@@ -1514,13 +1514,13 @@ def unified_nlr_blr(
                    fwhm_kms=500.0, **kwargs) -> ndarray, shape (n_wave,)
 
         where the return value is L_nu [erg/s/Hz]. Default ``None`` uses the
-        built-in analytic template from :func:`~tengri.components.agn.nlr.nlr_emission`.
+        built-in analytic template from :func:`~tengri.components.agn.nlr.compute_nlr_sed`.
         To use the Cue neural-net emulator, pass the result of
         :func:`make_cue_nlr_fn`.
     blr_fn : callable or None
         BLR emission backend. Same signature as ``nlr_fn``. Default ``None``
         uses the built-in analytic template from
-        :func:`~tengri.components.agn.blr.blr_emission`.
+        :func:`~tengri.components.agn.blr.compute_blr_sed`.
     include_xray : bool
         If True, include X-ray corona emission. Default False (UV-optical-IR only).
     xray_gamma_agn : float

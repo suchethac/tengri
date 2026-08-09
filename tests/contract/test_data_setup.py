@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Tests for SSP data setup and download helpers."""
 
+import os
+
 import pytest
 
 from tengri._data_setup import download_ssp, list_known_ssps
@@ -99,10 +101,26 @@ def test_download_ssp_unknown_name(tmp_path):
 
 @pytest.mark.unit
 def test_download_ssp_default_dest_uses_cwd(tmp_path, monkeypatch):
-    """Verify that default dest uses 'data/' relative to current directory."""
+    """Verify that default dest uses 'data/' relative to current directory.
 
-    # Change to tmp_path and mock download
+    Both halves of the isolation matter, and only one of them used to be here.
+    ``chdir`` alone does not pin the destination: $TENGRI_DATA_DIR OUTRANKS the
+    cwd-relative default (that is the whole point of #1431/#1582), so with the
+    variable set — the documented way to keep grids on a scratch filesystem —
+    this test does not merely fail. ``force=True`` makes it OVERWRITE whatever
+    real file sits at that name in the user's data directory, and the fake
+    response body below is eight bytes of ``b"x"``. That is how a 66 MB SSP
+    became an 8-byte stub on a developer machine.
+    """
+
+    # Change to tmp_path and neutralize the higher-precedence env var, so the
+    # cwd-relative default is what is actually under test.
     monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("TENGRI_DATA_DIR", raising=False)
+    assert "TENGRI_DATA_DIR" not in os.environ, (
+        "this test asserts the CWD-relative default; with $TENGRI_DATA_DIR set "
+        "it would write into that directory instead — and overwrite it"
+    )
 
     # Mock the download
     def mock_urlopen(url, timeout=None):

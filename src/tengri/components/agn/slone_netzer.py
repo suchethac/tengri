@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import functools
 from collections.abc import Callable
+from typing import NamedTuple
 
 import jax
 import jax.numpy as jnp
@@ -44,8 +45,12 @@ from tengri.utils.grid_interp import resample_template
 from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
 __all__ = [
+    "SloneNetzerGrid",
     "create_slone_netzer_from_grid",
+    "load_slone_netzer_default_grid",
+    "load_slone_netzer_grid",
     "slone_netzer_sed",
+    "slone_netzer_sed_from_grid",
 ]
 
 from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
@@ -102,93 +107,163 @@ def create_slone_netzer_from_grid(grid_path: str) -> Callable:
     templates' peak shifts strongly with accretion rate, and a smoothing kernel
     is not node-exact (cf. #583).
     """
+    return functools.partial(slone_netzer_sed_from_grid, load_slone_netzer_grid(grid_path))
+
+
+class SloneNetzerGrid(NamedTuple):
+    """Slone & Netzer (2012) disc template arrays, as a JAX pytree.
+
+    Carried as a pytree rather than closed over so the forward model can pass
+    the library into ``jax.jit`` as an argument; a closure's captured arrays
+    are concrete at trace time and freeze into the graph as ``Constant`` ops.
+
+    Attributes
+    ----------
+    template : ndarray, shape (n_mbh, n_edd, n_wave)
+        Tabulated disc SEDs [shape only; renormalized on use].
+    wave_grid : ndarray, shape (n_wave,)
+        Template rest-frame wavelength grid [Angstrom].
+    log_mbh : ndarray, shape (n_mbh,)
+        Grid axis, :math:`\\log_{10}(M_{\\rm BH}/M_\\odot)`.
+    log_edd : ndarray, shape (n_edd,)
+        Grid axis, :math:`\\log_{10}(\\dot M/\\dot M_{\\rm Edd})`.
+    """
+
+    template: jnp.ndarray
+    wave_grid: jnp.ndarray
+    log_mbh: jnp.ndarray
+    log_edd: jnp.ndarray
+
+
+@functools.cache
+def load_slone_netzer_grid(grid_path: str) -> SloneNetzerGrid:
+    """Load an SN12 grid HDF5 into a :class:`SloneNetzerGrid` pytree.
+
+    Parameters
+    ----------
+    grid_path : str
+        Path to ``slone_netzer_disc_grid.h5``.
+
+    Returns
+    -------
+    SloneNetzerGrid
+
+    Notes
+    -----
+    **JIT-compatible**: no — performs HDF5 I/O. Call outside the trace.
+    """
     raw = _load_slone_netzer_arrays(grid_path)
-    grid_jax = jnp.asarray(raw["template"])  # (n_mbh, n_edd, n_wave)
-    wave_grid = jnp.asarray(raw["wavelength"])
-    mbh_ax = jnp.asarray(raw["log_mbh"])
-    edd_ax = jnp.asarray(raw["log_edd"])
+    return SloneNetzerGrid(
+        template=np.asarray(raw["template"]),  # (n_mbh, n_edd, n_wave)
+        wave_grid=np.asarray(raw["wavelength"]),
+        log_mbh=np.asarray(raw["log_mbh"]),
+        log_edd=np.asarray(raw["log_edd"]),
+    )
 
-    def slone_netzer_grid(
-        wavelength: jnp.ndarray,
-        agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
-        # Deliberately NOT DEFAULT_AGN_LOG_MBH: the SN12 grid's log_mbh axis
-        # starts at 7.4, so the declared 7.0 would be silently clipped by the
-        # jnp.clip below. 8.6 is the grid's center node.
-        agn_log_mbh: float = 8.6,
-        agn_log_ledd: float = -2.0,
-        **_kwargs,
-    ) -> jnp.ndarray:
-        r"""Slone & Netzer (2012) disc SED at a single ``(M_BH, Mdot/Mdot_Edd)``.
 
-        Parameters
-        ----------
-        wavelength : array_like, shape (n_wave,)
-            Rest-frame wavelength grid. [Å]
-        agn_log_lbol : float, optional
-            ``log10(L_bol / L_sun)``. Default 11.0.
-        agn_log_mbh : float, optional
-            ``log10(M_BH / M_sun)``. Default 8.6.
-        agn_log_ledd : float, optional
-            ``log10(Mdot / Mdot_Edd)``. Default −2.0.
+def load_slone_netzer_default_grid() -> SloneNetzerGrid:
+    """Load the packaged SN12 grid pytree (discovery + cache).
 
-        Returns
-        -------
-        ndarray, shape (n_wave,)
-            Spectral luminosity density. [erg/s/Hz]
+    This is the ``template_loader`` the SN12 disc block registers.
 
-        Notes
-        -----
-        .. math::
+    Returns
+    -------
+    SloneNetzerGrid
 
-            L_\nu(\lambda) = L_{\rm bol}\,
-                             \frac{T(\lambda;\,\log M_{\rm BH},\,\log\dot m)}
-                                  {\int T(\nu;\,\log M_{\rm BH},\,\log\dot m)
-                                   \,\mathrm{d}\nu}
+    Raises
+    ------
+    FileNotFoundError
+        If no SN12 grid HDF5 is present on disk.
+    """
+    return load_slone_netzer_grid(_find_grid())
 
-        with :math:`L_{\rm bol} = 10^{\rm agn\_log\_lbol}\,L_\odot`. The
-        template is shape-only; ``agn_log_lbol`` sets the normalization.
 
-        **JIT-compatible**: yes.
-        """
-        # Node-exact bilinear interpolation over (log_mbh, log_edd). The SN12
-        # templates' peak wavelength varies strongly with accretion rate, so a
-        # smooth triweight kernel (which is not node-exact) smears the peak
-        # across neighboring nodes by 30-50%; bilinear reproduces the library
-        # templates at grid nodes exactly (cf. the DL14 WavePrecomp fix #583).
-        m = jnp.clip(agn_log_mbh, mbh_ax[0], mbh_ax[-1])
-        e = jnp.clip(agn_log_ledd, edd_ax[0], edd_ax[-1])
-        i = jnp.clip(jnp.searchsorted(mbh_ax, m) - 1, 0, mbh_ax.shape[0] - 2)
-        j = jnp.clip(jnp.searchsorted(edd_ax, e) - 1, 0, edd_ax.shape[0] - 2)
-        fm = (m - mbh_ax[i]) / (mbh_ax[i + 1] - mbh_ax[i])
-        fe = (e - edd_ax[j]) / (edd_ax[j + 1] - edd_ax[j])
-        template = (
-            (1.0 - fm) * (1.0 - fe) * grid_jax[i, j]
-            + (1.0 - fm) * fe * grid_jax[i, j + 1]
-            + fm * (1.0 - fe) * grid_jax[i + 1, j]
-            + fm * fe * grid_jax[i + 1, j + 1]
-        )
-        sed = resample_template(wavelength, wave_grid, template, left=0.0, right=0.0)
-        nu = _wavelength_to_nu(wavelength)
-        l_scale = 10.0**agn_log_lbol * _LSUN_ERG
-        if wavelength.dtype == jnp.float32:
-            # Float32 (#1206). Two traps here, both silent:
-            #   1. the template's own bolometric integral is ~1e45 erg/s (the SN12
-            #      L_nu ~1e30 over a ~1e15 Hz span) — it overflows float32, and
-            #      ``l_scale * sed / inf`` then flushes the whole disc to ZERO;
-            #   2. ``floor=1e-100`` is itself below the float32 minimum, so the
-            #      zero-template guard silently becomes a no-op.
-            # Peak-factor the integrand and regroup so only representable values
-            # form: ``l_scale * sed / (peak * hat_int)`` is evaluated as
-            # ``(l_scale / hat_int) * (sed / peak)`` — algebraically identical.
-            # stop_gradient: factorization constant; peak * hat_int == bolint(sed) (#1436).
-            peak = jax.lax.stop_gradient(jnp.max(jnp.abs(sed)))
-            peak = jnp.where(peak > 0.0, peak, 1.0)
-            hat_int = _bolometric_integral_nu(sed / peak, nu, floor=1e-30)
-            return (l_scale / hat_int) * (sed / peak)
-        integral_safe = _bolometric_integral_nu(sed, nu, floor=1e-100)
-        return l_scale * sed / integral_safe
+def slone_netzer_sed_from_grid(
+    grid: SloneNetzerGrid,
+    wavelength: jnp.ndarray,
+    agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
+    # Deliberately NOT DEFAULT_AGN_LOG_MBH: the SN12 grid's log_mbh axis
+    # starts at 7.4, so the declared 7.0 would be silently clipped by the
+    # jnp.clip below. 8.6 is the grid's center node.
+    agn_log_mbh: float = 8.6,
+    agn_log_ledd: float = -2.0,
+    **_kwargs,
+) -> jnp.ndarray:
+    r"""Slone & Netzer (2012) disc SED at a single ``(M_BH, Mdot/Mdot_Edd)``.
 
-    return slone_netzer_grid
+    Parameters
+    ----------
+    grid : SloneNetzerGrid
+        Template arrays, passed as an argument so they thread through JIT.
+    wavelength : array_like, shape (n_wave,)
+        Rest-frame wavelength grid. [Å]
+    agn_log_lbol : float, optional
+        ``log10(L_bol / L_sun)``. Default 11.0.
+    agn_log_mbh : float, optional
+        ``log10(M_BH / M_sun)``. Default 8.6.
+    agn_log_ledd : float, optional
+        ``log10(Mdot / Mdot_Edd)``. Default −2.0.
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Spectral luminosity density. [erg/s/Hz]
+
+    Notes
+    -----
+    .. math::
+
+        L_\nu(\lambda) = L_{\rm bol}\,
+                         \frac{T(\lambda;\,\log M_{\rm BH},\,\log\dot m)}
+                              {\int T(\nu;\,\log M_{\rm BH},\,\log\dot m)
+                               \,\mathrm{d}\nu}
+
+    with :math:`L_{\rm bol} = 10^{\rm agn\_log\_lbol}\,L_\odot`. The
+    template is shape-only; ``agn_log_lbol`` sets the normalization.
+
+    **JIT-compatible**: yes.
+    """
+    grid_jax = jnp.asarray(grid.template)
+    wave_grid = jnp.asarray(grid.wave_grid)
+    mbh_ax = jnp.asarray(grid.log_mbh)
+    edd_ax = jnp.asarray(grid.log_edd)
+    # Node-exact bilinear interpolation over (log_mbh, log_edd). The SN12
+    # templates' peak wavelength varies strongly with accretion rate, so a
+    # smooth triweight kernel (which is not node-exact) smears the peak
+    # across neighboring nodes by 30-50%; bilinear reproduces the library
+    # templates at grid nodes exactly (cf. the DL14 WavePrecomp fix #583).
+    m = jnp.clip(agn_log_mbh, mbh_ax[0], mbh_ax[-1])
+    e = jnp.clip(agn_log_ledd, edd_ax[0], edd_ax[-1])
+    i = jnp.clip(jnp.searchsorted(mbh_ax, m) - 1, 0, mbh_ax.shape[0] - 2)
+    j = jnp.clip(jnp.searchsorted(edd_ax, e) - 1, 0, edd_ax.shape[0] - 2)
+    fm = (m - mbh_ax[i]) / (mbh_ax[i + 1] - mbh_ax[i])
+    fe = (e - edd_ax[j]) / (edd_ax[j + 1] - edd_ax[j])
+    template = (
+        (1.0 - fm) * (1.0 - fe) * grid_jax[i, j]
+        + (1.0 - fm) * fe * grid_jax[i, j + 1]
+        + fm * (1.0 - fe) * grid_jax[i + 1, j]
+        + fm * fe * grid_jax[i + 1, j + 1]
+    )
+    sed = resample_template(wavelength, wave_grid, template, left=0.0, right=0.0)
+    nu = _wavelength_to_nu(wavelength)
+    l_scale = 10.0**agn_log_lbol * _LSUN_ERG
+    if wavelength.dtype == jnp.float32:
+        # Float32 (#1206). Two traps here, both silent:
+        #   1. the template's own bolometric integral is ~1e45 erg/s (the SN12
+        #      L_nu ~1e30 over a ~1e15 Hz span) — it overflows float32, and
+        #      ``l_scale * sed / inf`` then flushes the whole disc to ZERO;
+        #   2. ``floor=1e-100`` is itself below the float32 minimum, so the
+        #      zero-template guard silently becomes a no-op.
+        # Peak-factor the integrand and regroup so only representable values
+        # form: ``l_scale * sed / (peak * hat_int)`` is evaluated as
+        # ``(l_scale / hat_int) * (sed / peak)`` — algebraically identical.
+        # stop_gradient: factorization constant; peak * hat_int == bolint(sed) (#1436).
+        peak = jax.lax.stop_gradient(jnp.max(jnp.abs(sed)))
+        peak = jnp.where(peak > 0.0, peak, 1.0)
+        hat_int = _bolometric_integral_nu(sed / peak, nu, floor=1e-30)
+        return (l_scale / hat_int) * (sed / peak)
+    integral_safe = _bolometric_integral_nu(sed, nu, floor=1e-100)
+    return l_scale * sed / integral_safe
 
 
 _GRID_SEARCH_PATHS: tuple[str, ...] = (
@@ -204,14 +279,12 @@ _NOT_FOUND_MSG = (
 
 
 def _find_grid() -> str:
-    from tengri._data_setup import data_path
+    from tengri._data_setup import require_data
 
-    # _GRID_SEARCH_PATHS[-1] is the bare filename; data_path searches every
-    # directory the old parents[4] walk reached, plus $TENGRI_DATA_DIR (#1431).
-    try:
-        return str(data_path(_GRID_SEARCH_PATHS[-1]))
-    except FileNotFoundError:
-        raise FileNotFoundError(_NOT_FOUND_MSG) from None
+    # _GRID_SEARCH_PATHS[-1] is the bare filename; require_data searches every
+    # directory the old parents[4] walk reached, plus $TENGRI_DATA_DIR (#1431),
+    # and re-raises _NOT_FOUND_MSG verbatim when the grid is absent.
+    return require_data(_GRID_SEARCH_PATHS[-1], _NOT_FOUND_MSG)
 
 
 @functools.cache
@@ -265,15 +338,21 @@ def slone_netzer_grid_support() -> dict[str, tuple[float, float]]:
     }
 
 
-def slone_netzer_sed(*args, **kwargs) -> jnp.ndarray:
+def slone_netzer_sed(*args, _template: SloneNetzerGrid | None = None, **kwargs) -> jnp.ndarray:
     """Slone & Netzer (2012) disc (auto-loaded from the packaged HDF5 grid).
 
-    Thin wrapper that loads the default grid once and delegates to the
-    interpolation closure from :func:`create_slone_netzer_from_grid`.
+    Parameters
+    ----------
+    _template : SloneNetzerGrid, optional
+        Pre-loaded grid, threaded in as a JIT argument by the forward model.
+        When ``None`` (default) the packaged grid is loaded from disk and —
+        if this call happens under trace — baked into the graph as constants.
 
     Returns
     -------
     ndarray, shape (n_wave,)
         Spectral luminosity density. [erg/s/Hz]
     """
+    if _template is not None:
+        return slone_netzer_sed_from_grid(_template, *args, **kwargs)
     return _load_default()(*args, **kwargs)

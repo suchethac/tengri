@@ -2,7 +2,7 @@
 """Free-parameter declarations owned by the dust component.
 
 Three tuples, each the canonical source for one legacy bucket in
-``tengri.parameters._param_defs``:
+``tengri.parameters._builders``:
 
 - :data:`PARAMS` — dust **emission** priors (Draine-Li / Dale / Casey /
   BOSA / THEMIS / PAHspec). Backs the legacy ``_DUST_EMISSION_PARAMS``

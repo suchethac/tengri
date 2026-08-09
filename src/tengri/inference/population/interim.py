@@ -57,6 +57,67 @@ _TRUTH_TO_BOUNDS = {
 }
 
 
+def _assert_interim_bounds_are_physical(interim_bounds):
+    """Refuse interim priors that admit unphysical ``(sigma, tau)`` (#1585).
+
+    ``Uniform`` already rejects ``lo >= hi``, so only the non-positive branch
+    needs a guard here. Both axes are positive by construction: ``sigma`` is a
+    modulation amplitude [dex] and ``tau`` a correlation timescale, and neither
+    has a meaningful negative branch in the DRW kernel
+    ``K_ij = (sigma ln10)^2 exp(-|t_i - t_j| / tau)``.
+
+    Two of the four bad cases fail *quietly*, which is why a NaN check
+    downstream would not have caught them:
+
+    * ``tau = 0`` does not produce NaN. ``rho = exp(-dt/0) = 0``, so the field
+      degenerates to independent draws — a silently different model.
+    * ``sigma < 0`` returns a density bit-identical to ``|sigma|``, because
+      sigma enters only through the even quantity ``(sigma ln10)^2``. The
+      sampler then explores a spurious mirror of the physical mode.
+
+    Checked before the model is touched, so a bad prior costs no HMC time. The
+    sibling guard on the reweighting grid lives in
+    ``estimator._validate_grid_bounds``; this one covers the *fits*, which run
+    first.
+
+    Parameters
+    ----------
+    interim_bounds : dict
+        ``{"sigma_bounds": (lo, hi), "tau_bounds_myr": (lo, hi)}``. Keys that
+        are absent are left to the existing ``KeyError``.
+
+    Raises
+    ------
+    ValueError
+        If either present lower bound is non-positive.
+    """
+    sigma_bounds = interim_bounds.get("sigma_bounds")
+    if sigma_bounds is not None and float(sigma_bounds[0]) <= 0.0:
+        raise ValueError(
+            f"interim_bounds['sigma_bounds'][0]={float(sigma_bounds[0]):.3g} dex must be "
+            f"positive. sigma reaches the DRW kernel only through var=(sigma*ln10)^2, "
+            f"which is even, so a negative value is a bit-identical MIRROR of its "
+            f"positive twin -- the sampler cannot distinguish the two modes and the "
+            f"marginal in sigma is corrupt rather than merely wrong. sigma=0 divides by "
+            f"that variance and yields NaN. Use a small positive lower bound (e.g. 0.01). "
+            f"Bounds centered on a truth and scaled symmetrically cross zero once the "
+            f"half-width exceeds the center (issue #1585)."
+        )
+
+    tau_bounds = interim_bounds.get("tau_bounds_myr")
+    if tau_bounds is not None and float(tau_bounds[0]) <= 0.0:
+        raise ValueError(
+            f"interim_bounds['tau_bounds_myr'][0]={float(tau_bounds[0]):.3g} Myr must be "
+            f"positive. tau is a correlation timescale with no negative branch: at "
+            f"tau < 0 the kernel exp(-|t_i - t_j| / tau) diverges and the field "
+            f"log-density is NaN, while at tau = 0 it does NOT fail -- the correlation "
+            f"collapses to zero and the field silently degenerates to independent "
+            f"draws. Use a small positive lower bound (e.g. 10 Myr). Bounds centered on "
+            f"a truth and scaled symmetrically cross zero once the half-width exceeds "
+            f"the center (issue #1585)."
+        )
+
+
 def _assert_truth_within_interim_bounds(mock, interim_bounds):
     """Refuse a mock whose injected truth lies outside the interim support.
 
@@ -180,9 +241,13 @@ def fit_interim(
 
     t0 = time.time()
 
-    # Before anything expensive: is the truth even reachable under the bounds
-    # this fit will use? Checked here rather than in make_population because
-    # interim_bounds overrides the priors make_population validated against.
+    # Before anything expensive, in this order: are the bounds themselves
+    # physical, and is the truth reachable under them? Physicality first --
+    # "truth outside bounds" is a confusing thing to say about bounds that are
+    # not a valid support to begin with. Both are checked here rather than in
+    # make_population because interim_bounds overrides the priors
+    # make_population validated against.
+    _assert_interim_bounds_are_physical(interim_bounds)
     _assert_truth_within_interim_bounds(mock, interim_bounds)
 
     n_galaxies = len(mock.table)

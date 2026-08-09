@@ -3,9 +3,10 @@
 
 This module defines :class:`InferenceContext`, the bundle of state that
 inference backends receive in lieu of the full :class:`~tengri.Fitter`.
-It mirrors the role of :class:`~tengri.forward._kernels.strategy.KernelStrategy`
-on the forward-model side (ADR-0004): a frozen Python-level object that
-adapters consume to avoid coupling to the orchestrator's private internals.
+It mirrors the role ``KernelStrategy`` played on the forward-model side
+(ADR-0004): a frozen Python-level object that adapters consume to avoid
+coupling to the orchestrator's private internals. That class has since been
+removed, so it is named here in plain markup rather than cross-referenced.
 
 Design rules — these are non-negotiable:
 

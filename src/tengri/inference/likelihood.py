@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Likelihood protocol adapters for SED fitting.
 
-Builds a :class:`~tengri.inference.likelihoods.Likelihood` adapter from an
+Builds a :class:`~tengri.protocols.likelihood.Likelihood` adapter from an
 :class:`~tengri.inference.context.InferenceContext`.
 
 The accepts-context signature (added in the Step-D-prime architectural

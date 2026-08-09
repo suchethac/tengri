@@ -7,7 +7,7 @@ published by :class:`tengri.components.stellar.StellarSEDComponent`,
 applies an age-dependent extinction (birth cloud + diffuse ISM), and
 produces a full attenuated + IR-re-emitted SED.
 
-Sibling to :class:`tengri.components.dust.DustAttenuationSEDComponent`
+Sibling to :class:`tengri.components.dust.component.DustAttenuationSEDComponent`
 (single-screen, no per-age stellar input required).
 
 Cross-component reads
@@ -23,8 +23,8 @@ Cross-component publications
 
 - ``state.derived["L_ir"]`` (scalar, erg/s) — total IR luminosity
   re-radiated by dust, consumed by
-  :class:`tengri.components.radio.RadioSEDComponent` (FIR-radio
-  correlation) and :class:`tengri.components.xray.XRaySEDComponent`.
+  :class:`tengri.components.radio.component.RadioSEDComponent` (FIR-radio
+  correlation) and :class:`tengri.components.xray.component.XRaySEDComponent`.
 - ``state.sed_intrinsic`` is overwritten with the attenuated stellar
   SED + IR re-emission added.
 
@@ -300,7 +300,7 @@ class DustSEDComponent:
         """Free parameters this component owns (attenuation-only).
 
         Mirrors the canonical ``dust_*`` attenuation priors in
-        :mod:`tengri.parameters._param_defs`. Users may override any
+        :mod:`tengri.parameters._builders`. Users may override any
         entry as :class:`Fixed` to drop it from the prior.
 
         Emission-specific parameters (dust_T, dust_beta_ir, dust_alpha_dale,

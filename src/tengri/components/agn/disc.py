@@ -1886,88 +1886,126 @@ def create_relagn_disc_from_grid(grid_path: str) -> Callable:
     if not __import__("pathlib").Path(grid_path).exists():
         raise FileNotFoundError(f"RELAGN disc grid not found: {grid_path}")
 
-    cached = _load_relagn_disc_grid(grid_path)
-    grid_jax = cached["grid_jax"]
-    axes = cached["axes"]
-    edges = cached["edges"]
-    scatters = cached["scatters"]
-    wave_grid = cached["wave_grid"]
+    return functools.partial(relagn_disc_from_grid, _load_relagn_disc_grid(grid_path))
 
-    def relagn_disc(
-        wavelength: jnp.ndarray,
-        # Kept on this branch (main's #1578 dropped it): the float32
-        # renormalization below is this branch's #1206 work and reads it. Read
-        # off the declaration rather than the literal 11.0 it used to repeat,
-        # which is #1578's own rule.
-        agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
-        agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
-        agn_log_mdot: float = -1.0,
-        agn_astar: float = 0.0,
-        agn_cos_inc: float = DEFAULT_AGN_COS_INC,
-        **_kwargs,
-    ) -> jnp.ndarray:
-        """RELAGN outer disc from relativistic template grid.
 
-        Parameters
-        ----------
-        wavelength : ndarray, shape (n_wave,)
-            Rest-frame wavelength. [Å]
-        agn_log_lbol : float
-            log₁₀(L_bol / L_sun) — the normalization the template is scaled to.
-            [dimensionless]
-        agn_log_mbh : float
-            log₁₀(M_BH / M_sun). [dimensionless]
-        agn_log_mdot : float
-            log₁₀(Ṁ / Ṁ_Edd). [dimensionless]
-        agn_astar : float
-            Dimensionless BH spin, prograde only (0 to 0.998). [dimensionless]
-        agn_cos_inc : float
-            Cosine of inclination angle (1 = face-on). [dimensionless]
+def load_relagn_default_grid() -> dict:
+    """Load the packaged RELAGN disc grid (discovery + cache).
 
-        Returns
-        -------
-        ndarray, shape (n_wave,)
-            Specific luminosity L_ν. [erg s⁻¹ Hz⁻¹]
+    This is the ``template_loader`` the RELAGN disc block registers, so the
+    forward model can hoist the ~27 MB library out of the JIT trace and hand
+    it to the block as an argument.
 
-        Notes
-        -----
-        **JIT-compatible**: yes.
-        **Gradient-safe**: yes — triweight kernel, C²-continuous.
+    Returns
+    -------
+    dict
+        Template arrays; see :func:`_load_relagn_disc_grid`.
 
-        **Normalization (behavior change, #1206).** The template *shape* comes from
-        (M_BH, Ṁ, a\\*); its **normalization** is set by ``agn_log_lbol``, matching
-        every other disc in the composable menu (``multicolor``, ``kubota_done``,
-        ``slone_netzer``, …). Previously the grid's own absolute normalization was
-        used and ``agn_log_lbol`` had no effect — which both surprised users who set
-        it and made the disc unusable in float32, since the grid's absolute
-        ``λL_λ(5100 Å) ≈ 2.6e44`` erg/s exceeds the float32 maximum (3.4e38).
+    Raises
+    ------
+    FileNotFoundError
+        If ``data/relagn_disc_grid.h5`` is not present.
 
-        As with ``multicolor_disc``, the bolometric renormalization divides out any
-        wavelength-independent prefactor, so ``agn_cos_inc`` (a pure ``2 cos i``
-        scaling of this grid) no longer changes the disc's normalization; viewing
-        anisotropy enters downstream through the runner's inclination handling.
-        """
-        point = (agn_log_mbh, agn_log_mdot, agn_astar)
-        lnu_template = _interp_nd_triweight(grid_jax, axes, edges, point, scatters=scatters)
-        # Interpolate grid wavelength → observation wavelength
-        lnu_interp = resample_template(wavelength, wave_grid, lnu_template, left=0.0, right=0.0)
-        # Inclination scaling from reference cos_inc = 0.5
-        lnu_interp = lnu_interp * (2.0 * agn_cos_inc)
+    Notes
+    -----
+    ``_find_relagn_grid`` is imported inside the body on purpose:
+    :mod:`tengri.components.agn.unified` imports *this* module, so a
+    module-level import would close the cycle.
+    """
+    from tengri.components.agn.unified import _find_relagn_grid
 
-        # Renormalize to the requested bolometric luminosity (#1206).
-        nu = _wavelength_to_nu(wavelength)
-        l_scale = 10.0**agn_log_lbol * _LSUN_ERG
-        if wavelength.dtype == jnp.float32:
-            # Float32: the template's own bolometric integral is ~1e45 erg/s and
-            # overflows, which would flush the disc to zero. Peak-factor and
-            # regroup — ``(l_scale / hat_int) * (lnu / peak)`` is algebraically
-            # identical to ``l_scale * lnu / (peak * hat_int)``.
-            # stop_gradient: factorization constant; peak * hat_int == bolint(lnu) (#1436).
-            peak = jax.lax.stop_gradient(jnp.max(jnp.abs(lnu_interp)))
-            peak = jnp.where(peak > 0.0, peak, 1.0)
-            hat_int = _bolometric_integral_nu(lnu_interp / peak, nu, floor=1e-30)
-            return (l_scale / hat_int) * (lnu_interp / peak)
-        integral_safe = _bolometric_integral_nu(lnu_interp, nu, floor=1e-100)
-        return l_scale * lnu_interp / integral_safe
+    return _load_relagn_disc_grid(_find_relagn_grid())
 
-    return relagn_disc
+
+def relagn_disc_from_grid(
+    grid: dict,
+    wavelength: jnp.ndarray,
+    # Kept on this branch (main's #1578 dropped it): the float32
+    # renormalization below is this branch's #1206 work and reads it. Read
+    # off the declaration rather than the literal 11.0 it used to repeat,
+    # which is #1578's own rule.
+    agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
+    agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
+    agn_log_mdot: float = -1.0,
+    agn_astar: float = 0.0,
+    agn_cos_inc: float = DEFAULT_AGN_COS_INC,
+    **_kwargs,
+) -> jnp.ndarray:
+    r"""RELAGN outer disc from the relativistic template grid.
+
+    Parameters
+    ----------
+    grid : dict
+        Template arrays from :func:`_load_relagn_disc_grid`. Taken as an
+        **argument** rather than closed over, so the forward model can thread
+        the ~27 MB library through ``jax.jit`` as a ``Parameter`` instead of
+        baking it into the graph as ``Constant`` ops (#1383).
+    wavelength : ndarray, shape (n_wave,)
+        Rest-frame wavelength. [Å]
+    agn_log_lbol : float
+        :math:`\log_{10}(L_{\rm bol}/L_\odot)` — the normalization the template
+        is scaled to. [dimensionless]
+    agn_log_mbh : float
+        :math:`\log_{10}(M_{\rm BH}/M_\odot)`. [dimensionless]
+    agn_log_mdot : float
+        :math:`\log_{10}(\dot M / \dot M_{\rm Edd})`. [dimensionless]
+    agn_astar : float
+        Dimensionless BH spin, prograde only (0 to 0.998). [dimensionless]
+    agn_cos_inc : float
+        Cosine of inclination (1 = face-on). [dimensionless]
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Disc :math:`L_\nu`. [erg/s/Hz]
+
+    Notes
+    -----
+    **JIT-compatible**: yes.
+    **Gradient-safe**: yes — triweight kernel, C²-continuous.
+
+    **Inclination**: grid stored at cos_inc = 0.5; scaled by 2·cos_inc.
+
+    **Normalization (behavior change, #1206).** The template *shape* comes from
+    (M_BH, Ṁ, a\*); its **normalization** is set by ``agn_log_lbol``, matching
+    every other disc in the composable menu (``multicolor``, ``kubota_done``,
+    ``slone_netzer``, …). Previously the grid's own absolute normalization was
+    used and ``agn_log_lbol`` had no effect — which both surprised users who set
+    it and made the disc unusable in float32, since the grid's absolute
+    ``λL_λ(5100 Å) ≈ 2.6e44`` erg/s exceeds the float32 maximum (3.4e38).
+
+    As with ``multicolor_disc``, the bolometric renormalization divides out any
+    wavelength-independent prefactor, so ``agn_cos_inc`` (a pure ``2 cos i``
+    scaling of this grid) no longer changes the disc's normalization; viewing
+    anisotropy enters downstream through the runner's inclination handling.
+    """
+    point = (agn_log_mbh, agn_log_mdot, agn_astar)
+    lnu_template = _interp_nd_triweight(
+        jnp.asarray(grid["grid_jax"]),
+        tuple(jnp.asarray(a) for a in grid["axes"]),
+        tuple(jnp.asarray(e) for e in grid["edges"]),
+        point,
+        scatters=grid["scatters"],
+    )
+    # Interpolate grid wavelength -> observation wavelength
+    lnu_interp = resample_template(
+        wavelength, jnp.asarray(grid["wave_grid"]), lnu_template, left=0.0, right=0.0
+    )
+    # Inclination scaling from reference cos_inc = 0.5
+    lnu_interp = lnu_interp * (2.0 * agn_cos_inc)
+
+    # Renormalize to the requested bolometric luminosity (#1206).
+    nu = _wavelength_to_nu(wavelength)
+    l_scale = 10.0**agn_log_lbol * _LSUN_ERG
+    if wavelength.dtype == jnp.float32:
+        # Float32: the template's own bolometric integral is ~1e45 erg/s and
+        # overflows, which would flush the disc to zero. Peak-factor and
+        # regroup — ``(l_scale / hat_int) * (lnu / peak)`` is algebraically
+        # identical to ``l_scale * lnu / (peak * hat_int)``.
+        # stop_gradient: factorization constant; peak * hat_int == bolint(lnu) (#1436).
+        peak = jax.lax.stop_gradient(jnp.max(jnp.abs(lnu_interp)))
+        peak = jnp.where(peak > 0.0, peak, 1.0)
+        hat_int = _bolometric_integral_nu(lnu_interp / peak, nu, floor=1e-30)
+        return (l_scale / hat_int) * (lnu_interp / peak)
+    integral_safe = _bolometric_integral_nu(lnu_interp, nu, floor=1e-100)
+    return l_scale * lnu_interp / integral_safe
