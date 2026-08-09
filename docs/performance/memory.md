@@ -92,8 +92,8 @@ ship in `scripts/`:
   individually-modest workers (pytest-xdist, parallel sessions,
   orphaned kernels) that together sum past physical RAM.
 
-The total guard has two independent triggers, because either alone has
-a blind spot:
+Two independent triggers are on by default, because either alone has a
+blind spot:
 
 | Trigger | Fires when | Catches |
 | --- | --- | --- |
