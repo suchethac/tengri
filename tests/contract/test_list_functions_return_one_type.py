@@ -131,7 +131,7 @@ def _public_names(module_name: str, module: object) -> list[str]:
 def _census() -> list[tuple[str, object]]:
     """``(label, callable)`` for every public ``list_*`` in the package.
 
-    Deduplicated by object identity, labelled by the shortest module path
+    Deduplicated by object identity, labeled by the shortest module path
     that reaches it, so a re-export does not appear twice.
     """
     by_id: dict[int, tuple[str, object]] = {}
