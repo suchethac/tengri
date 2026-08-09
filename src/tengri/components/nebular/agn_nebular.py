@@ -365,6 +365,7 @@ def agn_nlr_cue(
     gas_logco: float = 0.0,
     alpha_pl: float = -1.7,
     ionspec_params: dict | None = None,
+    template_data=None,
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     """Compute AGN NLR emission using the Cue neural-network emulator.
 
@@ -431,6 +432,7 @@ def agn_nlr_cue(
     log_qh = _log_qh_from_lacc(l_acc_erg, alpha_pl)
 
     line_wav, line_lum = cue_backend.predict_nebular_line_luminosities(
+        template_data=template_data,
         gas_logu=neb_logU,
         gas_logn=gas_logn,
         gas_logz=gas_logz,
@@ -1126,9 +1128,34 @@ def _load_feltre_grid(filepath: str | Path) -> FeltreGridData:
     )
 
 
-def _nearest_idx(axis: jnp.ndarray, value: float) -> int:
-    """Return nearest-neighbor index into a 1-D axis array."""
-    return int(jnp.argmin(jnp.abs(axis - value)))
+def _nearest_idx(axis: jnp.ndarray, value: float) -> jnp.ndarray:
+    """Return nearest-neighbor index into a 1-D axis array.
+
+    Parameters
+    ----------
+    axis : array_like, shape (n,)
+        Axis node values.
+    value : float or Array
+        Coordinate to snap. May be a JAX tracer.
+
+    Returns
+    -------
+    ndarray
+        Scalar integer index, as a JAX array.
+
+    Notes
+    -----
+    **JIT-compatible**: yes. This deliberately does **not** wrap the result in
+    Python ``int()``: doing so raised ``ConcretizationTypeError`` whenever the
+    caller's coordinate was traced, which made the whole Feltre NLR block
+    unusable under ``jax.jit`` (#1640). Traced integer indices are fine — JAX
+    lowers them to a gather.
+
+    **Gradient**: nearest-neighbor snapping is piecewise-constant, so the
+    gradient w.r.t. ``value`` is zero. That was already true of the ``int()``
+    form; only the ability to trace it has changed.
+    """
+    return jnp.argmin(jnp.abs(jnp.asarray(axis) - value))
 
 
 class FeltreNLRBackend:
