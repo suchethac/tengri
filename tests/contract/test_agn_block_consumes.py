@@ -345,7 +345,14 @@ def test_all_fixed_wildcard_frees_nothing_and_keeps_old_defaults(synthetic_ssp_w
 # ── gate-2: every free AGN param in the flagship recipe moves predict() ──────
 
 _SSP = Path(__file__).resolve().parents[1].parent / "data"
-_BARE = _SSP / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
+
+# Actually bare-stellar now (#1579). The name said ``_BARE`` and the path was
+# the wNE grid -- nebular baked into the templates -- while the recipe under
+# test, ``agn_panchromatic()``, selects Cue and documents "SSP requirement:
+# bare-stellar". The pairing raises ``CueWNESSPError`` in production; it ran
+# here only because conftest set TENGRI_ALLOW_WNE_CUE=1 suite-wide for the
+# synthetic fixtures, which also disabled the metadata check.
+_BARE = _SSP / "fsps_prsc_miles_chabrier.h5"
 
 
 @pytest.mark.skipif(not _BARE.exists(), reason="SSP grid not present (CI has no data/ssp_*.h5)")

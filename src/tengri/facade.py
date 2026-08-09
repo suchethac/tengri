@@ -696,6 +696,10 @@ class Galaxy:
             If .fit() has not been called.
         ImportError
             If h5py is not installed.
+        ResultSerializationError
+            If any sample entry could not be written. The file is still
+            created and holds everything writable; see
+            :meth:`tengri.results.FitResult.save`.
         """
         if self.result is None:
             raise RuntimeError("Galaxy has not been fitted. Call .fit(...) first.")

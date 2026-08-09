@@ -41,7 +41,7 @@ from ._jaxpr_consts import baked_mb
 pytestmark = pytest.mark.contract
 
 # Any SSP works: the property under test is whether the AGN torus library
-# reaches the block as an argument, which is independent of the SSP flavour.
+# reaches the block as an argument, which is independent of the SSP flavor.
 # Pinning one filename here would make the whole file skip silently on any
 # checkout that ships a different grid.
 _SSP_DIR = pathlib.Path("data")

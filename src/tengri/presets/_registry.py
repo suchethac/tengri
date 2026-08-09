@@ -9,7 +9,7 @@ Use:
     from tengri.presets import list_presets, describe_preset, synthesizer_default
 
     model, params = synthesizer_default()
-    presets = list_presets()  # dict of all available presets
+    presets = list_presets()  # table of all available presets
     describe_preset("synthesizer_default")  # full metadata
 """
 
@@ -17,6 +17,8 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+
+from tengri.registry import _RegistryTable
 
 
 @dataclass(frozen=True)
@@ -99,34 +101,41 @@ def register_preset(
     return _decorator
 
 
-def list_presets() -> dict[str, dict]:
+def list_presets() -> _RegistryTable:
     """List all registered presets.
 
     Returns
     -------
-    dict[str, dict]
-        Maps preset name to metadata dict with keys:
+    _RegistryTable
+        One row per preset, with columns ``name``, ``short_doc``,
+        ``citations`` and ``status``.
 
-        - name: str
-        - short_doc: str
-        - citations: list[str]
-        - status: str
+    Notes
+    -----
+    Returned ``dict[str, dict]`` before #1574; every discovery verb
+    returns a table (#1285). ``.names()`` replaces ``list(presets)``, and
+    ``{row["name"]: row for row in list_presets()}`` reproduces the old
+    name-to-metadata mapping. For one preset, prefer
+    :func:`describe_preset`.
 
     Examples
     --------
-    >>> presets = list_presets()
-    >>> print(list(presets.keys()))
-    ['synthesizer_default']
+    >>> list_presets().names()
+    >>> list_presets().filter(status="production")
     """
-    return {
-        name: {
-            "name": entry.name,
-            "short_doc": entry.short_doc,
-            "citations": entry.citations,
-            "status": entry.status,
-        }
-        for name, entry in _PRESET_REGISTRY.items()
-    }
+    return _RegistryTable(
+        [
+            {
+                "name": entry.name,
+                "kind": "preset",
+                "short_doc": entry.short_doc,
+                "citations": entry.citations,
+                "status": entry.status,
+                "use": f"tengri.presets.describe_preset({entry.name!r})",
+            }
+            for entry in _PRESET_REGISTRY.values()
+        ]
+    )
 
 
 def describe_preset(name: str) -> dict:
