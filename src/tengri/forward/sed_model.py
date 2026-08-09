@@ -6479,6 +6479,7 @@ class SEDModel:
         if cached is None:
             return None
 
+        from tengri.components.agn.blocks._protocol import collect_block_templates
         from tengri.components.agn.component import AGNSEDComponent
         from tengri.components.nebular.component import NebularSEDComponent
 
@@ -6517,7 +6518,7 @@ class SEDModel:
             # no template. Load the SKIRTOR grid arrays here so the data always
             # threads through jit (small compile) rather than baking into the
             # trace as a constant (#1198). Guarded to the monolithic SKIRTOR
-            # model — composable torus blocks carry their own grid.
+            # model; composable blocks are handled by the recipe walk below.
             if skirtor is None and getattr(component.config, "model", None) == "skirtor":
                 try:
                     from tengri.components.agn.skirtor import _load_skirtor_default_grid
@@ -6527,6 +6528,19 @@ class SEDModel:
                     skirtor = None
             if skirtor is not None:
                 agn_templates["skirtor"] = skirtor
+
+            # Composable-block template libraries, keyed "<category>/<name>".
+            # Driven by the *resolved recipe*, so any block that declares a
+            # ``template_loader`` threads — including ones added later. This
+            # replaces a gate on ``config.model == "skirtor"``, which published
+            # nothing for ``composable`` (the build-grammar default) and so let
+            # every torus library bake into the graph (#1383).
+            blocks = component._state.block_templates if component._state is not None else None
+            if blocks is None:
+                blocks = collect_block_templates(component.block_recipe()) or None
+            if blocks:
+                agn_templates["blocks"] = blocks
+
             if agn_templates:
                 result["agn"] = agn_templates
             break

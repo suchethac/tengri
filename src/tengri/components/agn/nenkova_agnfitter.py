@@ -42,12 +42,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components.agn._params import DEFAULT_AGN_COS_INC, DEFAULT_AGN_LOG_LBOL
-from tengri.components.agn._phys import (
-    bolometric_integral_nu as _bolometric_integral_nu,
-    wavelength_to_nu as _wavelength_to_nu,
-)
-from tengri.utils.grid_interp import interp_nd_pchip, resample_template
-from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
+from tengri.components.agn._template_grid import TorusTemplateGrid, torus_lnu_from_grid
 
 __all__ = [
     "create_nenkova_agnfitter_from_grid",
@@ -85,8 +80,9 @@ def _load_nenkova_agnfitter_arrays(grid_path: str) -> dict:
         }
 
 
-def create_nenkova_agnfitter_from_grid(grid_path: str) -> Callable:
-    """Load Nenkova AGNfitter grid and return a JAX-native interpolation closure.
+@functools.cache
+def load_nenkova_agnfitter_grid(grid_path: str) -> TorusTemplateGrid:
+    """Load a Nenkova AGNfitter grid HDF5 into a :class:`TorusTemplateGrid` pytree.
 
     Parameters
     ----------
@@ -95,9 +91,8 @@ def create_nenkova_agnfitter_from_grid(grid_path: str) -> Callable:
 
     Returns
     -------
-    callable
-        Function ``fn(wavelength, agn_log_lbol, agn_cos_inc,
-        agn_torus_frac, **_) -> L_nu [erg/s/Hz]``.
+    TorusTemplateGrid
+        Template arrays with a single ``cos_inc`` axis, as numpy arrays.
 
     Raises
     ------
@@ -109,11 +104,8 @@ def create_nenkova_agnfitter_from_grid(grid_path: str) -> Callable:
 
     Notes
     -----
-    **JIT-compatible**: yes — the returned closure uses only ``jnp`` and
-    node-exact PCHIP interpolation.
-
-    **Gradient-safe**: yes — monotone-cubic (PCHIP) kernel is C¹-continuous
-    in ``agn_cos_inc``.
+    **JIT-compatible**: no — performs HDF5 I/O. Call outside the trace and
+    pass the result in as an argument.
     """
     raw = _load_nenkova_agnfitter_arrays(grid_path)
     grid_np = np.asarray(raw["template"], dtype=np.float64)
@@ -127,65 +119,87 @@ def create_nenkova_agnfitter_from_grid(grid_path: str) -> Callable:
     order = np.argsort(cos_inc_axis_np)
     cos_inc_axis_np = cos_inc_axis_np[order]
     template_reordered_np = grid_np[order]
+    return TorusTemplateGrid(
+        template=template_reordered_np,
+        axes=(cos_inc_axis_np,),
+        wave_grid=wave_np,
+    )
 
-    def nenkova_agnfitter_grid(
-        wavelength: jnp.ndarray,
-        agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
-        agn_cos_inc: float = DEFAULT_AGN_COS_INC,
-        agn_torus_frac: float = 0.5,
-        **_kwargs,
-    ) -> jnp.ndarray:
-        r"""Nenkova+08 (AGNfitter-rX) torus SED at a single inclination.
 
-        Parameters
-        ----------
-        wavelength : array_like, shape (n_wave,)
-            Rest-frame wavelength grid. [Å]
-        agn_log_lbol : float, optional
-            Bolometric luminosity, ``log10(L_bol / L_sun)``. Default 10.0.
-        agn_cos_inc : float, optional
-            Cosine of inclination (1 = face-on). Default 0.5.
-        agn_torus_frac : float, optional
-            Fraction of L_bol reprocessed by the torus. Default 0.5.
+def nenkova_agnfitter_sed_from_grid(
+    grid: TorusTemplateGrid,
+    wavelength: jnp.ndarray,
+    agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
+    agn_cos_inc: float = DEFAULT_AGN_COS_INC,
+    agn_torus_frac: float = 0.5,
+    **_kwargs,
+) -> jnp.ndarray:
+    r"""Nenkova+08 (AGNfitter-rX) torus SED at a single inclination.
 
-        Returns
-        -------
-        ndarray, shape (n_wave,)
-            Spectral luminosity density. [erg/s/Hz]
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Rest-frame wavelength grid. [Å]
+    agn_log_lbol : float, optional
+        Bolometric luminosity, ``log10(L_bol / L_sun)``. Default 10.0.
+    agn_cos_inc : float, optional
+        Cosine of inclination (1 = face-on). Default 0.5.
+    agn_torus_frac : float, optional
+        Fraction of L_bol reprocessed by the torus. Default 0.5.
 
-        Notes
-        -----
-        .. math::
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Spectral luminosity density. [erg/s/Hz]
 
-            L_\nu(\lambda) = L_{\rm bol}\,f_{\rm torus}\,
-                             \frac{T(\lambda,\,\cos i)}
-                                  {\int T(\nu,\,\cos i)\,\mathrm{d}\nu}
+    Notes
+    -----
+    .. math::
 
-        where :math:`T` is the tabulated template (node-exact at grid points
-        via monotone-cubic interpolation) and the integral is evaluated on
-        the (sorted) frequency grid corresponding to ``wavelength``.
+        L_\nu(\lambda) = L_{\rm bol}\,f_{\rm torus}\,
+                         \frac{T(\lambda,\,\cos i)}
+                              {\int T(\nu,\,\cos i)\,\mathrm{d}\nu}
 
-        **JIT-compatible**: yes.
+    where :math:`T` is the tabulated template (node-exact at grid points
+    via monotone-cubic interpolation) and the integral is evaluated on
+    the (sorted) frequency grid corresponding to ``wavelength``.
 
-        **Approximation**: the template is semi-empirical (Nenkova et al.
-        2008 [1]_), based on CLUMPY radiative-transfer models averaged
-        over secondary parameters. For studies requiring the full parameter
-        space (N_0, σ, τ_V, Y, q), use the original CLUMPY library
-        directly, not this averaged projection.
-        """
-        grid_jax = jnp.asarray(template_reordered_np)
-        cos_inc_axis = jnp.asarray(cos_inc_axis_np)
-        wave_grid = jnp.asarray(wave_np)
+    **JIT-compatible**: yes.
 
-        # Node-exact PCHIP interpolation on cos(incl) axis.
-        template = interp_nd_pchip(grid_jax, (cos_inc_axis,), (agn_cos_inc,))
-        sed = resample_template(wavelength, wave_grid, template, left=0.0, right=0.0)
-        nu = _wavelength_to_nu(wavelength)
-        integral_safe = _bolometric_integral_nu(sed, nu, floor=1e-100)
-        l_scale = 10.0**agn_log_lbol * _LSUN_ERG * agn_torus_frac
-        return l_scale * sed / integral_safe
+    **Approximation**: the template is semi-empirical (Nenkova et al.
+    2008 [1]_), based on CLUMPY radiative-transfer models averaged
+    over secondary parameters. For studies requiring the full parameter
+    space (N_0, σ, τ_V, Y, q), use the original CLUMPY library
+    directly, not this averaged projection.
+    """
+    return torus_lnu_from_grid(
+        grid,
+        wavelength,
+        (agn_cos_inc,),
+        agn_log_lbol=agn_log_lbol,
+        agn_torus_frac=agn_torus_frac,
+    )
 
-    return nenkova_agnfitter_grid
+
+def create_nenkova_agnfitter_from_grid(grid_path: str) -> Callable:
+    """Load a Nenkova AGNfitter grid and bind it to the SED evaluator.
+
+    Retained for callers holding the historical closure API; new code should
+    prefer :func:`load_nenkova_agnfitter_grid` plus
+    :func:`nenkova_agnfitter_sed_from_grid`, which keeps the grid threadable.
+
+    Parameters
+    ----------
+    grid_path : str
+        Path to ``nenkova_agnfitter_torus_grid.h5``.
+
+    Returns
+    -------
+    callable
+    """
+    return functools.partial(
+        nenkova_agnfitter_sed_from_grid, load_nenkova_agnfitter_grid(grid_path)
+    )
 
 
 _GRID_SEARCH_PATHS: tuple[str, ...] = (
@@ -211,12 +225,31 @@ def _find_nenkova_agnfitter_grid() -> str:
         raise FileNotFoundError(_NOT_FOUND_MSG) from None
 
 
+def load_nenkova_agnfitter_default_grid() -> TorusTemplateGrid:
+    """Load the packaged Nenkova AGNfitter grid pytree (discovery + cache).
+
+    This is the ``template_loader`` the torus block registers.
+
+    Returns
+    -------
+    TorusTemplateGrid
+
+    Raises
+    ------
+    FileNotFoundError
+        If no Nenkova AGNfitter grid HDF5 is present on disk.
+    """
+    return load_nenkova_agnfitter_grid(_find_nenkova_agnfitter_grid())
+
+
 @functools.cache
 def _load_nenkova_agnfitter_default() -> Callable:
     return create_nenkova_agnfitter_from_grid(_find_nenkova_agnfitter_grid())
 
 
-def nenkova_agnfitter_sed(*args, **kwargs) -> jnp.ndarray:
+def nenkova_agnfitter_sed(
+    *args, _template: TorusTemplateGrid | None = None, **kwargs
+) -> jnp.ndarray:
     """Nenkova+08 AGN torus (AGNfitter-rX, auto-loaded from tabulated templates).
 
     Wraps :func:`create_nenkova_agnfitter_from_grid` with on-disk grid discovery.
@@ -253,4 +286,6 @@ def nenkova_agnfitter_sed(*args, **kwargs) -> jnp.ndarray:
        radio-to-X-ray spectral energy distributions of AGNs," A&A 688, A46
        (2024). arXiv:2405.12111. DOI: 10.1051/0004-6361/202449329.
     """
+    if _template is not None:
+        return nenkova_agnfitter_sed_from_grid(_template, *args, **kwargs)
     return _load_nenkova_agnfitter_default()(*args, **kwargs)
