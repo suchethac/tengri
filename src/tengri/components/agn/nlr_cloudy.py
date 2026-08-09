@@ -76,6 +76,7 @@ __all__ = [
     "get_feltre_backend",
     "get_synthesizer_blr_backend",
     "get_synthesizer_nlr_backend",
+    "load_cue_agn_weights",
 ]
 
 #: Default location of the Cue emulator weights (built by the user; data-gated).
@@ -85,6 +86,35 @@ _FELTRE_BACKEND: FeltreNLRBackend | None = None
 _SYNTHESIZER_BACKEND: SynthesizerNLRBackend | None = None
 _SYNTHESIZER_BLR_BACKEND: SynthesizerBLRBackend | None = None
 _CUE_AGN_BACKEND = None  # lazy CueBackend for the AGN-ionized NLR block
+
+
+def _eager_construction():
+    """Build a cached backend outside whatever trace the caller is inside.
+
+    Every accessor below is a lazy singleton, so the **first** caller decides
+    what the cache holds for the rest of the process. That is fine until the
+    first caller is inside a ``jax.jit`` trace: any ``jnp`` operation run while
+    a trace is active returns a tracer bound to that trace, however concrete
+    its inputs are. The backend is then cached full of tracers, and the next
+    reader — a later test, the next fit — fails with ``UnexpectedTracerError``
+    naming the loader rather than whoever poisoned it.
+
+    Three of these four constructors reach ``jnp``:
+    :class:`CueBackend` via ``load_cue_weights`` (16x12 stacked network
+    parameters), and ``FeltreNLRBackend`` / ``SynthesizerNLRBackend`` via
+    ``jnp.sort`` (which ``SynthesizerBLRBackend`` inherits).
+
+    Only the Cue path had actually been caught, as the ``test_cue_nlr_grammar``
+    failure on main — and it reproduced only under a particular test order,
+    which is why it passed locally and failed in CI. The others are the same
+    construction under the same cache and differ only in whether anything has
+    happened to call them from inside a trace yet. Guarding the cache boundary
+    rather than the three constructors keeps the rule in one place: *a lazy
+    singleton must not let its first caller decide.*
+    """
+    import jax
+
+    return jax.ensure_compile_time_eval()
 
 
 def get_feltre_backend(grid_path: str | None = None) -> FeltreNLRBackend:
@@ -112,7 +142,10 @@ def get_feltre_backend(grid_path: str | None = None) -> FeltreNLRBackend:
     """
     global _FELTRE_BACKEND
     if grid_path is not None or _FELTRE_BACKEND is None:
-        _FELTRE_BACKEND = FeltreNLRBackend() if grid_path is None else FeltreNLRBackend(grid_path)
+        with _eager_construction():
+            _FELTRE_BACKEND = (
+                FeltreNLRBackend() if grid_path is None else FeltreNLRBackend(grid_path)
+            )
     return _FELTRE_BACKEND
 
 
@@ -137,7 +170,8 @@ def get_synthesizer_nlr_backend(grid_path: str) -> SynthesizerNLRBackend:
     """
     global _SYNTHESIZER_BACKEND
     if _SYNTHESIZER_BACKEND is None or _SYNTHESIZER_BACKEND.grid_path != grid_path:
-        _SYNTHESIZER_BACKEND = SynthesizerNLRBackend(grid_path)
+        with _eager_construction():
+            _SYNTHESIZER_BACKEND = SynthesizerNLRBackend(grid_path)
     return _SYNTHESIZER_BACKEND
 
 
@@ -161,7 +195,8 @@ def get_synthesizer_blr_backend(grid_path: str) -> SynthesizerBLRBackend:
     """
     global _SYNTHESIZER_BLR_BACKEND
     if _SYNTHESIZER_BLR_BACKEND is None or _SYNTHESIZER_BLR_BACKEND.grid_path != grid_path:
-        _SYNTHESIZER_BLR_BACKEND = SynthesizerBLRBackend(grid_path)
+        with _eager_construction():
+            _SYNTHESIZER_BLR_BACKEND = SynthesizerBLRBackend(grid_path)
     return _SYNTHESIZER_BLR_BACKEND
 
 
@@ -326,13 +361,49 @@ def get_cue_agn_backend(weights_path: str | None = None):
     ------
     FileNotFoundError
         If the weights file does not exist at the resolved path.
+
+    Notes
+    -----
+    Construction runs inside ``jax.ensure_compile_time_eval()``. Without it,
+    a backend first built *inside* a JIT trace captures ``DynamicJaxprTracer``
+    values, and because it is cached in a module-level global that poisoned
+    instance outlives the trace — every later out-of-trace call then raises
+    ``UnexpectedTracerError``. Whoever traces a Cue-NLR model first decides
+    whether the rest of the process works, which makes the failure depend on
+    execution order. Same defect class as the GRAHSP template cache (#1462).
     """
     global _CUE_AGN_BACKEND
     if weights_path is not None or _CUE_AGN_BACKEND is None:
         from tengri.components.nebular.cue import CueBackend
 
-        _CUE_AGN_BACKEND = CueBackend(weights_path or _DEFAULT_CUE_WEIGHTS_PATH)
+        with _eager_construction():
+            _CUE_AGN_BACKEND = CueBackend(weights_path or _DEFAULT_CUE_WEIGHTS_PATH)
     return _CUE_AGN_BACKEND
+
+
+def load_cue_agn_weights():
+    """Load the Cue emulator weights for the AGN NLR block (cache + discovery).
+
+    This is the ``template_loader`` the ``nlr/cue`` block registers. It returns
+    the weights **pytree**, not the backend object: only arrays can thread
+    through ``jax.jit`` as arguments, and the backend is an ordinary Python
+    object. Roughly 8.5 MB otherwise bakes into the graph as constants (#1383).
+
+    Returns
+    -------
+    Any
+        The backend's ``weights`` pytree.
+
+    Raises
+    ------
+    FileNotFoundError
+        If ``cue_weights.npz`` is not present.
+
+    Notes
+    -----
+    **JIT-compatible**: no, deliberately — it must run before tracing.
+    """
+    return get_cue_agn_backend().weights
 
 
 def compute_nlr_sed_cue(
@@ -345,6 +416,7 @@ def compute_nlr_sed_cue(
     neb_logn: float = 3.0,
     neb_logZ_gas: float = -1.8477,
     weights_path: str | None = None,
+    _template=None,
     **_kwargs,
 ) -> jnp.ndarray:
     r"""Cue-emulator AGN-ionized NLR adapter (the disc → Cue → NLR pipeline).
@@ -409,6 +481,7 @@ def compute_nlr_sed_cue(
         gas_logn=neb_logn,
         gas_logz=gas_logz_rel,
         alpha_pl=alpha_pl,
+        template_data=_template,
     )
     # agn_nlr_cue already scales lines by covering_fraction; convert L_sun→erg/s.
     line_lum_erg = jnp.asarray(line_lum_lsun) * _L_SUN_ERG_S
