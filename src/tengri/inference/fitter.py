@@ -447,6 +447,86 @@ def _memoized_approx_clone(model, cfg):
     return clone
 
 
+def _resolve_batch_fit_approx(model, approx, data_type):
+    """Route a batch-fit model through the fit-time precompute policy.
+
+    The batch surfaces' mirror of :meth:`Fitter._resolve_fit_approx`.
+    Single-galaxy fits have defaulted to the LUT under ``approx="auto"``
+    since that policy landed, but ``PopulationFitter`` consumed its
+    ``model_factory`` output raw and ``CatalogFitter`` held the model it was
+    given — so exactly the fits that evaluate the forward model the most
+    (thousands of evaluations, times the catalog size) silently ran the
+    exact wave-grid path at a measured ~2-6x per-evaluation premium. A
+    hierarchical or catalog fit taking minutes instead of well under one is
+    this gap's symptom.
+
+    Parameters
+    ----------
+    model : SEDModel or ForwardModel
+        The batch fit's model (or one built by its factory). Never mutated;
+        ``with_approx`` clones, memoized via :func:`_memoized_approx_clone`.
+    approx : "auto" or None or precompute config
+        ``"auto"`` selects the LUT for the data type (photometry ->
+        ``WavePrecomp``, spectroscopy/joint -> ``SpectrumPrecomp``) and
+        respects a model that already carries it; ``None`` returns the model
+        untouched (the exact path); anything else is handed to
+        ``with_approx`` verbatim.
+    data_type : str
+        The fit's data type; selects the LUT under ``"auto"``.
+
+    Returns
+    -------
+    SEDModel or ForwardModel
+        The LUT-routed clone, or the input model where the policy says (or
+        the model allows) nothing else. A ``with_approx`` failure warns and
+        stays exact — never break a fit that worked, only make its cost
+        visible.
+    """
+    if approx is None:
+        return model
+    if getattr(model, "with_approx", None) is None:
+        return model
+
+    if isinstance(approx, str):
+        if approx != "auto":
+            raise ValueError(
+                f"approx={approx!r} not understood; use 'auto' (default), None "
+                "(exact), or a precompute config (WavePrecomp/SpectrumPrecomp, "
+                "or a tuple)."
+            )
+        from tengri.forward.sed_model import SpectrumPrecomp, WavePrecomp
+
+        state = getattr(model, "approx", None)
+        if data_type == "photometry":
+            if state is not None and state.wave_precomp:
+                return model
+            cfg = WavePrecomp()
+        elif data_type in ("spectroscopy", "joint"):
+            if state is not None and getattr(state, "spectrum_precomp", False):
+                return model
+            cfg = SpectrumPrecomp()
+        else:
+            return model
+        existing = tuple(getattr(model, "approx_configs", ()))
+        resolved = (*existing, cfg) if existing else cfg
+    else:
+        resolved = approx
+
+    try:
+        return _memoized_approx_clone(model, resolved)
+    except Exception as exc:  # broad on purpose — never break a working fit
+        import warnings
+
+        warnings.warn(
+            f"Could not enable the precompute LUT for this batch fit "
+            f"({exc}). The fit is correct, only slower — a measured ~2-6x "
+            f"per forward evaluation on the exact path.",
+            UserWarning,
+            stacklevel=3,
+        )
+        return model
+
+
 # Jitted predict wrappers, memoized per (model, method name).
 #
 # ``jax.jit`` caches on the callable's identity, and ``model.predict_photometry``
