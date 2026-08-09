@@ -8,19 +8,23 @@ photometry mocks, #231):
 * ``_CatalogFitterOriginal.run`` — its own ``NotImplementedError`` branches
   already told callers to use ``mcmc_nuts``, so the default contradicted the
   class's own error messages. Now ``mcmc_nuts``.
-* ``PopulationFitter.run`` — its own ``ValueError`` for an unknown method has
+* ``PopulationFitter.run`` — its own ``ValueError`` for an unknown method
   named ``vi_nonlinear_fast`` "(default)" ever since ``b7c4fa1e2`` moved the
-  real default off it. Now ``vi_nonlinear_fast`` again, so signature and
-  message agree.
+  real default off it. Now ``vi_nonlinear_fast`` again, and the message is
+  *derived* from the dispatch tables, so it cannot disagree again.
 
 The shared cause is a *tier downgrade that never propagated to a signature*:
 both defaults were chosen for speed before #231 validated the segfault. The
 generic test below therefore asserts the invariant over **every** entry point,
 so a third one cannot appear silently.
 
-Note the two fixes differ, deliberately: ``mcmc_nuts`` is not in the
-hierarchical ``_method_map`` at all, so giving ``PopulationFitter`` the
-catalog's fix would make every hierarchical fit raise ``ValueError``.
+The two fixes differ, deliberately — and the reason has since changed, which is
+worth recording rather than quietly overwriting. At the time, ``mcmc_nuts`` was
+absent from the hierarchical ``_method_map`` entirely, so giving
+``PopulationFitter`` the catalog's fix would have made every hierarchical fit
+raise. NUTS is now reachable there (via ``FLAT_SAMPLERS``), so the defaults stay
+different for a *measured* reason instead: on a 2-galaxy D=18 problem, peak RSS
+was 5.21 GB for NUTS against 1.47-1.51 GB for ``map``/``mcmc_raytrace``.
 
 These are contract assertions on the *declared* default and on the advice
 strings — deliberately not a fit. Running a broken backend to prove it is
@@ -78,13 +82,13 @@ def test_each_default_is_the_specific_agreed_choice(label, fn, expected):
     assert _default_of(fn) == expected
 
 
-def test_population_default_matches_its_own_error_message():
-    """Signature and advice string must agree — they disagreed for months.
+def test_population_advice_cannot_disagree_with_its_signature():
+    """Signature and advice must agree — they disagreed for months.
 
-    ``PopulationFitter.run`` raises ``ValueError(... 'vi_nonlinear_fast'
-    (default) ...)`` for an unknown method. That string outlived ``b7c4fa1e2``,
-    which moved the real default to ``native_vi_linear``, so the class told
-    users one thing and did another.
+    The original defect: ``PopulationFitter.run`` raised
+    ``ValueError(... 'vi_nonlinear_fast' (default) ...)`` as a hand-written
+    literal, which outlived ``b7c4fa1e2`` moving the real default to
+    ``native_vi_linear``. The class told users one thing and did another.
 
     **What this can still catch, after #1576.** The advice now reads its
     marker from ``inspect.signature(cls.run)``, so a signature/advice
@@ -93,15 +97,19 @@ def test_population_default_matches_its_own_error_message():
     the thing that guarantees it is unfalsifiable, and a green tautology reads
     like protection it is not providing.
 
-    Two failure modes remain reachable, and both are asserted below:
+    Three failure modes remain reachable, and all three are asserted below:
 
-    * the signature default is not a dispatchable method at all, and
-    * the ``(default)`` marker is dropped from the message entirely.
+    * the signature default is not a dispatchable method at all,
+    * the ``(default)`` marker is dropped from the message entirely, and
+    * the derivation narrows back to one dispatch table, under-reporting
+      everything the flat seam added.
 
-    Verified by mutation: deleting the marker turns this red. The *drift* this
-    test was originally written for is now caught by
-    ``test_each_default_is_the_specific_agreed_choice`` instead, which pins
-    the agreed value rather than the agreement.
+    That third one is why this asserts against the *produced message* rather
+    than grepping ``run`` for a derivation expression. An earlier version of
+    this test pinned the source text ``sorted(set(_method_map) |
+    set(FLAT_SAMPLERS)``, which pinned the shape of one fix instead of the
+    property that matters — it went red the moment the derivation was moved
+    into a helper, while the behavior it claimed to protect was intact.
     """
     default = _default_of(PopulationFitter.run)
 
@@ -113,27 +121,54 @@ def test_population_default_matches_its_own_error_message():
     # ...and the advice must mark it as the default.
     #
     # Asserted against the produced message rather than against the source
-    # text of ``run``. This used to grep for the literal ``'<default>'
-    # (default)`` in the source, which could only pass while the list was
-    # hand-written -- the very thing #1576 removed. Checking the real output
-    # is strictly stronger: it still catches a signature/advice disagreement,
-    # and additionally catches a message that is built correctly but never
-    # reaches the caller.
+    # text of ``run``. Checking the real output is strictly stronger: it still
+    # catches a signature/advice disagreement, and additionally catches a
+    # message that is built correctly but never reaches the caller.
     message = PopulationFitter._unknown_method_message("__no_such_method__", {default: None})
     assert f"{default!r} (default)" in message, (
         f"the ValueError advice must name the real default ({default!r}); got: {message}"
     )
 
+    # ...and it must cover the flat seam, not just the NIFTy table.
+    #
+    # This is the assertion that keeps the widening honest, and it is not a
+    # tautology: ``runnable_flat`` is built from ``FLAT_SAMPLERS`` directly,
+    # so if the helper ever derives from ``method_map`` alone again — which
+    # was correct right up until the flat seam landed — the two assertions
+    # above stay green and this one goes red. Mutation-checked by dropping
+    # ``set(FLAT_SAMPLERS)`` from the helper's ``reachable``.
+    from tengri.inference._backend_registry import lookup_backend
+    from tengri.inference._hierarchical_flat import FLAT_SAMPLERS
 
-def test_population_has_no_nuts_path_so_it_must_not_claim_one():
-    """Guards the trap: the catalog fix is wrong here.
+    runnable_flat = {
+        m for m in FLAT_SAMPLERS if (entry := lookup_backend(m)) is None or entry.tier != "broken"
+    }
+    missing = sorted(m for m in runnable_flat if repr(m) not in message)
+    assert not missing, (
+        f"the advice omits flat-seam methods that run() dispatches: {missing}; got: {message}"
+    )
 
-    ``mcmc_nuts`` is absent from the hierarchical ``_method_map``; defaulting to
-    it would raise on every call. If NUTS is ever wired up, this test should be
-    updated deliberately, not deleted incidentally.
+
+def test_population_default_is_not_nuts_even_though_nuts_now_runs():
+    """NUTS became reachable here — the default still must not become it.
+
+    History, because the reason changed underneath this test. Originally NUTS
+    was absent from the hierarchical ``_method_map`` entirely, so defaulting to
+    it would have raised on every call. That is no longer true: NUTS runs
+    hierarchically through the flat seam (``FLAT_SAMPLERS``).
+
+    The conclusion survives on different evidence. Measured on a 2-galaxy, D=18
+    problem, peak RSS was 5.21 GB for ``mcmc_nuts`` against 1.51 GB for
+    ``mcmc_raytrace`` and 1.47 GB for ``map``, and D here grows with the number
+    of galaxies. NUTS is a legitimate *choice* on this path and a poor
+    *default*.
+
+    Kept as a distinct test rather than folded into the pinning test above
+    because it encodes a reason, not just a value.
     """
-    src = inspect.getsource(PopulationFitter.run)
-    assert '"mcmc_nuts"' not in src.split("_method_map = {")[1].split("}")[0]
+    from tengri.inference._hierarchical_flat import FLAT_SAMPLERS
+
+    assert "mcmc_nuts" in FLAT_SAMPLERS, "NUTS should be reachable hierarchically"
     assert _default_of(PopulationFitter.run) != "mcmc_nuts"
 
 

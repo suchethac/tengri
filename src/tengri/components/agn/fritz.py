@@ -29,7 +29,6 @@ References
 
 import functools
 from collections.abc import Callable
-from pathlib import Path
 from typing import NamedTuple
 
 import jax
@@ -152,6 +151,133 @@ def _interpolate_and_normalize(
     return l_scale * sed / integral_safe
 
 
+class FritzGrid(NamedTuple):
+    """Fritz+2006 6-D torus template arrays, as a JAX pytree.
+
+    Carried as a pytree (rather than closed over) so the forward model can
+    pass the library into ``jax.jit`` as an argument. Closing over it instead
+    bakes ~16 MB into the graph as ``Constant`` ops.
+
+    Attributes
+    ----------
+    dust : ndarray, shape (n_r, n_tau, n_beta, n_gamma, n_oa, n_psy, n_wave)
+        Tabulated torus SEDs [shape only; renormalized on use].
+    wave_grid : ndarray, shape (n_wave,)
+        Template rest-frame wavelength grid [Angstrom].
+    axes : tuple of ndarray
+        The six parameter axes, in interpolation order.
+    edges : tuple of ndarray
+        Triweight bin edges derived from ``axes``.
+    """
+
+    dust: jnp.ndarray
+    wave_grid: jnp.ndarray
+    axes: tuple[jnp.ndarray, ...]
+    edges: tuple[jnp.ndarray, ...]
+
+
+@functools.cache
+def load_fritz_grid(grid_path: str) -> FritzGrid:
+    """Load a Fritz+2006 grid HDF5 into a :class:`FritzGrid` pytree.
+
+    Parameters
+    ----------
+    grid_path : str
+        Path to a Fritz2006 HDF5 grid file.
+
+    Returns
+    -------
+    FritzGrid
+
+    Notes
+    -----
+    **JIT-compatible**: no — performs HDF5 I/O. Call outside the trace.
+
+    ``jax.ensure_compile_time_eval`` keeps the derived edge arrays concrete
+    even when this first runs inside a trace; without it the
+    ``functools.cache`` would immortalize ``DynamicJaxprTracer`` values that
+    leak out of the trace scope.
+    """
+    raw = _load_grid_arrays(grid_path)
+    with jax.ensure_compile_time_eval():
+        axes = tuple(jnp.array(ax) for ax in raw["axes"])
+        return FritzGrid(
+            dust=jnp.array(raw["dust"]),
+            wave_grid=jnp.array(raw["wave"]),
+            axes=axes,
+            edges=tuple(edges_for_grid(ax) for ax in axes),
+        )
+
+
+def fritz_sed_from_grid(
+    grid: FritzGrid,
+    wavelength: jnp.ndarray,
+    agn_log_lbol: float = 10.0,
+    agn_torus_frac: float = 0.5,
+    agn_fritz_r_ratio: float = 60.0,
+    agn_fritz_tau: float = 1.0,
+    agn_fritz_beta: float = -0.5,
+    agn_fritz_gamma: float = 4.0,
+    agn_fritz_oa: float = 60.0,
+    agn_fritz_psy: float = 0.001,
+    **_kwargs,
+) -> jnp.ndarray:
+    r"""Fritz+2006 torus :math:`L_\nu` by 6-D triweight grid interpolation.
+
+    Parameters
+    ----------
+    grid : FritzGrid
+        Template arrays, passed as an argument so they thread through JIT.
+    wavelength : ndarray, shape (n_wave,)
+        Wavelength grid. [Angstrom]
+    agn_log_lbol : float
+        :math:`\log_{10}(L_{\rm bol}/L_\odot)`. [dimensionless]
+    agn_torus_frac : float
+        Fraction of L_bol reprocessed by the torus. [dimensionless]
+    agn_fritz_r_ratio : float
+        Dust torus radius ratio (r_max / r_min). Allowed: 10, 30, 60, 100, 150.
+    agn_fritz_tau : float
+        Optical depth at 9.7 um. Allowed: 0.1, 0.3, 0.6, 1, 2, 3, 6, 10.
+    agn_fritz_beta : float
+        Radial dust density power-law index. Allowed: -1, -0.75, -0.5, -0.25, 0.
+    agn_fritz_gamma : float
+        Polar dust density gradient. Allowed: 0, 2, 4, 6.
+    agn_fritz_oa : float
+        Dust torus half-opening angle [degrees]. Allowed: 60, 100, 140.
+    agn_fritz_psy : float
+        Viewing angle from torus axis [degrees]; 0 = type-2 (edge-on),
+        90 = type-1 (face-on).
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Dust torus specific luminosity :math:`L_\nu`. [erg/s/Hz]
+
+    Notes
+    -----
+    **JIT-compatible**: yes. **Gradient-safe**: yes — the triweight kernel
+    is C2-continuous across all six axes.
+    """
+    l_scale = 10.0**agn_log_lbol * _L_SUN * agn_torus_frac
+    point = (
+        agn_fritz_r_ratio,
+        agn_fritz_tau,
+        agn_fritz_beta,
+        agn_fritz_gamma,
+        agn_fritz_oa,
+        agn_fritz_psy,
+    )
+    return _interpolate_and_normalize(
+        jnp.asarray(grid.dust),
+        jnp.asarray(grid.wave_grid),
+        tuple(jnp.asarray(a) for a in grid.axes),
+        tuple(jnp.asarray(e) for e in grid.edges),
+        wavelength,
+        point,
+        l_scale,
+    )
+
+
 def create_fritz_from_grid(grid_path: str) -> Callable:
     """Load Fritz2006 templates and return an interpolation function.
 
@@ -194,17 +320,8 @@ def create_fritz_from_grid(grid_path: str) -> Callable:
        A&A, 470, 221 (2006). arXiv:0606147.
        https://doi.org/10.1051/0004-6361:20066130
     """
-    raw = _load_grid_arrays(grid_path)
-
-    # Wrap conversion in ensure_compile_time_eval so the cached closure
-    # captures concrete arrays even if first invocation happens inside
-    # jax.jit. Without this, the @functools.cache wrapper would store
-    # DynamicJaxprTracer values that leak out of the trace scope.
-    with jax.ensure_compile_time_eval():
-        dust_jax = jnp.array(raw["dust"])
-        wave_grid = jnp.array(raw["wave"])
-        axes = tuple(jnp.array(ax) for ax in raw["axes"])
-        edges = tuple(edges_for_grid(ax) for ax in axes)
+    grid = load_fritz_grid(grid_path)
+    dust_jax, wave_grid, axes, edges = grid.dust, grid.wave_grid, grid.axes, grid.edges
 
     def fritz_grid(
         wavelength: jnp.ndarray,
@@ -392,19 +509,43 @@ def _find_fritz_grid() -> str:
     and the download fail is :class:`FileNotFoundError` raised.
     """
 
-    base = Path(__file__).resolve().parents[4]
-    for rel in _GRID_SEARCH_PATHS:
-        for candidate in [base / rel, Path(rel)]:
-            if candidate.is_file():
-                return str(candidate)
+    from tengri._data_setup import find_data
+
+    # Must consult $TENGRI_DATA_DIR before falling through to the download
+    # below (#1431) — otherwise a user whose grids live off the source tree
+    # re-fetches a file they already have.
+    found = find_data(*_GRID_SEARCH_PATHS)
+    if found is not None:
+        return str(found)
 
     # Not on disk — try the public host (mirrors the SSP auto-fetch path).
     try:
         from tengri._data_setup import download_template
 
-        return str(download_template(_GRID_FILENAME, dest=base / "data"))
+        # dest defaults to download_dir(), which is data_dirs()[0] — so the
+        # loader above finds the file next time. The previous explicit
+        # repo-root dest wrote where $TENGRI_DATA_DIR users never look.
+        return str(download_template(_GRID_FILENAME))
     except Exception:
         raise FileNotFoundError(_NOT_FOUND_MSG) from None
+
+
+def load_fritz_default_grid() -> FritzGrid:
+    """Load the packaged Fritz+2006 grid pytree (discovery + cache).
+
+    This is the ``template_loader`` the torus block registers, so the
+    forward model can hoist the library out of the JIT trace.
+
+    Returns
+    -------
+    FritzGrid
+
+    Raises
+    ------
+    FileNotFoundError
+        If the grid is neither on disk nor downloadable.
+    """
+    return load_fritz_grid(_find_fritz_grid())
 
 
 @functools.cache
@@ -479,6 +620,9 @@ def fritz_sed(*args, **kwargs):
     """
     # Allow the template to be threaded as a JIT runtime input
     _template = kwargs.pop("_template", None)
+    if isinstance(_template, FritzGrid):
+        # Threaded grid arrays: evaluate directly so they stay JIT arguments.
+        return fritz_sed_from_grid(_template, *args, **kwargs)
     template_fn = _template if _template is not None else _load_fritz_default()
     return template_fn(*args, **kwargs)
 

@@ -86,7 +86,6 @@ Public API (`from tengri import ...`) unchanged.
 |------|---------|--------------|
 | `src/tengri/forward/sed_model.py` | High-level SEDModel class (2957L, split deferred) | Understanding the forward model |
 | `src/tengri/forward/orchestrator.py` | The SEDComponent chain runner — replaced the kernel adapter family in Phase 6 (PR #135, 2026-05-20). Calls each component's `apply(state, params, ssp_data=...)` in sequence. | Core forward model |
-| `src/tengri/forward/pipeline.py` | SED computation engine (non-fused path) | Tracing SED assembly |
 | `src/tengri/forward/precompute/` | Precompute Protocol + registry + algorithm (`protocol.py`, `registry.py`, `grid.py`, `templates.py`) | Extending precompute |
 | `src/tengri/parameters/parameters.py` | Parameters class (canonical, was ParamSpec) | Parameter handling |
 | `src/tengri/parameters/priors.py` | Uniform / Gaussian / LogUniform / Fixed | Prior construction |

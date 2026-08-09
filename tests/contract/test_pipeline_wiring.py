@@ -63,6 +63,12 @@ def _pipeline_src() -> str:
     Originally pinned to the legacy ``forward.pipeline.compute_sed_components``
     body, deleted in Phase B closure. Its parameter-forwarding contract now
     lives across the orchestrator's component adapters and helpers.
+
+    ``forward.pipeline`` itself was still listed here until 2026-08, long after
+    it stopped holding anything this scan cares about: by then the module was
+    two metallicity dispatchers, and it contributed no AGN, X-ray, or radio
+    parameter text to the aggregate. The module has since been removed
+    entirely — every symbol in it was unreferenced — so the import went with it.
     """
     from tengri.components.agn import (
         component as agn_component,
@@ -76,13 +82,9 @@ def _pipeline_src() -> str:
     )
     from tengri.components.radio import component as radio_component
     from tengri.components.xray import component as xray_component
-    from tengri.forward import (
-        pipeline as sed_pipeline,
-        sed_model as sed_model_mod,
-    )
+    from tengri.forward import sed_model as sed_model_mod
 
     parts = [
-        inspect.getsource(sed_pipeline),
         inspect.getsource(sed_model_mod),
         inspect.getsource(agn_component),
         inspect.getsource(agn_unified),

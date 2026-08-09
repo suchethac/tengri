@@ -63,6 +63,22 @@ def _wne_ssp():
     return load_ssp_data(path)
 
 
+# Bare-stellar, for the one test here that needs an *additive* nebular backend
+# rather than a baked-in one (#1579). Cue refuses a nebular-included grid, so
+# pairing it with the wNE grid above is a configuration tengri will not build.
+_BARE_CANDIDATES = [
+    "data/fsps_prsc_miles_chabrier.h5",
+    "data/bc03_pdva_stelib_chabrier.h5",
+]
+
+
+def _bare_ssp():
+    path = next((p for p in _BARE_CANDIDATES if Path(p).is_file()), None)
+    if path is None:
+        pytest.skip("No bare-stellar SSP grid under data/.")
+    return load_ssp_data(path)
+
+
 # Hα emission-line equivalent width (measured off the baked SSP spectrum).
 _HALPHA_EW = SpectralIndexDef(
     name="Halpha_EW",
@@ -528,7 +544,11 @@ def test_predict_spectral_indices_fast_raises_on_additive_nebular():
     not in the SSP window integrals, so the LUT would be silently wrong."""
     import warnings
 
-    ssp = _wne_ssp()
+    # Bare-stellar, not wNE: this test needs an *additive* backend, and Cue on
+    # a nebular-included grid is refused (#1579). The grid's provenance is
+    # incidental to the assertion -- what matters is that the backend adds
+    # emission the SSP window integrals do not contain.
+    ssp = _bare_ssp()
     # Cue needs its trained-weights file; skip cleanly when absent (CI lacks it)
     # rather than FileNotFoundError at model build.
     if not Path("data/cue_weights.npz").is_file():

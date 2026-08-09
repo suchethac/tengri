@@ -19,10 +19,23 @@ build fails on an *absent* page, so ``-W`` could not see it either.
 
 What it checks
 --------------
-Every name in ``tengri.__all__`` is reachable from some autodoc directive
-under ``docs/`` — either its own ``.. autoclass:: / .. autofunction:: /
+Every public top-level name is reachable from some autodoc directive under
+``docs/`` — either its own ``.. autoclass:: / .. autofunction:: /
 .. autoexception:: / .. autodata::``, or an entry in the explicit
 ``:members:`` list of an ``.. automodule::``.
+
+"Public top-level name" means ``__all__`` **union** ``_CURATED_DIR``, because
+the export surface is two lists: ``__all__`` governs ``from tengri import *``
+and ``_CURATED_DIR`` governs ``tengri.<TAB>``. Censusing only the first was
+this guard's own bug (#1606): 11 names live in ``_CURATED_DIR`` alone, and
+6 of them — including ``Instrument``, an entire feature — had no page while
+the guard reported "every exported symbol appears in the API reference".
+
+That is the second instance of one rule. #1574 was the first: a contract test
+asserting "every ``list_*`` returns one type" was green while 6 of 29 violated
+it, for the same reason. A guard proves its contract only over its census, so
+``census()`` below asserts the union is strictly larger than ``__all__`` —
+dropping the second list has to fail rather than quietly narrow the sweep.
 
 Submodules are exempt. ``tengri.recipes``, ``tengri.plot`` and the other 23
 re-export namespaces are directories in the import tree, not symbols a
@@ -94,6 +107,42 @@ def documented_names() -> set[str]:
     return found
 
 
+def census(tengri) -> list[str]:
+    """Every public top-level name, from *both* export lists.
+
+    Parameters
+    ----------
+    tengri : module
+        The imported package.
+
+    Returns
+    -------
+    list of str
+        Sorted public names, dunders excluded.
+
+    Raises
+    ------
+    ValueError
+        If either list is empty, or if the union is no larger than
+        ``__all__``. Both mean the census has silently narrowed, and a
+        narrowed census passes everything — see the module docstring.
+    """
+    exported = {n for n in getattr(tengri, "__all__", ()) if not n.startswith("__")}
+    curated = {n for n in getattr(tengri, "_CURATED_DIR", ()) if not n.startswith("__")}
+    if not exported:
+        raise ValueError("tengri.__all__ is empty — nothing to check")
+    if not curated:
+        raise ValueError("tengri._CURATED_DIR is empty — the tab-completion menu went missing")
+    union = exported | curated
+    if len(union) <= len(exported):
+        raise ValueError(
+            "the census is no wider than __all__, so _CURATED_DIR is contributing "
+            "nothing. Either the two lists were merged (update this guard) or the "
+            "second list was dropped from the census (#1606)."
+        )
+    return sorted(union)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--verbose", action="store_true", help="list every symbol and its status")
@@ -103,9 +152,10 @@ def main() -> int:
     import tengri
 
     documented = documented_names()
-    exported = sorted(getattr(tengri, "__all__", []))
-    if not exported:
-        print("ERROR: tengri.__all__ is empty — nothing to check", file=sys.stderr)
+    try:
+        exported = census(tengri)
+    except ValueError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
         return 1
 
     missing: list[tuple[str, str]] = []

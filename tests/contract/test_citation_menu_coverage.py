@@ -177,12 +177,20 @@ _NOT_WALKED = {
     # Cited from ``Posterior.method`` instead -- inference backend is not a
     # structural field of the spec.
     "list_inference_methods": "cited from Posterior.method, not from the spec",
-    # No spec attribute selects it: the builder exposes ``radio.sf`` /
-    # ``radio.agn`` (which land on ``radio_sfr_mode`` / ``radio_agn_model``
-    # and resolve through ``list_radio_blocks``), and there is no
-    # ``radio_model`` attribute at all, so ``condon92`` is unreachable from
-    # any spec. Tracked on #1447.
-    "list_radio_models": "no spec attribute selects it (radio_model does not exist)",
+    # Walking it would double-count. ``radio={'type': X}`` *is* a live
+    # surface -- two shipped recipes use ``{'type': 'condon92'}`` -- but it
+    # is resolved onto ``radio_sfr_mode`` / ``radio_agn_model`` at parse
+    # time (``_legacy_radio_type_to_blocks``), and those two attributes are
+    # already walked through ``list_radio_blocks``. There is no surviving
+    # ``radio_model`` attribute to read, and nothing is lost: selecting
+    # ``radio_dpl`` cites Martinez-Ramirez+2024 via the ``radio_agn`` row.
+    #
+    # The earlier reason recorded here -- "condon92 is unreachable from any
+    # spec" -- was true when #1447 landed and went stale when the legacy
+    # ``type`` axis was wired. It is what kept #1461 mis-scoped: the menu
+    # entry was reachable all along, and the real defect was that the name
+    # was validated and then discarded (#1461).
+    "list_radio_models": "resolved onto radio_sfr_mode/radio_agn_model, which are walked",
     # Both kernels are already covered by the stellar component's unconditional
     # ``citations() -> ("dsps",)``. Selecting ``age_kernel='dsps'`` uses DSPS's
     # histogram kernel (Hearin+2021 Eq. 9) and cites DSPS; selecting ``'cic'``

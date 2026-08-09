@@ -233,7 +233,14 @@ def _build_nthcomp_filter_table(
     import h5py
 
     if template_path is None:
-        template_path = Path(__file__).parents[4] / "data" / "nthcomp_templates.h5"
+        from tengri._data_setup import find_data
+
+        # Honors $TENGRI_DATA_DIR (#1431); None when the grid is absent, which
+        # the caller already treats as "templates unavailable".
+        found = find_data("nthcomp_templates.h5")
+        if found is None:
+            return None, None, None, None
+        template_path = found
 
     if not template_path.exists():
         return None, None, None, None

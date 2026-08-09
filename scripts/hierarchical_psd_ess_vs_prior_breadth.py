@@ -35,7 +35,15 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 
 _DATA_DIR = Path(__file__).resolve().parents[1] / "data"
-_SSP_FILE = _DATA_DIR / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
+
+# Bare-stellar, because `recipes.stochastic_sfh_jwst()` below selects the Cue
+# nebular backend, whose docstring states "SSP requirement: bare-stellar".
+# This defaulted to the wNE grid -- nebular already baked into the templates --
+# so the sweep added Cue's emission on top of emission that was already there.
+# Inherited from test_population_psd_pilot.py when #1543 extracted the sweep;
+# both are fixed under #1579, which also stopped TENGRI_ALLOW_WNE_CUE from
+# disabling the metadata check that would otherwise have refused this.
+_SSP_FILE = _DATA_DIR / "fsps_prsc_miles_chabrier.h5"
 
 # Nominal interim bounds; widths below are multiples of these spans.
 NOMINAL_SIGMA = (0.01, 1.0)
@@ -93,6 +101,14 @@ def build_model_and_mock(ssp_path, n_galaxies):
 def bounds_for_width(width_mult):
     """Interim bounds at a given multiple of the nominal width.
 
+    Widening is symmetric about the center until a lower bound would reach the
+    nominal floor, then one-sided. Both axes are positive by construction --
+    ``sigma`` is an amplitude [dex] and ``tau`` a correlation timescale [yr] --
+    so an unclipped symmetric scaling walks them through zero: at
+    ``width_mult >= 1.21`` for sigma and ``>= 1.43`` for tau, which is two of
+    the four widths this sweep ships. Before #1585 that produced an all-NaN
+    quadrature grid and no error; ``SharedGrid.uniform`` now rejects it.
+
     Parameters
     ----------
     width_mult : float
@@ -101,15 +117,17 @@ def bounds_for_width(width_mult):
     Returns
     -------
     sigma_bounds : tuple of float
-        ``(lo, hi)`` [dex], symmetric about ``SIGMA_CENTER``.
+        ``(lo, hi)`` [dex], centered on ``SIGMA_CENTER`` and floored at
+        ``NOMINAL_SIGMA[0]``.
     tau_bounds_myr : tuple of float
-        ``(lo, hi)`` [Myr], symmetric about ``TAU_CENTER_MYR``.
+        ``(lo, hi)`` [Myr], centered on ``TAU_CENTER_MYR`` and floored at
+        ``NOMINAL_TAU_MYR[0]``.
     """
     s_half = 0.5 * (NOMINAL_SIGMA[1] - NOMINAL_SIGMA[0]) * width_mult
     t_half = 0.5 * (NOMINAL_TAU_MYR[1] - NOMINAL_TAU_MYR[0]) * width_mult
     return (
-        (SIGMA_CENTER - s_half, SIGMA_CENTER + s_half),
-        (TAU_CENTER_MYR - t_half, TAU_CENTER_MYR + t_half),
+        (max(SIGMA_CENTER - s_half, NOMINAL_SIGMA[0]), SIGMA_CENTER + s_half),
+        (max(TAU_CENTER_MYR - t_half, NOMINAL_TAU_MYR[0]), TAU_CENTER_MYR + t_half),
     )
 
 

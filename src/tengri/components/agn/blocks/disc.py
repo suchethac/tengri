@@ -742,8 +742,13 @@ def slone_netzer_disc_block(
     wavelength: Array,
     agn_log_lbol: float,
     *,
-    # Deliberately NOT DEFAULT_AGN_LOG_MBH: the SN12 grid's log_mbh axis starts
-    # at 7.4, so the declared 7.0 would be silently clipped. 8.6 is grid center.
+    # Both defaults are deliberately the block's own, NOT the shared declared
+    # ones: the SN12 grid covers log_mbh [7.4, 9.8] and log_edd [-4, -1.9586],
+    # so the declared 7.0 / -1.0 would each be silently clipped onto an edge
+    # node (bit-identical SED, exactly zero gradient). 8.6 is the log_mbh grid
+    # center; -2.0 is the on-grid counterpart for log_edd (#1578, #1586).
+    # A caller that supplies these explicitly overrides the pins, which is why
+    # Rule 9 of validate_block_recipe checks the active support at composition.
     agn_log_mbh: float = 8.6,
     agn_log_ledd: float = -2.0,
     **_params,

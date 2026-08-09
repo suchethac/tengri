@@ -33,8 +33,9 @@ values = np.linspace(lo, hi, 7)
 norm = mpl.colors.Normalize(vmin=values.min(), vmax=values.max())
 for v in values:
     params = {**baseline, "<the_knob>": v}
-    L_nu = model.predict_rest_sed(params)
-    ax.loglog(wave, wave * L_nu, color=cmap(norm(v)), lw=1.4)
+    pred = model.predict(params)
+    wave = pred.wave_rest                      # the array does not carry its axis
+    ax.loglog(wave, wave * pred.rest_sed(), color=cmap(norm(v)), lw=1.4)
 cbar = fig.colorbar(plt.cm.ScalarMappable(norm=norm, cmap=cmap), ax=ax,
                     pad=0.01, label=r"<knob label with units>")
 ax.set(xlabel=r"$\lambda$ [$\mu$m or $\mathrm{\AA}$, pick one]",

@@ -58,6 +58,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri._data_setup import package_or_env_data_path
 from tengri.components.nebular._constants import _LOG10_ZSUN, _LSUN_ERG
 from tengri.components.nebular._shared import (
     _interp_index_weight,
@@ -129,7 +130,7 @@ def _emit_mappings_stellar_ionizing_warning(model: str, mode: str) -> None:
 # Age cut for nebular emission (same as CloudyGridBackend)
 _MAX_NEB_LOG_AGE_YR = 8.0  # log10(100 Myr in yr)
 
-_DEFAULT_GRID_PATH = Path(__file__).resolve().parents[4] / "data" / "flury2024_grids.h5"
+_DEFAULT_GRID_PATH = package_or_env_data_path("flury2024_grids.h5")
 
 
 # ── NamedTuples for pre-loaded grid data ──────────────────────────

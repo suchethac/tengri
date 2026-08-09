@@ -264,26 +264,6 @@ class Distribution:
         """
         raise NotImplementedError(f"{type(self).__name__} must implement standardize()")
 
-    def to_nifty_prior(self):
-        """Convert to a NIFTy.re prior transform (optional).
-
-        Returns a callable that maps ξ → θ, compatible with
-        NIFTy's CorrelatedFieldMaker and optimize_kl.
-        Returns None if nifty8.re is not installed.
-
-        Returns
-        -------
-        callable or None
-            NIFTy8 prior object (callable mapping ξ → θ) if nifty8 is
-            installed, else None.
-        """
-        import importlib.util
-
-        if importlib.util.find_spec("nifty8") is None:
-            return None
-        # Default: wrap our unstandardize as a callable
-        return self.unstandardize
-
 
 # ── Concrete distributions ────────────────────────────────────────
 

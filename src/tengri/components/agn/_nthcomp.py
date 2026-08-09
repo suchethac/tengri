@@ -34,16 +34,17 @@ from __future__ import annotations
 
 import functools
 import warnings
-from pathlib import Path
 
 import h5py
 import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri._data_setup import package_or_env_data_path
+
 # ── Template loading (lazy — no computation at import time) ───────
 
-_DEFAULT_TEMPLATE_PATH = Path(__file__).parents[4] / "data" / "nthcomp_templates.h5"
+_DEFAULT_TEMPLATE_PATH = package_or_env_data_path("nthcomp_templates.h5")
 
 
 @functools.cache
