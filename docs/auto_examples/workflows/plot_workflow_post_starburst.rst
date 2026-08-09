@@ -21,11 +21,6 @@
 Model misspecification: post-starburst galaxies reveal wrong SFH
 ================================================================
 
-.. image:: images/sphx_glr_plot_workflow_post_starburst_001.png
-   :alt: plot workflow post starburst
-   :class: sphx-glr-single-img
-
-
 A post-starburst galaxy shows a recent burst followed by quenching.
 When fit with smooth tau-model (incorrect), the fit biases the recovered
 SFH. This workflow compares two models on the same mock data to show how
@@ -35,6 +30,38 @@ Reference: Cid Fernandes et al. 2005, MNRAS, 358, 363 (post-starburst
 classification); Conroy 2013, ARA&A, 51, 393 (SED fitting).
 
 .. GENERATED FROM PYTHON SOURCE LINES 13-167
+
+
+
+.. image-sg:: /auto_examples/workflows/images/sphx_glr_plot_workflow_post_starburst_001.png
+   :alt: plot workflow post starburst
+   :srcset: /auto_examples/workflows/images/sphx_glr_plot_workflow_post_starburst_001.png
+   :class: sphx-glr-single-img
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit__impl': FileNotFoundError: [Errno 2] No such file or directory: '/Users/suchethacooray/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
+      warnings.warn(
+    /Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_val_and_grad': FileNotFoundError: [Errno 2] No such file or directory: '/Users/suchethacooray/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
+      warnings.warn(
+    /Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_predict_photometry': FileNotFoundError: [Errno 2] No such file or directory: '/Users/suchethacooray/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
+      warnings.warn(
+    /Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_predict_properties': FileNotFoundError: [Errno 2] No such file or directory: '/Users/suchethacooray/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
+      warnings.warn(
+    /Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_single_step': FileNotFoundError: [Errno 2] No such file or directory: '/Users/suchethacooray/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
+      warnings.warn(
+    /Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_scan_batch': FileNotFoundError: [Errno 2] No such file or directory: '/Users/suchethacooray/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
+      warnings.warn(
+
+
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -192,6 +219,11 @@ classification); Conroy 2013, ARA&A, 51, 393 (SED fitting).
 
     fig.tight_layout()
     plt.savefig("plot_workflow_post_starburst.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 14.233 seconds)
 
 
 .. _sphx_glr_download_auto_examples_workflows_plot_workflow_post_starburst.py:

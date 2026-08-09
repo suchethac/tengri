@@ -66,6 +66,8 @@ emission to absorption across the inclination range.
 
  .. code-block:: none
 
+    /Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_interp_nd_triweight': FileNotFoundError: [Errno 2] No such file or directory: '/Users/suchethacooray/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
+      warnings.warn(
     Saved plot_skirtor_inclination_sweep.png (consolidated 3-panel figure)
 
 
@@ -122,7 +124,7 @@ emission to absorption across the inclination range.
             "torus": {"type": "skirtor", "all_params": tengri.FIXED},
             "all_params": tengri.FIXED,
             "log_lbol": 12.0,
-            "frac": 1.0,
+            "lum_ratio": 1.0,
         },
         redshift=tengri.Fixed(0.0),
     )
@@ -146,7 +148,7 @@ emission to absorption across the inclination range.
             "blr": {"type": "none", "all_params": tengri.FIXED},
             "all_params": tengri.FIXED,
             "log_lbol": 12.5,
-            "frac": 1.0,
+            "lum_ratio": 1.0,
         },
         redshift=tengri.Fixed(0.05),
     )
@@ -282,7 +284,7 @@ emission to absorption across the inclination range.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 5.365 seconds)
+   **Total running time of the script:** (0 minutes 4.477 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_skirtor_inclination_sweep.py:

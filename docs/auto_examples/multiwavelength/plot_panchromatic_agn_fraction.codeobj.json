@@ -1,13 +1,4 @@
 {
- "agn_frac": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "float64"
-  }
- ],
  "agn_fracs": [
   {
    "is_class": false,
@@ -51,6 +42,15 @@
    "module": "builtins",
    "module_short": "builtins",
    "name": "builtin_function_or_method"
+  }
+ ],
+ "agn_lum_ratio": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "float64"
   }
  ],
  "ax": [

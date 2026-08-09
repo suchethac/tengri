@@ -88,7 +88,7 @@ Silva, Maiolino & Granato 2004, MNRAS 355, 973.
             agn={
                 "all_params": tengri.FIXED,
                 "log_lbol": 12.5,
-                "frac": 1.0,
+                "lum_ratio": 1.0,
                 "cos_inc": 0.95,
                 "disc": {"type": "multicolor", "all_params": tengri.FIXED},
                 "torus": {"type": torus_type, "all_params": tengri.FIXED},

@@ -27,7 +27,7 @@ This diagnostic builds a star-forming model with several free parameters,
 defines a chi-squared loss, and compares autodiff vs FD gradients for each
 parameter. A mismatch (>1e-3) indicates a non-differentiable operation.
 
-.. GENERATED FROM PYTHON SOURCE LINES 11-104
+.. GENERATED FROM PYTHON SOURCE LINES 11-107
 
 
 
@@ -37,8 +37,27 @@ parameter. A mismatch (>1e-3) indicates a non-differentiable operation.
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-805/src/tengri/forward/sed_model.py:7566: WildcardPartialFreeWarning: 'all_params: FREE' freed 2 of 7 parameters in group 'dust'. These have no declared prior, only Fixed defaults, so they stay pinned:
+      dust_Rv, dust_bump_strength, dust_delta, dust_f_obscuration, dust_slope
+    The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. dust={'Rv': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
+      spec = parse_groups(**groups)
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-805/src/tengri/forward/sed_model.py:7566: WildcardPartialFreeWarning: 'all_params: FREE' freed 6 of 8 parameters in group 'sfh'. These have no declared prior, only Fixed defaults, so they stay pinned:
+      met_alpha_fe, met_logzsol_scatter
+    The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. sfh={'met_alpha_fe': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
+      spec = parse_groups(**groups)
+    /Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit__impl': FileNotFoundError: [Errno 2] No such file or directory: '/Users/suchethacooray/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
+      warnings.warn(
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -57,7 +76,10 @@ parameter. A mismatch (>1e-3) indicates a non-differentiable operation.
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
     jax.config.update("jax_enable_x64", True)
 
-    # Build model with multiple free parameters (DPL SFH, two-component dust, Cue nebular)
+    # Build model with multiple free parameters (DPL SFH, two-component dust) at a
+    # free redshift. Nebular is held fixed: every Cue parameter carries a Fixed
+    # registry default, so the ``FREE`` this line used to request never freed any of
+    # them — the gradient check has always run with nebular pinned, and now says so.
     ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
     obs = tengri.Observation(
         photometry=tengri.Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i"]),
@@ -73,7 +95,7 @@ parameter. A mismatch (>1e-3) indicates a non-differentiable operation.
             "all_params": tengri.FREE,
             "emission": {"type": "dale2014", "all_params": tengri.FIXED},
         },
-        neb={"type": "cue", "all_params": tengri.FREE},
+        neb={"type": "cue", "all_params": tengri.FIXED},
         redshift=tengri.FREE,
     )
 
@@ -139,7 +161,7 @@ parameter. A mismatch (>1e-3) indicates a non-differentiable operation.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 9.630 seconds)
+   **Total running time of the script:** (0 minutes 7.012 seconds)
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_diag_gradient_finite_difference.py:
