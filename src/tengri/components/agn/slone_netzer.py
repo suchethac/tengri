@@ -203,6 +203,52 @@ def _load_default() -> Callable:
     return create_slone_netzer_from_grid(_find_grid())
 
 
+@functools.cache
+def slone_netzer_grid_support() -> dict[str, tuple[float, float]]:
+    r"""Parameter support of the shipped SN12 grid, read from its own axes.
+
+    A parameter declaration records one support — its prior. A block that
+    interpolates a template library carries a *second*, implicit one: the
+    extent of the axes it interpolates over. The closure built by
+    :func:`create_slone_netzer_from_grid` clips both parameters onto these
+    axes, so a value outside them collapses onto the edge node — the SED is
+    bit-identical and the gradient is exactly zero, with no NaN, warning or
+    error to reveal it (#1586).
+
+    This accessor exposes that second support so a caller can compare it
+    against a declared prior at composition time instead of discovering the
+    clip empirically.
+
+    Returns
+    -------
+    support : dict[str, tuple[float, float]]
+        ``{'agn_log_mbh': (lo, hi), 'agn_log_ledd': (lo, hi)}`` — inclusive
+        bounds, both dimensionless. ``agn_log_mbh`` is
+        :math:`\log_{10}(M_{\rm BH}/M_\odot)`, ``agn_log_ledd`` is
+        :math:`\log_{10}(\dot m/\dot m_{\rm Edd})`.
+
+    Raises
+    ------
+    FileNotFoundError
+        If the packaged grid is not installed.
+
+    Notes
+    -----
+    **JIT-compatible**: not applicable — pure Python/NumPy, called at
+    composition time only. Cached, so the grid is read once per process.
+
+    The bounds are **read from the file**, and taken as ``axis[0]`` /
+    ``axis[-1]`` so they are exactly the arguments the ``jnp.clip`` pair in
+    :func:`create_slone_netzer_from_grid` uses. A hand-copied literal would
+    silently go stale if the packaged grid were ever rebuilt on new axes.
+    """
+    raw = _load_slone_netzer_arrays(_find_grid())
+    return {
+        "agn_log_mbh": (float(raw["log_mbh"][0]), float(raw["log_mbh"][-1])),
+        "agn_log_ledd": (float(raw["log_edd"][0]), float(raw["log_edd"][-1])),
+    }
+
+
 def slone_netzer_sed(*args, **kwargs) -> jnp.ndarray:
     """Slone & Netzer (2012) disc (auto-loaded from the packaged HDF5 grid).
 
