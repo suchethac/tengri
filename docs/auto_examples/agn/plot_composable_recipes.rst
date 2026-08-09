@@ -48,19 +48,8 @@ Stalevski et al. 2016 (SKIRTOR); Temple, Hewett & Banerji 2021.
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
-      return load_ssp_data(str(candidate))
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -119,7 +108,7 @@ Stalevski et al. 2016 (SKIRTOR); Temple, Hewett & Banerji 2021.
 
     fig, ax = plt.subplots(figsize=(8.0, 5.0))
     for label, color, blocks in RECIPES:
-        agn = {"all_params": tengri.FIXED, "log_lbol": 12.0, "frac": 1.0, **blocks}
+        agn = {"all_params": tengri.FIXED, "log_lbol": 12.0, "lum_ratio": 1.0, **blocks}
         model = tengri.SEDModel.build(ssp, sfh=SFH, dust=DUST, agn=agn, redshift=tengri.Fixed(0.0))
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
         out = model.predict(p)
@@ -136,11 +125,6 @@ Stalevski et al. 2016 (SKIRTOR); Temple, Hewett & Banerji 2021.
     ax.legend(loc="lower center", fontsize=9, frameon=False)
     fig.tight_layout()
     plt.savefig("plot_composable_recipes.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 11.621 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_composable_recipes.py:

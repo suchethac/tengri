@@ -74,9 +74,11 @@ References
 
  .. code-block:: none
 
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
-      return load_ssp_data(str(candidate))
     Building Type 1 (face-on, BLR) model...
+    /Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_interp_nd_triweight': FileNotFoundError: [Errno 2] No such file or directory: '/Users/suchethacooray/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
+      warnings.warn(
+    /Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_scan': FileNotFoundError: [Errno 2] No such file or directory: '/Users/suchethacooray/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
+      warnings.warn(
     Building Type 2 (edge-on, NLR) model...
     Saved: plot_type1_type2_unified_model.png
     Saved: plot_type1_type2_unified_model_transition.png
@@ -129,7 +131,7 @@ References
         "torus": {"type": "skirtor", "all_params": tengri.FIXED, "tau_skirtor": 7.0},
         "all_params": tengri.FIXED,
         "log_lbol": 12.0,
-        "frac": 1.0,
+        "lum_ratio": 1.0,
     }
 
     # Type 1: face-on, unobstructed disc view → broad lines visible
@@ -227,7 +229,7 @@ References
             agn={
                 "all_params": tengri.FIXED,
                 "log_lbol": 12.5,
-                "frac": 1.0,
+                "lum_ratio": 1.0,
                 "cos_inc": cos_inc,
                 "disc": {"type": "multicolor", "all_params": tengri.FIXED},
                 "torus": {"type": "skirtor", "all_params": tengri.FIXED},
@@ -282,7 +284,7 @@ References
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.591 seconds)
+   **Total running time of the script:** (0 minutes 4.552 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_type1_type2_unified_model.py:

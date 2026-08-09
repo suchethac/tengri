@@ -23,7 +23,10 @@ setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 jax.config.update("jax_enable_x64", True)
 
-# Build model with multiple free parameters (DPL SFH, two-component dust, Cue nebular)
+# Build model with multiple free parameters (DPL SFH, two-component dust) at a
+# free redshift. Nebular is held fixed: every Cue parameter carries a Fixed
+# registry default, so the ``FREE`` this line used to request never freed any of
+# them — the gradient check has always run with nebular pinned, and now says so.
 ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
 obs = tengri.Observation(
     photometry=tengri.Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i"]),
@@ -39,7 +42,7 @@ model = tengri.SEDModel.build(
         "all_params": tengri.FREE,
         "emission": {"type": "dale2014", "all_params": tengri.FIXED},
     },
-    neb={"type": "cue", "all_params": tengri.FREE},
+    neb={"type": "cue", "all_params": tengri.FIXED},
     redshift=tengri.FREE,
 )
 
