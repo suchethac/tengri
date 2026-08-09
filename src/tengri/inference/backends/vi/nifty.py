@@ -24,7 +24,7 @@ import jax.numpy as jnp
 
 from tengri.inference._model_cache import _default_owner as _model_cache_owner
 from tengri.inference._sample_utils import _mean_params
-from tengri.inference.likelihoods.gaussian import standardized_residual
+from tengri.inference.likelihoods.gaussian import diag_noise_operators, standardized_residual
 
 
 def run_nifty_fast_vi(
@@ -354,8 +354,13 @@ def _get_or_build_nifty_likelihood(fitter):
                 domain["psd_xi"] = jft.ShapeWithDtype((spec.n_grid,))
             nifty_model = jft.Model(sr_jit, domain=domain)
 
-        noise_cov_inv = 1.0 / noise**2
-        likelihood = jft.Gaussian(data, noise_cov_inv).amend(nifty_model)
+        # Operators, not arrays: NIFTy derives whichever of (cov_inv, std_inv)
+        # it is not given from the other, so an array for either reintroduces
+        # the 1/sigma**2 overflow in float32 (#1206).
+        cov_inv, std_inv = diag_noise_operators(noise)
+        likelihood = jft.Gaussian(data, noise_cov_inv=cov_inv, noise_std_inv=std_inv).amend(
+            nifty_model
+        )
 
     _model_cache_owner.get_or_compile_model(fitter.model)["nifty_lh"] = likelihood
     return likelihood

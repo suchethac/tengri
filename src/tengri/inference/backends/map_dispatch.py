@@ -18,6 +18,7 @@ from jax.flatten_util import ravel_pytree
 
 from tengri.inference._model_cache import _default_owner as _model_cache_owner
 from tengri.inference.context import InferenceContext
+from tengri.inference.likelihoods.gaussian import inv_noise_std
 
 _OPTAX_OPTIMIZERS = {"adam", "adamw", "sgd"}
 _SCIPY_OPTIMIZERS = {"lbfgs", "lbfgs_scipy"}
@@ -673,9 +674,9 @@ def build_vectorized_map_solver(
     fitter : Fitter
         Template fitter — its model, observation, spec, and ``_data_args``
         layout are reused for every galaxy. The galaxy-varying fields
-        (``data``, ``noise``, ``noise_inv``, ``sqrt_noise_inv``) are
-        replaced inside the scan; all other fields (filter curves, masks,
-        spec covariance) are shared from the template.
+        (``data``, ``noise``, ``sqrt_noise_inv``) are replaced inside the
+        scan; all other fields (filter curves, masks, spec covariance) are
+        shared from the template.
     n_steps : int, optional
         Number of optax steps (default 200).  No early stopping — the
         scan length is static, so compile cost is independent of n_steps.
@@ -707,12 +708,10 @@ def build_vectorized_map_solver(
 
     def _make_data_args(flux, noise):
         """Per-galaxy data_args with shared filter/obs fields preserved."""
-        noise_inv = 1.0 / noise**2
         out = dict(template_data_args)
         out["data"] = flux
         out["noise"] = noise
-        out["noise_inv"] = noise_inv
-        out["sqrt_noise_inv"] = jnp.sqrt(noise_inv)
+        out["sqrt_noise_inv"] = inv_noise_std(noise)
         return out
 
     def _initial_unbounded(key):

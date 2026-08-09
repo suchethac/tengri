@@ -241,6 +241,65 @@ The exact-op localization was the crux: `checkify` named the primitive
 `source_info_util.summarize` pointed at the phot-LUT block, which `debug_nans`
 (unfused → finite) could not.
 
+**Layer 3 — the METRIC, now also DELIVERED (#1588).** #1535 fixed the *energy*
+and left the *curvature*. The two are protected by different code, so the energy stayed
+finite while geoVI's sampling operator returned NaN — a fit that converges and
+reports a healthy objective while every posterior draw is NaN, with nothing in
+the output connecting the two.
+
+At σ ~ 3e-30 the engine derives two quantities from the noise, and they sit on
+opposite sides of the float32 ceiling (3.4e38):
+
+| quantity | magnitude | float32 | remedy |
+|---|---|---|---|
+| `sqrt_noise_inv` = 1/σ | 3.3e29 | representable | **spelling**: it was `jnp.sqrt(1.0/noise**2)`, a representable destination via an `inf` intermediate → `sqrt(inf)` |
+| `noise_inv` = 1/σ² | 1.1e59 | **never** representable | **restructure**: `J^T N^-1 J v` → `(J/σ)^T (J/σ) v` |
+
+Fixing only the spelling leaves `metric_vec` NaN; fixing only the structure
+leaves `transformation_flat` / `left_sqrt_metric_flat` /
+`right_sqrt_metric_flat` / `draw_residuals` / `draw_metric_sample` inf. Both are
+needed, and `test_geovi_metric_float32.py` asserts the first without the second
+is insufficient so they cannot be conflated again.
+
+Everything now routes through two named primitives in `likelihoods/gaussian.py`
+— `whiten(x, σ)` (carrying the `optimization_barrier`) and `inv_noise_std(σ)` —
+rather than 15 open-coded sites. `standardized_residual` delegates to `whiten`,
+so #1535's fix and this one are the same seam.
+
+Three consequences worth keeping:
+
+- **The barrier is load-bearing here too, and only under jit.** Measured:
+  `(x/σ)/σ` without a barrier is finite eagerly and 5/5 NaN under `jit` with σ
+  a compile-time constant, with a literal `inf` in the compiled HLO. Source
+  order is a suggestion; a data dependency is binding.
+- **`data_args` no longer publishes `noise_inv`.** After the restructure nothing
+  read it, and an all-`inf` array in the jitted argument dict is an invitation
+  to the next backend author. Backends needing N⁻¹ apply `sqrt_noise_inv` twice.
+  This is a (minor) contract change for third-party backends under ADR-0010.
+- **NIFTy needed operators, not arrays.** `jft.Gaussian` derives whichever of
+  `noise_cov_inv` / `noise_std_inv` it is not given from the other — `sqrt` of
+  the first, or the *square* of the second — so passing an array for either
+  reintroduces the overflow whichever one you pick. Both are now passed as
+  `jax.tree_util.Partial` operators (`diag_noise_operators`), which also
+  silences the "assuming the specified inverse covariance is diagonal" warning
+  NIFTy logged on every construction.
+
+The same defect had a second home: `marginalize_emission_lines` assembled its
+normal equations from `1/σ²` and returned NaN for `ln_L_marg`, `a_hat`, `a_cov`
+*and* its gradient in float32, while its docstring promised "Gradient-safe:
+yes". It now whitens the design matrix.
+
+**Known open, deliberately not fixed with this change** (both are allowlisted in
+the guard with their reason, so neither is silently forgotten):
+
+- `observation/noise.py` `H_tt = residual**2 + 1.0/tau**2` — the
+  variable-covariance Hessian. τ = 1/σ_eff ~ 3e29, so τ² ~ 1e59 overflows *and*
+  1/τ² underflows to 0. This needs the whole metric rescaled, not a spelling
+  change.
+- `observation/calibration.py` `inv_var = 1.0/max(obs_err**2, 1e-30)` — at a
+  real spectroscopic σ the 1e-30 floor binds **in float64 too**, so the first
+  question is what units `obs_err` arrives in, not precision.
+
 ---
 
 ## Summary

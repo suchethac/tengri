@@ -29,7 +29,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.inference.fitter import resolve_method
-from tengri.inference.likelihoods.gaussian import standardized_residual
+from tengri.inference.likelihoods.gaussian import diag_noise_operators, standardized_residual
 from tengri.utils.transforms import to_bounded, to_unbounded
 
 #: Acceptance below which a Ray Tracing chain is treated as not having sampled.
@@ -1514,15 +1514,13 @@ class PopulationFitter:
 
         # Precompute data
         all_data = []
-        all_noise_inv = []
+        all_noise = []
         for gal in self.galaxies:
-            d = jnp.asarray(gal["flux_obs"])
-            n = jnp.asarray(gal["noise"])
-            all_data.append(d)
-            all_noise_inv.append(1.0 / n**2)
+            all_data.append(jnp.asarray(gal["flux_obs"]))
+            all_noise.append(jnp.asarray(gal["noise"]))
 
         data_concat = jnp.concatenate(all_data)
-        noise_inv_concat = jnp.concatenate(all_noise_inv)
+        noise_concat = jnp.concatenate(all_noise)
 
         # ── Build signal response ─────────────────────────────
         def signal_response(primals):
@@ -1569,7 +1567,11 @@ class PopulationFitter:
 
         signal_response_jit = jax.jit(signal_response)
         nifty_model = jft.Model(signal_response_jit, domain=domain)
-        likelihood = jft.Gaussian(data_concat, noise_inv_concat).amend(nifty_model)
+        # Operators, not arrays — see likelihoods.gaussian.diag_noise_operators (#1206).
+        _cov_inv, _std_inv = diag_noise_operators(noise_concat)
+        likelihood = jft.Gaussian(
+            data_concat, noise_cov_inv=_cov_inv, noise_std_inv=_std_inv
+        ).amend(nifty_model)
 
         # ── Initialize ────────────────────────────────────────
         init = {}
@@ -1825,15 +1827,13 @@ class PopulationFitter:
 
         # Precompute data arrays
         all_data = []
-        all_noise_inv = []
+        all_noise = []
         for gal in galaxies:
-            d = jnp.asarray(gal["flux_obs"])
-            n = jnp.asarray(gal["noise"])
-            all_data.append(d)
-            all_noise_inv.append(1.0 / n**2)
+            all_data.append(jnp.asarray(gal["flux_obs"]))
+            all_noise.append(jnp.asarray(gal["noise"]))
 
         data_concat = jnp.concatenate(all_data)
-        noise_inv_concat = jnp.concatenate(all_noise_inv)
+        noise_concat = jnp.concatenate(all_noise)
 
         # Pre-build model once (PSD params will be overridden per-call)
         model = self.model_factory(psd_sigma=1.0, psd_tau_myr=50.0)
@@ -1891,7 +1891,11 @@ class PopulationFitter:
         nifty_model = jft.Model(signal_response_jit, domain=domain)
 
         # Gaussian likelihood
-        likelihood = jft.Gaussian(data_concat, noise_inv_concat).amend(nifty_model)
+        # Operators, not arrays — see likelihoods.gaussian.diag_noise_operators (#1206).
+        _cov_inv, _std_inv = diag_noise_operators(noise_concat)
+        likelihood = jft.Gaussian(
+            data_concat, noise_cov_inv=_cov_inv, noise_std_inv=_std_inv
+        ).amend(nifty_model)
 
         # ── Initialize ────────────────────────────────────────
         # Batched initialization: one (n_gal,) draw per param instead of a

@@ -13,7 +13,11 @@ import jax
 import jax.numpy as jnp
 
 from tengri.inference._sample_utils import _mean_params
-from tengri.inference.likelihoods.gaussian import standardized_residual
+from tengri.inference.likelihoods.gaussian import (
+    inv_noise_std,
+    standardized_residual,
+    whiten,
+)
 
 
 def _cg_eps() -> float:
@@ -917,14 +921,15 @@ def build_native_vi_linear_engine(signal_response, data, noise, flatten, unflatt
 
     **JIT-compatible**: the returned callables are pre-JIT'd.
     """
-    noise_inv = 1.0 / noise**2
-    sqrt_noise_inv = jnp.sqrt(noise_inv)
+    sqrt_noise_inv = inv_noise_std(noise)
 
     def metric_vec(xi, v):
+        # (J/sigma)^T (J/sigma) v + v -- never forms 1/sigma**2 (~1e59, inf in
+        # float32). See likelihoods.gaussian.whiten (#1206).
         xi_d, v_d = unflatten(xi), unflatten(v)
         _, Jv = jax.jvp(signal_response, (xi_d,), (v_d,))
         _, vjp_fn = jax.vjp(signal_response, xi_d)
-        return flatten(vjp_fn(noise_inv * Jv)[0]) + v
+        return flatten(vjp_fn(whiten(whiten(Jv, noise), noise))[0]) + v
 
     def hamiltonian(xi):
         pred = signal_response(unflatten(xi))
@@ -1091,14 +1096,15 @@ def build_native_vi_nonlinear_engine(signal_response, data, noise, flatten, unfl
 
     data = jnp.ravel(jnp.asarray(data))
     noise = jnp.ravel(jnp.asarray(noise))
-    noise_inv = 1.0 / noise**2
-    sqrt_noise_inv = jnp.sqrt(noise_inv)
+    sqrt_noise_inv = inv_noise_std(noise)
 
     def metric_vec(xi, v):
+        # (J/sigma)^T (J/sigma) v + v -- never forms 1/sigma**2 (~1e59, inf in
+        # float32). See likelihoods.gaussian.whiten (#1206).
         xi_d, v_d = unflatten(xi), unflatten(v)
         _, Jv = jax.jvp(signal_response, (xi_d,), (v_d,))
         _, vjp_fn = jax.vjp(signal_response, xi_d)
-        return flatten(vjp_fn(noise_inv * Jv)[0]) + v
+        return flatten(vjp_fn(whiten(whiten(Jv, noise), noise))[0]) + v
 
     def hamiltonian(xi):
         pred = signal_response(unflatten(xi))
@@ -1303,7 +1309,7 @@ def build_native_vi_catalog_linear_engine(signal_response, flatten, unflatten):
 
     Notes
     -----
-    Inner functions (metric_vec, draw_residuals, etc.) close over ``noise_inv`` and
+    Inner functions (metric_vec, draw_residuals, etc.) close over
     ``sqrt_noise_inv`` computed from the runtime ``noise`` argument.  JAX traces through
     these Python closures, so the traced values become XLA graph nodes — making the
     returned callables fully vmappable across different galaxies.
@@ -1333,19 +1339,19 @@ def build_native_vi_catalog_linear_engine(signal_response, flatten, unflatten):
         chi2 = jnp.sum(standardized_residual(data, pred, noise) ** 2)
         return 0.5 * chi2 + 0.5 * jnp.sum(xi**2)
 
-    def _metric_vec_with_noise_inv(xi, v, noise_inv):
+    def _metric_vec_with_noise(xi, v, noise):
+        # (J/sigma)^T (J/sigma) v + v -- never forms 1/sigma**2 (#1206).
         xi_d, v_d = unflatten(xi), unflatten(v)
         _, Jv = jax.jvp(signal_response, (xi_d,), (v_d,))
         _, vjp_fn = jax.vjp(signal_response, xi_d)
-        return flatten(vjp_fn(noise_inv * Jv)[0]) + v
+        return flatten(vjp_fn(whiten(whiten(Jv, noise), noise))[0]) + v
 
     def run_fn(init_pos, vi_key, data, noise, n_iter, n_samp, rtol):
-        noise_inv = 1.0 / noise**2
-        sqrt_noise_inv = jnp.sqrt(noise_inv)
+        sqrt_noise_inv = inv_noise_std(noise)
         H_vg = jax.value_and_grad(lambda xi: hamiltonian_fn(xi, data, noise))
 
         def metric_vec(xi, v):
-            return _metric_vec_with_noise_inv(xi, v, noise_inv)
+            return _metric_vec_with_noise(xi, v, noise)
 
         def draw_residuals(pos_f, subkeys):
             def draw_one(subkey):
@@ -1423,8 +1429,7 @@ def build_native_vi_catalog_linear_engine(signal_response, flatten, unflatten):
         return m_final, n_iters
 
     def draw_fn(pos_f, subkeys, noise):
-        noise_inv = 1.0 / noise**2
-        sqrt_noise_inv = jnp.sqrt(noise_inv)
+        sqrt_noise_inv = inv_noise_std(noise)
 
         def draw_one(subkey):
             k1, k2 = jax.random.split(subkey)
@@ -1433,7 +1438,7 @@ def build_native_vi_catalog_linear_engine(signal_response, flatten, unflatten):
             _, vjp_fn = jax.vjp(signal_response, unflatten(pos_f))
             jt = flatten(vjp_fn(sqrt_noise_inv * eta_lh)[0])
             return _cg_solve(
-                lambda v: _metric_vec_with_noise_inv(pos_f, v, noise_inv),
+                lambda v: _metric_vec_with_noise(pos_f, v, noise),
                 jt + eta_pr,
                 eta_pr,
                 maxiter=30,
@@ -1492,7 +1497,7 @@ def build_native_vi_catalog_nonlinear_engine(signal_response, flatten, unflatten
     therefore returns ``2 * n_keys`` residuals for ``n_keys`` input subkeys.
 
     Identical algorithm to ``build_native_vi_nonlinear_engine``. The only structural
-    difference is that ``noise_inv``, ``sqrt_noise_inv``, and ``n_data`` are derived
+    difference is that ``sqrt_noise_inv`` and ``n_data`` are derived
     from the runtime ``noise`` argument inside each callable rather than being captured
     in the outer closure.
 
@@ -1510,11 +1515,12 @@ def build_native_vi_catalog_nonlinear_engine(signal_response, flatten, unflatten
         chi2 = jnp.sum(standardized_residual(data, pred, noise) ** 2)
         return 0.5 * chi2 + 0.5 * jnp.sum(xi**2)
 
-    def _metric_vec_with_noise_inv(xi, v, noise_inv):
+    def _metric_vec_with_noise(xi, v, noise):
+        # (J/sigma)^T (J/sigma) v + v -- never forms 1/sigma**2 (#1206).
         xi_d, v_d = unflatten(xi), unflatten(v)
         _, Jv = jax.jvp(signal_response, (xi_d,), (v_d,))
         _, vjp_fn = jax.vjp(signal_response, xi_d)
-        return flatten(vjp_fn(noise_inv * Jv)[0]) + v
+        return flatten(vjp_fn(whiten(whiten(Jv, noise), noise))[0]) + v
 
     def _make_geometry(sqrt_noise_inv):
         """Return geometry helpers closed over a single sqrt_noise_inv trace."""
@@ -1533,14 +1539,13 @@ def build_native_vi_catalog_nonlinear_engine(signal_response, flatten, unflatten
         return transformation, left_sqrt_metric, right_sqrt_metric
 
     def run_fn(init_pos, vi_key, data, noise, n_iter, n_samp, rtol):
-        noise_inv = 1.0 / noise**2
-        sqrt_noise_inv = jnp.sqrt(noise_inv)
+        sqrt_noise_inv = inv_noise_std(noise)
         n_data = noise.shape[0]
         H_vg = jax.value_and_grad(lambda xi: hamiltonian_fn(xi, data, noise))
         transformation, left_sqrt_metric, right_sqrt_metric = _make_geometry(sqrt_noise_inv)
 
         def metric_vec(xi, v):
-            return _metric_vec_with_noise_inv(xi, v, noise_inv)
+            return _metric_vec_with_noise(xi, v, noise)
 
         def draw_metric_sample(xi, subkey):
             k1, k2 = jax.random.split(subkey)
@@ -1665,8 +1670,7 @@ def build_native_vi_catalog_nonlinear_engine(signal_response, flatten, unflatten
         return m_final, n_iters
 
     def draw_fn(pos_f, subkeys, noise):
-        noise_inv = 1.0 / noise**2
-        sqrt_noise_inv = jnp.sqrt(noise_inv)
+        sqrt_noise_inv = inv_noise_std(noise)
         n_data = noise.shape[0]
         transformation, left_sqrt_metric, right_sqrt_metric = _make_geometry(sqrt_noise_inv)
 
@@ -1685,7 +1689,7 @@ def build_native_vi_catalog_nonlinear_engine(signal_response, flatten, unflatten
             _, vjp_fn = jax.vjp(signal_response, unflatten(pos_f))
             jt = flatten(vjp_fn(sqrt_noise_inv * eta_lh)[0])
             return _cg_solve(
-                lambda v: _metric_vec_with_noise_inv(pos_f, v, noise_inv),
+                lambda v: _metric_vec_with_noise(pos_f, v, noise),
                 jt + eta_pr,
                 eta_pr,
                 maxiter=30,

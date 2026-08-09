@@ -29,12 +29,141 @@ from __future__ import annotations
 
 import jax
 import jax.numpy as jnp
+from jax.tree_util import Partial
 
 __all__ = [
     "diag_gaussian_chi2",
     "diag_gaussian_log_prob",
+    "diag_noise_operators",
+    "inv_noise_std",
     "standardized_residual",
+    "whiten",
 ]
+
+
+def whiten(x: jnp.ndarray, sigma: jnp.ndarray) -> jnp.ndarray:
+    r""":math:`x / \sigma`, with the division made binding on the compiler.
+
+    The single seam through which every noise-weighting in tengri passes.
+    Dividing by :math:`\sigma` once is always representable; forming
+    :math:`1/\sigma^2` never is, at the :math:`\sigma \sim 10^{-30}` of a real
+    flux (:math:`1/\sigma^2 \sim 10^{59}` against a float32 ceiling of
+    :math:`3.4\times10^{38}`). Applying this twice is therefore the *only*
+    float32-safe spelling of :math:`N^{-1}`:
+
+    .. math::
+
+        J^\mathsf{T} N^{-1} J v
+        \;=\; (J/\sigma)^\mathsf{T} (J/\sigma)\, v
+
+    Writing it in that order is not sufficient. Under ``jax.jit``, when
+    ``sigma`` is a compile-time constant, XLA re-associates
+    :math:`(x/\sigma)/\sigma` into :math:`x \cdot (1/\sigma^2)` and
+    constant-folds the reciprocal to ``inf``; ``0 * inf`` is ``NaN`` (#1535).
+    The ``optimization_barrier`` turns the intended order into a *data
+    dependency*, which the compiler must respect — a source-level grouping is
+    only a suggestion.
+
+    Parameters
+    ----------
+    x : array_like
+        Quantity to whiten — a residual, a Jacobian-vector product, or a
+        data-space vector.
+    sigma : array_like
+        1-σ uncertainty, broadcastable against ``x``.
+
+    Returns
+    -------
+    ndarray
+        ``x / sigma``, same shape as the broadcast of the inputs.
+
+    Notes
+    -----
+    **JIT-compatible**: yes, and it is only under JIT that the barrier does
+    anything. Safe under ``grad``/``vmap``: ``optimization_barrier`` is
+    semantically the identity, so values and derivatives are unchanged —
+    verified bit-exact in float64.
+    """
+    return jax.lax.optimization_barrier(x / sigma)
+
+
+def inv_noise_std(noise: jnp.ndarray) -> jnp.ndarray:
+    r""":math:`\sqrt{N^{-1}} = 1/\sigma` — the float32-representable spelling.
+
+    ``jnp.sqrt(1.0 / noise**2)`` is the *same number* by a route float32 cannot
+    travel: at :math:`\sigma = 3\times10^{-30}` the destination
+    :math:`1/\sigma = 3.3\times10^{29}` is comfortably inside the float32 range
+    while the intermediate :math:`1/\sigma^2 = 1.1\times10^{59}` is not, so the
+    result arrives as ``sqrt(inf) = inf`` and every geoVI/MGVI sqrt-metric
+    primitive downstream returns ``inf`` or ``NaN`` (#1588).
+
+    Parameters
+    ----------
+    noise : array_like
+        Per-point 1-σ uncertainty. Must be > 0.
+
+    Returns
+    -------
+    ndarray
+        ``1 / noise``, same shape as the input.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — a single reciprocal, no barrier needed (there is
+    no grouping for XLA to re-associate).
+
+    The variable-noise branch has always used this spelling
+    (:func:`tengri.observation.noise.compute_std_inv` returns
+    :math:`\tau = 1/\sigma_{\rm eff}`); only the fixed-noise branch routed
+    through the square.
+    """
+    return 1.0 / noise
+
+
+def _apply_noise_cov_inv(noise: jnp.ndarray, x: jnp.ndarray) -> jnp.ndarray:
+    """Apply :math:`N^{-1}` as two divisions. ``noise`` first, for ``Partial``."""
+    return whiten(whiten(x, noise), noise)
+
+
+def _apply_noise_std_inv(noise: jnp.ndarray, x: jnp.ndarray) -> jnp.ndarray:
+    """Apply :math:`\\sqrt{N^{-1}}` as one division. ``noise`` first, for ``Partial``."""
+    return whiten(x, noise)
+
+
+def diag_noise_operators(noise: jnp.ndarray) -> tuple[Partial, Partial]:
+    r"""Return :math:`(N^{-1},\; \sqrt{N^{-1}})` as operators, not as arrays.
+
+    A diagonal Gaussian needs both, and *as arrays* one of them is always
+    unrepresentable in float32: :math:`1/\sigma^2 \sim 10^{59}` at a real flux
+    uncertainty. As *operators* both are safe, because each application is a
+    division and no intermediate ever leaves the representable range.
+
+    This is what NIFTy's :class:`nifty8.re.Gaussian` wants — it accepts
+    callables for ``noise_cov_inv`` and ``noise_std_inv``, and derives whichever
+    one it is not given from the other (``sqrt`` of the first, or the square of
+    the second). Passing an array for either therefore reintroduces the
+    overflow no matter which one is chosen; passing both as operators is the
+    only spelling that avoids it.
+
+    Parameters
+    ----------
+    noise : array_like
+        Per-point 1-σ uncertainty. Must be > 0.
+
+    Returns
+    -------
+    cov_inv : jax.tree_util.Partial
+        ``x -> (x/sigma)/sigma``.
+    std_inv : jax.tree_util.Partial
+        ``x -> x/sigma``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes. ``Partial`` is a pytree, so ``noise`` stays a
+    traced leaf rather than a baked constant — matching the array spelling it
+    replaces, so a cached likelihood does not gain a recompile.
+    """
+    return Partial(_apply_noise_cov_inv, noise), Partial(_apply_noise_std_inv, noise)
 
 
 def standardized_residual(
@@ -48,14 +177,6 @@ def standardized_residual(
     scales :math:`\sigma \sim 10^{-31}` both :math:`\sigma^2 \sim 10^{-62}` and
     :math:`(d-\mu)^2` underflow float32 to zero while the ratio :math:`r` is
     O(1) and perfectly representable.
-
-    Writing it in that order is not sufficient. Under ``jax.jit``, when the data
-    are compile-time constants, XLA re-associates
-    :math:`((d-\mu)/\sigma)^2` back into :math:`(d-\mu)^2 \cdot (1/\sigma^2)`
-    and constant-folds the reciprocal to ``inf``; ``0 * inf`` is ``NaN`` (#1535).
-    The ``optimization_barrier`` turns the intended order into a *data
-    dependency*, which the compiler must respect — a source-level grouping is
-    only a suggestion.
 
     Parameters
     ----------
@@ -73,15 +194,14 @@ def standardized_residual(
 
     Notes
     -----
-    **JIT-compatible**: yes, and it is only under JIT that it does anything.
-    Safe under ``grad``/``vmap``: ``optimization_barrier`` is semantically the
-    identity, so values and derivatives are unchanged — verified bit-exact in
-    float64 and gradient-identical.
+    **JIT-compatible**: yes. Delegates to :func:`whiten`, which carries the
+    ``optimization_barrier`` that makes the divide-before-square ordering
+    binding on XLA rather than merely suggested.
 
     Costs nothing measurable: -1.6% against a 2.2% A/A noise floor on a 30-band
     χ², i.e. inside the measurement error.
     """
-    return jax.lax.optimization_barrier((observed - predicted) / sigma_eff)
+    return whiten(observed - predicted, sigma_eff)
 
 
 def diag_gaussian_chi2(

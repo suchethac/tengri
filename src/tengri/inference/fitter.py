@@ -68,6 +68,7 @@ from tengri.config.exceptions import ParameterError
 from tengri.inference._model_cache import _default_owner as _model_cache_owner
 from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physical
 from tengri.inference.jit_engine import build_jit_engine
+from tengri.inference.likelihoods.gaussian import inv_noise_std
 from tengri.inference.loss_functions import (
     build_loglikelihood_fn,
     build_loglikelihood_unbounded_fn,
@@ -1198,12 +1199,10 @@ class Fitter:
         flux grid (15×93×5994 floats) into the HLO as a constant —
         ballooning compile time from <5 s to 40 s on photometry.
         """
-        noise_inv = 1.0 / self.noise**2
         args = {
             "data": self.data,
             "noise": self.noise,
-            "noise_inv": noise_inv,
-            "sqrt_noise_inv": jnp.sqrt(noise_inv),
+            "sqrt_noise_inv": inv_noise_std(self.noise),
             "n_data": jnp.int32(len(self.data)),
         }
         if self.data_mask is not None:
@@ -3369,12 +3368,10 @@ class Fitter:
         # Stack galaxy data into batch arrays (n_gal, n_obs)
         flux_batch = jnp.stack([jnp.asarray(g["flux_obs"]) for g in batch])
         noise_batch = jnp.stack([jnp.asarray(g["noise"]) for g in batch])
-        noise_inv_batch = 1.0 / noise_batch**2
         batch_data_args = {
             "data": flux_batch,
             "noise": noise_batch,
-            "noise_inv": noise_inv_batch,
-            "sqrt_noise_inv": jnp.sqrt(noise_inv_batch),
+            "sqrt_noise_inv": inv_noise_std(noise_batch),
         }
 
         # Get shared logdensity (cached on Model, stable identity)
@@ -3882,12 +3879,10 @@ class Fitter:
         # Stack galaxy data into batch arrays (n_gal, n_obs)
         flux_batch = jnp.stack([jnp.asarray(g["flux_obs"]) for g in batch])
         noise_batch = jnp.stack([jnp.asarray(g["noise"]) for g in batch])
-        noise_inv_batch = 1.0 / noise_batch**2
         batch_data_args = {
             "data": flux_batch,
             "noise": noise_batch,
-            "noise_inv": noise_inv_batch,
-            "sqrt_noise_inv": jnp.sqrt(noise_inv_batch),
+            "sqrt_noise_inv": inv_noise_std(noise_batch),
         }
 
         # Initialize params for each galaxy independently

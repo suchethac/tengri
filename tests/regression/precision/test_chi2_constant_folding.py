@@ -40,6 +40,7 @@ nobody thought to add — which is what happened here, in the guard written to
 prevent it.
 """
 
+import ast
 import pathlib
 import re
 
@@ -223,6 +224,22 @@ def test_no_open_coded_chi2_remains():
     )
 
 
+def _imported_names(source):
+    """Every name bound by an ``import`` in ``source``, however it is spelled.
+
+    Parsed, not substring-matched: the original spelling test looked for the
+    literal ``"import standardized_residual"``, which is absent from every
+    legal multi-name or parenthesized import — so merely adding a second name
+    to an existing import reported the module as not importing it at all.
+    """
+    names = set()
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.ImportFrom | ast.Import):
+            for alias in node.names:
+                names.add(alias.asname or alias.name.split(".")[0])
+    return names
+
+
 def test_every_converted_module_still_imports_the_helper():
     """The converse: a module cannot pass the sweep by deleting its chi2 entirely."""
     missing = []
@@ -230,9 +247,29 @@ def test_every_converted_module_still_imports_the_helper():
         source = path.read_text()
         if "def standardized_residual" in source:
             continue  # the module that defines it does not import it
-        if "standardized_residual(" in source and "import standardized_residual" not in source:
+        if "standardized_residual(" in source and "standardized_residual" not in _imported_names(
+            source
+        ):
             missing.append(path.name)
     assert not missing, f"{missing} call standardized_residual without importing it"
+
+
+def test_the_import_check_accepts_every_legal_import_spelling():
+    """Negative control for the check above — it must not be spelling-sensitive.
+
+    A parenthesized multi-name import is the spelling that broke the original
+    substring test, so it is the one worth pinning.
+    """
+    spellings = (
+        "from m import standardized_residual",
+        "from m import a, standardized_residual",
+        "from m import (\n    a,\n    standardized_residual,\n    b,\n)",
+        "from m import standardized_residual as standardized_residual",
+    )
+    for src in spellings:
+        assert "standardized_residual" in _imported_names(src), (
+            f"the import check does not recognize this legal spelling:\n{src}"
+        )
 
 
 def test_a_bare_open_coded_chi2_still_demonstrates_the_hazard():
