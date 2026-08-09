@@ -506,11 +506,14 @@ class FeaturePrecomp:
        with **no line channel at all** benefits — often the most, because a
        photometry-only Cue fit otherwise re-runs Cue on every likelihood
        evaluation. Measured on a 10-parameter Cue model with free ``neb_logU``
-       / ``neb_logZ_gas``, a photometry-only gradient goes 4.65 ms to 0.33 ms
-       (14x) on adding this to :class:`WavePrecomp`. With a line channel
-       present the same model already sits near 0.43 ms and this buys close to
-       nothing. Measure before assuming either way; see
-       ``docs/dev/api_migration_v0.x.md`` for the full grid.
+       / ``neb_logZ_gas``, against an A/A control whose noise floor was 1.23x:
+       a photometry-only fit's compiled MAP step goes 0.645 s to 0.093 s
+       (**7x**) on adding this. With a line channel present the same model
+       already sits near 0.16 s and neither opt-in resolves at all.
+       :class:`WavePrecomp` alone does not resolve either (1.07x, under the
+       floor). Measure before assuming either way, and quote a ratio only
+       against its own noise floor; see ``docs/dev/api_migration_v0.x.md`` for
+       the full grid.
 
        That a photometry-only fit is *slower* than the same fit with an extra
        data channel is a defect, not a property of the method — tracked as

@@ -48,7 +48,7 @@
 # here and the opt-ins have little left to remove. Where `FeaturePrecomp` earns
 # its keep is the case that looks like it should not need it: the **same model
 # fit to photometry alone**, where every likelihood evaluation re-runs Cue and
-# the grid is worth an order of magnitude. "I am not fitting lines" is the
+# the grid is worth ~7x against a 1.23x noise floor. "I am not fitting lines" is the
 # opposite of a reason to skip it — the `FeaturePrecomp` docstring carries that
 # measurement, as does `docs/dev/api_migration_v0.x.md`.
 #
@@ -293,8 +293,11 @@ print(
 #   reports is the measurement's own noise floor.
 #
 # **The verdict rule, fixed before the numbers are in:** an `approx=` choice
-# counts as a real speedup only if its ratio exceeds the A/A ratio. If the
-# control says 1.4x, then a 1.3x "win" is the noise measuring itself.
+# counts as a real speedup only if its *excess over 1.0* is at least **twice**
+# the control's excess. If the control says 1.10x, a 1.15x "win" does not count —
+# 0.15 is not twice 0.10. Comparing the ratios directly (`1.15 > 1.10`) is too
+# weak, because both are noisy estimates and a hair's-breadth pass prints the
+# self-contradicting verdict "1.1x clears the 1.1x noise floor".
 #
 # The printed **rep spread** (slowest/fastest rep for that arm) is the diagnostic:
 # the three rotated arms each take the process's very first fit once and so carry
@@ -364,22 +367,37 @@ warm_e, warm_w, warm_f = wall[L_E], wall[L_W], wall[L_F]
 # noise. Orient it as >= 1 so it compares directly against the arm ratios.
 r_aa = max(loop_e, loop_aa) / min(loop_e, loop_aa)
 r_fast = loop_e / loop_f
-print(f"\n  A/A control (same model, twice): {r_aa:4.1f}x  <- the noise floor")
+
+# A bare `r_fast > r_aa` is too weak: both are noisy estimates, so an effect can
+# "clear" the floor by a hair and print the self-contradicting verdict
+# "1.1x clears the 1.1x noise floor". Compare *excesses over unity* instead and
+# demand a factor of two, so an effect must be twice the control's own departure
+# from 1.0 before it counts. Two decimals throughout — at one, a real gap and a
+# noise gap render identically.
+RESOLVE_MARGIN = 2.0
+resolved = (r_fast - 1.0) > RESOLVE_MARGIN * (r_aa - 1.0)
+print(f"\n  A/A control (same model, twice): {r_aa:5.2f}x  <- the noise floor")
 print(
-    f"  compiled-step ratio exact -> fast: {r_fast:4.1f}x   "
+    f"  compiled-step ratio exact -> fast: {r_fast:5.2f}x   "
     f"(fast {loop_f * 1e3:.0f} ms vs exact {loop_e * 1e3:.0f} ms)"
 )
 print("  attributed, one knob at a time:")
-print(f"    WavePrecomp        {loop_e:6.3f}s -> {loop_w:6.3f}s   {loop_e / loop_w:5.1f}x")
-print(f"    + FeaturePrecomp   {loop_w:6.3f}s -> {loop_f:6.3f}s   {loop_w / loop_f:5.1f}x")
-if r_fast <= r_aa:
-    print("  -> NOT resolved: the exact->fast ratio does not clear the A/A floor, so")
-    print("     on this fit the two opt-ins buy nothing measurable. With a line channel")
-    print("     in the Observation the nebular work is already off the per-gradient")
-    print("     path. Fit this model to photometry ALONE and FeaturePrecomp is worth")
-    print("     ~an order of magnitude (see issue #1596).")
+print(f"    WavePrecomp        {loop_e:6.3f}s -> {loop_w:6.3f}s   {loop_e / loop_w:6.2f}x")
+print(f"    + FeaturePrecomp   {loop_w:6.3f}s -> {loop_f:6.3f}s   {loop_w / loop_f:6.2f}x")
+if not resolved:
+    print(
+        f"  -> NOT resolved: excess over 1.0 is {r_fast - 1.0:.2f} against a control"
+        f" excess of {r_aa - 1.0:.2f};"
+    )
+    print(f"     the rule needs {RESOLVE_MARGIN:.0f}x that, so on this fit the two opt-ins buy")
+    print("     nothing measurable. With a line channel in the Observation the nebular")
+    print("     work is already off the per-gradient path. Fit this model to photometry")
+    print("     ALONE and FeaturePrecomp is worth ~7x against a 1.23x floor (see #1596).")
 else:
-    print(f"  -> resolved: {r_fast:.1f}x clears the {r_aa:.1f}x noise floor.")
+    print(
+        f"  -> resolved: excess {r_fast - 1.0:.2f} is more than {RESOLVE_MARGIN:.0f}x"
+        f" the control excess {r_aa - 1.0:.2f}."
+    )
 print(f"  fit() wall is ~{warm_f:.1f}s on any path — that is per-call JIT compile, not the fit.")
 
 # %% [markdown]
@@ -684,14 +702,14 @@ print(f"{'MAP, exact wave grid':<34}{warm_e:>10.2f} s{loop_e:>12.2f} s")
 print(f"{'MAP, WavePrecomp only':<34}{warm_w:>10.2f} s{loop_w:>12.2f} s")
 print(f"{'MAP, WavePrecomp+FeaturePrecomp':<34}{warm_f:>10.2f} s{loop_f:>12.2f} s")
 print(f"{'A/A control (exact, again)':<34}{'':>10}  {loop_aa:>12.2f} s")
-print(f"\nNoise floor (A/A, same model twice): {r_aa:.1f}x. Compiled-step ratio:")
-print(f"{loop_e / loop_f:.1f}x overall — {loop_e / loop_w:.1f}x from WavePrecomp, a further")
+print(f"\nNoise floor (A/A, same model twice): {r_aa:.2f}x. Compiled-step ratio:")
+print(f"{loop_e / loop_f:.2f}x overall — {loop_e / loop_w:.2f}x from WavePrecomp, a further")
 print(
-    f"{loop_w / loop_f:.1f}x from FeaturePrecomp. "
+    f"{loop_w / loop_f:.2f}x from FeaturePrecomp. "
     + (
-        "None of these clear the floor."
-        if r_fast <= r_aa
-        else "The overall ratio clears the floor."
+        "None of these resolve against the control."
+        if not resolved
+        else "The overall ratio resolves against the control."
     )
 )
 print(f"The fit() wall (~{warm_f:.1f}s) is per-call JIT")

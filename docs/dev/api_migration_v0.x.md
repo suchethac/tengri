@@ -893,24 +893,40 @@ LUT and the fluxes are *measured* off the reconstructed spectrum.
 **It is not a line-channel-only optimization, and the name misleads.** For
 **Cue**, the grid replaces the emulator call itself, so the saving lands on
 likelihood evaluations that touch the nebular block whether or not a line channel
-is being fit. Per-gradient cost of one 10-parameter Cue model (free `neb_logU` /
-`neb_logZ_gas`, DECam *grz* + WISE, `Fixed` redshift; measured 2026-08 on
-`origin/main` @ `e063fff0e`, min-of-3 x 200 evaluations):
+is being fit. One 10-parameter Cue model (free `neb_logU` / `neb_logZ_gas`,
+DECam *grz* + WISE, `Fixed` redshift), timing the **compiled MAP step** — the
+optimization loop with the JIT compile excluded, i.e. what a fit actually costs.
+Five arms, one cold process each, interleaved with the order rotated per rep,
+minimum of 3. The fourth arm is the first one repeated, so the ratio between the
+twins is the measurement's own noise floor:
 
-| `approx=`                        | `Observation` with lines | photometry only |
-| -------------------------------- | ------------------------ | --------------- |
-| `None`                           | 0.456 ms                 | 5.335 ms        |
-| `WavePrecomp()`                  | 0.425 ms                 | 4.653 ms        |
-| `(WavePrecomp(), FeaturePrecomp())` | 0.463 ms              | **0.331 ms**    |
+| arm | min compiled step |
+| --- | --- |
+| `approx=None`, with lines | 0.160 s |
+| `approx=None`, with lines *(A/A twin)* | 0.196 s |
+| `approx=None`, photometry only | 0.645 s |
+| `WavePrecomp()`, photometry only | 0.603 s |
+| `(WavePrecomp(), FeaturePrecomp())`, photometry only | **0.093 s** |
+
+```
+A/A floor                                     1.23x
+photometry-only vs with-lines (approx=None)   4.04x   clears
+FeaturePrecomp on photometry-only             6.98x   clears
+FeaturePrecomp on top of WavePrecomp          6.51x   clears
+WavePrecomp alone on photometry-only          1.07x   DOES NOT CLEAR
+```
 
 Two things to take from that grid, both counter-intuitive:
 
-1. **A photometry-only Cue fit is ~11x slower than the same fit with a line
-   channel attached**, and `FeaturePrecomp` is what recovers it (**14x** over
-   `WavePrecomp` alone). Adding data makes the fit faster, which is backwards;
-   treat the photometry-only number as a defect to be fixed, not a budget. It is
-   tracked as issue #1596 — until that lands, the opt-in is effectively required
-   for broadband-only Cue work rather than optional.
+1. **A photometry-only Cue fit is ~4x slower than the same fit with a line
+   channel attached**, and `FeaturePrecomp` is what recovers it (**7x**). Adding
+   data makes the fit faster, which is backwards; treat the photometry-only
+   number as a defect to be fixed, not a budget. It is tracked as issue #1596 —
+   until that lands, the opt-in is effectively required for broadband-only Cue
+   work rather than optional. (An earlier revision of this table quoted 11.7x and
+   16.1x. Those were **bare-gradient** ratios, measured without a control; across
+   a whole MAP step a fixed per-step optimizer cost dilutes them to the figures
+   above. The 4x is the one a user feels.)
 2. **With a line channel present the opt-ins do essentially nothing** — all three
    rows agree to within run-to-run noise. Do not assume `approx=` is buying
    speed; measure it. Notebook
@@ -921,8 +937,12 @@ Two things to take from that grid, both counter-intuitive:
    that notebook published this same ratio as 18.6x, 12.6x, 1.0x and 3.2x on
    unchanged code.
 
-`WavePrecomp` alone is worth only ~1.1x on a Cue model either way: the emulator,
-not the filter integration, is what dominates.
+**`WavePrecomp` alone does not resolve on a Cue model** — 1.07x, under the 1.23x
+A/A floor, so it should not be quoted as a number at all. (An earlier revision of
+this page called it "~1.1x either way". That figure came from an uncontrolled
+run; against its own noise floor there is nothing there to measure.) The reading
+still stands qualitatively: the emulator, not the filter integration, is what
+dominates a Cue model.
 
 For the **baked-in / wNE** backend the saving really is line-only, because there
 the lookup is a per-line window LUT rather than a replacement for a forward.
