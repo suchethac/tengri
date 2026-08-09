@@ -136,8 +136,14 @@ class CloudyGridWNESSPError(ValueError):
     """Raised when CloudyGridBackend is constructed with a wNE SSP.
 
     See :class:`tengri.components.nebular.cue.CueWNESSPError` for the same
-    failure mode applied to the Cue backend. Resolution: use a bare-stellar
-    SSP, or set ``TENGRI_ALLOW_WNE_CLOUDY_GRID=1`` to downgrade to a warning.
+    failure mode applied to the Cue backend, including which of the two
+    checks ``TENGRI_ALLOW_WNE_CLOUDY_GRID=1`` reaches. In short (#1579): it
+    downgrades the Q_H heuristic, whose false positives are routine, and
+    **not** the ``nebular_included`` metadata check, which has none.
+
+    Resolution: use a bare-stellar SSP, or keep this one and drop the
+    ``neb={'type': 'cloudy'}`` group -- its baked-in nebular backend
+    already models the lines.
     """
 
 
