@@ -76,6 +76,7 @@ __all__ = [
     "get_feltre_backend",
     "get_synthesizer_blr_backend",
     "get_synthesizer_nlr_backend",
+    "load_cue_agn_weights",
 ]
 
 #: Default location of the Cue emulator weights (built by the user; data-gated).
@@ -360,6 +361,16 @@ def get_cue_agn_backend(weights_path: str | None = None):
     ------
     FileNotFoundError
         If the weights file does not exist at the resolved path.
+
+    Notes
+    -----
+    Construction runs inside ``jax.ensure_compile_time_eval()``. Without it,
+    a backend first built *inside* a JIT trace captures ``DynamicJaxprTracer``
+    values, and because it is cached in a module-level global that poisoned
+    instance outlives the trace — every later out-of-trace call then raises
+    ``UnexpectedTracerError``. Whoever traces a Cue-NLR model first decides
+    whether the rest of the process works, which makes the failure depend on
+    execution order. Same defect class as the GRAHSP template cache (#1462).
     """
     global _CUE_AGN_BACKEND
     if weights_path is not None or _CUE_AGN_BACKEND is None:
@@ -368,6 +379,31 @@ def get_cue_agn_backend(weights_path: str | None = None):
         with _eager_construction():
             _CUE_AGN_BACKEND = CueBackend(weights_path or _DEFAULT_CUE_WEIGHTS_PATH)
     return _CUE_AGN_BACKEND
+
+
+def load_cue_agn_weights():
+    """Load the Cue emulator weights for the AGN NLR block (cache + discovery).
+
+    This is the ``template_loader`` the ``nlr/cue`` block registers. It returns
+    the weights **pytree**, not the backend object: only arrays can thread
+    through ``jax.jit`` as arguments, and the backend is an ordinary Python
+    object. Roughly 8.5 MB otherwise bakes into the graph as constants (#1383).
+
+    Returns
+    -------
+    Any
+        The backend's ``weights`` pytree.
+
+    Raises
+    ------
+    FileNotFoundError
+        If ``cue_weights.npz`` is not present.
+
+    Notes
+    -----
+    **JIT-compatible**: no, deliberately — it must run before tracing.
+    """
+    return get_cue_agn_backend().weights
 
 
 def compute_nlr_sed_cue(
@@ -380,6 +416,7 @@ def compute_nlr_sed_cue(
     neb_logn: float = 3.0,
     neb_logZ_gas: float = -1.8477,
     weights_path: str | None = None,
+    _template=None,
     **_kwargs,
 ) -> jnp.ndarray:
     r"""Cue-emulator AGN-ionized NLR adapter (the disc → Cue → NLR pipeline).
@@ -444,6 +481,7 @@ def compute_nlr_sed_cue(
         gas_logn=neb_logn,
         gas_logz=gas_logz_rel,
         alpha_pl=alpha_pl,
+        template_data=_template,
     )
     # agn_nlr_cue already scales lines by covering_fraction; convert L_sun→erg/s.
     line_lum_erg = jnp.asarray(line_lum_lsun) * _L_SUN_ERG_S

@@ -249,9 +249,16 @@ def collect_block_templates(recipe: dict[str, str]) -> dict[str, object]:
         if loader is None:
             continue
         try:
-            templates[f"{category}/{name}"] = loader()
+            bundle = loader()
         except Exception:
             continue
+        # A loader may legitimately return None when its library is absent in a
+        # given install (e.g. the v2 SKIRTOR grid has no separate disc column,
+        # and nthcomp templates are optional). Storing the None would put a key
+        # in the dict that reads as "threaded" to anything doing a membership
+        # test, so leave it out entirely.
+        if bundle is not None:
+            templates[f"{category}/{name}"] = bundle
     return templates
 
 

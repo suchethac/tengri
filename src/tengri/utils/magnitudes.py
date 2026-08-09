@@ -371,6 +371,14 @@ AB_VEGA_OFFSETS: dict[str, float] = {
 
 These are the zero-magnitude offsets: mag_Vega = mag_AB - offset.
 
+Keys are Johnson/Bessel and SDSS **short** band names (``"V"``, ``"r"``),
+not filter-registry ids (``"sdss_r"``). Passing a registry id raises
+``KeyError``; a filter-registry lookup for the offset does not exist.
+
+Available as ``tengri.units.AB_VEGA_OFFSETS`` as well as from
+``tengri.utils`` — it is the only argument ``ab_to_vega`` and ``vega_to_ab``
+take besides the magnitude, so it lives wherever they do (#1613).
+
 Sources
 -------
 Blanton & Roweis 2007, AJ, 133, 734 — Table 3, 5 (SDSS and Johnson/Bessel).
@@ -390,7 +398,8 @@ def ab_to_vega(mag_ab: jnp.ndarray, ab_vega_offset: float) -> jnp.ndarray:
     mag_ab : jnp.ndarray
         AB magnitude. Shape: arbitrary.
     ab_vega_offset : float
-        Zero-magnitude offset for this band (from `AB_VEGA_OFFSETS` dict).
+        Zero-magnitude offset for this band, e.g.
+        ``tengri.units.AB_VEGA_OFFSETS["V"]``. A float, not a band name.
 
     Returns
     -------
@@ -426,7 +435,8 @@ def vega_to_ab(mag_vega: jnp.ndarray, ab_vega_offset: float) -> jnp.ndarray:
     mag_vega : jnp.ndarray
         Vega magnitude. Shape: arbitrary.
     ab_vega_offset : float
-        Zero-magnitude offset for this band (from `AB_VEGA_OFFSETS` dict).
+        Zero-magnitude offset for this band, e.g.
+        ``tengri.units.AB_VEGA_OFFSETS["V"]``. A float, not a band name.
 
     Returns
     -------
