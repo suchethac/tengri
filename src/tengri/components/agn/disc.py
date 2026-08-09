@@ -46,6 +46,7 @@ from tengri.components.agn._nthcomp import (
     _TABLE_AVAILABLE as _NTHCOMP_AVAILABLE,
     nthcomp_lnu_interp as _nthcomp_lnu_interp,
 )
+from tengri.components.agn._params import DEFAULT_AGN_LOG_MBH
 from tengri.components.agn._phys import (
     C_LIGHT as _C_LIGHT,
     H_PLANCK as _H_PLANCK,
@@ -1149,7 +1150,7 @@ def _compute_zone_luminosities(
     l_bol_erg: float,
     agn_self_consistent_gamma: bool,
     float32: bool = False,
-    agn_log_mbh: float = 0.0,
+    agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
     agn_log_lbol_shape: float = 0.0,
 ) -> tuple:
     """Compute self-consistent luminosities of the three AGN zones.

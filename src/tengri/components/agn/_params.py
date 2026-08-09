@@ -813,4 +813,12 @@ PARAMS: tuple[ParamDeclaration, ...] = (
 #: that put nine entry points at 45.0, some 1e33 too luminous (#1200, #1560).
 DEFAULT_AGN_LOG_LBOL = declared_default(PARAMS, "agn_log_lbol")
 
-__all__ = ["DEFAULT_AGN_LOG_LBOL", "PARAMS"]
+#: Black-hole mass default, ``log10(M_BH / Msun)``, read off the declaration for
+#: the same reason. ``_compute_zone_luminosities`` had repeated the literal
+#: ``0.0``, six dex below the declared support [6, 10]: unreachable today
+#: because its one call site always passes the value, but ``10**0.0`` is a
+#: *one-solar-mass* Eddington luminosity, so any future bare call would
+#: silently mis-scale the hot corona by eight decades.
+DEFAULT_AGN_LOG_MBH = declared_default(PARAMS, "agn_log_mbh")
+
+__all__ = ["DEFAULT_AGN_LOG_LBOL", "DEFAULT_AGN_LOG_MBH", "PARAMS"]
