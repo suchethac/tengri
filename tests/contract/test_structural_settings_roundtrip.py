@@ -53,7 +53,7 @@ pytestmark = pytest.mark.contract
 #: ``_VALID_FOREGROUND_LAWS`` holds exactly one law today, so no non-default
 #: value exists to move it to. Its rule is still covered declaratively by
 #: :func:`test_every_structural_key_has_a_roundtrip_rule`, and a second law
-#: becomes exercisable here the day one is registered.
+#: can be swept here the day one is registered.
 CASES = [
     (
         "sfh.age_kernel",
