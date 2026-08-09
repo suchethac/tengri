@@ -8,12 +8,21 @@ current source — the docs site then shows a figure/code that no longer matches
 the example. This script compares each ``examples/**/plot_*.py`` to its stamp
 and reports the drift.
 
-Default mode is **warn-only** (exit 0): it prints the stale list so a human /
-CI annotation can see it, without failing the build. Heavy fit examples
-(VI/MCMC/NUTS) are intentionally left on their committed figures (re-executing
-them stalls/OOMs the doc build), so their stamps are expected to drift — a hard
-failure here would be a false alarm. Pass ``--strict`` to exit non-zero on any
-drift once the heavy set is handled (see #612 / #805).
+CI runs this with ``--strict`` (#805). It ran warn-only until 2026-08, during
+which the drift grew from 16 examples to 60 — nobody acts on a report that
+cannot fail. The earlier reason for warn-only, that heavy VI/MCMC/NUTS
+examples must keep their committed figures and would drift forever, no longer
+applies: the 2026-07 overhaul removed them, and every remaining fit example is
+MAP or native-VI (see ``docs/conf.py``).
+
+Fixing a drift means re-rendering the example, which CI cannot do — it has
+neither the SSP grids nor the ~20 GB of optional data. It belongs to whoever
+edited the source::
+
+    python tools/regen_gallery.py <basename>
+
+Not a bare ``make html``: that rewrites every page while executing almost
+none, so the ones it skips come back stripped of their output (#1236).
 
 Usage::
 
@@ -69,10 +78,12 @@ def main() -> int:
         _show("drifted from their committed render", stale)
     if unrendered:
         _show("have no committed render", unrendered)
+    names = " ".join(sorted({Path(p).stem for p in (*stale, *unrendered)}))
     print(
-        "\nRefresh by deleting the example's "
-        "docs/auto_examples/<section>/images/sphx_glr_<name>_001.png and "
-        "rebuilding the gallery (make html), then commit the regenerated files."
+        f"\nRefresh with:\n    python tools/regen_gallery.py {names}\n"
+        "then commit the regenerated docs/auto_examples/ files.\n"
+        "Do NOT use a bare `make html`: it rewrites every example page but "
+        "executes almost none, so the skipped ones lose their output (#1236)."
     )
 
     if strict:

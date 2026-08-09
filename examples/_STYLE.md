@@ -119,3 +119,29 @@ Copy from:
 - Fit template: `examples/quickstart/plot_first_fit.py`
 
 Both have been manually rewritten to the bar this file defines.
+
+## After you edit an example: regenerate its render
+
+The gallery users read is committed under `docs/auto_examples/` — CI never
+executes examples (it has no SSP grids and none of the ~20 GB of optional
+data), it ships what you committed. So an edited source with a stale render
+means the docs site shows code that no longer exists. CI fails on this
+(`tools/check_gallery_fresh.py --strict`, #805).
+
+```bash
+python tools/regen_gallery.py plot_your_example    # then commit what it writes
+```
+
+**Never a bare `make html` while anything is stale.** Sphinx-gallery rewrites a
+page whose source no longer matches its committed stamp, but `filename_pattern`
+stops it executing — so that page comes back *without* the output execution
+produced. Measured with 60 examples stale, a single-example build deleted
+45,204 lines across 195 files and exited 0 (#1236). `regen_gallery.py` runs the
+same build behind a fence that restores every page that was not a target.
+
+Pages that are already fresh are not rewritten at all, so on a gallery with
+zero drift a full build changes nothing — which is why the freshness gate is
+what keeps ordinary doc builds safe.
+
+Regenerating requires the optional data grids. If you do not have them, say so
+in the PR rather than committing a render built without them.
