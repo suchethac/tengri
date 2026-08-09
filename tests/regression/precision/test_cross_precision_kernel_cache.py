@@ -167,9 +167,16 @@ def test_float64_gradient_does_not_poison_a_later_float32_gradient(ssp_bare, sha
 
     Costs ~9 s (three gradients across two precisions), which buys the end-to-end
     signature of the bug rather than just its cause, so it runs on every PR.
+
+    The cache is cleared *first* for the same reason it is cleared in the middle:
+    "float64 has to go first" is a statement about the cache, and this test cannot
+    assert it while inheriting whatever its file-mates left there. Measured — run
+    alone it passed, run after the two tests above it failed, on this commit and
+    on the pre-merge one; clearing at entry makes the whole file pass.
     """
     from tengri.inference._model_cache import clear_structural_kernel_cache
 
+    clear_structural_kernel_cache()
     _gradient(ssp_bare, shared_obs, True, jnp.float64)
     served = _gradient(ssp_bare, shared_obs, False, jnp.float32)
 
