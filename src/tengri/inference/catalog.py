@@ -257,8 +257,9 @@ class Catalog:
             ``"mcmc_nuts"`` for posteriors. Never defaults to VI.
         key : jax.random.PRNGKey
             Base random key; per-galaxy keys are derived via ``jax.random.split``.
-        forward_chunk_size : int, default 1
+        forward_chunk_size : int or "auto", default "auto"
             K galaxies evaluated in parallel per ``lax.map`` step (native methods only).
+            ``"auto"`` derives K from the memory budget; an explicit int is honored.
         n_pad : int, "auto", or None
             Pad the catalog up to this many galaxies before running. Allows
             different catalog sizes to share XLA cache entries. ``None``

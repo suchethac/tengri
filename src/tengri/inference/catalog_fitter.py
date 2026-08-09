@@ -23,7 +23,7 @@ import jax.numpy as jnp
 import numpy as np
 from jax.flatten_util import ravel_pytree
 
-from tengri.inference._batching import AUTO, resolve_forward_chunk_size
+from tengri.inference._batching import AUTO, chunking_was_requested, resolve_forward_chunk_size
 from tengri.inference._dimension_guard import warn_if_nuts_high_dim as _warn_if_nuts_high_dim
 from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physical
 
@@ -967,7 +967,7 @@ class _CatalogFitterOriginal:
             If ``method`` is registered ``tier="broken"`` and
             ``allow_unvalidated`` is False.
         UserWarning
-            If ``forward_chunk_size != 1`` is passed for a method that does not
+            If ``forward_chunk_size > 1`` is passed for a method that does not
             batch (ignored).
 
         Notes
@@ -1071,7 +1071,10 @@ class _CatalogFitterOriginal:
                     UserWarning,
                     stacklevel=2,
                 )
-            if forward_chunk_size != 1:
+            # Ask the predicate, not the literal: `!= 1` was a comparison
+            # against the OLD default, so once #1189 made AUTO the default it
+            # fired for every caller who passed nothing (#1189 follow-up).
+            if chunking_was_requested(forward_chunk_size):
                 # Name the supported methods FROM the dispatch sets, not from a
                 # hand-written list. The literal this replaces said "only
                 # native_vi_linear and native_vi_nonlinear" long after
