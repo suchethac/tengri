@@ -52,8 +52,18 @@ _SSP_DIR = pathlib.Path("data")
 # above it; SKIRTOR (+31.4 MB) is 30x over.
 _BAKED_BUDGET_MB = 1.0
 
-# Blocks whose selection is a no-op or which carry no template library.
-_SKIP_TORUS = frozenset({"none"})
+# ``none`` is the no-op selector present in every category.
+_SKIP_BLOCKS = frozenset({"none"})
+
+# Block category -> the sub-block key the build grammar uses for that stage.
+_GROUP_KEY = {
+    "disc": "disc",
+    "nlr": "nlr",
+    "blr": "blr",
+    "feii": "feii",
+    "torus": "torus",
+    "attenuation": "atten",
+}
 
 
 @pytest.fixture(scope="module")
@@ -119,24 +129,69 @@ def test_baseline_bare_stellar_bakes_almost_nothing(ssp, obs):
     assert baked < _BAKED_BUDGET_MB, f"baseline already bakes {baked:.2f} MB"
 
 
-@pytest.mark.parametrize("torus", sorted(set(AGN_BLOCKS["torus"]) - _SKIP_TORUS))
-def test_torus_template_threads_as_argument(ssp, obs, torus):
-    """No torus block may bake its template library into the graph."""
-    model = _build(
-        ssp,
-        obs,
-        agn={
-            "type": "composable",
-            "all_params": FIXED,
-            "disc": {"type": "multicolor"},
-            "torus": {"type": torus},
-        },
-    )
-    baked = _traced_baked_mb(model)
+# Blocks still loading their library at trace time. The torus stage was
+# converted first because it was the measured one; these are the same defect
+# in the disc/nlr stages and need the same treatment — a ``template_loader``
+# on the registration plus a grid-taking evaluator in the family module.
+#
+# ``strict=True`` on purpose: when one of these is fixed, this test starts
+# FAILING as XPASS, which is the signal to delete its row. A non-strict xfail
+# would silently absorb the fix and let the row rot.
+_KNOWN_BAKING: dict[tuple[str, str], str] = {
+    ("disc", "relagn"): "27.5 MB — _load_relagn_disc_grid closure (#1383)",
+    ("disc", "kubota_done"): "23.0 MB — closure-captured disc grid (#1383)",
+    ("disc", "schartmann2005_skirtor_atten"): "10.0 MB — SKIRTOR grid closure (#1383)",
+    ("disc", "slone_netzer"): "1.8 MB — closure-captured disc grid (#1383)",
+    ("nlr", "cue"): "8.5 MB — Cue NLR weights closure (#1383)",
+}
+
+# Not a threading defect: this block raises TracerBoolConversionError under
+# jit regardless of where its templates live. Tracked separately so a genuine
+# JIT-safety bug is not filed away as a performance issue.
+_KNOWN_NOT_JITTABLE: dict[tuple[str, str], str] = {
+    ("nlr", "feltre"): "TracerBoolConversionError under jit — JIT-safety bug, not baking",
+}
+
+
+def _all_block_cases():
+    """Every (category, name) the recipe grammar can select, from the registry."""
+    cases = []
+    for category in sorted(AGN_BLOCKS):
+        for name in sorted(AGN_BLOCKS[category]):
+            if name in _SKIP_BLOCKS:
+                continue
+            key = (category, name)
+            marks = []
+            if key in _KNOWN_BAKING:
+                marks.append(pytest.mark.xfail(reason=_KNOWN_BAKING[key], strict=True))
+            elif key in _KNOWN_NOT_JITTABLE:
+                marks.append(pytest.mark.xfail(reason=_KNOWN_NOT_JITTABLE[key], strict=True))
+            cases.append(pytest.param(category, name, marks=marks, id=f"{category}-{name}"))
+    return cases
+
+
+@pytest.mark.parametrize("category,block", _all_block_cases())
+def test_block_template_threads_as_argument(ssp, obs, category, block):
+    """No AGN block, in any stage, may bake its template library into the graph.
+
+    Parametrized over the whole registry rather than the families that
+    happened to be measured, so a block that starts loading a library later
+    — or a newly registered one — is caught the day it lands.
+    """
+    group = {"type": "composable", "all_params": FIXED, "disc": {"type": "multicolor"}}
+    group[_GROUP_KEY[category]] = {"type": block}
+
+    try:
+        model = _build(ssp, obs, agn=group)
+        baked = _traced_baked_mb(model)
+    except (FileNotFoundError, NotImplementedError) as exc:
+        pytest.skip(f"{category}/{block} unavailable: {exc}")
+
     assert baked < _BAKED_BUDGET_MB, (
-        f"torus block {torus!r} bakes {baked:.2f} MB of templates into the "
-        f"traced graph (budget {_BAKED_BUDGET_MB} MB). The library must reach "
-        f"the block as a traced argument via template_state, not via a "
+        f"{category} block {block!r} bakes {baked:.2f} MB of templates into "
+        f"the traced graph (budget {_BAKED_BUDGET_MB} MB). The library must "
+        f"reach the block as a traced argument — declare a template_loader on "
+        f"register_agn_block and read the 'templates' kwarg — not via a "
         f"module-level cached loader called at trace time."
     )
 
