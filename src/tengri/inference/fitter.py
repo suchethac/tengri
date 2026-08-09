@@ -494,13 +494,25 @@ def _resolve_batch_fit_approx(model, approx, data_type):
                 "(exact), or a precompute config (WavePrecomp/SpectrumPrecomp, "
                 "or a tuple)."
             )
-        from tengri.forward.sed_model import SpectrumPrecomp, WavePrecomp
+        from tengri.forward.sed_model import FeaturePrecomp, SpectrumPrecomp, WavePrecomp
 
         state = getattr(model, "approx", None)
         if data_type == "photometry":
             if state is not None and state.wave_precomp:
                 return model
             cfg = WavePrecomp()
+            # Attempt the feature top-up first: for a backend that can
+            # tabulate its features (Cue's per-Q_H grid replaces the emulator
+            # call itself) this is the dominant lever — measured 1.45x warm /
+            # 1.68x cold on a 2-galaxy Cue population MAP fit (A/A floor
+            # 1.17x) and ~7x per-gradient on the single-galaxy #1596 model,
+            # where WavePrecomp alone does not clear the noise floor at all.
+            # A backend with nothing to tabulate raises; that raise IS the
+            # detection, so the fallback keeps the wave LUT rather than
+            # regressing to the raw model.
+            existing = tuple(getattr(model, "approx_configs", ()))
+            with contextlib.suppress(Exception):
+                return _memoized_approx_clone(model, (*existing, cfg, FeaturePrecomp()))
         elif data_type in ("spectroscopy", "joint"):
             if state is not None and getattr(state, "spectrum_precomp", False):
                 return model

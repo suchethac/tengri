@@ -39,14 +39,30 @@ class _StubApprox:
 class _StubModel:
     """Just enough surface for the ctor's spec read and the approx policy."""
 
-    def __init__(self, *, wave_precomp=False, spectrum_precomp=False, via_with_approx=False):
+    def __init__(
+        self,
+        *,
+        wave_precomp=False,
+        spectrum_precomp=False,
+        via_with_approx=False,
+        features_tabulate=False,
+    ):
         self.spec = _StubSpec()
         self.approx = _StubApprox(wave_precomp, spectrum_precomp)
         self.approx_configs = ()
         self.via_with_approx = via_with_approx
+        self.features_tabulate = features_tabulate
         self.received_cfg = None
 
     def with_approx(self, cfg):
+        from tengri.forward.sed_model import FeaturePrecomp
+
+        cfgs = cfg if isinstance(cfg, tuple) else (cfg,)
+        if any(isinstance(c, FeaturePrecomp) for c in cfgs) and not self.features_tabulate:
+            # Mirrors the real contract: a backend with nothing to tabulate
+            # raises (measured: neb='none' -> ValueError "no emission lines
+            # to tabulate"), and that raise IS the detection mechanism.
+            raise ValueError("no emission lines to tabulate")
         new = _StubModel(wave_precomp=True, via_with_approx=True)
         new.received_cfg = cfg
         return new
@@ -131,3 +147,50 @@ def test_catalog_approx_none_keeps_the_exact_path():
 def test_catalog_model_already_carrying_the_lut_is_not_rewrapped():
     fitter = _catalog_fitter(_StubModel(wave_precomp=True))
     assert not fitter.model.via_with_approx
+
+
+def test_auto_tops_up_featureprecomp_when_the_backend_can_tabulate():
+    """A feature-tabulating backend (Cue) gets BOTH LUTs under the default.
+
+    Measured on the 2-galaxy Cue population MAP fit: +FeaturePrecomp is
+    1.45x warm / 1.68x cold over WavePrecomp alone (A/A floor 1.17x), and
+    ~7x per-gradient on the single-galaxy #1596 model — WavePrecomp alone
+    does not clear the noise floor on a Cue model at all.
+    """
+    from tengri.forward.sed_model import FeaturePrecomp
+
+    fitter = _fitter(lambda **kw: _StubModel(features_tabulate=True))
+    model = fitter.model_factory(psd_sigma=1.0, psd_tau_myr=50.0)
+    assert model.via_with_approx
+    cfgs = model.received_cfg if isinstance(model.received_cfg, tuple) else (model.received_cfg,)
+    assert any(isinstance(c, WavePrecomp) for c in cfgs)
+    assert any(isinstance(c, FeaturePrecomp) for c in cfgs)
+
+
+def test_auto_falls_back_to_waveprecomp_when_features_cannot_tabulate():
+    """A line-less backend must keep WavePrecomp — never fall back to raw.
+
+    The naive spelling tries (WavePrecomp, FeaturePrecomp) atomically and
+    loses BOTH when the feature half raises, silently regressing the #1641
+    default for every stellar-only model.
+    """
+    from tengri.forward.sed_model import FeaturePrecomp
+
+    fitter = _fitter(lambda **kw: _StubModel(features_tabulate=False))
+    model = fitter.model_factory(psd_sigma=1.0, psd_tau_myr=50.0)
+    assert model.via_with_approx, "the feature raise must not cost the wave LUT"
+    cfgs = model.received_cfg if isinstance(model.received_cfg, tuple) else (model.received_cfg,)
+    assert any(isinstance(c, WavePrecomp) for c in cfgs)
+    assert not any(isinstance(c, FeaturePrecomp) for c in cfgs)
+
+
+def test_catalog_auto_also_tops_up_featureprecomp():
+    from tengri.forward.sed_model import FeaturePrecomp
+
+    fitter = _catalog_fitter(_StubModel(features_tabulate=True))
+    cfgs = (
+        fitter.model.received_cfg
+        if isinstance(fitter.model.received_cfg, tuple)
+        else (fitter.model.received_cfg,)
+    )
+    assert any(isinstance(c, FeaturePrecomp) for c in cfgs)
