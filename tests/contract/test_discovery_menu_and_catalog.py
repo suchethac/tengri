@@ -91,6 +91,11 @@ def test_search_concept_aliases_reach_the_right_menu():
     assert set(tengri.search("emission lines").names()) == set(
         tengri.list_nebular_backends().names()
     )
+    # "metallicity" reached only the 5 modes whose short_doc uses the word,
+    # silently dropping the gas-regulator and per-bin ones.
+    assert set(tengri.search("metallicity").names()) == set(
+        tengri.list_metallicity_modes().names()
+    )
 
     # a normal substring query is unaffected by the alias layer
     assert "skirtor" in set(tengri.search("skirtor").names())
@@ -435,6 +440,117 @@ def test_radio_block_categories_are_kept_apart():
 
     for row in tengri.list_radio_blocks():
         assert f"'{row['category']}'" in row["use"], row["use"]
+
+
+# ── the invariant itself: every axis, not just the ones already fixed ───────
+
+
+def _grammar_value_sets():
+    """Every set of values the build grammar accepts, discovered by introspection.
+
+    The per-axis guards above pin the axes that were *already* found broken.
+    That is not the same as pinning the rule, and the difference has cost real
+    bugs: #1323 made ``xray_aird`` / ``agn_xray_corona`` / ``radio_powerlaw`` /
+    ``radio_dpl`` builder-reachable, and a fully green suite said nothing,
+    because no test knew those axes existed. ``stellar={'met_mode': ...}``
+    arrived with no menu at all and nine undiscoverable values for the same
+    reason.
+
+    So enumerate the validators rather than listing axes: every module-level
+    ``_VALID_*`` collection and every zero-argument ``_valid_*()`` in
+    ``parameters.groups``, plus the registry-backed axes that do not follow
+    that naming. A new axis added under either convention is covered here the
+    day it lands, with no edit to this file.
+    """
+    import inspect
+
+    from tengri.components.radio.component import AGN_RADIO_MODELS, SF_RADIO_MODELS
+    from tengri.components.stellar.sfh.met_registry import MET_REGISTRY
+    from tengri.parameters import groups as G
+
+    found: dict[str, set[str]] = {}
+    for attr in dir(G):
+        obj = getattr(G, attr)
+        if attr.startswith("_VALID_") and isinstance(obj, (set, frozenset)):
+            values = obj
+        elif (
+            attr.startswith("_valid_") and callable(obj) and not inspect.signature(obj).parameters
+        ):
+            try:
+                values = obj()
+            except Exception:  # pragma: no cover - a validator needing context
+                continue
+        else:
+            continue
+        if values and all(isinstance(v, str) for v in values):
+            found[attr] = set(values)
+
+    # Axes validated against a component registry rather than a ``_valid_*``
+    # helper, so introspection above cannot see them.
+    found["MET_REGISTRY"] = set(MET_REGISTRY)
+    found["SF_RADIO_MODELS"] = set(SF_RADIO_MODELS)
+    found["AGN_RADIO_MODELS"] = set(AGN_RADIO_MODELS)
+
+    # Anti-vacuity. If the naming convention changes under us, introspection
+    # silently returns little or nothing and every assertion below passes for
+    # the wrong reason — the failure mode this whole file keeps re-learning.
+    assert len(found) >= 12, f"only discovered {sorted(found)} — introspection broke"
+    for expected in ("_VALID_DUST_TYPES", "_valid_xray_types", "MET_REGISTRY"):
+        assert expected in found, f"{expected} not discovered — introspection broke"
+    return found
+
+
+def _axis_value_pairs():
+    return sorted(
+        (axis, value) for axis, values in _grammar_value_sets().items() for value in values
+    )
+
+
+@pytest.mark.parametrize(("axis", "value"), _axis_value_pairs())
+def test_every_grammar_value_is_named_by_some_menu(axis, value):
+    """Anything ``SEDModel.build`` accepts must be findable before it is typed.
+
+    A value the builder takes but no menu names is not merely undocumented: it
+    is unreachable by the discovery path the docs teach. Worse, when the name
+    also exists on another axis the lookup does not fail — it answers
+    confidently about the wrong component (``describe('dpl')`` returned a
+    *SFH* model; ``describe('table')`` returned the SFH table, not the
+    metallicity mode).
+    """
+    from tengri.registry import _menu_listers
+
+    homes = [ln.__name__ for ln in _menu_listers() if value in set(ln().names())]
+    assert homes, f"{axis}={value!r} is accepted by the builder but named by no list_* menu"
+
+
+def test_every_menu_derives_its_names_from_the_validator():
+    """Menus that re-derive a validator's logic drift; menus that call it cannot.
+
+    Each of these three shipped a docstring promising it could "never drift"
+    from the grammar while re-implementing the derivation by hand. All three
+    had drifted: the dust-emission copy could not see ``_LAZY_DUST_EMISSION_TYPES``
+    (declared inside ``groups.py``), and the xray/radio copies read only the
+    legacy ``*_MODELS`` dict while the validator accepts its union with the
+    ``SEDModelComponent`` registry.
+    """
+    from tengri.parameters.groups import (
+        _valid_dust_emission_types,
+        _valid_radio_types,
+        _valid_xray_types,
+    )
+
+    for menu, validator in (
+        (tengri.list_xray_models, _valid_xray_types),
+        (tengri.list_radio_models, _valid_radio_types),
+        (tengri.list_dust_emission_models, _valid_dust_emission_types),
+        (tengri.list_metallicity_modes, None),
+    ):
+        if validator is None:
+            from tengri.components.stellar.sfh.met_registry import MET_REGISTRY
+
+            assert set(menu().names()) == set(MET_REGISTRY)
+            continue
+        assert set(menu().names()) == set(validator()), menu.__name__
 
 
 # ── usage hints teach the current SEDModel.build grammar ────────────────────

@@ -168,6 +168,7 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         "list_nebular_backends",
         "list_parameters",
         "list_plots",
+        "list_metallicity_modes",
         "list_radio_blocks",
         "list_radio_models",
         "list_recipes",
