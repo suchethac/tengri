@@ -141,7 +141,9 @@ def test_no_method_is_silently_substituted_for_another():
     # mcmc_dynamic_hmc and mcmc_ghmc joined when the seam gained their real
     # _shared.py full-scan drivers (they spent one commit refused, wired next);
     # mcmc_ess followed once _ess_full_scan existed — the flat prior is exactly
-    # the iid N(0,1) its ellipse assumes.
+    # the iid N(0,1) its ellipse assumes; the MCLMC pair joined with their
+    # blackjax (adjusted_)mclmc_find_L_and_step_size tuning, the piece whose
+    # absence had kept them refused.
     assert set(FLAT_SAMPLERS) == {
         "mcmc",
         "mcmc_nuts",
@@ -149,6 +151,8 @@ def test_no_method_is_silently_substituted_for_another():
         "mcmc_dynamic_hmc",
         "mcmc_ghmc",
         "mcmc_ess",
+        "mcmc_mclmc",
+        "mcmc_adjusted_mclmc",
         "map",
         "pathfinder",
     }, (
@@ -157,8 +161,6 @@ def test_no_method_is_silently_substituted_for_another():
     )
 
     substituted = {
-        "mcmc_mclmc",
-        "mcmc_adjusted_mclmc",
         "laplace",
     }
     for name in sorted(substituted):
@@ -270,10 +272,38 @@ def test_every_flat_sampler_names_a_real_backend_and_driver(name):
         "dynamic_hmc",
         "ghmc",
         "ess",
+        "mclmc",
+        "adjusted_mclmc",
         "nuts_pathfinder",
         "map",
         "nss",
     }, f"{name!r} declares unknown driver {driver!r}"
+
+
+def test_a_non_finite_tuning_is_refused_not_returned():
+    """A starved MCLMC tuner must raise, not hand back a frozen chain.
+
+    Measured on the 2-galaxy D=516 fixture: adjusted MCLMC with
+    ``n_warmup=60`` returned ``L=nan``, ``step_size=nan`` and 60 copies of
+    the init point — the #1530 MAP-echo failure, one driver over. The
+    fraction-based tuning phases (``frac_tune1=0.1`` etc.) starve below a
+    few hundred steps; at ``n_warmup=500`` the same fixture tunes finite.
+    A frozen chain that LOOKS like a populated posterior must be a loud
+    ``DegenerateChainError``, exactly as #1569 made raytrace's degeneracy.
+    """
+    import jax.numpy as jnp
+
+    from tengri.inference._hierarchical_flat import _require_finite_tuning
+    from tengri.inference.hierarchical import DegenerateChainError
+
+    # finite tuning passes silently
+    _require_finite_tuning(jnp.array(2.45), jnp.array(1.23), "mcmc_adjusted_mclmc", 500)
+
+    with pytest.raises(DegenerateChainError) as exc:
+        _require_finite_tuning(jnp.array(jnp.nan), jnp.array(jnp.nan), "mcmc_adjusted_mclmc", 60)
+    msg = str(exc.value)
+    assert "n_warmup" in msg, "the error must name the knob that fixes it"
+    assert "mcmc_adjusted_mclmc" in msg, "the error must name the method asked for"
 
 
 def test_flat_problem_exposes_a_separable_posterior():

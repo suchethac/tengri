@@ -644,6 +644,11 @@ class PopulationFitter:
               flat parameterization's prior is exactly the iid N(0,1) the ESS
               ellipse assumes, so its one structural requirement holds by
               construction; no step size or warmup exists to tune.
+            - ``"mcmc_adjusted_mclmc"`` — Metropolis-adjusted microcanonical
+              Langevin MC, tuned by blackjax's own (L, step size) adaptation.
+            - ``"mcmc_mclmc"`` — unadjusted MCLMC; tier="broken" ([POOR
+              MIXING] on the single-galaxy benchmarks, and biased at finite
+              step size by construction), requires ``allow_unvalidated=True``.
             - ``"mcmc_ghmc"`` — generalized (persistent-momentum) HMC;
               tier="broken" ([POOR MIXING] on the single-galaxy benchmarks),
               requires ``allow_unvalidated=True``. Always uses a diagonal mass
@@ -651,11 +656,10 @@ class PopulationFitter:
             - ``"map"`` — Adam MAP on the flat vector.
             - ``"pathfinder"`` — tier="broken" (OOM-killed the process on a
               measured 2-galaxy problem); requires ``allow_unvalidated=True``.
-            - ``"mcmc_mclmc"``, ``"mcmc_adjusted_mclmc"``,
-              ``"laplace"`` — refused with ``NotImplementedError`` and a
-              per-name reason (see
+            - ``"laplace"`` — refused with ``NotImplementedError`` and a
+              reason (see
               :data:`~tengri.inference._hierarchical_flat.FLAT_UNSUPPORTED`):
-              their real drivers are not wired at the seam yet, and running a
+              its real driver is not wired at the seam yet, and running a
               stand-in algorithm under the requested name would be silent
               substitution.
 
