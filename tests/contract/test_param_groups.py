@@ -128,16 +128,6 @@ class TestEquivalence:
             sfh_dpl_alpha=Uniform(0.5, 3.0),
             sfh_dpl_beta=Fixed(1.0),
             # tau_gyr and log_total_mass should be free via registry defaults
-            #
-            # ``met_logzsol_scatter`` must be named here, and that is the point
-            # of the equivalence rather than a wart in it. ``'*': FREE`` expands
-            # to each parameter's declared ``free_prior``, which is NOT its
-            # registry default (#887): this one defaults to ``Fixed(0.1)`` and
-            # declares ``Uniform(0, 0.5)``. The flat form applies no wildcard,
-            # so it only frees what the registry already had free. The two
-            # surfaces agree once the flat side writes out what the wildcard
-            # expanded to — which is what this test now checks.
-            met_logzsol_scatter=Uniform(0.0, 0.5),
             dust_model="two_component",
             dust_tau_bc=0.0,  # Registry default
             dust_tau_diff=0.0,  # Registry default

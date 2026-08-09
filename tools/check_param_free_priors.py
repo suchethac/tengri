@@ -32,6 +32,12 @@ grounds for refusing, and the distinction matters when revisiting them:
 ``no-evidence``
     A range would be defensible but could not be sourced. These are the ones to
     revisit first; each names what is missing.
+``explicit-only``
+    A genuine per-object freedom with a genuine range, withheld from the
+    wildcard because the data a default fit has cannot constrain it. Freeing it
+    by default would add a dimension whose posterior is its prior to every model
+    that opts the block free -- real cost, no information. The caller can and
+    should free it explicitly when their data supports it.
 
 Usage
 -----
@@ -87,6 +93,11 @@ REFUSED: dict[str, tuple[str, str]] = {
     "dla_z": ("not-continuous", "0 is a sentinel meaning 'use the source redshift'"),
     "redshift": ("not-continuous", "top-level grammar argument; survey-dependent range"),
     "sfh_const_end_gyr": ("not-continuous", "ordering constraint with sfh_const_start_gyr"),
+    # ── explicit-only: real freedom, but not one a default fit can constrain ──
+    "met_logzsol_scatter": (
+        "explicit-only",
+        "MDF second moment; declaring one added it to 6 of 10 shipped recipes",
+    ),
     # ── no-evidence: revisit these first ──
     "radio_alpha_thin": ("no-evidence", "needs Table 1 of Martinez-Ramirez+2024"),
     "radio_alpha_thick": (
@@ -98,7 +109,13 @@ REFUSED: dict[str, tuple[str, str]] = {
     "agn_xray_delta_alpha_ox": ("no-evidence", "as xray_delta_alpha_ox; kept in step with it"),
 }
 
-VALID_GROUNDS = {"inert", "fixed-by-physics", "not-continuous", "no-evidence"}
+VALID_GROUNDS = {
+    "inert",
+    "fixed-by-physics",
+    "not-continuous",
+    "no-evidence",
+    "explicit-only",
+}
 
 
 def main() -> int:

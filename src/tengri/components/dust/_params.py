@@ -36,7 +36,7 @@ from tengri.parameters.priors import Fixed, LogNormal, Uniform
 from tengri.protocols.component import ParamDeclaration
 
 PARAMS: tuple[ParamDeclaration, ...] = (
-    # The three Casey (2012) greybody + mid-IR power-law parameters. Their
+    # The three Casey (2012) graybody + mid-IR power-law parameters. Their
     # defaults are that paper's central values (T=35 K mid-range, beta=1.60,
     # alpha=2.0), so the free ranges are anchored on the same measurements:
     # Casey 2012, "Far-infrared spectral energy distribution fitting for

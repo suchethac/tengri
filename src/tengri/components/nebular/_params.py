@@ -195,7 +195,7 @@ ELINE_PARAMS: tuple[ParamDeclaration, ...] = (
         # Symmetric about zero because the offset is signed: blueshifted for
         # outflows, redshifted for inflows. +/-1000 km/s spans the velocity
         # offsets seen in starburst winds without letting the line wander into
-        # a neighbouring feature.
+        # a neighboring feature.
         free_prior=Uniform(-1000.0, 1000.0, "Line velocity offset", units="km/s", default=0.0),
     ),
 )

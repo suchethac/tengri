@@ -58,11 +58,19 @@ RECIPE_FREE_PARAMS = {
         "sfh_dpl_log_total_mass",
         "sfh_dpl_tau_gyr",
     ],
+    # ``sfh_dexp_start_gyr`` joined this list in #887 and the addition is the
+    # point, not collateral. This recipe asks for the SFH block with
+    # ``all_params: FREE``; the delayed-exponential's onset time is an SFH shape
+    # parameter, and it stayed pinned only because it declared a ``Fixed``
+    # default and no admissible range. A quiescent-galaxy fit that cannot move
+    # when star formation began is answering a narrower question than the recipe
+    # claims to ask.
     "quiescent_z0": [
         "dust_tau_bc",
         "dust_tau_diff",
         "met_logzsol",
         "sfh_dexp_log_total_mass",
+        "sfh_dexp_start_gyr",
         "sfh_dexp_tau_gyr",
     ],
     "agn_panchromatic": [

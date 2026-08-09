@@ -167,10 +167,20 @@ _register(
                 # it (e.g. ``Uniform(0.0, 0.5)``) to fit the MDF width like
                 # Bagpipes' ``lognorm`` chemical-enrichment mode.
                 Fixed(0.1),
-                # The prior this comment has recommended all along, now declared
-                # so ``all_params: FREE`` actually reaches it. 0 is included and
-                # meaningful: it recovers the single-Z delta population.
-                Uniform(0.0, 0.5, "Metallicity scatter sigma", units="dex", default=0.1),
+                # Deliberately NO free_prior (#887), and note what the comment
+                # above is actually saying: "*Free it* ... like Bagpipes'
+                # lognorm mode" is an instruction to the caller, mirroring a
+                # mode Bagpipes gates behind an explicit opt-in. It is not a
+                # request that the wildcard reach it.
+                #
+                # Measured: declaring one added this parameter to 6 of the 10
+                # shipped recipes, because ``met_*`` routes into the ``sfh``
+                # group and every recipe frees that block. It is the second
+                # moment of the MDF -- broadband photometry constrains the mean
+                # metallicity weakly and its width barely at all -- so that is a
+                # near-unconstrained dimension in every default fit, returning
+                # the prior and costing warmup. The mean (``met_logzsol``) is
+                # already free; the width stays explicit.
             ),
         },
         settings={},
