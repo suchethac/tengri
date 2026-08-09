@@ -123,6 +123,40 @@ def test_locator_reports_its_own_message_when_absent(modname, fname, monkeypatch
     assert str(exc.value) == mod._NOT_FOUND_MSG
 
 
+def test_require_data_raises_the_curated_message_verbatim(monkeypatch):
+    """The shared helper replaces ``data_path``'s text entirely, not by wrapping it.
+
+    Asserted on the helper itself, not only through its six callers: the
+    equality above would still pass if ``require_data`` appended the generic
+    message and every locator happened to be checked with ``in``.
+    """
+    from tengri import _data_setup
+
+    monkeypatch.setattr(
+        _data_setup,
+        "data_path",
+        lambda _f: (_ for _ in ()).throw(FileNotFoundError("generic: looked in /a, /b")),
+    )
+    curated = "CAT3D-Wind torus grid not found. Build it with: python scripts/build.py"
+    with pytest.raises(FileNotFoundError) as exc:
+        _data_setup.require_data("absent_grid.h5", curated)
+    assert str(exc.value) == curated
+    assert "generic" not in str(exc.value)
+
+
+def test_require_data_returns_a_str_not_a_path(monkeypatch, tmp_path):
+    """The grid loaders take ``str``; handing back a ``Path`` would be a silent shape change."""
+    from tengri import _data_setup
+
+    grid = tmp_path / "present_grid.h5"
+    grid.write_bytes(b"")
+    monkeypatch.setenv("TENGRI_DATA_DIR", str(tmp_path))
+
+    found = _data_setup.require_data("present_grid.h5", "unused")
+    assert isinstance(found, str), f"expected str, got {type(found).__name__}"
+    assert found == str(grid)
+
+
 def test_env_override_still_takes_precedence(monkeypatch, tmp_path):
     """$TENGRI_DATA_DIR must stay first — the new entries are appended, not prepended."""
     monkeypatch.setenv("TENGRI_DATA_DIR", str(tmp_path))
