@@ -6,7 +6,7 @@
 Provides ready-to-use model configurations for typical galaxy fitting workflows.
 Each recipe returns a nested-dict suitable for splat ting into
 :func:`~tengri.parameters.parse_groups()` or
-:func:`~tengri.forward.SEDModel.build()`.
+:func:`~tengri.SEDModel.build()`.
 
 Examples
 --------

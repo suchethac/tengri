@@ -307,7 +307,7 @@ class PopulationPosterior:
 
         Notes
         -----
-        Reuses :func:`tengri.analysis.diagnostics.rhat` and
+        Reuses :func:`tengri.analysis.diagnostics.autocorrelation.rhat` and
         :func:`tengri.analysis.diagnostics.effective_sample_size`. Static
         (zero-variance) parameters are dropped silently.
 

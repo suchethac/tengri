@@ -2,7 +2,7 @@
 """Free-parameter declarations owned by the nebular component.
 
 Each tuple in this module is the canonical source for one legacy
-bucket in ``tengri.parameters._param_defs``:
+bucket in ``tengri.parameters._builders``:
 
 - :data:`PARAMS` → ``_NEBULAR_PARAMS`` (standard CLOUDY / Cue / CB_19
   ionization knobs registered when ``nebular in {cloudy, cue, cb19}``).

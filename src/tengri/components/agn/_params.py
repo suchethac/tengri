@@ -2,7 +2,7 @@
 """Free-parameter declarations owned by the AGN component.
 
 Single source of truth for the ``agn_*`` priors.
-``tengri.parameters._param_defs`` derives its legacy ``_AGN_PARAMS``
+``tengri.parameters._builders`` derives its legacy ``_AGN_PARAMS``
 bucket from this tuple, and :meth:`AGNSEDComponent.declared_parameters`
 returns it directly.
 
