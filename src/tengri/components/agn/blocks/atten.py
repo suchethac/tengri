@@ -10,6 +10,7 @@ from __future__ import annotations
 import jax.numpy as jnp
 from jax import Array
 
+from tengri.components.agn._params import DEFAULT_AGN_COS_INC
 from tengri.components.agn.blocks._protocol import register_agn_block
 from tengri.components.agn.polar_dust import polar_dust_emission, polar_dust_extinction
 
@@ -29,8 +30,11 @@ __all__ = [
 def polar_dust_attenuation_block(
     wavelength: Array,
     *,
+    # Differs from the declared agn_polar_ebv default (0.03) on purpose: this is
+    # an opt-in attenuation stage, so its default must be the no-op. A caller who
+    # selects the block without asking for reddening gets none.
     agn_polar_ebv: float = 0.0,
-    agn_cos_inc: float = 0.86602540378443864,
+    agn_cos_inc: float = DEFAULT_AGN_COS_INC,
     agn_polar_oa: float = 45.0,
     agn_polar_law: str = "smc",
     **_params,
@@ -48,7 +52,8 @@ def polar_dust_attenuation_block(
         :math:`E(B-V)` of the polar dust [mag]. ``0.0`` (default) is no
         attenuation.
     agn_cos_inc : float, optional
-        :math:`\cos(i)` (1 = face-on, 0 = edge-on). Default ``0.5``.
+        :math:`\cos(i)` (1 = face-on, 0 = edge-on). Defaults to the declared
+        ``agn_cos_inc`` default, ``cos(30 deg)``.
     agn_polar_oa : float, optional
         Torus half-opening angle [deg, measured from equator]. Default
         ``45``.
@@ -84,8 +89,11 @@ def polar_dust_reemission_lnu(
     wavelength: Array,
     l_in: Array,
     *,
+    # Differs from the declared agn_polar_ebv default (0.03) on purpose: this is
+    # an opt-in attenuation stage, so its default must be the no-op. A caller who
+    # selects the block without asking for reddening gets none.
     agn_polar_ebv: float = 0.0,
-    agn_cos_inc: float = 0.86602540378443864,
+    agn_cos_inc: float = DEFAULT_AGN_COS_INC,
     agn_polar_oa: float = 45.0,
     agn_polar_temperature: float = 100.0,
     agn_polar_beta: float = 1.6,
@@ -111,7 +119,8 @@ def polar_dust_reemission_lnu(
     agn_polar_ebv : float, optional
         :math:`E(B-V)` of the polar dust [mag]. Default ``0.0``.
     agn_cos_inc : float, optional
-        :math:`\cos(i)` (1 = face-on, 0 = edge-on). Default ``0.5``.
+        :math:`\cos(i)` (1 = face-on, 0 = edge-on). Defaults to the declared
+        ``agn_cos_inc`` default, ``cos(30 deg)``.
     agn_polar_oa : float, optional
         Torus half-opening angle [deg, measured from equator]. Default ``45``.
     agn_polar_temperature : float, optional

@@ -36,7 +36,6 @@ from __future__ import annotations
 
 import contextlib
 import inspect
-import re
 
 import pytest
 
@@ -91,24 +90,63 @@ def test_population_advice_cannot_disagree_with_its_signature():
     literal, which outlived ``b7c4fa1e2`` moving the real default to
     ``native_vi_linear``. The class told users one thing and did another.
 
-    This asserts the *structural* cure rather than the literal. An earlier
-    version of this test required the string ``'vi_nonlinear_fast' (default)``
-    to be present — which pinned the shape of one fix instead of the property
-    that matters, and broke the moment the message was improved. A derived list
-    cannot disagree with the dispatch tables, so agreement stops being
-    something anyone has to remember.
+    **What this can still catch, after #1576.** The advice now reads its
+    marker from ``inspect.signature(cls.run)``, so a signature/advice
+    *disagreement* is no longer possible to express — the two derive from one
+    source. Stating that plainly matters, because an assertion downstream of
+    the thing that guarantees it is unfalsifiable, and a green tautology reads
+    like protection it is not providing.
+
+    Three failure modes remain reachable, and all three are asserted below:
+
+    * the signature default is not a dispatchable method at all,
+    * the ``(default)`` marker is dropped from the message entirely, and
+    * the derivation narrows back to one dispatch table, under-reporting
+      everything the flat seam added.
+
+    That third one is why this asserts against the *produced message* rather
+    than grepping ``run`` for a derivation expression. An earlier version of
+    this test pinned the source text ``sorted(set(_method_map) |
+    set(FLAT_SAMPLERS)``, which pinned the shape of one fix instead of the
+    property that matters — it went red the moment the derivation was moved
+    into a helper, while the behavior it claimed to protect was intact.
     """
-    src = inspect.getsource(PopulationFitter.run)
-    assert "sorted(set(_method_map) | set(FLAT_SAMPLERS)" in src, (
-        "the unknown-method error must derive its list from the dispatch tables"
-    )
-    # And the real default must actually be in what that derivation yields.
     default = _default_of(PopulationFitter.run)
+
+    # The default must actually be dispatchable...
+    src = inspect.getsource(PopulationFitter.run)
+    body = src.split("_method_map = {")[1].split("}")[0]
+    assert f'"{default}"' in body, f"the signature default {default!r} is not in _method_map"
+
+    # ...and the advice must mark it as the default.
+    #
+    # Asserted against the produced message rather than against the source
+    # text of ``run``. Checking the real output is strictly stronger: it still
+    # catches a signature/advice disagreement, and additionally catches a
+    # message that is built correctly but never reaches the caller.
+    message = PopulationFitter._unknown_method_message("__no_such_method__", {default: None})
+    assert f"{default!r} (default)" in message, (
+        f"the ValueError advice must name the real default ({default!r}); got: {message}"
+    )
+
+    # ...and it must cover the flat seam, not just the NIFTy table.
+    #
+    # This is the assertion that keeps the widening honest, and it is not a
+    # tautology: ``runnable_flat`` is built from ``FLAT_SAMPLERS`` directly,
+    # so if the helper ever derives from ``method_map`` alone again — which
+    # was correct right up until the flat seam landed — the two assertions
+    # above stay green and this one goes red. Mutation-checked by dropping
+    # ``set(FLAT_SAMPLERS)`` from the helper's ``reachable``.
+    from tengri.inference._backend_registry import lookup_backend
     from tengri.inference._hierarchical_flat import FLAT_SAMPLERS
 
-    body = src.split("_method_map = {")[1].split("\n        }")[0]
-    derived = set(re.findall(r'"([a-z_0-9]+)":', body)) | set(FLAT_SAMPLERS)
-    assert default in derived, f"default {default!r} is not among the methods run() advertises"
+    runnable_flat = {
+        m for m in FLAT_SAMPLERS if (entry := lookup_backend(m)) is None or entry.tier != "broken"
+    }
+    missing = sorted(m for m in runnable_flat if repr(m) not in message)
+    assert not missing, (
+        f"the advice omits flat-seam methods that run() dispatches: {missing}; got: {message}"
+    )
 
 
 def test_population_default_is_not_nuts_even_though_nuts_now_runs():

@@ -34,7 +34,7 @@ import jax
 import jax.numpy as jnp
 
 from tengri._deprecated import deprecated_alias
-from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
+from tengri.components.agn._params import DEFAULT_AGN_COS_INC, DEFAULT_AGN_LOG_LBOL
 from tengri.components.agn._phys import (
     L_SUN as _L_SUN,
 )
@@ -294,7 +294,7 @@ def _skirtor_grid_sed(
     agn_q_skirtor: float = 1.0,
     agn_oa_skirtor: float = 40.0,
     agn_radius_ratio: float = 20.0,
-    agn_cos_inc: float = 0.86602540378443864,
+    agn_cos_inc: float = DEFAULT_AGN_COS_INC,
     agn_torus_frac: float = 0.5,
     **_kwargs,
 ) -> jnp.ndarray:
@@ -413,7 +413,7 @@ def create_skirtor_from_grid(grid_path: str) -> Callable:
         agn_q_skirtor: float = 1.0,
         agn_oa_skirtor: float = 40.0,
         agn_radius_ratio: float = 20.0,
-        agn_cos_inc: float = 0.86602540378443864,
+        agn_cos_inc: float = DEFAULT_AGN_COS_INC,
         agn_torus_frac: float = 0.5,
         **_kwargs,
     ) -> jnp.ndarray:
@@ -536,7 +536,7 @@ def create_skirtor_components_from_grid(grid_path: str) -> Callable:
         agn_q_skirtor: float = 1.0,
         agn_oa_skirtor: float = 40.0,
         agn_radius_ratio: float = 20.0,
-        agn_cos_inc: float = 0.86602540378443864,
+        agn_cos_inc: float = DEFAULT_AGN_COS_INC,
         frac_agn: float = 0.5,
         agn_torus_frac: float | None = None,  # deprecated; falls back to frac_agn
         **_kwargs,
@@ -610,7 +610,7 @@ def skirtor_disc_dust_ratio(
     agn_q_skirtor: float = 1.0,
     agn_oa_skirtor: float = 40.0,
     agn_radius_ratio: float = 20.0,
-    agn_cos_inc: float = 0.86602540378443864,
+    agn_cos_inc: float = DEFAULT_AGN_COS_INC,
 ) -> jnp.ndarray:
     r"""CIGALE disc/dust bolometric ratio ``R = lumin_disk / lumin_dust``.
 

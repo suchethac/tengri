@@ -31,6 +31,11 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.components.agn._params import (
+    DEFAULT_AGN_COS_INC,
+    DEFAULT_AGN_LOG_MBH,
+    DEFAULT_AGN_LUM_RATIO,
+)
 from tengri.components.agn._phys import (
     C_LIGHT as _C_LIGHT,
     H_PLANCK as _H_PLANCK,
@@ -999,11 +1004,11 @@ def _integrate_warm_zone(
 def kubota_done_disc_preintegrated(
     kd_data: KDPreintegratedData,
     agn_log_lbol: float,
-    agn_lum_ratio: float = 1.0,
-    agn_log_mbh: float = 8.0,
+    agn_lum_ratio: float = DEFAULT_AGN_LUM_RATIO,
+    agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
     agn_log_ledd: float = -1.0,
     agn_a_spin: float = 0.0,
-    agn_cos_inc: float = 0.5,
+    agn_cos_inc: float = DEFAULT_AGN_COS_INC,
     agn_f_hard: float = 0.02,
     agn_gamma_warm: float = 2.5,
     agn_kt_warm: float = 0.2,

@@ -12,7 +12,7 @@ They consume :class:`Posterior` / :class:`SEDResult` / numpy arrays.
 Examples
 --------
 >>> from tengri import plot
->>> fig = plot.plot_sed_fit(posterior, observation)
+>>> fig = plot.plot_sed_fit(wave_eff, flux_obs, noise)
 >>> plot.setup_style()  # apply tengri rcParams
 """
 

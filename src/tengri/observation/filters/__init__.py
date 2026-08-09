@@ -998,7 +998,7 @@ def suggest(
 
     Examples
     --------
-    >>> suggest(z=3.0, coverage="visible_to_nir")  # z=3 galaxies, optical→NIR
+    >>> suggest(redshift=3.0, coverage="visible_to_nir")  # z=3 galaxies, optical→NIR
     ['jwst_f115w', 'jwst_f150w', ...]
     """
     # Coverage presets (rest-frame, Angstrom)

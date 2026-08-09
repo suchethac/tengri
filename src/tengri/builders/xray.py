@@ -13,13 +13,19 @@ selects the physics model.
    parser does not currently flip individual X-ray params to FREE via
    the ``*`` wildcard. Use per-param :class:`Distribution` overrides
    to make X-ray params free (e.g.
-   ``builders.xray.simple(alpha_ox=Uniform(-2.0, -1.0))``).
+   ``builders.xray.simple(delta_alpha_ox=Uniform(-0.4, 0.4))``).
+
+   The knob is ``delta_alpha_ox``, not ``alpha_ox``: it is an *offset* in
+   dex from the L_2500-derived empirical alpha_ox, defaulting to
+   ``Fixed(0.0)``. A prior centered on zero is the meaningful one — a range
+   like ``(-2.0, -1.0)`` would be the alpha_ox value itself, which this
+   parameter is not.
 
 Examples
 --------
 >>> from tengri import builders, Uniform
->>> builders.xray.simple(alpha_ox=Uniform(-2.0, -1.0))  # doctest: +SKIP
-{'type': 'simple', 'all_params': FIXED, 'alpha_ox': Uniform(...)}
+>>> builders.xray.simple(delta_alpha_ox=Uniform(-0.4, 0.4))  # doctest: +SKIP
+{'type': 'simple', 'all_params': FIXED, 'delta_alpha_ox': Uniform(...)}
 """
 
 from __future__ import annotations

@@ -18,6 +18,7 @@ Usage:
 from __future__ import annotations
 
 import functools
+import inspect
 import time
 import warnings
 from dataclasses import dataclass, field
@@ -512,6 +513,75 @@ class PopulationFitter:
             if n not in ("sfh_field_psd_sigma", "sfh_field_psd_tau_myr")
         ]
 
+    @classmethod
+    def _unknown_method_message(cls, method: str, method_map: dict) -> str:
+        """Build the ``Unknown method`` text, derived rather than hand-written.
+
+        The literal this replaced named seven methods and got three things
+        wrong at once (#1576):
+
+        * It omitted ``"vi"`` — a live ``method_map`` key, and the canonical
+          :data:`~tengri.inference._backend_registry.DEFAULT_METHOD` that every
+          other fit surface unified on (#1289). The message left out the single
+          most correct answer.
+        * It omitted ``"evi_nifty"``, which the branch directly above accepts.
+        * It advertised ``native_vi_linear`` and ``native_vi_nonlinear``, both
+          ``tier="broken"`` — and ``refuse_if_broken`` three lines earlier had
+          already refused them. The message recommended what its own caller
+          rejects, so taking the advice raised ``BackendError``.
+
+        Advice that raises is the defect, not the help (#1364). Deriving the
+        list from the dispatch tables keeps it from drifting again; filtering
+        by tier keeps it runnable.
+
+        ``run`` dispatches from **three** places, so all three are unioned
+        here. Deriving from ``method_map`` alone was complete when this helper
+        was written and stopped being so the moment the flat seam landed: it
+        would silently under-report every sampler reachable only through
+        :data:`~tengri.inference._hierarchical_flat.FLAT_SAMPLERS` (``map``,
+        ``mcmc_nuts``, ``mcmc_hmc``, …) — the same class of omission this
+        helper exists to prevent, one layer further out.
+
+        Names in :data:`~tengri.inference._hierarchical_flat.FLAT_UNSUPPORTED`
+        are deliberately *not* listed. ``run`` raises ``NotImplementedError``
+        with a per-name reason for those, which is more useful than appearing
+        in a list of things that work.
+
+        Parameters
+        ----------
+        method : str
+            The unrecognized name the caller passed.
+        method_map : dict
+            The live NIFTy dispatch table. Passed rather than imported because
+            it is a local of :meth:`run`; the other two sources are module
+            constants and are read directly.
+
+        Returns
+        -------
+        str
+            Error text naming every runnable method, the default marked.
+
+        Notes
+        -----
+        Not JIT-compatible; a Python-level error path called once.
+        """
+        from tengri.inference._backend_registry import lookup_backend
+
+        default = inspect.signature(cls.run).parameters["method"].default
+        reachable = set(method_map) | set(FLAT_SAMPLERS) | {"evi_nifty"}
+        # A name absent from the registry (evi_nifty) is dispatched anyway, so
+        # keep it — the same fail-open that refuse_if_broken applies.
+        supported = sorted(
+            m for m in reachable if (entry := lookup_backend(m)) is None or entry.tier != "broken"
+        )
+        shown = ", ".join(f"{m!r} (default)" if m == default else repr(m) for m in supported)
+        return (
+            f"Unknown method: {method!r}. Supported ({len(supported)}): {shown}. "
+            f"Backends registered tier='broken' are omitted here because "
+            f"PopulationFitter.run refuses them; pass allow_unvalidated=True to run "
+            f"one anyway, or see tengri.list_inference_methods(tier='broken')."
+        )
+
     def run(self, method="vi_nonlinear_fast", *, key=None, allow_unvalidated=False, **kwargs):
         """Run hierarchical inference.
 
@@ -520,11 +590,17 @@ class PopulationFitter:
         method : str
             **NIFTy-backed (CorrelatedFieldMaker, native PSD learning)**
 
+            - ``"vi"`` — the canonical name, shared with every other fit
+              surface (:data:`~tengri.inference._backend_registry.DEFAULT_METHOD`,
+              #1289). Same geoVI runner as ``"vi_nonlinear_fast"``.
             - ``"vi_nonlinear_fast"`` — geoVI via NIFTy ``optimize_kl``
               (default).
             - ``"vi_nonlinear"`` — geoVI; same runner as fast, kept for API symmetry.
             - ``"vi_linear_fast"`` — MGVI via NIFTy ``optimize_kl``.
             - ``"vi_linear"`` — MGVI; same runner as fast, kept for API symmetry.
+            - ``"evi_nifty"`` — expansion-point VI via ``_run_geovi_cfm``
+              (``sample_mode="evi"``). Dispatched by name, with no registry
+              entry of its own.
 
             **Pure-JAX (lax.while_loop, no NIFTy) — tier="broken"**
 
@@ -695,12 +771,11 @@ class PopulationFitter:
                 )
             # Derive the advertised list; never hand-write it. The literal this
             # replaced named 'vi_nonlinear_fast' as "(default)" for months after
-            # b7c4fa1e2 moved the default off it (#1394).
-            supported = sorted(set(_method_map) | set(FLAT_SAMPLERS) | {"evi_nifty"})
-            raise ValueError(
-                f"Unknown method: {method!r}. Supported "
-                f"({len(supported)}): {', '.join(supported)}."
-            )
+            # b7c4fa1e2 moved the default off it (#1394), and independently
+            # advertised two tier="broken" backends that the caller three lines
+            # up had already refused (#1576). The helper fixes both: it unions
+            # the dispatch tables and drops the broken tier.
+            raise ValueError(self._unknown_method_message(method, _method_map))
 
         cfm_method, sample_mode = _method_map[method]
         if cfm_method == "geovi":

@@ -218,11 +218,34 @@ def test_the_unknown_method_error_derives_its_list():
     """The advertised list must come from the tables, never a prose literal.
 
     The literal it replaced named ``vi_nonlinear_fast`` "(default)" for months
-    after b7c4fa1e2 moved the default off it.
+    after b7c4fa1e2 moved the default off it, and separately advertised two
+    ``tier="broken"`` backends that ``refuse_if_broken`` had already rejected
+    three lines earlier — advice that raises when taken (#1576).
+
+    Asserted against the **produced message**. An earlier version of this test
+    grepped ``run`` for the expression ``sorted(set(_method_map) |
+    set(FLAT_SAMPLERS)``, which pinned the shape of one particular fix rather
+    than the property that matters: it went red when the derivation moved into
+    ``_unknown_method_message`` even though the behavior was unchanged, and it
+    could never have caught a message built correctly but never raised.
+
+    ``run`` dispatches from two tables. Both must be represented, so the
+    derivation cannot narrow to either one alone.
     """
-    src = inspect.getsource(PopulationFitter.run)
-    assert "sorted(set(_method_map) | set(FLAT_SAMPLERS)" in src, (
-        "the error must derive its supported list from the dispatch tables"
+    message = PopulationFitter._unknown_method_message("__nope__", {"vi_nonlinear_fast": None})
+
+    assert "'vi_nonlinear_fast'" in message, "the NIFTy _method_map is missing from the advice"
+    assert "'mcmc_nuts'" in message, "the flat seam (FLAT_SAMPLERS) is missing from the advice"
+
+    # And nothing the caller would be refused for taking.
+    advertised_broken = sorted(
+        name
+        for name, entry in _BACKENDS.items()
+        if getattr(entry, "tier", None) == "broken" and repr(name) in message
+    )
+    assert not advertised_broken, (
+        f"the advice recommends tier='broken' backends that run() refuses: "
+        f"{advertised_broken}; got: {message}"
     )
 
 
