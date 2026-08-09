@@ -25,7 +25,15 @@ pytestmark = pytest.mark.regression_bug
 
 
 def _unknown_kwarg_error(fn, **kwargs):
-    """Run ``fn`` expecting a rejection; return the raised exception."""
+    """Run ``fn`` expecting a rejection; return the raised exception.
+
+    Catches both types deliberately, so the per-test ``isinstance`` assertion
+    below reports *which* one arrived instead of failing as an unhandled
+    exception. #1629 settled the answer at ``TypeError``: the same mistake must
+    fail the same way whether Python rejects the kwarg or the dispatch seam
+    does. ``check_capabilities`` still raises ``ValueError`` for *declared
+    capability* names, which is a different question and a different test.
+    """
     with pytest.raises((ValueError, TypeError)) as excinfo:
         fn(**kwargs)
     return excinfo.value
@@ -44,8 +52,8 @@ def test_catalog_fit_names_the_method_not_the_runner(synthetic_ssp_wide, synthet
     )
     msg = str(err)
 
-    assert isinstance(err, ValueError), (
-        f"expected a ValueError naming the unsupported option, got {type(err).__name__}: {msg}"
+    assert isinstance(err, TypeError), (
+        f"expected a TypeError naming the unsupported option, got {type(err).__name__}: {msg}"
     )
     assert "run_map" not in msg, (
         f"the error leaks the backend function name the caller never mentioned: {msg}"
@@ -131,5 +139,5 @@ def test_single_galaxy_surface_gets_the_same_answer(synthetic_ssp_wide, syntheti
         model.fit, data=flux, noise=noise, method="map", n_steps=2, nonsense_kwarg=3
     )
 
-    assert isinstance(err, ValueError), f"got {type(err).__name__}: {err}"
+    assert isinstance(err, TypeError), f"got {type(err).__name__}: {err}"
     assert "run_map" not in str(err), str(err)
