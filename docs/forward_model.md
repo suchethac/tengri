@@ -50,7 +50,7 @@ SubModel underneath happens to be.
 import tengri
 from tengri import FIXED, ForwardModel, SEDModel
 
-ssp = tengri.load_ssp_data()
+ssp = tengri.load_ssp_data(tengri.download_ssp())
 obs = tengri.Observation(photometry=tengri.Photometry.from_names(["sdss_u", "sdss_g", "sdss_r"]))
 
 # 1. Build the SED chain.

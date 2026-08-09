@@ -26,12 +26,35 @@ What it checks
 1. ``from tengri import A, B`` — every imported name must resolve.
 2. ``Class.attr`` — where ``Class`` is a name tengri actually exports, the
    attribute must exist on it.
+3. ``f(...)`` — every call whose callee resolves must *bind* against the
+   real signature.
+
+Check 3 exists because a name that resolves still gets the reader a
+``TypeError``. ``tengri.tutorial("first_fit")`` — the first thing a new user
+copies — opened with ``list_filters(instrument="2MASS")`` when the parameter
+is ``survey``, and called ``generate_mock(model, key=..., snr=...)`` when
+``params`` is required and positional. Both names exist, so checks 1 and 2
+pass and so does the tutorial contract test, which resolves
+``receiver.attribute`` and stops there. ``inspect.Signature.bind`` is the one
+rule that catches both shapes at once: the unexpected keyword *and* the
+missing required argument. Checking keyword names alone finds the first and
+misses the second.
+
+The three surfaces that ship copy-pasteable code are all in scope: docstring
+examples, published pages, and the ``tengri.tutorial()`` blocks — which are
+plain strings inside ``_tutorials.py``, so no docstring-based guard saw them
+before.
 
 Deliberately narrow. Classes tengri does not export are skipped, so
 internal types (``PipelineState.derived``, ``ForwardState.derived``) never
 produce noise. Attribute chains on local variables are not resolved —
 inferring the type of ``pred`` in ``pred.rest_sed()`` is guesswork, and a
-guard that guesses is a guard people learn to ignore.
+guard that guesses is a guard people learn to ignore. Check 3 keeps that
+bargain: a callee is resolved **in its own module's namespace first**, and
+only then against ``tengri``. Skipping that step is not hypothetical
+pedantry — there are two public ``list_filters``, one taking ``survey`` and
+one taking ``instrument``, and resolving the name globally reports the
+correct docstring of one as a violation of the other's signature.
 
 Usage
 -----
@@ -44,8 +67,11 @@ Exit code 0 if clean, 1 with violations listed otherwise.
 from __future__ import annotations
 
 import argparse
+import ast
+import inspect
 import re
 import sys
+import textwrap
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -158,6 +184,156 @@ def snippets_from_markdown(path: Path) -> list[str]:
     return out
 
 
+def blocks_from_python(path: Path) -> list[str]:
+    """Docstring examples as *blocks*, not lines.
+
+    Check 2 works line-by-line, but a call can wrap across a ``>>>`` and its
+    ``...`` continuations, and half a call does not parse. Contiguous doctest
+    runs are joined so the whole statement reaches the parser.
+    """
+    out, buf = [], []
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        s = line.strip()
+        if s.startswith(">>> ") or s.startswith("... "):
+            buf.append(s[4:])
+        elif buf:
+            out.append("\n".join(buf))
+            buf = []
+    if buf:
+        out.append("\n".join(buf))
+    return out
+
+
+def blocks_from_markdown(path: Path) -> list[str]:
+    """Fenced python blocks — the only markdown form that holds whole calls."""
+    return PY_FENCE.findall(path.read_text(encoding="utf-8", errors="replace"))
+
+
+def tutorial_blocks() -> list[tuple[str, str]]:
+    """``tengri.tutorial()`` code, which lives in string literals.
+
+    These never pass through a docstring, so no doc guard has ever read them.
+    """
+    try:
+        from tengri._tutorials import _TUTORIALS
+    except Exception:
+        return []
+    return [(name, tut.code) for name, tut in _TUTORIALS.items()]
+
+
+def _module_namespace(path: Path):
+    """The defining module's globals, so a local name wins over a tengri one."""
+    try:
+        rel = path.relative_to(REPO / "src")
+    except ValueError:
+        return {}
+    parts = list(rel.with_suffix("").parts)
+    if parts and parts[-1] == "__init__":
+        parts.pop()
+    try:
+        import importlib
+
+        return vars(importlib.import_module(".".join(parts)))
+    except Exception:
+        return {}
+
+
+def _parse_chunks(code: str):
+    """Yield an AST per blank-line-separated chunk that is valid Python.
+
+    Chunking keeps prose-mixed sources usable: a tutorial that ends in a
+    narrative paragraph would otherwise fail to parse as a whole and be
+    skipped in silence, which is the failure mode of scanning less than you
+    think you are.
+    """
+    chunks, buf = [], []
+    for ln in code.splitlines():
+        if not ln.strip():
+            if buf:
+                chunks.append("\n".join(buf))
+                buf = []
+        else:
+            buf.append(ln)
+    if buf:
+        chunks.append("\n".join(buf))
+    for ch in chunks:
+        for candidate in (ch, textwrap.dedent(ch)):
+            try:
+                yield ast.parse(candidate)
+                break
+            except SyntaxError:
+                continue
+
+
+_SENTINEL = object()
+
+
+def _resolve_callee(dotted: str, namespace: dict, resolve):
+    """Resolve ``a.b.c`` in the defining module first, then against tengri."""
+    parts = dotted.split(".")
+    head, rest = parts[0], parts[1:]
+    obj = namespace.get(head, _SENTINEL)
+    if obj is _SENTINEL:
+        if head == "tengri":
+            import tengri
+
+            obj = tengri
+        else:
+            obj = resolve(head)
+    if obj is None or obj is _SENTINEL:
+        return None
+    for p in rest:
+        obj = getattr(obj, p, None)
+        if obj is None:
+            return None
+    return obj
+
+
+def bind_violations(code: str, namespace: dict, resolve) -> list[tuple[str, str]]:
+    """Every call in ``code`` that cannot bind against its real signature."""
+    found: list[tuple[str, str]] = []
+    for tree in _parse_chunks(code):
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            fn = node.func
+            if isinstance(fn, ast.Attribute):
+                try:
+                    dotted = f"{ast.unparse(fn.value)}.{fn.attr}"
+                except Exception:
+                    continue
+            elif isinstance(fn, ast.Name):
+                dotted = fn.id
+            else:
+                continue
+            if not all(part.isidentifier() for part in dotted.split(".")):
+                continue
+            # ``f(*args)`` / ``f(**kw)`` hide the real arity, and ``f(...)`` is
+            # the documentation shorthand for "and the rest" — neither is a
+            # claim about the signature, so neither is checked.
+            if any(isinstance(a, ast.Starred) for a in node.args):
+                continue
+            if any(k.arg is None for k in node.keywords):
+                continue
+            if any(isinstance(a, ast.Constant) and a.value is Ellipsis for a in node.args):
+                continue
+            obj = _resolve_callee(dotted, namespace, resolve)
+            if obj is None or not callable(obj):
+                continue
+            try:
+                sig = inspect.signature(obj)
+            except (TypeError, ValueError):
+                continue  # builtins and C-level callables expose no signature
+            try:
+                sig.bind(
+                    *[_SENTINEL] * len(node.args),
+                    **{k.arg: _SENTINEL for k in node.keywords},
+                )
+            except TypeError as exc:
+                found.append((dotted, str(exc)))
+    return found
+
+
 def check(verbose: bool = False) -> list[str]:
     resolve = public_api()
     violations: list[str] = []
@@ -173,6 +349,15 @@ def check(verbose: bool = False) -> list[str]:
                 "Refusing to report violations from a resolver that cannot see "
                 "the public API."
             )
+
+    # Same bargain for check 3: a chunk parser or resolver that silently
+    # stopped matching would report a clean run forever. Prove it still
+    # rejects before trusting the absence of violations.
+    if not bind_violations('tengri.list_filters(instrument="x")', {}, resolve):
+        raise SystemExit(
+            "check_doc_examples is broken: the signature check no longer rejects a "
+            "call with an unexpected keyword. Refusing to report a clean run."
+        )
 
     targets: list[tuple[Path, list[str]]] = []
     for p in sorted((REPO / "src" / "tengri").rglob("*.py")):
@@ -247,6 +432,25 @@ def check(verbose: bool = False) -> list[str]:
                     violations.append(
                         f"{rel}: `{cls_name}.{attr}` does not exist on tengri.{cls_name}"
                     )
+
+    # 3. Every call whose callee resolves must bind against the real signature.
+    #    A name that exists is not the same claim as a call that works.
+    bind_targets: list[tuple[str, str, dict]] = []
+    for p in sorted((REPO / "src" / "tengri").rglob("*.py")):
+        if not is_excluded(p):
+            ns = _module_namespace(p)
+            bind_targets += [(str(p.relative_to(REPO)), b, ns) for b in blocks_from_python(p)]
+    for p in sorted((REPO / "docs").rglob("*.md")):
+        if not is_excluded(p):
+            bind_targets += [(str(p.relative_to(REPO)), b, {}) for b in blocks_from_markdown(p)]
+    for tut_name, code in tutorial_blocks():
+        bind_targets.append((f"src/tengri/_tutorials.py (tutorial {tut_name!r})", code, {}))
+
+    for origin, block, ns in bind_targets:
+        for dotted, err in bind_violations(block, ns, resolve):
+            checked += 1
+            violations.append(f"{origin}: `{dotted}(...)` does not bind — {err}")
+        checked += 1
 
     print(f"checked {checked} references across {len(targets)} files")
     return sorted(set(violations))

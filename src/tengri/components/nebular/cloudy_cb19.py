@@ -158,6 +158,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri._data_setup import package_or_env_data_path
 from tengri.components.nebular._constants import _LOG_OH_OFFSET, _LSUN_ERG
 from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
 from tengri.components.nebular._shared import (
@@ -183,8 +184,8 @@ from tengri.utils.scale import pow10
 # = 4.78e-13 erg/photon / 3.828e33 erg/Lsun
 _HB_PER_QH_LSUN: float = 4.78e-13 / _LSUN_ERG
 
-# Default data file location
-_DEFAULT_PATH = Path(__file__).parents[4] / "data" / "cb19_templates.h5"
+# Default data file location. Honors $TENGRI_DATA_DIR (#1431).
+_DEFAULT_PATH = package_or_env_data_path("cb19_templates.h5")
 
 
 # ── Ionizing spectrum warnings ────────────────────────────────────

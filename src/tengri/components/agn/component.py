@@ -39,6 +39,7 @@ from typing import Any
 import jax.numpy as jnp
 
 from tengri.components.agn._params import PARAMS as _AGN_PARAMS
+from tengri.components.agn.blocks._protocol import collect_block_templates
 from tengri.components.agn.unified import resolve_agn_model
 from tengri.components.xray.xray import COS_INC_REF_30DEG as _XRAY_COS_INC_REF_30DEG
 from tengri.parameters.resolve import require_redshift
@@ -144,14 +145,18 @@ class AGNSEDComponentState(SEDComponentState):
     :meth:`AGNSEDComponent.apply` time to filter-integrate the
     analytically computed AGN SED and publish ``agn_phot_lnu_precomp``.
 
-    Also optionally caches SKIRTOR torus template grids for JIT threading
-    so they become Parameter ops rather than baked Constants.
+    Also caches the template libraries of whichever composable blocks the
+    recipe selected, so they become Parameter ops rather than baked
+    Constants.
     """
 
     name: str = "agn"
     filter_waves: Any | None = None
     filter_trans: Any | None = None
     skirtor_templates: Any | None = None
+    #: ``{"<category>/<name>": pytree}`` for every selected block that
+    #: declared a ``template_loader``. See ``collect_block_templates``.
+    block_templates: Any | None = None
 
 
 @dataclass(frozen=True)
@@ -288,12 +293,37 @@ class AGNSEDComponent:
                 # will fall back to lazy loading.
                 pass
 
+        # Composable-block template libraries. Driven by the block recipe, NOT
+        # by ``config.model``: ``composable`` is the default in the build
+        # grammar, so a gate on ``model == "skirtor"`` publishes nothing for
+        # the recommended surface and every torus library bakes (#1383).
+        block_templates = collect_block_templates(self.block_recipe()) or None
+
         return AGNSEDComponentState(
             name=self.name,
             filter_waves=filter_waves,
             filter_trans=filter_trans,
             skirtor_templates=skirtor_templates,
+            block_templates=block_templates,
         )
+
+    def block_recipe(self) -> dict[str, str]:
+        """Map each pipeline stage to the block name this config selected.
+
+        Returns
+        -------
+        dict
+            ``{"disc": ..., "nlr": ..., "blr": ..., "feii": ..., "torus": ...,
+            "attenuation": ...}``.
+        """
+        return {
+            "disc": self.config.agn_disc_block,
+            "nlr": self.config.agn_nlr_block,
+            "blr": self.config.agn_blr_block,
+            "feii": self.config.agn_feii_block,
+            "torus": self.config.agn_torus_block,
+            "attenuation": self.config.agn_attenuation_block,
+        }
 
     def apply(
         self,
@@ -385,10 +415,12 @@ class AGNSEDComponent:
 
         # Thread the SKIRTOR template as a JIT runtime input
         skirtor_template = None
+        block_templates = None
         if template_data is not None and isinstance(template_data, dict):
             agn_data = template_data.get("agn")
             if agn_data is not None and isinstance(agn_data, dict):
                 skirtor_template = agn_data.get("skirtor")
+                block_templates = agn_data.get("blocks")
         # Build kwargs, adding _template for SKIRTOR threading if available.
         # The agn_kwargs dict is built in two passes:
         #   1. Explicit defaults for the AGN params the registered models
@@ -438,6 +470,12 @@ class AGNSEDComponent:
         agn_kwargs["agn_norm"] = self.config.agn_norm
         if skirtor_template is not None:
             agn_kwargs["_template"] = skirtor_template
+        # Per-block template libraries for the composable runner. The runner
+        # reads this under the name ``template_state`` and hands each stage
+        # its OWN family's bundle; without it every template-backed block
+        # loads its grid at trace time and bakes it in.
+        if block_templates:
+            agn_kwargs["template_state"] = block_templates
 
         # Call AGN function. For composable models, request L_2500_intrinsic
         # and L_4400_intrinsic. For monolithic models, both default to 0.0

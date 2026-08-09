@@ -65,18 +65,16 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri._deprecated import deprecated_alias
-from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
-from tengri.components.agn._phys import (
-    bolometric_integral_nu as _bolometric_integral_nu,
-    wavelength_to_nu as _wavelength_to_nu,
-)
-from tengri.utils.grid_interp import interp_nd_pchip, resample_template
-from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
+from tengri.components.agn._params import DEFAULT_AGN_COS_INC, DEFAULT_AGN_LOG_LBOL
+from tengri.components.agn._template_grid import TorusTemplateGrid, torus_lnu_from_grid
 
 __all__ = [
     "cat3d_wind_analytic",
     "cat3d_wind_sed",
+    "cat3d_wind_sed_from_grid",
     "create_cat3d_wind_from_grid",
+    "load_cat3d_wind_default_grid",
+    "load_cat3d_wind_grid",
 ]
 
 
@@ -95,8 +93,9 @@ def _load_cat3d_arrays(grid_path: str) -> dict:
         }
 
 
-def create_cat3d_wind_from_grid(grid_path: str) -> Callable:
-    """Load CAT3D-Wind grid and return a JAX-native interpolation closure.
+@functools.cache
+def load_cat3d_wind_grid(grid_path: str) -> TorusTemplateGrid:
+    """Load a CAT3D-Wind grid HDF5 into a :class:`TorusTemplateGrid` pytree.
 
     Parameters
     ----------
@@ -105,9 +104,8 @@ def create_cat3d_wind_from_grid(grid_path: str) -> Callable:
 
     Returns
     -------
-    callable
-        ``fn(wavelength, agn_log_lbol, agn_cos_inc, agn_a_cat3d,
-        agn_fwd_cat3d, agn_torus_frac, **_) -> L_nu [erg/s/Hz]``.
+    TorusTemplateGrid
+        Template arrays with axes ``(cos_inc, a, f_wd)``, as numpy arrays.
 
     Raises
     ------
@@ -119,10 +117,8 @@ def create_cat3d_wind_from_grid(grid_path: str) -> Callable:
 
     Notes
     -----
-    **JIT-compatible**: yes — pure ``jnp`` and monotone-cubic interpolation.
-
-    **Gradient-safe**: yes — node-exact PCHIP gives C¹-continuous gradients
-    across the three parameter axes.
+    **JIT-compatible**: no — performs HDF5 I/O. Call outside the trace and
+    pass the result in as an argument; see :mod:`tengri.components.agn._template_grid`.
     """
     raw = _load_cat3d_arrays(grid_path)
 
@@ -136,81 +132,101 @@ def create_cat3d_wind_from_grid(grid_path: str) -> Callable:
     cos_inc_axis = cos_inc_axis[order]
     template_reordered = raw["template"][order]
 
-    grid_jax = jnp.asarray(template_reordered)
-    wave_grid = jnp.asarray(raw["wavelength"])
-    axes = (
-        jnp.asarray(cos_inc_axis),
-        jnp.asarray(raw["a_axis"]),
-        jnp.asarray(raw["fwd_axis"]),
+    return TorusTemplateGrid(
+        template=np.asarray(template_reordered),
+        axes=(
+            np.asarray(cos_inc_axis),
+            np.asarray(raw["a_axis"]),
+            np.asarray(raw["fwd_axis"]),
+        ),
+        wave_grid=np.asarray(raw["wavelength"]),
     )
 
-    def cat3d_wind_grid(
-        wavelength: jnp.ndarray,
-        agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
-        agn_cos_inc: float = 0.86602540378443864,
-        agn_a_cat3d: float = -2.0,
-        agn_fwd_cat3d: float = 1.0,
-        agn_torus_frac: float = 0.5,
-        **_kwargs,
-    ) -> jnp.ndarray:
-        r"""CAT3D-Wind torus SED at a single ``(cos_inc, a, f_wd)``.
 
-        Parameters
-        ----------
-        wavelength : array_like, shape (n_wave,)
-            Rest-frame wavelength grid. [Å]
-        agn_log_lbol : float, optional
-            ``log10(L_bol / L_sun)``. Default 10.0.
-        agn_cos_inc : float, optional
-            Cosine of inclination (1 = face-on). Default 0.5.
-        agn_a_cat3d : float, optional
-            Radial power-law index of the clumpy-cloud distribution
-            (Hönig & Kishimoto 2017 ``a``). Default −2.0.
-        agn_fwd_cat3d : float, optional
-            Polar-wind mass fraction. Default 1.0.
-        agn_torus_frac : float, optional
-            Fraction of L_bol reprocessed by the torus. Default 0.5.
+def cat3d_wind_sed_from_grid(
+    grid: TorusTemplateGrid,
+    wavelength: jnp.ndarray,
+    agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
+    agn_cos_inc: float = DEFAULT_AGN_COS_INC,
+    agn_a_cat3d: float = -2.0,
+    agn_fwd_cat3d: float = 1.0,
+    agn_torus_frac: float = 0.5,
+    **_kwargs,
+) -> jnp.ndarray:
+    r"""CAT3D-Wind torus SED at a single ``(cos_inc, a, f_wd)``.
 
-        Returns
-        -------
-        ndarray, shape (n_wave,)
-            Spectral luminosity density. [erg/s/Hz]
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Rest-frame wavelength grid. [Å]
+    agn_log_lbol : float, optional
+        ``log10(L_bol / L_sun)``. Default 10.0.
+    agn_cos_inc : float, optional
+        Cosine of inclination (1 = face-on). Default 0.5.
+    agn_a_cat3d : float, optional
+        Radial power-law index of the clumpy-cloud distribution
+        (Hönig & Kishimoto 2017 ``a``). Default −2.0.
+    agn_fwd_cat3d : float, optional
+        Polar-wind mass fraction. Default 1.0.
+    agn_torus_frac : float, optional
+        Fraction of L_bol reprocessed by the torus. Default 0.5.
 
-        Notes
-        -----
-        .. math::
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Spectral luminosity density. [erg/s/Hz]
 
-            L_\nu(\lambda) = L_{\rm bol}\,f_{\rm torus}\,
-                             \frac{T(\lambda;\,\cos i,\,a,\,f_{\rm wd})}
-                                  {\int T(\nu;\,\cos i,\,a,\,f_{\rm wd})
-                                   \,\mathrm{d}\nu}
+    Notes
+    -----
+    .. math::
 
-        **JIT-compatible**: yes.
+        L_\nu(\lambda) = L_{\rm bol}\,f_{\rm torus}\,
+                         \frac{T(\lambda;\,\cos i,\,a,\,f_{\rm wd})}
+                              {\int T(\nu;\,\cos i,\,a,\,f_{\rm wd})
+                               \,\mathrm{d}\nu}
 
-        **Approximation**: the grid is drawn from the ``CAT3D_mean_3p``
-        library (Hönig & Kishimoto 2017 [1]_) as packaged by AGNfitter-rX
-        [2]_, which averages out secondary parameters (N_0, τ_V, σ) of
-        the full Hönig & Kishimoto 2017 parameter space. For torus
-        studies where those parameters are scientifically important, use
-        the full CAT3D-Wind library directly, not this three-parameter
-        projection.
+    **JIT-compatible**: yes.
 
-        **Grid completeness**: cells absent from the upstream library are
-        filled with the nearest populated cell at build time (see
-        ``scripts/build_cat3d_wind_grid.py``).
-        """
-        template = interp_nd_pchip(
-            grid_jax,
-            axes,
-            (agn_cos_inc, agn_a_cat3d, agn_fwd_cat3d),
-        )
-        sed = resample_template(wavelength, wave_grid, template, left=0.0, right=0.0)
-        nu = _wavelength_to_nu(wavelength)
-        integral_safe = _bolometric_integral_nu(sed, nu, floor=1e-100)
-        l_scale = 10.0**agn_log_lbol * _LSUN_ERG * agn_torus_frac
-        return l_scale * sed / integral_safe
+    **Approximation**: the grid is drawn from the ``CAT3D_mean_3p``
+    library (Hönig & Kishimoto 2017 [1]_) as packaged by AGNfitter-rX
+    [2]_, which averages out secondary parameters (N_0, τ_V, σ) of
+    the full Hönig & Kishimoto 2017 parameter space. For torus
+    studies where those parameters are scientifically important, use
+    the full CAT3D-Wind library directly, not this three-parameter
+    projection.
 
-    return cat3d_wind_grid
+    **Grid completeness**: cells absent from the upstream library are
+    filled with the nearest populated cell at build time (see
+    ``scripts/build_cat3d_wind_grid.py``).
+    """
+    return torus_lnu_from_grid(
+        grid,
+        wavelength,
+        (agn_cos_inc, agn_a_cat3d, agn_fwd_cat3d),
+        agn_log_lbol=agn_log_lbol,
+        agn_torus_frac=agn_torus_frac,
+    )
+
+
+def create_cat3d_wind_from_grid(grid_path: str) -> Callable:
+    """Load a CAT3D-Wind grid and bind it to the SED evaluator.
+
+    Retained for callers holding the historical closure API; new code should
+    prefer :func:`load_cat3d_wind_grid` plus
+    :func:`cat3d_wind_sed_from_grid`, which keeps the grid threadable.
+
+    Parameters
+    ----------
+    grid_path : str
+        Path to ``cat3d_wind_torus_grid.h5``.
+
+    Returns
+    -------
+    callable
+        ``fn(wavelength, agn_log_lbol, agn_cos_inc, agn_a_cat3d,
+        agn_fwd_cat3d, agn_torus_frac, **_) -> L_nu [erg/s/Hz]``.
+    """
+    return functools.partial(cat3d_wind_sed_from_grid, load_cat3d_wind_grid(grid_path))
 
 
 _GRID_SEARCH_PATHS: tuple[str, ...] = (
@@ -241,7 +257,25 @@ def _load_cat3d_default() -> Callable:
     return create_cat3d_wind_from_grid(_find_cat3d_grid())
 
 
-def cat3d_wind_sed(*args, **kwargs) -> jnp.ndarray:
+def load_cat3d_wind_default_grid() -> TorusTemplateGrid:
+    """Load the packaged CAT3D-Wind grid pytree (discovery + cache).
+
+    This is the ``template_loader`` the torus block registers, so the forward
+    model can hoist the library out of the JIT trace.
+
+    Returns
+    -------
+    TorusTemplateGrid
+
+    Raises
+    ------
+    FileNotFoundError
+        If no CAT3D-Wind grid HDF5 is present on disk.
+    """
+    return load_cat3d_wind_grid(_find_cat3d_grid())
+
+
+def cat3d_wind_sed(*args, _template: TorusTemplateGrid | None = None, **kwargs) -> jnp.ndarray:
     """CAT3D-Wind torus (auto-loaded from the packaged HDF5 grid).
 
     Parameters
@@ -271,6 +305,8 @@ def cat3d_wind_sed(*args, **kwargs) -> jnp.ndarray:
     FileNotFoundError
         If no CAT3D-Wind grid HDF5 is present on disk.
     """
+    if _template is not None:
+        return cat3d_wind_sed_from_grid(_template, *args, **kwargs)
     return _load_cat3d_default()(*args, **kwargs)
 
 

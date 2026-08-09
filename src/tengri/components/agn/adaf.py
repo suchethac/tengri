@@ -35,6 +35,7 @@ from __future__ import annotations
 import jax.numpy as jnp
 from jax.scipy.special import i0 as _i0, i1 as _i1
 
+from tengri.components.agn._params import DEFAULT_AGN_LOG_MBH, DEFAULT_AGN_LUM_RATIO
 from tengri.components.agn._phys import (
     C_LIGHT as _C_LIGHT,
     H_PLANCK as _H_PLANCK,
@@ -619,8 +620,8 @@ def _adaf_mdot_from_lbol(
 def adaf_spectrum(
     wavelength: jnp.ndarray,
     agn_log_lbol: float,
-    agn_lum_ratio: float = 1.0,
-    agn_log_mbh: float = 8.0,
+    agn_lum_ratio: float = DEFAULT_AGN_LUM_RATIO,
+    agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
     agn_adaf_alpha: float = 0.3,
     agn_adaf_beta: float = 0.5,
     agn_adaf_delta: float = 0.1,

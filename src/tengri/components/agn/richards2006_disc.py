@@ -64,7 +64,7 @@ _RICHARDS2006_BOL_INTEGRAL = float(
 )
 
 # L_sun in erg/s (IAU 2015)
-from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
+from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL, DEFAULT_AGN_LUM_RATIO
 from tengri.utils.physics_constants import L_SUN as _L_SUN_ERG_S
 
 
@@ -127,7 +127,7 @@ def richards2006_disc(
 def richards2006(
     wavelength: jnp.ndarray,
     agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
-    agn_lum_ratio: float = 1.0,
+    agn_lum_ratio: float = DEFAULT_AGN_LUM_RATIO,
     **_kwargs,
 ) -> jnp.ndarray:
     """Richards+2006 BBB composite — registered model entry point.

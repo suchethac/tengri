@@ -61,8 +61,7 @@ Usage::
     backend = MappingsPhotoAGNBackend("data/flury2024_grids.h5", density="cpr")
 """
 
-from pathlib import Path
-
+from tengri._data_setup import package_or_env_data_path
 from tengri.components.nebular._models import (
     NEBULAR_MODELS,
     NebularRegistryEntry,
@@ -110,7 +109,10 @@ from tengri.components.nebular.shock_model import (
     ShockNebularConfig,
 )
 
-_DEFAULT_CUE_WEIGHTS_PATH = Path(__file__).resolve().parents[4] / "data" / "cue_weights.npz"
+#: Cue network weights. Resolved through ``$TENGRI_DATA_DIR`` before the
+#: package's own ``data/`` (#1431) — the recipes that default to the Cue
+#: backend are otherwise unusable whenever the grids live off the source tree.
+_DEFAULT_CUE_WEIGHTS_PATH = package_or_env_data_path("cue_weights.npz")
 
 
 # Populate the runtime registry. Grammar-layer names match the keys the

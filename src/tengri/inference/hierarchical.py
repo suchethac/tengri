@@ -18,6 +18,7 @@ Usage:
 from __future__ import annotations
 
 import functools
+import inspect
 import time
 import warnings
 from dataclasses import dataclass, field
@@ -28,8 +29,13 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.inference._hierarchical_flat import (
+    FLAT_SAMPLERS,
+    FLAT_UNSUPPORTED,
+    run_flat_sampler,
+)
 from tengri.inference.fitter import resolve_method
-from tengri.inference.likelihoods.gaussian import diag_noise_operators, standardized_residual
+from tengri.inference.likelihoods.gaussian import diag_noise_operators
 from tengri.utils.transforms import to_bounded, to_unbounded
 
 #: Acceptance below which a Ray Tracing chain is treated as not having sampled.
@@ -508,6 +514,75 @@ class PopulationFitter:
             if n not in ("sfh_field_psd_sigma", "sfh_field_psd_tau_myr")
         ]
 
+    @classmethod
+    def _unknown_method_message(cls, method: str, method_map: dict) -> str:
+        """Build the ``Unknown method`` text, derived rather than hand-written.
+
+        The literal this replaced named seven methods and got three things
+        wrong at once (#1576):
+
+        * It omitted ``"vi"`` — a live ``method_map`` key, and the canonical
+          :data:`~tengri.inference._backend_registry.DEFAULT_METHOD` that every
+          other fit surface unified on (#1289). The message left out the single
+          most correct answer.
+        * It omitted ``"evi_nifty"``, which the branch directly above accepts.
+        * It advertised ``native_vi_linear`` and ``native_vi_nonlinear``, both
+          ``tier="broken"`` — and ``refuse_if_broken`` three lines earlier had
+          already refused them. The message recommended what its own caller
+          rejects, so taking the advice raised ``BackendError``.
+
+        Advice that raises is the defect, not the help (#1364). Deriving the
+        list from the dispatch tables keeps it from drifting again; filtering
+        by tier keeps it runnable.
+
+        ``run`` dispatches from **three** places, so all three are unioned
+        here. Deriving from ``method_map`` alone was complete when this helper
+        was written and stopped being so the moment the flat seam landed: it
+        would silently under-report every sampler reachable only through
+        :data:`~tengri.inference._hierarchical_flat.FLAT_SAMPLERS` (``map``,
+        ``mcmc_nuts``, ``mcmc_hmc``, …) — the same class of omission this
+        helper exists to prevent, one layer further out.
+
+        Names in :data:`~tengri.inference._hierarchical_flat.FLAT_UNSUPPORTED`
+        are deliberately *not* listed. ``run`` raises ``NotImplementedError``
+        with a per-name reason for those, which is more useful than appearing
+        in a list of things that work.
+
+        Parameters
+        ----------
+        method : str
+            The unrecognized name the caller passed.
+        method_map : dict
+            The live NIFTy dispatch table. Passed rather than imported because
+            it is a local of :meth:`run`; the other two sources are module
+            constants and are read directly.
+
+        Returns
+        -------
+        str
+            Error text naming every runnable method, the default marked.
+
+        Notes
+        -----
+        Not JIT-compatible; a Python-level error path called once.
+        """
+        from tengri.inference._backend_registry import lookup_backend
+
+        default = inspect.signature(cls.run).parameters["method"].default
+        reachable = set(method_map) | set(FLAT_SAMPLERS) | {"evi_nifty"}
+        # A name absent from the registry (evi_nifty) is dispatched anyway, so
+        # keep it — the same fail-open that refuse_if_broken applies.
+        supported = sorted(
+            m for m in reachable if (entry := lookup_backend(m)) is None or entry.tier != "broken"
+        )
+        shown = ", ".join(f"{m!r} (default)" if m == default else repr(m) for m in supported)
+        return (
+            f"Unknown method: {method!r}. Supported ({len(supported)}): {shown}. "
+            f"Backends registered tier='broken' are omitted here because "
+            f"PopulationFitter.run refuses them; pass allow_unvalidated=True to run "
+            f"one anyway, or see tengri.list_inference_methods(tier='broken')."
+        )
+
     def run(self, method="vi_nonlinear_fast", *, key=None, allow_unvalidated=False, **kwargs):
         """Run hierarchical inference.
 
@@ -516,11 +591,17 @@ class PopulationFitter:
         method : str
             **NIFTy-backed (CorrelatedFieldMaker, native PSD learning)**
 
+            - ``"vi"`` — the canonical name, shared with every other fit
+              surface (:data:`~tengri.inference._backend_registry.DEFAULT_METHOD`,
+              #1289). Same geoVI runner as ``"vi_nonlinear_fast"``.
             - ``"vi_nonlinear_fast"`` — geoVI via NIFTy ``optimize_kl``
               (default).
             - ``"vi_nonlinear"`` — geoVI; same runner as fast, kept for API symmetry.
             - ``"vi_linear_fast"`` — MGVI via NIFTy ``optimize_kl``.
             - ``"vi_linear"`` — MGVI; same runner as fast, kept for API symmetry.
+            - ``"evi_nifty"`` — expansion-point VI via ``_run_geovi_cfm``
+              (``sample_mode="evi"``). Dispatched by name, with no registry
+              entry of its own.
 
             **Pure-JAX (lax.while_loop, no NIFTy) — tier="broken"**
 
@@ -539,34 +620,41 @@ class PopulationFitter:
             of magnitude between them (82 vs 6 Myr) — which is why reaching
             them has to be a deliberate act rather than a default.
 
-            **MCMC**
-
-            - ``"mcmc_raytrace"`` — Ray Tracing on flat vector.
-            - ``"mcmc_ess"`` — **not** elliptical slice sampling here. ESS is a
-              :class:`~tengri.inference.fitter.Fitter`-only method; on this class
-              the name is an alias onto ``native_vi_linear``, so it is refused
-              with the rest of the broken tier. Use ``mcmc_raytrace``, or run ESS
-              per-galaxy through ``Fitter``.
-
-            **Pure-JAX (lax.while_loop, no NIFTy) — tier="broken"**
-
-            Faster on paper (3–4x NIFTy MGVI on CPU; O(1) memory in N) but
-            registered ``tier="broken"``: ``[UNSTABLE]``, segfaults on
-            DPL/dense_basis photometry mocks (#231). Both refuse to run without
-            ``allow_unvalidated=True``.
-
-            - ``"native_vi_linear"`` — MGVI inside ``lax.while_loop``.
-            - ``"native_vi_nonlinear"`` — geoVI inside ``lax.while_loop``.
-
             .. note::
                ``native_vi_linear`` was the default from ``b7c4fa1e2`` until
                2026-07. It was chosen for speed *before* the segfault was
                validated (#231, 2026-05-22), and the tier change never
                propagated back to the signature — this method's own
                ``ValueError`` for an unknown method went on naming
-               ``vi_nonlinear_fast`` "(default)" the whole time. There is no
-               NUTS option here: ``mcmc_nuts`` is not in the hierarchical
-               ``_method_map`` and raises.
+               ``vi_nonlinear_fast`` "(default)" the whole time.
+
+            **MCMC and MAP (through the flat seam)**
+
+            - ``"mcmc_raytrace"`` — Ray Tracing on the flat vector. At
+              hierarchical D the chain is typically degenerate, and the run
+              raises :class:`DegenerateChainError` rather than returning
+              MAP-echo draws (#1530).
+            - ``"mcmc"`` — pinned to NUTS, deliberately diverging from the
+              single-galaxy auto-pick (raytrace above D~20): hierarchical D
+              grows with the catalog, so that auto-pick would select the
+              guaranteed-degenerate sampler.
+            - ``"mcmc_nuts"``, ``"mcmc_hmc"``, ``"mcmc_dynamic_hmc"`` — NUTS /
+              static-leapfrog HMC / dynamic trajectory-length HMC on the flat
+              vector.
+            - ``"mcmc_ghmc"`` — generalized (persistent-momentum) HMC;
+              tier="broken" ([POOR MIXING] on the single-galaxy benchmarks),
+              requires ``allow_unvalidated=True``. Always uses a diagonal mass
+              matrix.
+            - ``"map"`` — Adam MAP on the flat vector.
+            - ``"pathfinder"`` — tier="broken" (OOM-killed the process on a
+              measured 2-galaxy problem); requires ``allow_unvalidated=True``.
+            - ``"mcmc_ess"``, ``"mcmc_mclmc"``, ``"mcmc_adjusted_mclmc"``,
+              ``"laplace"`` — refused with ``NotImplementedError`` and a
+              per-name reason (see
+              :data:`~tengri.inference._hierarchical_flat.FLAT_UNSUPPORTED`):
+              their real drivers are not wired at the seam yet, and running a
+              stand-in algorithm under the requested name would be silent
+              substitution.
 
         key : PRNGKey, optional
             Random key for reproducibility. If None, uses PRNGKey(0).
@@ -615,19 +703,33 @@ class PopulationFitter:
         # Resolve old method names to canonical names, emitting deprecation warnings
         method = resolve_method(method, emit_warning=True)
 
-        # Hierarchical-specific overrides applied after resolve_method:
-        #   mcmc_ess → native_vi_linear  (ESS is a Fitter-only method)
-        # vi_native / vi_native_linear are already resolved to canonical names by
-        # resolve_method above, so they need no explicit entry in _method_map.
-        _HIERARCHICAL_OVERRIDES = {
-            "mcmc_ess": "native_vi_linear",
-        }
-        method = _HIERARCHICAL_OVERRIDES.get(method, method)
+        # There are no hierarchical-specific method overrides any more.
+        #
+        # There used to be one: `mcmc_ess -> native_vi_linear`, on the grounds
+        # that "ESS is a Fitter-only method". It silently substituted a
+        # DIFFERENT sampler — and after #231 a tier="broken" one — for the
+        # method the caller named, with no warning and no entry in the result's
+        # diagnostics. A user who asked for elliptical slice sampling got MGVI
+        # and had no way to notice.
+        #
+        # The premise is now false: `mcmc_ess` runs hierarchically through the
+        # flat seam like every other sampler. Silent substitution is never the
+        # right repair for an unsupported method — either support it, or raise
+        # and say so. `resolve_method` above still maps deprecated *spellings*
+        # to canonical names, which is renaming, not substitution.
 
-        # Applied AFTER the overrides, not before: `mcmc_ess` maps onto
-        # `native_vi_linear`, so gating the pre-override name would let a
-        # tier="broken" backend in through the alias. `resolve_method` above
-        # checks the name only -- it never consults the registry tier (#1394).
+        # Gate on the name the caller actually asked for. This used to have to
+        # run AFTER the override table, because `mcmc_ess` was rewritten to
+        # `native_vi_linear` and gating the pre-override name would have let a
+        # tier="broken" backend in through the alias. With the table gone there
+        # is no alias left to sneak through, so the ordering constraint is gone
+        # too -- but the gate is not. `resolve_method` above checks the *name*
+        # only; it never consults the registry tier (#1394).
+        #
+        # This is the outer of two gates. `run_flat_sampler` applies
+        # `check_usable` again on the flat path, which is deliberate
+        # redundancy: the seam is reachable enough that neither gate should
+        # depend on the other still being there.
         from tengri.inference._backend_registry import refuse_if_broken
 
         refuse_if_broken(method, allow_unvalidated=allow_unvalidated)
@@ -654,13 +756,32 @@ class PopulationFitter:
         if method not in _method_map:
             if method == "evi_nifty":
                 return self._run_geovi_cfm(key=key, sample_mode="evi", **kwargs)
-            else:
-                raise ValueError(
-                    f"Unknown method: {method!r}. "
-                    f"Supported: 'vi_nonlinear_fast' (default), 'vi_nonlinear', "
-                    f"'vi_linear_fast', 'vi_linear', 'native_vi_linear', "
-                    f"'native_vi_nonlinear', 'mcmc_raytrace'."
+            # Everything the flat seam can drive. The hierarchical posterior is
+            # already a flat unconstrained vector with an iid N(0,1) prior (see
+            # _hierarchical_flat), so a sampler being "hierarchical" is a
+            # property of the problem, not of the sampler — there is nothing
+            # left to special-case per backend.
+            if method in FLAT_SAMPLERS:
+                return run_flat_sampler(
+                    self, method, key=key, allow_unvalidated=allow_unvalidated, **kwargs
                 )
+            # Refuse the ones the seam knowingly cannot drive with a specific
+            # reason rather than a generic "unknown method". A backend that is
+            # absent because nobody wired it up and one that is absent because
+            # its naive implementation returns biased samples deserve different
+            # errors — the second is a warning to whoever tries to add it.
+            if method in FLAT_UNSUPPORTED:
+                raise NotImplementedError(
+                    f"method={method!r} is not available for hierarchical fits. "
+                    f"{FLAT_UNSUPPORTED[method]}"
+                )
+            # Derive the advertised list; never hand-write it. The literal this
+            # replaced named 'vi_nonlinear_fast' as "(default)" for months after
+            # b7c4fa1e2 moved the default off it (#1394), and independently
+            # advertised two tier="broken" backends that the caller three lines
+            # up had already refused (#1576). The helper fixes both: it unions
+            # the dispatch tables and drops the broken tier.
+            raise ValueError(self._unknown_method_message(method, _method_map))
 
         cfm_method, sample_mode = _method_map[method]
         if cfm_method == "geovi":
@@ -2040,143 +2161,24 @@ class PopulationFitter:
         Flattens all shared + per-galaxy params into one vector and
         runs the Ray Tracing Sampler. Works for moderate N (~10-50 gal).
         """
-        from jax.flatten_util import ravel_pytree
-
+        from tengri.inference._hierarchical_flat import build_flat_problem
         from tengri.inference.backends.mcmc.raytrace import sample_raytrace
 
+        # ONE definition of the hierarchical posterior, shared with every other
+        # sampler. This block used to build its own `init`, its own
+        # `ravel_pytree`, and its own `log_prob` inline — ~135 lines that were
+        # textually equivalent to `build_flat_problem` but structurally
+        # independent, so nothing stopped the two from drifting apart and
+        # quietly sampling different distributions.
         n_gal = self.n_galaxies
-        spec = self._spec
-        stochastic = spec.stochastic
-        n_grid = spec.n_grid
-        free_names = self._free_names
-        bounds = {}
-        for name in free_names:
-            dist = spec.get_distribution(name)
-            bounds[name] = dist.bounds
-        fixed_values = spec.get_fixed_values()
-        sigma_lo, sigma_hi = self.psd_sigma_bounds
-        tau_lo, tau_hi = self.psd_tau_bounds
-
-        # Build initial flat vector
-        # Build init dict with stacked per-galaxy arrays for vmap
-        sigma_mid = 0.5 * (sigma_lo + sigma_hi)
-        tau_mid = 0.5 * (tau_lo + tau_hi)
-
-        # Pre-build model with midpoint PSD for MAP initialization
-        model = self.model_factory(psd_sigma=sigma_mid, psd_tau_myr=tau_mid)
-
-        # Initialize per-galaxy params via vectorized MAP (lax.map(batch_size=1)).
-        from tengri import Fitter
-        from tengri.inference.backends.map_dispatch import build_vectorized_map_solver
-
+        prob = build_flat_problem(self, key=key, memory_mode=memory_mode, verbose=verbose)
+        init_flat = prob.init_flat
+        D = prob.n_dim
+        log_prob = prob.log_prob
         keys = jax.random.split(key, n_gal + 2)
-
-        if verbose:
-            print("  Initializing per-galaxy params via vectorized MAP...")
-
-        _template_gal = self.galaxies[0]
-        _template_fitter = Fitter(
-            model,
-            _template_gal["flux_obs"],
-            _template_gal["noise"],
-            data_type=self.data_type,
-        )
-        map_solve_one = build_vectorized_map_solver(
-            _template_fitter,
-            n_steps=80,
-            learning_rate=0.05,
-        )
-
-        all_flux_init = jnp.stack([jnp.asarray(g["flux_obs"]) for g in self.galaxies])
-        all_noise_init = jnp.stack([jnp.asarray(g["noise"]) for g in self.galaxies])
-        gal_keys = keys[:n_gal]
-
-        all_init_unbounded = jax.lax.map(
-            lambda args: map_solve_one(args[0], args[1], args[2]),
-            (all_flux_init, all_noise_init, gal_keys),
-            batch_size=1,
-        )
-
-        if verbose:
-            print("  MAP initialization complete")
-
-        _gal_stacked = {
-            name: all_init_unbounded.get(name, jnp.zeros(n_gal)) for name in free_names
-        }
-        # Structured init: shared scalars + stacked per-galaxy arrays
-        init = {
-            "psd_sigma_u": to_unbounded(jnp.array(sigma_mid), sigma_lo, sigma_hi),
-            "psd_tau_u": to_unbounded(jnp.array(tau_mid), tau_lo, tau_hi),
-            "gal": _gal_stacked,
-        }
-        if stochastic:
-            init["gal_xi"] = all_init_unbounded.get(
-                "psd_xi",
-                jnp.zeros((n_gal, n_grid)),
-            )
-
-        init_flat, unravel_fn = ravel_pytree(init)
-        D = len(init_flat)
 
         if step_size is None:
             step_size = 0.005 if D > 100 else 0.01
-
-        # Build data
-        all_data = jnp.concatenate([jnp.asarray(g["flux_obs"]) for g in self.galaxies])
-        all_noise = jnp.concatenate([jnp.asarray(g["noise"]) for g in self.galaxies])
-
-        # Pre-build model once (PSD params will be overridden per-call)
-        model = self.model_factory(psd_sigma=1.0, psd_tau_myr=50.0)
-        data_type = self.data_type
-
-        def _predict_rt(params):
-            """Predict data from parameters (ray-trace variant)."""
-            if data_type == "photometry":
-                return model.predict_photometry(params)
-            return model.predict_spectrum(params)
-
-        def log_prob(flat_params):
-            """Compute log posterior for hierarchical ray-tracing."""
-            p = unravel_fn(flat_params)
-            psd_sigma = to_bounded(p["psd_sigma_u"], sigma_lo, sigma_hi)
-            psd_tau = to_bounded(p["psd_tau_u"], tau_lo, tau_hi)
-
-            # Single-galaxy forward (vmapped over galaxy axis)
-            def forward_one(ub_scalars, xi):
-                """Evaluate forward model for one galaxy."""
-                params = {}
-                for name in free_names:
-                    lo, hi = bounds[name]
-                    params[name] = to_bounded(ub_scalars[name], lo, hi)
-                for name, val in fixed_values.items():
-                    if name not in ("sfh_field_psd_sigma", "sfh_field_psd_tau_myr"):
-                        params[name] = val
-                params["sfh_field_psd_sigma"] = psd_sigma
-                params["sfh_field_psd_tau_myr"] = psd_tau
-                if stochastic:
-                    params["sfh_field_xi"] = xi
-                params = spec.resolve_mirrors(params)
-                return _predict_rt(params)
-
-            # lax.map keeps compiled graph O(1) in N_gal — see _run_vi_native_linear.
-            fwd = jax.checkpoint(forward_one) if memory_mode == "low" else forward_one
-            if stochastic:
-                gal_inputs = (p["gal"], p["gal_xi"])
-                predictions = jax.lax.map(lambda args: fwd(args[0], args[1]), gal_inputs)
-            else:
-                predictions = jax.lax.map(lambda ub: fwd(ub, None), p["gal"])
-
-            pred_all = predictions.reshape(-1)
-            chi2 = jnp.sum(standardized_residual(all_data, pred_all, all_noise) ** 2)
-
-            # Prior: standard normal on all unbounded + xi params
-            param_penalty = p["psd_sigma_u"] ** 2 + p["psd_tau_u"] ** 2
-            for name in free_names:
-                param_penalty += jnp.sum(p["gal"][name] ** 2)
-            if stochastic:
-                param_penalty += jnp.sum(p["gal_xi"] ** 2)
-
-            return -0.5 * chi2 - 0.5 * param_penalty
 
         if verbose:
             print(
@@ -2201,17 +2203,6 @@ class PopulationFitter:
         wall_time = time.time() - t0
         chain = chain[n_burnin:]
         accept_prob_post = accept_prob[n_burnin:]
-
-        # Extract shared params (vectorized over chain)
-        def extract_shared(flat_params):
-            """Extract shared PSD hyperparameters from flat parameter vector."""
-            p = unravel_fn(flat_params)
-            return jnp.array(
-                [
-                    to_bounded(p["psd_sigma_u"], sigma_lo, sigma_hi),
-                    to_bounded(p["psd_tau_u"], tau_lo, tau_hi),
-                ]
-            )
 
         # A chain that accepted nothing has not sampled (#1530). Its draws are
         # the initialization repeated n_steps times — and because that
@@ -2246,7 +2237,8 @@ class PopulationFitter:
                 f"that is for debugging the sampler, not for inference."
             )
 
-        shared_arr = jax.vmap(extract_shared)(chain)  # (n_samples, 2)
+        # The same latent -> physical map every other sampler uses.
+        shared_arr = jax.vmap(prob.extract_shared)(chain)  # (n_samples, 2)
         shared_samples = {
             "psd_sigma": shared_arr[:, 0],
             "psd_tau_myr": shared_arr[:, 1],

@@ -150,6 +150,17 @@ Observation
    :members:
    :show-inheritance:
 
+Instrument
+----------
+
+A named bundle of (photometry, spectroscopy, noise) defaults, so a
+notebook can say ``Instrument.JWST_NIRCam()`` instead of assembling
+those pieces by hand. :func:`~tengri.list_instruments` is the menu.
+
+.. autoclass:: tengri.Instrument
+   :members:
+   :show-inheritance:
+
 Data
 ----
 

@@ -35,6 +35,8 @@ import urllib.request
 from collections.abc import Iterable
 from pathlib import Path
 
+from tengri.registry import _RegistryTable
+
 __all__ = [
     "SSP_CATALOG_URL",
     "download_ssp",
@@ -51,14 +53,16 @@ __all__ = [
 SSP_CATALOG_URL: str = "https://halos.as.arizona.edu/suchethacooray/ssp-spectra/"
 
 
-def list_remote_ssps() -> list[str]:
-    """Return the list of SSP filenames available at :data:`SSP_CATALOG_URL`.
+def list_remote_ssps() -> _RegistryTable:
+    """List the SSP files available at :data:`SSP_CATALOG_URL`.
 
     Returns
     -------
-    list[str]
-        Filenames in the catalog (e.g. ``"fsps_prsc_miles_chabrier.h5"``),
-        in the order the server returned them, with duplicates removed.
+    _RegistryTable
+        One row per catalog entry, with column ``name`` (the filename,
+        e.g. ``"fsps_prsc_miles_chabrier.h5"``), in the order the server
+        returned them, with duplicates removed. ``.names()`` returns the
+        plain list of strings this gave before #1574.
 
     Raises
     ------
@@ -67,32 +71,37 @@ def list_remote_ssps() -> list[str]:
 
     Notes
     -----
-    This parses the Apache autoindex page with a single regex — it does
-    not validate that every linked file is a usable SSP grid.
+    Makes a live HTTP request on every call — this is the one discovery
+    verb that touches the network.
+
+    Parses the Apache autoindex page with a single regex; it does not
+    validate that every linked file is a usable SSP grid.
+
+    Examples
+    --------
+    >>> list_remote_ssps().names()
     """
     with urllib.request.urlopen(SSP_CATALOG_URL, timeout=30) as resp:
         html = resp.read().decode("utf-8", errors="replace")
     seen: set[str] = set()
-    out: list[str] = []
+    rows: list[dict] = []
     for match in re.finditer(r'href="([^"]+\.h5)"', html):
         name = match.group(1)
         if name not in seen:
             seen.add(name)
-            out.append(name)
-    return out
+            rows.append(
+                {
+                    "name": name,
+                    "kind": "ssp",
+                    "use": f"tengri.data.download_ssp({name!r})",
+                }
+            )
+    return _RegistryTable(rows)
 
 
 def local_ssp_path(name: str, dest_dir: str | os.PathLike = "data") -> Path:
     """Return the local filesystem path where :func:`download_ssp` writes ``name``."""
     return Path(dest_dir) / name
-
-
-def _format_bytes(n: int) -> str:
-    for unit in ("B", "KiB", "MiB", "GiB"):
-        if n < 1024:
-            return f"{n:.1f} {unit}"
-        n /= 1024  # type: ignore[assignment]
-    return f"{n:.1f} TiB"
 
 
 def download_ssp(
@@ -159,20 +168,3 @@ def download_ssp(
         stacklevel=2,
     )
     return _download_ssp(name, dest=dest_dir, force=overwrite, progress=progress)
-
-
-def download_ssps(
-    names: Iterable[str],
-    dest_dir: str | os.PathLike = "data",
-    *,
-    overwrite: bool = False,
-    progress: bool = True,
-) -> list[Path]:
-    """Download multiple SSP files; convenience wrapper around :func:`download_ssp`.
-
-    Returns
-    -------
-    list[pathlib.Path]
-        One path per input ``name``, in order.
-    """
-    return [download_ssp(name, dest_dir, overwrite=overwrite, progress=progress) for name in names]

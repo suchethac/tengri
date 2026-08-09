@@ -48,11 +48,17 @@ attenuation)::
 
 from __future__ import annotations
 
+import math
 import warnings
 
 import jax.numpy as jnp
 from jax import Array
 
+from tengri.components.agn.blocks._grid_support import (
+    block_grid_support,
+    is_contained,
+    live_fraction,
+)
 from tengri.components.agn.blocks._protocol import (
     AGN_BLOCKS,
     resolve_agn_block,
@@ -68,7 +74,7 @@ from tengri.components.agn.blocks.torus_screen import (
 )
 from tengri.components.agn.polar_dust import _RV_SMC, smc_extinction_curve
 from tengri.components.agn.reddening import redden_disc
-from tengri.components.agn.skirtor import skirtor_disc_dust_ratio
+from tengri.components.agn.skirtor import SKIRTORBundle, skirtor_disc_dust_ratio
 from tengri.utils.physics_constants import L_SUN
 
 #: Torus selectors that do NOT receive the gray Type-1/2 visibility mask:
@@ -138,7 +144,7 @@ _DISCS_WITH_5100A_CONTINUUM = _DISCS_WITH_5100A_CONTINUUM | frozenset(
 )
 
 #: Speed of light in Å × Hz, used for L_λ → L_ν conversion.
-from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
+from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL, DEFAULT_AGN_LUM_RATIO
 from tengri.utils.physics_constants import C_AA as C_AA_PER_S
 
 #: Selector keys recognized by the runner. Match the canonical pipeline order.
@@ -172,6 +178,7 @@ def validate_block_recipe(
     agn_torus_block: str,
     agn_attenuation_block: str,
     params: dict | None = None,
+    param_support: dict[str, tuple[float, float]] | None = None,
 ) -> list[str]:
     r"""Check a block recipe for suspicious / unphysical combinations.
 
@@ -209,6 +216,14 @@ def validate_block_recipe(
     7. **Polar-dust block with E(B-V)=0** — the ``polar_dust`` attenuation
        block is a no-op when ``agn_polar_ebv = 0``; warn to surface unset
        params before the user wonders why the SED is unattenuated.
+    9. **Support wider than the block's template grid** — a template-backed
+       block interpolates over fixed axes and *clips* outside them, so the
+       excess is bit-identical to the edge node and its gradient is exactly
+       zero. A prior wider than the grid therefore contains parameter space
+       a fit can never move through, silently. Warn with the live fraction
+       and the grid extent. See
+       :mod:`tengri.components.agn.blocks._grid_support` for why this cannot
+       be expressed on the parameter declaration itself (#1586).
 
     Parameters
     ----------
@@ -216,8 +231,12 @@ def validate_block_recipe(
 agn_torus_block, agn_attenuation_block : str
         Selectors for each pipeline stage.
     params : dict, optional
-        Free parameter dict; reserved for future per-impl param-presence
-        checks. Currently unused but accepted for forward compatibility.
+        Concrete parameter values, used by Rule 7 to surface a no-op
+        ``agn_polar_ebv``. Values may legitimately be absent or traced.
+    param_support : dict[str, tuple[float, float]], optional
+        ``{param_name: (lo, hi)}`` — the range each parameter can actually
+        take, i.e. a prior's bounds or ``(v, v)`` for a fixed value. Consumed
+        by Rule 9; when omitted, that rule is skipped.
 
     Returns
     -------
@@ -312,6 +331,59 @@ agn_torus_block, agn_attenuation_block : str
     # (Rule 8, the adaf-deprecation steer, was removed once the faithful
     # Mahadevan 1997 ADAF rewrite landed in #898 — the block is now production.)
 
+    # Rule 9: a template-backed block's grid axes are a SECOND support that no
+    # parameter declaration records. Outside them jnp.clip is flat, so the SED
+    # is bit-identical and the gradient is exactly 0.0 — a fit gets no signal
+    # and cannot move the parameter, with nothing raised or warned (#1586).
+    # Checked per (block, param) because the same parameters are shared with
+    # grid-free analytic discs that legitimately want the wider support.
+    if param_support:
+        for category, name in selectors.items():
+            for pname, (g_lo, g_hi) in block_grid_support(category, name).items():
+                active = param_support.get(pname)
+                if active is None:
+                    continue
+                a_lo, a_hi = active
+                if is_contained(active, (g_lo, g_hi)):
+                    continue  # no reachable value can be clipped
+                live = live_fraction(active, (g_lo, g_hi))
+                dead_pct = 100.0 * (1.0 - live)
+                extent = f"[{g_lo:g}, {g_hi:g}]"
+                if a_lo == a_hi:
+                    detail = (
+                        f"the fixed value {a_lo:g} lies outside the grid extent "
+                        f"{extent}, so it is clipped onto the nearest edge node"
+                    )
+                elif not (math.isfinite(a_lo) and math.isfinite(a_hi)):
+                    # An unbounded prior (e.g. an untruncated Gaussian) is NOT
+                    # inert — most of its mass may sit on the grid. Only the
+                    # tails clip, so say that and do not quote a percentage:
+                    # the fraction of an infinite support is not informative.
+                    detail = (
+                        f"its support [{a_lo:g}, {a_hi:g}] is unbounded, so the "
+                        f"tails beyond the grid extent {extent} are clipped onto "
+                        "an edge node"
+                    )
+                elif live == 0.0:
+                    detail = (
+                        f"its whole range [{a_lo:g}, {a_hi:g}] lies outside the "
+                        f"grid extent {extent}, so the parameter is entirely "
+                        "inert — every value gives the same SED"
+                    )
+                else:
+                    detail = (
+                        f"{dead_pct:.0f}% of its range [{a_lo:g}, {a_hi:g}] lies "
+                        f"outside the grid extent {extent} and is silently "
+                        "clipped onto an edge node"
+                    )
+                _emit(
+                    f"Composable AGN: {pname} with the {name!r} {category} "
+                    f"block — {detail}. The SED there is bit-identical to the "
+                    "edge node and the gradient is exactly zero, so a fit "
+                    f"cannot move it. Narrow {pname} to {extent}, or select a "
+                    f"{category} block with no template grid."
+                )
+
     return issues
 
 
@@ -394,18 +466,35 @@ agn_torus_block, agn_attenuation_block : str
     (e.g. α_ox in X-ray corona).
     """
     wave = jnp.asarray(wavelength)
-    # If templates are pre-loaded, forward them under a stable kwarg name
-    # blocks recognize (``templates``). When None, blocks fall back to their
-    # own lru_cache load. We strip the kwarg afterwards so blocks that don't
-    # take it never see it.
-    grahsp_templates = template_state.get("grahsp") if template_state is not None else None
+
+    # Pre-loaded template libraries are forwarded to each stage under a stable
+    # kwarg name blocks recognize (``templates``). The lookup is PER STAGE:
+    # every block family has its own library, so handing the same bundle to
+    # all six stages (as this did until the threading fix) can only ever feed
+    # one family and silently leaves the rest to load their own grid at trace
+    # time — which bakes it into the graph as constants.
+    #
+    # Keys are ``"<category>/<name>"``, matching ``collect_block_templates``.
+    # ``"grahsp"`` is still honored so callers holding the old flat bundle
+    # keep working. When a stage has no entry, the block falls back to its own
+    # cached load.
+    _legacy_grahsp = template_state.get("grahsp") if template_state is not None else None
+
+    def _templates_for(category: str, name: str):
+        """Resolve the pre-loaded library for one stage, if any."""
+        if template_state is None:
+            return _legacy_grahsp
+        found = template_state.get(f"{category}/{name}")
+        return _legacy_grahsp if found is None else found
+
+    disc_templates = _templates_for("disc", agn_disc_block)
 
     # Stage 1: disc continuum (L_lambda [erg/s/Å]).
     disc_fn = resolve_agn_block("disc", agn_disc_block)
     L_lambda_disc = disc_fn(
         wave,
         agn_log_lbol=agn_log_lbol,
-        templates=grahsp_templates,
+        templates=disc_templates,
         **params,
     )
     # Disc dust obscuration (agn_ebv_disc, Prévot SMC). Applied on the composable
@@ -444,7 +533,7 @@ agn_torus_block, agn_attenuation_block : str
     L_lambda_disc_30deg = disc_fn(
         wave,
         agn_log_lbol=agn_log_lbol,
-        templates=grahsp_templates,
+        templates=disc_templates,
         **{**params, "agn_cos_inc": _COS_30DEG},
     )
     L_2500_intrinsic = jnp.interp(2500.0, wave, L_lambda_disc_30deg) * (2500.0**2 / C_AA_PER_S)
@@ -492,10 +581,14 @@ agn_torus_block, agn_attenuation_block : str
     # (0.5) can never drift between the sites that debit the disc.
     _torus_frac = jnp.clip(jnp.asarray(params.get("agn_torus_frac", 0.5)), 0.0, 1.0)
     if _agn_norm == "cigale_joint" and agn_torus_block == "skirtor":
+        _skirtor_bundle = _templates_for("torus", agn_torus_block)
         _disc_R, _disc_incl, _disc_R_faceon = skirtor_disc_dust_ratio(
             wave,
             L_lambda_disc,
             _disc_ext,
+            _template=(
+                _skirtor_bundle.disc_dust if isinstance(_skirtor_bundle, SKIRTORBundle) else None
+            ),
             agn_tau_skirtor=params.get("agn_tau_skirtor", 7.0),
             agn_p_skirtor=params.get("agn_p_skirtor", 1.0),
             agn_q_skirtor=params.get("agn_q_skirtor", 1.0),
@@ -579,7 +672,7 @@ agn_torus_block, agn_attenuation_block : str
             wave,
             agn_log_lbol=agn_log_lbol,
             l5100_disc=l5100_disc,
-            templates=grahsp_templates,
+            templates=_templates_for("nlr", agn_nlr_block),
             **params,
         )
     )
@@ -590,7 +683,7 @@ agn_torus_block, agn_attenuation_block : str
             wave,
             agn_log_lbol=agn_log_lbol,
             l5100_disc=l5100_disc,
-            templates=grahsp_templates,
+            templates=_templates_for("blr", agn_blr_block),
             **params,
         )
     )
@@ -603,7 +696,7 @@ agn_torus_block, agn_attenuation_block : str
         wave,
         agn_log_lbol=agn_log_lbol,
         l5100_disc=l5100_disc,
-        templates=grahsp_templates,
+        templates=_templates_for("feii", agn_feii_block),
         **params,
     )
 
@@ -631,7 +724,7 @@ agn_torus_block, agn_attenuation_block : str
         wave,
         agn_log_lbol=agn_log_lbol,
         l5100_disc=l5100_disc,
-        templates=grahsp_templates,
+        templates=_templates_for("torus", agn_torus_block),
         **params,
     )
 
@@ -724,7 +817,7 @@ agn_torus_block, agn_attenuation_block : str
 def composable_agn_l_nu(
     wavelength: Array,
     agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
-    agn_lum_ratio: float = 1.0,
+    agn_lum_ratio: float = DEFAULT_AGN_LUM_RATIO,
     agn_disc_block: str = "none",
     agn_nlr_block: str = "none",
     agn_blr_block: str = "none",

@@ -152,6 +152,7 @@ from pathlib import Path
 import jax.numpy as jnp
 import numpy as np
 
+from tengri._data_setup import package_or_env_data_path
 from tengri.components.nebular._constants import (
     _C_CGS,
     _H_PLANCK,
@@ -160,8 +161,8 @@ from tengri.components.nebular._constants import (
 )
 from tengri.components.nebular.ionizing_spectrum import _CLIP_RANGES, SEGMENT_EDGES
 
-# Default path for the Feltre+2016 HDF5 grid
-_DEFAULT_FELTRE_GRID_PATH = Path(__file__).resolve().parents[4] / "data" / "feltre_grid.h5"
+# Default path for the Feltre+2016 HDF5 grid. Honors $TENGRI_DATA_DIR (#1431).
+_DEFAULT_FELTRE_GRID_PATH = package_or_env_data_path("feltre_grid.h5")
 
 # ── Physical constants ────────────────────────────────────────────
 _NU_LYMAN = _C_CGS / (911.76e-8)  # Lyman limit frequency [Hz]
@@ -354,6 +355,10 @@ def agn_nlr_cue(
     l_acc_erg: float,
     covering_fraction: float = 0.1,
     neb_logU: float = -3.0,
+    # Differs from the declared gas_logn default (2.0) on purpose: that
+    # declaration is the *galaxy* Cue HII-region density, while this is the AGN
+    # narrow-line region, whose canonical density is ~1e3 (matching the separate
+    # agn_nlr_logn declaration). Same parameter name, different physical region.
     gas_logn: float = 3.0,
     gas_logz: float = 0.0,
     gas_logno: float = 0.0,
@@ -1309,6 +1314,10 @@ def agn_nlr_emission(
     covering_fraction: float = 0.1,
     alpha_pl: float = -1.7,
     neb_logU: float = -3.0,
+    # Differs from the declared gas_logn default (2.0) on purpose: that
+    # declaration is the *galaxy* Cue HII-region density, while this is the AGN
+    # narrow-line region, whose canonical density is ~1e3 (matching the separate
+    # agn_nlr_logn declaration). Same parameter name, different physical region.
     gas_logn: float = 3.0,
     gas_logz: float = 0.0,
     gas_logno: float = 0.0,

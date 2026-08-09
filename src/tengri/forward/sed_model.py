@@ -71,10 +71,6 @@ from tengri.components.stellar.sps.dsps_wrapper import csp_age_dt
 from tengri.config.exceptions import ParameterMapError
 from tengri.cosmology import age_at_z, luminosity_distance
 from tengri.forward.approx_policy import BAND_PROJECTION_KEYS, ApproxPolicy
-from tengri.forward.pipeline import (
-    interp_metallicity,
-    interp_metallicity_evolving,
-)
 from tengri.forward.sed_model_types import (
     MockData,
     PriorPredictive,
@@ -2327,7 +2323,13 @@ class SEDModel:
         if self._dust_emission_model in _TEMPLATE_BASED_EMISSION_MODELS:
             from tengri.components.dust.emission import preload_emission_model
 
-            with contextlib.suppress(Exception):
+            # Same reasoning as the AGN backend warm below: this exists only to
+            # pull templates into the registry before the JIT trace, since
+            # loading them inside it raises UnexpectedTracerError. A load
+            # failure here is recoverable — the exact path still works — but a
+            # *bug* in the loader should not be. Narrowed to the
+            # data/dependency family so it is not both.
+            with contextlib.suppress(ImportError, OSError, KeyError):
                 preload_emission_model(self._dust_emission_model)
 
         # Identity entries for dust-emission params now come from the
@@ -2497,7 +2499,15 @@ class SEDModel:
                 if self._agn_blr_block in ("synthesizer", "synthesizer_spectra"):
                     blr_grid = _resolve_blr_grid("blr")
 
-                with contextlib.suppress(Exception):
+                # Warming a cache: these backends load lazily at predict time
+                # anyway, so a failure here costs latency, not correctness. The
+                # failures worth tolerating are the data/dependency ones —
+                # Synthesizer absent, grid file missing or unreadable. Catching
+                # everything also swallowed genuine bugs *inside* the loaders
+                # (a TypeError from a changed signature, say), and the only
+                # symptom was the first predict paying a cost this line existed
+                # to remove.
+                with contextlib.suppress(ImportError, OSError, KeyError):
                     from tengri.components.agn.nlr_cloudy import (
                         get_synthesizer_blr_backend,
                         get_synthesizer_nlr_backend,
@@ -6612,6 +6622,7 @@ class SEDModel:
         if cached is None:
             return None
 
+        from tengri.components.agn.blocks._protocol import collect_block_templates
         from tengri.components.agn.component import AGNSEDComponent
         from tengri.components.nebular.component import NebularSEDComponent
 
@@ -6650,7 +6661,7 @@ class SEDModel:
             # no template. Load the SKIRTOR grid arrays here so the data always
             # threads through jit (small compile) rather than baking into the
             # trace as a constant (#1198). Guarded to the monolithic SKIRTOR
-            # model — composable torus blocks carry their own grid.
+            # model; composable blocks are handled by the recipe walk below.
             if skirtor is None and getattr(component.config, "model", None) == "skirtor":
                 try:
                     from tengri.components.agn.skirtor import _load_skirtor_default_grid
@@ -6660,6 +6671,19 @@ class SEDModel:
                     skirtor = None
             if skirtor is not None:
                 agn_templates["skirtor"] = skirtor
+
+            # Composable-block template libraries, keyed "<category>/<name>".
+            # Driven by the *resolved recipe*, so any block that declares a
+            # ``template_loader`` threads — including ones added later. This
+            # replaces a gate on ``config.model == "skirtor"``, which published
+            # nothing for ``composable`` (the build-grammar default) and so let
+            # every torus library bake into the graph (#1383).
+            blocks = component._state.block_templates if component._state is not None else None
+            if blocks is None:
+                blocks = collect_block_templates(component.block_recipe()) or None
+            if blocks:
+                agn_templates["blocks"] = blocks
+
             if agn_templates:
                 result["agn"] = agn_templates
             break
@@ -8174,14 +8198,6 @@ class SEDModel:
             Age of universe in Gyr.
         """
         return age_at_z(z)
-
-    def _interp_metallicity(self, log_z):
-        """Dispatch metallicity interpolation (single Z value)."""
-        return interp_metallicity(self, log_z)
-
-    def _interp_metallicity_evolving(self, log_z_per_age):
-        """Dispatch evolving metallicity interpolation (per-age Z)."""
-        return interp_metallicity_evolving(self, log_z_per_age)
 
     def _method_recommendation(self) -> tuple[str, str]:
         """Return (method_name, reason) for the recommended inference method."""

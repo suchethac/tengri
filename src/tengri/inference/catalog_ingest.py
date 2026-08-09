@@ -39,6 +39,10 @@ class CatalogArrays(NamedTuple):
         Per-galaxy observed emission-line fluxes [erg/s/cm²].
     line_flux_err : ndarray, shape (N, n_lines) or None
         Per-galaxy emission-line flux uncertainties [erg/s/cm²].
+    line_censor : ndarray, shape (N, n_lines) or None
+        Per-galaxy emission-line censoring flags: 0 (detected), 1 (upper
+        limit), -1 (lower limit). Same convention as ``censor``, which is
+        the photometric band axis.
     """
 
     flux: np.ndarray
@@ -50,6 +54,7 @@ class CatalogArrays(NamedTuple):
     band_names: tuple[str, ...]
     line_flux_obs: np.ndarray | None = None
     line_flux_err: np.ndarray | None = None
+    line_censor: np.ndarray | None = None
 
 
 def ingest_catalog(
@@ -63,6 +68,7 @@ def ingest_catalog(
     censor_cols=None,
     line_cols=None,
     line_err_cols=None,
+    line_censor_cols=None,
     missing="error",
 ) -> CatalogArrays:
     """Convert a heterogeneous table into contiguous validated arrays.
@@ -109,6 +115,12 @@ def ingest_catalog(
         Emission-line error column names, bound positionally the same way.
         If None, defaults to ``"{name}_err"`` for each line, matching the
         ``err_cols`` convention.
+    line_censor_cols : list[str], optional
+        Emission-line censoring-flag column names, bound positionally the
+        same way. Flag values: 0 (detected), 1 (upper limit), -1 (lower
+        limit) -- the ``censor_cols`` convention, on the line axis instead
+        of the band axis. A list rather than a name-keyed dict because its
+        two siblings ``line_cols`` / ``line_err_cols`` bind positionally.
     missing : {"error", "mask"}, default "error"
         Policy for NaN flux values. "error" raises with guidance on
         `missing="mask"`; "mask" sets presence to False for that cell.
@@ -278,6 +290,13 @@ def ingest_catalog(
     # Step 9: Read emission-line fluxes if requested
     line_flux_obs = None
     line_flux_err = None
+    line_censor = None
+    if line_cols is None and line_censor_cols is not None:
+        raise ValueError(
+            "line_censor_cols was given without line_cols. A censor flag "
+            "marks a line as a limit rather than a detection, so it needs "
+            "the line it refers to. Pass line_cols=[...] as well."
+        )
     if line_cols is not None:
         # User explicitly provided line columns
         line_cols = list(line_cols)
@@ -319,6 +338,49 @@ def ingest_catalog(
         # Stack into (N, n_lines) arrays
         line_flux_obs = np.column_stack(line_flux_arrays)
         line_flux_err = np.column_stack(line_err_arrays)
+
+        # Per-galaxy line censoring (#1469). Same flag convention and the
+        # same boolean refusal as the photometric ``censor_cols`` above: a
+        # boolean column is an include-mask, and ``astype(int)`` would turn
+        # every True into "upper limit" without saying so.
+        if line_censor_cols is not None:
+            line_censor_cols = list(line_censor_cols)
+            if len(line_censor_cols) != len(line_cols):
+                raise ValueError(
+                    f"line_censor_cols count ({len(line_censor_cols)}) != "
+                    f"line_cols count ({len(line_cols)}); one censor column "
+                    "per line column, bound in the same order."
+                )
+            censor_arrays = []
+            for col_name in line_censor_cols:
+                try:
+                    col = np.asarray(table[col_name])
+                except (KeyError, TypeError) as e:
+                    actual_cols = list(table.keys()) if hasattr(table, "keys") else "unknown"
+                    raise ValueError(
+                        f"Missing line censor column '{col_name}'. Table columns: {actual_cols}"
+                    ) from e
+                if col.dtype == bool:
+                    raise ValueError(
+                        f"line censor column '{col_name}' is boolean; censor "
+                        "flags are integers 0 (detected), 1 (upper limit), "
+                        "-1 (lower limit). A boolean mask is not a censor "
+                        "flag — convert it explicitly."
+                    )
+                bad = sorted(set(np.unique(col).tolist()) - {0, 1, -1})
+                if bad:
+                    raise ValueError(
+                        f"line censor column '{col_name}' has invalid flag "
+                        f"value(s) {bad}; allowed: 0 (detected), 1 (upper "
+                        "limit), -1 (lower limit)."
+                    )
+                censor_arrays.append(col.astype(int))
+            line_censor = np.column_stack(censor_arrays)
+            if line_censor.shape[0] != n_galaxies:
+                raise ValueError(
+                    f"line censor array has {line_censor.shape[0]} rows, "
+                    f"but flux has {n_galaxies} rows"
+                )
 
         # Validate shapes
         if line_flux_obs.shape[0] != n_galaxies:
@@ -369,6 +431,7 @@ def ingest_catalog(
         band_names=band_names,
         line_flux_obs=line_flux_obs,
         line_flux_err=line_flux_err,
+        line_censor=line_censor,
     )
 
 

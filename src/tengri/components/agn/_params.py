@@ -813,12 +813,34 @@ PARAMS: tuple[ParamDeclaration, ...] = (
 #: that put nine entry points at 45.0, some 1e33 too luminous (#1200, #1560).
 DEFAULT_AGN_LOG_LBOL = declared_default(PARAMS, "agn_log_lbol")
 
-#: Black-hole mass default, ``log10(M_BH / Msun)``, read off the declaration for
-#: the same reason. ``_compute_zone_luminosities`` had repeated the literal
-#: ``0.0``, six dex below the declared support [6, 10]: unreachable today
-#: because its one call site always passes the value, but ``10**0.0`` is a
-#: *one-solar-mass* Eddington luminosity, so any future bare call would
-#: silently mis-scale the hot corona by eight decades.
+#: Default black hole mass for standalone model functions. Paired with
+#: ``DEFAULT_AGN_LOG_LBOL`` this is ``lambda_Edd = 0.030`` — a typical Seyfert.
+#: Sixteen call sites instead said 8.0, which against the same L_bol is
+#: ``lambda_Edd = 0.0030``, LINER-like; they were written when the sibling
+#: default was the nonsense ``agn_log_lbol = 45.0`` and so were never
+#: constrained to pair coherently with it.
+#:
+#: Not used by ``slone_netzer``: the SN12 template's ``log_mbh`` axis starts at
+#: 7.4, so this value would be silently clipped. That model keeps its own
+#: grid-center default. (The declared support ``[6, 10]`` runs below the grid,
+#: so a *fit* on that model can also clip — tracked separately.)
 DEFAULT_AGN_LOG_MBH = declared_default(PARAMS, "agn_log_mbh")
 
-__all__ = ["DEFAULT_AGN_LOG_LBOL", "DEFAULT_AGN_LOG_MBH", "PARAMS"]
+#: Default disc inclination, ``cos(30 deg)``. Matches CIGALE's skirtor2016
+#: ``i=30`` face-on type-1 convention; the older 0.5 (``i=60``) was found by the
+#: §9 reproduction audit to be the dominant residual at the SKIRTOR torus peak,
+#: which is why the declaration moved and these call sites must follow.
+DEFAULT_AGN_COS_INC = declared_default(PARAMS, "agn_cos_inc")
+
+#: Default AGN-to-stellar luminosity ratio. 1.0 means "use the configured AGN at
+#: full strength", so a wildcard ``'all_params': FIXED`` yields a working AGN
+#: (#417). The legacy 0.1 silently delivered a tenth of the requested AGN.
+DEFAULT_AGN_LUM_RATIO = declared_default(PARAMS, "agn_lum_ratio")
+
+__all__ = [
+    "DEFAULT_AGN_COS_INC",
+    "DEFAULT_AGN_LOG_LBOL",
+    "DEFAULT_AGN_LOG_MBH",
+    "DEFAULT_AGN_LUM_RATIO",
+    "PARAMS",
+]

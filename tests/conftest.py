@@ -418,6 +418,14 @@ def pytest_configure(config):
     # sanity band on every structural Cue test. Downgrade to the guard's
     # warning path suite-wide; the guard's raise contract is pinned by
     # tests/contract/test_new_user_errors.py, which delenv's this.
+    #
+    # Since #1579 this reaches the Q_H *heuristic* only -- which is all this
+    # comment ever claimed. It also used to disable CueBackend's metadata
+    # check, so a test could pair a *real* wNE grid with Cue and silently fit
+    # a double-counted nebular model; test_population_psd_pilot.py did. A
+    # heuristic needs an escape hatch because its false positives are routine
+    # (see above); a declaration read from nebular_included has no
+    # false-positive mode, so bypassing it can only hide a real error.
     os.environ.setdefault("TENGRI_ALLOW_WNE_CUE", "1")
 
     cb19_path = Path(__file__).parent.parent / "data" / "cb19_templates.h5"

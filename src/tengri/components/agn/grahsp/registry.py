@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
-from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
+from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL, DEFAULT_AGN_LUM_RATIO
 from tengri.components.agn.grahsp.model import (
     _DEFAULT_A_BC,
     _DEFAULT_A_FEII,
@@ -56,7 +56,7 @@ __all__ = ["grahsp"]
 def grahsp(
     wavelength: jnp.ndarray,
     agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
-    agn_lum_ratio: float = 1.0,
+    agn_lum_ratio: float = DEFAULT_AGN_LUM_RATIO,
     agn_grahsp_uvslope: float = _DEFAULT_UVSLOPE,
     agn_grahsp_plslope: float = _DEFAULT_PLSLOPE,
     agn_grahsp_plbendloc_nm: float = _DEFAULT_PLBENDLOC_NM,

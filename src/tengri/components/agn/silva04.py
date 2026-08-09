@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import functools
 from collections.abc import Callable
+from typing import NamedTuple
 
 import jax.numpy as jnp
 import numpy as np
@@ -49,10 +50,39 @@ from tengri.utils.grid_interp import interp_nd_triweight, resample_template
 from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
 __all__ = [
+    "Silva04Grid",
     "create_silva04_from_grid",
+    "load_silva04_grid",
     "silva04_analytic",
     "silva04_sed",
+    "silva04_sed_from_grid",
 ]
+
+
+class Silva04Grid(NamedTuple):
+    """Silva+04 template arrays, as a JAX pytree.
+
+    Carrying the grid as a pytree rather than closing over it is what makes
+    threading possible: a closure's captured arrays are concrete at trace
+    time and freeze into the graph as ``Constant`` ops, whereas a pytree can
+    be passed as a traced **argument** of the jitted forward model.
+
+    Attributes
+    ----------
+    template : ndarray, shape (n_nh, n_wave)
+        Tabulated torus templates [arbitrary units; normalized on use].
+    log_nh_axis : ndarray, shape (n_nh,)
+        Grid axis, :math:`\\log_{10}(N_H / {\\rm cm}^{-2})`.
+    edges : ndarray, shape (n_nh + 1,)
+        Triweight-kernel bin edges derived from ``log_nh_axis``.
+    wave_grid : ndarray, shape (n_wave,)
+        Template rest-frame wavelength grid [Angstrom].
+    """
+
+    template: jnp.ndarray
+    log_nh_axis: jnp.ndarray
+    edges: jnp.ndarray
+    wave_grid: jnp.ndarray
 
 
 def _load_silva04_arrays(grid_path: str) -> dict:
@@ -124,9 +154,36 @@ def create_silva04_from_grid(grid_path: str) -> Callable:
     # calls. ``jnp.asarray`` of a numpy array inside the closure body is
     # safe in either context: a DeviceArray when called eagerly, a JIT
     # constant when called under trace.
+    return functools.partial(silva04_sed_from_grid, load_silva04_grid(grid_path))
+
+
+@functools.cache
+def load_silva04_grid(grid_path: str) -> Silva04Grid:
+    """Load a Silva+04 grid HDF5 into a :class:`Silva04Grid` pytree.
+
+    Parameters
+    ----------
+    grid_path : str
+        Path to ``silva04_torus_grid.h5``.
+
+    Returns
+    -------
+    Silva04Grid
+        Template arrays as **numpy** arrays.
+
+    Notes
+    -----
+    **JIT-compatible**: no — performs HDF5 I/O. Call it outside the trace
+    and pass the result in as an argument.
+
+    Leaves stay ``np.ndarray`` rather than ``jnp.ndarray`` on purpose. If
+    this loader were first invoked inside a JIT trace and converted here,
+    any ``jnp`` op on those arrays would produce Tracers that the
+    ``functools.cache`` then immortalizes, leaking them as
+    ``UnexpectedTracerError`` on later out-of-trace calls. ``jnp.asarray``
+    at the point of use is safe in either context.
+    """
     raw = _load_silva04_arrays(grid_path)
-    grid_np = np.asarray(raw["template"], dtype=np.float64)
-    wave_np = np.asarray(raw["wavelength"], dtype=np.float64)
     log_nh_np = np.asarray(raw["log_nh_axis"], dtype=np.float64)
     # ``edges_for_grid`` uses ``jnp.concatenate``; running it on a numpy
     # array still yields a JAX array, so compute the equivalent in pure
@@ -135,64 +192,77 @@ def create_silva04_from_grid(grid_path: str) -> Callable:
     half_hi = (log_nh_np[-1] - log_nh_np[-2]) / 2.0
     mid = 0.5 * (log_nh_np[1:] + log_nh_np[:-1])
     edges_np = np.concatenate([[log_nh_np[0] - half_lo], mid, [log_nh_np[-1] + half_hi]])
+    return Silva04Grid(
+        template=np.asarray(raw["template"], dtype=np.float64),
+        log_nh_axis=log_nh_np,
+        edges=edges_np,
+        wave_grid=np.asarray(raw["wavelength"], dtype=np.float64),
+    )
 
-    def silva04_grid(
-        wavelength: jnp.ndarray,
-        agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
-        agn_log_nh_silva: float = 23.0,
-        agn_torus_frac: float = 0.5,
-        **_kwargs,
-    ) -> jnp.ndarray:
-        r"""Silva+04 torus SED at a single ``log10(N_H)``.
 
-        Parameters
-        ----------
-        wavelength : array_like, shape (n_wave,)
-            Rest-frame wavelength grid. [Å]
-        agn_log_lbol : float, optional
-            Bolometric luminosity, ``log10(L_bol / L_sun)``. Default 10.0.
-        agn_log_nh_silva : float, optional
-            Hydrogen column density, ``log10(N_H / cm^-2)``. Valid over the
-            grid extent (Silva+04 bins typically 22–25). Default 23.0.
-        agn_torus_frac : float, optional
-            Fraction of L_bol reprocessed by the torus. Default 0.5.
+def silva04_sed_from_grid(
+    grid: Silva04Grid,
+    wavelength: jnp.ndarray,
+    agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
+    agn_log_nh_silva: float = 23.0,
+    agn_torus_frac: float = 0.5,
+    **_kwargs,
+) -> jnp.ndarray:
+    r"""Silva+04 torus SED at a single ``log10(N_H)``.
 
-        Returns
-        -------
-        ndarray, shape (n_wave,)
-            Spectral luminosity density. [erg/s/Hz]
+    Parameters
+    ----------
+    grid : Silva04Grid
+        Template arrays. Passing these as an **argument** (rather than
+        closing over them) is what lets the forward model thread the
+        library through ``jax.jit`` as a ``Parameter`` instead of baking
+        ~2 MB into the graph as ``Constant`` ops.
+    wavelength : array_like, shape (n_wave,)
+        Rest-frame wavelength grid. [Å]
+    agn_log_lbol : float, optional
+        Bolometric luminosity, ``log10(L_bol / L_sun)``. Default 10.0.
+    agn_log_nh_silva : float, optional
+        Hydrogen column density, ``log10(N_H / cm^-2)``. Valid over the
+        grid extent (Silva+04 bins typically 22–25). Default 23.0.
+    agn_torus_frac : float, optional
+        Fraction of L_bol reprocessed by the torus. Default 0.5.
 
-        Notes
-        -----
-        .. math::
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Spectral luminosity density. [erg/s/Hz]
 
-            L_\nu(\lambda) = L_{\rm bol}\,f_{\rm torus}\,
-                             \frac{T(\lambda,\,\log N_H)}
-                                  {\int T(\nu,\,\log N_H)\,\mathrm{d}\nu}
+    Notes
+    -----
+    .. math::
 
-        where :math:`T` is the tabulated template and the integral is
-        evaluated on the (sorted) frequency grid corresponding to
-        ``wavelength``.
+        L_\nu(\lambda) = L_{\rm bol}\,f_{\rm torus}\,
+                         \frac{T(\lambda,\,\log N_H)}
+                              {\int T(\nu,\,\log N_H)\,\mathrm{d}\nu}
 
-        **JIT-compatible**: yes.
+    where :math:`T` is the tabulated template and the integral is
+    evaluated on the (sorted) frequency grid corresponding to
+    ``wavelength``.
 
-        **Approximation**: the template is semi-empirical (Silva, Maiolino &
-        Granato 2004 [1]_); it assumes smooth-dust geometry and is not a
-        full 3D radiative-transfer solution.  For silicate-feature–level
-        accuracy, use SKIRTOR ([2]_) instead.
-        """
-        grid_jax = jnp.asarray(grid_np)
-        log_nh_axis = jnp.asarray(log_nh_np)
-        wave_grid = jnp.asarray(wave_np)
-        edges = (jnp.asarray(edges_np),)
-        template = interp_nd_triweight(grid_jax, (log_nh_axis,), edges, (agn_log_nh_silva,))
-        sed = resample_template(wavelength, wave_grid, template, left=0.0, right=0.0)
-        nu = _wavelength_to_nu(wavelength)
-        integral_safe = _bolometric_integral_nu(sed, nu, floor=1e-100)
-        l_scale = 10.0**agn_log_lbol * _LSUN_ERG * agn_torus_frac
-        return l_scale * sed / integral_safe
+    **JIT-compatible**: yes. Differentiable in ``agn_log_nh_silva``
+    (triweight kernel is C²-continuous).
 
-    return silva04_grid
+    **Approximation**: the template is semi-empirical (Silva, Maiolino &
+    Granato 2004 [1]_); it assumes smooth-dust geometry and is not a
+    full 3D radiative-transfer solution.  For silicate-feature–level
+    accuracy, use SKIRTOR ([2]_) instead.
+    """
+    template = interp_nd_triweight(
+        jnp.asarray(grid.template),
+        (jnp.asarray(grid.log_nh_axis),),
+        (jnp.asarray(grid.edges),),
+        (agn_log_nh_silva,),
+    )
+    sed = resample_template(wavelength, jnp.asarray(grid.wave_grid), template, left=0.0, right=0.0)
+    nu = _wavelength_to_nu(wavelength)
+    integral_safe = _bolometric_integral_nu(sed, nu, floor=1e-100)
+    l_scale = 10.0**agn_log_lbol * _LSUN_ERG * agn_torus_frac
+    return l_scale * sed / integral_safe
 
 
 _GRID_SEARCH_PATHS: tuple[str, ...] = (
@@ -223,10 +293,26 @@ def _load_silva04_default() -> Callable:
     return create_silva04_from_grid(_find_silva04_grid())
 
 
-def silva04_sed(*args, **kwargs) -> jnp.ndarray:
-    """Silva+04 smooth AGN torus (auto-loaded from tabulated templates).
+def load_silva04_default_grid() -> Silva04Grid:
+    """Load the packaged Silva+04 grid pytree (discovery + cache).
 
-    Wraps :func:`create_silva04_from_grid` with on-disk grid discovery.
+    This is the ``template_loader`` the torus block registers, so the
+    forward model can hoist the library out of the trace.
+
+    Returns
+    -------
+    Silva04Grid
+
+    Raises
+    ------
+    FileNotFoundError
+        If no Silva+04 grid HDF5 is present on disk.
+    """
+    return load_silva04_grid(_find_silva04_grid())
+
+
+def silva04_sed(*args, _template: Silva04Grid | None = None, **kwargs) -> jnp.ndarray:
+    """Silva+04 smooth AGN torus (auto-loaded from tabulated templates).
 
     Parameters
     ----------
@@ -238,6 +324,11 @@ def silva04_sed(*args, **kwargs) -> jnp.ndarray:
         ``log10(N_H / cm^-2)``. Default 23.0.
     agn_torus_frac : float, optional
         Torus reprocessing fraction. Default 0.5.
+    _template : Silva04Grid, optional
+        Pre-loaded grid, threaded in as a JIT argument by the forward
+        model. When ``None`` (default) the packaged grid is loaded from
+        disk and — if this call happens under trace — baked into the
+        graph as constants.
     **kwargs
         Accepted and ignored for unified-dispatch compatibility.
 
@@ -251,6 +342,8 @@ def silva04_sed(*args, **kwargs) -> jnp.ndarray:
     FileNotFoundError
         If no Silva+04 grid HDF5 is present on disk.
     """
+    if _template is not None:
+        return silva04_sed_from_grid(_template, *args, **kwargs)
     return _load_silva04_default()(*args, **kwargs)
 
 

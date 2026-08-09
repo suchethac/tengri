@@ -46,7 +46,12 @@ from tengri.components.agn._nthcomp import (
     _TABLE_AVAILABLE as _NTHCOMP_AVAILABLE,
     nthcomp_lnu_interp as _nthcomp_lnu_interp,
 )
-from tengri.components.agn._params import DEFAULT_AGN_LOG_MBH
+from tengri.components.agn._params import (
+    DEFAULT_AGN_COS_INC,
+    DEFAULT_AGN_LOG_LBOL,
+    DEFAULT_AGN_LOG_MBH,
+    DEFAULT_AGN_LUM_RATIO,
+)
 from tengri.components.agn._phys import (
     C_LIGHT as _C_LIGHT,
     H_PLANCK as _H_PLANCK,
@@ -107,7 +112,7 @@ _LSUN_OVER_C2: float = float(_LSUN_ERG) / float(_C_LIGHT) ** 2
 def powerlaw_disc(
     wavelength: jnp.ndarray,
     agn_log_lbol: float,
-    agn_lum_ratio: float = 1.0,
+    agn_lum_ratio: float = DEFAULT_AGN_LUM_RATIO,
     agn_alpha: float = -1.0,
     agn_T_max: float = 1e5,
     **_kwargs,
@@ -553,11 +558,11 @@ def _apply_euv_tail(wavelength, nu, l_nu_wien, euv_tail):
 def multicolor_disc(
     wavelength: jnp.ndarray,
     agn_log_lbol: float,
-    agn_lum_ratio: float = 1.0,
-    agn_log_mbh: float = 8.0,
+    agn_lum_ratio: float = DEFAULT_AGN_LUM_RATIO,
+    agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
     agn_log_ledd: float = -1.0,
     agn_a_spin: float = 0.0,
-    agn_cos_inc: float = 0.5,
+    agn_cos_inc: float = DEFAULT_AGN_COS_INC,
     n_radii: int = 50,
     euv_tail: str | float | None = "powerlaw",
     agn_log_lbol_shape: float | None = None,
@@ -1453,11 +1458,11 @@ def compute_l2500(
 def kubota_done_disc(
     wavelength: jnp.ndarray,
     agn_log_lbol: float,
-    agn_lum_ratio: float = 1.0,
-    agn_log_mbh: float = 8.0,
+    agn_lum_ratio: float = DEFAULT_AGN_LUM_RATIO,
+    agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
     agn_log_ledd: float = -1.0,
     agn_a_spin: float = 0.0,
-    agn_cos_inc: float = 0.5,
+    agn_cos_inc: float = DEFAULT_AGN_COS_INC,
     agn_f_hard: float = 0.02,
     agn_gamma_warm: float = 2.5,
     agn_kt_warm: float = 0.2,
@@ -1731,8 +1736,8 @@ def kubota_done_disc(
 def adaf_disc(
     wavelength,
     agn_log_lbol,
-    agn_lum_ratio=1.0,
-    agn_log_mbh=8.0,
+    agn_lum_ratio=DEFAULT_AGN_LUM_RATIO,
+    agn_log_mbh=DEFAULT_AGN_LOG_MBH,
     agn_adaf_beta=0.5,
     agn_adaf_delta=0.1,
     agn_adaf_alpha=0.3,
@@ -1890,11 +1895,15 @@ def create_relagn_disc_from_grid(grid_path: str) -> Callable:
 
     def relagn_disc(
         wavelength: jnp.ndarray,
-        agn_log_lbol: float = 11.0,
-        agn_log_mbh: float = 8.0,
+        # Kept on this branch (main's #1578 dropped it): the float32
+        # renormalization below is this branch's #1206 work and reads it. Read
+        # off the declaration rather than the literal 11.0 it used to repeat,
+        # which is #1578's own rule.
+        agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
+        agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
         agn_log_mdot: float = -1.0,
         agn_astar: float = 0.0,
-        agn_cos_inc: float = 0.5,
+        agn_cos_inc: float = DEFAULT_AGN_COS_INC,
         **_kwargs,
     ) -> jnp.ndarray:
         """RELAGN outer disc from relativistic template grid.

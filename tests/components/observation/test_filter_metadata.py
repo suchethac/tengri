@@ -11,12 +11,14 @@ import numpy as np
 import pytest
 
 from tengri.observation.filters import (
+    FILTER_REGISTRY,
     _infer_facility,
     compute_effective_wavelength,
     compute_fwhm,
     filter_info,
     list_available_filters,
 )
+from tengri.registry import _RegistryTable
 
 pytestmark = pytest.mark.bounds
 
@@ -236,8 +238,28 @@ class TestFilterInfo:
 class TestListAvailableFiltersEnhanced:
     """Enhanced list_available_filters: grouping and property computation."""
 
-    def test_compute_properties_false_runs(self, capsys):
-        """compute_properties=False outputs summary without computing FWHM/λ_eff."""
-        list_available_filters(group_by="none", compute_properties=False)
-        captured = capsys.readouterr()
-        assert "Total:" in captured.out
+    def test_compute_properties_false_omits_the_expensive_columns(self):
+        """Without compute_properties, no curve is loaded, so no λ_eff/FWHM."""
+        rows = list_available_filters(group_by="none", compute_properties=False)
+        assert len(rows) > 0
+        assert set(rows[0]) >= {"name", "facility", "svo_id"}
+        assert "lambda_eff" not in rows[0]
+        assert "fwhm" not in rows[0]
+
+    def test_it_returns_a_table_and_prints_nothing(self, capsys):
+        """Printed 250 rows to stdout as a side effect until #1574."""
+        rows = list_available_filters(group_by="none", compute_properties=False)
+        assert isinstance(rows, _RegistryTable)
+        assert capsys.readouterr().out == ""
+
+    def test_group_by_facility_orders_rows_by_facility(self):
+        """Grouping became an ordering + a column when the printing went away."""
+        rows = list_available_filters(group_by="facility", compute_properties=False)
+        facilities = [r["facility"] for r in rows]
+        assert facilities == sorted(facilities)
+
+    def test_to_dict_gives_back_the_pre_1574_mapping(self):
+        """The documented migration for callers that wanted the dict."""
+        mapping = list_available_filters().to_dict("svo_id")
+        assert isinstance(mapping, dict)
+        assert mapping["sdss_r"] == FILTER_REGISTRY["sdss_r"]

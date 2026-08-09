@@ -1,14 +1,13 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Unit tests for MAPPINGS III + V shock emission model."""
 
-from pathlib import Path
-
 import chex
 import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri._data_setup import find_data
 from tengri.components.nebular.shock import (
     _FALLBACK_LINE_NAMES,
     ShockBackend,
@@ -17,9 +16,11 @@ from tengri.components.nebular.shock import (
     shock_line_ratios,
 )
 
-_H5_PATH = Path(__file__).resolve().parents[2] / "data" / "mappings_templates.h5"
+# parents[2] is tests/ from tests/components/nebular/, so this pointed at
+# tests/data/ — which never exists, and the tests below never ran (#1431).
+_H5_PATH = find_data("mappings_templates.h5")
 h5_only = pytest.mark.skipif(
-    not _H5_PATH.exists(),
+    _H5_PATH is None,
     reason="data/mappings_templates.h5 not found; build via download_mappings_templates.py",
 )
 

@@ -101,6 +101,17 @@ PopulationPosterior
    :members:
    :show-inheritance:
 
+Parameter information
+---------------------
+
+How much of each posterior mode the data determined, as opposed to the
+prior — the measured-versus-prior decomposition of a fit.
+
+.. autofunction:: tengri.parameter_information
+
+.. autoclass:: tengri.ParameterInformation
+   :members:
+
 sample_raytrace
 ---------------
 

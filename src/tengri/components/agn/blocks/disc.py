@@ -40,6 +40,7 @@ __all__ = [
     "slone_netzer_disc_block",
 ]
 
+from tengri.components.agn._params import DEFAULT_AGN_COS_INC, DEFAULT_AGN_LOG_MBH
 from tengri.utils.physics_constants import C_AA as _C_AA_PER_S
 
 _L_SUN_ERG: float = L_SUN
@@ -94,7 +95,7 @@ def adaf_disc_block(
     wavelength: Array,
     agn_log_lbol: float,
     *,
-    agn_log_mbh: float = 8.0,
+    agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
     agn_adaf_alpha: float = 0.3,
     agn_adaf_beta: float = 0.5,
     agn_adaf_delta: float = 0.1,
@@ -461,10 +462,10 @@ def kubota_done_disc_block(
     wavelength: Array,
     agn_log_lbol: float,
     *,
-    agn_log_mbh: float = 8.0,
+    agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
     agn_log_ledd: float = -1.0,
     agn_a_spin: float = 0.0,
-    agn_cos_inc: float = 0.86602540378443864,
+    agn_cos_inc: float = DEFAULT_AGN_COS_INC,
     agn_f_hard: float = 0.02,
     agn_gamma_warm: float = 2.5,
     agn_kt_warm: float = 0.2,
@@ -535,10 +536,10 @@ def multicolor_disc_block(
     wavelength: Array,
     agn_log_lbol: float,
     *,
-    agn_log_mbh: float = 8.0,
+    agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
     agn_log_ledd: float = -1.0,
     agn_a_spin: float = 0.0,
-    agn_cos_inc: float = 0.86602540378443864,
+    agn_cos_inc: float = DEFAULT_AGN_COS_INC,
     euv_tail: str | float | None = "powerlaw",
     agn_log_lbol_shape: float | None = None,
     **_params,
@@ -552,13 +553,15 @@ def multicolor_disc_block(
     agn_log_lbol : float
         :math:`\log_{10}(L_{\rm bol}/L_\odot)`.
     agn_log_mbh : float, optional
-        :math:`\log_{10}(M_{\rm BH}/M_\odot)`. Default ``8.0``.
+        :math:`\log_{10}(M_{\rm BH}/M_\odot)`. Defaults to the declared
+        ``agn_log_mbh`` default.
     agn_log_ledd : float, optional
         :math:`\log_{10}(\lambda_{\rm Edd})`. Default ``-1.0``.
     agn_a_spin : float, optional
         BH spin parameter. Default ``0.0``.
     agn_cos_inc : float, optional
-        Cosine of viewing inclination. Default ``0.5``.
+        Cosine of viewing inclination. Defaults to the declared
+        ``agn_cos_inc`` default, ``cos(30 deg)``.
     euv_tail : {"powerlaw", "both", "wien"}, float, or None, optional
         EUV / soft-X-ray behavior below the Lyman limit. ``"powerlaw"``
         (default) gives the disc a CIGALE-like power-law tail below ~100 Å;
@@ -601,10 +604,10 @@ def relagn_disc_block(
     wavelength: Array,
     agn_log_lbol: float,
     *,
-    agn_log_mbh: float = 8.0,
+    agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
     agn_log_mdot: float = -1.0,
     agn_astar: float = 0.0,
-    agn_cos_inc: float = 0.86602540378443864,
+    agn_cos_inc: float = DEFAULT_AGN_COS_INC,
     **_params,
 ) -> Array:
     r"""RELAGN relativistic Kerr accretion disc block.
@@ -629,7 +632,8 @@ def relagn_disc_block(
         *Unused.* Kept for block protocol; RELAGN sets its luminosity from
         M_BH and Mdot.
     agn_log_mbh : float, optional
-        :math:`\log_{10}(M_{\rm BH}/M_\odot)`, range [6, 10]. Default ``8.0``.
+        :math:`\log_{10}(M_{\rm BH}/M_\odot)`, range [6, 10]. Defaults to the
+        declared ``agn_log_mbh`` default.
     agn_log_mdot : float, optional
         :math:`\log_{10}(\dot M/\dot M_{\rm Edd})`, range [-1.5, 0.3].
         Default ``-1.0``.
@@ -745,6 +749,13 @@ def slone_netzer_disc_block(
     wavelength: Array,
     agn_log_lbol: float,
     *,
+    # Both defaults are deliberately the block's own, NOT the shared declared
+    # ones: the SN12 grid covers log_mbh [7.4, 9.8] and log_edd [-4, -1.9586],
+    # so the declared 7.0 / -1.0 would each be silently clipped onto an edge
+    # node (bit-identical SED, exactly zero gradient). 8.6 is the log_mbh grid
+    # center; -2.0 is the on-grid counterpart for log_edd (#1578, #1586).
+    # A caller that supplies these explicitly overrides the pins, which is why
+    # Rule 9 of validate_block_recipe checks the active support at composition.
     agn_log_mbh: float = 8.6,
     agn_log_ledd: float = -2.0,
     **_params,

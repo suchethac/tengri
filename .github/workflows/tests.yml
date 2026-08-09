@@ -81,6 +81,13 @@ jobs:
       - run: ruff format --check src/ tests/
       - run: python tools/add_spdx_headers.py --check
       - run: python tools/check_british_spelling.py
+      # CLAUDE.md says its instructions OVERRIDE default behavior and must be
+      # followed exactly, so a path in it that does not exist is a standing
+      # instruction to look in the wrong place. `area:examples` pointed at
+      # `docs/examples/` — no such directory; the gallery is at `examples/`.
+      # check_doc_examples.py resolves symbols and never looked at paths.
+      # Stdlib-only, same as the guards around it.
+      - run: python tools/check_claude_md_paths.py
       # tengri implements published models and validates against the reference
       # codes; it does not port or copy their source. The wording drifted back
       # twice after being swept by hand, so it is pinned here. Stdlib-only.

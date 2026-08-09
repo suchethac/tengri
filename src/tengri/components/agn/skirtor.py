@@ -34,7 +34,7 @@ import jax
 import jax.numpy as jnp
 
 from tengri._deprecated import deprecated_alias
-from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
+from tengri.components.agn._params import DEFAULT_AGN_COS_INC, DEFAULT_AGN_LOG_LBOL
 from tengri.components.agn._phys import (
     L_SUN as _L_SUN,
 )
@@ -294,7 +294,7 @@ def _skirtor_grid_sed(
     agn_q_skirtor: float = 1.0,
     agn_oa_skirtor: float = 40.0,
     agn_radius_ratio: float = 20.0,
-    agn_cos_inc: float = 0.86602540378443864,
+    agn_cos_inc: float = DEFAULT_AGN_COS_INC,
     agn_torus_frac: float = 0.5,
     **_kwargs,
 ) -> jnp.ndarray:
@@ -413,7 +413,7 @@ def create_skirtor_from_grid(grid_path: str) -> Callable:
         agn_q_skirtor: float = 1.0,
         agn_oa_skirtor: float = 40.0,
         agn_radius_ratio: float = 20.0,
-        agn_cos_inc: float = 0.86602540378443864,
+        agn_cos_inc: float = DEFAULT_AGN_COS_INC,
         agn_torus_frac: float = 0.5,
         **_kwargs,
     ) -> jnp.ndarray:
@@ -536,7 +536,7 @@ def create_skirtor_components_from_grid(grid_path: str) -> Callable:
         agn_q_skirtor: float = 1.0,
         agn_oa_skirtor: float = 40.0,
         agn_radius_ratio: float = 20.0,
-        agn_cos_inc: float = 0.86602540378443864,
+        agn_cos_inc: float = DEFAULT_AGN_COS_INC,
         frac_agn: float = 0.5,
         agn_torus_frac: float | None = None,  # deprecated; falls back to frac_agn
         **_kwargs,
@@ -610,7 +610,8 @@ def skirtor_disc_dust_ratio(
     agn_q_skirtor: float = 1.0,
     agn_oa_skirtor: float = 40.0,
     agn_radius_ratio: float = 20.0,
-    agn_cos_inc: float = 0.86602540378443864,
+    agn_cos_inc: float = DEFAULT_AGN_COS_INC,
+    _template=None,
 ) -> jnp.ndarray:
     r"""CIGALE disc/dust bolometric ratio ``R = lumin_disk / lumin_dust``.
 
@@ -664,7 +665,10 @@ def skirtor_disc_dust_ratio(
 
     **Reference**: Implements CIGALE ``skirtor2016.py`` (Boquien+2019).
     """
-    raw = _load_raw_disk_dust_grid()
+    # ``_template`` carries the disk/dust grid as a traced argument when the
+    # forward model threaded it; loading it here instead bakes ~20 MB of
+    # templates into the graph as constants.
+    raw = _template if _template is not None else _load_raw_disk_dust_grid()
     if raw is None:
         return jnp.asarray(1.0), jnp.ones_like(wave), jnp.asarray(1.0)
     disk_jax, dust_jax, wave_grid, axes = raw
@@ -750,6 +754,49 @@ def _load_raw_disk_dust_grid():
     return disk_jax, dust_jax, wave_grid, axes
 
 
+class SKIRTORBundle(NamedTuple):
+    """Both SKIRTOR libraries the composable AGN path needs, as one pytree.
+
+    The torus block interpolates the dust cube, while the runner's
+    CIGALE-joint normalization separately needs the raw disk/dust pair to
+    form the ratio :math:`R`. Both are template libraries and both must
+    thread, so one loader returns both rather than leaving the second to
+    load itself mid-trace and bake ~20 MB in.
+
+    Attributes
+    ----------
+    torus : SKIRTORGrid
+        Dust-cube grid consumed by :func:`skirtor_sed`.
+    disc_dust : tuple or None
+        ``(disk, dust, wave_grid, axes)`` for
+        :func:`skirtor_disc_dust_ratio`; ``None`` when the on-disk grid
+        predates the v3 split and carries no separate disk component.
+    """
+
+    torus: SKIRTORGrid
+    disc_dust: tuple | None
+
+
+def load_skirtor_bundle() -> SKIRTORBundle:
+    """Load both packaged SKIRTOR libraries (discovery + cache).
+
+    This is the ``template_loader`` the SKIRTOR torus block registers.
+
+    Returns
+    -------
+    SKIRTORBundle
+
+    Raises
+    ------
+    FileNotFoundError
+        If no SKIRTOR grid is present on disk.
+    """
+    return SKIRTORBundle(
+        torus=_load_skirtor_default_grid(),
+        disc_dust=_load_raw_disk_dust_grid(),
+    )
+
+
 # ── Auto-load tabulated SKIRTOR as the default ────────────────────
 
 
@@ -770,13 +817,13 @@ _NOT_FOUND_MSG = (
 
 def _find_skirtor_grid() -> str:
     """Locate the best available SKIRTOR grid file on disk."""
-    from pathlib import Path
+    from tengri._data_setup import find_data
 
-    base = Path(__file__).resolve().parents[4]
-    for rel in _GRID_SEARCH_PATHS:
-        for candidate in [base / rel, Path(rel)]:
-            if candidate.is_file():
-                return str(candidate)
+    # find_data searches every directory the old parents[4] walk reached, plus
+    # $TENGRI_DATA_DIR (#1431), and keeps the v3 > v2 > npz preference order.
+    found = find_data(*_GRID_SEARCH_PATHS)
+    if found is not None:
+        return str(found)
     raise FileNotFoundError(_NOT_FOUND_MSG)
 
 
@@ -786,13 +833,10 @@ def _find_skirtor_raw_grid() -> str | None:
     Built by ``scripts/build_skirtor_raw_grid.py``; carries the full
     ``ta,p,q,oa,R,i`` axes and the published radiative-transfer total.
     """
-    from pathlib import Path
+    from tengri._data_setup import find_data
 
-    base = Path(__file__).resolve().parents[4]
-    for candidate in [base / "data" / "skirtor_raw_v4.h5", Path("data/skirtor_raw_v4.h5")]:
-        if candidate.is_file():
-            return str(candidate)
-    return None
+    found = find_data("skirtor_raw_v4.h5")
+    return str(found) if found is not None else None
 
 
 def create_skirtor_raw_total_from_grid(grid_path: str) -> Callable:
