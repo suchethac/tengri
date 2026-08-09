@@ -81,7 +81,7 @@ def test_the_shipped_default_is_not_a_request():
 
 
 # --------------------------------------------------------------------------
-# 2. The behaviour — no warning on the default path
+# 2. The behavior — no warning on the default path
 # --------------------------------------------------------------------------
 
 

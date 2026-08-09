@@ -55,7 +55,22 @@ import sys
 #: decreasing data to +/-6e28. The surviving implementation in
 #: ``utils/grid_interp`` gates the division *inputs* on the monotonicity
 #: condition instead, so no clamp is needed.
-EXPECTED_SITES = 98
+#:
+#: 98 -> 97 on the float32 Tier B branch: three removed, two added, all in the
+#: #1206 work. Measured by diffing this tool's own ``--list`` against ``main``:
+#:
+#:   removed  ``agn/adaf.py``            ``max(integral, 1e-100)``
+#:   removed  ``agn/component.py``       ``max(L_agn_bol, 1e-30)``
+#:   removed  ``observation/calibration.py``  ``max(obs_err**2, 1e-30)``
+#:   added    ``agn/adaf.py``            two ``max(integral, <expr>)``
+#:
+#: The calibration one is the substantive one and is exactly this guard's thesis:
+#: the floor was expressed in *variance*, so it bound at every real spectroscopic
+#: sigma and pinned ``inv_var`` to 1e30 — the polynomial silently collapsed toward
+#: zero in **float64**, and its test passed because the assertion was an
+#: inequality the collapse pushed the right way (#1604). It is now floored in the
+#: sigma domain at the working dtype's smallest normal.
+EXPECTED_SITES = 97
 
 SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 
