@@ -48,7 +48,9 @@ class _RegistryTable(list):
         "short_doc",
         "use",
     )
-    _ALWAYS_HIDDEN = ("module", "requires", "params")  # surfaced via describe()
+    # ``fn`` holds a live callable (list_laws) — its str() is an address,
+    # so it is carried in the row but never rendered.
+    _ALWAYS_HIDDEN = ("module", "requires", "params", "fn")  # surfaced via describe()
 
     def _columns(self) -> list[str]:
         """Decide which columns to render.
@@ -1589,8 +1591,15 @@ def list_filters(survey: str | None = None) -> _RegistryTable:
     -------
     _RegistryTable
         One row per filter, with columns ``name`` (file stem),
-        ``survey``, ``instrument``, ``band``. Prints as a table, also
-        renders as HTML in Jupyter.
+        ``survey``, ``instrument``, ``band``, and ``alias`` — the short
+        spelling the loaders also accept (``"sdss_r"`` for
+        ``"SLOAN_SDSS_r"``), empty when the curve has no alias. Prints as
+        a table, also renders as HTML in Jupyter.
+
+    See Also
+    --------
+    tengri.observation.filters.list_filter_aliases : the same curves keyed
+        by short alias. Both names were once ``list_filters`` (#1574).
 
     Notes
     -----
@@ -1618,6 +1627,20 @@ def list_filters(survey: str | None = None) -> _RegistryTable:
     filter_dir = next((p for p in candidates if os.path.isdir(p)), None)
     if filter_dir is None:
         return _RegistryTable([])
+
+    # Short aliases the loaders also accept ("sdss_r" for "SLOAN_SDSS_r").
+    # Imported here, not at module scope: observation.filters imports this
+    # module, so a module-level import would cycle.
+    from tengri.observation.filters import FILTER_REGISTRY
+
+    # A curve may carry more than one alias (2MASS/2MASS.J is both
+    # "2mass_j" and "johnson_j"), so collect them all rather than letting
+    # the last one silently win.
+    _aliases: dict[str, list[str]] = {}
+    for short, svo_id in FILTER_REGISTRY.items():
+        _aliases.setdefault(svo_id.replace("/", "_").replace(".", "_"), []).append(short)
+    alias_by_stem = {stem: ", ".join(sorted(v)) for stem, v in _aliases.items()}
+
     out = []
     for fname in sorted(os.listdir(filter_dir)):
         if not fname.endswith(".dat"):
@@ -1634,6 +1657,7 @@ def list_filters(survey: str | None = None) -> _RegistryTable:
                 "survey": sv,
                 "instrument": instr,
                 "band": band,
+                "alias": alias_by_stem.get(stem, ""),
                 "use": _usage_hint(stem, "filter"),
             }
         )
