@@ -52,7 +52,13 @@ from tengri.utils.grid_interp import (
     preintegrate_lines,
     slice_fixed_axes,
 )
-from tengri.utils.interpolation import compute_grid_weights, edges_for_grid, tw_cuml_kern
+from tengri.utils.interpolation import (
+    apply_grid_window,
+    compute_grid_weights,
+    compute_grid_window,
+    edges_for_grid,
+    tw_cuml_kern,
+)
 from tengri.utils.magnitudes import (
     AB_VEGA_OFFSETS,
     ab_mag_to_fnu,
@@ -90,6 +96,7 @@ __all__ = [
     "angular_diameter_distance",
     "angular_diameter_distance_mpc",
     "apparent_to_absolute",
+    "apply_grid_window",
     "arcsec_per_kpc",
     "attenuation_to_tau",
     "comoving_distance",
@@ -97,6 +104,7 @@ __all__ = [
     "comoving_volume_element",
     # Interpolation
     "compute_grid_weights",
+    "compute_grid_window",
     "cosmological_dimming",
     "distance_modulus",
     "distance_modulus_from_dl",

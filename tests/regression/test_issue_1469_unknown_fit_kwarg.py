@@ -27,12 +27,14 @@ pytestmark = pytest.mark.regression_bug
 def _unknown_kwarg_error(fn, **kwargs):
     """Run ``fn`` expecting a rejection; return the raised exception.
 
-    Catches both types deliberately, so the per-test ``isinstance`` assertion
-    below reports *which* one arrived instead of failing as an unhandled
-    exception. #1629 settled the answer at ``TypeError``: the same mistake must
-    fail the same way whether Python rejects the kwarg or the dispatch seam
-    does. ``check_capabilities`` still raises ``ValueError`` for *declared
-    capability* names, which is a different question and a different test.
+    Catches both types on purpose. The type of this rejection has moved twice
+    in a day — Python's own ``TypeError`` from inside the runner, then
+    ``ValueError`` when #1605 added the pre-dispatch check, then ``TypeError``
+    again when #1629 settled it — so pinning it pins the layer, not the rule
+    (#1636). The tests below assert on the *message* instead: ``does not
+    accept`` appears only in the registry's rejection, so it distinguishes
+    "refused up front" from "died inside the backend", which is the whole of
+    #1469. Without that, a test passes with the guard deleted.
     """
     with pytest.raises((ValueError, TypeError)) as excinfo:
         fn(**kwargs)
@@ -52,8 +54,9 @@ def test_catalog_fit_names_the_method_not_the_runner(synthetic_ssp_wide, synthet
     )
     msg = str(err)
 
-    assert isinstance(err, TypeError), (
-        f"expected a TypeError naming the unsupported option, got {type(err).__name__}: {msg}"
+    assert "does not accept" in msg, (
+        f"the pre-dispatch guard is not what caught this — the kwarg fell through "
+        f"to the runner, which is the #1469 regression itself: {msg}"
     )
     assert "run_map" not in msg, (
         f"the error leaks the backend function name the caller never mentioned: {msg}"
@@ -139,5 +142,5 @@ def test_single_galaxy_surface_gets_the_same_answer(synthetic_ssp_wide, syntheti
         model.fit, data=flux, noise=noise, method="map", n_steps=2, nonsense_kwarg=3
     )
 
-    assert isinstance(err, TypeError), f"got {type(err).__name__}: {err}"
+    assert "does not accept" in str(err), f"the guard did not catch it: {err}"
     assert "run_map" not in str(err), str(err)

@@ -109,26 +109,35 @@ def test_sed_fit_params_reaches_params_override(model, mock_data):
 
 
 def test_unknown_kwargs_still_fail_loudly(model, mock_data):
-    """Routing must not create a silent kwarg sink — typos raise ``TypeError``, by name.
+    """Routing must not create a silent kwarg sink — typos still raise, by name.
 
-    ``TypeError`` is asserted because #1629 made it the *contract*: a misspelled
-    fit option must fail the same way whether Python rejects it or
-    ``check_unknown_kwargs`` does, matching what the rest of tengri raises for a
-    kwarg it refuses. A caller can therefore catch one type.
+    The rule is "loud", not "``TypeError``". Which exception surfaces depends on
+    *where* the name is caught, and that moved twice in one day: Python itself
+    rejected it inside the runner (``run_map() got an unexpected keyword
+    argument``), then #1605 added a pre-dispatch check in ``_backend_registry``
+    raising ``ValueError``, then #1629 settled it back to ``TypeError`` so the
+    same mistake fails the same way from either layer. ``check_capabilities``
+    still answers ``ValueError``, for *declared capability* names only.
 
-    That is worth stating because the type is not self-evidently stable — it was
-    ``TypeError`` (raised by Python inside the runner), then ``ValueError`` when
-    #1605 moved the rejection to the dispatch seam, then ``TypeError`` again when
-    #1629 settled it. Pin a type when it is a decision, as it now is; do not pin
-    one that is merely an artifact of which frame happened to raise.
+    Pinning the type pinned the layer, so an improvement to the error broke this
+    test while the guarded behavior was intact. Assert the invariant instead:
+    it raises, and the message shows the pre-dispatch guard is what caught it.
 
-    ``match=`` carries the half of the rule the original assertion missed: a
-    guard that only checks "something raised" passes on an error that never
-    names the offending kwarg, which is the difference between a loud failure
-    and an actionable one.
+    Match on ``does not accept``, not on the kwarg name. The name alone does not
+    discriminate — **both** layers put it in the message, the runner's as
+    ``run_map() got an unexpected keyword argument 'calibration_marginalze'``.
+    With ``check_fit_kwargs`` neutered to a silent return, the kwarg falls
+    through to the runner and dies at ``fitter.py`` with that ``TypeError``, so
+    a name-only match (or a bare ``pytest.raises``) passes with the guard
+    deleted — green on the exact regression this test exists to catch. Measured
+    on ``main`` at 04231b02e: mutation applied, test still passed.
+
+    ``does not accept`` appears only in the registry's message, so it separates
+    "refused up front" from "died inside", which is the distinction #1378 is
+    about. The type stays unpinned — the layer may move again.
     """
     flux, err = mock_data
     fwd = ForwardModel.build(sed=model)
 
-    with pytest.raises(TypeError, match="calibration_marginalze"):
+    with pytest.raises((TypeError, ValueError), match=r"does not accept"):
         fwd.fit(flux, err, method="map", n_steps=3, calibration_marginalze=True)
