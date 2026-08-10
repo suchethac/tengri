@@ -7,11 +7,14 @@ checking that injected values are discriminable from prior returns.
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 from typing import Any
 
 import jax
 import numpy as np
+
+from tengri.components.stellar.component import SFHBeforeBigBangWarning
 
 __all__ = [
     "MockPopulation",
@@ -142,6 +145,33 @@ def assert_truth_against_model(model, name, value, *, rel_tol=0.08):
     return bounds
 
 
+def _max_truncated_fraction(caught):
+    """Worst pre-Big-Bang truncation among captured warnings [dimensionless].
+
+    Reads the exact value off the warning instance rather than parsing the
+    message, which renders it as ``{:.0%}``.
+
+    Parameters
+    ----------
+    caught : list of warnings.WarningMessage
+        Records from a ``warnings.catch_warnings(record=True)`` block.
+
+    Returns
+    -------
+    fraction : float
+        Largest fraction seen, or ``0.0`` if no such warning carried one. The
+        maximum rather than the sum: repeated predictions of the same galaxy
+        each describe the whole SFH, so summing would climb past 1.0.
+    """
+    fractions = [
+        w.message.truncated_fraction
+        for w in caught
+        if isinstance(w.message, SFHBeforeBigBangWarning)
+        and getattr(w.message, "truncated_fraction", None) is not None
+    ]
+    return float(max(fractions)) if fractions else 0.0
+
+
 @dataclass
 class MockPopulation:
     """Mock galaxy population with truths and realistic noise.
@@ -157,6 +187,21 @@ class MockPopulation:
     n_halpha_absorption : int
         Count of galaxies whose Halpha is predicted in absorption
         (non-positive flux). Never dropped; reported to avoid selection bias.
+    truncated_fraction : ndarray, shape (N,), optional
+        Per-galaxy fraction of formed stellar mass placed before the Big Bang
+        and therefore truncated [dimensionless]. Same policy as
+        ``n_halpha_absorption``: measured and reported, never silently dropped,
+        so a caller can exclude or flag affected galaxies instead of learning
+        about them from stderr (#1645).
+
+        A galaxy whose SFH does not fit inside cosmic time at its own redshift
+        is not a faithful fixture: its forward model does not represent the
+        requested SFH. This happens because redshift and the SFH age parameters
+        are drawn independently, so nothing couples the SFH timescale to the
+        time actually available.
+
+        **0.0 means "at most 1%", not "none":** the forward path only warns
+        above ``frac > 0.01``, so smaller truncations are invisible here.
     """
 
     table: np.ndarray
@@ -164,6 +209,7 @@ class MockPopulation:
     n_halpha_absorption: int
     line_names: tuple[str, ...] = ()
     line_wavelengths: np.ndarray | None = None
+    truncated_fraction: np.ndarray | None = None
 
     def line_flux_data(self, galaxy=0):
         """Build a :class:`LineFluxData` template matching these mock lines.
@@ -209,6 +255,7 @@ def make_population(
     key: jax.Array,
     snr_phot: float,
     snr_line: float,
+    max_truncated_fraction: float | None = None,
 ) -> MockPopulation:
     """Generate a mock galaxy population with injected PSD parameters.
 
@@ -234,6 +281,17 @@ def make_population(
         Signal-to-noise ratio for photometry [dimensionless].
     snr_line : float
         Signal-to-noise ratio for emission lines [dimensionless].
+    max_truncated_fraction : float, optional
+        Reject the population if any galaxy places more than this fraction of
+        its stellar mass before the Big Bang [dimensionless]. Default ``None``
+        (accept anything), which preserves the historical behavior: the
+        fraction is always measured and returned on
+        :attr:`MockPopulation.truncated_fraction` regardless.
+
+        Off by default deliberately. The fixtures this repository already ships
+        contain such galaxies — the four-galaxy ESS-sweep mock truncates 3%, 5%,
+        9% and 69% — so defaulting to a limit would reject the project's own
+        populations rather than fix them (#1645).
 
     Returns
     -------
@@ -261,6 +319,7 @@ def make_population(
 
     # Sample parameters and override PSD terms
     truth_params = []
+    truncated_fractions = []
     phot_true_list = []
     phot_noise_list = []
     phot_obs_list = []
@@ -324,8 +383,29 @@ def make_population(
 
         truth_params.append(params)
 
-        # Predict photometry
-        phot_true = np.asarray(model.predict_photometry(params))
+        # Predict photometry. Capture rather than suppress: redshift and the SFH
+        # age parameters are drawn independently above, so an SFH can be asked
+        # to fit inside less cosmic time than it needs. The forward path
+        # truncates the excess and warns; recording the fraction is what lets a
+        # caller exclude such a galaxy instead of reading stderr (#1645).
+        # Both prediction calls are inside the capture, not just the first.
+        # `predict_photometry` runs the traced path, where this check is
+        # deliberately skipped; the warning comes from the EAGER path, which
+        # here is `measure_line_fluxes(fast=False)`. Wrapping only the
+        # photometry call recorded 0.0 for every galaxy while the warnings
+        # still reached stderr.
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always", SFHBeforeBigBangWarning)
+            phot_true = np.asarray(model.predict_photometry(params))
+            # Measure emission lines (returns array of shape (n_line,))
+            line_flux_true = np.asarray(
+                model.measure_line_fluxes(params, line_defs=line_defs, fast=False)
+            )
+        truncated_fractions.append(_max_truncated_fraction(caught))
+        # Re-emit everything: capturing is for measurement, not suppression, and
+        # a caller who watches stderr today must keep seeing what they see now.
+        for record in caught:
+            warnings.warn_explicit(record.message, record.category, record.filename, record.lineno)
         phot_noise = phot_true / snr_phot
 
         # Add photometric noise
@@ -338,10 +418,6 @@ def make_population(
         phot_noise_list.append(phot_noise)
         phot_obs_list.append(phot_obs)
 
-        # Measure emission lines (returns array of shape (n_line,))
-        line_flux_true = np.asarray(
-            model.measure_line_fluxes(params, line_defs=line_defs, fast=False)
-        )
         line_flux_noise = np.abs(line_flux_true) / snr_line
 
         # Add line-flux noise (absolute value to handle zero/negative fluxes)
@@ -377,10 +453,29 @@ def make_population(
         table[i]["line_flux_obs"] = line_flux_obs_list[i]
         table[i]["line_flux_err"] = line_flux_noise_list[i]
 
+    truncated = np.asarray(truncated_fractions, dtype=float)
+    if max_truncated_fraction is not None:
+        over = np.flatnonzero(truncated > float(max_truncated_fraction))
+        if over.size:
+            worst = ", ".join(f"galaxy {int(g)}: {truncated[g]:.0%}" for g in over)
+            raise ValueError(
+                f"{over.size} of {n_galaxies} mock galaxies place more than "
+                f"{float(max_truncated_fraction):.0%} of their stellar mass before the "
+                f"Big Bang at their own redshift ({worst}). That mass is truncated, so "
+                f"those galaxies' photometry does not represent the SFH recorded in "
+                f"truth_params, and any recovery statistic computed on them measures "
+                f"something other than what was injected. Redshift and the SFH age "
+                f"parameters are drawn independently, so nothing couples the SFH "
+                f"timescale to the cosmic time available -- narrow the redshift range, "
+                f"bound the SFH age parameters, or raise max_truncated_fraction to "
+                f"accept it deliberately (issue #1645)."
+            )
+
     return MockPopulation(
         table=table,
         truth_params=truth_params,
         n_halpha_absorption=halpha_absorption_count,
         line_names=tuple(line_names),
         line_wavelengths=np.asarray(wavelengths, dtype=float),
+        truncated_fraction=truncated,
     )

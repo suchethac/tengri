@@ -46,7 +46,19 @@ class SFHBeforeBigBangWarning(UserWarning):
     SFH. Bound the SFH age parameter or the redshift to silence it. The check
     is skipped under ``jax.jit`` / inference, where exploring such draws is
     expected. See suchethac/tengri#683.
+
+    Attributes
+    ----------
+    truncated_fraction : float or None
+        Fraction of formed stellar mass placed before the Big Bang
+        [dimensionless], exact. ``None`` on an instance not raised by the
+        forward path. The message renders this as ``{:.0%}``, so a consumer
+        that needs the value must read it here rather than parse the text —
+        "69%" in the message is anything in 0.685-0.695 (#1645).
     """
+
+    #: Set at the raise site; see the class docstring.
+    truncated_fraction = None
 
 
 class SFHBeyondSSPGridWarning(UserWarning):
@@ -2115,16 +2127,20 @@ class StellarSEDComponent:
         if mass_total_sfh is not None:
             frac_pre_bb = mass_pre_bb / max(mass_total_sfh, 1e-30)
             if frac_pre_bb > 0.01:
-                warnings.warn(
+                # Raised as an instance rather than (message, category) so the
+                # EXACT fraction rides along: the message rounds to whole
+                # percent, and a consumer that needs the number should not have
+                # to parse prose to get a rounded copy of it (#1645).
+                truncation = SFHBeforeBigBangWarning(
                     f"Star formation history forms {frac_pre_bb:.0%} of its stellar "
                     f"mass before the Big Bang at z={z_val:.2f} (cosmic age "
                     f"{t_obs_val:.2f} Gyr). That mass is truncated, so the "
                     f"prediction does not reflect the requested SFH — bound the SFH "
                     f"age parameter or the redshift to keep star formation within "
-                    f"cosmic time.",
-                    SFHBeforeBigBangWarning,
-                    stacklevel=2,
+                    f"cosmic time."
                 )
+                truncation.truncated_fraction = float(frac_pre_bb)
+                warnings.warn(truncation, stacklevel=2)
 
         # Lognormal metallicity-distribution-function width (Carnall+2018 §3.2,
         # #506): DSPS's ``*_lognormal_mdf`` / ``*_met_table`` kernels already
