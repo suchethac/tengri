@@ -43,13 +43,7 @@ _BAKED_BUDGET_MB = 1.0
 #
 # ``strict=True``: fixing one turns this XPASS, which fails the run and is the
 # signal to delete its row. A non-strict xfail would absorb the fix silently.
-_KNOWN_BAKING: dict[str, str] = {
-    "bosa": "4.45 MB — BOSA grid closure (#1649)",
-    "draine_li2007": "3.76 MB — DL07 grid closure (#1649)",
-    "dl07": "3.76 MB — alias of draine_li2007 (#1649)",
-    "dl07_tabulated": "3.76 MB — alias of draine_li2007 (#1649)",
-    "schreiber2018": "2.41 MB — Schreiber+2018 grid closure (#1649)",
-}
+_KNOWN_BAKING: dict[str, str] = {}
 
 
 @pytest.fixture(scope="module")

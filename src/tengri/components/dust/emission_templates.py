@@ -121,7 +121,7 @@ DUST_EMISSION_MODELS: dict[str, Callable] = {}
 # Template-based DL07: create from grid file
 
 
-def create_dl07_from_grid(grid_path: str) -> Callable:
+def create_dl07_from_grid(grid_path: str | dict) -> Callable:
     r"""Create a DL07 emission model function backed by tabulated templates.
 
     Loads the HDF5 grid once and returns a function matching the emission
@@ -149,7 +149,11 @@ def create_dl07_from_grid(grid_path: str) -> Callable:
     >>> DUST_EMISSION_MODELS["dl07_tabulated"] = dl07  # optional: register
     >>> sed_ir = dl07(wavelength, L_absorbed, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=2.5)
     """
-    templates = load_draine_li_templates(grid_path)
+    # A dict means the caller already loaded the grid — typically the component,
+    # so the arrays can be threaded into jit rather than baked (#1649). Building
+    # this closure over traced arrays is fine; only capture of *concrete* arrays
+    # freezes into the graph.
+    templates = grid_path if isinstance(grid_path, dict) else load_draine_li_templates(grid_path)
 
     # Pre-extract arrays for the closure
     single_u = templates["single_u"]  # (n_qpah, n_umin, n_wave)
@@ -975,7 +979,7 @@ def load_dale2014_templates(filepath: str) -> dict:
     return result
 
 
-def create_schreiber2018_from_grid(grid_path: str) -> Callable:
+def create_schreiber2018_from_grid(grid_path: str | dict) -> Callable:
     r"""Create a Schreiber+2018 (S17) cold-dust model backed by tabulated templates.
 
     This is the tabulated counterpart of the analytic ``schreiber2016`` model:
@@ -1019,20 +1023,14 @@ def create_schreiber2018_from_grid(grid_path: str) -> Callable:
            (https://doi.org/10.1051/0004-6361/201731506).
     .. [2] Martinez-Ramirez et al. 2024, A&A, 688, A46 (AGNfitter-rX packaging).
     """
-    import h5py as _h5py
-    import numpy as np
+    # A dict means the caller already loaded the grid — typically the component,
+    # so the arrays can be threaded into jit rather than baked (#1649).
+    grid = grid_path if isinstance(grid_path, dict) else load_schreiber2018_templates(grid_path)
 
-    with _h5py.File(grid_path, "r") as f:
-        g = f["schreiber2018"]
-        tdust_np = np.asarray(g["tdust"][:], dtype=np.float64)
-        wave_np = np.asarray(g["wavelength"][:], dtype=np.float64)
-        dust_np = np.asarray(g["dust"][:], dtype=np.float64)
-        pah_np = np.asarray(g["pah"][:], dtype=np.float64)
-
-    tdust = jnp.array(tdust_np, dtype=jnp.float64)
-    tmpl_wave = jnp.array(wave_np, dtype=jnp.float64)
-    dust_templates = jnp.array(dust_np, dtype=jnp.float64)
-    pah_templates = jnp.array(pah_np, dtype=jnp.float64)
+    tdust = jnp.asarray(grid["tdust"])
+    tmpl_wave = jnp.asarray(grid["wavelength"])
+    dust_templates = jnp.asarray(grid["dust"])
+    pah_templates = jnp.asarray(grid["pah"])
 
     def schreiber2018_tabulated(
         wavelength_aa: jnp.ndarray,

@@ -62,6 +62,31 @@ class DraineLi2007IRSEDComponent(EmissionComponent):
 
     _citations_tuple: ClassVar[tuple[str, ...]] = ("draine_li2007",)
 
+    accepts_threaded_templates: ClassVar[bool] = True
+
+    def load(self, wave: jnp.ndarray | None = None):
+        """Load the DL07 template dict so it can be threaded, not baked.
+
+        Returns
+        -------
+        dict or None
+            Template arrays, or ``None`` when unavailable — the backend then
+            falls back to its module-level load, which bakes 3.76 MB (#1649).
+
+        Notes
+        -----
+        **JIT-compatible**: no, deliberately — runs at build time.
+        """
+        del wave
+        from tengri.components.dust.emission.emission import _find_data_file
+        from tengri.components.dust.emission_templates import load_draine_li_templates
+
+        for fname in ("dl07_templates_v2.h5", "dl07_templates.h5"):
+            path = _find_data_file(fname)
+            if path is not None:
+                return load_draine_li_templates(path)
+        return None
+
     def predict(
         self,
         p: dict[str, jnp.ndarray],
@@ -69,6 +94,7 @@ class DraineLi2007IRSEDComponent(EmissionComponent):
         wave: jnp.ndarray,
         *,
         L_ir: float,
+        templates=None,
     ) -> tuple[jnp.ndarray, dict[str, jnp.ndarray]]:
         """Compute Draine & Li (2007) dust emission.
 
@@ -91,15 +117,19 @@ class DraineLi2007IRSEDComponent(EmissionComponent):
             contains {"sed_dust_ir": emission SED in erg/s/Hz}.
 
         """
-        from tengri.components.dust.emission import draine_li2007 as dl07_fn
-
-        sed = dl07_fn(
-            wave,
-            L_ir,
+        kwargs = dict(
             dust_umin=p["umin"],
             dust_gamma_dl=p["gamma_dl"],
             dust_qpah=p["qpah"],
         )
+        if templates is not None:
+            from tengri.components.dust.emission_templates import create_dl07_from_grid
+
+            sed = create_dl07_from_grid(templates)(wave, L_ir, **kwargs)
+        else:
+            from tengri.components.dust.emission import draine_li2007 as dl07_fn
+
+            sed = dl07_fn(wave, L_ir, **kwargs)
         return sed_in + sed, {"sed_dust_ir": sed}
 
 
