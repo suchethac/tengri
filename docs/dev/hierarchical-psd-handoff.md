@@ -1696,15 +1696,41 @@ the R̂ above. §2 already cautions that min-ESS misleads (there for an
 order-statistic reason across N; here N is fixed at 4, so the confound is noise
 rather than order statistics, but the conclusion is the same).
 
-**A defect in the mock population contaminates the min column (#1645).** All four
-mock galaxies truncate mass before the Big Bang — 3%, 5%, 9%, and **69%** at
-z = 4.05, 10.09, 3.69 and 10.67 — because `make_population` draws redshift and
-SFH age independently. The 69% galaxy's forward model does not represent its
-injected SFH. With `median == max == 125.0` and `min = 57.4` at width 0.5,
-exactly one of four galaxies is degraded and exactly one is gutted; that is a
-correlation of n = 1 and is a hypothesis, not a finding — per-galaxy ESS is not
-recorded. The mock is fixed across widths by construction, so the *comparison*
-survives; the absolute min does not.
+**The mock population has a separate defect (#1645), and it is NOT what drives
+the min column — tested, refuted.** All four mock galaxies truncate mass before
+the Big Bang — 2.7%, 5.4%, 8.7% and **69.2%** at z = 4.05, 10.09, 3.69 and 10.67
+— because `make_population` draws redshift and SFH age independently, so the
+69% galaxy's forward model does not represent its injected SFH.
+
+That invited an obvious confound: at width 0.5, `median == max == 125.0` against
+`min = 57.4` means exactly one of four galaxies is degraded, and exactly one is
+gutted. Same galaxy?
+
+**No.** Per-galaxy ESS against per-galaxy truncation, verdict rule fixed before
+the run:
+
+======== ======== ======== ======== ========
+galaxy   0        1        2        3
+======== ======== ======== ======== ========
+ESS      22.1     50.0     50.0     **12.97**
+truncated 2.7%    5.4%     **69.2%** 8.7%
+======== ======== ======== ======== ========
+
+``argmin(ess) = 3``, ``argmax(truncated) = 2``. **The gutted galaxy has the
+BEST ESS** (at the run's ceiling of 50), and the worst-ESS galaxy truncates only
+8.7%. Rank correlation +0.40 — weakly *positive*, the opposite sign to the
+confound. The ceiling censors galaxy 2 from above, which can only mean it is
+even better, never that it is the worst, so the refutation survives it.
+
+So the two problems are independent: #1645 is a real fixture defect worth
+fixing, and it does not explain this curve.
+
+That probe ran at reduced fidelity to fit the memory available
+(``dense_mass_matrix=False``, 300/400 warmup/samples, hence the ESS ceiling of
+50), so its **magnitudes are not comparable** to the banked numbers above — only
+the ordering across galaxies was under test, which is what the confound asks.
+N = 4, so this refutes a specific correlation; it does not establish that
+truncation is harmless in general.
 
 **Status.** Measured, not assumed. Every width was run in its own process and
 banked to its own JSON after two whole-campaign runs were SIGKILLed under memory
@@ -1712,9 +1738,9 @@ pressure. Before #1585 this curve could not be obtained at all: widths 2.0 and
 4.0 cross zero on both axes, and `SharedGrid.uniform` returned an entirely NaN
 grid without raising, while `log_prior` stayed finite over it.
 
-**What would make this decisive:** per-galaxy ESS in the returned result (to test
-the #1645 confound), and enough samples to clear §5's funnel before attributing
-anything to prior breadth.
+**What would make this decisive:** enough samples to clear §5's funnel before
+attributing anything to prior breadth. (Per-galaxy ESS is now recorded by the
+sweep, which is what allowed the confound above to be settled.)
 
 ---
 
