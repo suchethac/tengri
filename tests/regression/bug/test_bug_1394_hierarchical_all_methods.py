@@ -280,6 +280,80 @@ def test_every_flat_sampler_names_a_real_backend_and_driver(name):
     }, f"{name!r} declares unknown driver {driver!r}"
 
 
+def test_a_non_uniform_prior_is_refused_not_silently_replaced():
+    """The seam's standardized space realizes Uniform priors EXACTLY — and
+    nothing else.
+
+    ``build_flat_problem`` maps every free parameter through the Gaussian-CDF
+    box map (``to_bounded``), so the implied physical prior is Uniform over
+    ``.bounds`` regardless of what was declared. A ``Gaussian(mu, sigma)``
+    hierarchical free parameter would be silently fit with a Uniform prior
+    over its truncation box — and an untruncated one hands +/-inf to the box
+    map. Until the distributions grow a quantile map (theta = ppf(Phi(u)),
+    which would standardize ANY prior exactly), the honest state is refusal
+    naming the parameter and the consequence.
+    """
+    from tengri.inference._hierarchical_flat import _require_uniform_priors
+    from tengri.parameters.priors import Gaussian, Uniform
+
+    class _Spec:
+        def __init__(self, dists):
+            self._dists = dists
+
+        def get_distribution(self, name):
+            return self._dists[name]
+
+    ok = _Spec({"a": Uniform(0.0, 1.0), "b": Uniform(-2.0, 2.0)})
+    _require_uniform_priors(ok, ["a", "b"])  # passes silently
+
+    bad = _Spec({"a": Uniform(0.0, 1.0), "b": Gaussian(0.0, 1.0)})
+    with pytest.raises(NotImplementedError) as exc:
+        _require_uniform_priors(bad, ["a", "b"])
+    msg = str(exc.value)
+    assert "b" in msg, "the error must name the offending parameter"
+    assert "Gaussian" in msg, "the error must name the declared prior"
+    assert "Uniform" in msg, "the error must state what would silently happen"
+
+
+def test_a_frozen_chain_is_refused_not_returned():
+    """Every MCMC driver must refuse a chain that never moved.
+
+    #1530's lesson generalized: MAP-echo draws look like a plausible answer.
+    ``_require_finite_tuning`` catches the MCLMC starved-tuner cause; this is
+    the effect-side net for every driver — a retained chain whose draws are
+    all identical is not a posterior, whatever produced it.
+    """
+    import jax.numpy as jnp
+
+    from tengri.inference._hierarchical_flat import _require_moving_chain
+    from tengri.inference.hierarchical import DegenerateChainError
+
+    moving = jnp.array([[0.0, 1.0], [0.1, 1.0], [0.2, 0.9]])
+    _require_moving_chain(moving, "mcmc_nuts")  # passes silently
+
+    frozen = jnp.tile(jnp.array([[0.5, -1.2]]), (60, 1))
+    with pytest.raises(DegenerateChainError) as exc:
+        _require_moving_chain(frozen, "mcmc_nuts")
+    assert "mcmc_nuts" in str(exc.value)
+
+
+def test_an_unknown_fit_kwarg_is_refused_not_swallowed():
+    """``run_flat_sampler(..., **_ignored)`` was a silent kwarg sink.
+
+    The #1378 standard: a typo'd fit option must fail loudly. Before this
+    guard, ``n_samplse=1000`` (or ``init_from=...``, which the hierarchical
+    surface documents as unsupported) vanished silently and the fit ran with
+    defaults while the caller believed otherwise.
+    """
+    from tengri.inference._hierarchical_flat import run_flat_sampler
+
+    with pytest.raises(TypeError) as exc:
+        run_flat_sampler(object(), "map", key=None, n_samplse=1000)
+    msg = str(exc.value)
+    assert "n_samplse" in msg, "the error must name the unknown kwarg"
+    assert "n_samples" in msg, "the error must show the accepted options"
+
+
 def test_a_non_finite_tuning_is_refused_not_returned():
     """A starved MCLMC tuner must raise, not hand back a frozen chain.
 

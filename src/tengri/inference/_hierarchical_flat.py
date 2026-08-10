@@ -224,6 +224,7 @@ def build_flat_problem(fitter, *, key, memory_mode="low", verbose=False, map_ste
     stochastic = spec.stochastic
     n_grid = spec.n_grid
     free_names = fitter._free_names
+    _require_uniform_priors(spec, free_names)
     bounds = {name: spec.get_distribution(name).bounds for name in free_names}
     fixed_values = spec.get_fixed_values()
     sigma_lo, sigma_hi = fitter.psd_sigma_bounds
@@ -379,6 +380,61 @@ def build_flat_problem(fitter, *, key, memory_mode="low", verbose=False, map_ste
     )
 
 
+def _require_uniform_priors(spec, free_names):
+    """Refuse non-Uniform priors on hierarchical free parameters.
+
+    The seam's standardized space realizes Uniform priors EXACTLY: every free
+    parameter is an N(0,1) latent pushed through the Gaussian-CDF box map
+    (:func:`~tengri.utils.transforms.to_bounded`), whose implied physical
+    density is Uniform over ``.bounds`` regardless of what was declared. A
+    ``Gaussian`` free parameter would therefore be silently fit with a
+    Uniform prior over its truncation box — a wrong-prior result that looks
+    plausible — and an untruncated one hands +/-inf to the box map. Refusal
+    with the consequence named is the honest floor until the distributions
+    grow a quantile map (``theta = ppf(Phi(u))`` standardizes ANY prior
+    exactly; see the tracking issue named in the error).
+    """
+    from tengri.parameters.priors import Uniform
+
+    for name in free_names:
+        dist = spec.get_distribution(name)
+        if not isinstance(dist, Uniform):
+            raise NotImplementedError(
+                f"hierarchical free parameter {name!r} declares a "
+                f"{type(dist).__name__} prior, but the flat seam's "
+                f"standardized space realizes Uniform priors only: fitting "
+                f"would silently replace the declared prior with "
+                f"Uniform{tuple(dist.bounds)!r} (the Gaussian-CDF box map's "
+                f"implied density). Use a Uniform prior for this parameter "
+                f"hierarchically, or fit it per-galaxy through Fitter, which "
+                f"honors the declared prior. Exact non-Uniform support needs "
+                f"a quantile map on the distributions (#1651)."
+            )
+
+
+def _require_moving_chain(chain, method):
+    """Refuse a retained chain whose draws are all identical.
+
+    #1530's lesson generalized past its raytrace origin: MAP-echo draws look
+    like a plausible answer. ``_require_finite_tuning`` catches the MCLMC
+    starved-tuner *cause*; this is the effect-side net for every MCMC driver
+    — whatever produced it, a chain that never moved is not a posterior.
+    """
+    import numpy as np
+
+    if not bool(np.all(np.asarray(chain[1:]) == np.asarray(chain[0]))):
+        return
+    from tengri.inference.hierarchical import DegenerateChainError
+
+    raise DegenerateChainError(
+        f"{method}: every retained draw is identical to the first — the "
+        f"chain never moved, so this is the initialization echoed "
+        f"{int(chain.shape[0])} times, not a posterior. Check the sampler's "
+        f"tuning diagnostics (step size, acceptance, warmup length) rather "
+        f"than using these draws."
+    )
+
+
 def _require_finite_tuning(L, step_size, method, n_warmup):
     """Refuse a non-finite (L, step size) tuning instead of sampling with it.
 
@@ -429,7 +485,7 @@ def run_flat_sampler(
     mclmc_target_accept_rate=0.65,
     allow_unvalidated=False,
     verbose=True,
-    **_ignored,
+    **unknown,
 ):
     """Run any flat-seam-reachable sampler on a hierarchical population fit.
 
@@ -510,11 +566,31 @@ def run_flat_sampler(
     shared high-dimension advisory — see
     :func:`tengri.inference._dimension_guard.warn_if_nuts_high_dim`.
     """
+    import inspect
     import time
 
     from tengri.inference._backend_registry import check_usable, get_backend
     from tengri.inference._dimension_guard import warn_if_nuts_high_dim
     from tengri.inference.hierarchical import PopulationPosterior
+
+    if unknown:
+        # The previous spelling was ``**_ignored`` — a silent kwarg sink. A
+        # typo'd fit option (or ``init_from``, which the hierarchical surface
+        # documents as unsupported) vanished while the fit ran with defaults
+        # and the caller believed otherwise (#1378's bug class).
+        accepted = sorted(
+            p
+            for p in inspect.signature(run_flat_sampler).parameters
+            if p not in ("fitter", "method", "unknown")
+        )
+        raise TypeError(
+            f"run_flat_sampler() got unexpected keyword argument(s) "
+            f"{sorted(unknown)}. Accepted fit options for the hierarchical "
+            f"flat seam: {accepted}. Note that some options are per-family "
+            f"(the ess driver ignores warmup knobs; the MCLMC family ignores "
+            f"n_burnin) and init_from is not supported hierarchically — "
+            f"per-galaxy initialization is automatic via MAP."
+        )
 
     driver = FLAT_SAMPLERS.get(method)
     if driver is None:
@@ -749,6 +825,12 @@ def run_flat_sampler(
 
     else:  # pragma: no cover - FLAT_SAMPLERS admits no other driver
         raise ValueError(f"no driver for {method!r}")
+
+    if driver != "map":
+        # Effect-side net for every MCMC driver: whatever produced it, a chain
+        # that never moved is the initialization echoed n_samples times, not a
+        # posterior (#1530's failure mode, generalized past raytrace).
+        _require_moving_chain(chain, method)
 
     wall_time = time.time() - t0
     shared_arr = jax.vmap(prob.extract_shared)(chain)
