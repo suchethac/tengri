@@ -280,20 +280,22 @@ def test_every_flat_sampler_names_a_real_backend_and_driver(name):
     }, f"{name!r} declares unknown driver {driver!r}"
 
 
-def test_a_non_uniform_prior_is_refused_not_silently_replaced():
-    """The seam's standardized space realizes Uniform priors EXACTLY — and
-    nothing else.
+def test_declared_priors_map_exactly_through_the_seam():
+    """Any declared prior is realized EXACTLY via its own pushforward (#1651).
 
-    ``build_flat_problem`` maps every free parameter through the Gaussian-CDF
-    box map (``to_bounded``), so the implied physical prior is Uniform over
-    ``.bounds`` regardless of what was declared. A ``Gaussian(mu, sigma)``
-    hierarchical free parameter would be silently fit with a Uniform prior
-    over its truncation box — and an untruncated one hands +/-inf to the box
-    map. Until the distributions grow a quantile map (theta = ppf(Phi(u)),
-    which would standardize ANY prior exactly), the honest state is refusal
-    naming the parameter and the consequence.
+    The seam used to route every free parameter through the Uniform box map
+    (``to_bounded``), silently replacing a declared ``Gaussian`` with
+    Uniform-over-truncation-bounds — refused since the hardening PR. The
+    distributions have carried the exact N(0,1) pushforward all along
+    (``unstandardize``, the classes' declared single source of truth, used by
+    ``sample`` and by the single-galaxy unbounded machinery); the seam now
+    builds its physical map from it, so the standardized space realizes the
+    DECLARED prior for every distribution — the #1651 quantile map under the
+    name it already had.
     """
-    from tengri.inference._hierarchical_flat import _require_uniform_priors
+    import jax.numpy as jnp
+
+    from tengri.inference._hierarchical_flat import _physical_map
     from tengri.parameters.priors import Gaussian, Uniform
 
     class _Spec:
@@ -303,16 +305,71 @@ def test_a_non_uniform_prior_is_refused_not_silently_replaced():
         def get_distribution(self, name):
             return self._dists[name]
 
-    ok = _Spec({"a": Uniform(0.0, 1.0), "b": Uniform(-2.0, 2.0)})
-    _require_uniform_priors(ok, ["a", "b"])  # passes silently
+    g = Gaussian(2.0, 0.5, lo=1.0, hi=3.0)
+    spec = _Spec({"a": Uniform(0.0, 1.0), "b": g})
+    phys = _physical_map(spec, ["a", "b"])
+    u = jnp.array(0.7)
+    assert jnp.allclose(phys["b"](u), g.unstandardize(u)), (
+        "the seam's map must BE the distribution's own pushforward"
+    )
+    assert jnp.allclose(phys["a"](u), spec.get_distribution("a").unstandardize(u))
 
-    bad = _Spec({"a": Uniform(0.0, 1.0), "b": Gaussian(0.0, 1.0)})
+    class _NoPushforward:
+        """A distribution-like object without the standardization contract."""
+
     with pytest.raises(NotImplementedError) as exc:
-        _require_uniform_priors(bad, ["a", "b"])
+        _physical_map(_Spec({"a": _NoPushforward()}), ["a"])
     msg = str(exc.value)
-    assert "b" in msg, "the error must name the offending parameter"
-    assert "Gaussian" in msg, "the error must name the declared prior"
-    assert "Uniform" in msg, "the error must state what would silently happen"
+    assert "a" in msg and "unstandardize" in msg
+
+
+def test_every_prior_pushforward_is_the_declared_density():
+    """unstandardize really is the exact quantile map, class by class.
+
+    Change of variables: pushing u ~ N(0,1) through ``unstandardize`` implies
+    the physical density phi(u) / |d unstandardize/du|, which must equal
+    ``exp(log_prob(theta))`` — both are normalized, so agreement is exact,
+    not up to a constant. This is the load-bearing claim behind fitting any
+    declared prior hierarchically (#1651); a class whose ``unstandardize``
+    drifted from its ``log_prob`` would silently fit a wrong prior.
+    """
+    import jax
+    import jax.numpy as jnp
+
+    from tengri.parameters.priors import (
+        Gaussian,
+        Laplace,
+        LogNormal,
+        LogUniform,
+        StudentT,
+        Uniform,
+    )
+
+    dists = {
+        "uniform": Uniform(0.5, 3.5),
+        "gaussian": Gaussian(2.0, 0.5),
+        "gaussian_trunc": Gaussian(2.0, 0.5, lo=1.0, hi=3.0),
+        "loguniform": LogUniform(1e-2, 1e2),
+        "lognormal": LogNormal(0.5, 0.4),
+        "studentt_df2": StudentT(2.0, 0.5, df=2),
+        "laplace": Laplace(1.0, 0.3),
+    }
+    # Even point count: u=0 is Laplace's quantile-map kink (the median), where
+    # autodiff returns the one-sided derivative of a piecewise branch and the
+    # comparison spuriously reads +inf. Measured: every off-kink point agrees
+    # to ~1e-16; only the kink itself disagrees. Avoid it rather than widen
+    # the tolerance.
+    u_grid = jnp.linspace(-1.8, 1.8, 8)
+    log_phi = -0.5 * u_grid**2 - 0.5 * jnp.log(2 * jnp.pi)
+    for name, dist in dists.items():
+        theta = jax.vmap(dist.unstandardize)(u_grid)
+        dtheta_du = jax.vmap(jax.grad(lambda u, d=dist: d.unstandardize(u)))(u_grid)
+        implied = log_phi - jnp.log(jnp.abs(dtheta_du))
+        declared = jax.vmap(dist.log_prob)(theta)
+        assert jnp.allclose(implied, declared, atol=1e-5), (
+            f"{name}: unstandardize's pushforward density disagrees with "
+            f"log_prob — max |diff| = {float(jnp.max(jnp.abs(implied - declared))):.2e}"
+        )
 
 
 def test_a_frozen_chain_is_refused_not_returned():
