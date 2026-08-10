@@ -4,7 +4,13 @@
 All Tengri exceptions inherit from ``TengriError``.  Domain-specific
 exceptions also inherit from the closest stdlib type so that existing
 ``except ValueError`` / ``except OSError`` handlers still work.
+
+Also hosts :func:`warn_measured` / :func:`measurements_of`, the mechanism that
+lets a warning carry the exact quantity it reports instead of only rendering a
+rounded copy of it into prose (#1645).
 """
+
+import warnings
 
 
 class TengriError(Exception):
@@ -248,3 +254,108 @@ class LaplaceNotAtModeWarning(UserWarning):
     tengri.inference.backends.laplace.run_laplace
         Emits this warning; reports ``newton_decrement`` in ``diagnostics``.
     """
+
+
+#: Attribute names a measurement may not use: they belong to ``BaseException``
+#: or to this mechanism itself, and shadowing them breaks ``str(w)``, pickling,
+#: or the uniform accessor.
+_RESERVED_MEASUREMENT_NAMES = frozenset({"args", "with_traceback", "add_note", "measurements"})
+
+
+def warn_measured(message, category=UserWarning, *, stacklevel=2, **measurements):
+    """Emit a warning that carries the quantities it reports (#1645).
+
+    A warn site that renders a computed number into prose and discards the value
+    forces consumers to regex-parse the message, and to accept whatever the
+    format spec rounded it to: ``{frac:.0%}`` turns 0.6916830115613221 into
+    "69%", which is anything in 0.685-0.695. The message keeps its rounding for
+    humans; the exact values ride on the instance for code.
+
+    Parameters
+    ----------
+    message : str
+        Human-readable text, formatted as usual. Round freely here.
+    category : type, optional
+        Warning class. Default ``UserWarning``. Unchanged by this helper, so
+        existing ``warnings.filterwarnings`` entries keep working.
+    stacklevel : int, optional
+        Frames to skip, counted from the *caller* exactly as ``warnings.warn``
+        counts them. Default 2. This helper's own frame is added internally, so
+        a site migrating from ``warnings.warn(..., stacklevel=2)`` keeps the
+        same number and the same attribution.
+    **measurements
+        Named numeric quantities the message reports. Each is attached as an
+        attribute and collected into ``measurements``.
+
+    Raises
+    ------
+    ValueError
+        If a measurement name is reserved.
+    TypeError
+        If a measurement is not numeric. Prose belongs in ``message``.
+
+    Notes
+    -----
+    Read the values back with :func:`measurements_of`, which returns ``{}`` for
+    warnings that predate this mechanism, so a consumer never needs to know
+    whether a given site has been migrated.
+
+    ``tools/check_warning_payloads.py`` fails when a warn site renders a rounded
+    number without carrying it.
+
+    Examples
+    --------
+    >>> import warnings
+    >>> from tengri.config.exceptions import measurements_of, warn_measured
+    >>> with warnings.catch_warnings(record=True) as caught:
+    ...     warnings.simplefilter("always")
+    ...     warn_measured(f"lost {0.6917:.0%} of the mass", UserWarning, truncated_fraction=0.6917)
+    >>> measurements_of(caught[0].message)
+    {'truncated_fraction': 0.6917}
+    """
+    bad_names = sorted(set(measurements) & _RESERVED_MEASUREMENT_NAMES)
+    if bad_names:
+        raise ValueError(
+            f"Measurement name(s) {bad_names} are reserved by BaseException or by "
+            f"warn_measured itself; shadowing them breaks str(warning), pickling, or "
+            f"measurements_of(). Rename the measurement."
+        )
+    for name, value in measurements.items():
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError(
+                f"Measurement {name!r} = {value!r} is not numeric. This payload exists "
+                f"so a consumer can compare or threshold the value; descriptive text "
+                f"belongs in the message, which already carries it."
+            )
+
+    warning = category(message)
+    values = {name: float(value) for name, value in measurements.items()}
+    warning.measurements = values
+    for name, value in values.items():
+        setattr(warning, name, value)
+    # +1 for this frame, so the report blames whoever called us -- matching what
+    # a bare warnings.warn(..., stacklevel=N) would have done at the same site.
+    warnings.warn(warning, stacklevel=stacklevel + 1)
+
+
+def measurements_of(warning):
+    """Exact quantities carried by a warning, or ``{}``.
+
+    Safe on any object, so a consumer never needs to know whether a particular
+    warn site has been migrated to :func:`warn_measured`.
+
+    Parameters
+    ----------
+    warning : Warning or object
+        Typically ``record.message`` from
+        ``warnings.catch_warnings(record=True)``.
+
+    Returns
+    -------
+    values : dict
+        Mapping of name to exact value [units vary by measurement]. Empty for
+        warnings that carry none.
+    """
+    if not isinstance(warning, Warning):
+        return {}
+    return dict(getattr(warning, "measurements", {}) or {})

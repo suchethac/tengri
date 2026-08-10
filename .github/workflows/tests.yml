@@ -92,6 +92,14 @@ jobs:
       # codes; it does not port or copy their source. The wording drifted back
       # twice after being swept by hand, so it is pinned here. Stdlib-only.
       - run: python tools/check_reimplementation_language.py
+      # A warning that renders a computed number and discards it forces every
+      # consumer to regex-parse prose for a value the format spec already
+      # rounded: `{frac:.0%}` made "69%" mean anything in 0.685-0.695, and the
+      # mock builder that needed it recorded 0.0 for every galaxy while the
+      # warnings fired (#1645). AST, not grep — `warnings.warn(` and its
+      # f-string are on different lines, so a line-based scan of this same tree
+      # reports zero hits. Stdlib-only, same as the guards around it.
+      - run: python tools/check_warning_payloads.py
       # Every test tree must be reachable from some job's path list. The matrix
       # below is explicit, so a directory it stops naming goes dark silently —
       # which is what happened to `tests/unit`. Stdlib-only by design: this job
