@@ -1092,8 +1092,58 @@ class Fitter:
         obs = getattr(self.model, "observation", None)
         return getattr(obs, "line_fluxes", None) if obs is not None else None
 
+    @staticmethod
+    def _needs_full_forward_state(model) -> bool:
+        """Whether a feature channel forces the full-grid forward regardless.
+
+        Line ratios and spectral indices are served from ``predict_state`` — the
+        full-grid forward — because they need the discrete line catalog, which
+        the emission-line LUT does not publish. This is the ``has_line_ratios or
+        has_indices`` half of ``needs_state`` in
+        :func:`~tengri.inference.loss_functions.build_loss_fn`, read from the
+        same ``Observation`` attributes ``_build_data_args`` publishes them from.
+        ``_data_args`` is not available at approx-resolution time.
+
+        Parameters
+        ----------
+        model : SEDModel
+            The model whose observation carries the feature channels.
+
+        Returns
+        -------
+        bool
+            ``True`` when a ratio or index channel is present.
+
+        Notes
+        -----
+        **JIT-compatible**: not applicable — fit-setup time only.
+
+        Exists because :meth:`_fits_lines` was being asked two opposite
+        questions: :meth:`_auto_approx_config` appends the LUT *when* it is
+        true, and the #1596 photometry top-up attaches the LUT when it is
+        *false*. A fit with photometry + line ratios answered "no lines" to
+        both, so it was classed photometry-only, handed the LUT, and then
+        asked ``predict_line_ratios`` for a catalog the LUT does not publish.
+        Widening :meth:`_fits_lines` would have fixed the second site and
+        broken the first — it would append the LUT for exactly the fits that
+        cannot use it — which is why this is a separate predicate rather than
+        another clause in that one.
+        """
+        obs = getattr(model, "observation", None)
+        if obs is None:
+            return False
+        return (
+            getattr(obs, "line_ratios", None) is not None
+            or getattr(obs, "spectral_indices", None) is not None
+        )
+
     def _fits_lines(self, model) -> bool:
-        """Whether any emission-line channel is fit, measured or marginalized."""
+        """Whether any emission-line channel is fit, measured or marginalized.
+
+        Answers only "is there a line channel". Whether the LUT may *serve* it
+        is :meth:`_needs_full_forward_state` — see there for why the two are
+        deliberately separate predicates.
+        """
         return bool(
             getattr(self, "_eline_marginalize", False)
             or getattr(self, "_eline_fitted", False)
@@ -1126,6 +1176,11 @@ class Fitter:
             base = WavePrecomp()
         else:
             return None
+        if self._needs_full_forward_state(model):
+            # A ratio/index channel needs the discrete catalog the LUT does not
+            # publish, and pays the full-grid forward anyway — the LUT would be
+            # a wrapper around the cost it exists to avoid, and a broken one.
+            return base
         return (base, FeaturePrecomp()) if self._fits_lines(model) else base
 
     def _add_feature_precomp(self, model):
@@ -1204,13 +1259,21 @@ class Fitter:
                 # Respect the build-time approx, but do not let it suppress the
                 # line LUT — top it up rather than bailing.
                 resolved = model
-                if self._fits_lines(model):
+                # Same exclusion as ``_auto_approx_config``: a fit carrying
+                # line fluxes *and* ratios answers ``_fits_lines`` true, and
+                # topping it up would hand the LUT to a channel that needs the
+                # discrete catalog the LUT does not publish.
+                if self._fits_lines(model) and not self._needs_full_forward_state(model):
                     resolved = self._add_feature_precomp(model)
                 return resolved
             cfg = self._auto_approx_config(model)
             if cfg is None:
                 return model
-            if self.data_type == "photometry" and not self._fits_lines(model):
+            if (
+                self.data_type == "photometry"
+                and not self._fits_lines(model)
+                and not self._needs_full_forward_state(model)
+            ):
                 # #1596: a photometry-only Cue fit measured ~4x SLOWER than
                 # the same fit WITH a line channel, because FeaturePrecomp —
                 # despite the name, the nebular precompute; for Cue the
@@ -1241,6 +1304,12 @@ class Fitter:
         like the model simply being slow.
         """
         if not self._fits_lines(model):
+            return
+        if self._needs_full_forward_state(model):
+            # The LUT is withheld here on purpose — a ratio/index channel needs
+            # the discrete catalog it does not publish. Warning would point at a
+            # remedy that cannot be applied, and advice you cannot act on reads
+            # as a defect in the caller's model.
             return
         state = getattr(model, "approx", None)
         if state is not None and state.feature_precomp:

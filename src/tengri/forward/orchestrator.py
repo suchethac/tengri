@@ -18,7 +18,7 @@ touch this module directly.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
 import jax.numpy as jnp
@@ -86,6 +86,49 @@ def _inputs(c: SEDComponent) -> tuple[DerivedKey, ...]:
 
 def _optional_inputs(c: SEDComponent) -> tuple[DerivedKey, ...]:
     return _contract_method(c, "optional_inputs", "requires_optional")
+
+
+def components_consuming(
+    component_list: Sequence[SEDComponent], key_name: str
+) -> tuple[SEDComponent, ...]:
+    """Components in a chain that declare ``key_name`` as an input.
+
+    Reads the same ``inputs()`` / ``optional_inputs()`` contract the pipeline
+    already validates (ADR-0009), so the answer is *derived* from the chain
+    rather than restated in a second list.
+
+    Parameters
+    ----------
+    component_list : sequence of SEDComponent
+        The assembled component chain.
+    key_name : str
+        Derived-state key to look for, e.g. ``'sed_nebular'``.
+
+    Returns
+    -------
+    tuple of SEDComponent
+        Every component declaring ``key_name``, required or optional, in chain
+        order. Empty when nothing consumes it.
+
+    Notes
+    -----
+    **JIT-compatible**: not applicable — composition-time only.
+
+    Exists so a fast path can ask "does anything still need this?" instead of
+    asserting it from a hand-written census. ``sed_nebular`` was zeroed under
+    the per-Q_H nebular grid on the stated grounds that its "only live
+    consumers are the exact spectrum / dust-continuum paths"; the dust energy
+    balance consumes it too, and a model with dust emission then re-emitted
+    the stellar absorbed budget alone — 11 % low in the far-IR, with the
+    posterior gradient up to 380 % wrong, silently and in float64. A census
+    written next to the code it guards goes stale the first time a consumer is
+    added somewhere else; a derived one cannot.
+    """
+    return tuple(
+        c
+        for c in component_list
+        if any(k.name == key_name for k in (*_inputs(c), *_optional_inputs(c)))
+    )
 
 
 # Canonical units for every well-known cross-component derived key. Both

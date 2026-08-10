@@ -124,6 +124,12 @@ class NebularSEDComponent:
     #: makes the Cue forward dead for the photometry channel (XLA prunes it).
     #: Typed loosely to avoid an import cycle; it is a ``NebularGridTable``.
     grid_table: Any | None = None
+    #: ``True`` when a downstream component declares ``sed_nebular`` as an
+    #: input, which forbids the grid's photometry shortcut: serving photometry
+    #: from the grid requires zeroing the continuum, and the dust energy
+    #: balance needs it to size the absorbed budget. Set from the assembled
+    #: chain by :meth:`SEDModel.enable_fast_nebular` — derived, never asserted.
+    sed_consumed_downstream: bool = False
     # Tuple prefix so the MAPPINGS shock backend (``shock_*``) and the
     # photoionization backends (``neb_*``, ``ionspec_*``, ``gas_*``) all
     # flow through the standard prefix-stripping path. Backends silently
@@ -503,14 +509,27 @@ class NebularSEDComponent:
         # FAST path (#950): with a per-Q_H grid attached, the nebular photometry
         # (this apply) and the emission lines (predict_line_fluxes) reconstruct
         # from the grid, so the expensive Cue continuum + line-catalog forwards
-        # are not needed. Skip them: ``nebular_sed`` becomes zeros (its only live
-        # consumers are the exact spectrum / dust-continuum paths, which a fast
-        # model does not use — SEDModel.predict_spectrum guards against it), and
-        # the Cue NN forward is genuinely gone (not merely pruned), which is where
-        # the ~1.2 ms/eval saving comes from.
+        # are not needed. Skipping them zeroes ``nebular_sed``, and the Cue NN
+        # forward is genuinely gone (not merely pruned), which is where the
+        # ~1.2 ms/eval saving comes from.
+        #
+        # That trade is only available when nothing downstream reads the
+        # continuum. It used to be taken unconditionally, on the stated grounds
+        # that the only live consumers were the exact spectrum / dust-continuum
+        # paths — but the dust energy balance reads ``sed_nebular`` to size the
+        # absorbed budget, so a model with dust emission re-emitted the stellar
+        # half alone: 11 % low in the far-IR, gradient up to 380 % wrong, in
+        # float64 and silently. ``sed_consumed_downstream`` is derived from the
+        # assembled chain, so a future consumer disables the shortcut by
+        # declaring the input, with nothing to keep in sync here.
+        #
+        # One flag, used for BOTH the continuum and the photometry publication
+        # below: two checks of the same condition are free to drift apart, and
+        # this defect is what that costs.
         use_grid = (
             self.grid_table is not None
             and getattr(self.grid_table, "log_phot_per_qh", None) is not None
+            and not self.sed_consumed_downstream
         )
 
         if use_grid:
@@ -754,7 +773,11 @@ class NebularSEDComponent:
         # ``nebular_phot_lnu_precomp`` for consumption by predict_via_precomp.
         derived_overrides = dict(sed_nebular=nebular_sed, sed_shock=zeros)
         grid = self.grid_table
-        if grid is not None and getattr(grid, "log_phot_per_qh", None) is not None:
+        # ``use_grid``, not a second re-derivation of it: when a downstream
+        # consumer forces the exact continuum above, photometry must come from
+        # the filter integration below, or the nebular light would be counted
+        # once in ``sed_nebular`` and again from the grid.
+        if use_grid:
             # FAST path (#950): reconstruct the intrinsic nebular photometry from
             # the per-Q_H grid, ``L_nu = 10^{log_nion + interp(grid)}``, instead of the
             # per-eval filter integration below. The downstream contract is

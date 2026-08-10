@@ -61,6 +61,11 @@ class _StubFitterSelf:
 
     _fits_line_fluxes = staticmethod(Fitter._fits_line_fluxes)
     _fits_lines = Fitter._fits_lines
+    # Reads observation.line_ratios / .spectral_indices, which the stub model's
+    # observation does not define — so the LUT is offered here, as before. The
+    # real exclusion it implements is covered on real Observations in
+    # test_feature_precomp_channel_predicate.py.
+    _needs_full_forward_state = staticmethod(Fitter._needs_full_forward_state)
     _auto_approx_config = Fitter._auto_approx_config
     _add_feature_precomp = Fitter._add_feature_precomp
     _warn_lines_without_lut = Fitter._warn_lines_without_lut

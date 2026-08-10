@@ -4696,6 +4696,7 @@ class SEDModel:
 
         from tengri.components.nebular.component import NebularSEDComponent
         from tengri.components.nebular.nebular_grid_precompute import precompute_nebular_grid
+        from tengri.forward.orchestrator import components_consuming
 
         if self._nebular_backend is None or not hasattr(
             self._nebular_backend, "predict_nebular_line_luminosities"
@@ -4714,8 +4715,21 @@ class SEDModel:
         # compile_signature() now differs (nebular_grid_sig), so the next
         # predict_* builds a fresh kernel over this chain — no stale reuse.
         chain = self._build_component_chain()
+        # Whether the grid may also serve the photometry channel. It may only
+        # when nothing downstream reads the continuum, because serving
+        # photometry from the grid requires zeroing ``sed_nebular`` — and the
+        # dust energy balance reads it to size the absorbed budget. Asked of
+        # the chain rather than assumed, so registering a new consumer is a
+        # one-line ``inputs()`` declaration and nothing here goes stale.
+        sed_consumers = [
+            c
+            for c in components_consuming(chain, "sed_nebular")
+            if not isinstance(c, NebularSEDComponent)
+        ]
         self._cached_component_chain = [
-            dataclasses.replace(c, grid_table=table) if isinstance(c, NebularSEDComponent) else c
+            dataclasses.replace(c, grid_table=table, sed_consumed_downstream=bool(sed_consumers))
+            if isinstance(c, NebularSEDComponent)
+            else c
             for c in chain
         ]
         return self
