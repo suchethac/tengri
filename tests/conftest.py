@@ -121,11 +121,14 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):  # pragma: no
                 f"  {path}: 0 ran, {rec['skip_call']} skipped from inside a test body"
             )
         terminalreporter.write_line(
-            "Every test in the file(s) above skipped at call time, so the file is "
-            "green while verifying nothing. A `pytest.skip()` reached from an "
-            "`except` handler cannot tell 'optional dependency absent' from 'this "
-            "test is broken' — narrow the handler (ImportError / importorskip) so "
-            "a real failure fails. See #1615."
+            "Every test in the file(s) above skipped from inside a test body, so "
+            "the file is green while verifying nothing. That is worth a look, not "
+            "an automatic defect: a runtime `pytest.skip()` guarding genuinely "
+            "absent data is legitimate (prefer a `skipif` marker, so the gate is "
+            "visible at collection). The failure it catches is a skip whose "
+            "*reason is wrong* — an `except` handler reporting 'data not "
+            "available' when what actually raised was a stale API. Check which "
+            "one this is. See #1615."
         )
 
     n_skipped = sum(_SKIPPED_PARITY_TESTS.values())
