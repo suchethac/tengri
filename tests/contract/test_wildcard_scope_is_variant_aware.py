@@ -51,6 +51,17 @@ scope, while an all-inert group is reported as a fixture failure instead.
 Values are swept across each parameter's own declared support rather than drawn
 randomly: two random draws can coincide, which reads as "inert" and would make
 this test pass for the wrong reason.
+
+**Not covered, stated rather than left silent.** ``igm`` frees nothing under any
+of its six models, so there is no superset to over-free. ``xray`` is measured
+but not asserted: all five variants report an *identical* five-parameter inert
+set, and an inert set that does not vary with the variant cannot be a scoping
+defect, which is per-variant by construction. It is the fixture — the synthetic
+SSP is a ``(5000/lambda)^2`` power law, ~1.6e10 times its optical value at
+0.04 Angstrom, so it swamps the X-ray component on the very grid the X-ray model
+extends the SED onto. Covering ``xray`` needs an SSP that is not pathologically
+bright in the X-ray, not another entry here. ``agn`` and ``radio`` keep their
+own dedicated suites.
 """
 
 from __future__ import annotations
