@@ -2205,6 +2205,159 @@ def load_themis_templates(filepath: str) -> dict:
     return result
 
 
+#: Template-backed dust emission models -> ``{grid file: {axis: parameter}}``.
+#:
+#: Only axes that correspond to a **declared, user-settable parameter** appear.
+#: The L_TIR axes (``bosa``'s ``log_ltir_grid``, ``dh02_ce01``'s
+#: ``irlum_axis``) are deliberately absent: both are derived from
+#: ``L_absorbed`` by energy balance, not set by the user, so a prior can never
+#: overhang them and reporting one would be a false positive.
+_DUST_EMISSION_GRID_AXES: dict[str, tuple[str, dict[str, str]]] = {
+    "dl07": ("dl07_templates.h5", {"umin_grid": "dust_umin", "qpah_grid": "dust_qpah"}),
+    "dl14": (
+        "dl14_templates.h5",
+        {
+            "umin_grid": "dust_umin",
+            "qpah_grid": "dust_qpah",
+            "alpha_grid": "dust_alpha_dl14",
+        },
+    ),
+    "themis": (
+        "themis_templates.h5",
+        {
+            "umin_grid": "dust_umin",
+            "qhac_grid": "dust_qhac",
+            "alpha_grid": "dust_alpha",
+        },
+    ),
+    "dale2014": ("dale2014_templates.h5", {"alpha_grid": "dust_alpha_dale"}),
+    "schreiber2016": ("schreiber2016_templates.h5", {"tdust_grid": "dust_T"}),
+    "schreiber2018": ("schreiber2018_templates.h5", {"schreiber2018/tdust": "dust_T"}),
+    "bosa": ("bosa_templates.h5", {"log_ssfr_grid": "dust_log_ssfr"}),
+    "astrodust": ("astrodust_templates.h5", {"lgU": "dust_lgU"}),
+    "dale2014_cigale": ("dale2014_templates_cigale.h5", {"alpha_grid": "dust_alpha_dale"}),
+}
+
+#: Selectable menu names that are the same model under another name.
+#:
+#: The builder menu exposes several spellings per model (``draine_li2007`` and
+#: ``dl07_tabulated`` are both ``dl07``). Resolving them here rather than by
+#: stripping a suffix is what keeps the census complete: a suffix rule silently
+#: missed ``draine_li2007``, leaving that spelling unchecked -- the same
+#: census hole this whole registry exists to close.
+_DUST_EMISSION_ALIASES: dict[str, str] = {
+    "dl07_tabulated": "dl07",
+    "draine_li2007": "dl07",
+    "draine_li2014": "dl14",
+}
+
+
+def dust_emission_grid_support(name: str) -> dict[str, tuple[float, float]]:
+    """Interpolation support of a template-backed dust emission model.
+
+    Reports the extent of each grid axis that a **user-settable** parameter is
+    clipped onto, so :mod:`tengri.components.grid_support` can warn when a
+    prior overhangs it (#1586).
+
+    Parameters
+    ----------
+    name : str
+        Registry name of the emission model, e.g. ``'themis'``.
+
+    Returns
+    -------
+    support : dict[str, tuple[float, float]]
+        ``{parameter_name: (lo, hi)}``, empty when the model is not
+        template-backed or its grid file is not installed.
+
+    Raises
+    ------
+    FileNotFoundError
+        Never -- an absent grid yields ``{}`` so model construction still
+        works; the model's own loader raises if it is actually called.
+
+    Notes
+    -----
+    **JIT-compatible**: not applicable -- composition-time only.
+
+    Axes are read from the grid file, so they cannot go stale if a packaged
+    grid is rebuilt. ``themis``'s ``qhac`` axis is routed through
+    :func:`_qhac_axis_to_cigale` because the model interpolates on the
+    relabeled axis, not the raw dataset; every other axis here was verified
+    by measurement to be used as stored.
+    """
+    entry = _DUST_EMISSION_GRID_AXES.get(_DUST_EMISSION_ALIASES.get(name, name))
+    if entry is None:
+        return {}
+    filename, axis_map = entry
+
+    import h5py
+    import numpy as np
+
+    from tengri._data_setup import find_data
+
+    path = find_data(filename)
+    if path is None:
+        return {}
+
+    support: dict[str, tuple[float, float]] = {}
+    with h5py.File(str(path), "r") as f:
+        for axis_key, param in axis_map.items():
+            if axis_key not in f:
+                continue
+            axis = np.asarray(f[axis_key][()], dtype=float).ravel()
+            if axis.size < 2:
+                continue
+            if param == "dust_qhac":
+                axis = np.asarray(_qhac_axis_to_cigale(jnp.asarray(axis)), dtype=float)
+            support[param] = (float(axis.min()), float(axis.max()))
+    return support
+
+
+#: FSPS-to-CIGALE rescaling of the THEMIS a-C(:H) mass-fraction axis.
+_QHAC_FSPS_TO_CIGALE = 2.2 / 100.0
+
+
+def _qhac_axis_to_cigale(qhac_grid: jnp.ndarray) -> jnp.ndarray:
+    """Relabel an FSPS-scaled THEMIS ``qhac`` axis to the CIGALE convention.
+
+    The shipped THEMIS grid (``data/themis_templates.h5``) stores its qhac axis
+    in FSPS scaling (CIGALE value x 100/2.2, i.e. ``[0.909 .. 18.18]``). The
+    user-facing parameter follows CIGALE (``[0.02, 0.40]``, default 0.17 -- see
+    ``ThemisIRSEDComponent.qhac`` and CIGALE's ``themis.qhac``). Relabeling
+    makes the interpolation happen in the input's units; without it every
+    physical qhac < 0.909 -- the entire CIGALE range, including the 0.17
+    default -- silently clipped to the grid minimum and selected the wrong
+    grain composition, shifting the mid-IR PAH strength and FIR peak by tens of
+    percent. That is the #1586 failure mode, and this is why a grid-support
+    accessor must report the axis *after* this call, never the raw dataset.
+
+    The a-C(:H) mass fraction never exceeds ~0.5 in the CIGALE convention, so a
+    grid whose max exceeds that is unambiguously FSPS-scaled -- which keeps
+    CIGALE-unit grids (e.g. synthetic test grids) untouched and makes this
+    idempotent.
+
+    Parameters
+    ----------
+    qhac_grid : ndarray, shape (n_qhac,)
+        Raw a-C(:H) mass-fraction axis, either convention [dimensionless].
+
+    Returns
+    -------
+    ndarray, shape (n_qhac,)
+        The axis in the CIGALE convention.
+
+    Notes
+    -----
+    **JIT-compatible**: no -- reads a concrete max to pick a convention.
+
+    Regression: ``tests/components/dust/test_themis_qhac_convention.py``.
+    """
+    if float(jnp.max(qhac_grid)) > 0.5:
+        return qhac_grid * _QHAC_FSPS_TO_CIGALE
+    return qhac_grid
+
+
 def create_themis_from_grid(template_data: dict | str) -> Callable:
     """Create THEMIS emission function from pre-loaded DustEM template grid.
 
@@ -2250,22 +2403,7 @@ def create_themis_from_grid(template_data: dict | str) -> Callable:
     powerlaw = template_data["powerlaw"]  # (n_qhac, n_umin, n_wave)
     tmpl_wave = template_data["wavelength_aa"]
     umin_grid = template_data["umin_grid"]
-    qhac_grid = template_data["qhac_grid"]
-    # The shipped THEMIS grid (data/themis_templates.h5) stores its qhac axis
-    # in FSPS scaling (CIGALE value x 100/2.2, i.e. [0.909 .. 18.18]). The
-    # user-facing parameter follows CIGALE ([0.02, 0.40], default 0.17 — see
-    # ThemisIRSEDComponent.qhac and CIGALE's themis.qhac). Relabel an FSPS-scaled
-    # axis to the CIGALE convention so the interpolation happens in the input's
-    # units; without this every physical qhac < 0.909 (the entire CIGALE range,
-    # including the 0.17 default) silently clipped to the grid minimum and
-    # selected the wrong grain composition, shifting the mid-IR PAH strength and
-    # FIR peak by tens of percent. The a-C(:H) mass fraction never exceeds ~0.5
-    # in the CIGALE convention, so a grid whose max exceeds that is unambiguously
-    # FSPS-scaled — this keeps CIGALE-unit grids (e.g. synthetic test grids)
-    # untouched. Regression: tests/components/dust/test_themis_qhac_convention.py.
-    _QHAC_FSPS_TO_CIGALE = 2.2 / 100.0
-    if float(jnp.max(qhac_grid)) > 0.5:
-        qhac_grid = qhac_grid * _QHAC_FSPS_TO_CIGALE
+    qhac_grid = _qhac_axis_to_cigale(template_data["qhac_grid"])
 
     # Optional: alpha-dependent PDR component
     alpha_grid = template_data.get("alpha_grid", None)

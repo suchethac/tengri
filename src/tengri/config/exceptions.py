@@ -178,6 +178,46 @@ class WildcardPartialFreeWarning(UserWarning):
     """
 
 
+class AdvisoryWarning(UserWarning):
+    """Base for construction-time advisories about a model the user is building.
+
+    An advisory says "this model will run, but probably not do what you meant".
+    That is only meaningful for a model someone intends to *fit*, so the
+    introspection paths that build a throwaway ``Parameters`` purely to
+    enumerate names (``recipe_parameters`` and the builder factory discovery it
+    feeds) silence this category wholesale. Inheriting from it is what keeps a
+    new advisory from firing on ``import tengri``.
+
+    Subclass this rather than :class:`UserWarning` for any new
+    construction-time advisory. Existing ``UserWarning`` filters keep matching.
+    """
+
+
+class GridSupportWarning(AdvisoryWarning):
+    """A parameter's reachable range overhangs the grid that consumes it.
+
+    A template-backed component interpolates over grid axes and clips values
+    onto the edge node. Outside the axes ``jnp.clip`` is flat, so the SED is
+    bit-identical and the gradient is *exactly* zero: a fit gets no signal and
+    cannot move the parameter, with nothing raised, warned or NaN (issue
+    #1586). The declared prior records one support; the grid is a second,
+    implicit one that no declaration can express, because the same parameter is
+    often shared with grid-free analytic models that legitimately want the
+    wider range.
+
+    This warns rather than raising: overhanging a grid is wasteful but not
+    ill-posed, and a fit whose posterior stays inside the grid is unaffected.
+    Narrow the parameter to the quoted extent, or select a component with no
+    template grid. Filter this category if the overhang is deliberate.
+
+    See Also
+    --------
+    tengri.components.grid_support
+        The registry of ``(component, parameter)`` grid extents, and why the
+        constraint cannot live on the parameter declaration.
+    """
+
+
 class LaplaceNotAtModeWarning(UserWarning):
     """The Laplace expansion point is not a stationary point of the loss.
 

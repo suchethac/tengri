@@ -48,7 +48,6 @@ attenuation)::
 
 from __future__ import annotations
 
-import math
 import warnings
 
 import jax.numpy as jnp
@@ -56,8 +55,7 @@ from jax import Array
 
 from tengri.components.agn.blocks._grid_support import (
     block_grid_support,
-    is_contained,
-    live_fraction,
+    describe_clipping,
 )
 from tengri.components.agn.blocks._protocol import (
     AGN_BLOCKS,
@@ -343,39 +341,12 @@ agn_torus_block, agn_attenuation_block : str
                 active = param_support.get(pname)
                 if active is None:
                     continue
-                a_lo, a_hi = active
-                if is_contained(active, (g_lo, g_hi)):
+                # One definition of the overhang wording, shared with every
+                # other template-backed component (tengri.components.grid_support).
+                detail = describe_clipping(active, (g_lo, g_hi))
+                if detail is None:
                     continue  # no reachable value can be clipped
-                live = live_fraction(active, (g_lo, g_hi))
-                dead_pct = 100.0 * (1.0 - live)
                 extent = f"[{g_lo:g}, {g_hi:g}]"
-                if a_lo == a_hi:
-                    detail = (
-                        f"the fixed value {a_lo:g} lies outside the grid extent "
-                        f"{extent}, so it is clipped onto the nearest edge node"
-                    )
-                elif not (math.isfinite(a_lo) and math.isfinite(a_hi)):
-                    # An unbounded prior (e.g. an untruncated Gaussian) is NOT
-                    # inert — most of its mass may sit on the grid. Only the
-                    # tails clip, so say that and do not quote a percentage:
-                    # the fraction of an infinite support is not informative.
-                    detail = (
-                        f"its support [{a_lo:g}, {a_hi:g}] is unbounded, so the "
-                        f"tails beyond the grid extent {extent} are clipped onto "
-                        "an edge node"
-                    )
-                elif live == 0.0:
-                    detail = (
-                        f"its whole range [{a_lo:g}, {a_hi:g}] lies outside the "
-                        f"grid extent {extent}, so the parameter is entirely "
-                        "inert — every value gives the same SED"
-                    )
-                else:
-                    detail = (
-                        f"{dead_pct:.0f}% of its range [{a_lo:g}, {a_hi:g}] lies "
-                        f"outside the grid extent {extent} and is silently "
-                        "clipped onto an edge node"
-                    )
                 _emit(
                     f"Composable AGN: {pname} with the {name!r} {category} "
                     f"block — {detail}. The SED there is bit-identical to the "
