@@ -66,6 +66,7 @@ own dedicated suites.
 
 from __future__ import annotations
 
+import functools
 import warnings
 
 import jax
@@ -172,21 +173,28 @@ def _shock_cases():
 
 
 def _neb_cases():
-    """Photoionization backends a bare-stellar SSP supports.
+    """Photoionization backends — none, on the fixtures available here.
 
-    ``cue`` is absent by construction, not omission: it refuses a bare-stellar
-    SSP fixture (``CueWNESSPError``). ``ssp`` (baked-in) declares no free
-    parameters at all, so there is nothing for a wildcard to over-free.
+    Deliberately empty, and the reason is worth more than the case would be.
+
+    * ``cue`` refuses a bare-stellar SSP fixture (``CueWNESSPError``).
+    * ``ssp`` (baked-in) declares no free parameters, so there is no superset.
+    * ``cloudy`` needs a grid file that is not shipped and has no synthetic
+      stand-in, so the build raises outright in CI.
+    * ``cb19`` builds, because ``conftest`` synthesizes a stand-in grid when the
+      real one is absent — but that stand-in is ``np.broadcast_to`` of a single
+      line-ratio vector, so it is **constant along every interpolation axis**,
+      including the three this suite would test. On it, moving ``neb_log_nH``
+      changes the prediction by ~1e-9 of floating-point interpolation noise
+      whether or not the value reaches the backend. A case that passes on noise
+      is a case that passes for the wrong reason, and it would keep passing if
+      the threading regressed.
+
+    The threading those cases would have covered is asserted directly instead,
+    at the wiring, by :func:`test_backend_declared_nebular_params_are_threaded`
+    — which does not depend on how rich the grid is.
     """
-    for backend in ("cloudy", "cb19"):
-        yield Case(
-            f"neb[type={backend}]",
-            "neb_",
-            {
-                "dust": {"type": "two_component", "law_bc": "calzetti", "*": FIXED},
-                "neb": {"type": backend, "*": FREE},
-            },
-        )
+    return ()
 
 
 CASES = [*_dust_law_cases(), *_shock_cases(), *_neb_cases()]
@@ -336,6 +344,113 @@ def test_an_omitted_law_scopes_as_its_resolved_default():
         "the default law is power_law, which reads dust_slope — narrowing it "
         "away pins a parameter the law in force does read"
     )
+
+
+def test_backend_declared_nebular_params_are_threaded():
+    """A backend that names an axis must receive it; one that does not, must not.
+
+    The component built one shared kwargs dict that never contained
+    ``neb_log_nH``, ``neb_co`` or ``neb_dno``, so ``CB19Backend`` — which names
+    all three in both methods the dict is splatted into — received its signature
+    defaults on every call while the sampler proposed values freely. Sweeping
+    each across its declared support moved the SED by exactly 0.0.
+
+    Asserted at the wiring rather than through a prediction on purpose. The only
+    CB19 grid available in CI is ``conftest``'s synthetic stand-in, which is
+    constant along these very axes, so an SED-level probe there measures
+    interpolation noise and would stay green if this regressed.
+
+    Passing them unconditionally is not the alternative: every backend ends in
+    ``**kwargs``, so an unmodeled parameter is silently dropped rather than
+    rejected — indistinguishable from being read.
+    """
+    from tengri.components.nebular.baked_in import BakedInBackend
+    from tengri.components.nebular.cloudy_cb19 import CB19Backend
+    from tengri.components.nebular.cloudy_grid import CloudyGridBackend
+    from tengri.components.nebular.component import (
+        _BACKEND_OPTIONAL_PARAMS,
+        _backend_accepted_params,
+    )
+
+    assert _backend_accepted_params(CB19Backend) == frozenset(_BACKEND_OPTIONAL_PARAMS), (
+        "CB19 names log_nH / log_CO / dNO in both predict_nebular_sed and "
+        "predict_nebular_line_luminosities; all three must be threaded to it"
+    )
+    for backend in (CloudyGridBackend, BakedInBackend):
+        assert _backend_accepted_params(backend) == frozenset(), (
+            f"{backend.__name__} models none of these axes, so threading them "
+            f"would rely on **kwargs swallowing the value silently"
+        )
+
+
+def test_the_threaded_values_actually_reach_the_backend(synthetic_ssp_wide, panchromatic_obs):
+    """The sampler's value, not the signature default, must arrive at the call.
+
+    The acceptance filter being correct is not the same as the component using
+    it: the defect was a missing dict entry, and a filter nothing consults would
+    restore it exactly. Spy on the call and compare against the *default*, which
+    is what the backend received for as long as the bug existed.
+    """
+    backend_cls = pytest.importorskip("tengri.components.nebular.cloudy_cb19").CB19Backend
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        model = SEDModel.build(
+            ssp_data=synthetic_ssp_wide,
+            observation=panchromatic_obs,
+            sfh={"type": "dpl", "*": FIXED},
+            dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED},
+            neb={"type": "cb19", "*": FREE},
+            redshift=Fixed(0.5),
+        )
+
+    from tengri.components.nebular.component import _backend_accepted_params
+
+    seen = {}
+    original = backend_cls.predict_nebular_sed
+
+    # ``functools.wraps`` is load-bearing, not tidiness. The threading filter
+    # decides what to pass by introspecting this very method's signature, so a
+    # bare ``spy(self, *args, **kwargs)`` names none of the parameters and the
+    # filter returns the empty set — the probe would then measure the spy and
+    # report the defect whether or not it was present. ``wraps`` sets
+    # ``__wrapped__``, which ``inspect.signature`` follows back to the original.
+    @functools.wraps(original)
+    def spy(self, *args, **kwargs):
+        seen.update({k: v for k, v in kwargs.items() if k.startswith("neb_")})
+        return original(self, *args, **kwargs)
+
+    params = dict(model.spec.sample(jax.random.PRNGKey(0)))
+    # A value the signature default is not, so "arrived" cannot be confused
+    # with "defaulted": the defaults are 2.0 / -0.36 / 0.0.
+    probe_values = {"neb_log_nH": 3.5, "neb_co": -0.9, "neb_dno": 0.2}
+    params.update({k: np.float64(v) for k, v in probe_values.items() if k in params})
+
+    # The filter is cached per class, so a warm entry from another test would
+    # mask a spy that had perturbed the signature. Clear on both sides so this
+    # test neither inherits nor leaves a cached answer — without it the result
+    # depends on test order, which is how the signature problem above first
+    # showed up as "passes in the file, fails alone".
+    _backend_accepted_params.cache_clear()
+    backend_cls.predict_nebular_sed = spy
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            model.predict(params).rest_sed()
+    finally:
+        backend_cls.predict_nebular_sed = original
+        _backend_accepted_params.cache_clear()
+
+    assert seen, "the spy never fired — predict_nebular_sed was not called"
+    for name, expected in probe_values.items():
+        assert name in seen, (
+            f"{name} never reached predict_nebular_sed; the backend fell back to "
+            f"its signature default, which is the defect this guards"
+        )
+        assert float(seen[name]) == pytest.approx(expected), (
+            f"{name} arrived as {float(seen[name])}, not the {expected} that was "
+            f"passed — a stale or defaulted value is reaching the interpolator"
+        )
 
 
 def test_law_scope_is_read_from_the_signature_not_a_table():
