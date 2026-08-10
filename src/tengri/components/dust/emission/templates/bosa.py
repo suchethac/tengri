@@ -52,6 +52,40 @@ class BosaIRSEDComponent(EmissionComponent):
 
     _citations_tuple: ClassVar[tuple[str, ...]] = ("boquien_salim2021",)
 
+    accepts_threaded_templates: ClassVar[bool] = True
+
+    def load(self, wave: jnp.ndarray | None = None):
+        """Load the BOSA template dict so it can be threaded, not baked.
+
+        Returns
+        -------
+        dict or None
+            Template arrays, already normalized — ``_normalize_bosa_grid`` is
+            a preprocessing step that must not run on traced arrays. ``None``
+            when unavailable; the backend then falls back to its module-level
+            load, which bakes 4.45 MB (#1649).
+
+        Notes
+        -----
+        **JIT-compatible**: no, deliberately — runs at build time.
+        """
+        del wave
+        from tengri.components.dust.emission.emission import _find_data_file
+        from tengri.components.dust.emission_templates import (
+            _normalize_bosa_grid,
+            load_bosa_templates,
+        )
+
+        for fname in ("bosa_templates_v2.h5", "bosa_templates.h5"):
+            path = _find_data_file(fname)
+            if path is None:
+                continue
+            grid = load_bosa_templates(path)
+            if "wavelength_um" in grid and "wavelength_aa" not in grid:
+                grid = _normalize_bosa_grid(grid)
+            return grid
+        return None
+
     def predict(
         self,
         p: dict[str, jnp.ndarray],
@@ -59,6 +93,7 @@ class BosaIRSEDComponent(EmissionComponent):
         wave: jnp.ndarray,
         *,
         L_ir: float,
+        templates=None,
     ) -> tuple[jnp.ndarray, dict[str, jnp.ndarray]]:
         """Compute BOSA dust emission.
 
@@ -80,11 +115,14 @@ class BosaIRSEDComponent(EmissionComponent):
             contains {"sed_dust_ir": emission SED in erg/s/Hz}.
 
         """
-        from tengri.components.dust.emission import bosa as bosa_fn
+        if templates is not None:
+            # Closure built over the THREADED arrays: capture of a tracer is
+            # fine, capture of a concrete array is what bakes (#1649).
+            from tengri.components.dust.emission_templates import create_bosa_from_grid
 
-        sed = bosa_fn(
-            wave,
-            L_ir,
-            dust_log_ssfr=p["log_ssfr"],
-        )
+            sed = create_bosa_from_grid(templates)(wave, L_ir, dust_log_ssfr=p["log_ssfr"])
+        else:
+            from tengri.components.dust.emission import bosa as bosa_fn
+
+            sed = bosa_fn(wave, L_ir, dust_log_ssfr=p["log_ssfr"])
         return sed_in + sed, {"sed_dust_ir": sed}

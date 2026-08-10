@@ -6582,6 +6582,34 @@ class SEDModel:
         if band_response is not None:
             result.setdefault("dust_ir", {})["emission_band_response"] = band_response
 
+        # ── Dust IR template libraries, keyed by component name ──
+        #
+        # A template-backed emission backend that reads its grid inside
+        # ``predict`` freezes the whole library into the graph as ``Constant``
+        # ops — 66.6 MB for Draine & Li 2014, 39.4 for THEMIS, against a
+        # bare-stellar floor of 0.05 MB (#1649). Publishing the bundle here,
+        # loaded eagerly, lets ``EmissionComponent.apply`` hand it to
+        # ``predict`` as a traced argument instead.
+        #
+        # Opt-in via ``accepts_threaded_templates`` because ``predict``
+        # signatures are per backend; the analytic ones have no library and
+        # must not receive the keyword.
+        from tengri.components.dust.emission._component_base import EmissionComponent
+
+        for component in cached:
+            if not isinstance(component, EmissionComponent):
+                continue
+            if not getattr(component, "accepts_threaded_templates", False):
+                continue
+            bundle = getattr(component, "data", None)
+            if bundle is None:
+                try:
+                    bundle = component.load(None)
+                except Exception:
+                    bundle = None
+            if bundle is not None:
+                result.setdefault("dust_ir", {})[component.name] = bundle
+
         # The other additive emitters (X-ray, radio) are sums of rank-1 terms, so
         # they get a response *per term* rather than the single L_ir * R that dust's
         # one-term SED admits. Same exactness, same build-time integral.
