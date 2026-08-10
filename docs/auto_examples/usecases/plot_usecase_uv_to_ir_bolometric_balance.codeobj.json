@@ -110,29 +110,6 @@
    "name": "Observation"
   }
  ],
- "Path": [
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "pathlib",
-   "module_short": "pathlib",
-   "name": "Path"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "pathlib",
-   "module_short": "pathlib",
-   "name": "PurePath"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "pathlib",
-   "module_short": "pathlib",
-   "name": "Path"
-  }
- ],
  "Photometry.from_names": [
   {
    "is_class": false,
@@ -906,7 +883,7 @@
    "name": "builtin_function_or_method"
   }
  ],
- "load_ssp_data": [
+ "load_ssp": [
   {
    "is_class": false,
    "is_explicit": false,
@@ -919,7 +896,7 @@
    "is_explicit": false,
    "module": "tengri",
    "module_short": "tengri",
-   "name": "load_ssp_data"
+   "name": "load_ssp"
   }
  ],
  "lum_range": [
@@ -1623,45 +1600,6 @@
    "name": "SSPData"
   }
  ],
- "ssp_path": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "pathlib",
-   "module_short": "pathlib",
-   "name": "PosixPath"
-  }
- ],
- "ssp_path.exists": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "pathlib",
-   "module_short": "pathlib",
-   "name": "PosixPath.exists"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "pathlib",
-   "module_short": "pathlib",
-   "name": "Path.exists"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "pathlib",
-   "module_short": "pathlib",
-   "name": "PurePosixPath.exists"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "pathlib",
-   "module_short": "pathlib",
-   "name": "PurePath.exists"
-  }
- ],
  "std_ratio": [
   {
    "is_class": false,
@@ -1687,22 +1625,6 @@
    "module": "numpy",
    "module_short": "numpy",
    "name": "ndarray"
-  }
- ],
- "tengri.download_ssp": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "function"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "download_ssp"
   }
  ],
  "warnings.filterwarnings": [

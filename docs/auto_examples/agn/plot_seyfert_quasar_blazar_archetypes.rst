@@ -107,7 +107,7 @@ classification depends on viewing angle, accretion rate, and dust geometry.
         """
         agn_dict = {
             "log_lbol": log_lbol,
-            "frac": agn_lum_ratio,
+            "lum_ratio": agn_lum_ratio,
             "all_params": tengri.FIXED,
         }
         agn_dict.update(agn_blocks)
@@ -278,7 +278,7 @@ classification depends on viewing angle, accretion rate, and dust geometry.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.529 seconds)
+   **Total running time of the script:** (0 minutes 4.980 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_seyfert_quasar_blazar_archetypes.py:

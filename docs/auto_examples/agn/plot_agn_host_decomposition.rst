@@ -109,7 +109,7 @@ References
 
     def _build_model(agn_lum_ratio):
         """Build a model with specified AGN fraction."""
-        agn_config = {**BASE_AGN, "all_params": tengri.FIXED, "frac": agn_lum_ratio}
+        agn_config = {**BASE_AGN, "all_params": tengri.FIXED, "lum_ratio": agn_lum_ratio}
         model = tengri.SEDModel.build(ssp, agn=agn_config, **COMMON)
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
         out = model.predict(p)
@@ -149,7 +149,7 @@ References
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.679 seconds)
+   **Total running time of the script:** (0 minutes 4.053 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_host_decomposition.py:

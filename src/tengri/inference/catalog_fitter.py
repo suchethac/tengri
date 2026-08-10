@@ -858,10 +858,16 @@ class _CatalogFitterOriginal:
             replacements["is_lower_limit"] = censor == -1
         return dataclasses.replace(template, **replacements)
 
-    def __init__(self, model, galaxies, data_type="photometry"):
+    def __init__(self, model, galaxies, data_type="photometry", *, approx="auto"):
+        from tengri.inference.fitter import _resolve_batch_fit_approx
         from tengri.inference.jit_engine import CompileCache
 
-        self.model = model
+        # Same default as Fitter and PopulationFitter: a catalog fit pays the
+        # per-evaluation cost times the catalog size, so it routes through the
+        # precompute LUT unless the caller says approx=None (exact) or hands an
+        # explicit config.
+        self.model = _resolve_batch_fit_approx(model, approx, data_type)
+        self.approx = approx
         self.galaxies = list(galaxies)
         self.n_galaxies = len(self.galaxies)
         self.data_type = data_type
@@ -1710,7 +1716,7 @@ class CatalogFitter(_CatalogFitterOriginal):
     taught name never warned — #1369.)
     """
 
-    def __init__(self, model, galaxies, data_type="photometry"):
+    def __init__(self, model, galaxies, data_type="photometry", *, approx="auto"):
         warnings.warn(
             "CatalogFitter is deprecated: use tengri.Catalog — "
             "Catalog(fwd, table, flux_unit=..., redshift_col=...).fit(method=..., "
@@ -1719,4 +1725,4 @@ class CatalogFitter(_CatalogFitterOriginal):
             DeprecationWarning,
             stacklevel=2,
         )
-        super().__init__(model, galaxies, data_type)
+        super().__init__(model, galaxies, data_type, approx=approx)

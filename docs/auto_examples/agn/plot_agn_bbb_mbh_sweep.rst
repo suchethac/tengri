@@ -86,7 +86,7 @@ supermassive black holes.
             "type": "composable",
             "disc": {"type": "multicolor", "all_params": tengri.FIXED},
             "all_params": tengri.FIXED,
-            "frac": 1.0,
+            "lum_ratio": 1.0,
             "log_ledd": -1.0,
         },
         redshift=tengri.Fixed(0.05),
@@ -131,6 +131,11 @@ supermassive black holes.
 
     fig.tight_layout()
     plt.savefig("plot_agn_bbb_mbh_sweep.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.265 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_bbb_mbh_sweep.py:

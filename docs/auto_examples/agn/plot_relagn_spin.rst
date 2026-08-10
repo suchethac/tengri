@@ -80,7 +80,7 @@ formulation).
         agn={
             "all_params": tengri.FIXED,
             "log_lbol": 12.5,
-            "frac": 1.0,
+            "lum_ratio": 1.0,
             "log_mbh": 8.5,
             "a_spin": tengri.Uniform(0.0, 0.998),
             "disc": {"type": "kubota_done", "all_params": tengri.FIXED},
@@ -125,11 +125,6 @@ formulation).
 
     fig.tight_layout()
     plt.savefig("plot_relagn_spin.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.143 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_relagn_spin.py:

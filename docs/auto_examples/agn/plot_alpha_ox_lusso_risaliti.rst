@@ -89,7 +89,7 @@ Reference: Lusso & Risaliti 2016, ApJ, 819, 154
             "type": "composable",
             "disc": {"type": "multicolor", "all_params": tengri.FIXED},
             "all_params": tengri.FIXED,
-            "frac": 1.0,  # Full AGN contribution
+            "lum_ratio": 1.0,  # Full AGN contribution
         },
         redshift=tengri.Fixed(0.0),  # Rest-frame only
     )

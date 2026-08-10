@@ -105,7 +105,7 @@ Swap any one into a full model with ``agn={'disc': {'type': <name>}}``.
                 "disc": {"type": disc, "all_params": tengri.FIXED},
                 "all_params": tengri.FIXED,
                 "log_lbol": 12.5,
-                "frac": 1.0,
+                "lum_ratio": 1.0,
             },
             redshift=tengri.Fixed(0.05),
         )
@@ -133,7 +133,7 @@ Swap any one into a full model with ``agn={'disc': {'type': <name>}}``.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.048 seconds)
+   **Total running time of the script:** (0 minutes 6.460 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_disc_compare.py:
