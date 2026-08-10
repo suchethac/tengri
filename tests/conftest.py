@@ -112,7 +112,22 @@ def pytest_runtest_makereport(item, call):  # pragma: no cover — pytest hook
 
 
 def pytest_terminal_summary(terminalreporter, exitstatus, config):  # pragma: no cover
-    """Surface parity-sweep skip count in the terminal summary."""
+    """Surface parity-sweep skip count, and any file that tested nothing."""
+    inert = inert_test_files()
+    if inert:
+        terminalreporter.write_sep("=", "FILES THAT TESTED NOTHING")
+        for path, rec in inert:
+            terminalreporter.write_line(
+                f"  {path}: 0 ran, {rec['skip_call']} skipped from inside a test body"
+            )
+        terminalreporter.write_line(
+            "Every test in the file(s) above skipped at call time, so the file is "
+            "green while verifying nothing. A `pytest.skip()` reached from an "
+            "`except` handler cannot tell 'optional dependency absent' from 'this "
+            "test is broken' — narrow the handler (ImportError / importorskip) so "
+            "a real failure fails. See #1615."
+        )
+
     n_skipped = sum(_SKIPPED_PARITY_TESTS.values())
     if n_skipped > 0:
         terminalreporter.write_sep("=", "PARITY-SWEEP SKIP TALLY")
@@ -123,6 +138,74 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):  # pragma: no
             "If this count is high (>50%), the coverage claim in the README is misleading. "
             "Either ship tiny synthetic test fixtures or accept the coverage gap honestly."
         )
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Inert-file detector: a file where every test skipped *from inside a
+# test body* has stopped testing anything, and says so with a green tick.
+#
+# `tests/components/dust/test_dust_emission_traceable.py` did exactly that
+# for an unknown stretch: 6 of 6 skipping, five on
+# `SEDModel.__init__() got an unexpected keyword argument 'filter_waves'`
+# — a stale-API TypeError caught by `except Exception: pytest.skip(...)`.
+# It was the only thing exercising the dust template-threading seam, so it
+# also stood in as the evidence that the seam worked (#1615).
+#
+# The discriminator is *when* the skip happened, which is what makes this
+# rule usable on CI at all:
+#
+#   * `@pytest.mark.skipif(...)` is evaluated before the test runs, so the
+#     report arrives with ``when == "setup"``. This is the honest
+#     data-gate — "CLOUDY grid not present" — and CI is full of them
+#     because the grids are not shipped. Never flagged.
+#   * `pytest.skip()` reached *inside* the test body arrives with
+#     ``when == "call"``. The test started, something went wrong, and the
+#     handler converted it to a skip. One of those is ordinary; a file
+#     where they are the ONLY outcome is a file testing nothing.
+#
+# So: flag a file iff nothing ran AND at least one skip came from a test
+# body. A file gated entirely by markers stays silent no matter how many
+# of its tests skip.
+# ─────────────────────────────────────────────────────────────────────
+
+_FILE_OUTCOMES: dict[str, dict[str, int]] = {}
+
+
+def pytest_runtest_logreport(report):  # pragma: no cover — pytest hook
+    """Tally, per file, what actually executed versus what skipped and when."""
+    path = report.nodeid.split("::")[0]
+    rec = _FILE_OUTCOMES.setdefault(path, {"ran": 0, "skip_setup": 0, "skip_call": 0})
+
+    # xfail arrives as a call-phase "skip" with ``wasxfail`` attached. It is a
+    # test that ran and behaved as declared, not an absence of testing.
+    if getattr(report, "wasxfail", None) is not None:
+        if report.when == "call":
+            rec["ran"] += 1
+        return
+
+    if report.when == "setup" and report.skipped:
+        rec["skip_setup"] += 1
+    elif report.when == "call":
+        if report.skipped:
+            rec["skip_call"] += 1
+        else:
+            rec["ran"] += 1
+
+
+def inert_test_files() -> list[tuple[str, dict[str, int]]]:
+    """Files where nothing ran and at least one test skipped from its own body.
+
+    Returns
+    -------
+    list of (path, counts)
+        Sorted by path. Empty when every collected file either ran something
+        or was skipped entirely by markers.
+    """
+    return sorted(
+        (path, rec)
+        for path, rec in _FILE_OUTCOMES.items()
+        if rec["ran"] == 0 and rec["skip_call"] > 0
+    )
 
 
 # Suppress background JIT compilation in the test suite.  Without this,
