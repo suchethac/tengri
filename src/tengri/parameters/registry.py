@@ -186,6 +186,14 @@ def _register_model_registry_params(
                 units=_units_from_name(pname),
                 owner=owner,
                 group=f"{label}[{model_name!r}].params",
+                # Threading this is what makes an SFH/MET parameter freeable at
+                # all. The component ``_params.py`` walk above passes
+                # ``decl.free_prior``; this branch did not, so every ``sfh_*``
+                # record arrived with ``free_prior=None`` regardless of its
+                # declaration and ``all_params: FREE`` could never expand one
+                # (#887). ``getattr`` with a default keeps older registries that
+                # predate the ``ParamDef`` field working.
+                free_prior=getattr(pdef, "free_prior", None),
             )
 
 

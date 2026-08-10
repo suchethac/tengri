@@ -140,7 +140,19 @@ class ParamDef(NamedTuple):
     bound_error : str
         Error message when bound check fails.
     default : Distribution
-        Default prior distribution.
+        Default prior distribution — what the parameter resolves to when
+        nothing asks for it to be free. Usually ``Fixed``.
+    free_prior : Distribution or None, optional
+        The admissible range ``all_params: FREE`` expands to. ``None`` means
+        the parameter is not freeable by the wildcard and ``FREE`` falls back
+        to ``default``.
+
+        This mirrors :class:`~tengri.protocols.component.ParamDeclaration`'s
+        field of the same name. Without it an SFH parameter could not be
+        declared freeable at all: the component ``_params.py`` path carries a
+        ``free_prior`` and this registry did not, so every ``sfh_*`` entry
+        reached :func:`~tengri.parameters.registry.registry` with ``None`` no
+        matter what it declared (#887).
 
     Notes
     -----
@@ -152,6 +164,7 @@ class ParamDef(NamedTuple):
     bound_check: object  # Callable[[float, float], bool]
     bound_error: str
     default: Distribution
+    free_prior: Distribution | None = None
 
 
 class SFHModelSpec(NamedTuple):
@@ -387,11 +400,23 @@ _snorm_burst_spec = SFHModelSpec(
         "sfh_snorm_burst_skew": ParamDef(
             "Skewness", _always_true, "", Uniform(-1.0, 1.0, default=0.0)
         ),
+        # burst_sfr deliberately gets no free_prior: it is an absolute rate in
+        # Msun/yr, so its plausible range is set by the galaxy being fitted and
+        # no galaxy-independent interval exists (same reasoning as
+        # ``dust_L_agn_ir``). Free it explicitly against your own SFR scale.
         "sfh_snorm_burst_burst_sfr": ParamDef(
             "Constant burst SFR amplitude (Msun/yr)", _lo_nonneg, "must have lo >= 0", Fixed(0.0)
         ),
         "sfh_snorm_burst_burst_age_gyr": ParamDef(
-            "Burst lookback duration (Gyr)", _lo_positive, "must have lo > 0", Fixed(0.1)
+            "Burst lookback duration (Gyr)",
+            _lo_positive,
+            "must have lo > 0",
+            Fixed(0.1),
+            # A burst is short by definition -- beyond ~2 Gyr it is no longer a
+            # burst but the underlying SFH -- and the lower end stays above zero
+            # because the validator requires it and a zero-duration burst
+            # carries no mass.
+            Uniform(0.01, 2.0, "Burst duration", units="Gyr", default=0.1),
         ),
     },
     settings={},
@@ -442,11 +467,16 @@ _tsnorm_burst_spec = SFHModelSpec(
             "must have lo > 0",
             Uniform(1.0, 10.0, default=2.0),
         ),
+        # burst_sfr: no free_prior, for the same reason as the snorm variant.
         "sfh_tsnorm_burst_burst_sfr": ParamDef(
             "Constant burst SFR amplitude (Msun/yr)", _lo_nonneg, "must have lo >= 0", Fixed(0.0)
         ),
         "sfh_tsnorm_burst_burst_age_gyr": ParamDef(
-            "Burst lookback duration (Gyr)", _lo_positive, "must have lo > 0", Fixed(0.1)
+            "Burst lookback duration (Gyr)",
+            _lo_positive,
+            "must have lo > 0",
+            Fixed(0.1),
+            Uniform(0.01, 2.0, "Burst duration", units="Gyr", default=0.1),
         ),
     },
     settings={},
@@ -614,12 +644,29 @@ _register(
                 _lo_positive,
                 "must have lo > 0",
                 Fixed(AGEMAX_YR / 1e9),
+                # No free_prior, for the redshift-dependence reason given on
+                # ``sfh_exp_start_gyr`` below, which applies to every SF-onset
+                # lookback: the ceiling is the age of the universe at the source
+                # redshift and the declaration cannot know it.
             ),
             "sfh_const_end_gyr": ParamDef(
                 "Lookback to SF cessation (Gyr): when did SF stop? (0 = ongoing)",
                 _lo_nonneg,
                 "must have lo >= 0",
                 Fixed(0.0),
+                # Deliberately NO free_prior, because of the ordering constraint
+                # with ``sfh_const_start_gyr`` above. These two are lookback
+                # times bracketing the SF episode, so start_gyr (onset) must
+                # exceed end_gyr (cessation), and ``Parameters._validate_orderings``
+                # rejects any pair whose supports overlap -- the overlap region
+                # is a zero-mass galaxy with an exactly-zero gradient that a
+                # gradient sampler cannot escape. Freeing both from a wildcard
+                # would need an arbitrary split of the age axis between them.
+                # So the wildcard frees the onset and leaves cessation at 0
+                # ("still forming stars"), which is the common case; free it
+                # explicitly with a prior that stays below your onset's floor,
+                # e.g. sfh={'const_start_gyr': Uniform(8, 14),
+                #           'const_end_gyr': Uniform(0, 6)}.
             ),
         },
         settings={},
@@ -653,6 +700,22 @@ _register(
                 "must have lo > 0",
                 Uniform(0.1, 10.0, default=2.0),
             ),
+            # Deliberately NO free_prior (#887), and this covers the ``dexp`` and
+            # ``const`` onsets too. ``start`` is a lookback: these SFHs form
+            # stars only at ``t_lookback >= start``, so the parameter's ceiling
+            # is the age of the universe at the SOURCE redshift -- 8.6 Gyr at
+            # z=0.5, 3.3 at z=2, 0.9 at z=6. A declaration cannot know that, and
+            # no static interval is right for all of them: any bound generous
+            # enough for z~0 admits draws at z=2 where star formation never
+            # happens, giving a zero-mass galaxy and zero flux.
+            #
+            # Measured, not argued: declaring Uniform(0, 14) made
+            # test_bug_1031_dense_basis_composite::
+            # test_working_sfh_topologies_still_predict[dexp] draw such a value
+            # at z=0.5 and fail `assert jnp.all(flux > 0)`.
+            #
+            # Free it explicitly against your own redshift, e.g.
+            # sfh={'start_gyr': Uniform(0, 6)} for a z=1 target.
             "sfh_exp_start_gyr": ParamDef(
                 "Start lookback (Gyr)", _lo_nonneg, "must have lo >= 0", Fixed(0.0)
             ),
@@ -686,6 +749,7 @@ _register(
                 "must have lo > 0",
                 Uniform(0.1, 10.0, default=2.0),
             ),
+            # No free_prior -- see the shared note on ``sfh_exp_start_gyr``.
             "sfh_dexp_start_gyr": ParamDef(
                 "Start lookback (Gyr)", _lo_nonneg, "must have lo >= 0", Fixed(0.0)
             ),
@@ -931,6 +995,12 @@ _register(
                 "must have lo > 0",
                 Uniform(0.001, 0.5, default=0.02),
             ),
+            # Deliberately NO free_prior, and this one is not a judgment call:
+            # the validator itself demands ``int(lo) == lo``. The parameter
+            # selects a burst *shape* from three discrete alternatives, so a
+            # continuous prior over [0, 2] would spend almost all its mass on
+            # values that name no model at all. Structural choices belong in the
+            # grammar (``sfh={'burst_type': ...}``), not in the sampler.
             "sfh_periodic_burst_type": ParamDef(
                 "Burst type: 0=exponential, 1=delayed, 2=rectangular",
                 lambda lo, hi: lo >= 0 and hi <= 2 and int(lo) == lo,
@@ -1085,6 +1155,11 @@ _register(
                 _lo_positive,
                 "must have lo > 0",
                 Fixed(0.1),
+                # How sharply the top hat turns on and off. Below ~0.01 Gyr the
+                # sigmoid is a step at any realistic SSP age resolution; above
+                # ~2 Gyr the "top hat" has smoothed into the underlying SFH and
+                # the shape stops being a top hat at all.
+                Uniform(0.01, 2.0, "Top-hat transition width", units="Gyr", default=0.1),
             ),
         },
         settings={},
