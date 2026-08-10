@@ -95,7 +95,7 @@ import warnings
 from collections.abc import Callable
 from typing import NamedTuple
 
-from tengri.config.exceptions import ParameterError, WildcardPartialFreeWarning
+from tengri.config.exceptions import ParameterError, WildcardPartialFreeWarning, warn_measured
 from tengri.parameters._builders import _resolve_lazy_bucket
 from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Distribution, Fixed
@@ -202,7 +202,7 @@ def _default_fixed_value(param_name: str, registry_default: Distribution) -> flo
     # import time) from crashing the whole package. The warning category is
     # ``UserWarning`` so it shows up by default; do not silence it without
     # adding the default at the declaration site.
-    warnings.warn(
+    warn_measured(
         f"{param_name!r} has no curated default, so 'all_params': FIXED pins it at its "
         f"prior midpoint ({float(registry_default.unstandardize(0.0)):.4g}) — "
         f"an arbitrary rather than physically motivated value. Pass an "
@@ -210,6 +210,7 @@ def _default_fixed_value(param_name: str, registry_default: Distribution) -> flo
         f"it FREE. (Curating registry defaults is tracked in #1007.)",
         UserWarning,
         stacklevel=3,
+        prior_midpoint=float(registry_default.unstandardize(0.0)),
     )
     return float(registry_default.unstandardize(0.0))
 

@@ -68,7 +68,7 @@ import numpy as np
 
 from tengri.components.stellar.sfh.registry import compute_field_gp, resolve_sfh
 from tengri.components.stellar.sps.dsps_wrapper import csp_age_dt
-from tengri.config.exceptions import ParameterMapError
+from tengri.config.exceptions import ParameterMapError, warn_measured
 from tengri.cosmology import age_at_z, luminosity_distance
 from tengri.forward.approx_policy import BAND_PROJECTION_KEYS, ApproxPolicy
 from tengri.forward.sed_model_types import (
@@ -1632,7 +1632,7 @@ class SEDModel:
         if not blue:
             return
         bands = ", ".join(f"{n} (rest~{lam:.0f} Å)" for n, lam in blue)
-        warnings.warn(
+        warn_measured(
             "This model resolves to n_subbands=0, which applies dust as a first-order "
             f"Taylor projection across each filter (#617); at z~{z_rep:.2f} these "
             f"rest-UV band(s) are biased versus the exact path: {bands}. The bias "
@@ -1645,6 +1645,8 @@ class SEDModel:
             "applies there too. See docs/known_limitations.md.",
             UserWarning,
             stacklevel=2,
+            representative_redshift=z_rep,
+            n_biased_bands=len(blue),
         )
 
     def __repr__(self) -> str:
@@ -2126,9 +2128,7 @@ class SEDModel:
             if dist.is_fixed:
                 val = float(dist.value)
                 if not (grid_lo_zsol <= val <= grid_hi_zsol):
-                    import warnings
-
-                    warnings.warn(
+                    warn_measured(
                         f"{name}={val:.3f} is outside the SSP grid metallicity "
                         f"range [{grid_lo_zsol:.3f}, {grid_hi_zsol:.3f}] "
                         f"log10(Z/Zsun) (absolute grid log10(Z) ∈ "
@@ -2138,14 +2138,15 @@ class SEDModel:
                         f"{name} inside the grid, or load an SSP whose grid "
                         f"covers your target metallicity.",
                         UserWarning,
+                        value=val,
+                        grid_lo_zsol=grid_lo_zsol,
+                        grid_hi_zsol=grid_hi_zsol,
                         stacklevel=3,
                     )
             else:
                 lo, hi = float(dist.lo), float(dist.hi)
                 if lo < grid_lo_zsol or hi > grid_hi_zsol:
-                    import warnings
-
-                    warnings.warn(
+                    warn_measured(
                         f"{name} prior bounds [{lo:.3f}, {hi:.3f}] extend "
                         f"beyond the SSP grid metallicity range "
                         f"[{grid_lo_zsol:.3f}, {grid_hi_zsol:.3f}] "
@@ -2155,6 +2156,10 @@ class SEDModel:
                         f"maximum (issue #442). Tighten the prior to within "
                         f"the grid range or load an SSP with broader coverage.",
                         UserWarning,
+                        prior_lo=lo,
+                        prior_hi=hi,
+                        grid_lo_zsol=grid_lo_zsol,
+                        grid_hi_zsol=grid_hi_zsol,
                         stacklevel=3,
                     )
 

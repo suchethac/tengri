@@ -25,7 +25,6 @@ not an output of a separate precompute step.
 
 from __future__ import annotations
 
-import warnings
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
@@ -33,6 +32,7 @@ from typing import Any
 import jax
 import jax.numpy as jnp
 
+from tengri.config.exceptions import warn_measured
 from tengri.parameters.resolve import require_redshift
 
 
@@ -454,7 +454,7 @@ def _warn_if_history_exceeds_ssp_grid(age_yr, sfr, ssp_ages_yr, tab_lbt_yr, cons
             "oldest template instead"
         )
     )
-    warnings.warn(
+    warn_measured(
         f"The tabulated star formation history forms {frac:.0%} of its stellar "
         f"mass at lookback ages older than the oldest SSP template "
         f"({hi_yr / 1e9:.2f} Gyr). No template represents stars that old, so "
@@ -462,6 +462,8 @@ def _warn_if_history_exceeds_ssp_grid(age_yr, sfr, ssp_ages_yr, tab_lbt_yr, cons
         f"history later, to remove the approximation.",
         SFHBeyondSSPGridWarning,
         stacklevel=2,
+        beyond_grid_fraction=frac,
+        oldest_template_yr=hi_yr,
     )
 
 
@@ -2127,20 +2129,21 @@ class StellarSEDComponent:
         if mass_total_sfh is not None:
             frac_pre_bb = mass_pre_bb / max(mass_total_sfh, 1e-30)
             if frac_pre_bb > 0.01:
-                # Raised as an instance rather than (message, category) so the
-                # EXACT fraction rides along: the message rounds to whole
-                # percent, and a consumer that needs the number should not have
-                # to parse prose to get a rounded copy of it (#1645).
-                truncation = SFHBeforeBigBangWarning(
+                # The message rounds to whole percent; the payload does not, so
+                # a consumer never has to parse prose for a rounded copy (#1645).
+                warn_measured(
                     f"Star formation history forms {frac_pre_bb:.0%} of its stellar "
                     f"mass before the Big Bang at z={z_val:.2f} (cosmic age "
                     f"{t_obs_val:.2f} Gyr). That mass is truncated, so the "
                     f"prediction does not reflect the requested SFH — bound the SFH "
                     f"age parameter or the redshift to keep star formation within "
-                    f"cosmic time."
+                    f"cosmic time.",
+                    SFHBeforeBigBangWarning,
+                    stacklevel=2,
+                    truncated_fraction=frac_pre_bb,
+                    redshift=z_val,
+                    cosmic_age_gyr=t_obs_val,
                 )
-                truncation.truncated_fraction = float(frac_pre_bb)
-                warnings.warn(truncation, stacklevel=2)
 
         # Lognormal metallicity-distribution-function width (Carnall+2018 §3.2,
         # #506): DSPS's ``*_lognormal_mdf`` / ``*_met_table`` kernels already

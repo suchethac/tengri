@@ -29,9 +29,9 @@ Reference: tengri issue #299.
 
 from __future__ import annotations
 
-import warnings
-
 import numpy as np
+
+from tengri.config.exceptions import warn_measured
 
 
 class SFHBurstAliasingWarning(UserWarning):
@@ -140,7 +140,7 @@ def maybe_warn_burst_aliasing(spec, ssp_ages_yr) -> None:
         spacing_yr = _ssp_grid_spacing_yr_at(ssp_ages_arr, peak_yr)
         spacing_gyr = spacing_yr * 1e-9
         if width_gyr < spacing_gyr:
-            warnings.warn(
+            warn_measured(
                 f"SFH burst width {width_name}={width_gyr:.3g} Gyr is narrower "
                 f"than the SSP grid spacing {spacing_gyr:.3g} Gyr at peak "
                 f"{peak_name}={peak_gyr:.3g} Gyr. Predictions will show a "
@@ -149,4 +149,7 @@ def maybe_warn_burst_aliasing(spec, ssp_ages_yr) -> None:
                 f"width_gyr ≳ {spacing_gyr:.3g} for smooth behavior.",
                 SFHBurstAliasingWarning,
                 stacklevel=3,
+                burst_width_gyr=width_gyr,
+                ssp_spacing_gyr=spacing_gyr,
+                burst_peak_gyr=peak_gyr,
             )

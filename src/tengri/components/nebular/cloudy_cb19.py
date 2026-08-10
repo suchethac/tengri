@@ -167,6 +167,7 @@ from tengri.components.nebular._shared import (
     render_nebular_lines,
     sanitize_qh_table,
 )
+from tengri.config.exceptions import warn_measured
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
     PreintegratedLines,
@@ -395,11 +396,15 @@ def load_cb19_grid(
         # Select nearest HbFrac slice
         i_hb = int(np.argmin(np.abs(hbfrac_grid - hbfrac)))
         if abs(hbfrac_grid[i_hb] - hbfrac) > 0.15:
-            warnings.warn(
+            warn_measured(
                 f"Requested hbfrac={hbfrac} snapped to nearest grid value "
                 f"{hbfrac_grid[i_hb]:.2f} (gap={abs(hbfrac_grid[i_hb] - hbfrac):.2f}). "
                 "Available HbFrac values: " + str(hbfrac_grid.tolist()),
+                UserWarning,
                 stacklevel=2,
+                requested_hbfrac=float(hbfrac),
+                snapped_hbfrac=float(hbfrac_grid[i_hb]),
+                snap_gap=float(abs(hbfrac_grid[i_hb] - hbfrac)),
             )
 
         # Load line_ratios: (N_OH, N_age, N_U, N_nH, N_CO, N_dNO, N_HbFrac, N_lines)
