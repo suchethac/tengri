@@ -124,12 +124,20 @@ class NebularSEDComponent:
     #: makes the Cue forward dead for the photometry channel (XLA prunes it).
     #: Typed loosely to avoid an import cycle; it is a ``NebularGridTable``.
     grid_table: Any | None = None
-    #: ``True`` when a downstream component declares ``sed_nebular`` as an
-    #: input, which forbids the grid's photometry shortcut: serving photometry
-    #: from the grid requires zeroing the continuum, and the dust energy
-    #: balance needs it to size the absorbed budget. Set from the assembled
-    #: chain by :meth:`SEDModel.enable_fast_nebular` — derived, never asserted.
-    sed_consumed_downstream: bool = False
+    #: ``True`` when the continuum must be computed rather than zeroed, which
+    #: forbids the grid's photometry shortcut: serving photometry from the grid
+    #: requires zeroing the continuum, and the dust energy balance needs it to
+    #: size the absorbed budget. Set from the assembled chain by
+    #: :meth:`SEDModel.enable_fast_nebular` — derived, never asserted.
+    #:
+    #: Named for what the component must *do*, not for the one key that drives
+    #: it today: ``sed_shock`` has the same exposure and would share this gate.
+    #:
+    #: Known gap (#1673): the deriving census reads the component contract, so
+    #: it cannot see readers that take a published key without declaring an
+    #: input — ``state_to_sed_components`` is one, which is why a dust-free Cue
+    #: model still reports a zero ``sed_nebular`` on ``sed_components()``.
+    must_materialize_sed: bool = False
     # Tuple prefix so the MAPPINGS shock backend (``shock_*``) and the
     # photoionization backends (``neb_*``, ``ionspec_*``, ``gas_*``) all
     # flow through the standard prefix-stripping path. Backends silently
@@ -519,9 +527,11 @@ class NebularSEDComponent:
         # paths — but the dust energy balance reads ``sed_nebular`` to size the
         # absorbed budget, so a model with dust emission re-emitted the stellar
         # half alone: 11 % low in the far-IR, gradient up to 380 % wrong, in
-        # float64 and silently. ``sed_consumed_downstream`` is derived from the
+        # float64 and silently. ``must_materialize_sed`` is derived from the
         # assembled chain, so a future consumer disables the shortcut by
-        # declaring the input, with nothing to keep in sync here.
+        # declaring the input, with nothing to keep in sync here — for
+        # consumers that go through the contract. A reader that takes the
+        # published key without declaring it stays invisible here (#1673).
         #
         # One flag, used for BOTH the continuum and the photometry publication
         # below: two checks of the same condition are free to drift apart, and
@@ -529,7 +539,7 @@ class NebularSEDComponent:
         use_grid = (
             self.grid_table is not None
             and getattr(self.grid_table, "log_phot_per_qh", None) is not None
-            and not self.sed_consumed_downstream
+            and not self.must_materialize_sed
         )
 
         if use_grid:

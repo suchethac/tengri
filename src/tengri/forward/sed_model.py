@@ -4721,13 +4721,19 @@ class SEDModel:
         # dust energy balance reads it to size the absorbed budget. Asked of
         # the chain rather than assumed, so registering a new consumer is a
         # one-line ``inputs()`` declaration and nothing here goes stale.
+        #
+        # The census sees the component contract, and only that. A reader that
+        # takes ``sed_nebular`` off ``state.derived`` without declaring an
+        # input is invisible to it — ``state_to_sed_components`` does exactly
+        # that, so ``sed_components()`` on a dust-free Cue model still reports
+        # a zero nebular continuum (#1673).
         sed_consumers = [
             c
             for c in components_consuming(chain, "sed_nebular")
             if not isinstance(c, NebularSEDComponent)
         ]
         self._cached_component_chain = [
-            dataclasses.replace(c, grid_table=table, sed_consumed_downstream=bool(sed_consumers))
+            dataclasses.replace(c, grid_table=table, must_materialize_sed=bool(sed_consumers))
             if isinstance(c, NebularSEDComponent)
             else c
             for c in chain

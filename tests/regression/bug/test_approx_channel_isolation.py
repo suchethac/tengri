@@ -140,9 +140,15 @@ def test_feature_precomp_does_not_move_the_photometry_channel(ssp_data_fsps, obs
             ssp_data_fsps, obs, groups, (WavePrecomp(), FeaturePrecomp())
         )
 
-    rel = np.abs(feat_phot - base_phot) / np.abs(base_phot)
-    assert rel.max() == 0.0, (
-        f"FeaturePrecomp moved the photometry channel by {rel.max():.4e} on the "
+    # ``array_equal``, not ``rel.max() == 0.0``: a band whose flux is exactly
+    # zero makes ``rel`` nan, and ``nan == 0.0`` is False — the guard would
+    # still fail, but reporting a nan instead of the number that explains it.
+    # The ratio is computed only to describe the failure.
+    identical = np.array_equal(feat_phot, base_phot)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        rel = np.abs(feat_phot - base_phot) / np.abs(base_phot)
+    assert identical, (
+        f"FeaturePrecomp moved the photometry channel by {np.nanmax(rel):.4e} on the "
         f"{composition} model (bands={_BANDS}, per-band rel={rel.tolist()}). A "
         "line-channel precompute must not touch photometry: serving photometry "
         "from the per-Q_H grid zeroes sed_nebular, and the dust energy balance "
@@ -208,11 +214,16 @@ def test_the_grid_still_serves_photometry_when_nothing_consumes_the_continuum(ss
     )
     neb = [c for c in model._cached_component_chain if isinstance(c, NebularSEDComponent)]
     assert neb, "no nebular component in the chain — fixture no longer tests anything"
-    assert neb[0].sed_consumed_downstream is False, (
+    assert neb[0].must_materialize_sed is False, (
         "the per-Q_H grid was denied the photometry channel on a model with no "
         "sed_nebular consumer at all. The exclusion must key on an actual "
         "declared consumer, not fire whenever a grid is attached."
     )
+    # This exact configuration is also where #1673 bites: with the shortcut
+    # (correctly) enabled, ``sed_components()`` reports sed_nebular as zero,
+    # because that reader takes the published key without declaring an input
+    # and so is invisible to the census. Pinned there, not here — this test
+    # owns the perf half of the trade.
 
 
 @pytest.mark.parametrize("dust_type", ["single_component", "two_component", "wg00"])
@@ -266,9 +277,10 @@ def test_the_feature_error_was_never_interpolation(ssp_data_fsps, obs):
         }
 
     for n, phot in by_n.items():
-        rel = np.abs(phot - base) / np.abs(base)
-        assert rel.max() == 0.0, (
-            f"n_grid={n} moved photometry by {rel.max():.4e}. With no free "
+        with np.errstate(divide="ignore", invalid="ignore"):
+            rel = np.abs(phot - base) / np.abs(base)
+        assert np.array_equal(phot, base), (
+            f"n_grid={n} moved photometry by {np.nanmax(rel):.4e}. With no free "
             "ionization axes the grid has nothing to interpolate, so any shift "
             "here is a dropped term, not resolution."
         )

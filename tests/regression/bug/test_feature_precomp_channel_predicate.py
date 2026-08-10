@@ -83,7 +83,7 @@ def test_needs_full_forward_state_counts_ratios_and_indices(label, kwargs, expec
 
 
 def test_the_predicate_reads_the_attributes_the_data_args_are_built_from():
-    """Pin the attribute names, not just the behaviour.
+    """Pin the attribute names, not just the behavior.
 
     ``_build_data_args`` publishes ``line_ratio_obs`` / ``index_obs`` from
     ``observation.line_ratios`` / ``observation.spectral_indices``, and
