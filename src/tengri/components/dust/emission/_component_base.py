@@ -159,10 +159,16 @@ class EmissionComponent(SEDModelComponent):
             # ONE full-grid evaluation, shared by every consumer below. Each LUT branch
             # used to recompute it, which jit made free (CSE) but eager execution did not
             # — and predict_state, Prediction, and most of the test suite run eager.
+            # Build a SEPARATE dict for predict. Mutating ``input_kwargs`` would
+            # also inject ``templates`` into the two ``_apply_*_precomp`` helpers
+            # below, which forward it with ``**input_kwargs`` and do not accept
+            # it — that leaked through to the nebular line-catalog path and broke
+            # tests/contract/test_line_ratio_data.py.
+            predict_kwargs = dict(input_kwargs)
             if self.accepts_threaded_templates:
-                input_kwargs["templates"] = self.threaded_templates(template_data)
+                predict_kwargs["templates"] = self.threaded_templates(template_data)
             sed_ir, published_full = self.predict(
-                p_sliced, jnp.zeros_like(state.wave), state.wave, **input_kwargs
+                p_sliced, jnp.zeros_like(state.wave), state.wave, **predict_kwargs
             )
 
             # LUT path: publish the precomp families the LUT projectors consume...
@@ -202,9 +208,10 @@ class EmissionComponent(SEDModelComponent):
             return state.with_(sed_intrinsic=sed_in + sed_ir, derived=new_derived)
         else:
             # Exact full-wave path
+            predict_kwargs = dict(input_kwargs)
             if self.accepts_threaded_templates:
-                input_kwargs["templates"] = self.threaded_templates(template_data)
-            sed_out, published = self.predict(p_sliced, sed_in, state.wave, **input_kwargs)
+                predict_kwargs["templates"] = self.threaded_templates(template_data)
+            sed_out, published = self.predict(p_sliced, sed_in, state.wave, **predict_kwargs)
             new_derived = self._merge_published(state.derived, published)
             return state.with_(sed_intrinsic=sed_out, derived=new_derived)
 
