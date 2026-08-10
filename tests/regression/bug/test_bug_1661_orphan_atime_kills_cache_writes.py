@@ -65,7 +65,7 @@ def _plant(cache_dir, key, payload=b"compiled", *, with_atime):
 # --------------------------------------------------------------- the repair itself
 
 
-def test_repair_synthesises_the_missing_marker(tmp_path):
+def test_repair_synthesizes_the_missing_marker(tmp_path):
     _plant(tmp_path, "orphan", with_atime=False)
 
     repaired = jax_cache.repair_orphaned_atimes(tmp_path)
@@ -235,7 +235,7 @@ def test_doctor_is_quiet_on_a_healthy_cache(tmp_path):
 def test_orphan_breaks_a_real_jax_put_and_the_repair_fixes_it(tmp_path):
     """End-to-end through ``LRUCache`` -- the component that actually fails.
 
-    The first half pins upstream behaviour. If it ever stops raising, JAX has
+    The first half pins upstream behavior. If it ever stops raising, JAX has
     fixed ``_evict_if_needed`` and this workaround can be retired.
     """
     lru = pytest.importorskip("jax._src.lru_cache")
