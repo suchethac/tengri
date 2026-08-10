@@ -395,6 +395,21 @@ context *before* entering JAX transforms. The context's
 
 **Source of truth:** `docs/adr/0010-inference-backend-protocol.md`.
 
+## Adding a hierarchical sampler (the flat seam)
+
+**Read `docs/dev/hierarchical-flat-seam.md` before touching `_hierarchical_flat.py`.**
+Every hierarchical sampler operates in ONE standardized space — a flat
+unconstrained vector with an iid N(0,1) prior; every declared physical prior
+is realized exactly via its distribution's `unstandardize` pushforward
+(#1651), and an object without that contract is refused by name. Wiring a sampler is three
+edits (a `FLAT_SAMPLERS` entry, one driver branch, the set-pin test in the
+same commit) **plus one executed fit** — every wiring in the 2026-08 series
+found a runtime-only defect (blackjax API drift, NaN tuning → frozen chain,
+prior double-counting). A name may map only to a driver that runs the
+algorithm the name promises; stand-ins are silent substitution, the seam's
+founding bug. Frozen chains, non-finite tuning, unknown kwargs, and
+broken-tier access all raise loudly by design — do not weaken these guards.
+
 ## Critical gotchas
 
 - `jax.random.fold_in(key, hash(string))` overflows uint32. Use `abs(hash(x)) % (2**31)`

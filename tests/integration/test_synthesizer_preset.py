@@ -74,10 +74,13 @@ class TestPresetRegistry:
         ``list_presets`` returned ``dict[str, dict]`` until #1574/#1592 made every
         discovery verb return a ``_RegistryTable`` — a ``list`` of row dicts — so
         the whole surface answers one type. This test kept the old shape because
-        ``tests/integration`` is a gated tier that had not run since; it is the
-        documented migration that is asserted here, not a new contract.
+        ``tests/integration`` is a gated tier that had not run since (#1648); it is
+        the documented migration that is asserted here, not a new contract.
         """
         presets = list_presets()
+        # Pin the unified TYPE as well as the contents: a table that stopped
+        # being a list would still satisfy the membership checks below.
+        assert isinstance(presets, list)
         assert "synthesizer_default" in presets.names()
         # The docstring's own recipe for the old name-to-metadata mapping.
         by_name = {row["name"]: row for row in presets}
@@ -165,7 +168,7 @@ class TestSmokeCheckCLI:
         config, params = synthesizer_default()
 
         # List all presets. ``.names()`` is what replaced ``list(presets)`` when
-        # every discovery verb moved to a table return (#1574/#1592).
+        # every discovery verb moved to a table return (#1574/#1592/#1648).
         presets = list_presets()
         preset_names = presets.names()
 
