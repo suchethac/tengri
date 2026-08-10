@@ -28,8 +28,9 @@ comparison read 13.5x and 15.0x on consecutive runs of one machine, #1353).
 import numpy as np
 import pytest
 
-from tengri import FIXED, FREE, ForwardModel, SEDModel
+from tengri import FIXED, FREE, ForwardModel, Observation, SEDModel
 from tengri.inference.fitter import Fitter
+from tengri.observation import LineRatioData
 
 pytestmark = [pytest.mark.regression_bug]
 
@@ -111,3 +112,30 @@ class TestAutoPrecompForPhotometryOnlyCue:
         fwd = ForwardModel.build(sed=model)
         fitter = Fitter(fwd, flux, err)
         assert not fitter.model.approx.feature_precomp
+
+    def test_a_line_ratio_channel_is_excluded_from_the_widening(
+        self, ssp_data_fsps, synthetic_tophat_obs
+    ):
+        """Ratios read the backend's DISCRETE catalog, which the grid replaces.
+
+        The first version of this widening turned FeaturePrecomp on for any Cue
+        model, and a ratio fit that used to work started raising "Configured
+        nebular backend did not publish a discrete line catalog" from
+        ``predict_line_ratios`` (tests/contract/test_line_ratio_data.py).
+
+        Neuter: drop the ratio/index early-return in ``_wants_feature_precomp``
+        and that contract test fails again.
+        """
+        obs = Observation(
+            photometry=synthetic_tophat_obs.photometry,
+            line_ratios=LineRatioData.from_dict({("Halpha", "Hbeta"): (4.0, 0.3)}),
+        )
+        flux, err = _dummy_data(obs)
+        model = _cue_model(ssp_data_fsps, obs)
+        fwd = ForwardModel.build(sed=model)
+        fitter = Fitter(fwd, flux, err)
+        assert not fitter.model.approx.feature_precomp, (
+            "a line-ratio fit must not be given FeaturePrecomp by default: the "
+            "per-Q_H grid does not publish the discrete line catalog that "
+            "predict_line_ratios reads."
+        )

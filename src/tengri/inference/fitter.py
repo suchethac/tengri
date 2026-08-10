@@ -1045,6 +1045,22 @@ class Fitter:
         """
         if self._fits_lines(model):
             return True
+        # Ratio and index channels are excluded from the widening. They call
+        # ``predict_line_ratios`` / the index path, which read the backend's
+        # **discrete line catalog**; ``enable_fast_nebular`` swaps the nebular
+        # component for a grid-backed one that does not publish it, so turning the
+        # grid on by default here raised
+        # "Configured nebular backend did not publish a discrete line catalog"
+        # from a fit that used to work (caught by
+        # tests/contract/test_line_ratio_data.py). A model that *explicitly* asks
+        # for FeaturePrecomp alongside ratios still hits that — a real gap, but a
+        # pre-existing one, and not something a default should start doing.
+        obs = getattr(model, "observation", None)
+        if obs is not None and (
+            getattr(obs, "line_ratios", None) is not None
+            or getattr(obs, "spectral_indices", None) is not None
+        ):
+            return False
         # ``model`` is usually a ForwardModel, which delegates a fixed list of names
         # to its inner SED and does NOT include the private backend — reading
         # ``model._nebular_backend`` straight off it returns None, and the check
