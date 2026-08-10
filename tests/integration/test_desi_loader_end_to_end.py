@@ -71,7 +71,7 @@ def desi_model(tmp_path, ssp_data):
 def test_predicts_on_the_loaded_grid(desi_model):
     import jax
 
-    model, spectroscopy, spectrum, built = desi_model
+    model, spectroscopy, _spectrum, built = desi_model
 
     n_total = built["n_pix"] * len(built["cameras"])
     assert spectroscopy.n_pixels == n_total
@@ -109,7 +109,7 @@ def test_resolution_matrix_changes_the_prediction(desi_model):
 
     import jax
 
-    model, spectroscopy, _, built = desi_model
+    model, spectroscopy, _spectrum, _built = desi_model
     params = model.spec.sample(jax.random.PRNGKey(0))
     with_matrix = np.asarray(model.predict_spectrum(params))
 
