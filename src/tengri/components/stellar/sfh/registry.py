@@ -644,13 +644,10 @@ _register(
                 _lo_positive,
                 "must have lo > 0",
                 Fixed(AGEMAX_YR / 1e9),
-                # Both bounds are lookback times, so the grid's own age ceiling
-                # AGEMAX_YR (14 Gyr) is the physical edge -- SF cannot begin
-                # before the model's oldest population. The floor stays off zero
-                # per the validator.
-                Uniform(
-                    0.1, AGEMAX_YR / 1e9, "SF onset lookback", units="Gyr", default=AGEMAX_YR / 1e9
-                ),
+                # No free_prior, for the redshift-dependence reason given on
+                # ``sfh_exp_start_gyr`` below, which applies to every SF-onset
+                # lookback: the ceiling is the age of the universe at the source
+                # redshift and the declaration cannot know it.
             ),
             "sfh_const_end_gyr": ParamDef(
                 "Lookback to SF cessation (Gyr): when did SF stop? (0 = ongoing)",
@@ -703,12 +700,24 @@ _register(
                 "must have lo > 0",
                 Uniform(0.1, 10.0, default=2.0),
             ),
+            # Deliberately NO free_prior (#887), and this covers the ``dexp`` and
+            # ``const`` onsets too. ``start`` is a lookback: these SFHs form
+            # stars only at ``t_lookback >= start``, so the parameter's ceiling
+            # is the age of the universe at the SOURCE redshift -- 8.6 Gyr at
+            # z=0.5, 3.3 at z=2, 0.9 at z=6. A declaration cannot know that, and
+            # no static interval is right for all of them: any bound generous
+            # enough for z~0 admits draws at z=2 where star formation never
+            # happens, giving a zero-mass galaxy and zero flux.
+            #
+            # Measured, not argued: declaring Uniform(0, 14) made
+            # test_bug_1031_dense_basis_composite::
+            # test_working_sfh_topologies_still_predict[dexp] draw such a value
+            # at z=0.5 and fail `assert jnp.all(flux > 0)`.
+            #
+            # Free it explicitly against your own redshift, e.g.
+            # sfh={'start_gyr': Uniform(0, 6)} for a z=1 target.
             "sfh_exp_start_gyr": ParamDef(
-                "Start lookback (Gyr)",
-                _lo_nonneg,
-                "must have lo >= 0",
-                Fixed(0.0),
-                Uniform(0.0, AGEMAX_YR / 1e9, "Start lookback", units="Gyr", default=0.0),
+                "Start lookback (Gyr)", _lo_nonneg, "must have lo >= 0", Fixed(0.0)
             ),
         },
         settings={},
@@ -740,12 +749,9 @@ _register(
                 "must have lo > 0",
                 Uniform(0.1, 10.0, default=2.0),
             ),
+            # No free_prior -- see the shared note on ``sfh_exp_start_gyr``.
             "sfh_dexp_start_gyr": ParamDef(
-                "Start lookback (Gyr)",
-                _lo_nonneg,
-                "must have lo >= 0",
-                Fixed(0.0),
-                Uniform(0.0, AGEMAX_YR / 1e9, "Start lookback", units="Gyr", default=0.0),
+                "Start lookback (Gyr)", _lo_nonneg, "must have lo >= 0", Fixed(0.0)
             ),
         },
         settings={},

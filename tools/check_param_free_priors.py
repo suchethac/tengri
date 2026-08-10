@@ -32,6 +32,14 @@ grounds for refusing, and the distinction matters when revisiting them:
 ``no-evidence``
     A range would be defensible but could not be sourced. These are the ones to
     revisit first; each names what is missing.
+``target-dependent``
+    The admissible range is set by the source being fitted rather than by
+    physics or a grid, so no static interval is correct for every target. An
+    absolute luminosity or SFR has no galaxy-independent scale; an SF-onset
+    lookback is capped by the age of the universe at the source redshift (8.6
+    Gyr at z=0.5, 0.9 at z=6), so a bound generous enough for z~0 admits
+    zero-star-formation draws at z=2. These must be freed against the caller's
+    own target.
 ``explicit-only``
     A genuine per-object freedom with a genuine range, withheld from the
     wildcard because the data a default fit has cannot constrain it. Freeing it
@@ -79,9 +87,13 @@ REFUSED: dict[str, tuple[str, str]] = {
     "met_alpha_fe": ("fixed-by-physics", "pre-existing decision; only constrained by spectra"),
     "met_alpha_fe_young": ("fixed-by-physics", "as met_alpha_fe"),
     "dust_f_obscuration": ("fixed-by-physics", "pre-existing decision; degenerate with tau_diff"),
-    "dust_L_agn_ir": ("fixed-by-physics", "absolute luminosity; no galaxy-independent scale"),
-    "sfh_snorm_burst_burst_sfr": ("fixed-by-physics", "absolute SFR; scale set by the galaxy"),
-    "sfh_tsnorm_burst_burst_sfr": ("fixed-by-physics", "as the snorm variant"),
+    # ── target-dependent: the bound is set by the source, not by physics ──
+    "dust_L_agn_ir": ("target-dependent", "absolute luminosity; no galaxy-independent scale"),
+    "sfh_snorm_burst_burst_sfr": ("target-dependent", "absolute SFR; scale set by the galaxy"),
+    "sfh_tsnorm_burst_burst_sfr": ("target-dependent", "as the snorm variant"),
+    "sfh_exp_start_gyr": ("target-dependent", "onset capped by the age of the universe at z"),
+    "sfh_dexp_start_gyr": ("target-dependent", "as sfh_exp_start_gyr; caught by test_bug_1031"),
+    "sfh_const_start_gyr": ("target-dependent", "as sfh_exp_start_gyr"),
     # ── not-continuous: discrete values, sentinels, or ordering constraints ──
     "sfh_periodic_burst_type": (
         "not-continuous",
@@ -115,6 +127,7 @@ VALID_GROUNDS = {
     "not-continuous",
     "no-evidence",
     "explicit-only",
+    "target-dependent",
 }
 
 
