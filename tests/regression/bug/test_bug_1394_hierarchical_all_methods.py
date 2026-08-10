@@ -154,24 +154,16 @@ def test_no_method_is_silently_substituted_for_another():
         "mcmc_mclmc",
         "mcmc_adjusted_mclmc",
         "map",
+        "laplace",
         "pathfinder",
     }, (
         "FLAT_SAMPLERS gained or lost a name; if the new name's driver truly "
         "implements that algorithm, update this set in the same commit"
     )
-
-    substituted = {
-        "laplace",
-    }
-    for name in sorted(substituted):
-        assert name not in FLAT_SAMPLERS, (
-            f"{name!r} is mapped onto a driver that runs a different algorithm"
-        )
-        assert name in FLAT_UNSUPPORTED, f"{name!r} must be refused with a stated reason"
-        reason = FLAT_UNSUPPORTED[name]
-        assert any(alt in reason for alt in ("mcmc_nuts", "mcmc_hmc", "``map``", "Fitter")), (
-            f"{name!r}'s refusal must hand the caller a working alternative"
-        )
+    # laplace joined last, once its driver computed what distinguishes it
+    # from map: a Gaussian covariance from the negative Hessian at a
+    # GRADIENT-VERIFIED mode (#1537: curvature off a mode is a plausible
+    # wrong answer). The only remaining refusal is nss, tested above.
 
 
 class _SentinelReached(Exception):
@@ -276,6 +268,7 @@ def test_every_flat_sampler_names_a_real_backend_and_driver(name):
         "adjusted_mclmc",
         "nuts_pathfinder",
         "map",
+        "laplace",
         "nss",
     }, f"{name!r} declares unknown driver {driver!r}"
 
@@ -409,6 +402,80 @@ def test_an_unknown_fit_kwarg_is_refused_not_swallowed():
     msg = str(exc.value)
     assert "n_samplse" in msg, "the error must name the unknown kwarg"
     assert "n_samples" in msg, "the error must show the accepted options"
+
+
+def test_newton_polish_reaches_the_mode_adam_crawls_toward():
+    """Second-order polish converges where first-order plateaus.
+
+    Measured on the D=516 reference fixture: Adam's max |grad| was 1.13e3
+    after 300 steps and still 84.6 after 8000 — first-order alone cannot
+    reach a Laplace-grade mode there in any practical budget. The polish
+    reuses the exact Hessian the covariance needs, so it costs ~one
+    Hessian per iteration and converges quadratically inside the basin.
+    """
+    import jax.numpy as jnp
+
+    from tengri.inference._hierarchical_flat import _newton_polish
+
+    a = jnp.array([3.0, 0.5, 10.0])
+    center = jnp.array([1.0, -2.0, 0.3])
+
+    class _Prob:
+        n_dim = 3
+
+        @staticmethod
+        def log_prob(x):
+            return -0.5 * jnp.sum(a * (x - center) ** 2)
+
+    start = center + jnp.array([0.8, -1.5, 0.2])
+    mode = _newton_polish(_Prob, start, tol=1e-8, max_iters=12)
+    import jax
+
+    gmax = float(jnp.max(jnp.abs(jax.grad(_Prob.log_prob)(mode))))
+    assert gmax <= 1e-8, f"polish left max |grad| = {gmax:.2e}"
+    assert jnp.allclose(mode, center, atol=1e-8)
+
+
+def test_laplace_refuses_curvature_off_a_mode():
+    """#1537's lesson, enforced: no covariance without a verified mode.
+
+    The single-galaxy laplace expanded about non-modes with no grad=0 check
+    and returned plausible wrong answers (#1537). The hierarchical driver
+    verifies the gradient at the reached point and refuses loudly — naming
+    the knob (map_steps) — rather than handing back error bars measured
+    around a point that is not the posterior's mode.
+    """
+    import jax.numpy as jnp
+
+    from tengri.inference._hierarchical_flat import _require_converged_mode
+
+    _require_converged_mode(jnp.array([1e-5, -2e-5]), "laplace", 300, tol=1e-3)  # passes
+
+    with pytest.raises(RuntimeError) as exc:
+        _require_converged_mode(jnp.array([0.5, -0.01]), "laplace", 300, tol=1e-3)
+    msg = str(exc.value)
+    assert "map_steps" in msg, "the error must name the knob that fixes it"
+    assert "mode" in msg
+
+
+def test_laplace_refuses_non_negative_definite_curvature():
+    """A Cholesky that NaNs means the reached point is not a maximum.
+
+    ``jnp.linalg.cholesky`` returns NaNs (no exception) for a non-PSD input;
+    sampling from those NaNs would return a posterior of NaNs or, worse,
+    garbage that passes a finite-check downstream. Refuse by name instead.
+    """
+    import jax.numpy as jnp
+
+    from tengri.inference._hierarchical_flat import _require_psd_curvature
+
+    good = jnp.linalg.cholesky(jnp.eye(3))
+    _require_psd_curvature(good, "laplace")  # passes
+
+    bad = jnp.linalg.cholesky(jnp.array([[1.0, 0.0], [0.0, -1.0]]))  # NaNs
+    with pytest.raises(RuntimeError) as exc:
+        _require_psd_curvature(bad, "laplace")
+    assert "mode" in str(exc.value) or "definite" in str(exc.value)
 
 
 def test_a_non_finite_tuning_is_refused_not_returned():

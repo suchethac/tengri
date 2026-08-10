@@ -115,6 +115,8 @@ class; hierarchical initialization is automatic per-galaxy MAP).
 | `_physical_map` | a prior with no `unstandardize` pushforward entering the standardized space wrongly | #1651 |
 | `_require_finite_tuning` | MCLMC starved-tuner NaN → frozen chain | measured at `n_warmup=60`, D=516 |
 | `_require_moving_chain` | any MCMC chain that never moved — the init echoed `n_samples` times | #1530's MAP-echo mode, generalized |
+| `_require_converged_mode` | a Laplace covariance measured off a mode (Adam plateaus at hierarchical D: \|grad\| 84.6 after 8000 steps; the LM-Newton polish reaches 1.7e-3) | #1537 |
+| `_require_psd_curvature` | sampling from a NaN Cholesky at a saddle | #1537 |
 | `DegenerateChainError` in raytrace | near-zero acceptance chains returned as posteriors | #1530/#1569 |
 | unknown-kwarg `TypeError` | typo'd fit options running defaults silently | #1378 |
 
@@ -125,6 +127,11 @@ reachability tests), dynamic-hmc, ghmc, ess, mclmc, adjusted-mclmc — on
 Fixed-z photometry (stochastic-field and Cue fixtures) and free-z photometry;
 under both the exact path and the fit-time precompute LUT default (#1641).
 **Not yet executed**: population spectroscopy under `SpectrumPrecomp` (no
-in-tree fixture); the policy is stub-tested only. `laplace` remains refused —
-not a dispatch gap but a missing post-sampling product (covariance at a
-gradient-verified mode; cf. the #1537 lesson).
+in-tree fixture); the policy is stub-tested only. `laplace` is driven since
+2026-08-10: Adam warm start + Levenberg-Marquardt Newton polish to a
+gradient-verified mode (measured on the D=516 fixture: Adam alone plateaus at
+|grad| 84.6 after 8000 steps; the polish reaches 1.7e-3, 42.7 s end-to-end),
+then a Gaussian covariance from the Cholesky of the negative Hessian — with
+unconverged modes and non-PSD curvature refused loudly (#1537). The sole
+remaining refusal is `nss`, pending a real nested sampler on the exact prior
+transform the seam already provides.
