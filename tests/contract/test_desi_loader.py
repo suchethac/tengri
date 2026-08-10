@@ -82,6 +82,36 @@ class TestTargetSelection:
         with pytest.raises(ValueError, match="no FIBERMAP"):
             read_desi(path, targetid=1001)
 
+    def test_out_of_range_row_raises(self, coadd):
+        """Returning target 0 for row=99 would look like a successful read."""
+        from tengri.io import read_desi
+
+        path, built = coadd
+        n_spec = len(built["targetids"])
+        with pytest.raises(ValueError, match=f"holds {n_spec} spectra"):
+            read_desi(path, row=n_spec)
+
+    def test_row_on_a_single_spectrum_file_raises(self, tmp_path):
+        """A 1-D layout has no target axis, so only row=0 is satisfiable."""
+        pytest.importorskip("astropy")
+        from astropy.io import fits
+
+        from tengri.io import read_desi
+
+        path = tmp_path / "single.fits"
+        wave = np.linspace(3600.0, 5800.0, 8)
+        hdus = [
+            fits.PrimaryHDU(),
+            fits.ImageHDU(wave, name="B_WAVELENGTH"),
+            fits.ImageHDU(np.ones(8), name="B_FLUX"),
+            fits.ImageHDU(np.full(8, 4.0), name="B_IVAR"),
+        ]
+        fits.HDUList(hdus).writeto(path, overwrite=True)
+
+        assert read_desi(path, row=0).flux.shape == (8,)
+        with pytest.raises(ValueError, match="single spectrum"):
+            read_desi(path, row=1)
+
 
 class TestCameraOrder:
     """Overlapping cameras must be concatenated in camera order, never sorted."""

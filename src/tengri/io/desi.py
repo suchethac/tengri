@@ -143,14 +143,26 @@ def _native(array: np.ndarray) -> np.ndarray:
     return array
 
 
-def _row_of(array: np.ndarray, row: int, n_pix: int) -> np.ndarray:
-    """Select one target's row, tolerating the 1-D single-spectrum layout."""
+def _row_of(array: np.ndarray, row: int, n_pix: int, *, what: str = "spectrum") -> np.ndarray:
+    """Select one target's row, tolerating the 1-D single-spectrum layout.
+
+    Raises rather than silently returning the wrong target: a row index a file
+    cannot satisfy is a caller error, and returning row 0 for ``row=2`` would
+    look like a successful read of the wrong object.
+    """
     array = np.asarray(array)
     if array.ndim == 1:
+        if row != 0:
+            raise ValueError(
+                f"row={row} requested but this file holds a single {what} "
+                "(the array has no target axis)"
+            )
         return array
     if array.shape[-1] != n_pix and array.shape[0] == n_pix:
         # (n_pix, ...) rather than (n_spec, n_pix) — no target axis to select.
         return array
+    if not 0 <= row < array.shape[0]:
+        raise ValueError(f"row={row} is out of range: this file holds {array.shape[0]} spectra")
     return array[row]
 
 
@@ -194,10 +206,13 @@ def _read_camera(hdul, names: list[str], cam: str, row: int) -> DesiCamera | Non
         cols = wave_hdu.data.dtype.names
         wname = "WAVELENGTH" if "WAVELENGTH" in cols else wave_key
         wave = np.asarray(wave_hdu.data[wname], dtype=np.float64)
+        n_pix = wave.shape[0]
         fname = "FLUX" if "FLUX" in cols else f"{cam}_FLUX"
-        flux = np.asarray(wave_hdu.data[fname], dtype=np.float64)
+        flux = _row_of(wave_hdu.data[fname], row, n_pix).astype(np.float64)
         iname = "IVAR" if "IVAR" in cols else f"{cam}_IVAR"
-        ivar = np.asarray(wave_hdu.data[iname], dtype=np.float64) if iname in cols else None
+        ivar = (
+            _row_of(wave_hdu.data[iname], row, n_pix).astype(np.float64) if iname in cols else None
+        )
         scale = 1.0
         mask = resolution = None
     else:
