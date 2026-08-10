@@ -205,7 +205,12 @@ def block_diagonal_bands(blocks: Sequence[BandedMatrix]) -> BandedMatrix:
             k = int(np.searchsorted(offsets, offset))
             # Rows whose band would leave this segment contribute nothing.
             inside = (local + offset >= 0) & (local + offset < n)
-            data[k, start : start + n] = np.where(inside, b_data[k_local], 0.0)
+            # Accumulate rather than assign: a block that repeats an offset means
+            # the two diagonals add, which is what banded_matvec does when it
+            # sums over k. Assigning would silently drop one of them. Column
+            # slices are disjoint across blocks, so this is identical to
+            # assignment in the ordinary distinct-offset case.
+            data[k, start : start + n] += np.where(inside, b_data[k_local], 0.0)
 
     return BandedMatrix(offsets=jnp.asarray(offsets), data=jnp.asarray(data))
 

@@ -186,6 +186,34 @@ class TestBlockDiagonalBands:
             atol=1e-12,
         )
 
+    def test_repeated_offsets_add_as_banded_matvec_would(self):
+        """A block that repeats an offset means the diagonals add, not replace."""
+        n = 6
+        first = np.full(n, 0.25)
+        second = np.full(n, 0.75)
+        repeated = BandedMatrix(
+            offsets=jnp.asarray([0, 0]),
+            data=jnp.asarray(np.stack([first, second])),
+        )
+        composed = block_diagonal_bands([repeated])
+        x = np.arange(1.0, n + 1.0)
+
+        np.testing.assert_allclose(
+            np.asarray(banded_matvec(composed.offsets, composed.data, jnp.asarray(x))),
+            np.asarray(banded_matvec(repeated.offsets, repeated.data, jnp.asarray(x))),
+            rtol=1e-12,
+            atol=1e-12,
+        )
+        # Explicitly: 0.25 + 0.75 = 1.0, so the result is x itself. Assigning
+        # instead of accumulating would have dropped one diagonal and given
+        # 0.75 * x.
+        np.testing.assert_allclose(
+            np.asarray(banded_matvec(composed.offsets, composed.data, jnp.asarray(x))),
+            x,
+            rtol=1e-12,
+            atol=1e-12,
+        )
+
     def test_empty_composition_raises(self):
         with pytest.raises(ValueError, match="at least one block"):
             block_diagonal_bands([])
