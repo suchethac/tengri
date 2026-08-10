@@ -20,7 +20,7 @@ as a placeholder; spatial sub-models operate on
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import jax.numpy as jnp
@@ -84,7 +84,11 @@ class SpatialModel:
 
     components: tuple[SpatialComponent, ...]
     grid_kpc: tuple[jnp.ndarray, jnp.ndarray]
-    name: str = "spatial"
+    #: The :class:`SubModel` identifier. ``init=False`` because the protocol
+    #: calls it a *stable* identifier: this constructor never accepted it, and
+    #: an ordinary field declaration advertised otherwise to
+    #: ``dataclasses.fields()`` and to the docs.
+    name: str = field(default="spatial", init=False)
 
     def __init__(
         self,
@@ -95,7 +99,6 @@ class SpatialModel:
             grid_kpc = default_grid_kpc()
         object.__setattr__(self, "components", tuple(components))
         object.__setattr__(self, "grid_kpc", grid_kpc)
-        object.__setattr__(self, "name", "spatial")
 
     def declared_parameters(self) -> list[ParamDeclaration]:
         """Aggregated parameter declarations across all spatial components."""
@@ -164,7 +167,11 @@ class SpatialSEDModel:
 
     sed: Any
     spatial: SpatialModel
-    name: str = "spatial_sed"
+    #: The :class:`SubModel` identifier. ``init=False`` for the same reason as
+    #: on :class:`SpatialModel` — and here it also *closes* a hole: the
+    #: generated constructor accepted ``name=`` and let a caller overwrite the
+    #: identifier the protocol promises is stable.
+    name: str = field(default="spatial_sed", init=False)
 
     def declared_parameters(self) -> list[ParamDeclaration]:
         """Union of SED and spatial declared parameters."""
