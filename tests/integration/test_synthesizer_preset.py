@@ -69,11 +69,18 @@ class TestPresetRegistry:
     """Test list_presets() and describe_preset()."""
 
     def test_list_presets_includes_synthesizer_default(self):
-        """Check that synthesizer_default is registered."""
+        """Check that synthesizer_default is registered.
+
+        ``list_presets()`` returns the unified ``list_*`` shape (#1574/#1592):
+        a list of row dicts, not a name-keyed mapping. These assertions
+        consumed the pre-unification dict and failed only when the
+        label-gated integration tier finally ran (#1648).
+        """
         presets = list_presets()
-        assert isinstance(presets, dict)
-        assert "synthesizer_default" in presets
-        entry = presets["synthesizer_default"]
+        assert isinstance(presets, list)
+        by_name = {row["name"]: row for row in presets}
+        assert "synthesizer_default" in by_name
+        entry = by_name["synthesizer_default"]
         assert "short_doc" in entry
         assert "citations" in entry
         assert "status" in entry
@@ -156,9 +163,9 @@ class TestSmokeCheckCLI:
         # Build config and params
         config, params = synthesizer_default()
 
-        # List all presets
+        # List all presets — unified list_* shape: a list of row dicts (#1648)
         presets = list_presets()
-        preset_names = list(presets.keys())
+        preset_names = [row["name"] for row in presets]
 
         # Describe the preset
         desc = describe_preset("synthesizer_default")
