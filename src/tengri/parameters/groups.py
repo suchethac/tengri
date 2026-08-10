@@ -1538,11 +1538,17 @@ def _wildcard_scopes(
     # shape parameters no selected law names, leaving everything else free.
     dust_group_params = {name for name, grp in param_partition.items() if grp == "dust"}
     if dust_group_params:
+        # Read the slots off ``structural_params``, not ``structural_kwargs``:
+        # a slot the user did not name is absent from the kwargs but still
+        # resolves to a real law (both default to ``power_law``, which reads
+        # ``dust_slope``). Consulting the raw kwargs would narrow away a
+        # parameter the law in force does read — the failure this prevents,
+        # inverted.
         active_shape = frozenset().union(
             *(
-                _law_shape_params(structural_kwargs[slot])
-                for slot in _DUST_LAW_SLOTS
-                if structural_kwargs.get(slot) is not None
+                _law_shape_params(law)
+                for law in (getattr(structural_params, slot, None) for slot in _DUST_LAW_SLOTS)
+                if law is not None
             ),
             frozenset(),
         )

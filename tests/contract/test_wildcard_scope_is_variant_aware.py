@@ -293,6 +293,40 @@ def test_the_dust_freed_set_depends_on_the_selected_law(synthetic_ssp_wide, panc
         )
 
 
+def test_an_omitted_law_scopes_as_its_resolved_default():
+    """Not naming a law must scope identically to naming the default one.
+
+    ``law_bc``/``law_diff`` both default to ``power_law``, which reads
+    ``dust_slope`` — but an unnamed slot is simply *absent* from the translated
+    structural kwargs. Reading the slots from the raw kwargs therefore saw no
+    law, narrowed ``dust_slope`` away, and silently pinned it for every caller
+    who did not name a law explicitly, which is the common case. The scope must
+    come from the resolved ``Parameters``, where the default is present.
+    """
+    import tengri
+
+    def freed(dust):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            spec = tengri.parse_groups(
+                sfh={"type": "dpl", "*": FIXED}, dust=dust, neb={"type": "none"}
+            )
+        return {p for p in spec.free_params if p.startswith("dust_")}
+
+    omitted = freed({"type": "two_component", "*": FREE})
+    explicit = freed(
+        {"type": "two_component", "law_bc": "power_law", "law_diff": "power_law", "*": FREE}
+    )
+    assert omitted == explicit, (
+        f"omitting the law scopes differently from naming its default: "
+        f"omitted={sorted(omitted)} explicit={sorted(explicit)}"
+    )
+    assert "dust_slope" in omitted, (
+        "the default law is power_law, which reads dust_slope — narrowing it "
+        "away pins a parameter the law in force does read"
+    )
+
+
 def test_law_scope_is_read_from_the_signature_not_a_table():
     """A law registered later is scoped without editing the resolver.
 
