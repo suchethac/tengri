@@ -103,7 +103,7 @@ References
         "disc": {"type": "multicolor", "all_params": tengri.FIXED},
         "all_params": tengri.FIXED,
         "log_lbol": 12.0,
-        "frac": 1.0,
+        "lum_ratio": 1.0,
     }
 
 
@@ -177,7 +177,7 @@ References
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.685 seconds)
+   **Total running time of the script:** (0 minutes 3.320 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_skirtor_xcigale_sweep.py:

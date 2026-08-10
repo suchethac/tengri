@@ -50,8 +50,19 @@ References
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_interp_nd_triweight': FileNotFoundError: [Errno 2] No such file or directory: '/Users/suchethacooray/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
+      warnings.warn(
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -95,7 +106,7 @@ References
             "torus": {"type": "skirtor", "all_params": tengri.FIXED},
             "all_params": tengri.FIXED,
             "log_lbol": 12.0,
-            "frac": 1.0,
+            "lum_ratio": 1.0,
             "cos_inc": 0.5,
         },
         redshift=tengri.Fixed(0.0),

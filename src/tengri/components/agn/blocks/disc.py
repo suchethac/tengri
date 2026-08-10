@@ -15,6 +15,7 @@ from __future__ import annotations
 import jax.numpy as jnp
 from jax import Array
 
+from tengri.components.agn._nthcomp import load_nthcomp_table
 from tengri.components.agn.adaf import adaf_spectrum
 from tengri.components.agn.blocks._protocol import register_agn_block
 from tengri.components.agn.disc import (
@@ -468,6 +469,7 @@ def cigale_skirtor_disc_block(
     citation="Kubota & Done 2018, MNRAS, 480, 1247",
     status="production",
     short_doc="Kubota & Done 2018 three-zone disc and corona",
+    template_loader=load_nthcomp_table,
 )
 def kubota_done_disc_block(
     wavelength: Array,
@@ -484,6 +486,7 @@ def kubota_done_disc_block(
     agn_kt_hot: float = 100.0,
     agn_r_warm_ratio: float = 2.0,
     agn_log_lbol_shape: float | None = None,
+    templates=None,
     **_params,
 ) -> Array:
     r"""Kubota & Done (2018) three-zone disc + corona block.
@@ -532,6 +535,7 @@ def kubota_done_disc_block(
         agn_kt_hot=agn_kt_hot,
         agn_r_warm_ratio=agn_r_warm_ratio,
         agn_log_lbol_shape=agn_log_lbol_shape,
+        _template=templates,
     )
     return L_nu * _C_AA_PER_S / wave_aa**2
 

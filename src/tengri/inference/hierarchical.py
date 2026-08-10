@@ -35,7 +35,7 @@ from tengri.inference._hierarchical_flat import (
     FLAT_UNSUPPORTED,
     run_flat_sampler,
 )
-from tengri.inference.fitter import resolve_method
+from tengri.inference.fitter import _resolve_batch_fit_approx, resolve_method
 from tengri.inference.likelihoods.gaussian import diag_noise_operators
 from tengri.utils.transforms import to_bounded, to_unbounded
 
@@ -437,6 +437,15 @@ class PopulationFitter:
         (lo, hi) for uniform prior on τ_PSD (Myr).
     data_type : str
         "photometry" or "spectroscopy".
+    approx : "auto" or None or precompute config, optional
+        Fit-time precompute policy, mirroring :class:`Fitter`. ``"auto"``
+        (default) routes every factory-built model through the LUT for the
+        data type (photometry -> ``WavePrecomp``, spectroscopy ->
+        ``SpectrumPrecomp``) — a hierarchical sampler evaluates the forward
+        model thousands of times, and the exact path costs a measured ~2-6x
+        more per evaluation. ``None`` forces the exact wave-grid path; an
+        explicit config is used verbatim. A factory whose models already
+        carry the LUT is respected untouched.
 
     Notes
     -----
@@ -474,6 +483,7 @@ class PopulationFitter:
         psd_tau_prior=(1.0, 300.0),
         data_type="photometry",
         *,
+        approx="auto",
         _via_routing: bool = False,
     ):
         # ── Soft deprecation: prefer PopulationSEDModel + Fitter routing ──
@@ -499,14 +509,15 @@ class PopulationFitter:
                 stacklevel=2,
             )
 
-        self.model_factory = model_factory
         self.galaxies = galaxies
         self.n_galaxies = len(galaxies)
         self.psd_sigma_bounds = psd_sigma_prior
         self.psd_tau_bounds = psd_tau_prior
         self.data_type = data_type
+        self.approx = approx
 
-        # Create a template model to get spec info
+        # Create a template model to get spec info. Built from the RAW factory:
+        # it exists to read the spec, and must not pay the LUT build.
         self._template = model_factory(psd_sigma=1.0, psd_tau_myr=50.0)
         self._spec = self._template.spec
         self._free_names = [
@@ -514,6 +525,14 @@ class PopulationFitter:
             for n in self._spec.free_params
             if n not in ("sfh_field_psd_sigma", "sfh_field_psd_tau_myr")
         ]
+
+        # Fit-time factory: every runner (per-galaxy MAP init, the flat seam,
+        # geoVI, raytrace) builds its models through this, so the precompute
+        # default applies to the whole hierarchical surface at one seam.
+        def _fit_factory(*args, **kwargs):
+            return _resolve_batch_fit_approx(model_factory(*args, **kwargs), approx, data_type)
+
+        self.model_factory = _fit_factory
 
     @classmethod
     def _unknown_method_message(cls, method: str, method_map: dict) -> str:
@@ -646,6 +665,11 @@ class PopulationFitter:
               flat parameterization's prior is exactly the iid N(0,1) the ESS
               ellipse assumes, so its one structural requirement holds by
               construction; no step size or warmup exists to tune.
+            - ``"mcmc_adjusted_mclmc"`` — Metropolis-adjusted microcanonical
+              Langevin MC, tuned by blackjax's own (L, step size) adaptation.
+            - ``"mcmc_mclmc"`` — unadjusted MCLMC; tier="broken" ([POOR
+              MIXING] on the single-galaxy benchmarks, and biased at finite
+              step size by construction), requires ``allow_unvalidated=True``.
             - ``"mcmc_ghmc"`` — generalized (persistent-momentum) HMC;
               tier="broken" ([POOR MIXING] on the single-galaxy benchmarks),
               requires ``allow_unvalidated=True``. Always uses a diagonal mass
@@ -653,11 +677,10 @@ class PopulationFitter:
             - ``"map"`` — Adam MAP on the flat vector.
             - ``"pathfinder"`` — tier="broken" (OOM-killed the process on a
               measured 2-galaxy problem); requires ``allow_unvalidated=True``.
-            - ``"mcmc_mclmc"``, ``"mcmc_adjusted_mclmc"``,
-              ``"laplace"`` — refused with ``NotImplementedError`` and a
-              per-name reason (see
+            - ``"laplace"`` — refused with ``NotImplementedError`` and a
+              reason (see
               :data:`~tengri.inference._hierarchical_flat.FLAT_UNSUPPORTED`):
-              their real drivers are not wired at the seam yet, and running a
+              its real driver is not wired at the seam yet, and running a
               stand-in algorithm under the requested name would be silent
               substitution.
 

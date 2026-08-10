@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import functools
 import warnings
+from typing import NamedTuple
 
 import h5py
 import jax
@@ -138,31 +139,91 @@ def _clamp_interp_index(val: jnp.ndarray, grid: jnp.ndarray) -> tuple[jnp.ndarra
     return i_lo, jnp.clip(frac, 0.0, 1.0)
 
 
+class NthcompTable(NamedTuple):
+    """nthcomp Comptonization template arrays, as a JAX pytree.
+
+    Attributes
+    ----------
+    gamma : ndarray, shape (n_gamma,)
+        Photon-index axis.
+    kte : ndarray, shape (n_kte,)
+        Electron-temperature axis [keV].
+    ktbb : ndarray, shape (n_ktbb,)
+        Seed-blackbody-temperature axis [keV].
+    nu : ndarray, shape (n_nu,)
+        Template frequency grid [Hz].
+    table_log : ndarray, shape (n_gamma, n_kte, n_ktbb, n_nu)
+        ``log`` of the spectral shape.
+
+    Notes
+    -----
+    A pytree, so it can be handed to ``jax.jit`` as an argument. Closing over
+    these arrays instead freezes ~15 MB into every graph that touches a
+    Comptonized disc.
+    """
+
+    gamma: jnp.ndarray
+    kte: jnp.ndarray
+    ktbb: jnp.ndarray
+    nu: jnp.ndarray
+    table_log: jnp.ndarray
+
+
+def load_nthcomp_table() -> NthcompTable | None:
+    """Load the packaged nthcomp templates as a :class:`NthcompTable` pytree.
+
+    This is the ``template_loader`` the Comptonized disc blocks register.
+
+    Returns
+    -------
+    NthcompTable or None
+        ``None`` when the templates are absent — callers then fall back to
+        their analytic path, as they did before threading existed.
+
+    Notes
+    -----
+    **JIT-compatible**: no, deliberately — call it before tracing.
+    """
+    gamma, kte, ktbb, nu, table_log, available = _get_nthcomp_templates()
+    if not available:
+        return None
+    return NthcompTable(gamma=gamma, kte=kte, ktbb=ktbb, nu=nu, table_log=table_log)
+
+
 def _nthcomp_lnu_interp_impl(
     nu: jnp.ndarray,
     gamma: jnp.ndarray,
     kTe_keV: jnp.ndarray,
     kTbb_keV: jnp.ndarray,
+    table: NthcompTable | None = None,
 ) -> jnp.ndarray:
-    """Implementation of nthcomp interpolation (used by both forward and VJP)."""
-    if not _is_table_available():
-        raise RuntimeError(
-            "nthcomp templates not loaded. Run scripts/build_nthcomp_templates.py first."
-        )
+    """Implementation of nthcomp interpolation (used by both forward and VJP).
+
+    ``table`` carries the template arrays. Passing them in — rather than
+    reading the module-level cache here — is what lets the forward model
+    thread the ~15 MB library through ``jax.jit`` as a ``Parameter`` instead
+    of freezing it into the graph as ``Constant`` ops (#1383).
+    """
+    if table is None:
+        if not _is_table_available():
+            raise RuntimeError(
+                "nthcomp templates not loaded. Run scripts/build_nthcomp_templates.py first."
+            )
+        table = load_nthcomp_table()
 
     g = jnp.asarray(gamma, dtype=jnp.float32)
     t = jnp.asarray(kTe_keV, dtype=jnp.float32)
     b = jnp.asarray(kTbb_keV, dtype=jnp.float32)
 
-    gamma_jax = _get_gamma_jax()
-    kte_jax = _get_kte_jax()
-    ktbb_jax = _get_ktbb_jax()
+    gamma_jax = jnp.asarray(table.gamma)
+    kte_jax = jnp.asarray(table.kte)
+    ktbb_jax = jnp.asarray(table.ktbb)
     ig, fg = _clamp_interp_index(g, gamma_jax)
     it, ft = _clamp_interp_index(t, kte_jax)
     ib, fb = _clamp_interp_index(b, ktbb_jax)
 
-    table_jax = _get_table_jax()
-    nu_jax = _get_nu_jax()
+    table_jax = jnp.asarray(table.table_log)
+    nu_jax = jnp.asarray(table.nu)
 
     def _c(dg: int, dt: int, db: int) -> jnp.ndarray:
         """Return table value at the interpolation-cell corner offset (dg, dt, db)."""
@@ -188,7 +249,8 @@ def _nthcomp_lnu_interp_impl(
 
 
 @jax.custom_jvp
-def nthcomp_lnu_interp(
+def _nthcomp_interp(
+    table: NthcompTable,
     nu: jnp.ndarray,
     gamma: jnp.ndarray,
     kTe_keV: jnp.ndarray,
@@ -196,11 +258,16 @@ def nthcomp_lnu_interp(
 ) -> jnp.ndarray:
     """Return the normalized nthcomp L_nu shape via trilinear interpolation.
 
-    Requires templates to have been loaded (``_TABLE_AVAILABLE`` is True).
-    Extrapolation beyond grid bounds is clamped to boundary values.
+    The custom-VJP kernel. ``table`` is primal argument 0 so the library can
+    be threaded through ``jax.jit`` as an argument; :func:`nthcomp_lnu_interp`
+    is the public entry point that resolves it. Extrapolation beyond grid
+    bounds is clamped to boundary values.
 
     Parameters
     ----------
+    table : NthcompTable
+        Template arrays. Also saved in the residuals, because the backward
+        pass re-evaluates the interpolation at ``gamma + eps``.
     nu : jnp.ndarray
         Frequency grid [Hz].
     gamma : scalar jnp array
@@ -225,18 +292,13 @@ def nthcomp_lnu_interp(
     varying features (Wien seed-BB tail), then exponentiated. Extrapolation
     beyond grid bounds is clamped to preserve monotonicity at boundaries.
 
-    **Custom JVP**: a finite-difference approximation supplies the ``gamma``
+    **Custom JVP**: A finite-difference approximation supplies the ``gamma``
     derivative, because differentiating the composed ``jnp.interp`` chain
     directly returns NaN. ``nu``, ``kTe_keV`` and ``kTbb_keV`` are held fixed
-    during fitting and carry exactly zero derivative, as before.
-
-    The rule is a ``custom_jvp``, not a ``custom_vjp`` (#1206). A ``custom_vjp``
-    is **opaque to forward mode** — ``jax.jvp`` raises ``TypeError: can't apply
-    forward-mode autodiff (jvp) to a custom_vjp function`` — which takes out
-    geoVI, whose metric is built with forward mode, for every AGN model
-    reaching this kernel. A ``custom_jvp`` serves forward mode directly and
-    reverse mode by transposition; the transpose of ``fd_grad * d_gamma`` is
-    ``sum(g * fd_grad)``, exactly the reverse pass this replaces.
+    during fitting and carry exactly zero derivative. See
+    :func:`_nthcomp_interp_jvp` for the rule, and for why it is a ``custom_jvp``
+    rather than the ``custom_vjp`` this used to be (#1206): a ``custom_vjp`` is
+    opaque to forward mode, which takes out geoVI.
 
     References
     ----------
@@ -248,21 +310,23 @@ def nthcomp_lnu_interp(
        dominance in the torus emission," MNRAS, 283, 193 (1996).
        https://doi.org/10.1093/mnras/283.1.193
     """
-    return _nthcomp_lnu_interp_impl(nu, gamma, kTe_keV, kTbb_keV)
+    return _nthcomp_lnu_interp_impl(nu, gamma, kTe_keV, kTbb_keV, table)
 
 
-@nthcomp_lnu_interp.defjvp
-def _nthcomp_lnu_interp_jvp(primals: tuple, tangents: tuple) -> tuple:
+@_nthcomp_interp.defjvp
+def _nthcomp_interp_jvp(primals: tuple, tangents: tuple) -> tuple:
     """Forward-mode rule: a finite-difference derivative in ``gamma`` only.
 
     Parameters
     ----------
     primals : tuple
-        ``(nu, gamma, kTe_keV, kTbb_keV)`` -- see :func:`nthcomp_lnu_interp`.
+        ``(table, nu, gamma, kTe_keV, kTbb_keV)`` -- see :func:`_nthcomp_interp`.
     tangents : tuple
-        Tangents of those same four operands. Only the ``gamma`` tangent
-        contributes; the other three are discarded, matching the reverse rule
-        this replaces.
+        Tangents of those same five operands. Only the ``gamma`` tangent
+        contributes; the others are discarded, matching the reverse rule this
+        replaces. ``table`` is a library, never a fit parameter, so its tangent
+        is structurally zero -- the forward-mode counterpart of the zero
+        cotangent the reverse rule used to return for it.
 
     Returns
     -------
@@ -272,55 +336,32 @@ def _nthcomp_lnu_interp_jvp(primals: tuple, tangents: tuple) -> tuple:
 
     Notes
     -----
-    **JIT/grad/vmap-safe**: yes -- and, unlike the ``custom_vjp`` spelling this
-    replaces, ``jvp``-safe, which is what geoVI's forward-mode metric needs
-    (#1206).
+    **JIT-compatible**: yes.
 
-    The ``gamma`` derivative is a one-sided finite difference with an adaptive
-    step, because differentiating the composed ``jnp.interp`` chain
-    analytically returns NaN.
+    **A ``custom_jvp``, not a ``custom_vjp`` (#1206).** A ``custom_vjp`` is
+    *opaque to forward mode* -- ``jax.jvp`` raises ``TypeError: can't apply
+    forward-mode autodiff (jvp) to a custom_vjp function`` -- which takes out
+    geoVI, whose metric is built with forward mode, for every AGN model reaching
+    this kernel. A ``custom_jvp`` serves forward mode directly and reverse mode
+    by transposition; the transpose of ``fd_grad * d_gamma`` is
+    ``sum(g * fd_grad)``, exactly the reverse pass it replaces.
 
-    **``kTe_keV`` carries a real derivative that this rule deliberately drops.**
-    The wording here used to be that the other three operands "are held fixed
-    during fitting and carry exactly zero derivative". The first half is a
-    configuration choice, not a fact — ``kd18_disc_model.py`` declares
-    ``kt_warm = Uniform(0.1, 0.5, ...)``, so a user can and does free it — and
-    the second half is false: a central difference gives
-    ``d ln f / d ln kTe`` ~ -0.24, an order-unity sensitivity, where this rule
-    returns exactly ``0.0``.
-
-    Supplying it would cost a second :func:`_nthcomp_lnu_interp_impl` call on
-    *every* AGN JVP (~+50% on this kernel), paid by the majority of fits that
-    leave ``kt_warm`` pinned. So the trade-off stands, but it is a trade-off and
-    is now documented as one. The silent half is handled at build time:
-    ``_warn_dead_gradient_params`` in ``forward/sed_model.py`` emits a
-    :class:`~tengri.config.exceptions.DeadGradientParameterWarning` when
-    ``agn_kt_warm`` is freed, so a fit cannot quietly return the prior.
-
-    **No cotangent rescaling.** The previous reverse rule divided by
-    ``max|fd_grad|`` "to avoid overflow" and restored the scale with
-    ``* max * max``. That inverted the intended effect: with ``max|fd_grad|``
-    ~1e-17, an incoming cotangent of 1e30 became ``g / max`` ~1e47 -- past
-    float32's 3.4e38 -- and the trailing ``where(isfinite(g), g, 0.0)`` turned
-    the resulting ``inf`` into a **silent zero gradient**. Measured before this
-    change: ``d/d(gamma)`` came back exactly ``0.0`` at cotangent 1e30 for every
-    ``(gamma, kTe)`` tried, while being correct at cotangent 1. The unscaled
-    product ``sum(g * fd_grad)`` is ~1e13 at that cotangent -- nowhere near the
-    limit -- so dropping the rescaling removes both the overflow and the
-    fail-open that hid it.
+    The overflow-safe rescaling the reverse rule performed on ``g_out`` is not
+    needed here: forward mode never forms the cotangent product, so there is no
+    ``sum(g_out * fd_grad)`` to overflow.
     """
-    nu, gamma, kTe_keV, kTbb_keV = primals
-    _, d_gamma, _, _ = tangents
+    table, nu, gamma, kTe_keV, kTbb_keV = primals
+    _, _, d_gamma, _, _ = tangents
 
-    primal_out = _nthcomp_lnu_interp_impl(nu, gamma, kTe_keV, kTbb_keV)
+    primal_out = _nthcomp_lnu_interp_impl(nu, gamma, kTe_keV, kTbb_keV, table)
 
     # Adaptive one-sided step: relative for large gamma, absolute near zero.
     #
-    # 1e-3, not the 1e-6 carried over from the custom_vjp spelling. The impl is a
+    # 1e-3, not the 1e-6 carried by the ``custom_vjp`` spelling. The impl is a
     # composed ``jnp.interp`` chain, so the finite difference is a subtraction of two
     # nearly equal ~1e-16 values: at 1e-6 the surviving digits are cancellation
     # remainder, not slope. Measured against a converged central difference at three
-    # off-node gammas (2.37/2.53/2.64 — 2.5 is a grid node where the derivative is
+    # off-node gammas (2.37/2.53/2.64 -- 2.5 is a grid node where the derivative is
     # genuinely undefined and any FD comparison is meaningless)::
     #
     #     h        2.37      2.53      2.64
@@ -330,14 +371,14 @@ def _nthcomp_lnu_interp_jvp(primals: tuple, tangents: tuple) -> tuple:
     #     1e-3      -0.1%     +0.0%     -0.2%    <- plateau
     #     1e-2      +0.6%     +0.3%     +0.3%
     #
-    # The old step was not uniformly biased — it was wrong by -10% to +54% depending
+    # The old step was not uniformly biased -- it was wrong by -10% to +54% depending
     # on where in the grid gamma sat, which is why a single-step check never caught
     # it. The plateau is two decades wide; 1e-3 sits in its middle.
     eps = jnp.maximum(1e-3 * jnp.abs(gamma), 1e-3)
-    shifted = _nthcomp_lnu_interp_impl(nu, gamma + eps, kTe_keV, kTbb_keV)
+    shifted = _nthcomp_lnu_interp_impl(nu, gamma + eps, kTe_keV, kTbb_keV, table)
     fd_grad = (shifted - primal_out) / eps
 
-    # The tangent dtype must MATCH the primal's, exactly — a ``custom_jvp``
+    # The tangent dtype must MATCH the primal's, exactly -- a ``custom_jvp``
     # contract that ``custom_vjp`` did not impose, so it is the one way this
     # conversion can regress. ``nu`` sets the primal dtype while ``gamma`` sets
     # the tangent's: a float32 SED grid with a float64 ``gamma`` promotes the
@@ -348,6 +389,49 @@ def _nthcomp_lnu_interp_jvp(primals: tuple, tangents: tuple) -> tuple:
     #     (tangent type of float32[5994]) but got float64[5994].
     #
     # That is a hard error at trace time, not a wrong number, and it took out
-    # the B1_agn_disc_torus scenario — a mixed-dtype path that no unit test
+    # the B1_agn_disc_torus scenario -- a mixed-dtype path that no unit test
     # reaches, only the slow integration tier.
     return primal_out, jnp.asarray(fd_grad * d_gamma, dtype=primal_out.dtype)
+
+
+def nthcomp_lnu_interp(
+    nu: jnp.ndarray,
+    gamma: jnp.ndarray,
+    kTe_keV: jnp.ndarray,
+    kTbb_keV: jnp.ndarray,
+    _template: NthcompTable | None = None,
+) -> jnp.ndarray:
+    """Normalized nthcomp :math:`L_\\nu` shape via trilinear interpolation.
+
+    Thin dispatcher over the custom-VJP kernel. See :func:`_nthcomp_interp`
+    for the physics and the gradient treatment.
+
+    Parameters
+    ----------
+    nu : ndarray, shape (n_nu,)
+        Frequency grid [Hz].
+    gamma, kTe_keV, kTbb_keV : Array
+        Photon index, electron temperature [keV], seed temperature [keV].
+        Each is clamped to the grid range.
+    _template : NthcompTable, optional
+        Pre-loaded templates, threaded in as a JIT argument by the forward
+        model. ``None`` (default) reads the module-level cache, which — under
+        trace — bakes ~15 MB into the graph as constants.
+
+    Returns
+    -------
+    ndarray, shape (n_nu,)
+        Non-negative spectral shape.
+
+    Notes
+    -----
+    **JIT-compatible**: yes. The gradient w.r.t. ``gamma`` is the
+    finite-difference rule registered on :func:`_nthcomp_interp`; the
+    template cotangent is structurally zero.
+    """
+    table = _template if _template is not None else load_nthcomp_table()
+    if table is None:
+        raise RuntimeError(
+            "nthcomp templates not loaded. Run scripts/build_nthcomp_templates.py first."
+        )
+    return _nthcomp_interp(table, nu, gamma, kTe_keV, kTbb_keV)

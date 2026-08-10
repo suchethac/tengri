@@ -49,6 +49,7 @@ from tengri.utils.conversions import (
     vacuum_to_air,
 )
 from tengri.utils.magnitudes import (
+    AB_VEGA_OFFSETS,
     ab_mag_to_fnu,
     ab_to_vega,
     absolute_ab_mag_to_lnu,
@@ -65,6 +66,12 @@ from tengri.utils.magnitudes import (
 )
 
 __all__ = [
+    # ``ab_to_vega``/``vega_to_ab`` take a float offset, not a band name, and
+    # this is where the offsets come from. It is re-exported alongside them
+    # because the module contract above is "users can write ``from tengri
+    # import units`` without reaching into ``utils``" — and until #1613 the one
+    # argument those two functions need was reachable only from ``utils``.
+    "AB_VEGA_OFFSETS",
     "ab_mag_to_fnu",
     "ab_to_vega",
     "absolute_ab_mag_to_lnu",

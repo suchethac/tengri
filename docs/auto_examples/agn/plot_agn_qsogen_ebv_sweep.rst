@@ -93,7 +93,7 @@ fitted, so no inference is run.
             "all_params": tengri.FIXED,
             "agn_lum_ratio": 1.0,
             "log_lbol": 11.0,
-            "frac": 1.0,  # composable AGN is scaled by agn_lum_ratio * frac; keep both at 1
+            "lum_ratio": 1.0,  # composable AGN is scaled by agn_lum_ratio * frac; keep both at 1
         },
         redshift=tengri.Fixed(0.05),
     )
@@ -124,6 +124,11 @@ fitted, so no inference is run.
 
     fig.tight_layout()
     plt.savefig("plot_agn_qsogen_ebv_sweep.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.032 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_qsogen_ebv_sweep.py:

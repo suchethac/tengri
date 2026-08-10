@@ -312,33 +312,45 @@ _LINE_NAMES = (
 
 
 def _load_subnet(npz: dict, prefix: str) -> SubNetWeights:
-    """Extract a SubNetWeights from the flat npz dict."""
+    """Extract a SubNetWeights from the flat npz dict.
+
+    NumPy, not ``jnp`` (#1631). These are trained constants, and the arrays
+    end up cached on a module-level backend; a NumPy array cannot be
+    trace-scoped under any trace, so the cache is trace-independent by
+    construction. See :func:`load_cue_weights`.
+    """
     n_layers = int(npz[f"{prefix}_n_layers"])
 
-    W = tuple(jnp.array(npz[f"{prefix}_W_{i}"]) for i in range(n_layers))
-    b = tuple(jnp.array(npz[f"{prefix}_b_{i}"]) for i in range(n_layers))
-    alphas = tuple(jnp.array(npz[f"{prefix}_alpha_{i}"]) for i in range(n_layers - 1))
-    betas = tuple(jnp.array(npz[f"{prefix}_beta_{i}"]) for i in range(n_layers - 1))
+    W = tuple(np.asarray(npz[f"{prefix}_W_{i}"]) for i in range(n_layers))
+    b = tuple(np.asarray(npz[f"{prefix}_b_{i}"]) for i in range(n_layers))
+    alphas = tuple(np.asarray(npz[f"{prefix}_alpha_{i}"]) for i in range(n_layers - 1))
+    betas = tuple(np.asarray(npz[f"{prefix}_beta_{i}"]) for i in range(n_layers - 1))
 
     return SubNetWeights(
         W=W,
         b=b,
         alphas=alphas,
         betas=betas,
-        param_shift=jnp.array(npz[f"{prefix}_parameters_shift"]),
-        param_scale=jnp.array(npz[f"{prefix}_parameters_scale"]),
-        pca_shift=jnp.array(npz[f"{prefix}_pca_shift"]),
-        pca_scale=jnp.array(npz[f"{prefix}_pca_scale"]),
-        log_spec_shift=jnp.array(npz[f"{prefix}_log_spectrum_shift"]),
-        log_spec_scale=jnp.array(npz[f"{prefix}_log_spectrum_scale"]),
-        pca_components=jnp.array(npz[f"{prefix}_pca_components"]),
-        pca_mean=jnp.array(npz[f"{prefix}_pca_mean"]),
+        param_shift=np.asarray(npz[f"{prefix}_parameters_shift"]),
+        param_scale=np.asarray(npz[f"{prefix}_parameters_scale"]),
+        pca_shift=np.asarray(npz[f"{prefix}_pca_shift"]),
+        pca_scale=np.asarray(npz[f"{prefix}_pca_scale"]),
+        log_spec_shift=np.asarray(npz[f"{prefix}_log_spectrum_shift"]),
+        log_spec_scale=np.asarray(npz[f"{prefix}_log_spectrum_scale"]),
+        pca_components=np.asarray(npz[f"{prefix}_pca_components"]),
+        pca_mean=np.asarray(npz[f"{prefix}_pca_mean"]),
         n_layers=n_layers,
     )
 
 
 def load_cue_weights(npz_path: str) -> CueWeights:
     """Load all Cue weights from the npz file.
+
+    .. note::
+
+       The returned arrays are always **concrete**, even when this is called
+       from inside a ``jax.jit`` trace. See :func:`_load_cue_weights_eager`
+       for why that has to be enforced rather than assumed.
 
     Parses the pre-trained Speculator neural network weights from a NumPy
     archive and constructs batched weight arrays for fast vectorized inference.
@@ -351,13 +363,25 @@ def load_cue_weights(npz_path: str) -> CueWeights:
     Returns
     -------
     CueWeights
-        Immutable container with all weights on JAX arrays, including
+        Immutable container with all weights on **NumPy** arrays, including
         precomputed batched arrays for 16 line sub-networks.
 
     Notes
     -----
     **JIT-compatible**: no — performs file I/O and array padding at load time.
     Call once per model initialization; results are re-used for all inference.
+
+    **Why NumPy and not** ``jnp`` (#1631): these arrays are cached — the AGN
+    NLR path memoizes a backend in ``nlr_cloudy._CUE_AGN_BACKEND``. Under
+    omnistaging every ``jnp`` call inside a jit trace stages out to the jaxpr
+    and returns a ``DynamicJaxprTracer``, *even on constant inputs*. So a
+    first caller that reached this function from inside a trace cached
+    trace-scoped arrays, and the next trace raised ``UnexpectedTracerError``
+    on ``float32[16,12]`` — 16 line sub-networks x 12 Cue parameters, i.e.
+    ``batched_param_shifts``. A NumPy array cannot be trace-scoped under any
+    trace, so the cache is trace-independent by construction rather than by
+    discipline. Consumers wrap with ``jnp.asarray`` at use. Identical fix and
+    reasoning to ``load_grahsp_templates`` (#1462).
 
     **Batching strategy**: Hidden layers are stacked as (16, in, out); output
     layers and PCA arrays are zero-padded to max dimensions (max_pcas, max_lines)
@@ -372,6 +396,36 @@ def load_cue_weights(npz_path: str) -> CueWeights:
         by dust grains and its application to metal-rich galaxies", ApJ 539, 718
 
     """
+    with jax.ensure_compile_time_eval():
+        return _load_cue_weights_eager(npz_path)
+
+
+def _load_cue_weights_eager(npz_path: str) -> CueWeights:
+    """Body of :func:`load_cue_weights`, always evaluated outside any trace.
+
+    Every ``jnp`` call below runs on values read straight off disk, so it looks
+    like it cannot produce a tracer. It can. **Any** ``jnp`` operation executed
+    while a trace is active returns a tracer bound to that trace, however
+    concrete its inputs are — so whether this function yields real arrays or
+    tracers is decided by its *caller's* context, not by anything here.
+
+    That matters because the result is cached: ``CueBackend`` holds it, and
+    ``nlr_cloudy._CUE_AGN_BACKEND`` holds the backend for the process. The first
+    caller therefore decides what every later caller gets. If the first call
+    happens inside a ``jax.jit`` trace, the cache is filled with tracers and the
+    next reader — a different test, a different fit — dies with
+    ``UnexpectedTracerError`` pointing here, far from whatever actually did it.
+
+    That is not hypothetical: it is the CI failure in
+    ``test_cue_nlr_grammar.py``, reported as ``float32[16,12]`` leaking from
+    line ``batched_param_shifts=jnp.stack(...)`` — 16 line sub-networks x 12
+    parameters. It passed locally and failed on CI purely because the two run
+    tests in a different order, so they disagreed about who warmed the cache.
+
+    ``jax.ensure_compile_time_eval`` makes the answer independent of the
+    caller. The docstring above already promised ``JIT-compatible: no``; this
+    enforces it instead of trusting every call site to honor it.
+    """
     npz = dict(np.load(npz_path, allow_pickle=True))
 
     # Line sub-networks
@@ -384,7 +438,7 @@ def load_cue_weights(npz_path: str) -> CueWeights:
                 f"Missing line sub-network '{name}' in {npz_path}. Re-run convert_cue_weights.py."
             )
         line_nets.append(_load_subnet(npz, prefix))
-        line_wav_sels.append(jnp.array(npz[f"{prefix}_wav_selection"]))
+        line_wav_sels.append(np.asarray(npz[f"{prefix}_wav_selection"]))
 
     # Continuum sub-network
     cont_net = _load_subnet(npz, "cont")
@@ -394,10 +448,10 @@ def load_cue_weights(npz_path: str) -> CueWeights:
     n_hidden = nets[0].n_layers - 1
 
     # Hidden layers: stack (16, in, out) — all same architecture
-    b_W_h = tuple(jnp.stack([n.W[i] for n in nets]) for i in range(n_hidden))
-    b_b_h = tuple(jnp.stack([n.b[i] for n in nets]) for i in range(n_hidden))
-    b_a_h = tuple(jnp.stack([n.alphas[i] for n in nets]) for i in range(n_hidden))
-    b_beta_h = tuple(jnp.stack([n.betas[i] for n in nets]) for i in range(n_hidden))
+    b_W_h = tuple(np.stack([n.W[i] for n in nets]) for i in range(n_hidden))
+    b_b_h = tuple(np.stack([n.b[i] for n in nets]) for i in range(n_hidden))
+    b_a_h = tuple(np.stack([n.alphas[i] for n in nets]) for i in range(n_hidden))
+    b_beta_h = tuple(np.stack([n.betas[i] for n in nets]) for i in range(n_hidden))
 
     # Output layer + PCA: pad to max dims
     max_pcas = max(n.W[n_hidden].shape[1] for n in nets)
@@ -405,44 +459,42 @@ def load_cue_weights(npz_path: str) -> CueWeights:
 
     def _pad2d(arr, target_r, target_c, fill=0.0):
         """Pad a 2D array to target shape along both dimensions."""
-        return jnp.pad(
+        return np.pad(
             arr, ((0, target_r - arr.shape[0]), (0, target_c - arr.shape[1])), constant_values=fill
         )
 
     def _pad1d(arr, target, fill=0.0):
         """Pad a 1D array to target shape."""
-        return jnp.pad(arr, (0, target - arr.shape[0]), constant_values=fill)
+        return np.pad(arr, (0, target - arr.shape[0]), constant_values=fill)
 
-    nn_line_wav = jnp.array(npz["nn_line_wavelength"])
+    nn_line_wav = np.asarray(npz["nn_line_wavelength"])
 
     return CueWeights(
         line_nets=tuple(line_nets),
         cont_net=cont_net,
         line_names=_LINE_NAMES,
         line_wav_selections=tuple(line_wav_sels),
-        sorted_line_wav=jnp.array(npz["sorted_line_wavelength"]),
+        sorted_line_wav=np.asarray(npz["sorted_line_wavelength"]),
         nn_line_wav=nn_line_wav,
-        line_old_idx=jnp.array(npz["line_old_idx"]),
-        cont_wav=jnp.array(npz["cont_wavelength"]),
+        line_old_idx=np.asarray(npz["line_old_idx"]),
+        cont_wav=np.asarray(npz["cont_wavelength"]),
         # Precomputed batched arrays
-        batched_param_shifts=jnp.stack([n.param_shift for n in nets]),
-        batched_param_scales=jnp.stack([n.param_scale for n in nets]),
+        batched_param_shifts=np.stack([n.param_shift for n in nets]),
+        batched_param_scales=np.stack([n.param_scale for n in nets]),
         batched_W_hidden=b_W_h,
         batched_b_hidden=b_b_h,
         batched_alpha_hidden=b_a_h,
         batched_beta_hidden=b_beta_h,
-        batched_W_out=jnp.stack([_pad2d(n.W[n_hidden], 256, max_pcas) for n in nets]),
-        batched_b_out=jnp.stack([_pad1d(n.b[n_hidden], max_pcas) for n in nets]),
-        batched_pca_scale=jnp.stack([_pad1d(n.pca_scale, max_pcas, fill=1.0) for n in nets]),
-        batched_pca_shift=jnp.stack([_pad1d(n.pca_shift, max_pcas) for n in nets]),
-        batched_pca_comp=jnp.stack([_pad2d(n.pca_components, max_pcas, max_lines) for n in nets]),
-        batched_pca_mean=jnp.stack([_pad1d(n.pca_mean, max_lines) for n in nets]),
-        batched_spec_scale=jnp.stack(
-            [_pad1d(n.log_spec_scale, max_lines, fill=1.0) for n in nets]
-        ),
-        batched_spec_shift=jnp.stack([_pad1d(n.log_spec_shift, max_lines) for n in nets]),
+        batched_W_out=np.stack([_pad2d(n.W[n_hidden], 256, max_pcas) for n in nets]),
+        batched_b_out=np.stack([_pad1d(n.b[n_hidden], max_pcas) for n in nets]),
+        batched_pca_scale=np.stack([_pad1d(n.pca_scale, max_pcas, fill=1.0) for n in nets]),
+        batched_pca_shift=np.stack([_pad1d(n.pca_shift, max_pcas) for n in nets]),
+        batched_pca_comp=np.stack([_pad2d(n.pca_components, max_pcas, max_lines) for n in nets]),
+        batched_pca_mean=np.stack([_pad1d(n.pca_mean, max_lines) for n in nets]),
+        batched_spec_scale=np.stack([_pad1d(n.log_spec_scale, max_lines, fill=1.0) for n in nets]),
+        batched_spec_shift=np.stack([_pad1d(n.log_spec_shift, max_lines) for n in nets]),
         batched_n_lines=tuple(n.pca_components.shape[1] for n in nets),
-        batched_sort_idx=jnp.argsort(nn_line_wav),
+        batched_sort_idx=np.argsort(nn_line_wav),
     )
 
 
@@ -788,9 +840,17 @@ def predict_continuum(
     log_spec = _speculator_log_spectrum(nn_params, weights.cont_net)
 
     # Sort by wavelength (Cue does wavind_sorted = argsort(cont_wavelength))
-    sort_idx = jnp.argsort(weights.cont_wav)
+    #
+    # ``jnp.asarray`` at use, because ``cont_wav`` is NumPy when it comes from
+    # ``load_cue_weights`` and a tracer when it arrives threaded as
+    # ``template_data`` (#1631). ``jnp.argsort`` stages out under jit, so
+    # ``sort_idx`` is traced either way -- and indexing a *NumPy* array with a
+    # tracer calls ``__array__()`` on it and raises
+    # ``TracerArrayConversionError``.
+    cont_wav = jnp.asarray(weights.cont_wav)
+    sort_idx = jnp.argsort(cont_wav)
     log_spec_sorted = log_spec[sort_idx]
-    wav_sorted = weights.cont_wav[sort_idx]
+    wav_sorted = cont_wav[sort_idx]
 
     # Convert from log10(Lsun/Hz/Q_H) to Lsun/Hz:
     # Internal computation stays in Lsun/Hz to avoid exponent overflow;
@@ -952,9 +1012,12 @@ class CueBackend:
         self.weights = load_cue_weights(weights_path)
         self.default_gas_logqion = default_gas_logqion
 
-        # Cache sorted wavelength arrays
-        self._line_sort_idx = jnp.argsort(self.weights.nn_line_wav)
-        self._cont_sort_idx = jnp.argsort(self.weights.cont_wav)
+        # Cache sorted wavelength arrays. NumPy, for the reason in
+        # ``load_cue_weights``: this backend is memoized in a module-level
+        # global (``nlr_cloudy._CUE_AGN_BACKEND``), so anything built here
+        # inside a jit trace would be handed to the *next* trace (#1631).
+        self._line_sort_idx = np.argsort(self.weights.nn_line_wav)
+        self._cont_sort_idx = np.argsort(self.weights.cont_wav)
 
         # Precompute ionizing spectrum parameters from SSP if provided.
         # These serve as defaults when ionspec params are not explicitly

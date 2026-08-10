@@ -1157,6 +1157,7 @@ def _compute_zone_luminosities(
     float32: bool = False,
     agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
     agn_log_lbol_shape: float = 0.0,
+    nthcomp_table=None,
 ) -> tuple:
     """Compute self-consistent luminosities of the three AGN zones.
 
@@ -1266,11 +1267,15 @@ def _compute_zone_luminosities(
         b_nu_plain = _planck_lnu(nu, t_ring)
         p_plain = jnp.abs(jnp.trapezoid(b_nu_plain, nu))
         kTbb_keV = _K_BOLTZ_KEV * t_ring
-        shape = _nthcomp_lnu_interp(nu, agn_gamma_warm, agn_kt_warm, kTbb_keV)
+        shape = _nthcomp_lnu_interp(
+            nu, agn_gamma_warm, agn_kt_warm, kTbb_keV, _template=nthcomp_table
+        )
         if float32:
             # Float32 (#1206): the ring bolometric ``p_plain * ring_area`` ~1e42
             # erg/s overflows, though the ring L_nu (~1e27) is representable.
             # Fold the tiny normalized ``shape`` in first so no ~1e42 forms.
+            # This is also why ``l_total`` is built below rather than above the
+            # branch as on main: forming it at all is the overflow.
             return (shape * p_plain) * _ring_area(r_cm, dr_ring, agn_cos_inc)
         l_total = p_plain * _ring_area(r_cm, dr_ring, agn_cos_inc)
         return shape * l_total
@@ -1472,6 +1477,7 @@ def kubota_done_disc(
     n_radii: int = 50,
     agn_self_consistent_gamma: bool = False,
     agn_log_lbol_shape: float | None = None,
+    _template=None,
     **_kwargs,
 ) -> jnp.ndarray:
     """Kubota & Done (2018) three-zone accretion disc with self-consistent corona.
@@ -1725,6 +1731,7 @@ def kubota_done_disc(
         float32=_f32,
         agn_log_mbh=agn_log_mbh,
         agn_log_lbol_shape=_lbol_shape,
+        nthcomp_table=_template,
     )
 
     return l_nu_total * scale

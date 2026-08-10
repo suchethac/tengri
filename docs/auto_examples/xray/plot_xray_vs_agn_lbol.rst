@@ -45,8 +45,10 @@ deep X-ray surveys (Lehmer+2010, 2016).
 
  .. code-block:: none
 
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
-      return load_ssp_data(str(candidate))
+    /Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_trapezoid': FileNotFoundError: [Errno 2] No such file or directory: '/Users/suchethacooray/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
+      warnings.warn(
+    /Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit__interp': FileNotFoundError: [Errno 2] No such file or directory: '/Users/suchethacooray/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
+      warnings.warn(
 
 
 
@@ -101,7 +103,7 @@ deep X-ray surveys (Lehmer+2010, 2016).
             "torus": {"type": "skirtor", "all_params": tengri.FIXED},
             "all_params": tengri.FIXED,
             "log_lbol": tengri.Uniform(8.0, 14.0),
-            "frac": 1.0,
+            "lum_ratio": 1.0,
         },
         xray={"type": "simple", "all_params": tengri.FIXED},
         redshift=tengri.Fixed(0.05),
@@ -146,7 +148,7 @@ deep X-ray surveys (Lehmer+2010, 2016).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 6.590 seconds)
+   **Total running time of the script:** (0 minutes 5.973 seconds)
 
 
 .. _sphx_glr_download_auto_examples_xray_plot_xray_vs_agn_lbol.py:

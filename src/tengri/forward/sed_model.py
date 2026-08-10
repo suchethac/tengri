@@ -6618,9 +6618,23 @@ class SEDModel:
             ``"agn"``) carrying the threaded template data for that
             subsystem. Returns ``None`` if no components need threading.
         """
+        # Build the chain if it is not cached yet, rather than bailing out.
+        #
+        # Returning None here made threading work exactly ONCE per process. The
+        # chain is only pre-built in ``__init__`` under spectrum_precomp /
+        # wave_precomp; otherwise the first ``predict_state`` warmup populates
+        # it. On a SECOND model with the same compile signature the structural
+        # kernel cache hits, that warmup never runs, and this returned None — so
+        # every template fell back to its in-block load and baked. Measured on
+        # ``torus='skirtor'``: 0.05 MB on build 1, **29.94 MB on builds 2+**.
+        #
+        # Every caller of this method assembles arguments *before* tracing (see
+        # ``predict_observables`` / ``predict_observables_jit`` / the fitter), so
+        # building the chain here runs in the same eager context that build 1
+        # used. Matching the lazy pattern already used by ``_qh_at`` and friends.
         cached = getattr(self, "_cached_component_chain", None)
         if cached is None:
-            return None
+            cached = self._cached_component_chain = self._build_component_chain()
 
         from tengri.components.agn.blocks._protocol import collect_block_templates
         from tengri.components.agn.component import AGNSEDComponent

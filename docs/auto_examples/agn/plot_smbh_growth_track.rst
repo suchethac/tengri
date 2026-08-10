@@ -240,6 +240,11 @@ References:
     plt.savefig("plot_smbh_growth_track.png", dpi=150, bbox_inches="tight")
 
 
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 6.361 seconds)
+
+
 .. _sphx_glr_download_auto_examples_agn_plot_smbh_growth_track.py:
 
 .. only:: html

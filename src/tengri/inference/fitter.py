@@ -350,6 +350,33 @@ def _model_catalog_z_range(model):
     return getattr(model, "_catalog_z_range", None)
 
 
+def fit_surface_ctor_names() -> frozenset[str]:
+    """Names the fit surfaces accept but route to ``Fitter.__init__``.
+
+    Returns
+    -------
+    frozenset of str
+        The constructor's keyword parameters, minus the ones the surfaces
+        pass positionally.
+
+    Notes
+    -----
+    Read off the live signature so it cannot drift from the constructor.
+    :func:`split_fitter_kwargs` uses it to decide routing;
+    :func:`~tengri.inference._backend_registry.check_unknown_kwargs` uses it
+    to suggest a documented ``fit()`` option that is not a runner parameter.
+    Both must mean the same thing by "constructor-routed", which is why this
+    is one function rather than the same comprehension written twice.
+    """
+    import inspect
+
+    return frozenset(
+        name
+        for name in inspect.signature(Fitter.__init__).parameters
+        if name not in _FIT_SURFACE_POSITIONAL
+    )
+
+
 def split_fitter_kwargs(kwargs):
     """Split a fit-surface ``**kwargs`` dict into (constructor, run) halves (#1378).
 
@@ -376,13 +403,7 @@ def split_fitter_kwargs(kwargs):
         Everything else, for ``Fitter.run`` (unknown names still fail loudly
         there, as before).
     """
-    import inspect
-
-    ctor_names = {
-        name
-        for name in inspect.signature(Fitter.__init__).parameters
-        if name not in _FIT_SURFACE_POSITIONAL
-    }
+    ctor_names = fit_surface_ctor_names()
     ctor_kwargs = {k: v for k, v in kwargs.items() if k in ctor_names}
     run_kwargs = {k: v for k, v in kwargs.items() if k not in ctor_names}
     return ctor_kwargs, run_kwargs
@@ -446,6 +467,98 @@ def _memoized_approx_clone(model, cfg):
         clone = model.with_approx(cfg)
         bucket[key] = clone
     return clone
+
+
+def _resolve_batch_fit_approx(model, approx, data_type):
+    """Route a batch-fit model through the fit-time precompute policy.
+
+    The batch surfaces' mirror of :meth:`Fitter._resolve_fit_approx`.
+    Single-galaxy fits have defaulted to the LUT under ``approx="auto"``
+    since that policy landed, but ``PopulationFitter`` consumed its
+    ``model_factory`` output raw and ``CatalogFitter`` held the model it was
+    given — so exactly the fits that evaluate the forward model the most
+    (thousands of evaluations, times the catalog size) silently ran the
+    exact wave-grid path at a measured ~2-6x per-evaluation premium. A
+    hierarchical or catalog fit taking minutes instead of well under one is
+    this gap's symptom.
+
+    Parameters
+    ----------
+    model : SEDModel or ForwardModel
+        The batch fit's model (or one built by its factory). Never mutated;
+        ``with_approx`` clones, memoized via :func:`_memoized_approx_clone`.
+    approx : "auto" or None or precompute config
+        ``"auto"`` selects the LUT for the data type (photometry ->
+        ``WavePrecomp``, spectroscopy/joint -> ``SpectrumPrecomp``) and
+        respects a model that already carries it; ``None`` returns the model
+        untouched (the exact path); anything else is handed to
+        ``with_approx`` verbatim.
+    data_type : str
+        The fit's data type; selects the LUT under ``"auto"``.
+
+    Returns
+    -------
+    SEDModel or ForwardModel
+        The LUT-routed clone, or the input model where the policy says (or
+        the model allows) nothing else. A ``with_approx`` failure warns and
+        stays exact — never break a fit that worked, only make its cost
+        visible.
+    """
+    if approx is None:
+        return model
+    if getattr(model, "with_approx", None) is None:
+        return model
+
+    if isinstance(approx, str):
+        if approx != "auto":
+            raise ValueError(
+                f"approx={approx!r} not understood; use 'auto' (default), None "
+                "(exact), or a precompute config (WavePrecomp/SpectrumPrecomp, "
+                "or a tuple)."
+            )
+        from tengri.forward.sed_model import FeaturePrecomp, SpectrumPrecomp, WavePrecomp
+
+        state = getattr(model, "approx", None)
+        if data_type == "photometry":
+            if state is not None and state.wave_precomp:
+                return model
+            cfg = WavePrecomp()
+            # Attempt the feature top-up first: for a backend that can
+            # tabulate its features (Cue's per-Q_H grid replaces the emulator
+            # call itself) this is the dominant lever — measured 1.45x warm /
+            # 1.68x cold on a 2-galaxy Cue population MAP fit (A/A floor
+            # 1.17x) and ~7x per-gradient on the single-galaxy #1596 model,
+            # where WavePrecomp alone does not clear the noise floor at all.
+            # A backend with nothing to tabulate raises; that raise IS the
+            # detection, so the fallback keeps the wave LUT rather than
+            # regressing to the raw model.
+            existing = tuple(getattr(model, "approx_configs", ()))
+            with contextlib.suppress(Exception):
+                return _memoized_approx_clone(model, (*existing, cfg, FeaturePrecomp()))
+        elif data_type in ("spectroscopy", "joint"):
+            if state is not None and getattr(state, "spectrum_precomp", False):
+                return model
+            cfg = SpectrumPrecomp()
+        else:
+            return model
+        existing = tuple(getattr(model, "approx_configs", ()))
+        resolved = (*existing, cfg) if existing else cfg
+    else:
+        resolved = approx
+
+    try:
+        return _memoized_approx_clone(model, resolved)
+    except Exception as exc:  # broad on purpose — never break a working fit
+        import warnings
+
+        warnings.warn(
+            f"Could not enable the precompute LUT for this batch fit "
+            f"({exc}). The fit is correct, only slower — a measured ~2-6x "
+            f"per forward evaluation on the exact path.",
+            UserWarning,
+            stacklevel=3,
+        )
+        return model
 
 
 # Jitted predict wrappers, memoized per (model, method name).
@@ -2817,7 +2930,10 @@ class Fitter:
         check_capabilities(entry, kwargs)
         # Same answer for every other unrecognized name, so a typo or an
         # unsupported channel names the method instead of the runner (#1469).
-        check_unknown_kwargs(entry, kwargs)
+        # Constructor-routed names go in as suggestion candidates only: they
+        # are documented fit() options, so a typo'd one must be correctable
+        # even though the runner does not declare it.
+        check_unknown_kwargs(entry, kwargs, also_accepted=fit_surface_ctor_names())
 
         # Compile the loss/grad + predict surface up front so the fit loop runs
         # warm and the persistent JAX cache is populated.

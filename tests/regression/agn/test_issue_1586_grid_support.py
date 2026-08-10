@@ -57,8 +57,8 @@ import jax
 import jax.numpy as jnp
 import pytest
 
+from tengri.components import grid_support as grid_support_mod
 from tengri.components.agn._params import PARAMS
-from tengri.components.agn.blocks import _grid_support
 from tengri.components.agn.blocks._grid_support import (
     block_grid_support,
     is_contained,
@@ -146,10 +146,15 @@ def test_containment_tolerates_a_transcribed_bound():
 
 @pytest.fixture
 def synthetic_grid_block(monkeypatch):
-    """Give the analytic 'multicolor' disc a pretend grid support."""
+    """Give the analytic 'multicolor' disc a pretend grid support.
+
+    Registers in the component-generic table, which is the single source every
+    lookup consults; the AGN spelling ``('disc', 'multicolor')`` is just the
+    dotted key with its ``agn.`` prefix stripped.
+    """
     monkeypatch.setitem(
-        _grid_support.AGN_BLOCK_GRID_SUPPORT,
-        ("disc", "multicolor"),
+        grid_support_mod.GRID_SUPPORT,
+        ("agn.disc", "multicolor"),
         lambda: {"agn_log_mbh": (7.4, 9.8)},
     )
     return ("disc", "multicolor")

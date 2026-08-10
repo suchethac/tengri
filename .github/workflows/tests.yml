@@ -115,10 +115,15 @@ jobs:
       # NOTE: `gen_property_table.py --check` cannot live here. This job installs
       # ruff and nothing else, and the generator imports tengri (hence jax) to read
       # the property registry. It runs in `smoke`, which does `pip install -e`.
-      # Gallery freshness — warn-only (#805): reports examples whose committed
-      # docs/auto_examples render has drifted from the source. Informational
-      # until the heavy-fit examples (#612) are handled; promote to --strict then.
-      - run: python tools/check_gallery_fresh.py
+      # Gallery freshness (#805): fails when an example's committed
+      # docs/auto_examples render lags its source. Warn-only until 2026-08, in
+      # which time the drift grew 16 -> 60 examples; a gate that cannot fail
+      # does not hold a line. CI cannot regenerate a render (no SSP grids, no
+      # ~20 GB of optional data — see docs/conf.py), so the fix belongs to
+      # whoever edited the example: `python tools/regen_gallery.py <basename>`.
+      # Use that, never a bare `make html`, which strips executed output from
+      # every page it rewrites but does not execute (#1236).
+      - run: python tools/check_gallery_fresh.py --strict
 
   # Static security scan + dependency vulnerability check. Informational
   # for now (continue-on-error) — surfaces findings in the PR check UI
