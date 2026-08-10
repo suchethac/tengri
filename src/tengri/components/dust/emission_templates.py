@@ -2404,7 +2404,15 @@ def create_themis_from_grid(template_data: dict | str) -> Callable:
     powerlaw = template_data["powerlaw"]  # (n_qhac, n_umin, n_wave)
     tmpl_wave = template_data["wavelength_aa"]
     umin_grid = template_data["umin_grid"]
-    qhac_grid = _qhac_axis_to_cigale(template_data["qhac_grid"])
+    # ``_qhac_axis_to_cigale`` reads a concrete max to pick a unit convention,
+    # so it cannot run on traced arrays. When the caller threaded this grid in
+    # (see EmissionComponent.threaded_templates) it supplies the axis already
+    # converted, under a distinct key. The membership test is Python-level and
+    # therefore safe under trace; the conversion itself stays eager (#1649).
+    if "qhac_grid_cigale" in template_data:
+        qhac_grid = template_data["qhac_grid_cigale"]
+    else:
+        qhac_grid = _qhac_axis_to_cigale(template_data["qhac_grid"])
 
     # Optional: alpha-dependent PDR component
     alpha_grid = template_data.get("alpha_grid", None)
