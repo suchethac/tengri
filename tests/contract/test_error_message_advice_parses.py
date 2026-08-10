@@ -250,6 +250,23 @@ _NOT_GRAMMAR_KEYS = frozenset({"priors", "params", "data", "kwargs", "metadata"}
 #: real value, so those snippets are not judgeable from source.
 _PLACEHOLDER = re.compile(r"\{[A-Za-z_][\w.\[\]'\"()]*\}")
 
+#: Verbs that make the snippet after them something to REMOVE, not to follow.
+#: Not every dict literal in a message is a recommendation: the CLOUDY wNE
+#: error says "keep this SSP and drop the ``neb={'type': 'cloudy'}`` group",
+#: quoting the construct precisely so the reader can delete it. Feeding that to
+#: the grammar asks the wrong question — and answers it by accident, since it
+#: parses whenever a CLOUDY grid happens to be installed.
+_REMOVAL_CUES = ("drop", "remove", "delete", "without", "instead of", "rather than")
+
+#: How far back to look for one of those cues. Long enough to catch "drop the
+#: `neb=...` group", short enough not to swallow an unrelated earlier clause.
+_CUE_WINDOW = 48
+
+
+def _is_removal_advice(text: str, at: int) -> bool:
+    """Does the message tell the reader to take this snippet OUT?"""
+    return any(cue in text[max(0, at - _CUE_WINDOW) : at].lower() for cue in _REMOVAL_CUES)
+
 
 def _literal_advice_in_source() -> list[tuple[str, int, str, dict]]:
     """Every fully-literal ``group={...}`` snippet inside a ``raise`` in src/."""
@@ -269,6 +286,11 @@ def _literal_advice_in_source() -> list[tuple[str, int, str, dict]]:
                     continue
                 if _PLACEHOLDER.search(repr(value)):
                     continue
+                # Conservative: skip only when EVERY occurrence of this snippet
+                # in the message is something the reader is told to remove.
+                sites = [m.start() for m in re.finditer(re.escape(name) + r"=\{", text)]
+                if sites and all(_is_removal_advice(text, i) for i in sites):
+                    continue
                 out.append((str(path.relative_to(_SRC)), node.lineno, name, value))
     return out
 
@@ -284,6 +306,41 @@ def test_the_source_census_finds_advice_to_check() -> None:
     assert len(found) >= 5, (
         f"expected the source scan to find several literal advice snippets, got "
         f"{found!r}. An empty census passes the next test for the wrong reason."
+    )
+
+
+def test_removal_advice_is_not_treated_as_a_recommendation() -> None:
+    """ "Drop ``x={...}``" quotes a construct to delete, not one to adopt.
+
+    Assumed otherwise at first, and CI caught it: the CLOUDY wNE error says
+    "keep this SSP and drop the ``neb={'type': 'cloudy'}`` group", and the arm
+    below dutifully fed that to the grammar. It passed locally only because a
+    CLOUDY grid happened to be installed, and failed on a runner without one —
+    an accidental answer to the wrong question.
+    """
+    assert _is_removal_advice(
+        "keep this SSP and drop the neb={", len("keep this SSP and drop the ")
+    )
+    assert _is_removal_advice("remove the dust={", len("remove the "))
+    assert not _is_removal_advice("Use either: radio={", len("Use either: "))
+    assert not _is_removal_advice("Pass one via neb={", len("Pass one via "))
+
+
+def test_the_exemption_does_not_swallow_the_bug_it_sits_next_to() -> None:
+    """The #1677 advice must still be judged, cues or not.
+
+    An exemption that quietly widened until it covered everything would leave
+    the arm green and blind — the failure mode this whole file exists to catch.
+    """
+    message = (
+        "met= needs a model built with stellar={'met_mode': 'table'}; either "
+        "rebuild with a tabulated metallicity or drop met=."
+    )
+    names = [name for name, _ in _dict_snippets(message)]
+    assert "stellar" in names
+    at = message.index("stellar={")
+    assert not _is_removal_advice(message, at), (
+        "the trailing 'drop met=.' must not exempt the recommendation that precedes it"
     )
 
 
