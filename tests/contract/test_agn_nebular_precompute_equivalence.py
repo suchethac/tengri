@@ -3,12 +3,42 @@
 
 Verifies that precompute lookups return per-filter photometry matching the
 runtime full-wavelength evaluation to within 1e-3 relative tolerance.
+
+.. warning::
+
+   **Quarantined — this file has not run for some time (#1660).** All three
+   tests skipped with "SSP data not available", which was false: the SSP data
+   was present. They call ``SEDModel(base_spec, filter_list, ...)``, but the
+   second positional is now ``ssp_data`` (order: ``spec, ssp_data, filters``),
+   so the filter list landed in the SSP slot, construction raised
+   ``AttributeError``, and ``except (FileNotFoundError, AttributeError)``
+   reported it as missing data.
+
+   It is skipped rather than repaired in place because updating it mechanically
+   would test the wrong thing twice over. The ``precompute=True/False`` axis it
+   toggles is documented as legacy and explicitly *not* the LUT path — that is
+   ``approx=WavePrecomp()``. And on the modern axis the naive rewrite is
+   vacuous: measured, an ``analytic`` BLR changes the photometry in the sixth
+   significant figure, while the exact-vs-LUT difference is identical to four
+   significant figures with and without it. The comparison would be dominated
+   by the stellar continuum and would say nothing about the emitter.
+
+   A real replacement needs a configuration where the line emitter dominates a
+   band, and must assert that dominance before comparing. See #1660.
 """
 
 import numpy as np
 import pytest
 
-pytestmark = pytest.mark.contract
+pytestmark = [
+    pytest.mark.contract,
+    pytest.mark.skip(
+        reason=(
+            "quarantined: stale API made this silently inert, and updating it "
+            "mechanically would compare continuum to continuum — see #1660"
+        )
+    ),
+]
 
 from tengri import Parameters, SEDModel
 from tengri.config import AGNConfig
