@@ -19,11 +19,16 @@ themis               ``dust_umin``     ``[0.1, 80]``        no upper bound
 schreiber2018        ``dust_T``        ``[14.24, 60.21]``   no upper bound
 ===================  ================  ===================  ==============
 
-``dust_lgU`` is the one that bites without any user action: its own declared
-``free_prior`` overhangs, so ``all_params: FREE`` hands a sampler a range whose
-top 14.3% is bit-identical with an exactly-zero gradient. The three ``umin``
-rows show why the constraint cannot live on the declaration -- one parameter,
-three different caps depending on which backend is selected.
+``dust_lgU`` was the one that bit without any user action: its own declared
+``free_prior`` overhung, so ``all_params: FREE`` handed a sampler a range whose
+top 14.3% was bit-identical with an exactly-zero gradient. That case is now
+*fixed*, not merely reported — a declaration-supplied free prior is intersected
+with the selected component's grid, so the range is ``Uniform(0, 6)``. A
+hand-written prior is still only warned about: ``FREE`` delegates the range to
+the declaration, whereas writing ``Uniform(...)`` states intent.
+
+The three ``umin`` rows show why the constraint cannot live on the declaration
+-- one parameter, three different caps depending on which backend is selected.
 """
 
 from __future__ import annotations
@@ -175,18 +180,126 @@ def test_themis_qhac_extent_is_the_relabeled_axis_not_the_raw_dataset():
 # --------------------------------------------------------------------------
 
 
-def test_astrodust_lgu_free_prior_overhangs_its_grid():
-    """``all_params: FREE`` alone is enough to trigger it -- no user prior."""
+def _spec(**group_kwargs):
+    """Build a spec, ignoring the advisory (asserted separately)."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", GridSupportWarning)
+        return parse_groups(sfh={"type": "dpl"}, redshift=0.1, **group_kwargs)
+
+
+def test_astrodust_lgu_free_prior_is_narrowed_to_the_grid():
+    """``all_params: FREE`` alone triggers it, and it is *fixed*, not just flagged.
+
+    ``dust_lgU`` declares ``free_prior=Uniform(0, 7)`` against an astrodust grid
+    of ``[-3, 6]``, so the top 14.3% was bit-identical with an exactly-zero
+    gradient. ``FREE`` asks for the parameter to be *sampled*; the range comes
+    from the declaration, not the caller, so intersecting it with the grid gives
+    the caller what they asked for instead of a dead tail.
+    """
     if not grid_support("dust.emission", "astrodust"):
         pytest.skip("astrodust grid not installed")
-    messages = _grid_warnings(
+    spec = _spec(
         dust={"type": "two_component", "emission": {"type": "astrodust", "all_params": FREE}}
     )
+    assert spec._distributions["dust_lgU"].bounds == pytest.approx((0.0, 6.0))
+    # Narrowing only ever shrinks: the grid reaches lgU = -3 but the declaration
+    # floors at 0, and widening there would assert physics it excluded.
+    assert spec._distributions["dust_lgU"].bounds[0] == 0.0
+    # ...and it is visible, never silent.
+    assert spec._group_provenance["dust_lgU"].endswith("_grid")
+
+
+def test_a_narrowed_prior_no_longer_warns():
+    """Nothing is left to warn about once the dead region is gone."""
+    if not grid_support("dust.emission", "astrodust"):
+        pytest.skip("astrodust grid not installed")
+    assert (
+        _grid_warnings(
+            dust={
+                "type": "two_component",
+                "emission": {"type": "astrodust", "all_params": FREE},
+            }
+        )
+        == []
+    )
+
+
+def test_an_explicit_user_prior_is_warned_about_not_overridden():
+    """The caller wrote the range by hand; substituting another is not our call.
+
+    This is the line between the two behaviors: ``FREE`` delegates the range to
+    the declaration (narrow it), a hand-written ``Uniform`` states intent (warn).
+    """
+    if not grid_support("dust.emission", "astrodust"):
+        pytest.skip("astrodust grid not installed")
+    group = {"type": "two_component", "emission": {"type": "astrodust", "lgU": Uniform(0.0, 7.0)}}
+    spec = _spec(dust=group)
+    assert spec._distributions["dust_lgU"].bounds == pytest.approx((0.0, 7.0))
+
+    messages = _grid_warnings(dust=group)
     assert len(messages) == 1, messages
-    message = messages[0]
-    assert "dust_lgU" in message
-    assert "[-3, 6]" in message  # the extent to narrow to
-    assert "14%" in message  # (7 - 6) / 7
+    assert "dust_lgU" in messages[0]
+    assert "[-3, 6]" in messages[0]  # the extent to narrow to
+    assert "14%" in messages[0]  # (7 - 6) / 7
+
+
+def test_a_narrowed_prior_still_round_trips_through_to_groups():
+    """The narrowing marker must not cost the parameter its wildcard intent.
+
+    ``to_groups`` collapses a group back to ``all_params: FREE`` by comparing
+    provenance tags exactly. Tagging the narrowed parameter
+    ``wildcard_free_grid`` would have failed that comparison, emitting
+    ``lgU`` as an explicit override and quietly changing the emitted grammar.
+    """
+    if not grid_support("dust.emission", "astrodust"):
+        pytest.skip("astrodust grid not installed")
+    spec = _spec(
+        dust={"type": "two_component", "emission": {"type": "astrodust", "all_params": FREE}}
+    )
+    emitted = spec.to_groups()["dust"]["emission"]
+    assert emitted["all_params"] is FREE
+    assert "lgU" not in emitted, "narrowed param must collapse into the wildcard"
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", GridSupportWarning)
+        again = parse_groups(**spec.to_groups())
+    assert set(again.free_params) == set(spec.free_params)
+    assert again._distributions["dust_lgU"].bounds == pytest.approx((0.0, 6.0))
+
+
+def test_the_narrowed_range_is_entirely_live():
+    """The point of narrowing: every value in the new range moves the SED.
+
+    Asserts the *derived* property rather than the observed number -- a
+    gradient that is exactly zero is the defect, so the bound is "not zero
+    anywhere in range", not "equal to what it happened to be today".
+    """
+    if not grid_support("dust.emission", "astrodust"):
+        pytest.skip("astrodust grid not installed")
+    jax = pytest.importorskip("jax")
+    import jax.numpy as jnp
+
+    from tengri.components.dust.emission.templates.astrodust import AstrodustIRSEDComponent
+
+    comp = AstrodustIRSEDComponent()
+    wave = jnp.logspace(4.0, 7.0, 200)
+    if comp.load(wave) is None:
+        pytest.skip("astrodust grid not installed")
+
+    def total(v):
+        sed, _ = comp.predict({"lgU": v}, jnp.zeros_like(wave), wave, L_ir=1.0)
+        return jnp.sum(sed)
+
+    lo, hi = (
+        _spec(
+            dust={"type": "two_component", "emission": {"type": "astrodust", "all_params": FREE}}
+        )
+        ._distributions["dust_lgU"]
+        .bounds
+    )
+    for frac in (0.0, 0.25, 0.5, 0.75, 1.0):
+        v = lo + frac * (hi - lo)
+        assert float(jax.grad(total)(v)) != 0.0, f"gradient dead at lgU={v}"
 
 
 def test_a_prior_inside_the_grid_is_silent():

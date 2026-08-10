@@ -1976,6 +1976,12 @@ class Parameters:
             "wildcard_free": f"[{WILDCARD_ALIAS} FREE]",
             "wildcard_fixed": f"[{WILDCARD_ALIAS} FIXED]",
             "registry_default": "[default]",
+            # The "_grid" suffix marks a declared free prior that was
+            # intersected with the selected component's template grid, whose
+            # axes it overhung. Shown, never silent: the printed range is then
+            # not the one the declaration carries (#1586).
+            "user_free_grid": "[user FREE -> grid]",
+            "wildcard_free_grid": f"[{WILDCARD_ALIAS} FREE -> grid]",
         }
 
         # Parameter table

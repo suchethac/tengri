@@ -73,6 +73,7 @@ from tengri.components.agn.blocks.torus_screen import (
 from tengri.components.agn.polar_dust import _RV_SMC, smc_extinction_curve
 from tengri.components.agn.reddening import redden_disc
 from tengri.components.agn.skirtor import SKIRTORBundle, skirtor_disc_dust_ratio
+from tengri.config.exceptions import AdvisoryWarning
 from tengri.utils.physics_constants import L_SUN
 
 #: Torus selectors that do NOT receive the gray Type-1/2 visibility mask:
@@ -93,12 +94,20 @@ __all__ = [
 ]
 
 
-class RecipeWarning(UserWarning):
+class RecipeWarning(AdvisoryWarning):
     """Emitted by :func:`validate_block_recipe` for suspicious block combos.
 
-    Subclassing :class:`UserWarning` lets callers ``warnings.simplefilter
-    ("error", RecipeWarning)`` to turn recipe issues into hard errors during
-    development without affecting other warnings.
+    Callers can still ``warnings.simplefilter("error", RecipeWarning)`` to turn
+    recipe issues into hard errors during development without affecting other
+    warnings — :class:`~tengri.config.exceptions.AdvisoryWarning` derives from
+    :class:`UserWarning`, so existing filters keep matching.
+
+    It subclasses ``AdvisoryWarning`` because it is exactly that: a statement
+    about a model the caller is *building*. The paths that construct a
+    throwaway ``Parameters`` — recipe introspection, and the structural spec
+    that only enumerates declared names — silence that category wholesale, so
+    these no longer fire on ``import tengri`` or describe a pre-narrowing range
+    that has already been superseded (#1586).
     """
 
 
