@@ -38,13 +38,16 @@ Consequences that do the work:
 
 **Boundaries of the guarantee** (each enforced or stated, never silent):
 
-- *Uniform priors only.* The box map's implied physical density is Uniform
-  over `.bounds` regardless of what was declared, so a `Gaussian` hierarchical
-  free parameter would be silently fit with the wrong prior.
-  `build_flat_problem` **refuses** non-Uniform free-parameter priors
-  (`_require_uniform_priors`); exact support needs a quantile map on the
-  distributions — `theta = ppf(Phi(u))` standardizes any prior under the same
-  latent space — tracked as #1651.
+- *Every declared prior is exact* (#1651, resolved). Each free parameter maps
+  through its distribution's own `unstandardize` — the classes' single source
+  of truth, shared with `sample` and the single-galaxy unbounded machinery —
+  so Uniform is bit-identical to the old box map and Gaussian / LogUniform /
+  LogNormal / StudentT / Laplace are realized exactly rather than silently
+  replaced by Uniform-over-bounds (the wrong-prior bug the hardening pass
+  refused). The pushforward-vs-`log_prob` agreement is pinned class-by-class
+  (`test_every_prior_pushforward_is_the_declared_density`). A
+  distribution-like object *without* the `unstandardize` contract is refused
+  by name (`_physical_map`).
 - *Standardized prior, not standardized geometry.* The posterior's
   conditioning still varies with the problem; samplers keep their own tuning
   needs (mass matrix, step size, warmup). Standardization buys uniform
@@ -109,7 +112,7 @@ class; hierarchical initialization is automatic per-galaxy MAP).
 | guard | converts | origin |
 | ----- | -------- | ------ |
 | `check_usable` (outer in `run()`, inner here — deliberate redundancy) | tier="broken" backends running un-opted-in | #1394 |
-| `_require_uniform_priors` | silently fitting Uniform in place of a declared non-Uniform prior | #1651 |
+| `_physical_map` | a prior with no `unstandardize` pushforward entering the standardized space wrongly | #1651 |
 | `_require_finite_tuning` | MCLMC starved-tuner NaN → frozen chain | measured at `n_warmup=60`, D=516 |
 | `_require_moving_chain` | any MCMC chain that never moved — the init echoed `n_samples` times | #1530's MAP-echo mode, generalized |
 | `DegenerateChainError` in raytrace | near-zero acceptance chains returned as posteriors | #1530/#1569 |

@@ -25,10 +25,13 @@ vector, every sampler in the registry is a plain function call.
 The prior is the reason this is clean
 -------------------------------------
 The hierarchical parameterization is already **iid standard normal**. Every
-bounded quantity is stored as an unconstrained latent and mapped through
-:func:`~tengri.utils.transforms.to_bounded`, which is the Gaussian CDF, so an
-N(0,1) latent yields a genuine Uniform(lo, hi) physical prior. The log posterior
-is therefore separable by construction:
+free parameter is stored as an unconstrained latent and mapped through its
+distribution's own ``unstandardize`` pushforward — the classes' single source
+of truth, shared with ``sample`` and the single-galaxy unbounded machinery —
+so an N(0,1) latent yields the DECLARED physical prior exactly: Uniform via
+the Gaussian-CDF box map, and every other class via its quantile map (#1651;
+the pushforward-vs-``log_prob`` agreement is pinned class-by-class in the
+regression suite). The log posterior is therefore separable by construction:
 
 .. math::
 
@@ -224,8 +227,7 @@ def build_flat_problem(fitter, *, key, memory_mode="low", verbose=False, map_ste
     stochastic = spec.stochastic
     n_grid = spec.n_grid
     free_names = fitter._free_names
-    _require_uniform_priors(spec, free_names)
-    bounds = {name: spec.get_distribution(name).bounds for name in free_names}
+    physical = _physical_map(spec, free_names)
     fixed_values = spec.get_fixed_values()
     sigma_lo, sigma_hi = fitter.psd_sigma_bounds
     tau_lo, tau_hi = fitter.psd_tau_bounds
@@ -302,8 +304,12 @@ def build_flat_problem(fitter, *, key, memory_mode="low", verbose=False, map_ste
         def forward_one(ub_scalars, xi):
             params = {}
             for name in free_names:
-                lo, hi = bounds[name]
-                params[name] = to_bounded(ub_scalars[name], lo, hi)
+                # The declared prior's own N(0,1) pushforward — Uniform's is
+                # bit-identical to the old to_bounded box map; every other
+                # distribution becomes EXACT instead of silently Uniform
+                # (#1651). Same convention as the per-galaxy MAP init and the
+                # single-galaxy unbounded machinery.
+                params[name] = physical[name](ub_scalars[name])
             for name, val in fixed_values.items():
                 if name not in ("sfh_field_psd_sigma", "sfh_field_psd_tau_myr"):
                     params[name] = val
@@ -380,36 +386,53 @@ def build_flat_problem(fitter, *, key, memory_mode="low", verbose=False, map_ste
     )
 
 
-def _require_uniform_priors(spec, free_names):
-    """Refuse non-Uniform priors on hierarchical free parameters.
+def _physical_map(spec, free_names):
+    """The per-parameter N(0,1) -> physical pushforwards for the seam.
 
-    The seam's standardized space realizes Uniform priors EXACTLY: every free
-    parameter is an N(0,1) latent pushed through the Gaussian-CDF box map
-    (:func:`~tengri.utils.transforms.to_bounded`), whose implied physical
-    density is Uniform over ``.bounds`` regardless of what was declared. A
-    ``Gaussian`` free parameter would therefore be silently fit with a
-    Uniform prior over its truncation box — a wrong-prior result that looks
-    plausible — and an untruncated one hands +/-inf to the box map. Refusal
-    with the consequence named is the honest floor until the distributions
-    grow a quantile map (``theta = ppf(Phi(u))`` standardizes ANY prior
-    exactly; see the tracking issue named in the error).
+    Each free parameter's map IS its distribution's own ``unstandardize`` —
+    the classes' declared single source of truth, already used by ``sample``
+    and by the single-galaxy unbounded machinery — so the seam's standardized
+    space realizes the DECLARED prior exactly for every distribution
+    (Uniform's pushforward is bit-identical to the old ``to_bounded`` box
+    map; every other class becomes exact instead of being silently replaced
+    by Uniform-over-bounds, the wrong-prior bug the hardening pass refused
+    and #1651 specced away). The pushforward-vs-``log_prob`` agreement is
+    pinned class-by-class in the regression suite.
+
+    A distribution-like object without ``unstandardize`` cannot be
+    standardized and is refused by name rather than mapped wrongly.
     """
     from tengri.parameters.priors import Uniform
 
+    physical = {}
     for name in free_names:
         dist = spec.get_distribution(name)
-        if not isinstance(dist, Uniform):
+        if isinstance(dist, Uniform):
+            # Uniform keeps the EXACT previous graph, not merely the exact
+            # math: Uniform.unstandardize is bitwise-equal to to_bounded
+            # pointwise, but to_bounded is @jax.jit-decorated, so calling it
+            # embeds a nested-jit boundary in the traced likelihood while the
+            # bound method inlines — different XLA fusion, one-ULP erf-chain
+            # differences, and a measurably different HMC chain (step_size
+            # 0.06797 vs the historical 0.06732 on the reference fixture).
+            # Routing Uniform through to_bounded keeps all-Uniform fits
+            # bit-identical to every published result.
+            lo, hi = dist.bounds
+            physical[name] = lambda u, lo=lo, hi=hi: to_bounded(u, lo, hi)
+            continue
+        unstd = getattr(dist, "unstandardize", None)
+        if not callable(unstd):
             raise NotImplementedError(
                 f"hierarchical free parameter {name!r} declares a "
-                f"{type(dist).__name__} prior, but the flat seam's "
-                f"standardized space realizes Uniform priors only: fitting "
-                f"would silently replace the declared prior with "
-                f"Uniform{tuple(dist.bounds)!r} (the Gaussian-CDF box map's "
-                f"implied density). Use a Uniform prior for this parameter "
-                f"hierarchically, or fit it per-galaxy through Fitter, which "
-                f"honors the declared prior. Exact non-Uniform support needs "
-                f"a quantile map on the distributions (#1651)."
+                f"{type(dist).__name__} prior with no 'unstandardize' "
+                f"pushforward, so it cannot enter the seam's standardized "
+                f"N(0,1) space. Implement unstandardize/standardize on the "
+                f"distribution (see tengri.parameters.priors for the "
+                f"contract), or fit this parameter per-galaxy through "
+                f"Fitter."
             )
+        physical[name] = unstd
+    return physical
 
 
 def _require_moving_chain(chain, method):

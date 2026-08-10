@@ -399,8 +399,9 @@ context *before* entering JAX transforms. The context's
 
 **Read `docs/dev/hierarchical-flat-seam.md` before touching `_hierarchical_flat.py`.**
 Every hierarchical sampler operates in ONE standardized space — a flat
-unconstrained vector with an iid N(0,1) prior; Uniform physical priors are
-exact and non-Uniform ones are refused (#1651). Wiring a sampler is three
+unconstrained vector with an iid N(0,1) prior; every declared physical prior
+is realized exactly via its distribution's `unstandardize` pushforward
+(#1651), and an object without that contract is refused by name. Wiring a sampler is three
 edits (a `FLAT_SAMPLERS` entry, one driver branch, the set-pin test in the
 same commit) **plus one executed fit** — every wiring in the 2026-08 series
 found a runtime-only defect (blackjax API drift, NaN tuning → frozen chain,
