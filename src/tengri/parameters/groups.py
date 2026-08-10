@@ -91,8 +91,10 @@ True
 from __future__ import annotations
 
 import difflib
+import inspect
 import warnings
 from collections.abc import Callable
+from functools import lru_cache
 from typing import NamedTuple
 
 from tengri.config.exceptions import (
@@ -756,40 +758,11 @@ def parse_groups(**kwargs) -> Parameters:
     resolved_kwargs = dict(structural_kwargs)
     provenance: dict[str, str] = {}
 
-    # Which agn_* parameters the active AGN model / composable block selection
-    # actually consumes. A group-level ``agn={'*': FREE}`` frees only these,
-    # not the full declared superset — otherwise it would create dozens of
-    # unconstrained no-op nuisance dimensions for parameters belonging to
-    # inactive blocks (e.g. GRAHSP params under a SKIRTOR torus).
-    agn_active_params = _agn_active_param_set(structural_kwargs)
-
-    # Which radio sub-block params the active sf / agn radio model consumes.
-    # A ``radio={'sf': {'*': FREE}}`` / ``radio={'agn': {'*': FREE}}`` wildcard
-    # frees only these — the inactive model's params collapse to Fixed (mirrors
-    # the AGN block-scoped wildcard above).
-    radio_sf_active = _RADIO_SF_PARAMS_BY_MODE.get(
-        structural_kwargs.get("radio_sfr_mode"), frozenset()
-    )
-    radio_agn_active = _RADIO_AGN_PARAMS_BY_MODEL.get(
-        structural_kwargs.get("radio_agn_model"), frozenset()
-    )
-
-    # Which dust.emission params the selected IR engine actually reads. The
-    # sub-block's partition spans every engine it can dispatch to — 22 names
-    # across nine — so an unscoped ``emission={'*': FREE}`` frees whichever of
-    # those carry free registry defaults, whichever engine is selected. Under
-    # ``schreiber2016`` (a two-parameter model) that freed six parameters
-    # belonging to DL07/DL14/MBB/THEMIS, each provably inert — sweeping one
-    # across its full support leaves the dust IR SED bit-identical — while the
-    # engine's own ``dust_T`` stayed pinned, though it moves that SED by 94%
-    # (#1482). Scoping mirrors the AGN and radio blocks above. ``None`` when the
-    # engine declares nothing introspectable; the wildcard then keeps its
-    # unscoped behavior rather than guessing which names are live.
-    dust_emission_wildcard_params = (
-        _declared_param_names(structural_params.dust_emission)
-        if structural_params.dust_emission is not None
-        else None
-    )
+    # Which parameters each group's ``all_params: FREE`` may free, scoped to the
+    # structural variant that group selected. Computed once, consulted once in
+    # the resolve loop below — see :func:`_wildcard_scopes` for why every group
+    # with a structural axis needs an entry and what happens when one lacks it.
+    wildcard_scopes = _wildcard_scopes(structural_kwargs, structural_params, param_partition)
 
     # Outcome of every *active* ``all_params: FREE`` wildcard, keyed by the
     # group it was written in. ``FREE`` resolves to the registry default, which
@@ -875,18 +848,14 @@ def parse_groups(**kwargs) -> Parameters:
             # Group was not a dict (or is a sub-key); use structural default
             continue
 
-        # AGN group wildcards are scoped to the active blocks' consumed params
-        # (block-scoped wildcard). Non-AGN groups are always wildcard-active.
+        # A group whose wildcard is scoped to its selected structural variant
+        # frees only what that variant reads; a parameter outside the scope
+        # resolves to ``wildcard_fixed_inactive`` and stays declared-but-Fixed.
+        # ``None`` (the group has no structural axis, or its variant declares
+        # nothing introspectable) leaves the wildcard unnarrowed.
         is_agn = group == "agn" or group.startswith("agn.")
-        wildcard_active = True
-        if is_agn:
-            wildcard_active = param_name in agn_active_params
-        elif group == "radio.sf":
-            wildcard_active = param_name in radio_sf_active
-        elif group == "radio.agn":
-            wildcard_active = param_name in radio_agn_active
-        elif group == "dust.emission" and dust_emission_wildcard_params is not None:
-            wildcard_active = param_name in dust_emission_wildcard_params
+        scope = wildcard_scopes.get(group)
+        wildcard_active = scope is None or param_name in scope
         final_dist, tag = _resolve_value(
             param_name,
             group_dict,
@@ -1403,6 +1372,196 @@ def _agn_active_param_set(structural_kwargs: dict) -> frozenset[str]:
     from tengri.components.agn.blocks._consumes import agn_active_param_set
 
     return agn_active_param_set(structural_kwargs)
+
+
+def _law_shape_params(law_name: str) -> frozenset[str]:
+    """Declared parameters the named attenuation law reads, from its signature.
+
+    Parameters
+    ----------
+    law_name : str
+        Key in ``DUST_LAWS`` as written in the grammar, e.g. ``"calzetti"``.
+
+    Returns
+    -------
+    frozenset of str
+        Flat parameter names (``dust_Rv``, ``dust_slope``, ...). Empty for a law
+        that reads nothing beyond wavelength, and for an unregistered name.
+
+    Notes
+    -----
+    **JIT-compatible**: no — signature introspection at build time.
+
+    Read off the function signature rather than a maintained table, so a law
+    registered later is scoped without editing this module. Every law also
+    takes ``**kwargs``, which is exactly why the signature is the only honest
+    source: ``def calzetti(wavelength, **_kwargs)`` *accepts* ``dust_Rv`` and
+    silently discards it, so "does the call succeed?" cannot answer "does this
+    law read this parameter?" — only the named parameters can.
+
+    Two spellings reach the same quantity: the law kwarg (``n_slope``) and the
+    flat parameter (``dust_slope``). ``_TWO_COMPONENT_LAW_PARAMS`` is the
+    existing map between them; a signature name already spelled ``dust_*`` is
+    its own flat name.
+    """
+    from tengri.components.dust._apply import _TWO_COMPONENT_LAW_PARAMS
+    from tengri.components.dust.laws._registry import DUST_LAWS
+
+    entry = DUST_LAWS.get(law_name)
+    if entry is None:
+        return frozenset()
+    fn = entry["fn"] if isinstance(entry, dict) else entry
+
+    kwarg_to_flat = {kwarg: flat for kwarg, flat, _ in _TWO_COMPONENT_LAW_PARAMS}
+    try:
+        sig = inspect.signature(fn)
+    except (TypeError, ValueError):  # pragma: no cover - builtins have no signature
+        return frozenset()
+
+    names = set()
+    for param in sig.parameters.values():
+        if param.kind is param.VAR_KEYWORD:
+            continue
+        flat = kwarg_to_flat.get(param.name)
+        if flat is not None:
+            names.add(flat)
+        elif param.name.startswith("dust_"):
+            names.add(param.name)
+    return frozenset(names)
+
+
+@lru_cache(maxsize=1)
+def _all_law_shape_params() -> frozenset[str]:
+    """Every parameter any registered attenuation law reads.
+
+    Returns
+    -------
+    frozenset of str
+        Union of :func:`_law_shape_params` over ``DUST_LAWS``.
+
+    Notes
+    -----
+    **JIT-compatible**: no — signature introspection, cached after the first
+    call because the law registry is populated at import time and every
+    ``parse_groups`` would otherwise re-introspect all 22 laws.
+
+    The ``dust`` wildcard frees the group's parameters *minus* the members of
+    this set that the selected laws do not read, so parameters no law takes as
+    a shape argument — the Charlot & Fall optical depths — are never narrowed
+    away by a law that happens to be shape-free.
+    """
+    from tengri.components.dust.laws._registry import DUST_LAWS
+
+    return frozenset().union(*(_law_shape_params(name) for name in DUST_LAWS), frozenset())
+
+
+#: Law slots a two-component/single-component dust model can select. Each is an
+#: independent choice, so a shape parameter is live if *any* slot's law reads it.
+_DUST_LAW_SLOTS: tuple[str, ...] = ("dust_law_bc", "dust_law_diff", "dust_law_neb")
+
+
+def _wildcard_scopes(
+    structural_kwargs: dict,
+    structural_params: Parameters,
+    param_partition: dict[str, str],
+) -> dict[str, frozenset[str] | None]:
+    """Per-group scope for ``all_params: FREE``, keyed by group name.
+
+    Parameters
+    ----------
+    structural_kwargs : dict
+        Translated structural choices (``dust_law_bc``, ``shock_norm``, ...).
+    structural_params : Parameters
+        Structural-only spec, used for the selected ``dust_emission`` engine.
+    param_partition : dict
+        Parameter name -> owning group, from :func:`_partition_by_group`.
+
+    Returns
+    -------
+    dict
+        Group name -> the parameters its wildcard may free, or ``None`` to leave
+        the wildcard unnarrowed. Groups absent from the mapping are unnarrowed.
+
+    Notes
+    -----
+    **JIT-compatible**: no — build-time introspection.
+
+    A group's declared parameters span every structural variant it can dispatch
+    to, but a build selects one. Freeing the whole superset hands the sampler
+    dimensions the selected variant never reads: flat directions explored at
+    full cost whose posterior comes back equal to the prior, with nothing in the
+    fit saying why. That is #1482, measured there as six inert free dimensions
+    under ``schreiber2016`` while the engine's own ``dust_T`` — worth 94% of the
+    dust IR SED — stayed pinned.
+
+    The failure recurred because each group was scoped where it was noticed:
+    AGN, then ``radio.sf``/``radio.agn``, then ``dust.emission``, three
+    mechanisms behind three branches in the resolver. A fourth group needing it
+    was a fourth branch, and until someone wrote that branch the group failed
+    silently. Collecting the scopes here makes the resolver's use of them
+    single and uniform, so adding a group is an entry rather than a branch.
+
+    ``None`` and ``frozenset()`` are different answers and the distinction is
+    load-bearing: ``None`` means "not scoped, free whatever the group declares",
+    while an empty set would pin every parameter in the group. A variant that
+    declares nothing introspectable must map to ``None`` — narrowing it to the
+    empty set would cause the very failure this exists to prevent (see
+    ``_declared_param_names`` on ``energy_balance_split``).
+    """
+    scopes: dict[str, frozenset[str] | None] = {}
+
+    # ── AGN: every agn.* sub-block shares the active-block scope ──
+    agn_active = _agn_active_param_set(structural_kwargs)
+    for group in set(param_partition.values()):
+        if group == "agn" or group.startswith("agn."):
+            scopes[group] = agn_active
+
+    # ── radio: the selected sf mode / agn model ──
+    scopes["radio.sf"] = _RADIO_SF_PARAMS_BY_MODE.get(
+        structural_kwargs.get("radio_sfr_mode"), frozenset()
+    )
+    scopes["radio.agn"] = _RADIO_AGN_PARAMS_BY_MODEL.get(
+        structural_kwargs.get("radio_agn_model"), frozenset()
+    )
+
+    # ── dust.emission: the selected IR engine's own declarations ──
+    scopes["dust.emission"] = (
+        _declared_param_names(structural_params.dust_emission)
+        if structural_params.dust_emission is not None
+        else None
+    )
+
+    # ── dust: the attenuation laws the selected slots name ──
+    # The group owns both the optical depths (which every law consumes through
+    # the Charlot & Fall geometry, not as a curve-shape argument) and the four
+    # curve-shape modifiers, which only some laws read. Narrow by removing the
+    # shape parameters no selected law names, leaving everything else free.
+    dust_group_params = {name for name, grp in param_partition.items() if grp == "dust"}
+    if dust_group_params:
+        active_shape = frozenset().union(
+            *(
+                _law_shape_params(structural_kwargs[slot])
+                for slot in _DUST_LAW_SLOTS
+                if structural_kwargs.get(slot) is not None
+            ),
+            frozenset(),
+        )
+        scopes["dust"] = frozenset(dust_group_params - (_all_law_shape_params() - active_shape))
+
+    # ── shock: the selected normalization ──
+    # ``norm='frac'`` scales the galaxy Halpha via ``shock_frac``; ``'lhalpha'``
+    # sets an absolute ``shock_log_lhalpha``. Each reads one and ignores the
+    # other, so an unscoped wildcard always frees one inert luminosity scale.
+    shock_group_params = {name for name, grp in param_partition.items() if grp == "shock"}
+    if shock_group_params:
+        unused = (
+            "shock_log_lhalpha"
+            if structural_kwargs.get("shock_norm", "frac") != "lhalpha"
+            else "shock_frac"
+        )
+        scopes["shock"] = frozenset(shock_group_params - {unused})
+
+    return scopes
 
 
 def _translate_structural(groups: dict) -> dict:
