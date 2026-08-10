@@ -1017,16 +1017,45 @@ def _base_provenance(tag: str) -> str:
 #: they asked for, so it is left alone and merely warned about.
 _DECLARATION_SOURCED_FREE = frozenset({"user_free", "wildcard_free"})
 
-#: ``structural_params`` key -> registry selector, for grid-narrowing.
-#:
-#: Keyed on the *selected* component, which is what makes narrowing safe for a
-#: shared parameter: ``agn_log_mbh`` is consumed by the analytic discs too, and
-#: they are untouched because they are not in this table. Only when
-#: ``slone_netzer`` is the chosen disc does its grid constrain anything.
-_GRID_SELECTOR_BY_STRUCTURAL: dict[str, str] = {
-    "dust_emission": "dust.emission",
-    "agn_disc_block": "agn.disc",
-}
+
+def _selected_component(selector: str, structural) -> str | None:
+    """Which component is selected for ``selector``, or ``None``.
+
+    Derives the structural attribute from the selector rather than consulting a
+    second table: ``"dust.emission"`` -> ``dust_emission``, ``"agn.disc"`` ->
+    ``agn_disc_block``. An earlier draft hand-maintained that mapping, which
+    made it a second census that had to agree with
+    :data:`~tengri.components.grid_support.GRID_SUPPORT` — registering a
+    component there would silently not be narrowed, with nothing failing. That
+    is the same drift this whole area exists to remove, so it is derived.
+
+    Parameters
+    ----------
+    selector : str
+        Dotted selector, e.g. ``'agn.disc'``.
+    structural : Parameters
+        Structural-only spec carrying the component selections.
+
+    Returns
+    -------
+    str or None
+        The selected component name, or ``None`` when this spec makes no such
+        selection.
+
+    Notes
+    -----
+    **JIT-compatible**: not applicable — composition-time only.
+
+    Narrowing keys on the *selected* component, which is what makes it safe for
+    a shared parameter: ``agn_log_mbh`` is consumed by the analytic discs too,
+    and they are untouched because they carry no grid.
+    """
+    base = selector.replace(".", "_")
+    for attr in (base, f"{base}_block"):
+        value = getattr(structural, attr, None)
+        if isinstance(value, str):
+            return value
+    return None
 
 
 def _narrow_free_priors_to_grid(
@@ -1074,12 +1103,14 @@ def _narrow_free_priors_to_grid(
       bound (astrodust reaches ``lgU = -3`` where the declaration floors at 0);
       widening there would assert physics the declaration deliberately excluded.
     """
-    from tengri.components.grid_support import grid_support
+    from tengri.components.grid_support import GRID_SUPPORT, grid_support
     from tengri.parameters.priors import Uniform
 
-    for key, selector in _GRID_SELECTOR_BY_STRUCTURAL.items():
-        name = getattr(structural, key, None)
-        if not isinstance(name, str):
+    # Drive off the registry itself, so registering a component is the only
+    # step needed for it to be narrowed as well as reported.
+    for selector in sorted({sel for sel, _ in GRID_SUPPORT}):
+        name = _selected_component(selector, structural)
+        if name is None:
             continue
         for pname, (g_lo, g_hi) in grid_support(selector, name).items():
             if provenance.get(pname) not in _DECLARATION_SOURCED_FREE:

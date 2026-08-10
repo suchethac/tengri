@@ -114,6 +114,28 @@ def test_every_selectable_variant_is_registered_or_declared_grid_free():
     )
 
 
+def test_every_registered_selector_resolves_to_a_structural_attribute():
+    """Narrowing is driven off the registry, so every selector must resolve.
+
+    ``_selected_component`` derives the structural attribute from the selector
+    (``'agn.disc'`` -> ``agn_disc_block``) rather than consulting a second
+    table. If a future selector follows neither convention it would silently
+    never narrow -- reported but not fixed -- which is precisely the
+    two-lists-that-must-agree failure this area exists to remove.
+    """
+    from tengri.parameters.groups import _selected_component
+
+    spec = _spec(
+        dust={"type": "two_component", "emission": {"type": "dl07"}},
+        agn={"type": "composable", "disc": {"type": "slone_netzer"}},
+    )
+    unresolved = sorted({sel for sel, _ in GRID_SUPPORT if _selected_component(sel, spec) is None})
+    assert unresolved == [], (
+        f"registered selectors with no structural attribute, so they are "
+        f"reported but never narrowed: {unresolved}"
+    )
+
+
 @pytest.mark.parametrize("alias", ["dl07_tabulated", "draine_li2007", "draine_li2014"])
 def test_menu_aliases_resolve_to_the_same_support(alias):
     """An alias must be checked as thoroughly as the canonical spelling."""
