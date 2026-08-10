@@ -384,7 +384,7 @@ class Catalog:
         ----------
         fwd : ForwardModel
             Model built with ``sfh={'type': 'table'}`` (and
-            ``met={'type': 'table'}`` if ``met`` is given).
+            ``stellar={'met_mode': 'table'}`` if ``met`` is given).
         t_gyr : array_like, shape (n_t,) or (N, n_t)
             Cosmic time [Gyr], strictly increasing. A 1-D grid is shared by
             every galaxy and broadcast.
@@ -465,9 +465,12 @@ class Catalog:
         if met is not None:
             if cfg.metallicity_model != "table":
                 raise ValueError(
-                    f"met= needs a model built with met={{'type': 'table'}}; this "
-                    f"model's metallicity_model is {cfg.metallicity_model!r}. Either "
-                    f"rebuild with a tabulated metallicity or drop met=."
+                    f"met= needs a model built with stellar={{'met_mode': 'table'}}; "
+                    f"this model's metallicity_model is {cfg.metallicity_model!r}. "
+                    f"Either rebuild with a tabulated metallicity or drop met=. "
+                    f"('table' is the one metallicity mode that cannot be inferred "
+                    f"from parameter names — it declares no fittable parameters — so "
+                    f"it has to be named explicitly.)"
                 )
             met = np.asarray(met)
             if met.shape != sfr.shape:
