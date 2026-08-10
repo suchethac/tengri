@@ -1207,7 +1207,25 @@ class Fitter:
                     resolved = self._add_feature_precomp(model)
                 return resolved
             cfg = self._auto_approx_config(model)
-            return model if cfg is None else _memoized_approx_clone(model, cfg)
+            if cfg is None:
+                return model
+            if self.data_type == "photometry" and not self._fits_lines(model):
+                # #1596: a photometry-only Cue fit measured ~4x SLOWER than
+                # the same fit WITH a line channel, because FeaturePrecomp —
+                # despite the name, the nebular precompute; for Cue the
+                # per-Q_H grid replaces the emulator call itself (~7x
+                # per-gradient) — was only added when lines were fit, and
+                # WavePrecomp alone does not clear the noise floor on a Cue
+                # model. Attempt the feature top-up; a backend with nothing
+                # to tabulate raises, and that raise IS the detection — fall
+                # back to the wave LUT, never to the raw model. Mirrors the
+                # batch surfaces' _resolve_batch_fit_approx.
+                from tengri.forward.sed_model import FeaturePrecomp
+
+                base = cfg if isinstance(cfg, tuple) else (cfg,)
+                with contextlib.suppress(Exception):
+                    return _memoized_approx_clone(model, (*base, FeaturePrecomp()))
+            return _memoized_approx_clone(model, cfg)
 
         resolved = _memoized_approx_clone(model, approx)
         self._warn_lines_without_lut(resolved)
