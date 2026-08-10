@@ -280,6 +280,137 @@ def test_every_flat_sampler_names_a_real_backend_and_driver(name):
     }, f"{name!r} declares unknown driver {driver!r}"
 
 
+def test_declared_priors_map_exactly_through_the_seam():
+    """Any declared prior is realized EXACTLY via its own pushforward (#1651).
+
+    The seam used to route every free parameter through the Uniform box map
+    (``to_bounded``), silently replacing a declared ``Gaussian`` with
+    Uniform-over-truncation-bounds — refused since the hardening PR. The
+    distributions have carried the exact N(0,1) pushforward all along
+    (``unstandardize``, the classes' declared single source of truth, used by
+    ``sample`` and by the single-galaxy unbounded machinery); the seam now
+    builds its physical map from it, so the standardized space realizes the
+    DECLARED prior for every distribution — the #1651 quantile map under the
+    name it already had.
+    """
+    import jax.numpy as jnp
+
+    from tengri.inference._hierarchical_flat import _physical_map
+    from tengri.parameters.priors import Gaussian, Uniform
+
+    class _Spec:
+        def __init__(self, dists):
+            self._dists = dists
+
+        def get_distribution(self, name):
+            return self._dists[name]
+
+    g = Gaussian(2.0, 0.5, lo=1.0, hi=3.0)
+    spec = _Spec({"a": Uniform(0.0, 1.0), "b": g})
+    phys = _physical_map(spec, ["a", "b"])
+    u = jnp.array(0.7)
+    assert jnp.allclose(phys["b"](u), g.unstandardize(u)), (
+        "the seam's map must BE the distribution's own pushforward"
+    )
+    assert jnp.allclose(phys["a"](u), spec.get_distribution("a").unstandardize(u))
+
+    class _NoPushforward:
+        """A distribution-like object without the standardization contract."""
+
+    with pytest.raises(NotImplementedError) as exc:
+        _physical_map(_Spec({"a": _NoPushforward()}), ["a"])
+    msg = str(exc.value)
+    assert "a" in msg and "unstandardize" in msg
+
+
+def test_every_prior_pushforward_is_the_declared_density():
+    """unstandardize really is the exact quantile map, class by class.
+
+    Change of variables: pushing u ~ N(0,1) through ``unstandardize`` implies
+    the physical density phi(u) / |d unstandardize/du|, which must equal
+    ``exp(log_prob(theta))`` — both are normalized, so agreement is exact,
+    not up to a constant. This is the load-bearing claim behind fitting any
+    declared prior hierarchically (#1651); a class whose ``unstandardize``
+    drifted from its ``log_prob`` would silently fit a wrong prior.
+    """
+    import jax
+    import jax.numpy as jnp
+
+    from tengri.parameters.priors import (
+        Gaussian,
+        Laplace,
+        LogNormal,
+        LogUniform,
+        StudentT,
+        Uniform,
+    )
+
+    dists = {
+        "uniform": Uniform(0.5, 3.5),
+        "gaussian": Gaussian(2.0, 0.5),
+        "gaussian_trunc": Gaussian(2.0, 0.5, lo=1.0, hi=3.0),
+        "loguniform": LogUniform(1e-2, 1e2),
+        "lognormal": LogNormal(0.5, 0.4),
+        "studentt_df2": StudentT(2.0, 0.5, df=2),
+        "laplace": Laplace(1.0, 0.3),
+    }
+    # Even point count: u=0 is Laplace's quantile-map kink (the median), where
+    # autodiff returns the one-sided derivative of a piecewise branch and the
+    # comparison spuriously reads +inf. Measured: every off-kink point agrees
+    # to ~1e-16; only the kink itself disagrees. Avoid it rather than widen
+    # the tolerance.
+    u_grid = jnp.linspace(-1.8, 1.8, 8)
+    log_phi = -0.5 * u_grid**2 - 0.5 * jnp.log(2 * jnp.pi)
+    for name, dist in dists.items():
+        theta = jax.vmap(dist.unstandardize)(u_grid)
+        dtheta_du = jax.vmap(jax.grad(lambda u, d=dist: d.unstandardize(u)))(u_grid)
+        implied = log_phi - jnp.log(jnp.abs(dtheta_du))
+        declared = jax.vmap(dist.log_prob)(theta)
+        assert jnp.allclose(implied, declared, atol=1e-5), (
+            f"{name}: unstandardize's pushforward density disagrees with "
+            f"log_prob — max |diff| = {float(jnp.max(jnp.abs(implied - declared))):.2e}"
+        )
+
+
+def test_a_frozen_chain_is_refused_not_returned():
+    """Every MCMC driver must refuse a chain that never moved.
+
+    #1530's lesson generalized: MAP-echo draws look like a plausible answer.
+    ``_require_finite_tuning`` catches the MCLMC starved-tuner cause; this is
+    the effect-side net for every driver — a retained chain whose draws are
+    all identical is not a posterior, whatever produced it.
+    """
+    import jax.numpy as jnp
+
+    from tengri.inference._hierarchical_flat import _require_moving_chain
+    from tengri.inference.hierarchical import DegenerateChainError
+
+    moving = jnp.array([[0.0, 1.0], [0.1, 1.0], [0.2, 0.9]])
+    _require_moving_chain(moving, "mcmc_nuts")  # passes silently
+
+    frozen = jnp.tile(jnp.array([[0.5, -1.2]]), (60, 1))
+    with pytest.raises(DegenerateChainError) as exc:
+        _require_moving_chain(frozen, "mcmc_nuts")
+    assert "mcmc_nuts" in str(exc.value)
+
+
+def test_an_unknown_fit_kwarg_is_refused_not_swallowed():
+    """``run_flat_sampler(..., **_ignored)`` was a silent kwarg sink.
+
+    The #1378 standard: a typo'd fit option must fail loudly. Before this
+    guard, ``n_samplse=1000`` (or ``init_from=...``, which the hierarchical
+    surface documents as unsupported) vanished silently and the fit ran with
+    defaults while the caller believed otherwise.
+    """
+    from tengri.inference._hierarchical_flat import run_flat_sampler
+
+    with pytest.raises(TypeError) as exc:
+        run_flat_sampler(object(), "map", key=None, n_samplse=1000)
+    msg = str(exc.value)
+    assert "n_samplse" in msg, "the error must name the unknown kwarg"
+    assert "n_samples" in msg, "the error must show the accepted options"
+
+
 def test_a_non_finite_tuning_is_refused_not_returned():
     """A starved MCLMC tuner must raise, not hand back a frozen chain.
 

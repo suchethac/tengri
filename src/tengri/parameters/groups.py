@@ -95,7 +95,12 @@ import warnings
 from collections.abc import Callable
 from typing import NamedTuple
 
-from tengri.config.exceptions import ParameterError, WildcardPartialFreeWarning, warn_measured
+from tengri.config.exceptions import (
+    AdvisoryWarning,
+    ParameterError,
+    WildcardPartialFreeWarning,
+    warn_measured,
+)
 from tengri.parameters._builders import _resolve_lazy_bucket
 from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Distribution, Fixed
@@ -721,8 +726,17 @@ def parse_groups(**kwargs) -> Parameters:
 
     # ── Pass 2: Resolve per-parameter values ──────────────────────────
 
-    # Build a structural Parameters to get the declared parameter list
-    structural_params = Parameters(**structural_kwargs)
+    # Build a structural Parameters to get the declared parameter list.
+    #
+    # Advisories are silenced here: this spec exists only to enumerate which
+    # parameters the selected components declare. Its values are registry
+    # defaults that pass 2 has not resolved and grid-narrowing has not touched
+    # yet, so any advisory it raises describes a state the caller never asked
+    # for and is about to be superseded — it would report the *pre-narrowing*
+    # range as a defect after that range has already been fixed (#1586).
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", AdvisoryWarning)
+        structural_params = Parameters(**structural_kwargs)
 
     # Partition declared params by owning group. ``met_*`` lands in
     # ``"stellar"`` when the user opted into the new top-level slot
@@ -948,6 +962,8 @@ def parse_groups(**kwargs) -> Parameters:
 
     # ── Construct final Parameters ────────────────────────────────────
 
+    _narrow_free_priors_to_grid(resolved_kwargs, provenance, structural_params)
+
     final_params = Parameters(**resolved_kwargs)
     # Fill in provenance for params not touched by user/wildcard
     for name in list(final_params._distributions.keys()):
@@ -957,6 +973,179 @@ def parse_groups(**kwargs) -> Parameters:
     _warn_firrc_slope_degeneracy(final_params)
 
     return final_params
+
+
+#: Marks a provenance tag whose prior was intersected with a component's grid.
+_GRID_NARROWED_SUFFIX = "_grid"
+
+#: Least fraction of a declared range that may survive an automatic narrowing.
+#:
+#: Trimming a modest dead tail is a tidy-up. Cutting a 2.5 dex prior down to
+#: 0.04 dex is not — it pins the parameter in all but name, and doing that
+#: silently is worse than the dead tail it removes. Below this, the narrowing
+#: is declined and the overhang is reported instead.
+_MIN_RETAINED_FRACTION = 0.10
+
+
+def _base_provenance(tag: str) -> str:
+    """Strip the grid-narrowing marker, leaving how the value was *chosen*.
+
+    ``wildcard_free_grid`` still means "this came from ``all_params: FREE``";
+    the suffix only records that the declared range was then intersected with
+    the selected component's grid. Round-tripping through
+    :func:`parameters_to_groups` has to see the base tag, or a narrowed
+    parameter loses its wildcard intent and gets emitted as an explicit
+    override instead of collapsing back into ``all_params``.
+
+    Parameters
+    ----------
+    tag : str
+        Raw provenance tag.
+
+    Returns
+    -------
+    str
+        The tag without the grid-narrowing marker.
+    """
+    return tag[: -len(_GRID_NARROWED_SUFFIX)] if tag.endswith(_GRID_NARROWED_SUFFIX) else tag
+
+
+#: Provenance tags whose prior came from the *declaration*, not from the user.
+#:
+#: ``FREE`` is a request to sample a parameter, not a statement about its range
+#: — the range comes from the declared ``free_prior``. Those are the only ones
+#: safe to narrow. ``user_prior`` means the caller wrote a distribution by hand;
+#: overriding that would be silently substituting a different model for the one
+#: they asked for, so it is left alone and merely warned about.
+_DECLARATION_SOURCED_FREE = frozenset({"user_free", "wildcard_free"})
+
+
+def _selected_component(selector: str, structural) -> str | None:
+    """Which component is selected for ``selector``, or ``None``.
+
+    Derives the structural attribute from the selector rather than consulting a
+    second table: ``"dust.emission"`` -> ``dust_emission``, ``"agn.disc"`` ->
+    ``agn_disc_block``. An earlier draft hand-maintained that mapping, which
+    made it a second census that had to agree with
+    :data:`~tengri.components.grid_support.GRID_SUPPORT` — registering a
+    component there would silently not be narrowed, with nothing failing. That
+    is the same drift this whole area exists to remove, so it is derived.
+
+    Parameters
+    ----------
+    selector : str
+        Dotted selector, e.g. ``'agn.disc'``.
+    structural : Parameters
+        Structural-only spec carrying the component selections.
+
+    Returns
+    -------
+    str or None
+        The selected component name, or ``None`` when this spec makes no such
+        selection.
+
+    Notes
+    -----
+    **JIT-compatible**: not applicable — composition-time only.
+
+    Narrowing keys on the *selected* component, which is what makes it safe for
+    a shared parameter: ``agn_log_mbh`` is consumed by the analytic discs too,
+    and they are untouched because they carry no grid.
+    """
+    base = selector.replace(".", "_")
+    for attr in (base, f"{base}_block"):
+        value = getattr(structural, attr, None)
+        if isinstance(value, str):
+            return value
+    return None
+
+
+def _narrow_free_priors_to_grid(
+    resolved: dict, provenance: dict[str, str], structural: dict
+) -> None:
+    """Intersect a declaration-supplied free prior with its component's grid.
+
+    A template-backed component clips its parameters onto the grid axes it
+    interpolates over, where ``jnp.clip`` is flat: the SED is bit-identical and
+    the gradient is exactly zero (#1586). ``astrodust`` ships the live case —
+    ``dust_lgU`` declares ``free_prior=Uniform(0, 7)`` against a grid of
+    ``[-3, 6]``, so ``all_params: FREE`` handed a sampler a range whose top
+    14.3% could not move. Intersecting removes the dead region instead of only
+    warning about it.
+
+    Mutates ``resolved`` in place and retags ``provenance`` so
+    :meth:`~tengri.parameters.parameters.Parameters.summary` shows the narrowing
+    rather than silently reporting a range the caller never wrote.
+
+    Parameters
+    ----------
+    resolved : dict
+        Resolved ``{param_name: Distribution}`` kwargs, mutated in place.
+    provenance : dict of str to str
+        Resolution tag per parameter.
+    structural : Parameters
+        Structural-only spec carrying the component selections, e.g. its
+        ``dust_emission`` attribute.
+
+    Notes
+    -----
+    **JIT-compatible**: not applicable — composition-time only.
+
+    Deliberately narrow in scope:
+
+    - Only :class:`~tengri.parameters.priors.Uniform` is narrowed. Intersecting
+      a Normal or LogUniform with a box is not a truncation of the same family,
+      so those keep their prior and fall through to the warning.
+    - The **declaration is never touched**. ``dust_lgU`` is shared with
+      ``draine2021_pah_ir``, whose grid need not match ``astrodust``'s, and
+      ``dust_umin``'s cap is 20 / 50 / 80 depending only on which backend is
+      selected. That is why the constraint lives per ``(component, parameter)``
+      — see :mod:`tengri.components.grid_support`.
+    - Narrowing only ever shrinks. The grid may extend *below* a declared
+      bound (astrodust reaches ``lgU = -3`` where the declaration floors at 0);
+      widening there would assert physics the declaration deliberately excluded.
+    """
+    from tengri.components.grid_support import GRID_SUPPORT, grid_support
+    from tengri.parameters.priors import Uniform
+
+    # Drive off the registry itself, so registering a component is the only
+    # step needed for it to be narrowed as well as reported.
+    for selector in sorted({sel for sel, _ in GRID_SUPPORT}):
+        name = _selected_component(selector, structural)
+        if name is None:
+            continue
+        for pname, (g_lo, g_hi) in grid_support(selector, name).items():
+            if provenance.get(pname) not in _DECLARATION_SOURCED_FREE:
+                continue
+            dist = resolved.get(pname)
+            if not isinstance(dist, Uniform):
+                continue
+            lo, hi = dist.bounds
+            new_lo, new_hi = max(lo, g_lo), min(hi, g_hi)
+            if new_lo >= new_hi or (new_lo <= lo and new_hi >= hi):
+                # Disjoint (nothing sensible to narrow to — let the warning
+                # say so) or already contained.
+                continue
+            if (new_hi - new_lo) < _MIN_RETAINED_FRACTION * (hi - lo):
+                # The declaration and the grid barely overlap, so "narrowing"
+                # would replace a physical range with a sliver — effectively
+                # pinning the parameter without saying so. agn_log_ledd is the
+                # case: Uniform(-2, 0.5) against a grid ending at -1.9586
+                # retains 1.7%, a 0.04 dex prior. A disagreement that large is
+                # a modeling decision, not a tidy-up: leave it and let the
+                # warning report it.
+                continue
+            default = dist.default
+            if default is not None:
+                default = min(max(default, new_lo), new_hi)
+            resolved[pname] = Uniform(
+                new_lo,
+                new_hi,
+                dist.description,
+                units=dist.units,
+                default=default,
+            )
+            provenance[pname] = provenance[pname] + "_grid"
 
 
 #: Sub-block group name -> the ``structural_params`` attribute naming the
@@ -3418,7 +3607,7 @@ def _analyze_wildcard_intent(
     # Collect provenance tags
     tags = set()
     for param_name in param_names:
-        tag = provenance.get(param_name, "registry_default")
+        tag = _base_provenance(provenance.get(param_name, "registry_default"))
         # Only consider wildcard tags
         if tag in ("wildcard_free", "wildcard_fixed"):
             tags.add(tag)
@@ -3461,7 +3650,9 @@ def _get_explicit_overrides(
     explicit = {}
 
     for param_name in param_names:
-        tag = provenance.get(param_name, "registry_default")
+        # Base tag: a grid-narrowed parameter still came from the wildcard, so
+        # it must collapse back into it rather than surface as an override.
+        tag = _base_provenance(provenance.get(param_name, "registry_default"))
 
         # If there's a wildcard intent, exclude params that match it
         if wildcard_intent is not None:
