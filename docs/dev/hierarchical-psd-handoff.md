@@ -1651,6 +1651,73 @@ established is the fix: no remedy has been tried against this mechanism.
 
 ---
 
+## 4j. ESS vs interim prior breadth — the quantification §4d asked for
+
+§4d's "what this implies for the fix", point 2, says reducing the interim prior's
+τ range "would shrink the leak directly, at the cost of assuming what you are
+trying to measure. **Worth quantifying**, not worth shipping silently." This
+section is that measurement.
+
+`scripts/hierarchical_psd_ess_vs_prior_breadth.py`, four widths on the same
+four-galaxy mock (`PRNGKey(42)`, σ_true = 0.6, τ_true = 350 Myr), bounds scaled
+about the truth and floored at the nominal support edge:
+
+| width | σ bounds | τ [Myr] | ESS min | **ESS median** | maxR̂ |
+|---|---|---|---|---|---|
+| 0.5 | 0.35–0.85 | 228–472 | 57.4 | **125.0** | 1.15 |
+| 1.0 | 0.10–1.09 | 105–595 | 4.4 | **66.9** | 1.57 |
+| 2.0 | 0.01–1.59 | 10–840 | 1.1 | **66.8** | 1.39 |
+| 4.0 | 0.01–2.58 | 10–1330 | 3.9 | **66.1** | 1.97 |
+
+`fit_interim` returns `n_samples // thin` = 125 draws per galaxy, so 125.0 is
+full efficiency.
+
+**The one robust structure is median ESS: 125.0 at width 0.5, then 66.9 / 66.8 /
+66.1 — flat to within 1% across a further 4× broadening.** The curve is a step,
+not a slope. It separates "prior concentrated on the truth" from "anything
+broader," and resolves nothing finer.
+
+**What this does NOT license.** Width 0.5 spans σ ∈ (0.35, 0.85) around a truth
+of 0.6 and τ ∈ (228, 472) around 350. Importance weights are near-uniform there
+because the proposal already approximates the target. Reading "narrow scores
+better" as a reason to narrow the prior is exactly the circularity §4d warned
+about — the efficiency gain is bought by assuming the answer.
+
+**maxR̂ is NOT a breadth signal — it is §5's funnel.** The values (1.15–1.97) are
+non-monotonic in width, and §5 already records static-HMC R̂(σ) = 4.42 at
+1000/1000 and 1.61 at 4000/4000 while ξ's own R̂ is 0.994–0.998, with seed-to-seed
+σ swings of 0.597→1.000. These runs use the default 1000 samples, so this scatter
+is the documented (σ, ξ) funnel, not an effect of the prior. Do not read the R̂
+column as a trend.
+
+**ESS min is not usable here either.** 57.4 → 4.4 → 1.1 → 3.9 is non-monotonic,
+it is a minimum over only four galaxies, and the chains it is computed from carry
+the R̂ above. §2 already cautions that min-ESS misleads (there for an
+order-statistic reason across N; here N is fixed at 4, so the confound is noise
+rather than order statistics, but the conclusion is the same).
+
+**A defect in the mock population contaminates the min column (#1645).** All four
+mock galaxies truncate mass before the Big Bang — 3%, 5%, 9%, and **69%** at
+z = 4.05, 10.09, 3.69 and 10.67 — because `make_population` draws redshift and
+SFH age independently. The 69% galaxy's forward model does not represent its
+injected SFH. With `median == max == 125.0` and `min = 57.4` at width 0.5,
+exactly one of four galaxies is degraded and exactly one is gutted; that is a
+correlation of n = 1 and is a hypothesis, not a finding — per-galaxy ESS is not
+recorded. The mock is fixed across widths by construction, so the *comparison*
+survives; the absolute min does not.
+
+**Status.** Measured, not assumed. Every width was run in its own process and
+banked to its own JSON after two whole-campaign runs were SIGKILLed under memory
+pressure. Before #1585 this curve could not be obtained at all: widths 2.0 and
+4.0 cross zero on both axes, and `SharedGrid.uniform` returned an entirely NaN
+grid without raising, while `log_prior` stayed finite over it.
+
+**What would make this decisive:** per-galaxy ESS in the returned result (to test
+the #1645 confound), and enough samples to clear §5's funnel before attributing
+anything to prior breadth.
+
+---
+
 ## 5. The funnel (not yet addressed)
 
 `s = L(σ,τ)·ξ` is **bilinear**, so the (σ, ξ) geometry is a funnel. Symptoms:
