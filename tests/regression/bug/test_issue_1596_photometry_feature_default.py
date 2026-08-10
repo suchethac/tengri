@@ -93,3 +93,46 @@ def test_a_backend_that_cannot_tabulate_keeps_the_wave_lut():
     cfgs = _resolved_cfgs(_StubModel(features_tabulate=False))
     assert any(isinstance(c, WavePrecomp) for c in cfgs)
     assert not any(isinstance(c, FeaturePrecomp) for c in cfgs)
+
+
+class _StubObs:
+    photometry = object()
+    line_fluxes = None
+    line_ratios = None
+    spectral_indices = None
+
+
+def test_a_line_ratio_channel_disables_the_feature_topup():
+    """The ratio term reads the backend's DISCRETE line catalog — which the
+    feature-LUT path does not publish.
+
+    Measured on main at the #1656 merge (594a60552):
+    ``test_ratio_term_constrains_fit`` went red with "Configured nebular
+    backend did not publish a discrete line catalog" because the top-up fired
+    for an Observation carrying ``line_ratios`` — a channel ``_fits_lines``
+    does not see. The channel matrix's unwritten cells strike again
+    (#1460/#1480/#1599 lineage): the top-up may fire only when NO
+    line-adjacent channel exists.
+    """
+    model = _StubModel(features_tabulate=True)
+    obs = _StubObs()
+    obs.line_ratios = object()
+    model.observation = obs
+    cfgs = _resolved_cfgs(model)
+    assert any(isinstance(c, WavePrecomp) for c in cfgs)
+    assert not any(isinstance(c, FeaturePrecomp) for c in cfgs), (
+        "the feature top-up fired despite a line-ratio channel that needs "
+        "the discrete catalog the LUT path does not publish"
+    )
+
+
+def test_spectral_indices_also_disable_the_feature_topup():
+    """Unverified interaction stays OFF: indices are a channel the top-up has
+    never been executed against, and the ratio channel proved 'plausibly
+    orthogonal' is not evidence."""
+    model = _StubModel(features_tabulate=True)
+    obs = _StubObs()
+    obs.spectral_indices = object()
+    model.observation = obs
+    cfgs = _resolved_cfgs(model)
+    assert not any(isinstance(c, FeaturePrecomp) for c in cfgs)
