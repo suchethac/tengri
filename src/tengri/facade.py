@@ -839,6 +839,25 @@ def doctor() -> str:
                 writable = os.access(cache_dir, os.W_OK)
                 status = "writable" if writable else "READ-ONLY"
                 lines.append(f"XLA cache: {cache_dir} ({status})")
+
+                # Directory permissions are not the same question as "can JAX
+                # write to this cache". One entry missing its -atime companion
+                # makes every put() raise, while reads keep working -- so the
+                # cache serves hits and silently refuses to grow, and os.access
+                # reports "writable" throughout (#1661).
+                from tengri.utils.jax_cache import orphaned_entries
+
+                orphans = orphaned_entries(cache_dir)
+                if orphans:
+                    lines.append(
+                        f"WARNING: {len(orphans)} cache entr"
+                        f"{'y is' if len(orphans) == 1 else 'ies are'} missing an "
+                        f"-atime marker; ALL cache writes are failing"
+                    )
+                    lines.append(
+                        "  → import tengri repairs this at startup; to fix now: "
+                        "tengri.utils.jax_cache.repair_orphaned_atimes()"
+                    )
             else:
                 lines.append(f"WARNING: XLA cache dir does not exist: {cache_dir}")
         else:
