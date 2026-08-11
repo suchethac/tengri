@@ -921,9 +921,13 @@ Two things to take from that grid, both counter-intuitive:
 1. **A photometry-only Cue fit is ~4x slower than the same fit with a line
    channel attached**, and `FeaturePrecomp` is what recovers it (**7x**). Adding
    data makes the fit faster, which is backwards; treat the photometry-only
-   number as a defect to be fixed, not a budget. It is tracked as issue #1596 —
-   until that lands, the opt-in is effectively required for broadband-only Cue
-   work rather than optional. (An earlier revision of this table quoted 11.7x and
+   number as a defect to be fixed, not a budget. It was tracked as issue #1596
+   and is **fixed**: the `"auto"` fit policy now attempts the feature LUT for a
+   photometry-only fit whose backend can tabulate, so the row a user lands on by
+   default is the 0.093 s one. #1683 extended the same top-up to a model built
+   `approx=WavePrecomp()`, which both fit resolvers had returned untouched — so
+   the third and fourth rows above are what the *build-time* knob buys a
+   **prediction** path, not what a fit resolves to today. (An earlier revision of this table quoted 11.7x and
    16.1x. Those were **bare-gradient** ratios, measured without a control; across
    a whole MAP step a fixed per-step optimizer cost dilutes them to the figures
    above. The 4x is the one a user feels.)

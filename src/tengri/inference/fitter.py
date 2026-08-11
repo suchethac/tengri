@@ -541,8 +541,8 @@ def _resolve_batch_fit_approx(model, approx, data_type):
 
         state = getattr(model, "approx", None)
         if data_type == "photometry":
-            if state is not None and state.wave_precomp:
-                return model
+            has_wave = state is not None and state.wave_precomp
+            has_feature = state is not None and getattr(state, "feature_precomp", False)
             cfg = WavePrecomp()
             # Attempt the feature top-up first: for a backend that can
             # tabulate its features (Cue's per-Q_H grid replaces the emulator
@@ -561,10 +561,21 @@ def _resolve_batch_fit_approx(model, approx, data_type):
             # first spelling checked line_fluxes only, the channel matrix's
             # classic unwritten cell (#1460/#1480/#1599). spectral_indices is
             # excluded as unverified rather than known-broken.
-            if not _has_line_adjacent_channel(model):
+            #
+            # #1683: a model that ALREADY carries WavePrecomp returned here
+            # untouched until this branch was restructured, so a batch fit built
+            # with approx=WavePrecomp() never reached the top-up either — the
+            # mirror of the single-galaxy gap, and the worse half: population
+            # and catalog fits evaluate the forward model the most. When the
+            # wave LUT is already configured, only the feature LUT is appended;
+            # re-appending WavePrecomp would duplicate it.
+            if not has_feature and not _has_line_adjacent_channel(model):
                 existing = tuple(getattr(model, "approx_configs", ()))
+                extra = (FeaturePrecomp(),) if has_wave else (cfg, FeaturePrecomp())
                 with contextlib.suppress(Exception):
-                    return _memoized_approx_clone(model, (*existing, cfg, FeaturePrecomp()))
+                    return _memoized_approx_clone(model, (*existing, *extra))
+            if has_wave:
+                return model
         elif data_type in ("spectroscopy", "joint"):
             if state is not None and getattr(state, "spectrum_precomp", False):
                 return model
@@ -1156,77 +1167,10 @@ class Fitter:
             base = WavePrecomp()
         else:
             return None
-        return (base, FeaturePrecomp()) if self._wants_feature_precomp(model) else base
+        return (base, FeaturePrecomp()) if self._fits_lines(model) else base
 
-    def _wants_feature_precomp(self, model):
-        """Whether this fit should carry ``FeaturePrecomp``.
-
-        A line channel is the obvious trigger, and was the only one. But for a
-        **Cue-like** backend the per-Q_H grid replaces the *emulator call itself*,
-        not merely the line reconstruction, so it pays with no line channel at all
-        — the case a line-keyed condition can never reach.
-
-        Measured on a 10-parameter Cue model (free ``neb_logU`` / ``neb_logZ_gas``,
-        DECam *grz* + WISE), likelihood-gradient FLOPs read from the compiled HLO,
-        one process per arm with the persistent cache disabled:
-
-        =====================  ===========  =========
-        fit                    before       after
-        =====================  ===========  =========
-        photometry + lines      5,021,451   5,021,451
-        photometry only        82,526,904   3,737,260
-        =====================  ===========  =========
-
-        22x on the photometry-only column — and it also *repairs the gradient*.
-        On the un-tabulated path the loss is not smooth in ``met_logzsol``:
-        autodiff and central differences disagree by 24%, and the finite-difference
-        estimate swings between -45.9 and -80.4 as the step shrinks. Through the
-        grid the two agree to 7e-8, so every optimizer and NUTS run on a
-        photometry-only Cue fit was steering by an unreliable gradient. See #1596.
-
-        Same shape as the 2026-07 hole recorded in :meth:`_auto_approx_config`:
-        the trigger named a *channel* when the win belongs to the *backend*.
-        """
-        if self._fits_lines(model):
-            return True
-        # Ratio and index channels are excluded from the widening. They call
-        # ``predict_line_ratios`` / the index path, which read the backend's
-        # **discrete line catalog**; ``enable_fast_nebular`` swaps the nebular
-        # component for a grid-backed one that does not publish it, so turning the
-        # grid on by default here raised
-        # "Configured nebular backend did not publish a discrete line catalog"
-        # from a fit that used to work (caught by
-        # tests/contract/test_line_ratio_data.py). A model that *explicitly* asks
-        # for FeaturePrecomp alongside ratios still hits that — a real gap, but a
-        # pre-existing one, and not something a default should start doing.
-        obs = getattr(model, "observation", None)
-        if obs is not None and (
-            getattr(obs, "line_ratios", None) is not None
-            or getattr(obs, "spectral_indices", None) is not None
-        ):
-            return False
-        # ``model`` is usually a ForwardModel, which delegates a fixed list of names
-        # to its inner SED and does NOT include the private backend — reading
-        # ``model._nebular_backend`` straight off it returns None, and the check
-        # then answers False for every ForwardModel fit without saying so.
-        backend = None
-        for attr in ("_inner_sed_for_delegation", "_single_inner_sed"):
-            sed = getattr(model, attr, None)
-            if callable(sed):
-                try:
-                    sed = sed()
-                except Exception:  # a model with no single inner SED (population/spatial)
-                    sed = None
-            if sed is not None:
-                backend = getattr(sed, "_nebular_backend", None)
-                if backend is not None:
-                    break
-        if backend is None:
-            backend = getattr(model, "_nebular_backend", None)
-        return backend is not None and hasattr(backend, "predict_nebular_line_luminosities")
-
-    def _add_feature_precomp(self, model):
-        """Top up a build-time ``approx=`` with ``FeaturePrecomp`` for a lines fit.
+    def _add_feature_precomp(self, model, *, warn_on_failure: bool = True):
+        """Top up a build-time ``approx=`` with ``FeaturePrecomp``.
 
         A model built with ``approx=WavePrecomp()`` used to be returned
         untouched by the ``"auto"`` policy, so naming WavePrecomp explicitly
@@ -1240,7 +1184,25 @@ class Fitter:
         Adding the LUT can legitimately fail — a nebular backend that publishes
         neither a discrete catalog nor SSP-window lines has no fast path. That
         is a reason to stay exact and say so, never to break a fit that worked,
-        so the failure is caught and surfaced as a warning.
+        so the failure is caught.
+
+        Parameters
+        ----------
+        model : SEDModel or ForwardModel
+            Never mutated; ``with_approx`` clones.
+        warn_on_failure : bool, default True
+            Whether a failed top-up warns. True for a **line** fit, where the
+            fallback costs a measured ~21x per gradient and the user asked for
+            the channel that pays for the LUT. False for the photometry-only
+            attempt (#1596), where failure is the *expected* answer for every
+            backend that is not Cue-like — there the raise IS the detection,
+            and warning on it would fire on the common case.
+
+        Returns
+        -------
+        SEDModel or ForwardModel
+            The topped-up clone, or ``model`` when the LUT is already present
+            or could not be added.
         """
         from tengri.forward.sed_model import FeaturePrecomp
 
@@ -1251,6 +1213,8 @@ class Fitter:
         try:
             return _memoized_approx_clone(model, (*existing, FeaturePrecomp()))
         except Exception as exc:  # broad on purpose — never break a working fit
+            if not warn_on_failure:
+                return model
             import warnings
 
             warnings.warn(
@@ -1300,10 +1264,21 @@ class Fitter:
             if callable(has) and has():
                 # Respect the build-time approx, but do not let it suppress the
                 # line LUT — top it up rather than bailing.
-                resolved = model
                 if self._fits_lines(model):
-                    resolved = self._add_feature_precomp(model)
-                return resolved
+                    return self._add_feature_precomp(model)
+                # #1683: #1596 in its BUILD-TIME spelling. The fix that landed
+                # in #1656 tops up only the branch below, where the model carries
+                # no approx at all; a photometry-only Cue model built WITH
+                # approx=WavePrecomp() still returned here untouched. So
+                # naming the wave LUT explicitly cost the feature LUT — the
+                # same "slower than passing nothing at all" pathology this
+                # method's docstring records for lines, measured at ~22x the
+                # per-gradient FLOPs on a 10-parameter Cue model. Silent on
+                # failure: a backend with nothing to tabulate is the common
+                # case here, not an anomaly worth warning about.
+                if self.data_type == "photometry" and not _has_line_adjacent_channel(model):
+                    return self._add_feature_precomp(model, warn_on_failure=False)
+                return model
             cfg = self._auto_approx_config(model)
             if cfg is None:
                 return model

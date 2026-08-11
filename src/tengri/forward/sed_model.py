@@ -511,10 +511,21 @@ class FeaturePrecomp:
        against its own noise floor; see ``docs/dev/api_migration_v0.x.md`` for
        the full grid.
 
-       That a photometry-only fit is *slower* than the same fit with an extra
-       data channel is a defect, not a property of the method — tracked as
-       issue #1596. Until it is fixed, treat this opt-in as required rather
-       than optional for broadband-only Cue work.
+       That a photometry-only fit was *slower* than the same fit with an extra
+       data channel was a defect, not a property of the method — #1596, fixed:
+       the ``"auto"`` fit policy now attempts this LUT for any photometry-only
+       fit whose backend can tabulate, and #1683 extended that to a model built
+       with ``approx=WavePrecomp()``, which both fit resolvers had returned
+       untouched.
+
+       Passing it explicitly still matters for **prediction**. No fit policy
+       reaches ``model.predict_photometry`` / :meth:`SEDModel.predict`, which
+       run whatever the build-time ``approx=`` says — so a build-time opt-in is
+       what a forward-model benchmark or a mock-generation loop is choosing.
+       The converse is the trap: ``Fitter(approx="auto")`` (the default)
+       re-resolves the build-time knob, so *fit* arms that differ only in
+       ``SEDModel.build(approx=...)`` can be one configuration wearing three
+       labels.
 
     The line wavelengths default to those of ``Observation.line_fluxes`` — the
     model already knows which lines it is being fitted against — so the common
