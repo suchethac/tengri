@@ -3944,6 +3944,51 @@ class SEDModel:
             raise ValueError("No filters set. Pass filters or observation= to SEDModel().")
         return self.predict_observables_jit(params).phot_fnu
 
+    def _refuse_on_fast_nebular(self, caller):
+        """Refuse a rest-frame-SED consumer on a fast-nebular model (#950, #1665).
+
+        With a per-Q_H nebular grid attached the Cue continuum forward is
+        skipped (``nebular_sed = 0``), so anything *measured off the rest-frame
+        SED* is missing both the nebular continuum and the emission lines.
+        Photometry and line fluxes stay correct — they reconstruct from the
+        grid — which is precisely why the damage is invisible from the fit that
+        selected the fast path.
+
+        One helper called by every such consumer, because **the census is the
+        part that goes wrong**: #950 guarded ``predict_spectrum`` and stopped
+        there, so ``predict_spectral_indices`` kept measuring a gutted rest SED.
+        Under ``approx=(WavePrecomp(), FeaturePrecomp())`` that moved all 13
+        spectral indices off the exact path — worst ``HgA`` by **+1733%**, the
+        five Balmer indices by 29–1733% — with no exception and no warning
+        (#1665). Adding a rest-SED consumer means adding a call here.
+
+        Parameters
+        ----------
+        caller : str
+            Public method name, quoted back to the user in the error.
+
+        Raises
+        ------
+        ValueError
+            Whenever a per-Q_H nebular grid is attached to this model.
+
+        Notes
+        -----
+        **JIT-compatible**: yes — the check reads a static Python attribute set
+        at build time, so it resolves at trace time and emits no ops.
+        """
+        if getattr(self, "_nebular_grid_table", None) is None:
+            return
+        raise ValueError(
+            f"{caller} is not available on a fast-nebular model: a per-Q_H "
+            "nebular grid is attached (approx=(WavePrecomp(), FeaturePrecomp()), "
+            "or enable_fast_nebular), so the Cue continuum forward is skipped and "
+            "the rest-frame SED omits the nebular continuum and emission lines. "
+            "Use approx=WavePrecomp() alone — exact for this quantity and still "
+            "LUT-fast for photometry — or drop approx= entirely, for spectra, "
+            "spectral indices, line ratios, and .lines."
+        )
+
     def predict_spectrum(
         self,
         params,
@@ -4042,19 +4087,9 @@ class SEDModel:
         predict : Lazy access to all SED and SFH quantities.
         predict_photometry : Filter-integrated flux (simpler, faster).
         """
-        # Fast-nebular guard (#950): with a per-Q_H grid attached the Cue
-        # continuum forward is skipped (nebular_sed = 0), so the spectrum would
-        # be missing the nebular continuum + emission lines. Refuse loudly rather
-        # than silently return a nebular-less spectrum — the fast path is for
-        # photometry + line fluxes only.
-        if getattr(self, "_nebular_grid_table", None) is not None:
-            raise ValueError(
-                "predict_spectrum is not available on a fast-nebular model "
-                "(enable_fast_nebular attached a per-Q_H grid, so the Cue "
-                "continuum forward is skipped and the spectrum would omit the "
-                "nebular emission). Use the exact model (built without "
-                "enable_fast_nebular) for spectra, line ratios, and .lines."
-            )
+        # Fast-nebular guard (#950): the fast path is for photometry + line
+        # fluxes only. Shared with every other rest-SED consumer (#1665).
+        self._refuse_on_fast_nebular("predict_spectrum")
 
         # A caller-supplied ``wave_obs`` is evaluated directly on that grid,
         # independent of any configured spectroscopy channel or the cached
@@ -4719,6 +4754,11 @@ class SEDModel:
         """
         from tengri.forward.result import SEDResult
         from tengri.observation.spectral_indices import measure_index_jax
+
+        # Indices are measured off the rest-frame SED, which the fast-nebular
+        # grid path gutted (#1665). Same guard as predict_spectrum — this
+        # consumer was simply missing from that census.
+        self._refuse_on_fast_nebular("predict_spectral_indices")
 
         if fast:
             return self._feature_fast_indices(params, tuple(index_defs))

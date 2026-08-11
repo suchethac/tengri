@@ -1,0 +1,181 @@
+# SPDX-License-Identifier: BSD-3-Clause
+"""A composed ``approx`` must publish what each of its members publishes (#1665).
+
+``WavePrecomp()`` alone is exact. ``FeaturePrecomp()`` alone is exact. Composed,
+the pair silently dropped the nebular contribution from every rest-frame band:
+13 of 13 spectral indices moved, worst ``HgA`` by **+1733%**, with no exception
+and no warning.
+
+Mechanism. ``NebularSEDComponent.apply`` takes its fast grid branch when
+``grid_table.log_phot_per_qh`` is populated -- and that channel is only built
+when ``WavePrecomp`` supplied filters. So the grid path fires for the *pair* and
+for neither single, which is why single-member coverage could not see it. That
+branch published ``nebular_phot_lnu_precomp`` (the observed band) and never its
+rest-frame twin ``nebular_restband_lnu_precomp``, so ``measure_spectral_indices``
+summed a rest band with the nebular emission missing. The five worst indices are
+exactly the Balmer ones -- Hbeta, HgA, HgF, HdA, HdF -- whose windows sit on
+nebular *emission* lines; the continuum-break and metal indices moved only by the
+nebular *continuum*, a few tenths of a percent.
+
+The rule pinned here is the general one, not the thirteen numbers: **the two
+photometry publishes are twins**, so a path that emits one and not the other is
+broken regardless of which index happens to expose it. ``test_restband_twin_*``
+asserts that exactly, and needs no tolerance.
+"""
+
+from pathlib import Path
+
+import numpy as np
+import pytest
+
+pytestmark = pytest.mark.regression_bug
+
+_BARE_SSP_CANDIDATES = [
+    "data/fsps_prsc_miles_chabrier.h5",
+    "data/ssp_prsc_bc03_chabrier.h5",
+]
+
+# Every index the measurable registry exposes -- the defect hit all of them.
+_INDEX_NAMES = [
+    "Ca4227",
+    "D4000",
+    "Dn4000",
+    "Fe4383",
+    "Fe5270",
+    "Fe5335",
+    "Hbeta",
+    "HdA",
+    "HdF",
+    "HgA",
+    "HgF",
+    "Mgb",
+    "uv_slope_beta",
+]
+
+# Tolerance is *derived*, not read off the failure. The fast grid is an
+# interpolant, so a correct pair still carries its interpolation error; the
+# builder's own warning bounds that at ~1.3% worst-case for the
+# collisionally-excited lines (uniform met axis) and ~0.5% node-snapped. 5%
+# clears that ceiling with margin while sitting far below the smallest arm of
+# the defect (+28.7% on HdA) -- so this threshold cannot be satisfied by the bug.
+_GRID_INTERP_CEILING_PCT = 5.0
+
+
+def _bare_ssp_path():
+    return next((p for p in _BARE_SSP_CANDIDATES if Path(p).is_file()), None)
+
+
+def _requirements():
+    bare = _bare_ssp_path()
+    if bare is None or not Path("data/cue_weights.npz").is_file():
+        pytest.skip("No bare-stellar SSP / Cue weights available.")
+    return bare
+
+
+def _approx_arms():
+    """(label, factory) for exact and each precompute combination."""
+    from tengri.forward.sed_model import FeaturePrecomp, WavePrecomp
+
+    return {
+        "exact": lambda: None,
+        "wave": lambda: WavePrecomp(),
+        "feature": lambda: FeaturePrecomp(),
+        "wave+feature": lambda: (WavePrecomp(), FeaturePrecomp()),
+    }
+
+
+def _build(approx, index_data):
+    import warnings
+
+    from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, load_ssp_data
+
+    ssp = load_ssp_data(_requirements())
+    obs = Observation(
+        photometry=Photometry.from_names(["sdss_g", "sdss_r", "sdss_i"]),
+        spectral_indices=index_data,
+    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return SEDModel.build(
+            ssp_data=ssp,
+            observation=obs,
+            sfh={"type": "dpl", "all_params": FIXED},
+            dust={"type": "two_component", "law_bc": "calzetti", "all_params": FIXED},
+            neb={"type": "cue", "all_params": FIXED},
+            redshift=Fixed(0.05),
+            approx=approx,
+        )
+
+
+def _index_data():
+    from tengri.observation.spectral_indices import SpectralIndexData
+
+    return SpectralIndexData.from_names(
+        _INDEX_NAMES,
+        values=[1.0] * len(_INDEX_NAMES),
+        errors=[0.05] * len(_INDEX_NAMES),
+    )
+
+
+@pytest.mark.parametrize("arm", ["wave", "feature", "wave+feature"])
+def test_spectral_indices_agree_with_exact_or_refuse_loudly(arm):
+    """No ``approx`` combination may *silently* move a spectral index.
+
+    Two answers are acceptable and one is not. Returning a value binds that
+    value to the exact path. Refusing is equally fine -- the fast-nebular grid
+    deliberately deletes the Cue continuum forward, which is where its speedup
+    comes from, so a rest-frame quantity genuinely cannot be served from it and
+    ``predict_spectrum`` has refused on exactly this ground since #950.
+
+    What is forbidden is the third outcome, which is what shipped: return a
+    number, no exception, no warning, wrong by up to 1733%.
+
+    Deliberately *not* asserted: which of the two acceptable answers the pair
+    gives. Pinning "it raises" would turn a future correct-values implementation
+    red for succeeding.
+    """
+    sid = _index_data()
+    arms = _approx_arms()
+
+    exact = np.asarray(_build(arms["exact"](), sid).predict_spectral_indices({}, sid.index_defs))
+    model = _build(arms[arm](), sid)
+    try:
+        got = np.asarray(model.predict_spectral_indices({}, sid.index_defs))
+    except ValueError as exc:
+        assert "fast-nebular" in str(exc), (
+            f"approx={arm!r} refused, but not with the fast-nebular explanation "
+            f"a user can act on: {exc}"
+        )
+        return
+
+    dev_pct = np.abs((got - exact) / np.abs(exact)) * 100.0
+    worst = int(np.argmax(dev_pct))
+    assert dev_pct[worst] < _GRID_INTERP_CEILING_PCT, (
+        f"approx={arm!r} returned SILENTLY WRONG indices: {_INDEX_NAMES[worst]} "
+        f"moved {dev_pct[worst]:.2f}% ({exact[worst]:.6f} -> {got[worst]:.6f}); "
+        f"{int((dev_pct >= _GRID_INTERP_CEILING_PCT).sum())} of {len(_INDEX_NAMES)} "
+        "indices exceed the grid-interpolation ceiling."
+    )
+
+
+@pytest.mark.parametrize("arm", ["wave", "feature", "wave+feature"])
+def test_restband_twin_is_published_whenever_the_observed_band_is(arm):
+    """``nebular_phot_lnu_precomp`` and its rest-frame twin ship together.
+
+    This is the rule the thirteen indices were merely a symptom of, and it is an
+    exact key-set assertion -- no tolerance, no SSP-grid sensitivity. A path that
+    publishes the observed band while dropping the rest band is broken whether or
+    not the caller happens to ask for an index.
+    """
+    sid = _index_data()
+    state = _build(_approx_arms()[arm](), sid).predict_state({})
+
+    if "nebular_phot_lnu_precomp" not in state.derived:
+        pytest.skip(f"approx={arm!r} does not use the photometry LUT publish.")
+
+    assert "nebular_restband_lnu_precomp" in state.derived, (
+        f"approx={arm!r} published 'nebular_phot_lnu_precomp' but not "
+        "'nebular_restband_lnu_precomp'. Every rest-frame consumer "
+        "(spectral indices, rest-frame colors) then silently loses the "
+        "nebular contribution -- see #1665."
+    )
