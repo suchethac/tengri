@@ -61,6 +61,7 @@ Usage::
     backend = MappingsPhotoAGNBackend("data/flury2024_grids.h5", density="cpr")
 """
 
+from tengri._completion import curated_dir
 from tengri._data_setup import package_or_env_data_path
 from tengri.components.nebular._models import (
     NEBULAR_MODELS,
@@ -188,9 +189,7 @@ __all__ = [
 ]
 
 
-def __dir__() -> list[str]:
-    """Curated tab-completion list — only the names in ``__all__``."""
-    return list(__all__)
+__dir__ = curated_dir(__all__)
 
 
 # Convenience re-exports for `from tengri.nebular import ...`

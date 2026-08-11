@@ -45,6 +45,7 @@ Internal plumbing:
 # Dust block in the SEDComponent pipeline — combines UV–optical attenuation
 # with IR re-emission via per-template emission components (``type='astrodust'``,
 # ``'draine2021_pah'``, ``'modified_blackbody'``, ``'dale2014'``, …).
+from tengri._completion import curated_dir
 from tengri.components.dust.attenuation import (
     DUST_LAWS,
     apply_lyman_cutoff as apply_lyman_cutoff,
@@ -223,10 +224,7 @@ _CURATED_DIR = (
 )
 
 
-def __dir__() -> list[str]:
-    """Curated tab-completion list. Filtering only — everything remains
-    accessible via attribute access."""
-    return list(_CURATED_DIR)
+__dir__ = curated_dir(_CURATED_DIR)
 
 
 #: Names removed in #871 when the monolithic ``DustEmissionSEDComponent`` adapter

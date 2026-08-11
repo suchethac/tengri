@@ -102,12 +102,9 @@ def _find_data_file(filename: str) -> str | None:
     the package-anchored and cwd-relative candidates this used to hold, and
     additionally honors ``$TENGRI_DATA_DIR`` (#1431).
     """
-    from tengri._data_setup import find_data
+    from tengri._data_setup import find_data_str
 
-    found = find_data(filename)
-    if found is not None:
-        return str(found)
-    return None
+    return find_data_str(filename)
 
 
 # Import DUST_EMISSION_MODELS from emission.py after module initialization
@@ -2645,12 +2642,15 @@ def _make_lazy_loader(
 
 # --- DL07: tries v2 HDF5 first, then legacy .h5 ---
 def _find_dl07_templates() -> str | None:
-    """Find DL07 template file, preferring v2 HDF5 over legacy version."""
-    for fn in ("dl07_templates_v2.h5", "dl07_templates.h5"):
-        path = _find_data_file(fn)
-        if path is not None:
-            return path
-    return None
+    """Find DL07 template file, preferring v2 HDF5 over the legacy version.
+
+    ``find_data_str`` is name-major -- the first *filename* that exists
+    anywhere wins -- which is exactly the preference this used to hand-roll
+    (#1431).
+    """
+    from tengri._data_setup import find_data_str
+
+    return find_data_str("dl07_templates_v2.h5", "dl07_templates.h5")
 
 
 def _dl07_lazy_wrapper(*args, **kwargs):

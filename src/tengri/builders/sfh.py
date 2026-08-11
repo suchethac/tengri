@@ -45,6 +45,7 @@ import inspect
 from collections.abc import Callable
 from typing import Any
 
+from tengri._completion import curated_dir
 from tengri.builders._factory import _pop_wildcard
 from tengri.components.stellar.sfh.registry import SFH_REGISTRY
 from tengri.parameters.sentinels import FIXED, FREE, WILDCARD_ALIAS
@@ -247,12 +248,4 @@ def available() -> list[str]:
 __all__ = ["available", *sorted(_FACTORIES)]
 
 
-def __dir__() -> list[str]:
-    """Restrict tab-completion to the names this namespace actually offers.
-
-    ``__all__`` governs ``from ... import *`` but not ``dir()``, so without
-    this the module's own imports -- ``Any``, ``Callable``, the ``__future__``
-    ``annotations`` object, and internal helpers like ``make_factory`` --
-    showed up as completions beside the physics (#1288).
-    """
-    return sorted(__all__)
+__dir__ = curated_dir(__all__)

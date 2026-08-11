@@ -20,6 +20,7 @@ __all__ = [
     "data_path",
     "download_dir",
     "download_ssp",
+    "find_data_str",
     "find_ssp_files",
     "list_available_ssps",
     "list_known_ssps",
@@ -234,6 +235,30 @@ def find_data(*filenames: str) -> Path | None:
             if candidate.is_file():
                 return candidate
     return None
+
+
+def find_data_str(*filenames: str) -> str | None:
+    """:func:`find_data` as a ``str`` path, or ``None``.
+
+    Parameters
+    ----------
+    *filenames : str
+        Candidate files in preference order, as for :func:`find_data`.
+
+    Returns
+    -------
+    str or None
+        ``str`` of the first candidate that exists, or ``None``.
+
+    Notes
+    -----
+    The template loaders want a string -- they interpolate it into messages and
+    hand it to readers typed for ``str``. Three modules each carried their own
+    ``_find_data_file`` doing this one conversion (#1431); they now delegate
+    here, so the three cannot drift apart again.
+    """
+    found = find_data(*filenames)
+    return str(found) if found is not None else None
 
 
 def require_data(filename: str, not_found_msg: str) -> str:
