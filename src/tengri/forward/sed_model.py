@@ -6270,7 +6270,42 @@ class SEDModel:
         """
         return self.predict_state(params)
 
-    def predict_state(self, params, fixed_values=None, ssp_data=None, template_data=None):
+    def _full_state_chain(self):
+        """The component chain with every publication shortcut disabled.
+
+        Derived from the observables chain by
+        :func:`~tengri.forward.orchestrator.materialized_chain`, and memoized
+        against that chain's *identity* so any rebuild (``enable_fast_nebular``
+        swaps the whole list) invalidates it automatically rather than leaving
+        a stale copy behind.
+
+        Returns
+        -------
+        list of SEDComponent
+            The chain :meth:`predict_state` runs unless the caller declares it
+            reads only the projected observables.
+        """
+        from tengri.forward.orchestrator import materialized_chain
+
+        chain = getattr(self, "_cached_component_chain", None)
+        if chain is None:
+            chain = self._cached_component_chain = self._build_component_chain()
+        cached = getattr(self, "_cached_full_state_chain", None)
+        if cached is not None and cached[0] is chain:
+            return cached[1]
+        full = list(materialized_chain(chain))
+        self._cached_full_state_chain = (chain, full)
+        return full
+
+    def predict_state(
+        self,
+        params,
+        fixed_values=None,
+        ssp_data=None,
+        template_data=None,
+        *,
+        observables_only=False,
+    ):
         """Forward pass via the SEDComponent orchestrator.
 
         Builds a component chain from this model's structural settings
@@ -6307,6 +6342,19 @@ class SEDModel:
             components as JIT runtime inputs instead of closure capture.
             Defaults to ``None``, which causes components to use their
             internal template data.
+        observables_only : bool, keyword-only, optional
+            Declare that the caller reads only the *projected observables* —
+            photometry and spectra off the LUT — and never the SED arrays or
+            ``derived`` publications. Components may then take publication
+            shortcuts: the per-Q_H nebular grid zeroes ``sed_nebular`` because
+            skipping the Cue forward is the whole saving (#1596).
+
+            Default ``False``, so the returned state is complete. Only
+            :meth:`predict_observables_jit` sets it, and that is the point:
+            correctness is what you get by default and the optimization is the
+            thing that has to be asked for. Setting it while reading the SED
+            costs the entire nebular continuum — measured at 97 % of the peak
+            on a dust-free Cue model, in float64 and silently (#1673).
 
         Returns
         -------
@@ -6358,7 +6406,12 @@ class SEDModel:
         if cached is None:
             cached = self._build_component_chain()
             self._cached_component_chain = cached
-        chain = cached
+        # The observables kernel reads only what the LUT projects, so it may
+        # run the chain with its publication shortcuts intact. Every other
+        # caller gets a complete state: this method's contract is the full
+        # ForwardState, and a component that silently withholds one of its
+        # published keys breaks it (#1673).
+        chain = cached if observables_only else self._full_state_chain()
         # Initialize the chain on the panchromatic-extended grid when
         # radio/xray is configured. RadioSEDComponent / XRaySEDComponent
         # populate ``state.derived["sed_radio"]`` / ``["sed_xray"]``
@@ -6569,11 +6622,15 @@ class SEDModel:
             self._cached_component_chain = self._build_component_chain()
 
         def _impl(params, fixed_values, ssp_data, template_data):
+            # The one caller that may take the publication shortcuts: this
+            # kernel returns projected observables and never exposes the state,
+            # so a zeroed sed_nebular is invisible to it by construction.
             state = self.predict_state(
                 params,
                 fixed_values=fixed_values,
                 ssp_data=ssp_data,
                 template_data=template_data,
+                observables_only=True,
             )
             full = {**fixed_values, **params}
             # Part B: spectrum LUT (and, for a joint model, photometry LUT)

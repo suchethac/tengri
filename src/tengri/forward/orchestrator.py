@@ -131,6 +131,57 @@ def components_consuming(
     )
 
 
+def _materialized(c: SEDComponent) -> SEDComponent:
+    """A component's publishing variant, or the component itself.
+
+    Duck-typed like the contract accessors above: a component with no
+    publication shortcut needs no method and is returned by identity.
+    """
+    hook = getattr(c, "materialized", None)
+    return hook() if callable(hook) else c
+
+
+def materialized_chain(component_list: Sequence[SEDComponent]) -> tuple[SEDComponent, ...]:
+    """Chain variant in which every component publishes the outputs it declares.
+
+    A component may skip publishing an output when :func:`components_consuming`
+    says nothing needs it — :class:`~tengri.components.nebular.component.NebularSEDComponent`
+    zeroes ``sed_nebular`` under the per-Q_H grid, because skipping the Cue
+    forward *is* the saving.
+
+    That census reads the ADR-0009 contract, so it finds every consumer that
+    declares an input and nothing else. A reader that takes a published key off
+    ``state.derived`` without declaring one is invisible to it, and the forward
+    state has several: ``state_to_sed_components`` behind
+    ``Posterior.sed_components``, and the accumulated ``state.sed_intrinsic``
+    behind ``pred.rest_sed()``. On a dust-free Cue model that cost the whole
+    nebular continuum — ``sed_nebular`` exactly zero and the published SED 97 %
+    short at its peak, in float64 and silently (#1673).
+
+    Those callers ask for this chain rather than each teaching the census about
+    itself. A component opts in by defining ``materialized()``; everything else
+    is returned by identity.
+
+    Parameters
+    ----------
+    component_list : sequence of SEDComponent
+        The assembled component chain.
+
+    Returns
+    -------
+    tuple of SEDComponent
+        The chain in order, each publication-skipping component replaced by its
+        publishing variant.
+
+    Notes
+    -----
+    **JIT-compatible**: not applicable — composition-time only. Variants come
+    from :func:`dataclasses.replace` over static config, so no JAX work happens
+    here and the result is safe to build outside a trace and reuse inside one.
+    """
+    return tuple(_materialized(c) for c in component_list)
+
+
 # Canonical units for every well-known cross-component derived key. Both
 # publisher and consumer must declare a units string matching the table
 # entry (where one exists). Adding a new derived key to the contract is

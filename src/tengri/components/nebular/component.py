@@ -18,7 +18,7 @@ line paths — and add the resulting line + continuum SED to ``sed_intrinsic``.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 import jax.numpy as jnp
@@ -133,10 +133,11 @@ class NebularSEDComponent:
     #: Named for what the component must *do*, not for the one key that drives
     #: it today: ``sed_shock`` has the same exposure and would share this gate.
     #:
-    #: Known gap (#1673): the deriving census reads the component contract, so
-    #: it cannot see readers that take a published key without declaring an
-    #: input — ``state_to_sed_components`` is one, which is why a dust-free Cue
-    #: model still reports a zero ``sed_nebular`` on ``sed_components()``.
+    #: The census reads the component contract, so it cannot see a reader that
+    #: takes a published key off ``state.derived`` without declaring an input —
+    #: ``state_to_sed_components`` and the accumulated ``state.sed_intrinsic``
+    #: are both such readers. They ask :meth:`materialized` for a publishing
+    #: variant instead of being enumerated here (#1673).
     must_materialize_sed: bool = False
     # Tuple prefix so the MAPPINGS shock backend (``shock_*``) and the
     # photoionization backends (``neb_*``, ``ionspec_*``, ``gas_*``) all
@@ -144,6 +145,29 @@ class NebularSEDComponent:
     # ignore keys they don't consume — passing ``shock_*`` to Cue is
     # harmless, and vice versa.
     parameter_prefix: tuple[str, ...] = ("neb_", "shock_", "ionspec_", "gas_")
+
+    def materialized(self) -> NebularSEDComponent:
+        """Variant that computes the nebular continuum instead of zeroing it.
+
+        The publication hook :func:`~tengri.forward.orchestrator.materialized_chain`
+        asks for. Serving photometry from the per-Q_H grid requires zeroing
+        ``sed_nebular``, so any caller that reads the forward state itself needs
+        this variant rather than the one the observables kernel runs (#1673).
+
+        Returns
+        -------
+        NebularSEDComponent
+            ``self`` when the continuum is already materialized, else a copy
+            with :attr:`must_materialize_sed` set. Returning ``self`` unchanged
+            keeps the chain's identity stable for callers that cache on it.
+
+        Notes
+        -----
+        **JIT-compatible**: not applicable — composition-time only.
+        """
+        if self.must_materialize_sed:
+            return self
+        return replace(self, must_materialize_sed=True)
 
     def citations(self) -> tuple[str, ...]:
         """Nebular-backend citations (Cue / Cloudy / baked-in / shock) are

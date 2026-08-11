@@ -17,7 +17,7 @@ here it could not even work -- ``_fits_lines`` is asked two *opposite*
 questions (``_auto_approx_config`` appends the LUT when it is true, the #1596
 top-up attaches it when it is false), so widening it would have fixed one call
 site by breaking the other. Hence a separate predicate,
-``_needs_full_forward_state``, gating both.
+``_has_line_adjacent_channel``, gating both.
 
 These are decision-table tests over the real ``Observation`` attributes, not
 stubs: the failure mode is a predicate reading the wrong attribute, which a stub
@@ -30,7 +30,7 @@ import jax.numpy as jnp
 import pytest
 
 from tengri.forward.sed_model import FeaturePrecomp
-from tengri.inference.fitter import Fitter
+from tengri.inference.fitter import Fitter, _has_line_adjacent_channel
 from tengri.observation.line_ratio_data import LineRatioData
 from tengri.observation.spectral_indices import STANDARD_INDICES, SpectralIndexData
 
@@ -70,12 +70,12 @@ def _indices():
         ("both", {"line_ratios": _ratios, "spectral_indices": _indices}, True),
     ],
 )
-def test_needs_full_forward_state_counts_ratios_and_indices(label, kwargs, expected):
+def test_has_line_adjacent_channel_counts_ratios_and_indices(label, kwargs, expected):
     """Every channel served from ``predict_state`` must be reported."""
     obs = _Obs(**{k: v() for k, v in kwargs.items()})
-    got = Fitter._needs_full_forward_state(_Model(obs))
+    got = _has_line_adjacent_channel(_Model(obs))
     assert got is expected, (
-        f"_needs_full_forward_state said {got} for the {label} configuration. "
+        f"_has_line_adjacent_channel said {got} for the {label} configuration. "
         "Line ratios and spectral indices need the discrete line catalog, which "
         "the emission-line LUT does not publish, so a fit carrying either must "
         "never be handed FeaturePrecomp."
@@ -99,7 +99,7 @@ def test_the_predicate_reads_the_attributes_the_data_args_are_built_from():
     fields = Observation.__init__.__code__.co_varnames
     for name in ("line_ratios", "spectral_indices"):
         assert name in fields, (
-            f"Observation no longer takes {name!r}; Fitter._needs_full_forward_state "
+            f"Observation no longer takes {name!r}; _has_line_adjacent_channel "
             "reads it via getattr and would silently report False for every fit."
         )
 
@@ -116,9 +116,9 @@ def test_a_ratio_fit_is_not_classified_photometry_only():
         "fixture no longer reproduces the misclassification: _fits_lines already "
         "counts ratios, so the guard below proves nothing"
     )
-    assert Fitter._needs_full_forward_state(model), (
+    assert _has_line_adjacent_channel(model), (
         "a line-ratio fit must be excluded from the photometry-only feature-LUT "
-        "top-up by _needs_full_forward_state, since _fits_lines does not see it"
+        "top-up by _has_line_adjacent_channel, since _fits_lines does not see it"
     )
 
 
@@ -145,7 +145,7 @@ def test_a_line_flux_plus_ratio_fit_is_also_excluded():
     assert not any(isinstance(c, FeaturePrecomp) for c in cfgs), (
         f"auto policy resolved {cfgs!r} for a line-flux + line-ratio fit. "
         "_fits_lines is true here, so this case is reachable only through "
-        "_needs_full_forward_state."
+        "_has_line_adjacent_channel."
     )
 
 
