@@ -18,9 +18,11 @@ grounds for refusing, and the distinction matters when revisiting them:
 ``inert``
     Freeing it would add a dimension the selected code path never reads. Either
     the group's wildcard is not scoped to the structural variant that owns the
-    parameter (the ``dust`` attenuation laws), or the data needed to make it
-    live is not shipped (``dust_frac_agn`` needs the QSO template). Fixing the
-    scoping makes these declarable.
+    parameter, or the data needed to make it live is not shipped
+    (``dust_frac_agn`` needs the QSO template). Fixing the scoping makes these
+    declarable, and that is not hypothetical: the four ``dust`` attenuation-law
+    shape modifiers left this list once ``parse_groups`` began narrowing the
+    group wildcard to the laws a build actually selects.
 ``fixed-by-physics``
     A perfectly good range exists but the quantity is not a per-object degree of
     freedom -- an analytic constant, or a population-level calibration whose
@@ -69,10 +71,10 @@ from tengri.parameters.registry import registry
 #: name -> (ground, reason). See the module docstring for the four grounds.
 REFUSED: dict[str, tuple[str, str]] = {
     # ── inert: the wildcard is not scoped to the variant that reads them ──
-    "dust_Rv": ("inert", "only cardelli reads it; calzetti fixes R_V=4.05 internally"),
-    "dust_delta": ("inert", "only the KC13/Noll curve reads it; calzetti discards it"),
-    "dust_bump_strength": ("inert", "as dust_delta -- multiplies the KC13 bump amplitude"),
-    "dust_slope": ("inert", "only the power-law curve reads it as n_slope"),
+    # The four attenuation-law shape modifiers that used to sit here --
+    # dust_Rv, dust_delta, dust_bump_strength, dust_slope -- are declared now.
+    # Scoping the dust wildcard to the laws the build selects is what made them
+    # declarable, which is the general remedy this ground was pointing at.
     "dust_frac_agn": ("inert", "needs templates_qso; the default Dale file ships only SF"),
     "neb_logZ_gas": ("inert", "range is the selected nebular backend's grid; neb is unscoped"),
     "neb_xid": ("inert", "Feltre NLR only, and a 3-node grid inside a wider validator"),
@@ -99,6 +101,7 @@ REFUSED: dict[str, tuple[str, str]] = {
         "not-continuous",
         "validator requires int; selects one of 3 shapes",
     ),
+    "neb_hbfrac": ("not-continuous", "snapped to the nearest of 2 grid values at load time"),
     "shock_log_density": ("not-continuous", "snapped to nearest grid point -- zero gradient"),
     "shock_b_over_sqrt_n": ("not-continuous", "snapped to nearest grid point -- zero gradient"),
     "noise_dof": ("not-continuous", "0 is a sentinel selecting the Gaussian likelihood"),
