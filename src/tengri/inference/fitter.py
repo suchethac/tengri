@@ -552,6 +552,18 @@ def _resolve_batch_fit_approx(model, approx, data_type):
         state = getattr(model, "approx", None)
         if data_type == "photometry":
             if state is not None and state.wave_precomp:
+                # The wave LUT is already configured — but this returned before
+                # the feature top-up below could run, so a model built
+                # ``approx=WavePrecomp()`` opted out of the dominant lever by
+                # being explicit (#1683). Worse here than on the single-galaxy
+                # surface: these are the fits that evaluate the forward model
+                # the most. Append only FeaturePrecomp; re-appending the wave
+                # LUT would duplicate it.
+                if getattr(state, "feature_precomp", False) or _has_line_adjacent_channel(model):
+                    return model
+                existing = tuple(getattr(model, "approx_configs", ()))
+                with contextlib.suppress(Exception):
+                    return _memoized_approx_clone(model, (*existing, FeaturePrecomp()))
                 return model
             cfg = WavePrecomp()
             # Attempt the feature top-up first: for a backend that can
@@ -1178,22 +1190,46 @@ class Fitter:
             return base
         return (base, FeaturePrecomp()) if self._fits_lines(model) else base
 
-    def _add_feature_precomp(self, model):
-        """Top up a build-time ``approx=`` with ``FeaturePrecomp`` for a lines fit.
+    def _add_feature_precomp(self, model, *, warn_on_failure=True):
+        """Top up a build-time ``approx=`` with ``FeaturePrecomp``.
 
         A model built with ``approx=WavePrecomp()`` used to be returned
         untouched by the ``"auto"`` policy, so naming WavePrecomp explicitly
-        made a lines fit *slower than passing nothing at all* — the exact
-        opposite of what the argument reads like it does.
+        made a fit *slower than passing nothing at all* — the exact opposite of
+        what the argument reads like it does. That was fixed for a lines fit
+        first and for a photometry-only one in #1683; both spellings now reach
+        here.
 
         The existing configs are carried over rather than rebuilt, so a
         configured ``catalog_z_range`` survives; see
-        :attr:`SEDModel.approx_configs`.
+        :attr:`SEDModel.approx_configs`. Only ``FeaturePrecomp`` is appended —
+        re-appending the wave LUT would duplicate it.
 
+        Parameters
+        ----------
+        model : SEDModel
+            The fit's model. Never mutated; ``with_approx`` clones.
+        warn_on_failure : bool, keyword-only, optional
+            Whether an unavailable LUT is worth telling the caller about.
+            ``True`` for a line channel, where the documented cost of going
+            without is ~21x per gradient. ``False`` for the photometry-only
+            top-up, where a backend with nothing to tabulate is the *expected*
+            case rather than an anomaly — warning there would fire on every
+            non-Cue model and name a remedy the caller cannot apply.
+
+        Returns
+        -------
+        SEDModel
+            The topped-up clone, or ``model`` unchanged when the LUT is already
+            configured or could not be enabled.
+
+        Notes
+        -----
         Adding the LUT can legitimately fail — a nebular backend that publishes
         neither a discrete catalog nor SSP-window lines has no fast path. That
-        is a reason to stay exact and say so, never to break a fit that worked,
-        so the failure is caught and surfaced as a warning.
+        is a reason to stay exact, never to break a fit that worked, so the
+        failure is caught either way; ``warn_on_failure`` decides only whether
+        it is announced.
         """
         from tengri.forward.sed_model import FeaturePrecomp
 
@@ -1204,6 +1240,8 @@ class Fitter:
         try:
             return _memoized_approx_clone(model, (*existing, FeaturePrecomp()))
         except Exception as exc:  # broad on purpose — never break a working fit
+            if not warn_on_failure:
+                return model
             import warnings
 
             warnings.warn(
@@ -1252,14 +1290,25 @@ class Fitter:
             has = getattr(model, "_has_modern_approx", None)
             if callable(has) and has():
                 # Respect the build-time approx, but do not let it suppress the
-                # line LUT — top it up rather than bailing.
-                resolved = model
+                # feature LUT — top it up rather than bailing.
+                #
                 # Same exclusion as ``_auto_approx_config``: a fit carrying
                 # line fluxes *and* ratios answers ``_fits_lines`` true, and
                 # topping it up would hand the LUT to a channel that needs the
                 # discrete catalog the LUT does not publish.
-                if self._fits_lines(model) and not _has_line_adjacent_channel(model):
-                    resolved = self._add_feature_precomp(model)
+                resolved = model
+                if not _has_line_adjacent_channel(model):
+                    fits_lines = self._fits_lines(model)
+                    # A photometry-only fit gets the same top-up (#1683). This
+                    # branch used to return here, so #1596's fix — which lives
+                    # below, past the early return — was unreachable for any
+                    # model built with approx=WavePrecomp(): naming the wave LUT
+                    # explicitly cost the feature LUT, 22x in likelihood-gradient
+                    # FLOPs on a 10-parameter Cue model. Failure is expected for
+                    # a backend with nothing to tabulate, so only the lines case
+                    # — whose cost is the documented ~21x — announces it.
+                    if fits_lines or self.data_type == "photometry":
+                        resolved = self._add_feature_precomp(model, warn_on_failure=fits_lines)
                 return resolved
             cfg = self._auto_approx_config(model)
             if cfg is None:
