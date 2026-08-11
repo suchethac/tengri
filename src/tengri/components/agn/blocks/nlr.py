@@ -37,6 +37,7 @@ from tengri.components.agn.nlr_cloudy import (
     compute_nlr_sed_feltre,
     compute_nlr_sed_synthesizer,
     compute_nlr_sed_synthesizer_spectra,
+    load_cue_agn_weights,
 )
 from tengri.utils.physics_constants import L_SUN as _L_SUN_ERG
 
@@ -189,6 +190,7 @@ def nlr_feltre_block(
     ),
     status="experimental",
     short_doc="Cue emulator AGN-ionized NLR (fast differentiable, BEAGLE-style)",
+    template_loader=load_cue_agn_weights,
 )
 def nlr_cue_block(
     wavelength: Array,
@@ -201,6 +203,7 @@ def nlr_cue_block(
     agn_nlr_logU: float = -2.0,
     agn_nlr_logn: float = 3.0,
     agn_nlr_logZ: float = -1.8477,
+    templates=None,
     **_params,
 ) -> tuple[Array, Array]:
     r"""AGN-ionized NLR from the Cue emulator (BEAGLE-style, differentiable).
@@ -230,6 +233,7 @@ def nlr_cue_block(
     l_disc_bol_erg = 10.0**agn_log_lbol * _L_SUN_ERG
     L_nu = compute_nlr_sed_cue(
         wave_aa,
+        _template=templates,
         l_disc_bol_erg=l_disc_bol_erg,
         covering_fraction=agn_nlr_cf,
         fwhm_kms=agn_nlr_fwhm_kms,

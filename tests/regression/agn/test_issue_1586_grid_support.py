@@ -41,12 +41,17 @@ question they answer is simply a different one:
   *declared prior*. Here the default sits comfortably inside ``[6, 10]``; it is
   the prior itself that overruns the grid.
 * ``tests/contract/test_agn_block_consumes.py`` perturbs every parameter across
-  its prior to find inert ones, but it exempts ``slone_netzer`` (whose grid is
-  absent from CI) and detects only *fully* inert parameters, not 98%-dead ones.
+  its prior to find inert ones, but it exempts ``slone_netzer`` and detects only
+  *fully* inert parameters, not 98%-dead ones. (That exemption is justified in
+  ``_consumes.py`` as "requires a data grid absent from CI" — but
+  ``data/slone_netzer_disc_grid.h5`` is git-tracked, as are the ``cat3d_wind``
+  and ``grahsp`` grids, so the stated reason no longer holds.)
 
-The grid is not installed in CI, so the data-dependent facts below skip there.
-The rule's own logic is driven with a synthetic support table and therefore
-gates everywhere.
+The grid *is* shipped, so every test below runs in CI. The ``_sn12_grid`` skip
+is a safety net for a stripped install, not the expected path — if these start
+skipping, the data file has gone missing rather than the check being untested.
+Rule 9's own logic is additionally driven with a synthetic support table so it
+stays testable independently of any data file.
 """
 
 from __future__ import annotations
@@ -57,8 +62,8 @@ import jax
 import jax.numpy as jnp
 import pytest
 
+from tengri.components import grid_support as grid_support_mod
 from tengri.components.agn._params import PARAMS
-from tengri.components.agn.blocks import _grid_support
 from tengri.components.agn.blocks._grid_support import (
     block_grid_support,
     is_contained,
@@ -146,10 +151,15 @@ def test_containment_tolerates_a_transcribed_bound():
 
 @pytest.fixture
 def synthetic_grid_block(monkeypatch):
-    """Give the analytic 'multicolor' disc a pretend grid support."""
+    """Give the analytic 'multicolor' disc a pretend grid support.
+
+    Registers in the component-generic table, which is the single source every
+    lookup consults; the AGN spelling ``('disc', 'multicolor')`` is just the
+    dotted key with its ``agn.`` prefix stripped.
+    """
     monkeypatch.setitem(
-        _grid_support.AGN_BLOCK_GRID_SUPPORT,
-        ("disc", "multicolor"),
+        grid_support_mod.GRID_SUPPORT,
+        ("agn.disc", "multicolor"),
         lambda: {"agn_log_mbh": (7.4, 9.8)},
     )
     return ("disc", "multicolor")
@@ -424,3 +434,79 @@ def test_the_gradient_is_exactly_zero_at_the_declared_defaults():
     live_mbh, live_ledd = grad(8.6, -2.5)
     assert float(live_mbh) != 0.0
     assert float(live_ledd) != 0.0
+
+
+# --------------------------------------------------------------------------
+# Narrowing: the same mechanism, on the disc block that started all this.
+# --------------------------------------------------------------------------
+
+
+def _spec_with_disc(disc: str):
+    """Composable AGN spec on ``disc``, everything freed, advisories muted."""
+    from tengri.components.agn.blocks.runner import RecipeWarning
+    from tengri.parameters import FREE, parse_groups
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RecipeWarning)
+        return parse_groups(
+            sfh={"type": "dpl"},
+            agn={"type": "composable", "disc": {"type": disc}, "all_params": FREE},
+            redshift=0.1,
+        )
+
+
+def test_log_mbh_is_narrowed_onto_the_sn12_grid():
+    """40% of the declared range was inert; freeing it now yields only the grid.
+
+    ``FREE`` asks for a parameter to be *sampled* and takes the range from the
+    declaration, so intersecting with the grid delivers what was asked for. The
+    declaration itself is untouched.
+    """
+    _sn12_grid()
+    spec = _spec_with_disc("slone_netzer")
+    assert spec._distributions["agn_log_mbh"].bounds == pytest.approx((7.4, 9.8))
+    assert spec._group_provenance["agn_log_mbh"].endswith("_grid")
+
+
+def test_log_ledd_is_left_alone_because_narrowing_would_pin_it():
+    """A 1.7% overlap is a disagreement, not a tail to trim.
+
+    ``Uniform(-2, 0.5)`` against a grid ending at -1.9586 retains 0.04 dex.
+    Substituting that silently would pin the parameter in all but name, so the
+    narrowing is declined and the overhang reported -- the one case where
+    warning beats fixing.
+    """
+    _sn12_grid()
+    spec = _spec_with_disc("slone_netzer")
+    assert spec._distributions["agn_log_ledd"].bounds == pytest.approx((-2.0, 0.5))
+    assert not spec._group_provenance["agn_log_ledd"].endswith("_grid")
+
+    from tengri.parameters import FREE, parse_groups
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        parse_groups(
+            sfh={"type": "dpl"},
+            agn={
+                "type": "composable",
+                "disc": {"type": "slone_netzer"},
+                "all_params": FREE,
+            },
+            redshift=0.1,
+        )
+    messages = [str(w.message) for w in caught if "agn_log_ledd" in str(w.message)]
+    assert len(messages) == 1, messages
+    assert "98%" in messages[0]
+
+
+def test_narrowing_does_not_touch_a_grid_free_disc():
+    """The declaration is shared; only the *selected* component constrains it.
+
+    An analytic disc has no grid, so the same wildcard must leave the full
+    physical range intact. Without keying on the selection, narrowing for one
+    block would quietly constrain every model sharing the parameter -- the
+    exact failure this module argues against.
+    """
+    spec = _spec_with_disc("multicolor")
+    assert spec._distributions["agn_log_mbh"].bounds == pytest.approx((6.0, 10.0))
+    assert not spec._group_provenance["agn_log_mbh"].endswith("_grid")

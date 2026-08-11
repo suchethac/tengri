@@ -48,19 +48,8 @@ References
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
-      return load_ssp_data(str(candidate))
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -148,7 +137,7 @@ References
         agn={
             "all_params": tengri.FIXED,
             "log_lbol": LOG_LBOL,
-            "frac": 1.0,
+            "lum_ratio": 1.0,
             "disc": {"type": "multicolor", "all_params": tengri.FIXED},
             "torus": {"type": "skirtor", "all_params": tengri.FIXED},
         },
@@ -185,11 +174,6 @@ References
     ax.legend(frameon=False, fontsize=9, loc="lower center")
     fig.tight_layout()
     plt.savefig("plot_custom_torus_extension.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 6.097 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_custom_torus_extension.py:

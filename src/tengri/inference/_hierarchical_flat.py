@@ -7,7 +7,8 @@ with them but because the only flat-vector formulation lived *inside*
 ``_run_raytrace`` as a set of closures, reachable by exactly one sampler.
 
 This seam drives the NUTS / HMC / dynamic-HMC / GHMC / elliptical-slice /
-MAP / pathfinder family. Every other registered name is either driven by ``PopulationFitter``'s
+MCLMC / adjusted-MCLMC / MAP / Laplace / pathfinder family. Every other
+registered name is either driven by ``PopulationFitter``'s
 own runners or refused with a stated reason — see :data:`FLAT_UNSUPPORTED`. A
 name is driven here only when the driver runs the algorithm the name promises;
 a stand-in (the first draft ran plain HMC under five distinct-algorithm names)
@@ -24,10 +25,13 @@ vector, every sampler in the registry is a plain function call.
 The prior is the reason this is clean
 -------------------------------------
 The hierarchical parameterization is already **iid standard normal**. Every
-bounded quantity is stored as an unconstrained latent and mapped through
-:func:`~tengri.utils.transforms.to_bounded`, which is the Gaussian CDF, so an
-N(0,1) latent yields a genuine Uniform(lo, hi) physical prior. The log posterior
-is therefore separable by construction:
+free parameter is stored as an unconstrained latent and mapped through its
+distribution's own ``unstandardize`` pushforward — the classes' single source
+of truth, shared with ``sample`` and the single-galaxy unbounded machinery —
+so an N(0,1) latent yields the DECLARED physical prior exactly: Uniform via
+the Gaussian-CDF box map, and every other class via its quantile map (#1651;
+the pushforward-vs-``log_prob`` agreement is pinned class-by-class in the
+regression suite). The log posterior is therefore separable by construction:
 
 .. math::
 
@@ -79,8 +83,9 @@ __all__ = ["FLAT_SAMPLERS", "FlatProblem", "build_flat_problem", "run_flat_sampl
 #: driver and ``laplace`` onto the bare ``"map"`` point estimate — the result's
 #: diagnostics recorded the requested name while a different algorithm ran.
 #: Dynamic HMC, GHMC and elliptical slice have since gained their real
-#: ``_shared.py`` full-scan drivers and rejoined; the rest live in
-#: :data:`FLAT_UNSUPPORTED` until their real drivers are wired.
+#: ``_shared.py`` full-scan drivers and rejoined; the MCLMC pair followed with
+#: their blackjax ``(adjusted_)mclmc_find_L_and_step_size`` tuning. The rest
+#: live in :data:`FLAT_UNSUPPORTED` until their real drivers are wired.
 FLAT_SAMPLERS: dict[str, str] = {
     "mcmc_nuts": "nuts",
     "mcmc_hmc": "hmc",
@@ -89,6 +94,8 @@ FLAT_SAMPLERS: dict[str, str] = {
     # The flat prior is exactly the iid N(0,1) the ESS ellipse assumes, so
     # the sampler's one structural requirement holds by construction here.
     "mcmc_ess": "ess",
+    "mcmc_mclmc": "mclmc",
+    "mcmc_adjusted_mclmc": "adjusted_mclmc",
     # Pinned to NUTS, unlike the single-galaxy auto-pick (NUTS for low-D,
     # raytrace above D~20): hierarchical D grows with the catalog, and at that
     # D raytrace degenerates and raises DegenerateChainError by design
@@ -96,6 +103,7 @@ FLAT_SAMPLERS: dict[str, str] = {
     # failure.
     "mcmc": "nuts",
     "map": "map",
+    "laplace": "laplace",
     "pathfinder": "nuts_pathfinder",
 }
 
@@ -112,27 +120,6 @@ FLAT_UNSUPPORTED: dict[str, str] = {
         "silently truncated -- and therefore biased -- sample set. The prior "
         "transform this seam provides is exact and correct; what is missing is "
         "the sampler on top of it. See #1429."
-    ),
-    "mcmc_mclmc": (
-        "microcanonical Langevin MC needs its own (L, step size) adaptation, "
-        "not the HMC window adaptation this seam runs. _mclmc_sample_scan in "
-        "backends/mcmc/_shared.py provides the sampling half but not the "
-        "tuning. Use mcmc_nuts or mcmc_hmc hierarchically."
-    ),
-    "mcmc_adjusted_mclmc": (
-        "adjusted microcanonical Langevin MC needs its own (L, step size) "
-        "adaptation, not the HMC window adaptation this seam runs. "
-        "_adjusted_mclmc_sample_scan in backends/mcmc/_shared.py provides the "
-        "sampling half but not the tuning. Use mcmc_nuts or mcmc_hmc "
-        "hierarchically."
-    ),
-    "laplace": (
-        "a Laplace approximation is MAP plus a Gaussian covariance from the "
-        "curvature at a verified mode; this seam's map driver computes no "
-        "covariance, so driving laplace with it would silently drop the error "
-        "bars that distinguish laplace from map. Use ``map`` for the "
-        "hierarchical point estimate, or run laplace per-galaxy through "
-        "Fitter."
     ),
 }
 
@@ -233,7 +220,7 @@ def build_flat_problem(fitter, *, key, memory_mode="low", verbose=False, map_ste
     stochastic = spec.stochastic
     n_grid = spec.n_grid
     free_names = fitter._free_names
-    bounds = {name: spec.get_distribution(name).bounds for name in free_names}
+    physical = _physical_map(spec, free_names)
     fixed_values = spec.get_fixed_values()
     sigma_lo, sigma_hi = fitter.psd_sigma_bounds
     tau_lo, tau_hi = fitter.psd_tau_bounds
@@ -310,8 +297,12 @@ def build_flat_problem(fitter, *, key, memory_mode="low", verbose=False, map_ste
         def forward_one(ub_scalars, xi):
             params = {}
             for name in free_names:
-                lo, hi = bounds[name]
-                params[name] = to_bounded(ub_scalars[name], lo, hi)
+                # The declared prior's own N(0,1) pushforward — Uniform's is
+                # bit-identical to the old to_bounded box map; every other
+                # distribution becomes EXACT instead of silently Uniform
+                # (#1651). Same convention as the per-galaxy MAP init and the
+                # single-galaxy unbounded machinery.
+                params[name] = physical[name](ub_scalars[name])
             for name, val in fixed_values.items():
                 if name not in ("sfh_field_psd_sigma", "sfh_field_psd_tau_myr"):
                     params[name] = val
@@ -388,6 +379,221 @@ def build_flat_problem(fitter, *, key, memory_mode="low", verbose=False, map_ste
     )
 
 
+def _physical_map(spec, free_names):
+    """The per-parameter N(0,1) -> physical pushforwards for the seam.
+
+    Each free parameter's map IS its distribution's own ``unstandardize`` —
+    the classes' declared single source of truth, already used by ``sample``
+    and by the single-galaxy unbounded machinery — so the seam's standardized
+    space realizes the DECLARED prior exactly for every distribution
+    (Uniform's pushforward is bit-identical to the old ``to_bounded`` box
+    map; every other class becomes exact instead of being silently replaced
+    by Uniform-over-bounds, the wrong-prior bug the hardening pass refused
+    and #1651 specced away). The pushforward-vs-``log_prob`` agreement is
+    pinned class-by-class in the regression suite.
+
+    A distribution-like object without ``unstandardize`` cannot be
+    standardized and is refused by name rather than mapped wrongly.
+    """
+    from tengri.parameters.priors import Uniform
+
+    physical = {}
+    for name in free_names:
+        dist = spec.get_distribution(name)
+        if isinstance(dist, Uniform):
+            # Uniform keeps the EXACT previous graph, not merely the exact
+            # math: Uniform.unstandardize is bitwise-equal to to_bounded
+            # pointwise, but to_bounded is @jax.jit-decorated, so calling it
+            # embeds a nested-jit boundary in the traced likelihood while the
+            # bound method inlines — different XLA fusion, one-ULP erf-chain
+            # differences, and a measurably different HMC chain (step_size
+            # 0.06797 vs the historical 0.06732 on the reference fixture).
+            # Routing Uniform through to_bounded keeps all-Uniform fits
+            # bit-identical to every published result.
+            lo, hi = dist.bounds
+            physical[name] = lambda u, lo=lo, hi=hi: to_bounded(u, lo, hi)
+            continue
+        unstd = getattr(dist, "unstandardize", None)
+        if not callable(unstd):
+            raise NotImplementedError(
+                f"hierarchical free parameter {name!r} declares a "
+                f"{type(dist).__name__} prior with no 'unstandardize' "
+                f"pushforward, so it cannot enter the seam's standardized "
+                f"N(0,1) space. Implement unstandardize/standardize on the "
+                f"distribution (see tengri.parameters.priors for the "
+                f"contract), or fit this parameter per-galaxy through "
+                f"Fitter."
+            )
+        physical[name] = unstd
+    return physical
+
+
+def _require_moving_chain(chain, method):
+    """Refuse a retained chain whose draws are all identical.
+
+    #1530's lesson generalized past its raytrace origin: MAP-echo draws look
+    like a plausible answer. ``_require_finite_tuning`` catches the MCLMC
+    starved-tuner *cause*; this is the effect-side net for every MCMC driver
+    — whatever produced it, a chain that never moved is not a posterior.
+    """
+    import numpy as np
+
+    if not bool(np.all(np.asarray(chain[1:]) == np.asarray(chain[0]))):
+        return
+    from tengri.inference.hierarchical import DegenerateChainError
+
+    raise DegenerateChainError(
+        f"{method}: every retained draw is identical to the first — the "
+        f"chain never moved, so this is the initialization echoed "
+        f"{int(chain.shape[0])} times, not a posterior. Check the sampler's "
+        f"tuning diagnostics (step size, acceptance, warmup length) rather "
+        f"than using these draws."
+    )
+
+
+def _adam_map_ascent(prob, map_steps, map_learning_rate):
+    """Adam gradient ascent on ``prob.log_prob`` — shared by map and laplace.
+
+    One implementation so the two drivers cannot drift: laplace IS this
+    ascent plus a verified-mode covariance.
+    """
+    import optax
+
+    opt = optax.adam(map_learning_rate)
+    state = opt.init(prob.init_flat)
+
+    def _step(carry, _):
+        pos, st = carry
+        g = jax.grad(prob.log_prob)(pos)
+        updates, st = opt.update(jax.tree.map(lambda x: -x, g), st, pos)
+        return (optax.apply_updates(pos, updates), st), None
+
+    (best, _), _ = jax.lax.scan(_step, (prob.init_flat, state), None, length=map_steps)
+    return best
+
+
+def _newton_polish(prob, mode, *, tol, max_iters=12):
+    """Damped-Newton ascent to a Laplace-grade mode, from Adam's endpoint.
+
+    First-order alone cannot deliver a mode at hierarchical D: measured on
+    the D=516 reference fixture, Adam's ``max |grad log_prob|`` was 1.13e3
+    after 300 steps and still 84.6 after 8000. Newton converges
+    quadratically inside the basin and reuses exactly the machinery the
+    Laplace covariance needs anyway (one dense Hessian per iteration, ~D
+    gradient-equivalents each).
+
+    Levenberg-Marquardt damping: the step solves ``(H + lambda*I) dx = g``
+    with ``lambda`` adapted — far from the mode the negative Hessian is
+    typically indefinite (measured: a pure-Newton polish from Adam(300)'s
+    endpoint stalled at |grad|=228 on the D=516 fixture), and a large
+    ``lambda`` degrades the step gracefully toward plain gradient ascent,
+    while near the mode ``lambda`` shrinks and Newton's quadratic finish
+    takes over. A step is accepted only when it increases ``log_prob`` and
+    stays finite; persistent failure exits, and the downstream guards then
+    refuse the unconverged point rather than silently sampling it.
+    """
+    import numpy as np
+
+    grad_fn = jax.grad(prob.log_prob)
+    lam = 1e-3
+    for _ in range(max_iters):
+        g = grad_fn(mode)
+        if float(np.max(np.abs(np.asarray(g)))) <= tol:
+            break
+        neg_hess = -jax.hessian(prob.log_prob)(mode)
+        lp0 = float(prob.log_prob(mode))
+        eye = jnp.eye(prob.n_dim if hasattr(prob, "n_dim") else g.shape[0])
+        accepted = False
+        for _ in range(12):
+            step = jnp.linalg.solve(neg_hess + lam * eye, g)
+            trial = mode + step
+            lp = float(prob.log_prob(trial))
+            if np.isfinite(lp) and lp > lp0 and bool(np.all(np.isfinite(np.asarray(trial)))):
+                mode = trial
+                lam = max(lam / 3.0, 1e-9)
+                accepted = True
+                break
+            lam *= 10.0
+        if not accepted:
+            break
+    return mode
+
+
+def _require_converged_mode(grad_at_mode, method, map_steps, *, tol):
+    """Refuse a Laplace expansion about a point that is not a mode (#1537).
+
+    The single-galaxy laplace expanded about non-modes with no grad=0 check
+    and returned plausible wrong answers — curvature measured off a mode is
+    a covariance for the wrong distribution. The gradient's infinity norm at
+    the reached point must be small; otherwise raise naming the knob.
+    """
+    import numpy as np
+
+    gmax = float(np.max(np.abs(np.asarray(grad_at_mode))))
+    if gmax <= tol:
+        return
+    raise RuntimeError(
+        f"{method}: the point reached after map_steps={map_steps} is not a "
+        f"mode — max |grad log_prob| = {gmax:.3g} exceeds tol={tol:.3g}, and "
+        f"a Laplace covariance measured off a mode is a plausible wrong "
+        f"answer (#1537). Raise map_steps (or adjust map_learning_rate) "
+        f"until the ascent converges, or loosen laplace_grad_tol if this "
+        f"tolerance is genuinely too strict for your problem's scale."
+    )
+
+
+def _require_psd_curvature(chol, method):
+    """Refuse a non-negative-definite curvature at the expansion point.
+
+    ``jnp.linalg.cholesky`` returns NaNs, not an exception, when the negative
+    Hessian is not positive definite — which means the reached point is a
+    saddle or worse, not a maximum. Sampling from those NaNs would return a
+    posterior of NaNs (or garbage that passes a finite-check downstream);
+    refuse by name instead.
+    """
+    import numpy as np
+
+    if bool(np.all(np.isfinite(np.asarray(chol)))):
+        return
+    raise RuntimeError(
+        f"{method}: the negative Hessian at the reached point is not "
+        f"positive definite (its Cholesky factor carries non-finite "
+        f"entries), so the point is a saddle rather than a mode and no "
+        f"Gaussian covariance exists there. Raise map_steps so the ascent "
+        f"reaches an actual maximum (#1537)."
+    )
+
+
+def _require_finite_tuning(L, step_size, method, n_warmup):
+    """Refuse a non-finite (L, step size) tuning instead of sampling with it.
+
+    A starved MCLMC tuner produces NaN parameters, and the chain then never
+    moves — measured on the 2-galaxy D=516 fixture at ``n_warmup=60``:
+    ``L=nan``, ``step_size=nan``, 60 post-tuning draws all equal to the init
+    point. That output LOOKS like a plausible populated posterior, which is
+    the #1530 failure mode; #1569 made raytrace's version of it a loud
+    ``DegenerateChainError``, and this is the MCLMC family's version. The
+    fraction-based tuning phases starve below a few hundred steps; the same
+    fixture tunes finite at ``n_warmup=500``.
+    """
+    import numpy as np
+
+    if np.isfinite(float(L)) and np.isfinite(float(step_size)):
+        return
+    from tengri.inference.hierarchical import DegenerateChainError
+
+    raise DegenerateChainError(
+        f"{method}: the (L, step size) tuner returned non-finite values "
+        f"(L={float(L)!r}, step_size={float(step_size)!r}) after "
+        f"n_warmup={n_warmup} tuning steps, and a chain run with them never "
+        f"moves — every draw would be a copy of the initialization, which "
+        f"looks like a posterior and is not one. The fraction-based tuning "
+        f"phases starve at short warmup; raise n_warmup to a few hundred "
+        f"(the single-galaxy default is 500; n_warmup=500 tunes this family "
+        f"finite on the reference 2-galaxy problem)."
+    )
+
+
 def run_flat_sampler(
     fitter,
     method,
@@ -405,9 +611,11 @@ def run_flat_sampler(
     map_learning_rate=0.05,
     ghmc_alpha=0.8,
     ghmc_delta=0.65,
+    mclmc_target_accept_rate=0.65,
+    laplace_grad_tol=1e-2,
     allow_unvalidated=False,
     verbose=True,
-    **_ignored,
+    **unknown,
 ):
     """Run any flat-seam-reachable sampler on a hierarchical population fit.
 
@@ -422,7 +630,9 @@ def run_flat_sampler(
         Window adaptation / discarded / retained chain lengths (MCMC drivers).
         The ``ess`` driver has no warmup — its exact-prior ellipse needs no
         tuning, so ``n_warmup`` and the HMC-family knobs below are ignored
-        there; only ``n_burnin`` / ``n_samples`` apply.
+        there; only ``n_burnin`` / ``n_samples`` apply. The MCLMC family is
+        the mirror image: ``n_warmup`` sets the (L, step size) tuning length,
+        which consumes the transient, so ``n_burnin`` is ignored there.
     n_leapfrog : int
         Leapfrog steps per HMC proposal.
     max_num_doublings : int
@@ -449,7 +659,14 @@ def run_flat_sampler(
     memory_mode : {"low", "high"}
         Passed to :func:`build_flat_problem`.
     map_steps, map_learning_rate : int, float
-        Gradient-ascent settings for the ``map`` driver.
+        Gradient-ascent settings for the ``map`` and ``laplace`` drivers
+        (one shared ascent — laplace IS map plus a verified-mode covariance).
+    laplace_grad_tol : float
+        Convergence tolerance on ``max |grad log_prob|`` at the point the
+        ``laplace`` ascent reaches [dimensionless in the standardized latent
+        space]. Curvature measured off a mode is a covariance for the wrong
+        distribution (#1537), so exceeding this raises rather than returning
+        plausible wrong error bars.
     ghmc_alpha : float
         GHMC momentum persistence, in [0, 1] [dimensionless]. Same default as
         the single-galaxy ``run_ghmc``. The GHMC driver always uses a diagonal
@@ -458,6 +675,13 @@ def run_flat_sampler(
     ghmc_delta : float
         GHMC proposal step-size scaling [dimensionless]. Same default as the
         single-galaxy ``run_ghmc``.
+    mclmc_target_accept_rate : float
+        Metropolis acceptance target for the ``adjusted_mclmc`` driver's
+        tuner [dimensionless]. Same default (0.65) as the single-galaxy
+        ``run_adjusted_mclmc`` — deliberately NOT the HMC-family
+        ``target_accept_rate``, whose 0.8 default tunes a different
+        proposal mechanism. Unused by the unadjusted ``mclmc`` driver,
+        which has no accept/reject step.
     allow_unvalidated : bool
         Opt in to ``tier="broken"`` backends, exactly as ``Fitter.run`` does.
         Required for ``pathfinder`` and ``mcmc_ghmc``, the tier="broken" names
@@ -479,11 +703,31 @@ def run_flat_sampler(
     shared high-dimension advisory — see
     :func:`tengri.inference._dimension_guard.warn_if_nuts_high_dim`.
     """
+    import inspect
     import time
 
     from tengri.inference._backend_registry import check_usable, get_backend
     from tengri.inference._dimension_guard import warn_if_nuts_high_dim
     from tengri.inference.hierarchical import PopulationPosterior
+
+    if unknown:
+        # The previous spelling was ``**_ignored`` — a silent kwarg sink. A
+        # typo'd fit option (or ``init_from``, which the hierarchical surface
+        # documents as unsupported) vanished while the fit ran with defaults
+        # and the caller believed otherwise (#1378's bug class).
+        accepted = sorted(
+            p
+            for p in inspect.signature(run_flat_sampler).parameters
+            if p not in ("fitter", "method", "unknown")
+        )
+        raise TypeError(
+            f"run_flat_sampler() got unexpected keyword argument(s) "
+            f"{sorted(unknown)}. Accepted fit options for the hierarchical "
+            f"flat seam: {accepted}. Note that some options are per-family "
+            f"(the ess driver ignores warmup knobs; the MCLMC family ignores "
+            f"n_burnin) and init_from is not supported hierarchically — "
+            f"per-galaxy initialization is automatic via MAP."
+        )
 
     driver = FLAT_SAMPLERS.get(method)
     if driver is None:
@@ -618,25 +862,132 @@ def run_flat_sampler(
             "n_burnin": n_burnin,
         }
 
+    elif driver in ("mclmc", "adjusted_mclmc"):
+        import blackjax
+
+        from tengri.inference.backends.mcmc._shared import (
+            _adjusted_mclmc_sample_scan,
+            _mclmc_sample_scan,
+        )
+
+        # blackjax's (adjusted_)mclmc_find_L_and_step_size takes a ONE-argument
+        # logdensity, so the data must close over here — one compile per
+        # catalog for this family, exactly as the single-galaxy backends
+        # behave. The (ld2, data_args) reuse contract is not reachable through
+        # the tuner API without reimplementing the tuner.
+        def _ld_1arg(pos):
+            return ld2(pos, data_args)
+
+        # No burn-in phase: the (L, step size) tuning consumes the transient,
+        # so the chain is n_samples long and n_burnin is ignored.
+        tune_key, init_key, ckey = jax.random.split(key_run, 3)
+        chain_keys = jax.random.split(ckey, n_samples)
+        if driver == "mclmc":
+            kernel = blackjax.mcmc.mclmc.build_kernel(
+                integrator=blackjax.mcmc.integrators.isokinetic_mclachlan,
+            )
+            state = blackjax.mcmc.mclmc.init(prob.init_flat, _ld_1arg, init_key)
+            state, params, _ = blackjax.mclmc_find_L_and_step_size(
+                mclmc_kernel=kernel,
+                logdensity_fn=_ld_1arg,
+                num_steps=n_warmup,
+                state=state,
+                rng_key=tune_key,
+                diagonal_preconditioning=True,
+            )
+            _require_finite_tuning(params.L, params.step_size, method, n_warmup)
+            _, chain = _mclmc_sample_scan(
+                state,
+                chain_keys,
+                kernel,
+                params.L,
+                params.step_size,
+                _ld_1arg,
+                params.inverse_mass_matrix,
+            )
+            extra = {
+                "L": float(params.L),
+                "step_size": float(params.step_size),
+                "n_warmup": n_warmup,
+            }
+        else:
+            kernel = blackjax.mcmc.adjusted_mclmc.build_kernel(
+                integrator=blackjax.mcmc.integrators.isokinetic_mclachlan,
+            )
+            state = blackjax.mcmc.adjusted_mclmc.init(prob.init_flat, _ld_1arg)
+            state, params, _ = blackjax.adjusted_mclmc_find_L_and_step_size(
+                mclmc_kernel=kernel,
+                logdensity_fn=_ld_1arg,
+                num_steps=n_warmup,
+                state=state,
+                rng_key=tune_key,
+                target=mclmc_target_accept_rate,
+                diagonal_preconditioning=True,
+            )
+            _require_finite_tuning(params.L, params.step_size, method, n_warmup)
+            n_integration_steps = jnp.ceil(params.L / params.step_size).astype(int)
+            _, (chain, divergent) = _adjusted_mclmc_sample_scan(
+                state,
+                chain_keys,
+                kernel,
+                params.step_size,
+                n_integration_steps,
+                _ld_1arg,
+                params.inverse_mass_matrix,
+            )
+            extra = {
+                "L": float(params.L),
+                "step_size": float(params.step_size),
+                "n_integration_steps": int(n_integration_steps),
+                "divergent": int(jnp.sum(divergent)),
+                "n_warmup": n_warmup,
+            }
+
     elif driver == "map":
-        import optax
-
-        opt = optax.adam(map_learning_rate)
-        state = opt.init(prob.init_flat)
-
-        def _step(carry, _):
-            pos, st = carry
-            g = jax.grad(prob.log_prob)(pos)
-            updates, st = opt.update(jax.tree.map(lambda x: -x, g), st, pos)
-            return (optax.apply_updates(pos, updates), st), None
-
-        (best, _), _ = jax.lax.scan(_step, (prob.init_flat, state), None, length=map_steps)
+        best = _adam_map_ascent(prob, map_steps, map_learning_rate)
         # A point estimate is a length-1 "chain", so downstream extraction is shared.
         chain = best[None, :]
         extra = {"n_steps": map_steps, "log_prob": float(prob.log_prob(best))}
 
+    elif driver == "laplace":
+        # MAP + a Gaussian covariance from the curvature AT A VERIFIED MODE —
+        # the two things whose absence kept this name refused: returning the
+        # bare point estimate under 'laplace' silently dropped the error bars
+        # (the map driver exists for that), and curvature off a mode is a
+        # plausible wrong answer (#1537: the single-galaxy laplace expanded
+        # about non-modes with no grad=0 check).
+        mode = _adam_map_ascent(prob, map_steps, map_learning_rate)
+        # Adam alone plateaus at hierarchical D (measured: |grad| 84.6 after
+        # 8000 steps on the D=516 fixture); the Newton polish reaches the
+        # actual mode with the same Hessian machinery the covariance needs.
+        mode = _newton_polish(prob, mode, tol=laplace_grad_tol, max_iters=40)
+        grad_at_mode = jax.grad(prob.log_prob)(mode)
+        _require_converged_mode(grad_at_mode, method, map_steps, tol=laplace_grad_tol)
+
+        # Dense negative Hessian: D forward-over-reverse passes; at the
+        # reference D=516 this is ~D gradient-equivalents, comparable to one
+        # more MAP ascent. cov = (-H)^{-1} sampled via -H = L L^T,
+        # draw = mode + solve(L^T, eps) so cov(draw) = (L L^T)^{-1} exactly.
+        neg_hess = -jax.hessian(prob.log_prob)(mode)
+        chol = jnp.linalg.cholesky(neg_hess)
+        _require_psd_curvature(chol, method)
+        eps = jax.random.normal(key_run, (n_samples, prob.n_dim))
+        chain = mode[None, :] + jax.scipy.linalg.solve_triangular(chol.T, eps.T, lower=False).T
+        extra = {
+            "n_steps": map_steps,
+            "log_prob": float(prob.log_prob(mode)),
+            "grad_inf_norm": float(jnp.max(jnp.abs(grad_at_mode))),
+            "n_samples": n_samples,
+        }
+
     else:  # pragma: no cover - FLAT_SAMPLERS admits no other driver
         raise ValueError(f"no driver for {method!r}")
+
+    if driver != "map":
+        # Effect-side net for every MCMC driver: whatever produced it, a chain
+        # that never moved is the initialization echoed n_samples times, not a
+        # posterior (#1530's failure mode, generalized past raytrace).
+        _require_moving_chain(chain, method)
 
     wall_time = time.time() - t0
     shared_arr = jax.vmap(prob.extract_shared)(chain)

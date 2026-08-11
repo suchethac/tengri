@@ -116,20 +116,31 @@ def test_a_group_with_no_declared_ranges_still_raises_end_to_end():
     pytest.skip("every candidate group now declares free ranges — guard covered by unit tests")
 
 
-def test_dla_wildcard_raises_once_the_only_freeable_param_is_overridden():
+def test_dla_wildcard_raises_once_every_freeable_param_is_overridden():
     """Explicit overrides shrink what the wildcard covers — possibly to nothing.
 
-    ``dla_log_n_hi`` is the one DLA param with a free (Uniform) registry
-    default, so a bare wildcard legitimately frees it. Give ``log_n_hi`` an
-    explicit prior and the wildcard is left covering only Fixed-default params,
-    which is the shape that silently freed nothing.
+    Three DLA params are freeable: ``dla_log_n_hi`` (a free ``Uniform``
+    registry default) plus ``dla_temp`` and ``dla_b_turb``, which gained
+    declared ``free_prior`` ranges in #887. Override all three and the wildcard
+    is left covering only ``dla_z`` — which deliberately has no ``free_prior``,
+    because its 0 is a sentinel meaning "use the source redshift". That is the
+    shape that used to silently free nothing, so the guard must fire.
+
+    Before #887 overriding ``log_n_hi`` alone was enough, since it was the only
+    one with a range. Naming all three keeps the test asserting the guard rather
+    than asserting how few parameters happened to be declared.
     """
     with pytest.raises(ParameterError, match=r"'igm\.dla'"):
         tengri.parse_groups(
             sfh={"type": "dpl", "*": FIXED},
             igm={
                 "type": "inoue14",
-                "dla": {"log_n_hi": Uniform(19, 22), "all_params": FREE},
+                "dla": {
+                    "log_n_hi": Uniform(19, 22),
+                    "temp": tengri.Fixed(1e4),
+                    "b_turb": tengri.Fixed(0.0),
+                    "all_params": FREE,
+                },
             },
             redshift=tengri.Fixed(2.0),
         )

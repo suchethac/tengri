@@ -53,6 +53,18 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "neb_logZ_gas",
         Fixed(-0.3),  # will be overridden to match met_logzsol if not set
         "Gas-phase metallicity log10(Z_gas/Zsun)",
+        # Deliberately NO free_prior, for the same reason as ``neb_xid`` (which
+        # lives in ``parameters/_builders.py::_AGN_EXTRAS``):
+        # its admissible range is the selected nebular backend's grid, and those
+        # differ (Cue, the Cloudy grids and the baked-in SSP tables do not share
+        # an extent). The ``neb`` group wildcard is not backend-scoped the way
+        # ``dust.emission`` is since #1482, so one declared range would be right
+        # for one backend and clipped or unreachable for the others.
+        #
+        # It is also tied: absent an explicit setting it tracks ``met_logzsol``,
+        # so freeing it silently decouples gas-phase from stellar metallicity
+        # and adds a near-degenerate dimension. Free it explicitly when you mean
+        # to fit that decoupling, with a range drawn from your backend's grid.
     ),
     ParamDeclaration(
         "neb_fesc",
@@ -168,12 +180,23 @@ ELINE_PARAMS: tuple[ParamDeclaration, ...] = (
         lambda lo, hi: lo >= 0,
         "must have lo >= 0",
         units="km/s",
+        # 0 (the default) means "instrument resolution only" and is a genuine
+        # value here, not a sentinel. The ceiling is narrow-line: broad AGN
+        # components have their own ELINE_BROAD_PARAMS block, and the sibling
+        # ``neb_eline_sigma_kms`` carries the wider [0, 2000] precisely because
+        # it must also describe those.
+        free_prior=Uniform(0.0, 500.0, "Line velocity dispersion", units="km/s", default=0.0),
     ),
     ParamDeclaration(
         "eline_delta_v_kms",
         Fixed(0.0),  # Default: no velocity offset
         "Emission line velocity offset from systemic redshift in km/s",
         units="km/s",
+        # Symmetric about zero because the offset is signed: blueshifted for
+        # outflows, redshifted for inflows. +/-1000 km/s spans the velocity
+        # offsets seen in starburst winds without letting the line wander into
+        # a neighboring feature.
+        free_prior=Uniform(-1000.0, 1000.0, "Line velocity offset", units="km/s", default=0.0),
     ),
 )
 
@@ -330,6 +353,15 @@ SHOCK_PARAMS: tuple[ParamDeclaration, ...] = (
         units="km/s",
     ),
     ParamDeclaration(
+        # Neither shock grid axis gets a free_prior, and the reason is in their
+        # own descriptions: both are *snapped to the nearest grid point*. A
+        # continuous prior over a snapped axis is piecewise constant, so its
+        # gradient is exactly zero almost everywhere and a gradient-based
+        # sampler cannot move along it -- the parameter would look free and
+        # behave frozen, which is the failure mode #887 exists to remove rather
+        # than one to introduce. Fitting these needs either a grid-interpolating
+        # kernel or an explicitly discrete sampler; until then set them
+        # structurally.
         "shock_log_density",
         Fixed(0.0),
         "Log10 pre-shock density in cm^-3; snapped to nearest grid point",

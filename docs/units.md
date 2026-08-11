@@ -56,28 +56,40 @@ All in `tengri.units` and JAX-native (JIT/grad/vmap-safe):
 ```python
 from tengri import units
 
-# Spectral flux density
-units.fnu_to_jy(fnu)             # erg/s/cm²/Hz -> Jansky
+# Spectral flux density — every one has its inverse
+units.fnu_to_jy(fnu)              # erg/s/cm²/Hz -> Jansky
+units.jy_to_fnu(jy)
 units.fnu_to_ujy(fnu)             # ... -> microjansky
+units.ujy_to_fnu(ujy)
 units.fnu_to_njy(fnu)             # ... -> nanojansky
+units.njy_to_fnu(njy)
 units.fnu_to_maggies(fnu)         # ... -> SDSS maggies
-units.jy_to_fnu(jy)               # inverse
+units.maggies_to_fnu(maggies)
 units.fnu_to_flambda(fnu, wave)   # F_ν -> F_λ (erg/s/cm²/Å)
+units.flambda_to_fnu(flambda, wave)
 
-# AB / Vega magnitudes
+# AB magnitudes
 units.fnu_to_ab_mag(fnu)
 units.ab_mag_to_fnu(mag_ab)
-units.ab_to_vega(mag_ab, band)    # band name from filter registry
-units.vega_to_ab(mag_vega, band)
+units.lnu_to_absolute_ab_mag(lnu)
+units.absolute_ab_mag_to_lnu(mag_abs)
 
 # L_ν ↔ F_ν at a given luminosity distance
 units.lnu_to_fnu(lnu, d_lum_mpc, redshift)
 units.fnu_to_lnu(fnu, d_lum_mpc, redshift)
 
+# L_ν ↔ L_λ
+units.lnu_to_llambda(lnu, wave)
+units.llambda_to_lnu(llambda, wave)
+
 # Absolute / apparent / surface brightness
 units.absolute_to_apparent(M_abs, dm)
 units.apparent_to_absolute(m_app, dm)
 units.distance_modulus_from_dl_mpc(d_lum_mpc)
+units.distance_modulus_from_dl(d_lum_cm)
+units.cosmological_dimming(dm, redshift)   # dimming-corrected distance modulus
+units.mag_to_surface_brightness(mag, area_arcsec2)
+units.surface_brightness_to_mag(mu, area_arcsec2)
 
 # Wavelength media
 units.air_to_vacuum(wave_air)
@@ -91,6 +103,30 @@ units.erg_per_s_to_lsun(ergs)
 units.tau_to_attenuation(tau)     # = exp(-tau)
 units.attenuation_to_tau(att)
 ```
+
+### Vega magnitudes
+
+`ab_to_vega` and `vega_to_ab` take a **float offset**, not a band name —
+`mag_Vega = mag_AB − offset`. The offsets ship as a dict:
+
+```python
+from tengri import units
+
+units.ab_to_vega(20.0, units.AB_VEGA_OFFSETS["V"])   # -> 19.98
+units.vega_to_ab(19.98, units.AB_VEGA_OFFSETS["V"])  # -> 20.0
+```
+
+Its keys are Johnson/Bessel and SDSS **short** band names, not
+filter-registry ids:
+
+```python
+list(units.AB_VEGA_OFFSETS)
+# ['U', 'B', 'V', 'R', 'I', 'J', 'H', 'K', 'u', 'g', 'r', 'i', 'z']
+```
+
+So `AB_VEGA_OFFSETS["r"]`, never `AB_VEGA_OFFSETS["sdss_r"]` — there is no
+filter-registry lookup for the offset, and a registry id raises `KeyError`.
+Values are from Blanton & Roweis 2007, AJ, 133, 734 (Tables 3, 5).
 
 The full list (about 35 helpers) is `tengri.units.__all__` —
 `from tengri import units; help(units)` shows it.
@@ -184,9 +220,17 @@ with: optical/NIR broadband → `bessell`; CIGALE-reduced products →
 ```python
 import tengri
 tengri.list_filter_conventions()
-# {'bessell': 'Photon-counting, weight 1/lambda (default; DSPS/FSPS/sedpy).',
-#  'energy':  'Energy-counting, weight 1/lambda^2 / flat-in-frequency (CIGALE/bagpipes).'}
+# name     short_doc
+# ───────  ─────────────────────────────────────────────────────────────────────────
+# bessell  Photon-counting, weight 1/lambda (default; DSPS/FSPS/sedpy).
+# energy   Energy-counting, weight 1/lambda^2 / flat-in-frequency (CIGALE/bagpipes).
+# [2 results — filter_convention]
 ```
+
+Like every other `list_*` verb it returns a `_RegistryTable`, not a dict
+(unified in #1295), so index it by position or go through its helpers —
+`.names()` for the bare names, `.to_dict("name")` if you want the mapping
+this page used to show.
 
 The convention is a **build-time** choice: it is baked into the
 preintegrated `WavePrecomp` lookup table, so the exact path

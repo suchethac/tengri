@@ -55,6 +55,31 @@ class Schreiber2018IRSEDComponent(EmissionComponent):
 
     _citations_tuple: ClassVar[tuple[str, ...]] = ("schreiber2018",)
 
+    accepts_threaded_templates: ClassVar[bool] = True
+
+    def load(self, wave: jnp.ndarray | None = None):
+        """Load the Schreiber+2018 template dict so it can be threaded.
+
+        Returns
+        -------
+        dict or None
+            Template arrays, or ``None`` when unavailable — the backend then
+            falls back to its module-level load, which bakes 2.41 MB (#1649).
+
+        Notes
+        -----
+        **JIT-compatible**: no, deliberately — runs at build time.
+        """
+        del wave
+        from tengri.components.dust.emission.emission import _find_data_file
+        from tengri.components.dust.emission_templates import load_schreiber2018_templates
+
+        for fname in ("schreiber2018_templates_v2.h5", "schreiber2018_templates.h5"):
+            path = _find_data_file(fname)
+            if path is not None:
+                return load_schreiber2018_templates(path)
+        return None
+
     def predict(
         self,
         p: dict[str, jnp.ndarray],
@@ -62,6 +87,7 @@ class Schreiber2018IRSEDComponent(EmissionComponent):
         wave: jnp.ndarray,
         *,
         L_ir: float,
+        templates=None,
     ) -> tuple[jnp.ndarray, dict[str, jnp.ndarray]]:
         """Compute Schreiber et al. (2018) dust emission.
 
@@ -93,10 +119,15 @@ class Schreiber2018IRSEDComponent(EmissionComponent):
         # ``dust_tdust`` / ``dust_fpah`` names sent them into ``**_kwargs`` where
         # they were silently ignored (the component's temperature/PAH knobs had NO
         # effect). Fixed as part of the #849 name unification.
-        sed = schreiber_fn(
-            wave,
-            L_ir,
-            dust_T=p["T"],
-            dust_f_pah=p["f_pah"],
-        )
+        kwargs = dict(dust_T=p["T"], dust_f_pah=p["f_pah"])
+        if templates is not None:
+            # Closure over the THREADED arrays — capture of a tracer is fine;
+            # capture of a concrete array is what bakes (#1649).
+            from tengri.components.dust.emission_templates import (
+                create_schreiber2018_from_grid,
+            )
+
+            sed = create_schreiber2018_from_grid(templates)(wave, L_ir, **kwargs)
+        else:
+            sed = schreiber_fn(wave, L_ir, **kwargs)
         return sed_in + sed, {"sed_dust_ir": sed}

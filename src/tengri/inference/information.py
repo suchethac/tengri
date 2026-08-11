@@ -49,10 +49,11 @@ References
 
 from __future__ import annotations
 
-import warnings
 from dataclasses import dataclass
 
 import numpy as np
+
+from tengri.config.exceptions import warn_measured
 
 __all__ = [
     "MODE_TOLERANCE_NATS",
@@ -441,7 +442,7 @@ def parameter_information(target, params=None, *, key=None) -> ParameterInformat
         gradient=np.asarray(gradient),
     )
     if not info.at_a_mode:
-        warnings.warn(
+        warn_measured(
             f"Expansion point is not a mode: the Newton decrement leaves "
             f"{0.5 * info.newton_decrement**2:.1f} nats of log-posterior "
             f"unclaimed (tolerance {MODE_TOLERANCE_NATS}). Curvature away from a "
@@ -452,6 +453,9 @@ def parameter_information(target, params=None, *, key=None) -> ParameterInformat
             f"n_eff 17.6 where the converged fit gives 6.3.",
             RuntimeWarning,
             stacklevel=2,
+            newton_decrement=float(info.newton_decrement),
+            unclaimed_nats=float(0.5 * info.newton_decrement**2),
+            n_eff=float(info.n_eff),
         )
     return info
 

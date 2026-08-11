@@ -349,6 +349,33 @@ def _model_catalog_z_range(model):
     return getattr(model, "_catalog_z_range", None)
 
 
+def fit_surface_ctor_names() -> frozenset[str]:
+    """Names the fit surfaces accept but route to ``Fitter.__init__``.
+
+    Returns
+    -------
+    frozenset of str
+        The constructor's keyword parameters, minus the ones the surfaces
+        pass positionally.
+
+    Notes
+    -----
+    Read off the live signature so it cannot drift from the constructor.
+    :func:`split_fitter_kwargs` uses it to decide routing;
+    :func:`~tengri.inference._backend_registry.check_unknown_kwargs` uses it
+    to suggest a documented ``fit()`` option that is not a runner parameter.
+    Both must mean the same thing by "constructor-routed", which is why this
+    is one function rather than the same comprehension written twice.
+    """
+    import inspect
+
+    return frozenset(
+        name
+        for name in inspect.signature(Fitter.__init__).parameters
+        if name not in _FIT_SURFACE_POSITIONAL
+    )
+
+
 def split_fitter_kwargs(kwargs):
     """Split a fit-surface ``**kwargs`` dict into (constructor, run) halves (#1378).
 
@@ -375,13 +402,7 @@ def split_fitter_kwargs(kwargs):
         Everything else, for ``Fitter.run`` (unknown names still fail loudly
         there, as before).
     """
-    import inspect
-
-    ctor_names = {
-        name
-        for name in inspect.signature(Fitter.__init__).parameters
-        if name not in _FIT_SURFACE_POSITIONAL
-    }
+    ctor_names = fit_surface_ctor_names()
     ctor_kwargs = {k: v for k, v in kwargs.items() if k in ctor_names}
     run_kwargs = {k: v for k, v in kwargs.items() if k not in ctor_names}
     return ctor_kwargs, run_kwargs
@@ -445,6 +466,129 @@ def _memoized_approx_clone(model, cfg):
         clone = model.with_approx(cfg)
         bucket[key] = clone
     return clone
+
+
+def _has_line_adjacent_channel(model) -> bool:
+    """Whether the observation carries a channel that reads line internals.
+
+    ``line_ratios`` needs the nebular backend's DISCRETE line catalog
+    (``line_waves``/``line_lums``), which the feature-LUT path does not
+    publish — enabling ``FeaturePrecomp`` under it broke
+    ``test_ratio_term_constrains_fit`` on main (594a60552).
+    ``spectral_indices`` is included as unverified against the LUT rather
+    than known-broken: the ratio channel was also "plausibly orthogonal"
+    until it was measured. ``line_fluxes`` is deliberately NOT here — that
+    channel is the one ``FeaturePrecomp`` exists to serve, and its top-up is
+    handled by the callers' ``_fits_lines`` paths.
+    """
+    obs = getattr(model, "observation", None)
+    if obs is None:
+        return False
+    return (
+        getattr(obs, "line_ratios", None) is not None
+        or getattr(obs, "spectral_indices", None) is not None
+    )
+
+
+def _resolve_batch_fit_approx(model, approx, data_type):
+    """Route a batch-fit model through the fit-time precompute policy.
+
+    The batch surfaces' mirror of :meth:`Fitter._resolve_fit_approx`.
+    Single-galaxy fits have defaulted to the LUT under ``approx="auto"``
+    since that policy landed, but ``PopulationFitter`` consumed its
+    ``model_factory`` output raw and ``CatalogFitter`` held the model it was
+    given — so exactly the fits that evaluate the forward model the most
+    (thousands of evaluations, times the catalog size) silently ran the
+    exact wave-grid path at a measured ~2-6x per-evaluation premium. A
+    hierarchical or catalog fit taking minutes instead of well under one is
+    this gap's symptom.
+
+    Parameters
+    ----------
+    model : SEDModel or ForwardModel
+        The batch fit's model (or one built by its factory). Never mutated;
+        ``with_approx`` clones, memoized via :func:`_memoized_approx_clone`.
+    approx : "auto" or None or precompute config
+        ``"auto"`` selects the LUT for the data type (photometry ->
+        ``WavePrecomp``, spectroscopy/joint -> ``SpectrumPrecomp``) and
+        respects a model that already carries it; ``None`` returns the model
+        untouched (the exact path); anything else is handed to
+        ``with_approx`` verbatim.
+    data_type : str
+        The fit's data type; selects the LUT under ``"auto"``.
+
+    Returns
+    -------
+    SEDModel or ForwardModel
+        The LUT-routed clone, or the input model where the policy says (or
+        the model allows) nothing else. A ``with_approx`` failure warns and
+        stays exact — never break a fit that worked, only make its cost
+        visible.
+    """
+    if approx is None:
+        return model
+    if getattr(model, "with_approx", None) is None:
+        return model
+
+    if isinstance(approx, str):
+        if approx != "auto":
+            raise ValueError(
+                f"approx={approx!r} not understood; use 'auto' (default), None "
+                "(exact), or a precompute config (WavePrecomp/SpectrumPrecomp, "
+                "or a tuple)."
+            )
+        from tengri.forward.sed_model import FeaturePrecomp, SpectrumPrecomp, WavePrecomp
+
+        state = getattr(model, "approx", None)
+        if data_type == "photometry":
+            if state is not None and state.wave_precomp:
+                return model
+            cfg = WavePrecomp()
+            # Attempt the feature top-up first: for a backend that can
+            # tabulate its features (Cue's per-Q_H grid replaces the emulator
+            # call itself) this is the dominant lever — measured 1.45x warm /
+            # 1.68x cold on a 2-galaxy Cue population MAP fit (A/A floor
+            # 1.17x) and ~7x per-gradient on the single-galaxy #1596 model,
+            # where WavePrecomp alone does not clear the noise floor at all.
+            # A backend with nothing to tabulate raises; that raise IS the
+            # detection, so the fallback keeps the wave LUT rather than
+            # regressing to the raw model.
+            #
+            # Only when NO line-adjacent channel exists: the ratio term reads
+            # the backend's DISCRETE line catalog ('line_waves'/'line_lums'),
+            # which the feature-LUT path does not publish — measured red on
+            # main at 594a60552 (test_ratio_term_constrains_fit) because the
+            # first spelling checked line_fluxes only, the channel matrix's
+            # classic unwritten cell (#1460/#1480/#1599). spectral_indices is
+            # excluded as unverified rather than known-broken.
+            if not _has_line_adjacent_channel(model):
+                existing = tuple(getattr(model, "approx_configs", ()))
+                with contextlib.suppress(Exception):
+                    return _memoized_approx_clone(model, (*existing, cfg, FeaturePrecomp()))
+        elif data_type in ("spectroscopy", "joint"):
+            if state is not None and getattr(state, "spectrum_precomp", False):
+                return model
+            cfg = SpectrumPrecomp()
+        else:
+            return model
+        existing = tuple(getattr(model, "approx_configs", ()))
+        resolved = (*existing, cfg) if existing else cfg
+    else:
+        resolved = approx
+
+    try:
+        return _memoized_approx_clone(model, resolved)
+    except Exception as exc:  # broad on purpose — never break a working fit
+        import warnings
+
+        warnings.warn(
+            f"Could not enable the precompute LUT for this batch fit "
+            f"({exc}). The fit is correct, only slower — a measured ~2-6x "
+            f"per forward evaluation on the exact path.",
+            UserWarning,
+            stacklevel=3,
+        )
+        return model
 
 
 # Jitted predict wrappers, memoized per (model, method name).
@@ -1161,7 +1305,29 @@ class Fitter:
                     resolved = self._add_feature_precomp(model)
                 return resolved
             cfg = self._auto_approx_config(model)
-            return model if cfg is None else _memoized_approx_clone(model, cfg)
+            if cfg is None:
+                return model
+            if (
+                self.data_type == "photometry"
+                and not self._fits_lines(model)
+                and not _has_line_adjacent_channel(model)
+            ):
+                # #1596: a photometry-only Cue fit measured ~4x SLOWER than
+                # the same fit WITH a line channel, because FeaturePrecomp —
+                # despite the name, the nebular precompute; for Cue the
+                # per-Q_H grid replaces the emulator call itself (~7x
+                # per-gradient) — was only added when lines were fit, and
+                # WavePrecomp alone does not clear the noise floor on a Cue
+                # model. Attempt the feature top-up; a backend with nothing
+                # to tabulate raises, and that raise IS the detection — fall
+                # back to the wave LUT, never to the raw model. Mirrors the
+                # batch surfaces' _resolve_batch_fit_approx.
+                from tengri.forward.sed_model import FeaturePrecomp
+
+                base = cfg if isinstance(cfg, tuple) else (cfg,)
+                with contextlib.suppress(Exception):
+                    return _memoized_approx_clone(model, (*base, FeaturePrecomp()))
+            return _memoized_approx_clone(model, cfg)
 
         resolved = _memoized_approx_clone(model, approx)
         self._warn_lines_without_lut(resolved)
@@ -2885,7 +3051,10 @@ class Fitter:
         check_capabilities(entry, kwargs)
         # Same answer for every other unrecognized name, so a typo or an
         # unsupported channel names the method instead of the runner (#1469).
-        check_unknown_kwargs(entry, kwargs)
+        # Constructor-routed names go in as suggestion candidates only: they
+        # are documented fit() options, so a typo'd one must be correctable
+        # even though the runner does not declare it.
+        check_unknown_kwargs(entry, kwargs, also_accepted=fit_surface_ctor_names())
 
         # Compile the loss/grad + predict surface up front so the fit loop runs
         # warm and the persistent JAX cache is populated.

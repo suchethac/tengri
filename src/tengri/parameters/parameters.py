@@ -673,6 +673,21 @@ class Parameters:
         # a free prior) lets Rule 7 surface the polar-dust E(B-V)=0 no-op at
         # construction (#890); a free/fitted E(B-V) stays a tracer at runtime and
         # is intentionally left out so no no-op warning fires.
+        # The grid-support checks need the range each parameter can actually
+        # take, not its value: a prior's bounds, or (v, v) for a fixed one.
+        # Every Distribution defines .bounds, so read it directly rather than
+        # behind a blanket except — a guard against a silent failure must not
+        # itself fail silently. A string-valued Fixed (a categorical choice)
+        # reports (None, None) and is skipped.
+        param_support: dict[str, tuple[float, float]] = {}
+        for _name, _dist in self._distributions.items():
+            _lo, _hi = _dist.bounds
+            if _lo is None or _hi is None:
+                continue
+            param_support[_name] = (float(_lo), float(_hi))
+
+        self._warn_on_grid_overhang(param_support)
+
         if self.agn_model == "composable":
             from tengri.components.agn.blocks import validate_block_recipe
 
@@ -681,18 +696,6 @@ class Parameters:
                 _ebv_dist = self._distributions.get("agn_polar_ebv")
                 if _ebv_dist is not None and _ebv_dist.is_fixed:
                     recipe_params = {"agn_polar_ebv": float(_ebv_dist.value)}
-            # Rule 9 needs the range each parameter can actually take, not its
-            # value: a prior's bounds, or (v, v) for a fixed one. Every
-            # Distribution defines .bounds, so read it directly rather than
-            # behind a blanket except — a guard against a silent failure must
-            # not itself fail silently. A string-valued Fixed (a categorical
-            # choice) reports (None, None) and is skipped.
-            param_support: dict[str, tuple[float, float]] = {}
-            for _name, _dist in self._distributions.items():
-                _lo, _hi = _dist.bounds
-                if _lo is None or _hi is None:
-                    continue
-                param_support[_name] = (float(_lo), float(_hi))
             validate_block_recipe(
                 agn_disc_block=self.agn_disc_block,
                 agn_nlr_block=self.agn_nlr_block,
@@ -1067,6 +1070,63 @@ class Parameters:
         else:
             # Default: dpl + field
             return ["dpl", "field"]
+
+    def _selected_grid_components(self) -> list[tuple[str, str]]:
+        """``(selector, name)`` pairs for the template-backed components in play.
+
+        Returns
+        -------
+        list of (str, str)
+            Selectors spelled as in the build grammar, e.g.
+            ``[("dust.emission", "themis")]``. AGN blocks are excluded: they are
+            checked by ``validate_block_recipe``, which carries the extra
+            AGN-only rules and its own message framing.
+
+        Notes
+        -----
+        **JIT-compatible**: not applicable -- composition-time only.
+        """
+        selected: list[tuple[str, str]] = []
+        dust_em = getattr(self, "dust_emission", None)
+        if isinstance(dust_em, str):
+            # Pass the selected name through verbatim. The registry carries
+            # every selectable spelling, including aliases, so no normalization
+            # happens here — an earlier draft stripped a "_tabulated" suffix
+            # and thereby missed "draine_li2007" entirely.
+            selected.append(("dust.emission", dust_em))
+        return selected
+
+    def _warn_on_grid_overhang(self, param_support: dict[str, tuple[float, float]]) -> None:
+        """Warn when a reachable range overhangs the grid that consumes it.
+
+        Parameters
+        ----------
+        param_support : dict of str to (float, float)
+            ``{param_name: (lo, hi)}`` each parameter can actually take.
+
+        Notes
+        -----
+        **JIT-compatible**: not applicable -- composition-time only.
+
+        Covers every template-backed component except the AGN blocks, whose
+        equivalent check lives in ``validate_block_recipe`` (#1586).
+        """
+        import warnings
+
+        from tengri.components.grid_support import check_grid_support
+        from tengri.config.exceptions import GridSupportWarning
+
+        findings = check_grid_support(self._selected_grid_components(), param_support)
+        for selector, name, pname, detail, (g_lo, g_hi) in findings:
+            warnings.warn(
+                f"{selector}={name!r}: {pname} — {detail}. The SED there is "
+                "bit-identical to the edge node and the gradient is exactly "
+                f"zero, so a fit cannot move it. Narrow {pname} to "
+                f"[{g_lo:g}, {g_hi:g}], or select a {selector} component with "
+                "no template grid.",
+                GridSupportWarning,
+                stacklevel=3,
+            )
 
     def _validate_bounds(self):
         """Check that distribution bounds respect physical constraints."""
@@ -1916,6 +1976,12 @@ class Parameters:
             "wildcard_free": f"[{WILDCARD_ALIAS} FREE]",
             "wildcard_fixed": f"[{WILDCARD_ALIAS} FIXED]",
             "registry_default": "[default]",
+            # The "_grid" suffix marks a declared free prior that was
+            # intersected with the selected component's template grid, whose
+            # axes it overhung. Shown, never silent: the printed range is then
+            # not the one the declaration carries (#1586).
+            "user_free_grid": "[user FREE -> grid]",
+            "wildcard_free_grid": f"[{WILDCARD_ALIAS} FREE -> grid]",
         }
 
         # Parameter table

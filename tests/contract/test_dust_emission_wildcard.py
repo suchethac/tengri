@@ -94,13 +94,37 @@ EMISSION_TYPES = (
     "astrodust",
 )
 
-#: Backends every one of whose declared parameters defaults to a ``Fixed`` scalar,
-#: so ``'*': FREE`` can free none of them and the guard must refuse the build.
-#: Maps type -> the declared names the error is required to name.
-NOTHING_FREEABLE = {
-    "dale2014": {"dust_alpha_dale", "dust_frac_agn"},
-    "casey2012": {"dust_T", "dust_beta_ir", "dust_alpha_mir"},
-}
+
+def _nothing_freeable() -> dict[str, set[str]]:
+    """Backends whose every declared parameter still resolves to a ``Fixed`` scalar.
+
+    ``'*': FREE`` can free none of these, so the guard must refuse the build.
+
+    Derived rather than listed. #887 is giving parameters their declared
+    ``free_prior`` a subsystem at a time, and each one moves a backend off this
+    list -- a hardcoded set would keep asserting that a guard fires after the
+    fix that stops it firing. (That is not hypothetical: this set previously
+    named ``dale2014``, and declaring ``dust_alpha_dale`` -- the parameter
+    #1482's own title calls unreachable -- turned the assertion red.)
+    """
+    from tengri.parameters.groups import _declared_param_names
+    from tengri.parameters.registry import registry
+
+    reg = registry()
+    out: dict[str, set[str]] = {}
+    for etype in EMISSION_TYPES:
+        declared = _declared_param_names(etype)
+        if not declared:
+            continue
+        if all(getattr(reg.get(n), "free_prior", None) is None for n in declared):
+            out[etype] = set(declared)
+    return out
+
+
+#: Maps type -> the declared names the error is required to name. Empty is the
+#: #887 goal state, not a failure: it means every shipped IR backend has at
+#: least one parameter the wildcard can genuinely free.
+NOTHING_FREEABLE = _nothing_freeable()
 
 #: Dust attenuation deep enough that L_absorbed is large and IR emission is a
 #: real term rather than a rounding error.

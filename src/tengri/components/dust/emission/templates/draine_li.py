@@ -62,6 +62,31 @@ class DraineLi2007IRSEDComponent(EmissionComponent):
 
     _citations_tuple: ClassVar[tuple[str, ...]] = ("draine_li2007",)
 
+    accepts_threaded_templates: ClassVar[bool] = True
+
+    def load(self, wave: jnp.ndarray | None = None):
+        """Load the DL07 template dict so it can be threaded, not baked.
+
+        Returns
+        -------
+        dict or None
+            Template arrays, or ``None`` when unavailable — the backend then
+            falls back to its module-level load, which bakes 3.76 MB (#1649).
+
+        Notes
+        -----
+        **JIT-compatible**: no, deliberately — runs at build time.
+        """
+        del wave
+        from tengri.components.dust.emission.emission import _find_data_file
+        from tengri.components.dust.emission_templates import load_draine_li_templates
+
+        for fname in ("dl07_templates_v2.h5", "dl07_templates.h5"):
+            path = _find_data_file(fname)
+            if path is not None:
+                return load_draine_li_templates(path)
+        return None
+
     def predict(
         self,
         p: dict[str, jnp.ndarray],
@@ -69,6 +94,7 @@ class DraineLi2007IRSEDComponent(EmissionComponent):
         wave: jnp.ndarray,
         *,
         L_ir: float,
+        templates=None,
     ) -> tuple[jnp.ndarray, dict[str, jnp.ndarray]]:
         """Compute Draine & Li (2007) dust emission.
 
@@ -91,15 +117,19 @@ class DraineLi2007IRSEDComponent(EmissionComponent):
             contains {"sed_dust_ir": emission SED in erg/s/Hz}.
 
         """
-        from tengri.components.dust.emission import draine_li2007 as dl07_fn
-
-        sed = dl07_fn(
-            wave,
-            L_ir,
+        kwargs = dict(
             dust_umin=p["umin"],
             dust_gamma_dl=p["gamma_dl"],
             dust_qpah=p["qpah"],
         )
+        if templates is not None:
+            from tengri.components.dust.emission_templates import create_dl07_from_grid
+
+            sed = create_dl07_from_grid(templates)(wave, L_ir, **kwargs)
+        else:
+            from tengri.components.dust.emission import draine_li2007 as dl07_fn
+
+            sed = dl07_fn(wave, L_ir, **kwargs)
         return sed_in + sed, {"sed_dust_ir": sed}
 
 
@@ -142,6 +172,32 @@ class DraineLi2014IRSEDComponent(EmissionComponent):
 
     _citations_tuple: ClassVar[tuple[str, ...]] = ("draine_li2014",)
 
+    accepts_threaded_templates: ClassVar[bool] = True
+
+    def load(self, wave: jnp.ndarray | None = None):
+        """Load the DL14 template grid so it can be threaded, not baked.
+
+        Returns
+        -------
+        dict or None
+            Template arrays, or ``None`` when the grid is unavailable — the
+            backend then falls back to its module-level load, which bakes.
+
+        Notes
+        -----
+        **JIT-compatible**: no, deliberately — this runs at build time so the
+        arrays reach ``predict`` as a traced argument (#1649).
+        """
+        del wave
+        from tengri.components.dust.emission.emission import _find_data_file
+        from tengri.components.dust.emission_templates import load_dl14_templates
+
+        for fname in ("dl14_templates_v2.h5", "dl14_templates.h5"):
+            path = _find_data_file(fname)
+            if path is not None:
+                return load_dl14_templates(path)
+        return None
+
     def predict(
         self,
         p: dict[str, jnp.ndarray],
@@ -149,6 +205,7 @@ class DraineLi2014IRSEDComponent(EmissionComponent):
         wave: jnp.ndarray,
         *,
         L_ir: float,
+        templates=None,
     ) -> tuple[jnp.ndarray, dict[str, jnp.ndarray]]:
         """Compute Draine & Li (2014) dust emission.
 
@@ -171,14 +228,19 @@ class DraineLi2014IRSEDComponent(EmissionComponent):
             contains {"sed_dust_ir": emission SED in erg/s/Hz}.
 
         """
-        from tengri.components.dust.emission import draine_li2014 as dl14_fn
-
-        sed = dl14_fn(
-            wave,
-            L_ir,
+        kwargs = dict(
             dust_umin=p["umin"],
             dust_gamma_dl=p["gamma_dl"],
             dust_qpah=p["qpah"],
             dust_alpha_dl14=p["alpha_dl14"],
         )
+        if templates is not None:
+            # Threaded: the grid arrives as a traced argument.
+            from tengri.components.dust.emission_templates import dl14_sed_from_grid
+
+            sed = dl14_sed_from_grid(templates, wave, L_ir, **kwargs)
+        else:
+            from tengri.components.dust.emission import draine_li2014 as dl14_fn
+
+            sed = dl14_fn(wave, L_ir, **kwargs)
         return sed_in + sed, {"sed_dust_ir": sed}

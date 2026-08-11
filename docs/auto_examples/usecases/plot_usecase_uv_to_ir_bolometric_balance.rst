@@ -41,7 +41,7 @@ Non-conservation flags calibration issues in the dust emission routing.
 
 Reference: da Cunha et al. 2008, MNRAS, 388, 1595 (energy-balance principle).
 
-.. GENERATED FROM PYTHON SOURCE LINES 25-270
+.. GENERATED FROM PYTHON SOURCE LINES 25-266
 
 
 
@@ -55,31 +55,29 @@ Reference: da Cunha et al. 2008, MNRAS, 388, 1595 (energy-balance principle).
 
  .. code-block:: none
 
-      0%|          | 0.00/67.0M [00:00<?, ?B/s]      2%|▏         | 1.59M/67.0M [00:00<00:04, 15.7MB/s]      6%|▋         | 4.26M/67.0M [00:00<00:02, 22.1MB/s]     10%|█         | 6.96M/67.0M [00:00<00:02, 24.3MB/s]     15%|█▍        | 9.78M/67.0M [00:00<00:02, 25.8MB/s]     19%|█▉        | 12.9M/67.0M [00:00<00:01, 27.7MB/s]     24%|██▍       | 15.9M/67.0M [00:00<00:01, 28.7MB/s]     28%|██▊       | 18.8M/67.0M [00:00<00:01, 26.8MB/s]     32%|███▏      | 21.7M/67.0M [00:00<00:01, 27.4MB/s]     37%|███▋      | 24.5M/67.0M [00:00<00:01, 27.5MB/s]     41%|████      | 27.3M/67.0M [00:01<00:01, 27.4MB/s]     45%|████▌     | 30.1M/67.0M [00:01<00:01, 27.8MB/s]     49%|████▉     | 32.9M/67.0M [00:01<00:01, 27.9MB/s]     54%|█████▎    | 35.8M/67.0M [00:01<00:01, 28.1MB/s]     58%|█████▊    | 39.0M/67.0M [00:01<00:00, 29.1MB/s]     63%|██████▎   | 42.5M/67.0M [00:01<00:00, 30.6MB/s]     68%|██████▊   | 45.7M/67.0M [00:01<00:00, 31.1MB/s]     73%|███████▎  | 49.0M/67.0M [00:01<00:00, 31.5MB/s]     78%|███████▊  | 52.1M/67.0M [00:01<00:00, 30.8MB/s]     83%|████████▎ | 55.3M/67.0M [00:01<00:00, 31.0MB/s]     87%|████████▋ | 58.4M/67.0M [00:02<00:00, 30.8MB/s]     92%|█████████▏| 61.6M/67.0M [00:02<00:00, 31.2MB/s]     97%|█████████▋| 64.8M/67.0M [00:02<00:00, 25.6MB/s]    100%|██████████| 67.0M/67.0M [00:02<00:00, 28.6MB/s]
-    Downloaded SSP to /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/examples/usecases/data/fsps_prsc_miles_chabrier.h5
-    τ_V =  0.00: L_UV_absorbed = 1.7764e+36 erg/s, L_IR = 2.0580e+36 erg/s, ratio = 1.159
-    τ_V =  0.10: L_UV_absorbed = 2.0018e+36 erg/s, L_IR = 2.3013e+36 erg/s, ratio = 1.150
-    τ_V =  0.30: L_UV_absorbed = 2.3204e+36 erg/s, L_IR = 2.6555e+36 erg/s, ratio = 1.144
-    τ_V =  0.50: L_UV_absorbed = 2.5231e+36 erg/s, L_IR = 2.8921e+36 erg/s, ratio = 1.146
-    τ_V =  1.00: L_UV_absorbed = 2.7789e+36 erg/s, L_IR = 3.2201e+36 erg/s, ratio = 1.159
-    τ_V =  1.50: L_UV_absorbed = 2.8849e+36 erg/s, L_IR = 3.3809e+36 erg/s, ratio = 1.172
-    τ_V =  2.00: L_UV_absorbed = 2.9382e+36 erg/s, L_IR = 3.4761e+36 erg/s, ratio = 1.183
-    τ_V =  2.50: L_UV_absorbed = 2.9700e+36 erg/s, L_IR = 3.5407e+36 erg/s, ratio = 1.192
-    τ_V =  3.00: L_UV_absorbed = 2.9915e+36 erg/s, L_IR = 3.5888e+36 erg/s, ratio = 1.200
-    τ_V =  3.50: L_UV_absorbed = 3.0075e+36 erg/s, L_IR = 3.6268e+36 erg/s, ratio = 1.206
-    τ_V =  4.00: L_UV_absorbed = 3.0200e+36 erg/s, L_IR = 3.6583e+36 erg/s, ratio = 1.211
-    τ_V =  0.15: L_UV_absorbed = 2.0959e+36 erg/s, L_IR = 2.4043e+36 erg/s, ratio = 1.147
-    τ_V =  0.75: L_UV_absorbed = 2.6814e+36 erg/s, L_IR = 3.0888e+36 erg/s, ratio = 1.152
-    τ_V =  2.25: L_UV_absorbed = 2.9559e+36 erg/s, L_IR = 3.5111e+36 erg/s, ratio = 1.188
-    τ_V =  3.75: L_UV_absorbed = 3.0141e+36 erg/s, L_IR = 3.6432e+36 erg/s, ratio = 1.209
+    τ_V =  0.00: L_UV_absorbed = 1.7764e+36 erg/s, L_IR = 2.0693e+36 erg/s, ratio = 1.165
+    τ_V =  0.10: L_UV_absorbed = 2.0018e+36 erg/s, L_IR = 2.3139e+36 erg/s, ratio = 1.156
+    τ_V =  0.30: L_UV_absorbed = 2.3204e+36 erg/s, L_IR = 2.6701e+36 erg/s, ratio = 1.151
+    τ_V =  0.50: L_UV_absorbed = 2.5231e+36 erg/s, L_IR = 2.9081e+36 erg/s, ratio = 1.153
+    τ_V =  1.00: L_UV_absorbed = 2.7789e+36 erg/s, L_IR = 3.2379e+36 erg/s, ratio = 1.165
+    τ_V =  1.50: L_UV_absorbed = 2.8849e+36 erg/s, L_IR = 3.3996e+36 erg/s, ratio = 1.178
+    τ_V =  2.00: L_UV_absorbed = 2.9382e+36 erg/s, L_IR = 3.4953e+36 erg/s, ratio = 1.190
+    τ_V =  2.50: L_UV_absorbed = 2.9700e+36 erg/s, L_IR = 3.5603e+36 erg/s, ratio = 1.199
+    τ_V =  3.00: L_UV_absorbed = 2.9915e+36 erg/s, L_IR = 3.6086e+36 erg/s, ratio = 1.206
+    τ_V =  3.50: L_UV_absorbed = 3.0075e+36 erg/s, L_IR = 3.6469e+36 erg/s, ratio = 1.213
+    τ_V =  4.00: L_UV_absorbed = 3.0200e+36 erg/s, L_IR = 3.6785e+36 erg/s, ratio = 1.218
+    τ_V =  0.15: L_UV_absorbed = 2.0959e+36 erg/s, L_IR = 2.4176e+36 erg/s, ratio = 1.153
+    τ_V =  0.75: L_UV_absorbed = 2.6814e+36 erg/s, L_IR = 3.1059e+36 erg/s, ratio = 1.158
+    τ_V =  2.25: L_UV_absorbed = 2.9559e+36 erg/s, L_IR = 3.5305e+36 erg/s, ratio = 1.194
+    τ_V =  3.75: L_UV_absorbed = 3.0141e+36 erg/s, L_IR = 3.6634e+36 erg/s, ratio = 1.215
 
     ======================================================================
     ENERGY BALANCE SUMMARY
     ======================================================================
-    Mean L_IR / L_UV_absorbed ratio: 1.1745 ± 0.0242
-    Max deviation from y=x: 21.13%
+    Mean L_IR / L_UV_absorbed ratio: 1.1810 ± 0.0244
+    Max deviation from y=x: 21.80%
     Models within ±10%: 0 / 15
-    Models within ±20%: 12 / 15
+    Models within ±20%: 11 / 15
 
     ⚠ WARNING: Energy non-conservation detected (>10% deviation).
     File an issue with the above table and commit hash.
@@ -99,7 +97,6 @@ Reference: da Cunha et al. 2008, MNRAS, 388, 1595 (energy-balance principle).
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
-    from pathlib import Path
 
     import jax
     import matplotlib.pyplot as plt
@@ -111,7 +108,7 @@ Reference: da Cunha et al. 2008, MNRAS, 388, 1595 (energy-balance principle).
         Observation,
         Photometry,
         SEDModel,
-        load_ssp_data,
+        load_ssp,
     )
     from tengri.analysis.plotting import setup_style
 
@@ -123,13 +120,10 @@ Reference: da Cunha et al. 2008, MNRAS, 388, 1595 (energy-balance principle).
     # 1. Setup: bare-stellar SSP and wavelength grid for integration
     # ============================================================================
 
-    # Load a bare-stellar SSP (required for Cue nebular). If not found, download.
-    ssp_path = Path("data/fsps_prsc_miles_chabrier.h5")
-    if not ssp_path.exists():
-        import tengri
-
-        ssp_path = Path(tengri.download_ssp("fsps_prsc_miles_chabrier"))
-    ssp = load_ssp_data(str(ssp_path))
+    # Load a bare-stellar SSP (required for Cue nebular). `load_ssp` walks parent
+    # directories for `data/`, so it finds the committed grid whatever the working
+    # directory is — the gallery runner executes each example from its own folder.
+    ssp = load_ssp("fsps_prsc_miles_chabrier")
 
     # Redshift
     z = 0.05
@@ -342,7 +336,7 @@ Reference: da Cunha et al. 2008, MNRAS, 388, 1595 (energy-balance principle).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 12.296 seconds)
+   **Total running time of the script:** (0 minutes 19.313 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_uv_to_ir_bolometric_balance.py:
