@@ -679,10 +679,14 @@ class PopulationFitter:
               rather than returning error bars measured off a mode (#1537).
             - ``"pathfinder"`` — tier="broken" (OOM-killed the process on a
               measured 2-galaxy problem); requires ``allow_unvalidated=True``.
-            - ``"nss"`` — the sole remaining refusal
-              (:data:`~tengri.inference._hierarchical_flat.FLAT_UNSUPPORTED`):
-              a real nested sampler is missing, and a blind rejection
-              stand-in returns biased samples.
+            - ``"nss"`` — the in-tree Nested Slice Sampler (Yallup+2026) on
+              the flat vector, with live points drawn from the exact iid
+              N(0,1) prior; the only driver that also returns
+              ``log_evidence`` (hierarchical model comparison). Requires
+              ``nss_n_live > D`` — the HRSS direction covariance is
+              estimated from the live set and is singular otherwise — so at
+              stochastic-field D (hundreds of latents) prefer
+              ``"mcmc_nuts"``, or shrink ``n_grid`` at build time.
 
         key : PRNGKey, optional
             Random key for reproducibility. If None, uses PRNGKey(0).

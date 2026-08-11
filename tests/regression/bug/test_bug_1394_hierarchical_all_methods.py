@@ -62,20 +62,29 @@ def test_every_registered_backend_is_accounted_for():
     assert not missing, f"backends neither driven nor explained: {missing}"
 
 
-def test_nss_is_refused_with_a_reason_not_shipped_broken():
-    """A degenerate sampler must not be reachable just to make a count look good.
+def test_nss_is_driven_by_the_real_nested_slice_sampler():
+    """The founding refusal is resolved by wiring, not by lowering the bar.
 
     The blind-rejection nested sampler first written here exhausted its attempt
     budget and terminated at iteration 147 of a requested 200 on a 2-galaxy
     D=18 problem, returning silently truncated -- therefore biased -- samples.
-    Removed rather than shipped. The prior transform it needs is exact and is
-    still provided; what is missing is a real sampler on top of it (#1429).
+    Removed rather than shipped, and the refusal recorded (#1429). The
+    resolution is the in-tree Nested Slice Sampler (Yallup+2026 -- constrained
+    HRSS exploration WITHIN the likelihood contour, the same implementation
+    the single-galaxy ``nss`` backend runs), driven on the seam's standardized
+    problem with the exact probit prior transform it was always waiting for.
     """
-    assert "nss" not in FLAT_SAMPLERS
-    assert "nss" in FLAT_UNSUPPORTED
-    reason = FLAT_UNSUPPORTED["nss"]
-    assert "constrained exploration" in reason, "the reason must say what is missing"
-    assert "#1429" in reason, "the reason must point at the follow-up"
+    assert "nss" in FLAT_SAMPLERS, "the refusal is resolved; nss has a real driver (#1429)"
+    assert FLAT_SAMPLERS["nss"] == "nss"
+    assert "nss" not in FLAT_UNSUPPORTED
+    # The wiring must call the real sampler, not a rejection stand-in: the
+    # driver builds the NSS algorithm and hands it the LIKELIHOOD alone (the
+    # prior lives in the live-point draws and the probit transform).
+    src = inspect.getsource(
+        __import__("tengri.inference._hierarchical_flat", fromlist=["x"]).run_flat_sampler
+    )
+    assert "as_top_level_api" in src, "the driver must run the in-tree NSS, not a stand-in"
+    assert "log_likelihood_with_data" in src
 
 
 def test_raytrace_and_the_seam_share_ONE_posterior_definition():
@@ -156,14 +165,17 @@ def test_no_method_is_silently_substituted_for_another():
         "map",
         "laplace",
         "pathfinder",
+        "nss",
     }, (
         "FLAT_SAMPLERS gained or lost a name; if the new name's driver truly "
         "implements that algorithm, update this set in the same commit"
     )
-    # laplace joined last, once its driver computed what distinguishes it
-    # from map: a Gaussian covariance from the negative Hessian at a
-    # GRADIENT-VERIFIED mode (#1537: curvature off a mode is a plausible
-    # wrong answer). The only remaining refusal is nss, tested above.
+    # laplace joined once its driver computed what distinguishes it from map:
+    # a Gaussian covariance from the negative Hessian at a GRADIENT-VERIFIED
+    # mode (#1537: curvature off a mode is a plausible wrong answer). nss —
+    # the founding refusal — joined last, when the in-tree Nested Slice
+    # Sampler was driven on the standardized problem (#1429), emptying
+    # FLAT_UNSUPPORTED for the first time.
 
 
 class _SentinelReached(Exception):
@@ -502,6 +514,52 @@ def test_a_non_finite_tuning_is_refused_not_returned():
     msg = str(exc.value)
     assert "n_warmup" in msg, "the error must name the knob that fixes it"
     assert "mcmc_adjusted_mclmc" in msg, "the error must name the method asked for"
+
+
+def test_nss_refuses_a_live_set_smaller_than_the_dimension():
+    """HRSS directions come from the live points' covariance -- rank matters.
+
+    ``n_live`` points give the empirical covariance rank at most
+    ``n_live - 1``; with ``n_live <= D`` every slice direction lies in a
+    proper subspace and the orthogonal complement is NEVER explored --
+    silent bias, not slowness. The default n_live=500 therefore refuses the
+    D=516 reference fixture by construction, with an error naming the knob
+    (nss_n_live) and the working alternatives, instead of returning samples
+    confined to a hyperplane that pass every finite-check downstream.
+    """
+    from tengri.inference._hierarchical_flat import _require_nondegenerate_live_set
+
+    _require_nondegenerate_live_set(100, 20, "nss")  # passes: 100 live points span D=20
+
+    with pytest.raises(ValueError) as exc:
+        _require_nondegenerate_live_set(500, 516, "nss")
+    msg = str(exc.value)
+    assert "nss_n_live" in msg, "the error must name the knob that fixes it"
+    assert "516" in msg, "the error must name the dimension it cannot span"
+    assert "nss" in msg, "the error must name the method asked for"
+
+
+def test_nss_refuses_an_unconverged_evidence_integral():
+    """#1429's founding failure, as a runtime invariant rather than a probe.
+
+    The rejection stand-in's defect was terminating early and returning a
+    silently truncated -- therefore biased -- sample set. The real sampler
+    can reach the same state by a different road: hitting
+    ``nss_max_iterations`` while ``log(Z_live/Z)`` still exceeds tolerance
+    means the live set still holds unintegrated posterior mass, and
+    resampling then systematically misses the peak. Loud refusal naming the
+    knob, not a diagnostics field nobody reads.
+    """
+    from tengri.inference._hierarchical_flat import _require_converged_evidence
+
+    # converged: remaining evidence fraction below tolerance passes silently
+    _require_converged_evidence(412, 10000, -3.5, -3.0, "nss")
+
+    with pytest.raises(RuntimeError) as exc:
+        _require_converged_evidence(10000, 10000, 4.2, -3.0, "nss")
+    msg = str(exc.value)
+    assert "nss_max_iterations" in msg, "the error must name the knob that fixes it"
+    assert "#1429" in msg, "the error must cite the failure class it prevents"
 
 
 def test_flat_problem_exposes_a_separable_posterior():

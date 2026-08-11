@@ -33,8 +33,11 @@ Consequences that do the work:
   holds **exactly**, with `cov = I` — which is why it takes the *likelihood
   alone* (`FlatProblem.log_likelihood_with_data`); handing it `log_prob` would
   double-count the prior its ellipse encodes.
-- Nested sampling's unit-cube transform is exactly the elementwise probit
-  (`FlatProblem.prior_transform`) — no machinery had to be invented.
+- Nested sampling gets its prior for free twice over: the unit-cube
+  transform is exactly the elementwise probit (`FlatProblem.prior_transform`),
+  and the initial live set is simply `jax.random.normal` draws. The `nss`
+  driver hands the in-tree Nested Slice Sampler the *likelihood alone* —
+  like ESS, giving it `log_prob` would double-count the prior.
 
 **Boundaries of the guarantee** (each enforced or stated, never silent):
 
@@ -55,8 +58,8 @@ Consequences that do the work:
 
 ## Wiring a new sampler: three edits plus one executed fit
 
-Demonstrated five times in 2026-08 (dynamic-HMC, GHMC, ESS, MCLMC,
-adjusted-MCLMC; PRs #1531/#1624/#1644):
+Demonstrated six times in 2026-08 (dynamic-HMC, GHMC, ESS, MCLMC,
+adjusted-MCLMC, NSS; PRs #1531/#1624/#1644 and the #1429 wiring):
 
 1. **`FLAT_SAMPLERS["name"] = "driver"`** — or move the name out of
    `FLAT_UNSUPPORTED`. Registry gating (tier opt-in via `allow_unvalidated`),
@@ -102,6 +105,7 @@ loudly for typos):
 | ess                   | none — exact-prior ellipse      | `n_burnin` sliced  |
 | mclmc / adjusted      | `(L, step size)` tuning (`n_warmup`; starves below a few hundred steps) | none — tuning consumes the transient |
 | map                   | n/a (`map_steps`)               | n/a                |
+| nss                   | none — `nss_*` knobs; `n_samples` = resampled equal-weight draws | n/a — dead-point history, not a chain |
 
 Unknown kwargs **raise** (`TypeError` naming the accepted set) — the previous
 `**_ignored` sink swallowed typos and `init_from=` silently (#1378's bug
@@ -117,6 +121,8 @@ class; hierarchical initialization is automatic per-galaxy MAP).
 | `_require_moving_chain` | any MCMC chain that never moved — the init echoed `n_samples` times | #1530's MAP-echo mode, generalized |
 | `_require_converged_mode` | a Laplace covariance measured off a mode (Adam plateaus at hierarchical D: \|grad\| 84.6 after 8000 steps; the LM-Newton polish reaches 1.7e-3) | #1537 |
 | `_require_psd_curvature` | sampling from a NaN Cholesky at a saddle | #1537 |
+| `_require_nondegenerate_live_set` | NSS with `n_live <= D` — the HRSS direction covariance is singular (rank ≤ n_live−1), so samples stay confined to a subspace while passing every finite-check | #1429 |
+| `_require_converged_evidence` | NSS hitting its iteration cap with unintegrated mass still in the live set — a silently truncated, biased sample set | #1429 |
 | `DegenerateChainError` in raytrace | near-zero acceptance chains returned as posteriors | #1530/#1569 |
 | unknown-kwarg `TypeError` | typo'd fit options running defaults silently | #1378 |
 
@@ -126,12 +132,34 @@ Verified by real fits (cold process, A/A-controlled): map, hmc, nuts (via
 reachability tests), dynamic-hmc, ghmc, ess, mclmc, adjusted-mclmc — on
 Fixed-z photometry (stochastic-field and Cue fixtures) and free-z photometry;
 under both the exact path and the fit-time precompute LUT default (#1641).
-**Not yet executed**: population spectroscopy under `SpectrumPrecomp` (no
-in-tree fixture); the policy is stub-tested only. `laplace` is driven since
+`laplace` is driven since
 2026-08-10: Adam warm start + Levenberg-Marquardt Newton polish to a
 gradient-verified mode (measured on the D=516 fixture: Adam alone plateaus at
 |grad| 84.6 after 8000 steps; the polish reaches 1.7e-3, 42.7 s end-to-end),
 then a Gaussian covariance from the Cholesky of the negative Hessian — with
-unconverged modes and non-PSD curvature refused loudly (#1537). The sole
-remaining refusal is `nss`, pending a real nested sampler on the exact prior
-transform the seam already provides.
+unconverged modes and non-PSD curvature refused loudly (#1537).
+
+`nss` — the founding refusal — is driven since 2026-08-11 (#1429): the
+in-tree Nested Slice Sampler on the standardized problem. Executed on a
+2-galaxy `n_grid=8` stochastic hierarchy (D=20, `nss_n_live=100`): converged
+by the evidence criterion at 65 iterations / 1625 dead points, 104 s cold,
+`log Z = -15.97`, resampled `ess = 470`, and the shared posterior agrees
+with `mcmc_nuts` mutually within each other's central 90% intervals on both
+hyperparameters — the #1429 acceptance bar. Two keys put the evidence
+scatter at ~2.4 nats at `n_live=100`; raise `nss_n_live` when the fit is
+*for* model comparison. The rank guard (`nss_n_live > D`) was fired live on
+the D=516 fixture.
+
+Population spectroscopy under `SpectrumPrecomp` is executed as of
+2026-08-11 — the one path #1641 had shipped stub-tested only. The
+`approx="auto"` resolution is asserted live on the fit-time factory's output
+and a real `mcmc_hmc` fit runs through the seam on a 2-galaxy, 50-pixel
+spectroscopic hierarchy (in-tree:
+`test_population_spectroscopy_resolves_the_spectrum_lut_and_runs`). The
+exact-path control arm measured the LUT's price at this SNR: 9.66x faster
+(165.9 → 17.2 s) and a **systematic ~1-sigma posterior offset** in
+`psd_sigma` (LUT 2.030 vs exact 2.053, each mean outside the other's central
+90% interval; τ unresolved) — the spectroscopy sibling of #1671's
+WavePrecomp gradient bias, filed as #1688. Execution verified; the
+approximation's cost is now a number instead of an assumption.
+`FLAT_UNSUPPORTED` is empty — every registered backend is genuinely driven.
