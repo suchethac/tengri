@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Star formation history models: PSD kernels, GP generation, mean SFH, registry."""
 
+from tengri._completion import curated_dir
 from tengri.components.stellar.sfh._prior_sampling import (
     DEFAULT_AGE_GRID_YR,
     sample_sfh_prior,
@@ -146,6 +147,4 @@ __all__ = [
 ]
 
 
-def __dir__() -> list[str]:
-    """Curated tab-completion list — only the names in ``__all__``."""
-    return list(__all__)
+__dir__ = curated_dir(__all__)
