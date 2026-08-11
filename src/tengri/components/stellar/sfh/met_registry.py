@@ -45,7 +45,17 @@ class MetParamDef(NamedTuple):
     bound_error : str
         Error message when bound check fails.
     default : Distribution
-        Default prior distribution.
+        Default prior distribution — what the parameter resolves to when
+        nothing asks for it to be free. Usually ``Fixed``.
+    free_prior : Distribution or None, optional
+        The admissible range ``all_params: FREE`` expands to. ``None`` means
+        the parameter is not freeable by the wildcard.
+
+        Mirrors the field of the same name on
+        :class:`~tengri.components.stellar.sfh.registry.ParamDef` and on
+        :class:`~tengri.protocols.component.ParamDeclaration`. All three
+        declaration mechanisms must carry it or the parameters they own are
+        invisible to ``FREE`` no matter what they declare (#887).
 
     Notes
     -----
@@ -57,6 +67,7 @@ class MetParamDef(NamedTuple):
     bound_check: object
     bound_error: str
     default: Distribution
+    free_prior: Distribution | None = None
 
 
 class MetModelSpec(NamedTuple):
@@ -156,6 +167,20 @@ _register(
                 # it (e.g. ``Uniform(0.0, 0.5)``) to fit the MDF width like
                 # Bagpipes' ``lognorm`` chemical-enrichment mode.
                 Fixed(0.1),
+                # Deliberately NO free_prior (#887), and note what the comment
+                # above is actually saying: "*Free it* ... like Bagpipes'
+                # lognorm mode" is an instruction to the caller, mirroring a
+                # mode Bagpipes gates behind an explicit opt-in. It is not a
+                # request that the wildcard reach it.
+                #
+                # Measured: declaring one added this parameter to 6 of the 10
+                # shipped recipes, because ``met_*`` routes into the ``sfh``
+                # group and every recipe frees that block. It is the second
+                # moment of the MDF -- broadband photometry constrains the mean
+                # metallicity weakly and its width barely at all -- so that is a
+                # near-unconstrained dimension in every default fit, returning
+                # the prior and costing warmup. The mean (``met_logzsol``) is
+                # already free; the width stays explicit.
             ),
         },
         settings={},
@@ -340,24 +365,44 @@ _register(
                 lambda lo, hi: lo > 0,
                 "must have lo > 0",
                 Fixed(0.03),
+                # The mass of metals returned per unit mass locked in stars.
+                # For a standard IMF this is of order the solar metallicity and
+                # a few times it; the range brackets the values used across
+                # closed-box and leaky-box chemical evolution treatments.
+                Uniform(0.005, 0.1, "Nucleosynthetic yield", default=0.03),
             ),
             "chem_eta_outflow": MetParamDef(
                 "Mass loading factor (outflow rate / SFR)",
                 lambda lo, hi: lo >= 0,
                 "must have lo >= 0",
                 Fixed(0.0),
+                # 0 (the default) is a closed box. Mass loading rises steeply
+                # toward low mass, reaching order 10 in dwarfs, which sets the
+                # ceiling; the quantity is a ratio to the SFR so it is
+                # galaxy-mass dependent but not galaxy-scale dependent.
+                Uniform(0.0, 10.0, "Outflow mass loading factor", default=0.0),
             ),
             "chem_f_gas_init": MetParamDef(
                 "Initial gas fraction",
                 lambda lo, hi: lo > 0 and hi <= 1,
                 "must be in (0, 1]",
                 Fixed(0.9),
+                # The validator's own (0, 1] interval; the floor is nudged off
+                # zero because a zero initial gas fraction has no gas to form
+                # any stars from.
+                Uniform(0.01, 1.0, "Initial gas fraction", default=0.9),
             ),
             "chem_return_frac": MetParamDef(
                 "Stellar return fraction",
                 lambda lo, hi: lo >= 0 and hi < 1,
                 "must be in [0, 1)",
                 Fixed(0.4),
+                # The fraction of formed stellar mass returned to the ISM. It
+                # is set by the IMF rather than by the galaxy -- roughly 0.3 for
+                # a Salpeter-like slope and 0.45 for Chabrier/Kroupa -- so the
+                # range covers the IMFs in use rather than the validator's full
+                # [0, 1).
+                Uniform(0.2, 0.6, "Stellar return fraction", default=0.4),
             ),
         },
         settings={},
@@ -438,6 +483,9 @@ _register(
                 lambda lo, hi: lo > 0,
                 "must have lo > 0",
                 Fixed(0.03),
+                # Same quantity and same range as ``chem_yield`` above, under
+                # ProSpect's spelling; kept identical so the two cannot drift.
+                Uniform(0.005, 0.1, "Nucleosynthetic yield", default=0.03),
             ),
         },
         settings={},

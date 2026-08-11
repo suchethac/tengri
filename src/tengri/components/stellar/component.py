@@ -25,7 +25,6 @@ not an output of a separate precompute step.
 
 from __future__ import annotations
 
-import warnings
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
@@ -33,6 +32,7 @@ from typing import Any
 import jax
 import jax.numpy as jnp
 
+from tengri.config.exceptions import warn_measured
 from tengri.parameters.resolve import require_redshift
 
 
@@ -46,7 +46,19 @@ class SFHBeforeBigBangWarning(UserWarning):
     SFH. Bound the SFH age parameter or the redshift to silence it. The check
     is skipped under ``jax.jit`` / inference, where exploring such draws is
     expected. See suchethac/tengri#683.
+
+    Attributes
+    ----------
+    truncated_fraction : float or None
+        Fraction of formed stellar mass placed before the Big Bang
+        [dimensionless], exact. ``None`` on an instance not raised by the
+        forward path. The message renders this as ``{:.0%}``, so a consumer
+        that needs the value must read it here rather than parse the text —
+        "69%" in the message is anything in 0.685-0.695 (#1645).
     """
+
+    #: Set at the raise site; see the class docstring.
+    truncated_fraction = None
 
 
 class SFHBeyondSSPGridWarning(UserWarning):
@@ -443,7 +455,7 @@ def _warn_if_history_exceeds_ssp_grid(age_yr, sfr, ssp_ages_yr, tab_lbt_yr, cons
             "oldest template instead"
         )
     )
-    warnings.warn(
+    warn_measured(
         f"The tabulated star formation history forms {frac:.0%} of its stellar "
         f"mass at lookback ages older than the oldest SSP template "
         f"({hi_yr / 1e9:.2f} Gyr). No template represents stars that old, so "
@@ -451,6 +463,8 @@ def _warn_if_history_exceeds_ssp_grid(age_yr, sfr, ssp_ages_yr, tab_lbt_yr, cons
         f"history later, to remove the approximation.",
         SFHBeyondSSPGridWarning,
         stacklevel=2,
+        beyond_grid_fraction=frac,
+        oldest_template_yr=hi_yr,
     )
 
 
@@ -2332,7 +2346,9 @@ class StellarSEDComponent:
         if mass_total_sfh is not None:
             frac_pre_bb = mass_pre_bb / max(mass_total_sfh, 1e-30)
             if frac_pre_bb > 0.01:
-                warnings.warn(
+                # The message rounds to whole percent; the payload does not, so
+                # a consumer never has to parse prose for a rounded copy (#1645).
+                warn_measured(
                     f"Star formation history forms {frac_pre_bb:.0%} of its stellar "
                     f"mass before the Big Bang at z={z_val:.2f} (cosmic age "
                     f"{t_obs_val:.2f} Gyr). That mass is truncated, so the "
@@ -2341,6 +2357,9 @@ class StellarSEDComponent:
                     f"cosmic time.",
                     SFHBeforeBigBangWarning,
                     stacklevel=2,
+                    truncated_fraction=frac_pre_bb,
+                    redshift=z_val,
+                    cosmic_age_gyr=t_obs_val,
                 )
 
         # Lognormal metallicity-distribution-function width (Carnall+2018 §3.2,

@@ -469,6 +469,28 @@ def _memoized_approx_clone(model, cfg):
     return clone
 
 
+def _has_line_adjacent_channel(model) -> bool:
+    """Whether the observation carries a channel that reads line internals.
+
+    ``line_ratios`` needs the nebular backend's DISCRETE line catalog
+    (``line_waves``/``line_lums``), which the feature-LUT path does not
+    publish — enabling ``FeaturePrecomp`` under it broke
+    ``test_ratio_term_constrains_fit`` on main (594a60552).
+    ``spectral_indices`` is included as unverified against the LUT rather
+    than known-broken: the ratio channel was also "plausibly orthogonal"
+    until it was measured. ``line_fluxes`` is deliberately NOT here — that
+    channel is the one ``FeaturePrecomp`` exists to serve, and its top-up is
+    handled by the callers' ``_fits_lines`` paths.
+    """
+    obs = getattr(model, "observation", None)
+    if obs is None:
+        return False
+    return (
+        getattr(obs, "line_ratios", None) is not None
+        or getattr(obs, "spectral_indices", None) is not None
+    )
+
+
 def _resolve_batch_fit_approx(model, approx, data_type):
     """Route a batch-fit model through the fit-time precompute policy.
 
@@ -532,9 +554,18 @@ def _resolve_batch_fit_approx(model, approx, data_type):
             # A backend with nothing to tabulate raises; that raise IS the
             # detection, so the fallback keeps the wave LUT rather than
             # regressing to the raw model.
-            existing = tuple(getattr(model, "approx_configs", ()))
-            with contextlib.suppress(Exception):
-                return _memoized_approx_clone(model, (*existing, cfg, FeaturePrecomp()))
+            #
+            # Only when NO line-adjacent channel exists: the ratio term reads
+            # the backend's DISCRETE line catalog ('line_waves'/'line_lums'),
+            # which the feature-LUT path does not publish — measured red on
+            # main at 594a60552 (test_ratio_term_constrains_fit) because the
+            # first spelling checked line_fluxes only, the channel matrix's
+            # classic unwritten cell (#1460/#1480/#1599). spectral_indices is
+            # excluded as unverified rather than known-broken.
+            if not _has_line_adjacent_channel(model):
+                existing = tuple(getattr(model, "approx_configs", ()))
+                with contextlib.suppress(Exception):
+                    return _memoized_approx_clone(model, (*existing, cfg, FeaturePrecomp()))
         elif data_type in ("spectroscopy", "joint"):
             if state is not None and getattr(state, "spectrum_precomp", False):
                 return model
@@ -1128,14 +1159,16 @@ class Fitter:
         broken the first — it would append the LUT for exactly the fits that
         cannot use it — which is why this is a separate predicate rather than
         another clause in that one.
+
+        Delegates to :func:`_has_line_adjacent_channel`, the module-level
+        spelling the batch resolver needs. The two were written independently
+        against the same bug (#1659 and the energy-balance work) with
+        byte-identical bodies; they are kept as one implementation under two
+        names rather than two bodies, because two checks of one condition are
+        free to drift apart — the mechanism behind the dropped-nebular defect
+        this branch fixes.
         """
-        obs = getattr(model, "observation", None)
-        if obs is None:
-            return False
-        return (
-            getattr(obs, "line_ratios", None) is not None
-            or getattr(obs, "spectral_indices", None) is not None
-        )
+        return _has_line_adjacent_channel(model)
 
     def _fits_lines(self, model) -> bool:
         """Whether any emission-line channel is fit, measured or marginalized.

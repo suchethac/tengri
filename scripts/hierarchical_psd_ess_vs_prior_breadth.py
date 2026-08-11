@@ -182,6 +182,18 @@ def run_sweep(model, mock, widths, *, key, n_sigma=5, n_tau=5):
                 "min_ess": float(np.min(ess.at_mode)),
                 "median_ess": float(np.median(ess.at_mode)),
                 "max_ess": float(np.max(ess.at_mode)),
+                # Per galaxy, not just the three order statistics. Reducing first
+                # made the min unattributable: at width 0.5 the population showed
+                # min=57.4 against median=max=125.0, so exactly one galaxy was
+                # degraded -- and exactly one galaxy truncates 69% of its mass
+                # (#1645). Testing whether those are the same galaxy needs the
+                # per-galaxy vector, which was already computed and discarded.
+                "ess_at_mode": [float(x) for x in np.asarray(ess.at_mode)],
+                "truncated_fraction": (
+                    [float(x) for x in np.asarray(mock.truncated_fraction)]
+                    if getattr(mock, "truncated_fraction", None) is not None
+                    else None
+                ),
                 "max_rhat_all": float(np.nanmax([v for v in result.rhat.values()])),
             }
         )

@@ -32,10 +32,16 @@ superset.
 
 from __future__ import annotations
 
-from tengri.parameters.priors import Fixed, Uniform
+from tengri.parameters.priors import Fixed, LogNormal, Uniform
 from tengri.protocols.component import ParamDeclaration
 
 PARAMS: tuple[ParamDeclaration, ...] = (
+    # The three Casey (2012) graybody + mid-IR power-law parameters. Their
+    # defaults are that paper's central values (T=35 K mid-range, beta=1.60,
+    # alpha=2.0), so the free ranges are anchored on the same measurements:
+    # Casey 2012, "Far-infrared spectral energy distribution fitting for
+    # galaxies near and far", MNRAS 425, 3094 (arXiv:1206.1595) reports
+    # T ~ 25-45 K for local (U)LIRGs, beta = 1.60 +/- 0.38, alpha = 2.0 +/- 0.5.
     ParamDeclaration(
         "dust_T",
         Fixed(35.0),
@@ -43,6 +49,12 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         lambda lo, hi: lo > 0,
         "must be > 0",
         units="K",
+        # Casey's 25-45 K is a local-(U)LIRG sample, not a bound on the model;
+        # the same parameterization is routinely applied to warmer high-z dust,
+        # so the range is widened to 20-80 K rather than pinned to that sample.
+        # This is the single highest-impact entry in #887: sweeping dust_T across
+        # this range moves the dust IR SED by ~94% (#1482).
+        free_prior=Uniform(20.0, 80.0, "Dust temperature", units="K", default=35.0),
     ),
     ParamDeclaration(
         "dust_beta_ir",
@@ -50,11 +62,19 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "IR emissivity index for graybody/Casey emission",
         lambda lo, hi: lo > 0,
         "must be > 0",
+        # beta = 1.60 +/- 0.38 (Casey 2012). Floored at 1.0 -- where grain
+        # models put the physical minimum, and below the widely presumed 1.5 --
+        # and carried to +2.4 sigma above the mean.
+        free_prior=Uniform(1.0, 2.5, "IR emissivity index", default=1.6),
     ),
     ParamDeclaration(
         "dust_alpha_mir",
         Fixed(2.0),
         "Mid-IR power-law slope for Casey 2012 emission",
+        # alpha = 2.0 +/- 0.5 (Casey 2012), taken to +/-2 sigma. This
+        # declaration carries no validator, so the free range is the only
+        # statement of its admissible domain.
+        free_prior=Uniform(1.0, 3.0, "Mid-IR power-law slope", default=2.0),
     ),
     ParamDeclaration(
         "dust_alpha_dale",
@@ -62,13 +82,26 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "Dale et al. 2014 alpha parameter (0.0625-4.0)",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
+        # data/dale2014_templates.h5 ``alpha_grid``: 64 nodes spanning
+        # [0.0625, 4.0] exactly, so the declared range is the whole grid and
+        # only dale2014 consumes it -- no intersection needed.
+        free_prior=Uniform(0.0625, 4.0, "Dale 2014 radiation-field slope", default=2.0),
     ),
     ParamDeclaration(
         "dust_umin",
         Fixed(1.0),
-        "Draine & Li minimum radiation field (0.1-25 for DL07, 0.1-50 for DL14)",
+        # Bounds measured from the shipped grids, not quoted: data/dl07_templates.h5
+        # ``umin_grid`` spans [0.1, 20] (22 nodes), dl14 [0.1, 50] (36), themis
+        # [0.1, 80] (37). The prose here previously said "0.1-25 for DL07", which
+        # no grid supports.
+        "Draine & Li minimum radiation field (grid: 0.1-20 DL07, 0.1-50 DL14, 0.1-80 THEMIS)",
         lambda lo, hi: lo > 0,
         "must be > 0",
+        # This bucket is the static superset registered for every IR backend, so
+        # the free range is the grid *intersection*: a prior valid under DL14 but
+        # not DL07 would be clipped to the DL07 edge, and everything above 20
+        # would carry exactly zero gradient (#1586).
+        free_prior=Uniform(0.1, 20.0, "DL/THEMIS minimum radiation field", default=1.0),
     ),
     ParamDeclaration(
         "dust_gamma_dl",
@@ -81,9 +114,14 @@ PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "dust_qpah",
         Fixed(2.5),
-        "Draine & Li PAH mass fraction (%, 0.47-4.58 for DL07, 0.47-7.32 for DL14)",
+        # Measured from the shipped grids: dl07 ``qpah_grid`` spans [0.1, 4.58]
+        # (11 nodes) and dl14 [0.47, 7.32] (11). The prose previously gave the
+        # DL07 floor as 0.47, which is DL14's.
+        "Draine & Li PAH mass fraction (%, grid: 0.1-4.58 DL07, 0.47-7.32 DL14)",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
+        # Intersection of the two grids, for the same reason as ``dust_umin``.
+        free_prior=Uniform(0.47, 4.58, "PAH mass fraction", units="%", default=2.5),
     ),
     ParamDeclaration(
         "dust_alpha_dl14",
@@ -110,6 +148,12 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "controlled deviation.",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
+        # The relaxed prior this description has recommended all along, now
+        # actually declared. LogNormal keeps eta positive and multiplicative
+        # about strict balance (median eta=1); the truncation at 5 is a guard
+        # against the sampler wandering into unphysically AGN-dominated IR, not
+        # a physical edge -- +/-3 sigma is [0.55, 1.82].
+        free_prior=LogNormal(0.0, 0.2, 0.0, 5.0, "Energy-balance relaxation factor", default=1.0),
     ),
     ParamDeclaration(
         "dust_T_warm",
@@ -118,6 +162,9 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         lambda lo, hi: lo > 0,
         "must be > 0",
         units="K",
+        free_prior=Uniform(
+            30.0, 60.0, "Warm-component grain temperature", units="K", default=45.0
+        ),
     ),
     ParamDeclaration(
         "dust_T_cold",
@@ -126,6 +173,9 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         lambda lo, hi: lo > 0,
         "must be > 0",
         units="K",
+        free_prior=Uniform(
+            15.0, 25.0, "Cold-component grain temperature", units="K", default=20.0
+        ),
     ),
     ParamDeclaration(
         "dust_f_cold",
@@ -147,6 +197,14 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "balance — the AGN supplies the extra IR.",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
+        # Deliberately NO free_prior. Unlike every other entry here this is an
+        # absolute luminosity in the same units as L_absorbed, not a shape or a
+        # fraction, so its plausible range is set by the source being fitted and
+        # there is no galaxy-independent interval to declare -- any fixed upper
+        # bound would be wrong by orders of magnitude for some target. It is
+        # also the one knob whose whole purpose is to break energy balance, so
+        # freeing it under a blanket wildcard would silently un-anchor the IR
+        # budget. Free it explicitly against your own luminosity scale.
     ),
     ParamDeclaration(
         "dust_beta_warm",
@@ -155,6 +213,7 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "``energy_balance_split`` model (dimensionless, typ. 1.5-2.0)",
         lambda lo, hi: lo > 0,
         "must be > 0",
+        free_prior=Uniform(1.5, 2.0, "Warm-component emissivity index", default=1.5),
     ),
     ParamDeclaration(
         "dust_beta_cold",
@@ -163,19 +222,36 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "``energy_balance_split`` model (dimensionless, typ. 1.5-2.0)",
         lambda lo, hi: lo > 0,
         "must be > 0",
+        free_prior=Uniform(1.5, 2.0, "Cold-component emissivity index", default=2.0),
     ),
     ParamDeclaration(
         "dust_qhac",
         Fixed(0.17),
-        "THEMIS small hydrocarbon grain fraction (Jones+2017, 0-15%)",
+        # CIGALE convention, which is what this parameter is in: qhac spans
+        # [0.02, 0.40] with the THEMIS default 0.17. The shipped grid
+        # (data/themis_templates.h5) stores the axis FSPS-scaled at
+        # [0.909, 18.18] = CIGALE x 100/2.2 and is relabeled on load by
+        # emission_templates._normalize_dl07_like_grid, so the grid extent read
+        # off the file is NOT this parameter's range. The old prose "0-15%"
+        # matched neither convention.
+        "THEMIS a-C(:H) small hydrocarbon mass fraction (Jones+2017; CIGALE 0.02-0.40)",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
+        free_prior=Uniform(0.02, 0.40, "a-C(:H) mass fraction", default=0.17),
     ),
     ParamDeclaration(
         "dust_log_ssfr",
         Fixed(-10.0),
         "log10(sSFR/yr^-1) for BOSA template selection (Boquien & Salim 2021)",
         units="log10(1/yr)",
+        # Measured from data/bosa_templates.h5: ``log_ssfr_grid`` has 14 nodes
+        # spanning [-11, -8.4], and this default (-10) sits inside it. The grid
+        # is the whole admissible domain -- BOSA selects a template by
+        # interpolating this axis, so a draw outside it clips to an edge
+        # template and stops responding (#1586).
+        free_prior=Uniform(
+            -11.0, -8.4, "sSFR for BOSA selection", units="log10(1/yr)", default=-10.0
+        ),
     ),
     ParamDeclaration(
         "dust_lgU",
@@ -205,6 +281,19 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "L_AGN = L_dust*f/(1-f) (CIGALE dale2014, 0<=f<1)",
         lambda lo, hi: lo >= 0.0 and hi < 1.0,
         "must be in [0, 1)",
+        # Deliberately NO free_prior, and this one was measured rather than
+        # argued. The validator bounds both ends, so the #887 convention
+        # (free_prior == the validator interval) would give Uniform(0, 0.99) --
+        # but the AGN term it scales needs the pure-AGN QSO template, and only
+        # data/dale2014_templates_cigale.h5 ships one. The default
+        # data/dale2014_templates.h5 holds {alpha_grid, templates_sf,
+        # wavelength_aa} and no templates_qso, so sweeping frac_agn across its
+        # whole support leaves predict_photometry bit-identical: freeing it by
+        # default would hand the sampler exactly the flat direction #1482
+        # removed. Free it explicitly (frac_agn=Uniform(0, 0.99)) alongside the
+        # CIGALE template, where it is live.
+        # Caught by tests/contract/test_dust_emission_wildcard.py::
+        # test_no_freed_parameter_is_inert[dale2014].
     ),
     # dust_tdust (#849): retired — the Schreiber tabulated components now share the
     # canonical ``dust_T`` (used by modified_blackbody / casey2012 / the
@@ -251,6 +340,12 @@ ATTENUATION_PARAMS: tuple[ParamDeclaration, ...] = (
         "dust_slope",
         Fixed(-0.7),
         "Dust power-law index",
+        # Deliberately NO free_prior -- see the shared note on the four
+        # law-dependent shape modifiers below (``dust_bump_strength``).
+        # The range this would take once the group wildcard is law-scoped:
+        # Uniform(-1.5, -0.3), bracketing Charlot & Fall (2000)'s two canonical
+        # values, n = -0.7 for the diffuse ISM (this default) and n = -1.3 for
+        # birth clouds.
     ),
     ParamDeclaration(
         "dust_f_obscuration",
@@ -273,11 +368,41 @@ ATTENUATION_PARAMS: tuple[ParamDeclaration, ...] = (
         "UV bump strength at 2175A (Kriek & Conroy 2013)",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
+        # Deliberately NO free_prior -- and this covers ``dust_slope``,
+        # ``dust_delta`` and ``dust_Rv`` too. Each has a perfectly good range
+        # (noted per-parameter), but every one is read by only *some*
+        # attenuation laws, and the ``dust`` group wildcard is not scoped to the
+        # selected law. ``calzetti`` -- the default, and what all four recipes
+        # use -- is literally ``def calzetti(wavelength, **_kwargs)``: it
+        # discards all four and fixes R_V = 4.05 internally. Declaring them
+        # widened ``dust: all_params: FREE`` from the documented {tau_bc,
+        # tau_diff} to six parameters, four of them bit-exactly inert under the
+        # default law -- #1482's failure, re-created one group over.
+        #
+        # These become declarable once the group wildcard narrows to the
+        # selected law the way ``dust.emission`` narrows to the selected engine
+        # (parse_groups' ``dust_emission_wildcard_params``). That is the
+        # follow-up; until then the honest state is pinned-and-explicit.
+        #
+        # The range this would take: Uniform(0, 2). It is a *multiplier* on the
+        # KC13 bump amplitude, not the amplitude: attenuation.py computes
+        # ``e_b = dust_bump_strength * (0.85 - 1.9 * dust_delta)`` (KC13 Eq. 3),
+        # so 0 is bump-free (this default) and 1 is KC13 as published.
     ),
     ParamDeclaration(
         "dust_delta",
         Fixed(0.0),
         "Attenuation curve slope modification",
+        # Deliberately NO free_prior -- see the shared note on
+        # ``dust_bump_strength`` above.
+        #
+        # The range this would take: Uniform(-1.0, 0.4). Kriek & Conroy (2013)
+        # measure a mean delta = -0.2 across 0.5 < z < 2 star-forming galaxies,
+        # 0 recovering Calzetti and more negative values steepening toward
+        # SMC-like curves. The upper end is not taste: KC13 Eq. 3 gives
+        # e_b = 0.85 - 1.9*delta, which turns NEGATIVE above delta = 0.447 -- an
+        # inverted bump -- so 0.4 is where the bump amplitude stays positive
+        # across the whole range.
     ),
     ParamDeclaration(
         "dust_Rv",
@@ -285,6 +410,16 @@ ATTENUATION_PARAMS: tuple[ParamDeclaration, ...] = (
         "Total-to-selective extinction R_V (Cardelli)",
         lambda lo, hi: lo > 0,
         "must be > 0",
+        # Deliberately NO free_prior -- see the shared note on
+        # ``dust_bump_strength`` above. This is the clearest case of the four:
+        # only ``cardelli`` reads it, and ``calzetti`` fixes R_V = 4.05 in the
+        # curve itself, so under the default law the value is not merely
+        # ignored, it is contradicted.
+        #
+        # The range this would take: Uniform(2.0, 6.0). R_V = 3.1 is the Milky
+        # Way diffuse-ISM mean (Cardelli, Clayton & Mathis 1989) and
+        # sightline-to-sightline variation spans roughly 2-6, dense clouds at
+        # the high end.
     ),
 )
 

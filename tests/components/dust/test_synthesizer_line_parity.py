@@ -32,6 +32,30 @@ from tengri.components.nebular.agn_nebular import (
 _DATA = Path(__file__).resolve().parents[3] / "data" / "synthesizer_grids"
 _NLR = _DATA / "test_grid_agn-nlr.hdf5"
 _BLR = _DATA / "test_grid_agn-blr.hdf5"
+_SSP_GRID = (
+    Path(__file__).resolve().parents[3]
+    / "reproduction"
+    / "synthesizer"
+    / "_drivers"
+    / "data"
+    / "synthesizer_test_grid.h5"
+)
+
+# Declared as markers rather than `if not path.exists(): pytest.skip(...)` inside
+# the test bodies. Both forms skip, but a marker is evaluated at collection, so
+# the gate is visible before anything runs — and a body skip is indistinguishable,
+# from the outside, from a test that started and hit trouble. The inert-file
+# detector in tests/conftest.py flags a file whose tests all skip from their
+# bodies for exactly that reason, and flagged this one while it was behaving
+# correctly (#1654). These grids genuinely are not shipped; saying so at
+# collection is both more honest and quieter.
+_needs_agn_grids = pytest.mark.skipif(
+    not (_NLR.exists() and _BLR.exists()),
+    reason=f"Synthesizer AGN test grids not found under {_DATA}",
+)
+_needs_ssp_grid = pytest.mark.skipif(
+    not _SSP_GRID.exists(), reason="repackaged Synthesizer SSP grid not present"
+)
 
 
 @pytest.fixture(scope="module")
@@ -134,6 +158,8 @@ def test_covering_fraction_is_separate_multiplier(backends):
     assert b.max() == pytest.approx(3.0 * a.max(), rel=1e-5)
 
 
+@_needs_agn_grids
+@_needs_ssp_grid
 def test_grid_backed_lines_selectable_via_builder(monkeypatch):
     """SEDModel.build can compose a unified AGN with grid-backed NLR/BLR (#588).
 
@@ -142,8 +168,6 @@ def test_grid_backed_lines_selectable_via_builder(monkeypatch):
     through the high-level API uses the same photoionization grids as the direct
     adapters — not just the analytic templates.
     """
-    if not _NLR.exists():
-        pytest.skip(f"Synthesizer AGN test grids not found under {_DATA}")
     from tengri.components.agn.blocks._protocol import AGN_BLOCKS
 
     assert "synthesizer" in AGN_BLOCKS["nlr"]
@@ -152,17 +176,7 @@ def test_grid_backed_lines_selectable_via_builder(monkeypatch):
     monkeypatch.setenv("TENGRI_SYNTHESIZER_AGN_GRID_DIR", str(_DATA))
     from tengri import FIXED, Fixed, SEDModel, load_ssp_data
 
-    ssp_path = (
-        Path(__file__).resolve().parents[3]
-        / "reproduction"
-        / "synthesizer"
-        / "_drivers"
-        / "data"
-        / "synthesizer_test_grid.h5"
-    )
-    if not ssp_path.exists():
-        pytest.skip("repackaged Synthesizer SSP grid not present")
-    ssp = load_ssp_data(str(ssp_path))
+    ssp = load_ssp_data(str(_SSP_GRID))
     model = SEDModel.build(
         ssp_data=ssp,
         sfh={
@@ -188,6 +202,8 @@ def test_grid_backed_lines_selectable_via_builder(monkeypatch):
     assert (sed > 0).any()
 
 
+@_needs_agn_grids
+@_needs_ssp_grid
 @pytest.mark.parametrize(
     "nlr_block_type,blr_block_type", [("synthesizer", "none"), ("none", "synthesizer")]
 )
@@ -208,8 +224,6 @@ def test_synth_lines_photometry_under_jit_and_precompute(
     (#390 class). Both the exact and WavePrecomp photometry paths must run and
     agree band-for-band (additive emitters are exact filter-integrated).
     """
-    if not (_NLR.exists() and _BLR.exists()):
-        pytest.skip(f"Synthesizer AGN test grids not found under {_DATA}")
     monkeypatch.setenv("TENGRI_SYNTHESIZER_AGN_GRID_DIR", str(_DATA))
 
     import jax.numpy as jnp
@@ -219,17 +233,7 @@ def test_synth_lines_photometry_under_jit_and_precompute(
     from tengri.observation import Observation, Photometry
     from tengri.observation.photometry import FilterCurve
 
-    ssp_path = (
-        Path(__file__).resolve().parents[3]
-        / "reproduction"
-        / "synthesizer"
-        / "_drivers"
-        / "data"
-        / "synthesizer_test_grid.h5"
-    )
-    if not ssp_path.exists():
-        pytest.skip("repackaged Synthesizer SSP grid not present")
-    ssp = load_ssp_data(str(ssp_path))
+    ssp = load_ssp_data(str(_SSP_GRID))
 
     def _tophat(center, frac=0.16, n=40):
         wave = jnp.linspace(center * (1.0 - frac), center * (1.0 + frac), n)

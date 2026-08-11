@@ -12,6 +12,7 @@ import time
 import jax
 import jax.numpy as jnp
 
+from tengri.config.exceptions import warn_measured
 from tengri.inference._sample_utils import _mean_params
 from tengri.inference.likelihoods.gaussian import (
     inv_noise_std,
@@ -739,13 +740,16 @@ def run_native_vi(
         loss_std = float(jnp.std(jnp.array(seed_losses)))
         loss_mean = float(jnp.mean(jnp.array(seed_losses)))
         if loss_std > 0.1 * abs(loss_mean) and loss_mean != 0:
-            warnings.warn(
+            warn_measured(
                 f"Seeds disagree: H = {loss_mean:.1f} ± {loss_std:.1f} "
                 f"(CV={loss_std / abs(loss_mean):.0%}). "
                 f"This may indicate multimodality or poor convergence. "
                 f"Consider increasing n_iterations or inspecting the posterior.",
                 UserWarning,
                 stacklevel=2,
+                loss_mean=loss_mean,
+                loss_std=loss_std,
+                loss_cv=loss_std / abs(loss_mean),
             )
 
     converged_flat = best_flat
