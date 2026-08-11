@@ -21,6 +21,12 @@ The rule pinned here is the general one, not the thirteen numbers: **the two
 photometry publishes are twins**, so a path that emits one and not the other is
 broken regardless of which index happens to expose it. ``test_restband_twin_*``
 asserts that exactly, and needs no tolerance.
+
+The same gate also skips the discrete line-catalog publish, which made
+``predict_line_ratios`` raise a *misdirecting* error: a Cue model was told to
+"Use Cue or CloudyGrid". ``test_line_ratio_refusal_*`` pins the refusal naming
+the real cause -- an error that sends you to fix the one thing you did right is
+worse than the raise it replaced.
 """
 
 from pathlib import Path
@@ -155,6 +161,32 @@ def test_spectral_indices_agree_with_exact_or_refuse_loudly(arm):
         f"moved {dev_pct[worst]:.2f}% ({exact[worst]:.6f} -> {got[worst]:.6f}); "
         f"{int((dev_pct >= _GRID_INTERP_CEILING_PCT).sum())} of {len(_INDEX_NAMES)} "
         "indices exceed the grid-interpolation ceiling."
+    )
+
+
+def test_line_ratio_refusal_names_the_real_cause_not_a_backend_swap():
+    """The refusal must diagnose the fast path, not misdirect to a backend swap.
+
+    The grid path skips the discrete line-catalog publish, so a **Cue** model
+    fell through to the generic backend message and was told *"Use Cue or
+    CloudyGrid"* -- advice the user had already taken, naming a cause that was
+    not theirs. An error that sends you to fix the one thing you did right is
+    worse than the raise it replaced.
+    """
+    from tengri.forward.sed_model import FeaturePrecomp, WavePrecomp
+    from tengri.observation import LineRatioData
+
+    sid = _index_data()
+    model = _build((WavePrecomp(), FeaturePrecomp()), sid)
+    lrd = LineRatioData.from_dict({("Halpha", "Hbeta"): (2.86, 0.3)})
+
+    with pytest.raises(ValueError) as excinfo:
+        model.predict_line_ratios({}, lrd)
+
+    msg = str(excinfo.value)
+    assert "fast-nebular" in msg, f"refusal does not name the fast path: {msg}"
+    assert "Use Cue or CloudyGrid" not in msg, (
+        "refusal still tells a Cue user to use Cue -- the pre-#1665 misdirection."
     )
 
 

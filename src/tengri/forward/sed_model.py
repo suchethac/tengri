@@ -4681,6 +4681,12 @@ class SEDModel:
         **JIT-compatible**: no — delegates to the nebular backend via
         :meth:`predict_state`.
         """
+        # Diagnose the fast-nebular case FIRST (#1665). The grid path skips the
+        # discrete line-catalog publish, so a Cue model would otherwise fall
+        # through to the backend message below and be told to "use Cue" -- advice
+        # the user has already taken, naming a cause that is not theirs.
+        self._refuse_on_fast_nebular("predict_line_ratios")
+
         if state is None:
             state = self.predict_state(params)
         if "line_waves" not in state.derived or "line_lums" not in state.derived:
