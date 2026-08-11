@@ -80,6 +80,8 @@ from typing import NamedTuple
 
 import jax.numpy as jnp
 
+from tengri._mapping import ReadOnlyPropertyMapping
+
 
 class _SEDCallable:
     """A callable SED accessor that refuses to be mistaken for an array.
@@ -1645,7 +1647,7 @@ class IonizingProperties(_CachedBase):
 # ── Property catalog accessor ────────────────────────────────────
 
 
-class PropertyCatalog:
+class PropertyCatalog(ReadOnlyPropertyMapping):
     """View of computed properties with dict-like and attribute access.
 
     A PropertyCatalog is a dict-like accessor bound to a Prediction that
@@ -1705,10 +1707,6 @@ class PropertyCatalog:
         pred = object.__getattribute__(self, "_prediction")
         return iter(sorted(pred._model._ensure_property_catalog().keys()))
 
-    def keys(self):
-        """Return property names."""
-        return list(self)
-
     def get(self, name: str, default=None):
         """Return the property value for ``name``, or ``default`` if absent.
 
@@ -1752,26 +1750,9 @@ class PropertyCatalog:
         """
         return [(name, self[name]) for name in self]
 
-    def to_dict(self, names=None) -> dict:
-        """Export properties as a dict.
-
-        Parameters
-        ----------
-        names : tuple[str] or list[str], optional
-            Property names to export. If None, exports all available.
-
-        Returns
-        -------
-        dict[str, scalar]
-            Mapping of name → computed value.
-        """
-        if names is None:
-            names = list(self)
-        return {name: self[name] for name in names}
-
-    def __setattr__(self, name, value):
-        """Prevent attribute assignment."""
-        raise AttributeError("PropertyCatalog is read-only")
+    # ``keys`` / ``to_dict`` / read-only ``__setattr__`` come from
+    # ReadOnlyPropertyMapping (#1431). ``get`` / ``values`` / ``items`` stay
+    # here: they return plain lists, which a Mapping base would turn into views.
 
 
 from tengri.parameters.resolve import resolve_fixed_params

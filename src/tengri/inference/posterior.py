@@ -27,6 +27,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri._mapping import ReadOnlyPropertyMapping
+
 logger = logging.getLogger(__name__)
 
 # Draws per compiled kernel when lifting properties over a posterior. Peak
@@ -34,7 +36,7 @@ logger = logging.getLogger(__name__)
 _PROPERTY_CHUNK = 64
 
 
-class PosteriorProperties(Mapping):
+class PosteriorProperties(ReadOnlyPropertyMapping, Mapping):
     r"""The property catalog lifted over the sample axis.
 
     The topology-agnostic seam of contract §1 — **same names, more axes**. Every
@@ -121,26 +123,9 @@ class PosteriorProperties(Mapping):
         """
         return len(self._model().available_properties)
 
-    def keys(self):
-        """Available property names — identical to the model's."""
-        return list(self)
-
-    def to_dict(self, names=None) -> dict:
-        """Export properties as a plain dict, ready for a table.
-
-        Parameters
-        ----------
-        names : sequence of str, optional
-            Names to export. Defaults to every available property.
-
-        Returns
-        -------
-        dict
-            ``name -> ndarray, shape (n_samples,)`` (scalars for a MAP fit).
-        """
-        if names is None:
-            names = list(self)
-        return {name: self[name] for name in names}
+    # ``keys`` / ``to_dict`` / read-only ``__setattr__`` come from
+    # ReadOnlyPropertyMapping, which precedes Mapping in the MRO so ``keys``
+    # keeps returning a list rather than Mapping's view (#1431).
 
     # ── the sample-axis-only verb ────────────────────────────────
 
@@ -184,9 +169,6 @@ class PosteriorProperties(Mapping):
         arr = np.asarray(self[name])
         lo, med, hi = np.percentile(arr, [tail, 50.0, 100.0 - tail])
         return float(lo), float(med), float(hi)
-
-    def __setattr__(self, name, value):
-        raise AttributeError("PosteriorProperties is read-only")
 
     def __repr__(self):
         post = object.__getattribute__(self, "_posterior")

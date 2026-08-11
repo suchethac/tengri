@@ -23,6 +23,7 @@ import jax.numpy as jnp
 import numpy as np
 from jax.flatten_util import ravel_pytree
 
+from tengri._mapping import ReadOnlyPropertyMapping
 from tengri.inference._dimension_guard import warn_if_nuts_high_dim as _warn_if_nuts_high_dim
 from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physical
 
@@ -627,7 +628,7 @@ class CatalogPosterior:
         )
 
 
-class CatalogProperties:
+class CatalogProperties(ReadOnlyPropertyMapping):
     """The property catalog lifted over the galaxy axis of a :class:`CatalogPosterior`.
 
     A ``CatalogPosterior`` is a *list of independent* ``Posterior`` objects, not
@@ -666,16 +667,6 @@ class CatalogProperties:
         posts = self._posteriors()
         return iter(posts[0].properties.keys() if posts else [])
 
-    def keys(self):
-        """Available property names — identical to the per-galaxy ones."""
-        return list(self)
-
-    def to_dict(self, names=None) -> dict:
-        """Export properties as a plain dict keyed by name."""
-        if names is None:
-            names = list(self)
-        return {name: self[name] for name in names}
-
     def ci(self, name: str, level: float = 0.68) -> np.ndarray:
         """Per-galaxy credible interval.
 
@@ -685,9 +676,6 @@ class CatalogProperties:
             ``(lo, median, hi)`` per galaxy.
         """
         return np.array([p.properties.ci(name, level=level) for p in self._posteriors()])
-
-    def __setattr__(self, name, value):
-        raise AttributeError("CatalogProperties is read-only")
 
     def __repr__(self):
         return (
