@@ -278,6 +278,28 @@ def build_flat_problem(fitter, *, key, memory_mode="low", verbose=False, map_ste
     all_data_arr = jnp.concatenate([jnp.asarray(g["flux_obs"]) for g in fitter.galaxies])
     all_noise_arr = jnp.concatenate([jnp.asarray(g["noise"]) for g in fitter.galaxies])
 
+    # #1671 made operational, at the population surface: `model` above came
+    # through the fit factory, which resolves the precompute LUT (#1641), so
+    # price its forward bias against the whole catalog's SNR once. The exact
+    # reference is rebuilt from the RAW factory at the SAME psd arguments —
+    # pairing models that differ in anything but the LUT would measure
+    # physics, not approximation. Advisory: any failure degrades to silence.
+    _raw_factory = getattr(fitter, "_raw_model_factory", None)
+    if _raw_factory is not None:
+        from tengri.inference.fitter import _warn_if_lut_bias_amplified
+
+        with contextlib.suppress(Exception):
+            _raw_model = _raw_factory(psd_sigma=sigma_mid, psd_tau_myr=tau_mid)
+            if model is not _raw_model:
+                _warn_if_lut_bias_amplified(
+                    _raw_model,
+                    model,
+                    all_data_arr,
+                    all_noise_arr,
+                    data_type,
+                    surface="PopulationFitter",
+                )
+
     def _predict(params):
         if data_type == "photometry":
             return model.predict_photometry(params)
