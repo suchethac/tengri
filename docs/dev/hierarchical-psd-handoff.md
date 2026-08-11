@@ -1792,6 +1792,36 @@ This also makes divergence counts uninformative (blackjax's static-HMC
 `dense_mass_matrix=True` at D=26 risks the 20+ GB NUTS warmup documented in
 CLAUDE.md; use `dense_mass_matrix=False`.
 
+**A first attempt to measure this FAILED to reproduce the symptom, and the
+configuration is recorded so nobody repeats it (2026-08-12).** Three arms at
+``field_centering`` = 1.0 / 0.5 / 0.0, NUTS, ``dense_mass_matrix=False``,
+400 warmup / 400 samples / 4 chains, on a single-galaxy mock (5 SDSS bands,
+SNR 30, ``n_grid=16``, D ~ 20: four free parameters plus the field latents):
+
+======  =================  ==================
+``a``   R-hat(sigma)       max R-hat(xi)
+======  =================  ==================
+1.00    1.001              0.993
+0.50    0.997              0.992
+0.00    1.023              0.998
+======  =================  ==================
+
+All healthy, so **the arms say nothing about centering** — the pre-registered
+rule's first branch (``a=1`` must reproduce the symptom before a treatment can
+be credited) fired INCONCLUSIVE.
+
+The tempting reading — "NUTS cures the funnel" — is **refuted by its own
+control**: static HMC at ``n_leapfrog_steps=100`` on the *identical* data and
+model gives R-hat(sigma) = **1.003**. The symptom is absent from this
+configuration under *either* sampler, so nothing here is evidence about the
+sampler either.
+
+What that leaves: this section's R-hat(sigma) = 4.42 belongs to the **interim
+fits inside the population pilot** at D=26, not to a standalone single-galaxy
+fit at D ~ 20. Reproducing it needs that configuration. A probe that cannot
+exhibit the disease cannot test a cure, and a treatment arm looks equally clean
+either way — which is why the control matters more than the arms.
+
 ---
 
 ## 6. How to run it
