@@ -91,6 +91,7 @@ from typing import Any, ClassVar
 import jax
 import jax.numpy as jnp
 
+from tengri.components.template_threading import TemplateThreading
 from tengri.parameters.priors import Distribution
 from tengri.protocols.component import (
     BARE_NAME_ALLOWLIST,
@@ -109,7 +110,7 @@ __all__ = [
 _REGISTRY: dict[str, type[SEDModelComponent]] = {}
 
 
-class SEDModelComponent:
+class SEDModelComponent(TemplateThreading):
     """Astronomer-friendly base class for SED physics components.
 
     Implements the :class:`SEDComponent` Protocol with automatic parameter
@@ -273,6 +274,12 @@ class SEDModelComponent:
     parameter_prefix: str = "component_"
     config: SEDComponentConfig = SEDComponentConfig()
     taylor_order: int = 0  # Taylor expansion order: 0 (zeroth-order), 1 (+ first-order derivative)
+
+    # The template-threading seam (``accepts_threaded_templates``,
+    # ``template_namespace``, ``threaded_templates``, ``templates_for_threading``)
+    # is inherited from :class:`TemplateThreading`, which the bare-Protocol
+    # component family inherits too — see that class for why it does not live
+    # here.
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         """Auto-discover free parameters, inputs, outputs; register by name.
@@ -582,8 +589,10 @@ class SEDModelComponent:
             SSP data (ignored for dust emission components; available for
             subclasses that need it).
         template_data : mapping, optional
-            Cached template grids and precomputed data (e.g., dust_ir LUTs).
-            Currently unused; reserved for future optimization threading.
+            Threaded template grids and precomputed data, keyed
+            ``[namespace][component_name]``. Forwarded to :meth:`predict` as
+            ``templates=`` when :attr:`accepts_threaded_templates` is set;
+            ignored otherwise.
 
         Returns
         -------
@@ -654,12 +663,22 @@ class SEDModelComponent:
             # unchanged (358,180 FLOPs, ~130 us). It is NOT free in eager mode, which is
             # what ``predict_state`` and the test suite run — hence the single shared
             # evaluation here rather than one per LUT branch.
-            sed_out, published_full = self.predict(p_sliced, sed_in, state.wave, **input_kwargs)
+            # Build a SEPARATE dict for predict. Mutating ``input_kwargs``
+            # would also inject ``templates`` into the ``_apply_*precomp``
+            # helpers above, which forward it with ``**inputs`` and do not
+            # accept it.
+            predict_kwargs = dict(input_kwargs)
+            if self.accepts_threaded_templates:
+                predict_kwargs["templates"] = self.threaded_templates(template_data)
+            sed_out, published_full = self.predict(p_sliced, sed_in, state.wave, **predict_kwargs)
             new_derived = self._merge_published(state.derived, {**published_full, **published})
             return state.with_(sed_intrinsic=sed_out, derived=new_derived)
         else:
             # Default full-grid path
-            sed_out, published = self.predict(p_sliced, sed_in, state.wave, **input_kwargs)
+            predict_kwargs = dict(input_kwargs)
+            if self.accepts_threaded_templates:
+                predict_kwargs["templates"] = self.threaded_templates(template_data)
+            sed_out, published = self.predict(p_sliced, sed_in, state.wave, **predict_kwargs)
             # Update state with new SED and published keys
             new_derived = self._merge_published(state.derived, published)
             return state.with_(sed_intrinsic=sed_out, derived=new_derived)

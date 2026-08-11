@@ -24,6 +24,7 @@ from typing import Any
 import jax.numpy as jnp
 
 from tengri.components.nebular.baked_in import BakedInBackend
+from tengri.components.template_threading import TemplateThreading
 from tengri.parameters.priors import Fixed, Uniform
 from tengri.parameters.resolve import require_redshift
 from tengri.protocols.component import (
@@ -93,7 +94,7 @@ class NebularSEDComponentState(SEDComponentState):
 
 
 @dataclass(frozen=True)
-class NebularSEDComponent:
+class NebularSEDComponent(TemplateThreading):
     r"""SEDComponent adapter wrapping :class:`BakedInBackend`.
 
     Notes
