@@ -1554,6 +1554,19 @@ def _wildcard_scopes(
         )
         scopes["dust"] = frozenset(dust_group_params - (_all_law_shape_params() - active_shape))
 
+    # ── xray: the selected corona model ──
+    # Read the model off ``structural_params`` for the same reason the dust
+    # slots are: an ``xray`` group that names no model still resolves to one.
+    xray_group_params = {name for name, grp in param_partition.items() if grp == "xray"}
+    if xray_group_params:
+        xray_model = getattr(structural_params, "xray_model", None) or structural_kwargs.get(
+            "xray_model"
+        )
+        reads = _XRAY_PARAMS_BY_MODEL.get(xray_model, _XRAY_DEFAULT_MODEL_PARAMS)
+        scopes["xray"] = frozenset(
+            xray_group_params - (_XRAY_VARIANT_PARAMS - reads) - _XRAY_UNREACHABLE_PARAMS
+        )
+
     # ── shock: the selected normalization ──
     # ``norm='frac'`` scales the galaxy Halpha via ``shock_frac``; ``'lhalpha'``
     # sets an absolute ``shock_log_lhalpha``. Each reads one and ignores the
@@ -2349,6 +2362,47 @@ _RADIO_AGN_PARAMS_BY_MODEL: dict[str, frozenset[str]] = {
         }
     ),
 }
+#: X-ray corona params that only *some* models read. ``XRaySEDComponent`` picks
+#: one of two argument lists on ``config.model``: the ``lopez24`` corona passes
+#: ``alpha_irx`` (the 12um -> L_X ratio) and no ``delta_alpha_ox``; every other
+#: model passes ``delta_alpha_ox`` (the Just+2007 alpha_ox offset) and never
+#: passes ``alpha_irx``.
+#:
+#: Params every model reads -- ``gamma_agn``, ``E_cut``, ``log_nh``, the two XRB
+#: photon indices -- are deliberately absent: only variant-specific names belong
+#: here, so a shared param added later cannot be pinned by omission.
+#:
+#: The ``xray_alpha_irx`` declaration has stated this since it was written
+#: ("read only by the lopez24 corona -- yang20 ignores it -- so freeing it under
+#: a wildcard is only meaningful with that corona selected"). Nothing consulted
+#: it: measured on a UV-to-X-ray fixture with a luminous AGN, ``alpha_irx``
+#: moves the SED by 62% under ``lopez24`` and by *exactly* zero under every
+#: other model, while the wildcard freed it for all of them.
+_XRAY_PARAMS_BY_MODEL: dict[str, frozenset[str]] = {
+    "lopez24": frozenset({"xray_alpha_irx"}),
+}
+#: What the non-``lopez24`` branch reads instead.
+_XRAY_DEFAULT_MODEL_PARAMS: frozenset[str] = frozenset({"xray_delta_alpha_ox"})
+#: Union of the above: the names the scope may narrow away.
+_XRAY_VARIANT_PARAMS: frozenset[str] = _XRAY_DEFAULT_MODEL_PARAMS | frozenset().union(
+    *_XRAY_PARAMS_BY_MODEL.values()
+)
+#: Declared and freeable, but read by no model the grammar can currently build.
+#:
+#: ``xray_det_hmxb`` / ``xray_det_lmxb`` are consumed only by
+#: ``XRayAirdSEDComponent``. ``xray={'type': 'xray_aird'}`` validates (the type
+#: menu derives from ``_REGISTRY``) but ``component_factory`` builds the generic
+#: ``"xray"`` registry entry for every X-ray type, so the Aird component is
+#: never constructed and both offsets are inert in every build: ``xray_aird``
+#: and ``agn_xray_corona`` are bit-identical to ``yang20`` (#1684).
+#:
+#: They are narrowed away here rather than left free, because a wildcard must
+#: not hand the sampler a dimension nothing reads. **When #1684 wires the Aird
+#: component, move these into an ``xray_aird`` entry of
+#: :data:`_XRAY_PARAMS_BY_MODEL` instead of deleting them** -- they are
+#: variant-specific, not dead.
+_XRAY_UNREACHABLE_PARAMS: frozenset[str] = frozenset({"xray_det_hmxb", "xray_det_lmxb"})
+
 #: Union of every param owned by each radio sub-group, used by the partition
 #: to route names away from the flat ``radio`` group.
 _RADIO_SF_PARAM_NAMES: frozenset[str] = frozenset().union(*_RADIO_SF_PARAMS_BY_MODE.values())

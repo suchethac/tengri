@@ -6,7 +6,7 @@ but a build selects one. Freeing the whole superset hands the sampler dimensions
 the selected variant never reads — flat directions explored at full cost whose
 posterior comes back equal to the prior, with nothing in the fit saying why.
 
-That defect has now been found in five places, each time only because someone
+That defect has now been found in six places, each time only because someone
 looked at that group:
 
 ===================  ==============================================
@@ -17,6 +17,7 @@ group                what an unscoped wildcard freed
 ``dust.emission``    6 inert dims under ``schreiber2016`` (#1482)
 ``dust``             4 shape modifiers ``calzetti`` discards
 ``shock``            the unselected normalization's luminosity scale
+``xray``             ``alpha_irx``, read only by the ``lopez24`` corona
 ===================  ==============================================
 
 The first three were fixed one at a time behind three branches in the resolver,
@@ -24,6 +25,15 @@ so a fourth group needing it failed silently until someone wrote a fourth
 branch. This test is the general form: it enumerates variants *from the live
 registries* — all 22 attenuation laws come from ``DUST_LAWS``, not a list here —
 and asserts the property for every one.
+
+A guard, though, is only as wide as the set of *groups* it enumerates, which is
+the same failure one level up: green about what it covers and silent about the
+rest, with nothing distinguishing "swept and clean" from "never looked at". So
+the group list is not written here either. It is derived from
+``_GROUP_STRUCTURAL_KEYS`` — the map ``parse_groups`` validates against, so a
+group cannot be accepted by the grammar without an entry — and every group that
+takes a wildcard must be either swept below or named in :data:`_EXCUSED` with
+its reason. See :func:`test_every_wildcard_group_is_swept_or_excused`.
 
 Two measurement traps this file exists downstream of, both of which produced a
 wrong answer before being caught:
@@ -52,16 +62,29 @@ Values are swept across each parameter's own declared support rather than drawn
 randomly: two random draws can coincide, which reads as "inert" and would make
 this test pass for the wrong reason.
 
-**Not covered, stated rather than left silent.** ``igm`` frees nothing under any
-of its six models, so there is no superset to over-free. ``xray`` is measured
-but not asserted: all five variants report an *identical* five-parameter inert
-set, and an inert set that does not vary with the variant cannot be a scoping
-defect, which is per-variant by construction. It is the fixture — the synthetic
-SSP is a ``(5000/lambda)^2`` power law, ~1.6e10 times its optical value at
-0.04 Angstrom, so it swamps the X-ray component on the very grid the X-ray model
-extends the SED onto. Covering ``xray`` needs an SSP that is not pathologically
-bright in the X-ray, not another entry here. ``agn`` and ``radio`` keep their
-own dedicated suites.
+**Not covered, stated rather than left silent.** :data:`_EXCUSED` carries one
+entry per unswept group with the measured reason, and the census test above
+fails if any group is missing from both it and the sweep.
+
+**A correction, recorded because the wrong answer was written down first.** This
+docstring previously stated that ``xray`` could not be asserted because "all
+five variants report an identical five-parameter inert set", which was read as a
+fixture artifact — the synthetic SSP being a ``(5000/lambda)^2`` power law that
+swamps the X-ray component. Both halves were wrong, and the second explained
+away the first:
+
+* The inert set looked variant-independent only because the *probe* was. With an
+  X-ray-capable SSP and a luminous AGN, ``xray_alpha_irx`` moves the SED by 62%
+  under ``lopez24`` and by **exactly zero** under every other corona — the
+  textbook scoping defect, which ``xray_alpha_irx``'s own declaration had
+  described in prose all along.
+* "Swamped by a bright fixture" predicts small-but-nonzero, and predicts it for
+  every X-ray parameter. The measurements were *exactly* 0.0 while
+  ``xray_E_cut`` moved the SED by 85% on the same build. A magnitude argument
+  cannot explain a set of exact zeros sitting beside a live parameter.
+
+The remaining two, ``xray_det_hmxb`` / ``xray_det_lmxb``, are inert for a third
+reason that is not scoping at all — see :data:`_XRAY_UNREACHABLE_PARAMS`.
 """
 
 from __future__ import annotations
@@ -75,6 +98,7 @@ import numpy as np
 import pytest
 
 from tengri import FIXED, FREE, Fixed, SEDModel
+from tengri.components.stellar.sps.dsps_wrapper import SSPData
 from tengri.observation import Observation, Photometry
 from tengri.observation.photometry import FilterCurve
 
@@ -121,16 +145,52 @@ def panchromatic_obs():
     return Observation(photometry=Photometry(filters=tuple(_tophat(c) for c in centers)))
 
 
-class Case(dict):
-    """One (group, structural variant) build, with the fixture it needs."""
+@pytest.fixture(scope="module")
+def xray_capable_ssp():
+    """Like ``synthetic_ssp_wide`` but starting at 1 A, so the X-ray band exists.
 
-    def __init__(self, label, prefix, groups, *, overrides=None, log_total_mass=None):
+    ``synthetic_ssp_wide`` starts at 100 A. The X-ray corona lives at ~1-100 A,
+    i.e. off the end of that grid, which makes every X-ray parameter report as
+    inert for a reason that is the fixture's rather than the model's.
+    """
+    n_age = 20
+    wave = jnp.logspace(0.0, 7.0, 2000)  # 1 A - 1 mm
+    ages_gyr = jnp.linspace(-3.0, 1.14, n_age)
+    lgmet = jnp.array([-4.0, -2.65, -1.3])
+    base = (5000.0 / wave) ** 2
+    flux = (
+        base[None, None, :]
+        * (1.0 + 0.15 * (ages_gyr - ages_gyr.mean()))[None, :, None]
+        * (1.0 + 0.10 * (lgmet - lgmet.mean()))[:, None, None]
+    )
+    return SSPData(
+        ssp_wave=wave,
+        ssp_flux=jnp.abs(flux) + 1e-12,
+        ssp_lg_age_gyr=ages_gyr,
+        ssp_lgmet=lgmet,
+    )
+
+
+class Case(dict):
+    """One (group, structural variant) build, with the fixture it needs.
+
+    ``group`` is the grammar group this case covers, and is what
+    :func:`test_every_wildcard_group_is_swept_or_excused` counts. It is stated
+    rather than parsed back out of ``label`` so that renaming a label for
+    readability cannot silently drop a group out of the census.
+    """
+
+    def __init__(
+        self, label, group, prefix, groups, *, overrides=None, log_total_mass=None, ssp="wide"
+    ):
         super().__init__(
             label=label,
+            group=group,
             prefix=prefix,
             groups=groups,
             overrides=overrides or {},
             log_total_mass=log_total_mass,
+            ssp=ssp,
         )
 
 
@@ -141,6 +201,7 @@ def _dust_law_cases():
     for law in sorted(DUST_LAWS):
         yield Case(
             f"dust[law={law}]",
+            "dust",
             "dust_",
             {
                 "dust": {
@@ -161,6 +222,7 @@ def _shock_cases():
     for norm in ("frac", "lhalpha"):
         yield Case(
             f"shock[norm={norm}]",
+            "shock",
             "shock_",
             {
                 "dust": {"type": "two_component", "law_bc": "calzetti", "*": FIXED},
@@ -197,11 +259,131 @@ def _neb_cases():
     return ()
 
 
-CASES = [*_dust_law_cases(), *_shock_cases(), *_neb_cases()]
+def _xray_cases():
+    """Every X-ray corona model, on a fixture where the X-ray band exists.
+
+    Two fixture conditions are load-bearing, and each was established by
+    measurement rather than assumed:
+
+    * the SSP must reach the X-ray band (see :func:`xray_capable_ssp`);
+    * an AGN must be present. ``gamma_agn`` and ``log_nh`` shape the *AGN*
+      corona, so with no AGN they are inert for an honest reason — a dead arm,
+      not a dead parameter, the distinction the ``shock_velocity`` measurement
+      forced. With a luminous AGN they move the SED by 10.9 and 89.4.
+    """
+    from tengri.parameters.groups import _valid_xray_types
+
+    for model in sorted(t for t in _valid_xray_types() if t != "none"):
+        yield Case(
+            f"xray[model={model}]",
+            "xray",
+            "xray_",
+            {
+                "dust": {"type": "two_component", "law_bc": "calzetti", "*": FIXED},
+                "neb": {"type": "none"},
+                "xray": {"type": model, "*": FREE},
+                "agn": {"type": "composable", "*": FIXED, "log_lbol": Fixed(13.0)},
+            },
+            ssp="xray",
+        )
+
+
+def _simple_group_cases():
+    """Groups whose wildcard needs no special fixture, swept for completeness."""
+    yield Case(
+        "sfh[dpl]",
+        "sfh",
+        "sfh_",
+        {
+            "sfh": {"type": "dpl", "*": FREE},
+            "neb": {"type": "none"},
+            "dust": {"type": "two_component", "*": FIXED},
+        },
+    )
+    yield Case(
+        "stellar",
+        "stellar",
+        "met_",
+        {
+            "neb": {"type": "none"},
+            "dust": {"type": "two_component", "*": FIXED},
+            "stellar": {"*": FREE},
+        },
+    )
+    yield Case(
+        "radio[condon92]",
+        "radio",
+        "radio_",
+        {
+            "neb": {"type": "none"},
+            "dust": {"type": "two_component", "*": FIXED},
+            "radio": {"type": "condon92", "*": FREE},
+        },
+    )
+
+
+CASES = [
+    *_dust_law_cases(),
+    *_shock_cases(),
+    *_neb_cases(),
+    *_xray_cases(),
+    *_simple_group_cases(),
+]
+
+#: Groups this suite cannot sweep, and the measured reason for each. Consulted
+#: by :func:`test_every_wildcard_group_is_swept_or_excused`; every entry is a
+#: statement that someone looked, not that nobody did. Where another suite
+#: already owns the group, the entry names it — the point is that no group is
+#: unaccounted for, not that this file must own all of them.
+_EXCUSED: dict[str, str] = {
+    "dust.emission": (
+        "owned by tests/contract/test_dust_emission_wildcard.py, the guard "
+        "written for #1482 — it narrows the outcome to the selected engine's "
+        "own declared_parameters(), which is finer than this sweep."
+    ),
+    "agn": (
+        "owned by tests/contract/test_agn_block_consumes.py, which pins "
+        "agn_active_param_set against the CONSUMES tables and asserts every "
+        "free AGN param in recipes.agn_panchromatic() moves predict()."
+    ),
+    "agn.disc": "owned by tests/contract/test_agn_block_consumes.py (block-scoped wildcard).",
+    "agn.torus": "owned by tests/contract/test_agn_block_consumes.py (block-scoped wildcard).",
+    "agn.nlr": "owned by tests/contract/test_agn_block_consumes.py (block-scoped wildcard).",
+    "agn.blr": "owned by tests/contract/test_agn_block_consumes.py (block-scoped wildcard).",
+    "agn.feii": "owned by tests/contract/test_agn_block_consumes.py (block-scoped wildcard).",
+    "agn.atten": "owned by tests/contract/test_agn_block_consumes.py (block-scoped wildcard).",
+    "agn.lines": (
+        "deprecated alias, expanded to an (agn.nlr, agn.blr) pair by "
+        "expand_lines_alias before any wildcard is resolved, so it never "
+        "reaches the resolver as a group of its own."
+    ),
+    "neb": (
+        "no usable fixture — see _neb_cases for the measurement. Both CB19 "
+        "grids reachable from this checkout are constant along all seven "
+        "physical axes (max relative variation exactly 0.0), so a sweep would "
+        "measure interpolation noise; cue refuses the synthetic SSP; cloudy "
+        "ships no grid. The threading is asserted at the wiring instead."
+    ),
+    "igm": (
+        "measured: the wildcard frees nothing under any igm model, so there is "
+        "no superset to over-free and the sweep would be vacuous."
+    ),
+    "igm.dla": "measured: frees nothing, as igm — no superset to over-free.",
+    "radio.sf": "measured: frees nothing under bell2003 — no superset to over-free.",
+    "radio.agn": (
+        "its two params (radio_loudness, radio_alpha_agn) are inert with no "
+        "AGN present and every param freed is inert, which by this suite's own "
+        "discriminator indicts the fixture rather than the scope. Sweeping it "
+        "needs a radio-loud AGN fixture this module does not have."
+    ),
+}
 
 
 def _build(ssp, obs, case):
-    sfh = {"type": "dpl", "*": FIXED}
+    # A case may carry its own sfh group (the sfh case frees it); otherwise the
+    # sfh is pinned so it contributes no free params to the prefix under test.
+    groups = dict(case["groups"])
+    sfh = dict(groups.pop("sfh", None) or {"type": "dpl", "*": FIXED})
     if case["log_total_mass"] is not None:
         sfh["log_total_mass"] = case["log_total_mass"]
     with warnings.catch_warnings():
@@ -211,7 +393,7 @@ def _build(ssp, obs, case):
             observation=obs,
             sfh=sfh,
             redshift=Fixed(0.5),
-            **case["groups"],
+            **groups,
         )
 
 
@@ -242,9 +424,12 @@ def _partition_freed(model, prefix, overrides):
 
 
 @pytest.mark.parametrize("case", CASES, ids=[c["label"] for c in CASES])
-def test_no_wildcard_freed_parameter_is_inert(synthetic_ssp_wide, panchromatic_obs, case):
+def test_no_wildcard_freed_parameter_is_inert(
+    synthetic_ssp_wide, xray_capable_ssp, panchromatic_obs, case
+):
     """Every parameter the wildcard hands the sampler must move the prediction."""
-    model = _build(synthetic_ssp_wide, panchromatic_obs, case)
+    ssp = xray_capable_ssp if case["ssp"] == "xray" else synthetic_ssp_wide
+    model = _build(ssp, panchromatic_obs, case)
     freed, live, inert = _partition_freed(model, case["prefix"], case["overrides"])
 
     if not inert:
@@ -277,6 +462,7 @@ def test_the_dust_freed_set_depends_on_the_selected_law(synthetic_ssp_wide, panc
     for law in ("calzetti", "cardelli", "power_law", "kriek_conroy"):
         case = Case(
             law,
+            "dust",
             "dust_",
             {
                 "dust": {
@@ -490,3 +676,55 @@ def test_every_registered_law_is_covered_by_the_sweep():
         f"the law sweep and DUST_LAWS have diverged: "
         f"missing={sorted(set(DUST_LAWS) - swept)}, extra={sorted(swept - set(DUST_LAWS))}"
     )
+
+
+def _wildcard_groups() -> frozenset[str]:
+    """Every grammar group that accepts a wildcard, read from the grammar itself.
+
+    ``_GROUP_STRUCTURAL_KEYS`` is what :func:`parse_groups` validates user keys
+    against, so a group cannot be *accepted* without an entry here. Deriving the
+    census denominator from it is what makes the census widen by itself.
+
+    Relevance is derived, not listed: a group can only over-free if it takes a
+    wildcard at all. ``foreground`` declares no ``'*'`` key and so drops out on
+    its own merits rather than by being remembered.
+    """
+    from tengri.parameters.groups import _GROUP_STRUCTURAL_KEYS
+
+    return frozenset(g for g, keys in _GROUP_STRUCTURAL_KEYS.items() if "*" in keys)
+
+
+def test_every_wildcard_group_is_swept_or_excused():
+    """Every group that takes a wildcard is swept here, or excused with a reason.
+
+    The defect this file guards recurred three times because each group was
+    scoped where it was noticed. A guard that enumerates only the groups someone
+    thought of has the same failure mode one level up: it is green about the
+    groups it covers and silent about the rest, and nothing distinguishes
+    "swept and clean" from "never looked at".
+
+    So the denominator comes from the grammar and every group must be accounted
+    for explicitly — swept by a case, or named in :data:`_EXCUSED` with the
+    measured reason it cannot be. Adding a group to the grammar without doing
+    either fails here.
+    """
+    swept = {c["group"] for c in CASES}
+    uncovered = _wildcard_groups() - swept - set(_EXCUSED)
+    assert not uncovered, (
+        f"{len(uncovered)} wildcard-accepting group(s) are neither swept nor excused: "
+        f"{sorted(uncovered)}. Add a case, or an _EXCUSED entry stating why not."
+    )
+
+
+def test_no_group_is_excused_without_a_reason():
+    """An excuse must carry its reason, and must not outlive the group it names.
+
+    An empty or stale excuse is worse than none: it reads as a considered
+    decision while covering nothing.
+    """
+    for group, reason in _EXCUSED.items():
+        assert group in _wildcard_groups(), (
+            f"_EXCUSED names '{group}', which the grammar no longer accepts a "
+            f"wildcard for — delete the entry."
+        )
+        assert len(reason.split()) >= 5, f"_EXCUSED['{group}'] does not state a reason"
