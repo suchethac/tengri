@@ -1082,22 +1082,51 @@ class Fitter:
             return obs.data_type
         return "photometry"
 
-    @staticmethod
-    def _fits_line_fluxes(model) -> bool:
+    def _line_fluxes_for(self, model):
+        """The line-flux config this fit scores against, for ``model``'s schema.
+
+        Parameters
+        ----------
+        model : SEDModel
+            The model whose ``observation`` carries the line schema.
+
+        Returns
+        -------
+        LineFluxData or None
+            The ``line_flux_data=`` override when one was supplied, else the
+            Observation's own ``line_fluxes``.
+
+        Notes
+        -----
+        THE one place a line-flux channel is resolved, because a channel with
+        two sources read separately is a channel two callers can disagree
+        about. The approx predicate read the attribute alone, so a fit
+        supplying its fluxes per galaxy (``line_flux_data=``, #1599) published
+        ``line_flux_waves`` and set ``has_line_fluxes`` in the loss while
+        classifying as photometry-only — and on a model built with
+        ``approx=WavePrecomp()`` it was then handed back untouched, losing the
+        ``FeaturePrecomp`` top-up at ~21x the per-gradient cost, with no
+        warning. A third source means editing this function and nothing else.
+        """
+        if self._line_flux_override is not None:
+            return self._line_flux_override
+        obs = getattr(model, "observation", None)
+        return getattr(obs, "line_fluxes", None) if obs is not None else None
+
+    def _fits_line_fluxes(self, model) -> bool:
         """Whether this fit has a measured emission-line-flux channel.
 
-        Reads ``observation.line_fluxes``, which is exactly what
-        :meth:`_build_data_args` reads to publish ``line_flux_waves`` and hence
+        Resolves through :meth:`_line_fluxes_for` — the same call
+        :meth:`_build_data_args` makes to publish ``line_flux_waves``, and hence
         what makes ``build_loss_fn`` set ``has_line_fluxes``. Single-sourcing
         the condition matters: the whole point is that the LUT is added when
         (and only when) the loss would otherwise pay for the full-grid forward,
         so the two must not be able to disagree.
 
         ``_data_args`` itself is not available here — it is built after the
-        approx policy resolves — so the underlying attribute is read directly.
+        approx policy resolves — so the channel is resolved directly.
         """
-        obs = getattr(model, "observation", None)
-        return getattr(obs, "line_fluxes", None) is not None
+        return self._line_fluxes_for(model) is not None
 
     def _resolved_line_fluxes(self):
         """The line-flux config this fit actually scores against.
@@ -1117,10 +1146,7 @@ class Fitter:
         two read different objects, a fit can compile the Gaussian adapter and
         then be handed a censored mask (#1599).
         """
-        if self._line_flux_override is not None:
-            return self._line_flux_override
-        obs = getattr(self.model, "observation", None)
-        return getattr(obs, "line_fluxes", None) if obs is not None else None
+        return self._line_fluxes_for(self.model)
 
     def _fits_lines(self, model) -> bool:
         """Whether any emission-line channel is fit, measured or marginalized."""
