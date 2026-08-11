@@ -104,6 +104,45 @@ from tengri.utils.scale import LOG10_4PI, apply_log10_scale
 #: between the two and is refused a constant band response.
 _L_IR_PROBE = 1.0e44
 
+#: Properties whose value is read off the rest-frame SED, which the fast-nebular
+#: grid path deletes the nebular contribution from (#950 zeroes ``nebular_sed``;
+#: that deleted Cue forward IS the speedup). ``predict_properties`` refuses these
+#: when a per-Q_H grid is attached, and serves the other 30 normally.
+#:
+#: The census is established by **measurement**, not by reading which helpers
+#: touch ``sed``: a broadband integral can be insensitive to the missing nebular
+#: flux at printed precision, and guarding the read list would over-refuse. Each
+#: name below was measured to move under ``approx=(WavePrecomp(),
+#: FeaturePrecomp())`` against exact on an FSPS/MILES Cue model at z=0.05 --
+#: 13 of 43 properties, worst first:
+#:
+#:   l_tir 30.07%   irx_fuv 29.26%   irx 27.22%   l_dust_absorbed 18.67%
+#:   xi_ion 6.20%   fuv_flux 5.84%   rest_uv_color 2.78%   l_bol 2.19%
+#:   nuv_flux 2.05%   uv_slope_beta 2.01%   dn4000 1.00%   balmer_break 0.64%
+#:   m_uv 0.08%
+#:
+#: The energy-balance quantities are the worst hit, which is the tell: deleting
+#: the nebular continuum removes reprocessed luminosity the dust budget is
+#: balanced against, so l_tir/irx/l_dust_absorbed move by ~20-30% while the
+#: shape indices move by ~1-3%.
+_FAST_NEBULAR_UNSAFE_PROPERTIES = frozenset(
+    {
+        "balmer_break",
+        "dn4000",
+        "fuv_flux",
+        "irx",
+        "irx_fuv",
+        "l_bol",
+        "l_dust_absorbed",
+        "l_tir",
+        "m_uv",
+        "nuv_flux",
+        "rest_uv_color",
+        "uv_slope_beta",
+        "xi_ion",
+    }
+)
+
 
 def _chain_consumes(chain, key: str) -> bool:
     """Does any component in ``chain`` declare ``key`` as a (possibly optional) input?
@@ -5374,6 +5413,14 @@ class SEDModel:
         if unknown:
             available = sorted(self._property_catalog.keys())
             raise KeyError(f"Unknown properties: {sorted(unknown)}. Available: {available}")
+
+        # Rest-SED-derived properties cannot be served by the fast-nebular grid
+        # (#1665). Refuse only those: stellar_mass, sfr and the other 30 are
+        # perfectly correct on the fast path, and blanket-refusing them would
+        # break exactly the fits the fast path exists for.
+        unsafe = sorted(_FAST_NEBULAR_UNSAFE_PROPERTIES.intersection(names_to_compute))
+        if unsafe and getattr(self, "_nebular_grid_table", None) is not None:
+            self._refuse_on_fast_nebular(f"predict_properties(names={unsafe})")
 
         # Compute the state once
         state = self.predict_state(params)

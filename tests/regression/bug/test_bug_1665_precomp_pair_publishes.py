@@ -193,6 +193,38 @@ def test_sed_accessors_agree_with_exact_or_refuse_loudly(accessor):
     )
 
 
+def test_properties_refuse_only_the_sed_derived_ones_on_the_fast_path():
+    """The property guard must be narrow: refuse the SED-derived, serve the rest.
+
+    ``predict_properties`` reaches the same gutted rest SED by a different route
+    (the quantities are built inside the forward pass, not through
+    ``predict_spectral_indices``), so 13 of 43 properties moved under the pair --
+    worst ``l_tir`` by **30.07%**, with the energy-balance family (irx 27%,
+    l_dust_absorbed 19%) hit hardest because deleting the nebular continuum
+    removes reprocessed luminosity the dust budget balances against.
+
+    Narrowness is the point. ``stellar_mass`` and 29 others are exactly correct
+    on the fast path, and blanket-refusing them would break the fits the fast
+    path exists to serve.
+    """
+    from tengri.forward.sed_model import (
+        _FAST_NEBULAR_UNSAFE_PROPERTIES,
+        FeaturePrecomp,
+        WavePrecomp,
+    )
+
+    model = _build((WavePrecomp(), FeaturePrecomp()), _index_data())
+
+    with pytest.raises(ValueError, match="fast-nebular"):
+        model.predict_properties({}, names=("l_tir",))
+
+    safe = model.predict_properties({}, names=("stellar_mass",))
+    assert np.isfinite(float(safe["stellar_mass"])), (
+        "the guard is too wide -- stellar_mass is correct on the fast path"
+    )
+    assert "stellar_mass" not in _FAST_NEBULAR_UNSAFE_PROPERTIES
+
+
 def test_line_ratio_refusal_names_the_real_cause_not_a_backend_swap():
     """The refusal must diagnose the fast path, not misdirect to a backend swap.
 
