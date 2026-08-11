@@ -234,7 +234,7 @@ class WavePrecomp:
     :class:`~tengri.config.exceptions.PrecompBiasWarning` fires with the
     number when it is material. For final inference at high SNR, rerun with
     ``approx=None`` (exact path) or compare the two posteriors. The
-    spectroscopy analogue (:class:`SpectrumPrecomp`) was measured as a
+    spectroscopy analog (:class:`SpectrumPrecomp`) was measured as a
     ~1-sigma posterior shift on a 50-pixel, 5 %-noise fixture (#1688).
     """
 
