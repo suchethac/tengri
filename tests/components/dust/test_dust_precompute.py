@@ -2,15 +2,14 @@
 """Tests for dust age weight precomputation and fast dust attenuation.
 
 Validates that precomputing the age-dependent sigmoid weight once
-at init gives identical results to recomputing it per call, with
-measurable speedup.
+at init gives identical results to recomputing it per call, and that
+the precomputed path compiles to strictly less work.
 """
 
 import chex
 import pytest
 
 pytestmark = pytest.mark.bounds
-import time
 
 import jax
 import jax.numpy as jnp
@@ -292,55 +291,77 @@ class TestFastDustGradients:
         chex.assert_tree_all_finite(result)
 
 
-# ── Benchmark ─────────────────────────────────────────────────────
-class TestFastDustSpeedup:
-    """Verify measurable speedup from precomputed age weights."""
+# ── Precompute must do strictly less work ─────────────────────────
+class TestFastDustDoesLessWork:
+    """The precomputed path must compile to strictly less work than the exact one."""
 
-    @pytest.mark.benchmark
-    def test_fast_path_not_slower(self, age_grid, filter_wavelengths, dust_age_weights):
-        """Fast path is at least as fast as original (jitted).
-        Wall-clock assertions cross-test pollute under parallel pytest sweeps
-        because of shared compile caches and CPU scheduler noise.  Marked
-        ``@pytest.mark.benchmark`` so this is opt-in (``pytest -m benchmark``)
-        instead of running by default.  Acceptance bound widened from 1.2× to
-        2× to absorb residual noise.
+    def test_fast_path_compiles_to_fewer_flops(
+        self, age_grid, filter_wavelengths, dust_age_weights
+    ):
+        """The precomputed path compiles to strictly fewer FLOPs than the exact path.
+
+        This guard exists to catch ``two_component_dust_fast`` silently
+        degrading into the per-call work it is supposed to skip. It used to
+        assert a wall-clock ratio (``t_fast < t_original * 3.0``) and was
+        marked ``benchmark`` so it ran serially in the smoke job. That
+        formulation could not do the job, for two independent reasons —
+        both measured, 2026-08-11:
+
+        **1. It could not detect the regression.** Timed at the benchmark's own
+        setup the ratio is 1.00 at every problem size (5, 20, 50, 200, 1000,
+        5000 wavelengths). The cause is constant folding: with ``age_grid``
+        closed over, it is a compile-time constant, so XLA folds the
+        age-weight computation *inside the exact path* — precisely the work
+        the precompute exists to skip. Compiled cost makes it exact rather
+        than approximate: closed over, both paths compile to **1717 FLOPs**,
+        the same number. A fast path that fell back to the exact one would
+        move the ratio from 1.00 to 1.00.
+
+        **2. It failed on noise.** Equal-cost arms leave the whole 3x bound to
+        absorb runner jitter, and on 2026-08-11 a shared runner returned
+        43.4us vs 13.3us (3.26x) on ``main``. Because ``smoke`` gates
+        ``test``, that one wobble skipped the entire ~13000-test matrix.
+
+        Passing the age grid as a **traced argument** blocks the folding and
+        the real difference appears: exact **2573 FLOPs** vs fast **1717**,
+        a ratio of 0.667 (wall clock agrees: 0.76). FLOP counts come from the
+        compiled executable, are identical across recompiles, and cannot be
+        moved by scheduler load — so this runs in the ordinary parallel sweep
+        and the ``benchmark`` marker (defined in ``pyproject.toml`` as
+        "asserts a wall-clock ratio") no longer applies.
+
+        Tracing the grid is not an artificial setup: threading grids as
+        runtime arguments instead of baking them in as constants is the
+        direction of #1383 and #1650.
         """
-        original_jit = jax.jit(
-            lambda tv1, tv2: two_component_dust(
-                filter_wavelengths,
-                age_grid,
-                tau_v1=tv1,
-                tau_v2=tv2,
-                **_CF_KWARGS,
-            )
+
+        def _flops(fn, *args) -> float:
+            """Compiled FLOP count — deterministic, unlike wall clock."""
+            return jax.jit(fn).lower(*args).compile().cost_analysis()["flops"]
+
+        # The age grid must be TRACED, not closed over. Closed over, XLA folds
+        # the exact path's age-weight work into a constant and the two paths
+        # compile to an identical cost, which is what made the old wall-clock
+        # form blind.
+        flops_exact = _flops(
+            lambda tv1, tv2, ages: two_component_dust(
+                filter_wavelengths, ages, tau_v1=tv1, tau_v2=tv2, **_CF_KWARGS
+            ),
+            0.5,
+            0.3,
+            age_grid,
         )
-        fast_jit = jax.jit(
-            lambda tv1, tv2: two_component_dust_fast(
-                filter_wavelengths,
-                dust_age_weights,
-                tau_v1=tv1,
-                tau_v2=tv2,
-                **_CF_KWARGS,
-            )
+        flops_fast = _flops(
+            lambda tv1, tv2, weights: two_component_dust_fast(
+                filter_wavelengths, weights, tau_v1=tv1, tau_v2=tv2, **_CF_KWARGS
+            ),
+            0.5,
+            0.3,
+            dust_age_weights,
         )
-        # Warmup — a few extra rounds to settle compile caches under parallel.
-        for _ in range(3):
-            _ = original_jit(0.5, 0.3).block_until_ready()
-            _ = fast_jit(0.5, 0.3).block_until_ready()
-        N = 1000
-        t0 = time.time()
-        for _ in range(N):
-            _ = original_jit(0.5, 0.3).block_until_ready()
-        t_original = (time.time() - t0) / N
-        t0 = time.time()
-        for _ in range(N):
-            _ = fast_jit(0.5, 0.3).block_until_ready()
-        t_fast = (time.time() - t0) / N
-        # Loose bound — see docstring.  The structural correctness check (fast
-        # path produces same numbers as exact path) is in test_fast_path_matches_*.
-        # 3× tolerance: microbenchmarks at the ~30-60 µs scale are dominated by
-        # JIT cache state and scheduler noise on GitHub runners; the regression
-        # intent is to catch a 10× explosion, not a 2× one.
-        assert t_fast < t_original * 3.0, (
-            f"Fast path slower: {t_fast * 1e6:.1f}μs vs {t_original * 1e6:.1f}μs"
+
+        assert flops_fast < flops_exact, (
+            f"Precomputed path does not do less work: fast {flops_fast:,.0f} FLOPs "
+            f"vs exact {flops_exact:,.0f}. Equal counts mean the fast path is "
+            f"recomputing the age weights it is meant to receive."
         )
