@@ -531,6 +531,26 @@ def _filter_menu(rows: list[dict], column: str, value: str | None, *, listing: s
     return [r for r in rows if r.get(column) == value]
 
 
+def _resolve_category(value: str | None, accepted, *, listing: str) -> str | None:
+    """The category to filter on, or ``None`` for "do not filter".
+
+    The category axis is validated where the rows are *built*, not after, so it
+    cannot go through :func:`_filter_menu`. It gets the same contract anyway:
+    ``list_agn_blocks`` already refused an unknown category while
+    ``list_radio_blocks`` silently returned zero of seven rows — one sibling
+    right, one wrong, which is the giveaway that nothing enforced the rule.
+    """
+    if value is None or str(value).lower() == ALL:
+        return None
+    if value not in accepted:
+        raise ValueError(
+            f"{listing}(category={value!r}) — {value!r} is not a category this "
+            f"menu has. Accepted: {sorted(accepted)}. Pass category={ALL!r} "
+            f"(or omit it) to list everything."
+        )
+    return value
+
+
 # ──────────────────────────────────────────────────────────────────
 # Listing functions
 # ──────────────────────────────────────────────────────────────────
@@ -606,6 +626,10 @@ def list_agn_blocks(*, category: str | None = None, status: str | None = None) -
     # returned an empty table for the exact name it had just advertised
     # (#1451). Normalize before filtering rather than at each comparison.
     group_key_to_category = {v: k for k, v in category_to_group_key.items()}
+    # `'all'` means "do not filter" on every other menu axis (#1679); refusing
+    # it only here would be a second, smaller version of the same trap.
+    if category is not None and str(category).lower() == ALL:
+        category = None
     if category is not None:
         category = group_key_to_category.get(category, category)
         # ...and fail loudly on anything else. The filter used to fall through
@@ -1057,6 +1081,7 @@ def list_radio_blocks(*, category: str | None = None, status: str | None = None)
 
     # Derived from the validator's own tuples, never from a hand-written list.
     names_by_category = {"sf": SF_RADIO_MODELS, "agn": AGN_RADIO_MODELS}
+    category = _resolve_category(category, names_by_category, listing="list_radio_blocks")
 
     out: list[dict] = []
     for cat, names in names_by_category.items():

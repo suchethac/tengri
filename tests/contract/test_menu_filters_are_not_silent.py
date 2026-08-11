@@ -113,6 +113,55 @@ def test_a_real_value_this_menu_lacks_is_still_an_empty_answer(name, lister, col
     assert lister(**{column: absent[0]}) == []
 
 
+def _category_menus() -> list[tuple[str, object]]:
+    """Every menu that takes a ``category=`` filter."""
+    return [
+        (lister.__name__, lister)
+        for lister in _menu_listers()
+        if "category" in inspect.signature(lister).parameters
+    ]
+
+
+CATEGORY_MENUS = _category_menus()
+CATEGORY_IDS = [name for name, _ in CATEGORY_MENUS]
+
+
+def test_both_block_menus_take_a_category() -> None:
+    """The census for the category axis, asserted rather than assumed."""
+    assert set(CATEGORY_IDS) >= {"list_agn_blocks", "list_radio_blocks"}
+
+
+@pytest.mark.parametrize(("name", "lister"), CATEGORY_MENUS, ids=CATEGORY_IDS)
+def test_category_all_returns_everything(name, lister) -> None:
+    """``category='all'`` must mean "do not filter", like every other axis."""
+    assert len(lister(category=ALL)) == len(lister())
+    assert len(lister(category="ALL")) == len(lister())
+
+
+@pytest.mark.parametrize(("name", "lister"), CATEGORY_MENUS, ids=CATEGORY_IDS)
+def test_an_unknown_category_raises(name, lister) -> None:
+    """The sibling defect #1679 missed on its first pass.
+
+    ``list_agn_blocks`` already refused an unknown category — #1451 fixed it
+    there after ``list_agn_blocks('atten')`` returned an empty table for the
+    exact key it had just advertised. ``list_radio_blocks`` was never given the
+    same treatment and silently returned zero of seven rows. One sibling right
+    and one wrong is the tell that nothing enforced the rule.
+    """
+    with pytest.raises(ValueError):
+        lister(category="definitely_not_a_category")
+
+
+@pytest.mark.parametrize(("name", "lister"), CATEGORY_MENUS, ids=CATEGORY_IDS)
+def test_a_real_category_still_narrows(name, lister) -> None:
+    """Raising on typos must not have broken the filter it guards."""
+    categories = sorted({r["category"] for r in lister() if r.get("category")})
+    assert categories, f"{name} rows carry no category; this test would be vacuous"
+    narrowed = lister(category=categories[0])
+    assert 0 < len(narrowed) < len(lister())
+    assert {r["category"] for r in narrowed} == {categories[0]}
+
+
 def test_broken_backends_are_still_reachable_by_name() -> None:
     """The hidden-row case the vocabulary must not reject.
 
