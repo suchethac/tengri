@@ -61,6 +61,7 @@ from tengri.components.radio.radio import (
     radio_total_dpl_terms,
     radio_total_terms,
 )
+from tengri.components.template_threading import TemplateThreading
 from tengri.parameters.resolve import require_redshift
 from tengri.protocols.component import (
     DerivedKey,
@@ -157,7 +158,7 @@ class RadioSEDComponentState(SEDComponentState):
 
 
 @dataclass(frozen=True)
-class RadioSEDComponent:
+class RadioSEDComponent(TemplateThreading):
     r"""SEDComponent adapter around the radio physics module.
 
     Notes

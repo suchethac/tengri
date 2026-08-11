@@ -38,6 +38,7 @@ from typing import Any, ClassVar
 import jax.numpy as jnp
 
 from tengri.components._term_response import term_band_response as _term_band_response
+from tengri.components.template_threading import TemplateThreading
 from tengri.components.xray._params import PARAMS as _XRAY_PARAMS
 from tengri.components.xray.xray import (
     COS_INC_REF_30DEG,
@@ -82,7 +83,7 @@ class XRaySEDComponentState(SEDComponentState):
 
 
 @dataclass(frozen=True)
-class XRaySEDComponent:
+class XRaySEDComponent(TemplateThreading):
     r"""SEDComponent adapter around :func:`xray_total`.
 
     Notes

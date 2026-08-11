@@ -151,7 +151,7 @@ from __future__ import annotations
 
 import warnings
 from pathlib import Path
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 import h5py
 import jax
@@ -817,6 +817,7 @@ class CB19Backend:
         neb_log_nH: float = 2.0,
         neb_co: float = -0.36,
         neb_dno: float = 0.0,
+        template_data: Any | None = None,
         **_kwargs,
     ) -> tuple[jnp.ndarray, jnp.ndarray]:
         r"""Compute emission line luminosities via 6D interpolation over the CB_19 grid.
@@ -870,6 +871,11 @@ class CB19Backend:
         neb_dno : float
             ΔN/O offset (log10) from default N/O scaling [log10]. Grid range:
             [−0.25, 0.25]. Default 0.0.
+        template_data : CB19GridData, optional
+            Pre-loaded grid threaded as a JIT argument instead of read from
+            ``self.grid`` under the trace, where it bakes 0.665 MB of
+            ``log_line_ratios`` into every compile (#1694). ``None`` uses
+            ``self.grid``.
 
         Returns
         -------
@@ -899,7 +905,15 @@ class CB19Backend:
         # Convert absolute log10(Z) → log10(O/H) on CLOUDY scale
         log_oh = neb_logZ_gas + _LOG_OH_OFFSET
 
-        grid = self.grid
+        # Prefer the threaded grid. ``SEDModel._template_data_for_jit`` has
+        # published this backend's grid all along and ``NebularSEDComponent``
+        # has passed it here all along — but the signature ended in ``**_kwargs``,
+        # so ``template_data`` was accepted and discarded, and ``self.grid``
+        # (a concrete array) was read under the trace instead. Every layer
+        # looked wired; nothing was, and the 0.665 MB ``log_line_ratios`` cube
+        # was an XLA ``Constant`` on every compile (#1694). Same idiom as
+        # ``CloudyGridBackend`` and ``CueBackend``.
+        grid = template_data if template_data is not None else self.grid
         grids_6d = (
             grid.log_OH_grid,
             grid.log_age_grid,
@@ -1013,6 +1027,7 @@ class CB19Backend:
         neb_dno: float = 0.0,
         line_sigma_aa: float = 0.0,
         line_sigma_kms: float = 0.0,
+        template_data: Any | None = None,
         **_kwargs,
     ) -> jnp.ndarray:
         r"""Compute CB_19 nebular emission lines on the SSP wavelength grid.
@@ -1070,6 +1085,10 @@ class CB19Backend:
         line_sigma_aa : float
             Gaussian line width (σ) for line profiles [Å]. 0 = nearest-pixel
             delta function. Default 0.0.
+        template_data : CB19GridData, optional
+            Pre-loaded grid, forwarded to
+            :meth:`predict_nebular_line_luminosities` so it threads as a JIT
+            argument rather than baking 0.665 MB into every compile (#1694).
 
         Returns
         -------
@@ -1109,6 +1128,13 @@ class CB19Backend:
             neb_log_nH=neb_log_nH,
             neb_co=neb_co,
             neb_dno=neb_dno,
+            # Forward it. This method is the OTHER door into the line
+            # luminosities, and leaving it unforwarded left the grid baked even
+            # after the callee learned to thread: of the four calls a single
+            # trace makes, two arrived here with ``template_data=None``. XLA
+            # de-duplicates identical constants, so a half-threaded component
+            # measures exactly the same as an un-threaded one (#1694).
+            template_data=template_data,
         )
 
         neb_sed = render_nebular_lines(
