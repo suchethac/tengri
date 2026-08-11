@@ -164,6 +164,35 @@ def test_spectral_indices_agree_with_exact_or_refuse_loudly(arm):
     )
 
 
+@pytest.mark.parametrize("accessor", ["rest_sed", "obs_sed"])
+def test_sed_accessors_agree_with_exact_or_refuse_loudly(accessor):
+    """``pred.rest_sed()`` / ``pred.obs_sed()`` are rest-SED consumers too.
+
+    They read ``state.sed_intrinsic``, the very array the fast grid zeroes the
+    nebular contribution out of, so they belong to the same census as
+    ``predict_spectrum``. Returning a nebular-free panchromatic SED to someone
+    who asked for the model SED is the same defect wearing a different name.
+    """
+    from tengri.forward.sed_model import FeaturePrecomp, WavePrecomp
+
+    sid = _index_data()
+    exact = np.asarray(getattr(_build(None, sid).predict({}), accessor)())
+
+    pred = _build((WavePrecomp(), FeaturePrecomp()), sid).predict({})
+    try:
+        got = np.asarray(getattr(pred, accessor)())
+    except ValueError as exc:
+        assert "fast-nebular" in str(exc), f"{accessor} refused unhelpfully: {exc}"
+        return
+
+    finite = np.isfinite(exact) & np.isfinite(got) & (np.abs(exact) > 0)
+    dev_pct = np.abs((got[finite] - exact[finite]) / np.abs(exact[finite])) * 100.0
+    assert dev_pct.max() < _GRID_INTERP_CEILING_PCT, (
+        f"pred.{accessor}() returned SILENTLY WRONG values under the pair: "
+        f"worst deviation {dev_pct.max():.2f}%."
+    )
+
+
 def test_line_ratio_refusal_names_the_real_cause_not_a_backend_swap():
     """The refusal must diagnose the fast path, not misdirect to a backend swap.
 

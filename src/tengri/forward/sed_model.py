@@ -5990,6 +5990,9 @@ class SEDModel:
             DeprecationWarning,
             stacklevel=2,
         )
+        # Deprecated, but it reaches the rest SED by its own route rather than
+        # through predict_spectrum, so it needs the census guard too (#1665).
+        self._refuse_on_fast_nebular("predict_spectrum_components")
         return self._spectrum_via_state(params, wave_obs=wave_obs)
 
     def predict_emission_lines(self, params):
