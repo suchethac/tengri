@@ -81,6 +81,7 @@ from tengri import (
     FIXED,
     FREE,
     FeaturePrecomp,
+    Fitter,
     Fixed,
     ForwardModel,
     LineList,
@@ -291,6 +292,14 @@ print(
 # - **Run an A/A control.** One arm is `model_exact` *again*, under a different
 #   label. It should be identical to the first exact arm, so whatever ratio it
 #   reports is the measurement's own noise floor.
+# - **Check the arms are actually different.** `fit()` resolves `approx="auto"`,
+#   and that policy *re-resolves* the build-time `approx=` — topping it up rather
+#   than taking it as given. So the cell prints the **resolved fit-time config
+#   per arm before timing anything**. An arm can be mislabelled as easily as it
+#   can be mistimed, and a table attributing a ratio to a knob that does not
+#   differ between arms can only ever report noise. Build-time `approx=` is what
+#   a **prediction** path uses (`predict_photometry`, `predict`); a **fit**
+#   re-picks it.
 #
 # **The verdict rule, fixed before the numbers are in:** an `approx=` choice
 # counts as a real speedup only if its *excess over 1.0* is at least **twice**
@@ -334,6 +343,25 @@ built = [(label, ForwardModel.build(sed=model)) for label, model in ARMS]
 # penalty lands on the same arm every rep and survives the min. Rotating by one
 # each pass moves every arm through a different slot, so no arm is structurally
 # first.
+# Before timing anything: what does the FIT actually run? `Fitter(approx="auto")`
+# — the default, and what `fit()` uses — RE-RESOLVES the build-time `approx=`. So
+# three models built three ways need not be three configurations at fit time.
+# Print it rather than assume it. This is the same class of error as timing
+# process position, one level down: an arm can be mislabelled as well as mistimed.
+print("resolved fit-time precompute (what approx= actually buys a FIT):")
+for _label, _fwd in built:
+    _st = Fitter(_fwd, flux_phot, n_phot).model.approx
+    _tags = [
+        _n
+        for _n, _on in (
+            ("WavePrecomp", _st.wave_precomp),
+            ("SpectrumPrecomp", _st.spectrum_precomp),
+            ("FeaturePrecomp", _st.feature_precomp),
+        )
+        if _on
+    ]
+    print(f"  {_label:<22} -> {', '.join(_tags) or 'exact (no LUT)'}")
+
 loops: dict[str, list[float]] = {label: [] for label, _ in built}
 walls: dict[str, list[float]] = {label: [] for label, _ in built}
 posts: dict[str, object] = {}
@@ -390,9 +418,12 @@ if not resolved:
         f" excess of {r_aa - 1.0:.2f};"
     )
     print(f"     the rule needs {RESOLVE_MARGIN:.0f}x that, so on this fit the two opt-ins buy")
-    print("     nothing measurable. With a line channel in the Observation the nebular")
-    print("     work is already off the per-gradient path. Fit this model to photometry")
-    print("     ALONE and FeaturePrecomp is worth ~7x against a 1.23x floor (see #1596).")
+    print("     nothing measurable -- and the resolution table above says why it is")
+    print("     STRUCTURAL, not statistical: fit() resolves approx='auto', which tops up")
+    print("     the build-time choice, so all three arms run the SAME configuration.")
+    print("     These arms differ in what they PREDICT with, not in what they FIT with.")
+    print("     Fit to photometry ALONE and FeaturePrecomp is worth ~7x against a 1.23x")
+    print("     floor -- that gap was #1596 (fixed), and #1683 for the build-time form.")
 else:
     print(
         f"  -> resolved: excess {r_fast - 1.0:.2f} is more than {RESOLVE_MARGIN:.0f}x"
