@@ -110,3 +110,74 @@ def test_every_offered_name_resolves():
 def test_dir_returns_the_curated_list():
     """Pin the wiring, so the tests above cannot pass while ``dir()`` diverges."""
     assert set(tengri.__dir__()) == set(_CURATED_DIR)
+
+
+# ── the gap between the two published lists, explained ───────────
+
+#: Names ``tengri.<TAB>`` offers that ``from tengri import *`` does not bind,
+#: each with the reason it is absent from ``__all__``.
+#:
+#: This gap is **by design**, and it looks exactly like a bug: two published
+#: lists over one namespace, differing by eleven names, one of them
+#: ``Posterior``. It has been diagnosed as "missing exports" three times and
+#: measurement refuted it every time (#1692 is the third). The rule is in
+#: ``docs/dev/api_migration_v0.x.md``: where a symbol's canonical home is a
+#: sub-namespace, that is the import path we teach, so the name stays out of
+#: the star-import contract while remaining reachable — and worth completing —
+#: as ``tengri.<name>``.
+#:
+#: ``DELIBERATELY_NOT_IN_ALL`` in ``test_module_docstring_is_honest.py`` pins
+#: the same intent for four names, but it is a hand-picked list over a
+#: different (larger) set — importable-but-not-exported, which includes names
+#: the menu deliberately hides, like ``Fitter``. It never covered this gap,
+#: which is why diffing the two *published* lists kept looking novel.
+CURATED_NOT_STAR_EXPORTED = {
+    "Instrument": "canonical home tengri.observation",
+    "ParameterInformation": "canonical home tengri.inference",
+    "PopulationPosterior": "canonical home tengri.inference",
+    "Posterior": "canonical home tengri.inference (also in DELIBERATELY_NOT_IN_ALL)",
+    "__version__": "a dunder: in __all__ it would shadow the importer's own __version__",
+    "cite": "canonical home tengri.citations",
+    "generate_mock": "canonical home tengri.analysis",
+    "list_instruments": "canonical home tengri.observation",
+    "parameter_information": "canonical home tengri.inference",
+    "print_citations": "canonical home tengri.citations",
+    "print_logo": "canonical home tengri._logo",
+}
+
+
+def test_the_gap_between_the_two_lists_is_fully_explained():
+    """Every curated name absent from ``__all__`` must have a recorded reason.
+
+    Not a subset check in either direction — an equality, so it fails from
+    both sides. A new unexplained divergence fails; so does an entry that
+    stops being divergent, which would otherwise rot into a stale exemption.
+    """
+    gap = set(_CURATED_DIR) - set(tengri.__all__)
+    assert gap == set(CURATED_NOT_STAR_EXPORTED), (
+        "the curated-menu/__all__ gap changed. This gap is deliberate, so the "
+        "fix is usually to record the reason here rather than to edit either "
+        "list:\n"
+        f"  newly unexplained: {sorted(gap - set(CURATED_NOT_STAR_EXPORTED))}\n"
+        f"  no longer in the gap: {sorted(set(CURATED_NOT_STAR_EXPORTED) - gap)}"
+    )
+
+
+@pytest.mark.parametrize("name", sorted(CURATED_NOT_STAR_EXPORTED))
+def test_an_excluded_name_is_still_reachable_by_attribute(name):
+    """The premise of the design: excluded from ``import *``, not from the API."""
+    assert hasattr(tengri, name), (
+        f"{name} is offered by tab-completion and excluded from __all__, so "
+        "attribute access is the ONLY way to reach it — and it does not resolve"
+    )
+
+
+def test_no_dunder_is_star_exported():
+    """``__all__`` binds underscore names too, unlike bare ``import *``.
+
+    ``__version__`` is the live case: promoting it to ``__all__`` to "close the
+    gap" would make ``from tengri import *`` overwrite the importing module's
+    own ``__version__``.
+    """
+    dunders = sorted(n for n in tengri.__all__ if n.startswith("_"))
+    assert dunders == [], f"__all__ exports underscore names: {dunders}"
