@@ -20,6 +20,14 @@ So the assertions here are on the number of **compiled programs** — read from
 the catalog's own memoized ``jit`` wrapper, which is the object whose cache the
 claim is about — plus a global compile counter as the guard against the jit
 being removed entirely.
+
+**The instrument has a saturation failure mode (#1663).** ``_cache_size()``
+reads from a process-wide C++ cache of fixed capacity, and once a process has
+created that many distinct jitted callables it reports 0 for everything — so
+these assertions failed in a full-suite run and only there. See
+:func:`_accessor_can_report`, which the autouse fixture below probes so a
+degraded accessor is repaired, and a still-degraded one is named rather than
+misread as "the catalog stopped jitting".
 """
 
 from __future__ import annotations
@@ -27,6 +35,7 @@ from __future__ import annotations
 import warnings
 
 import jax
+import jax.numpy as jnp
 import numpy as np
 import pytest
 
@@ -38,15 +47,60 @@ _Z_OBS = 0.05
 _T_GYR = np.concatenate([np.array([0.0]), np.linspace(1.0, 13.0, 39)])
 
 
+def _accessor_can_report():
+    """Can ``_cache_size()`` still report a compile at all, right now? (#1663)
+
+    JAX holds its compiled programs in a **process-wide** C++ cache
+    (``jax._src.pjit._cpp_pjit_cache_*``) with a fixed capacity — 8192 on jax
+    0.9.1. Once a process has created that many distinct jitted callables, a
+    newly created one gets no cache slot, and ``fn._cache_size()`` reads ``0``
+    **immediately after a successful call**.
+
+    Nothing is actually wrong when that happens: measured on jax 0.9.1, a fresh
+    jit past saturation still costs one compile on call 1 and *zero* on call 2,
+    exactly like the unsaturated control, and 20 warm calls take 0.000 s. The
+    executable is still served — only the accessor stops reporting it.
+
+    That is what made #1663 look like a cross-tree contamination bug: a full
+    suite creates well over 8192 jits in one xdist worker, an isolated run of
+    this file creates a handful, and so the assertions below read 0 only in the
+    large run. Bisecting for a contaminating *test* cannot converge, because the
+    cause is an accumulation threshold rather than any one test.
+
+    Probing the accessor functionally — rather than reading JAX's capacity
+    constant — keeps this correct across JAX upgrades and across whichever of
+    the two internal caches happens to saturate.
+    """
+    canary = jax.jit(lambda x: x + 1.0)
+    canary(jnp.zeros(()))
+    return canary._cache_size() > 0
+
+
+@pytest.fixture(autouse=True)
+def _room_in_the_pjit_cache():
+    """Guarantee the compile-count accessor can report before each test (#1663).
+
+    ``jax.clear_caches()`` empties the saturated C++ cache (measured: 8192 -> 0),
+    after which a fresh jit reports 1 again. It is only called when the probe
+    says the accessor is degraded, so the common case pays one tiny compile and
+    no other test on this worker loses its warm executables.
+    """
+    if not _accessor_can_report():
+        jax.clear_caches()
+
+
 def _cache_size(cached):
     """Number of compiled programs held by the catalog's batched callable.
 
-    ``_cache_size`` is JAX-internal, so this distinguishes the two ways it can
-    go missing — they need opposite fixes and must not share a message:
+    ``_cache_size`` is JAX-internal, so this distinguishes the ways it can go
+    missing — they need opposite fixes and must not share a message:
 
     * the callable is not jitted at all (someone dropped the ``jax.jit``), which
       is a **source** regression;
-    * it is jitted but JAX moved the accessor, which is a **test** repair.
+    * it is jitted but JAX moved the accessor, which is a **test** repair;
+    * it is jitted and the accessor exists, but JAX's process-wide compile cache
+      is saturated so it reports 0 regardless — a **measurement** failure that
+      says nothing about the catalog (#1663).
 
     Either way it fails rather than skips. The acceptance criterion here is a
     compile count, and a silently skipped count test is precisely the invisible
@@ -64,7 +118,17 @@ def _cache_size(cached):
             f"jax {jax.__version__} no longer exposes _cache_size() on a jitted "
             f"callable; re-point this helper at the current accessor."
         )
-    return cached._cache_size()
+    size = cached._cache_size()
+    if size == 0 and not _accessor_can_report():
+        raise AssertionError(
+            "JAX's process-wide pjit cache is saturated, so _cache_size() "
+            "reports 0 for every callable and this assertion cannot give a "
+            "verdict about the catalog (#1663). The _room_in_the_pjit_cache "
+            "fixture should have cleared it — check that it still runs, and see "
+            "_accessor_can_report() for the mechanism. This is NOT evidence "
+            "that Catalog._batched stopped jitting."
+        )
+    return size
 
 
 @pytest.fixture
