@@ -7,11 +7,14 @@ checking that injected values are discriminable from prior returns.
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 from typing import Any
 
 import jax
 import numpy as np
+
+from tengri.components.stellar.component import SFHBeforeBigBangWarning
 
 __all__ = [
     "MockPopulation",
@@ -142,6 +145,86 @@ def assert_truth_against_model(model, name, value, *, rel_tol=0.08):
     return bounds
 
 
+def _max_truncated_fraction(caught):
+    """Worst pre-Big-Bang truncation among captured warnings [dimensionless].
+
+    Reads the exact value off the warning instance rather than parsing the
+    message, which renders it as ``{:.0%}``.
+
+    Parameters
+    ----------
+    caught : list of warnings.WarningMessage
+        Records from a ``warnings.catch_warnings(record=True)`` block.
+
+    Returns
+    -------
+    fraction : float
+        Largest fraction seen, or ``0.0`` if no such warning carried one. The
+        maximum rather than the sum: repeated predictions of the same galaxy
+        each describe the whole SFH, so summing would climb past 1.0.
+    """
+    fractions = [
+        w.message.truncated_fraction
+        for w in caught
+        if isinstance(w.message, SFHBeforeBigBangWarning)
+        and getattr(w.message, "truncated_fraction", None) is not None
+    ]
+    return float(max(fractions)) if fractions else 0.0
+
+
+def _resample_until_realizable(draw, *, max_fraction, max_attempts):
+    """Redraw a galaxy until its SFH fits inside cosmic time (#1645).
+
+    Rejection sampling, made explicit. The accepted draw is from the prior
+    **conditioned on** truncating no more than ``max_fraction`` — a different
+    distribution from the prior, which is why the caller opts in and why the
+    count of redraws is reported back.
+
+    Parameters
+    ----------
+    draw : callable
+        ``draw(attempt) -> float``, producing a galaxy and returning the
+        fraction of its stellar mass placed before the Big Bang
+        [dimensionless]. Called with a 0-based attempt index so the caller can
+        vary its PRNG key.
+    max_fraction : float
+        Largest acceptable truncated fraction [dimensionless]. Inclusive, to
+        match the refuse path, which raises only on ``>``.
+    max_attempts : int
+        Redraw budget for this galaxy [count].
+
+    Returns
+    -------
+    fraction : float
+        Truncated fraction of the accepted draw [dimensionless].
+    attempts : int
+        Draws taken, including the accepted one [count]. 1 means no redraw.
+
+    Raises
+    ------
+    ValueError
+        If no draw satisfies the threshold within ``max_attempts``. Looping
+        forever would hang a mock builder, and keeping the last draw would
+        defeat the point of having asked.
+    """
+    best = None
+    for attempt in range(max_attempts):
+        fraction = float(draw(attempt))
+        if fraction <= max_fraction:
+            return fraction, attempt + 1
+        best = fraction if best is None else min(best, fraction)
+    raise ValueError(
+        f"No draw truncated at most {max_fraction:g} of its stellar mass within "
+        f"max_attempts={max_attempts}; the best of {max_attempts} attempts still "
+        f"truncated {best:g}. Redshift and the SFH age parameters are drawn "
+        f"independently, so if the redshift prior reaches high z while the SFH "
+        f"timescale stays long, few or no draws are realizable and rejection "
+        f"sampling cannot rescue it. Narrow the redshift range, bound the SFH age "
+        f"parameters, or raise max_truncated_fraction to accept what the prior "
+        f"actually produces (issue #1645)."
+    )
+
+
 @dataclass
 class MockPopulation:
     """Mock galaxy population with truths and realistic noise.
@@ -157,6 +240,29 @@ class MockPopulation:
     n_halpha_absorption : int
         Count of galaxies whose Halpha is predicted in absorption
         (non-positive flux). Never dropped; reported to avoid selection bias.
+    truncated_fraction : ndarray, shape (N,), optional
+        Per-galaxy fraction of formed stellar mass placed before the Big Bang
+        and therefore truncated [dimensionless]. Same policy as
+        ``n_halpha_absorption``: measured and reported, never silently dropped,
+        so a caller can exclude or flag affected galaxies instead of learning
+        about them from stderr (#1645).
+
+        A galaxy whose SFH does not fit inside cosmic time at its own redshift
+        is not a faithful fixture: its forward model does not represent the
+        requested SFH. This happens because redshift and the SFH age parameters
+        are drawn independently, so nothing couples the SFH timescale to the
+        time actually available.
+
+        **0.0 means "at most 1%", not "none":** the forward path only warns
+        above ``frac > 0.01``, so smaller truncations are invisible here.
+    n_resampled : int, optional
+        Draws discarded and redrawn under ``resample_truncated`` [count]. Zero
+        unless that option was used.
+
+        **Non-zero means the population is not a draw from the prior**, but from
+        the prior conditioned on being physically realizable. Report it wherever
+        the prior is described; a conditioned population with the conditioning
+        left unstated is the same class of error as the truncation it fixes.
     """
 
     table: np.ndarray
@@ -164,6 +270,8 @@ class MockPopulation:
     n_halpha_absorption: int
     line_names: tuple[str, ...] = ()
     line_wavelengths: np.ndarray | None = None
+    truncated_fraction: np.ndarray | None = None
+    n_resampled: int = 0
 
     def line_flux_data(self, galaxy=0):
         """Build a :class:`LineFluxData` template matching these mock lines.
@@ -209,6 +317,9 @@ def make_population(
     key: jax.Array,
     snr_phot: float,
     snr_line: float,
+    max_truncated_fraction: float | None = None,
+    resample_truncated: bool = False,
+    max_resample_attempts: int = 20,
 ) -> MockPopulation:
     """Generate a mock galaxy population with injected PSD parameters.
 
@@ -234,6 +345,39 @@ def make_population(
         Signal-to-noise ratio for photometry [dimensionless].
     snr_line : float
         Signal-to-noise ratio for emission lines [dimensionless].
+    max_truncated_fraction : float, optional
+        Reject the population if any galaxy places more than this fraction of
+        its stellar mass before the Big Bang [dimensionless]. Default ``None``
+        (accept anything), which preserves the historical behavior: the
+        fraction is always measured and returned on
+        :attr:`MockPopulation.truncated_fraction` regardless.
+
+        Off by default deliberately. The fixtures this repository already ships
+        contain such galaxies — the four-galaxy ESS-sweep mock truncates 3%, 5%,
+        9% and 69% — so defaulting to a limit would reject the project's own
+        populations rather than fix them (#1645).
+    resample_truncated : bool, optional
+        Redraw a galaxy that exceeds ``max_truncated_fraction`` instead of
+        raising. Default ``False``. Requires ``max_truncated_fraction``, since
+        without a threshold there is nothing to reject against.
+
+        **This changes the distribution.** The result is a draw from the prior
+        *conditioned on* being physically realizable, not from the prior; the
+        conditioning is reported as :attr:`MockPopulation.n_resampled`.
+
+        Off by default for the same reason as above, plus one more: redrawing
+        would silently change every existing mock built from a fixed key —
+        including the population behind the banked ESS-vs-breadth curve in
+        ``docs/dev/hierarchical-psd-handoff.md`` §4j.
+
+        The whole galaxy is redrawn, not its redshift alone: truncation is a
+        property of the sampled redshift *and* SFH age together, so redrawing
+        one without the other need not change whether the history fits.
+    max_resample_attempts : int, optional
+        Redraw budget per galaxy [count]. Default 20. Exhausting it raises
+        rather than looping or quietly keeping the last draw — if no draw is
+        realizable, the prior and the threshold are incompatible and rejection
+        sampling cannot rescue it.
 
     Returns
     -------
@@ -261,6 +405,8 @@ def make_population(
 
     # Sample parameters and override PSD terms
     truth_params = []
+    truncated_fractions = []
+    n_resampled = 0
     phot_true_list = []
     phot_noise_list = []
     phot_obs_list = []
@@ -315,17 +461,65 @@ def make_population(
     )
 
     for i, k_i in enumerate(keys):
-        # Sample parameters from prior
-        params = model.spec.sample(k_i)
+        # One galaxy = sample the prior, override the injected truths, predict.
+        # Bundled into a closure so `resample_truncated` can repeat the whole
+        # unit with a fresh key: the truncation is a property of the SAMPLED
+        # redshift and SFH age together, so redrawing one without the other
+        # would not change whether the history fits in cosmic time (#1645).
+        drawn = {}
 
-        # Override PSD parameters with truths
-        params["sfh_field_psd_sigma"] = sigma_true
-        params["sfh_field_psd_tau_myr"] = tau_true_myr
+        def _draw_galaxy(attempt, _k=k_i, _i=i, _out=drawn):
+            key_attempt = _k if attempt == 0 else jax.random.fold_in(_k, 10_000 + attempt)
+            params = model.spec.sample(key_attempt)
+            params["sfh_field_psd_sigma"] = sigma_true
+            params["sfh_field_psd_tau_myr"] = tau_true_myr
+            # Both prediction calls are inside the capture, not just the first.
+            # `predict_photometry` runs the traced path, where this check is
+            # deliberately skipped; the warning comes from the EAGER path, which
+            # here is `measure_line_fluxes(fast=False)`. Wrapping only the
+            # photometry call recorded 0.0 for every galaxy while the warnings
+            # still reached stderr.
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always", SFHBeforeBigBangWarning)
+                phot = np.asarray(model.predict_photometry(params))
+                lines = np.asarray(
+                    model.measure_line_fluxes(params, line_defs=line_defs, fast=False)
+                )
+            _out["params"] = params
+            _out["phot"] = phot
+            _out["lines"] = lines
+            _out["caught"] = caught
+            return _max_truncated_fraction(caught)
 
+        if resample_truncated:
+            if max_truncated_fraction is None:
+                raise ValueError(
+                    "resample_truncated=True needs max_truncated_fraction to say what "
+                    "counts as acceptable; without a threshold there is nothing to "
+                    "reject against. Pass e.g. max_truncated_fraction=0.1."
+                )
+            fraction, attempts = _resample_until_realizable(
+                _draw_galaxy,
+                max_fraction=max_truncated_fraction,
+                max_attempts=max_resample_attempts,
+            )
+            n_resampled += attempts - 1
+        else:
+            fraction = _draw_galaxy(0)
+
+        params = drawn["params"]
+        phot_true = drawn["phot"]
+        line_flux_true = drawn["lines"]
+        caught = drawn["caught"]
         truth_params.append(params)
+        truncated_fractions.append(fraction)
 
-        # Predict photometry
-        phot_true = np.asarray(model.predict_photometry(params))
+        # Re-emit everything the accepted draw produced: capturing is for
+        # measurement, not suppression, and a caller who watches stderr today
+        # must keep seeing what they see now. Rejected draws stay silent — a
+        # galaxy that was redrawn is not one the caller has to reason about.
+        for record in caught:
+            warnings.warn_explicit(record.message, record.category, record.filename, record.lineno)
         phot_noise = phot_true / snr_phot
 
         # Add photometric noise
@@ -338,10 +532,6 @@ def make_population(
         phot_noise_list.append(phot_noise)
         phot_obs_list.append(phot_obs)
 
-        # Measure emission lines (returns array of shape (n_line,))
-        line_flux_true = np.asarray(
-            model.measure_line_fluxes(params, line_defs=line_defs, fast=False)
-        )
         line_flux_noise = np.abs(line_flux_true) / snr_line
 
         # Add line-flux noise (absolute value to handle zero/negative fluxes)
@@ -377,10 +567,30 @@ def make_population(
         table[i]["line_flux_obs"] = line_flux_obs_list[i]
         table[i]["line_flux_err"] = line_flux_noise_list[i]
 
+    truncated = np.asarray(truncated_fractions, dtype=float)
+    if max_truncated_fraction is not None:
+        over = np.flatnonzero(truncated > float(max_truncated_fraction))
+        if over.size:
+            worst = ", ".join(f"galaxy {int(g)}: {truncated[g]:.0%}" for g in over)
+            raise ValueError(
+                f"{over.size} of {n_galaxies} mock galaxies place more than "
+                f"{float(max_truncated_fraction):.0%} of their stellar mass before the "
+                f"Big Bang at their own redshift ({worst}). That mass is truncated, so "
+                f"those galaxies' photometry does not represent the SFH recorded in "
+                f"truth_params, and any recovery statistic computed on them measures "
+                f"something other than what was injected. Redshift and the SFH age "
+                f"parameters are drawn independently, so nothing couples the SFH "
+                f"timescale to the cosmic time available -- narrow the redshift range, "
+                f"bound the SFH age parameters, or raise max_truncated_fraction to "
+                f"accept it deliberately (issue #1645)."
+            )
+
     return MockPopulation(
         table=table,
         truth_params=truth_params,
         n_halpha_absorption=halpha_absorption_count,
         line_names=tuple(line_names),
         line_wavelengths=np.asarray(wavelengths, dtype=float),
+        truncated_fraction=truncated,
+        n_resampled=n_resampled,
     )

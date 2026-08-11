@@ -27,6 +27,7 @@ References
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import NamedTuple
 
 import jax
@@ -134,6 +135,84 @@ def resolution_bands_from_desi(diag_data: jnp.ndarray, offsets: jnp.ndarray) -> 
     rows = jnp.arange(n_diag)[:, None]
     rolled = jnp.where(valid, diag_data[rows, jnp.clip(cols, 0, n - 1)], 0.0)
     return BandedMatrix(offsets=offsets, data=rolled)
+
+
+def block_diagonal_bands(blocks: Sequence[BandedMatrix]) -> BandedMatrix:
+    r"""Compose per-segment banded operators into one block-diagonal operator.
+
+    Multi-arm spectrographs deliver one resolution operator per camera, each on
+    its own pixel grid (DESI b/r/z; Guy et al. 2023 [2]_). Concatenating the
+    camera grids in camera order gives a single pixel vector, and the resolution
+    operator over that vector is block diagonal — camera :math:`m` occupying rows
+    and columns :math:`[s_m, s_m + n_m)`:
+
+    .. math::
+
+        A = \mathrm{diag}(A_0, A_1, \ldots, A_{M-1}), \qquad
+        s_m = \sum_{m' < m} n_{m'}
+
+    No band is allowed to reach across a segment boundary: an entry of block
+    :math:`m` whose column index leaves :math:`[0, n_m)` is set to zero, so
+    camera :math:`m`'s LSF never mixes photons into camera :math:`m+1`.
+
+    Parameters
+    ----------
+    blocks : sequence of BandedMatrix
+        Per-segment operators, in the order their pixel grids are concatenated.
+        Block ``m`` has ``data`` of shape ``(K_m, n_m)``; the ``K_m`` and the
+        offsets may differ between blocks.
+
+    Returns
+    -------
+    BandedMatrix
+        Operator of width ``sum(n_m)`` whose ``offsets`` are the sorted union of
+        the per-block offsets.
+
+    Raises
+    ------
+    ValueError
+        If ``blocks`` is empty.
+
+    Notes
+    -----
+    Build-time helper (NumPy; offsets are static). JIT-compatible: the returned
+    operator is consumed by :func:`banded_matvec`, which is. Gradient-safe: yes
+    — the composition is a rearrangement of the block data.
+
+    Zeroing the cross-boundary reach is done here rather than inherited from the
+    blocks: :func:`resolution_bands_from_desi` already zeroes its own edges, but
+    :func:`gaussian_resolution_bands` does not, so relying on the blocks would
+    leak one camera's LSF into the next.
+
+    References
+    ----------
+    .. [2] Guy, J. et al. 2023, AJ, 165, 144, arXiv:2209.14482.
+    """
+    blocks = tuple(blocks)
+    if not blocks:
+        raise ValueError("block_diagonal_bands requires at least one block")
+
+    sizes = [int(np.asarray(b.data).shape[1]) for b in blocks]
+    starts = np.concatenate([[0], np.cumsum(sizes)[:-1]]).astype(int)
+    offsets = np.unique(np.concatenate([np.asarray(b.offsets).ravel() for b in blocks]))
+    data = np.zeros((offsets.shape[0], int(sum(sizes))))
+
+    for block, start, n in zip(blocks, starts, sizes, strict=True):
+        b_off = np.asarray(block.offsets).ravel()
+        b_data = np.asarray(block.data)
+        local = np.arange(n)
+        for k_local, offset in enumerate(b_off):
+            k = int(np.searchsorted(offsets, offset))
+            # Rows whose band would leave this segment contribute nothing.
+            inside = (local + offset >= 0) & (local + offset < n)
+            # Accumulate rather than assign: a block that repeats an offset means
+            # the two diagonals add, which is what banded_matvec does when it
+            # sums over k. Assigning would silently drop one of them. Column
+            # slices are disjoint across blocks, so this is identical to
+            # assignment in the ordinary distinct-offset case.
+            data[k, start : start + n] += np.where(inside, b_data[k_local], 0.0)
+
+    return BandedMatrix(offsets=jnp.asarray(offsets), data=jnp.asarray(data))
 
 
 def gaussian_resolution_bands(wave_obs: jnp.ndarray, resolution, n_diag: int = 11) -> BandedMatrix:

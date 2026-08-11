@@ -46,6 +46,44 @@ class EmissionComponent(SEDModelComponent):
     # Shared class attributes for all emission components
     parameter_prefix: str = "dust_"
 
+    #: Opt-in: when True, :meth:`apply` passes this component's template bundle
+    #: to :meth:`predict` as ``templates=``, taken from
+    #: ``template_data["dust_ir"][self.name]`` and falling back to ``self.data``.
+    #:
+    #: It is opt-in rather than automatic because ``predict`` signatures are
+    #: written per backend; passing an unexpected keyword to every one of them
+    #: would break the analytic components, which have no library at all. A
+    #: template-backed backend sets this and accepts ``templates=None``.
+    #:
+    #: Without threading, a backend that loads its grid inside ``predict``
+    #: freezes the whole library into the graph as ``Constant`` ops — measured
+    #: at 66.6 MB for Draine & Li 2014 (#1649).
+    accepts_threaded_templates: ClassVar[bool] = False
+
+    def threaded_templates(self, template_data: Mapping[str, Any] | None) -> Any | None:
+        """Return this component's pre-loaded template bundle, if any.
+
+        Parameters
+        ----------
+        template_data : mapping, optional
+            The nested threading dict; the ``"dust_ir"`` slot is namespaced by
+            component ``name``.
+
+        Returns
+        -------
+        object or None
+            The threaded bundle, else ``self.data`` (set by ``precompute`` via
+            :meth:`load`), else ``None`` — in which case the backend falls back
+            to its own module-level load and bakes.
+        """
+        if isinstance(template_data, dict):
+            dust_ir = template_data.get("dust_ir")
+            if isinstance(dust_ir, dict):
+                found = dust_ir.get(self.name)
+                if found is not None:
+                    return found
+        return getattr(self, "data", None)
+
     # Cross-component contract: all components consume L_ir and produce dust IR SED.
     # SEDModelComponent.__init_subclass__ collects these dicts into the DerivedKey
     # tuples and rebinds the shadowed accessor methods onto concrete subclasses.
@@ -121,8 +159,16 @@ class EmissionComponent(SEDModelComponent):
             # ONE full-grid evaluation, shared by every consumer below. Each LUT branch
             # used to recompute it, which jit made free (CSE) but eager execution did not
             # — and predict_state, Prediction, and most of the test suite run eager.
+            # Build a SEPARATE dict for predict. Mutating ``input_kwargs`` would
+            # also inject ``templates`` into the two ``_apply_*_precomp`` helpers
+            # below, which forward it with ``**input_kwargs`` and do not accept
+            # it — that leaked through to the nebular line-catalog path and broke
+            # tests/contract/test_line_ratio_data.py.
+            predict_kwargs = dict(input_kwargs)
+            if self.accepts_threaded_templates:
+                predict_kwargs["templates"] = self.threaded_templates(template_data)
             sed_ir, published_full = self.predict(
-                p_sliced, jnp.zeros_like(state.wave), state.wave, **input_kwargs
+                p_sliced, jnp.zeros_like(state.wave), state.wave, **predict_kwargs
             )
 
             # LUT path: publish the precomp families the LUT projectors consume...
@@ -162,7 +208,10 @@ class EmissionComponent(SEDModelComponent):
             return state.with_(sed_intrinsic=sed_in + sed_ir, derived=new_derived)
         else:
             # Exact full-wave path
-            sed_out, published = self.predict(p_sliced, sed_in, state.wave, **input_kwargs)
+            predict_kwargs = dict(input_kwargs)
+            if self.accepts_threaded_templates:
+                predict_kwargs["templates"] = self.threaded_templates(template_data)
+            sed_out, published = self.predict(p_sliced, sed_in, state.wave, **predict_kwargs)
             new_derived = self._merge_published(state.derived, published)
             return state.with_(sed_intrinsic=sed_out, derived=new_derived)
 

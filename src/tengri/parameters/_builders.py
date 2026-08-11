@@ -48,6 +48,18 @@ def _bucket_from_declarations(
 # than moving it into ``components/agn/_params.py`` (which would violate the
 # prefix invariant checked by ``tools/check_param_prefixes.py``).
 
+# ``neb_xid`` carries no ``free_prior`` (#887), for two reasons that compound.
+# It is read only by the Feltre NLR backend, and the ``neb`` group wildcard is
+# not backend-scoped the way ``dust.emission`` has been since #1482, so freeing
+# it under any other nebular backend would add an inert dimension. Its grid is
+# also three nodes — {0.1, 0.3, 0.5} — inside a validator interval of
+# [0.05, 0.6], so the admissible interval and the tabulated one are not the same
+# object and a uniform over the former would spend most of its mass off-grid.
+#
+# This tuple is a *third* declaration shape besides ``ParamDeclaration`` and
+# ``ParamDef``/``MetParamDef``, and the only one still without a ``free_prior``
+# slot. Adding one here is not worth it for a single parameter that should not
+# be freed by wildcard anyway; fold it into a real declaration if that changes.
 _AGN_EXTRAS: dict = {
     "neb_xid": (
         "Dust-to-metal ratio (Feltre NLR backend) [0.1, 0.3, 0.5]",

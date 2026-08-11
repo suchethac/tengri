@@ -7,8 +7,8 @@ with them but because the only flat-vector formulation lived *inside*
 ``_run_raytrace`` as a set of closures, reachable by exactly one sampler.
 
 This seam drives the NUTS / HMC / dynamic-HMC / GHMC / elliptical-slice /
-MCLMC / adjusted-MCLMC / MAP / pathfinder family. Every other registered name
-is either driven by ``PopulationFitter``'s
+MCLMC / adjusted-MCLMC / MAP / Laplace / pathfinder family. Every other
+registered name is either driven by ``PopulationFitter``'s
 own runners or refused with a stated reason — see :data:`FLAT_UNSUPPORTED`. A
 name is driven here only when the driver runs the algorithm the name promises;
 a stand-in (the first draft ran plain HMC under five distinct-algorithm names)
@@ -103,6 +103,7 @@ FLAT_SAMPLERS: dict[str, str] = {
     # failure.
     "mcmc": "nuts",
     "map": "map",
+    "laplace": "laplace",
     "pathfinder": "nuts_pathfinder",
 }
 
@@ -119,14 +120,6 @@ FLAT_UNSUPPORTED: dict[str, str] = {
         "silently truncated -- and therefore biased -- sample set. The prior "
         "transform this seam provides is exact and correct; what is missing is "
         "the sampler on top of it. See #1429."
-    ),
-    "laplace": (
-        "a Laplace approximation is MAP plus a Gaussian covariance from the "
-        "curvature at a verified mode; this seam's map driver computes no "
-        "covariance, so driving laplace with it would silently drop the error "
-        "bars that distinguish laplace from map. Use ``map`` for the "
-        "hierarchical point estimate, or run laplace per-galaxy through "
-        "Fitter."
     ),
 }
 
@@ -458,6 +451,119 @@ def _require_moving_chain(chain, method):
     )
 
 
+def _adam_map_ascent(prob, map_steps, map_learning_rate):
+    """Adam gradient ascent on ``prob.log_prob`` — shared by map and laplace.
+
+    One implementation so the two drivers cannot drift: laplace IS this
+    ascent plus a verified-mode covariance.
+    """
+    import optax
+
+    opt = optax.adam(map_learning_rate)
+    state = opt.init(prob.init_flat)
+
+    def _step(carry, _):
+        pos, st = carry
+        g = jax.grad(prob.log_prob)(pos)
+        updates, st = opt.update(jax.tree.map(lambda x: -x, g), st, pos)
+        return (optax.apply_updates(pos, updates), st), None
+
+    (best, _), _ = jax.lax.scan(_step, (prob.init_flat, state), None, length=map_steps)
+    return best
+
+
+def _newton_polish(prob, mode, *, tol, max_iters=12):
+    """Damped-Newton ascent to a Laplace-grade mode, from Adam's endpoint.
+
+    First-order alone cannot deliver a mode at hierarchical D: measured on
+    the D=516 reference fixture, Adam's ``max |grad log_prob|`` was 1.13e3
+    after 300 steps and still 84.6 after 8000. Newton converges
+    quadratically inside the basin and reuses exactly the machinery the
+    Laplace covariance needs anyway (one dense Hessian per iteration, ~D
+    gradient-equivalents each).
+
+    Levenberg-Marquardt damping: the step solves ``(H + lambda*I) dx = g``
+    with ``lambda`` adapted — far from the mode the negative Hessian is
+    typically indefinite (measured: a pure-Newton polish from Adam(300)'s
+    endpoint stalled at |grad|=228 on the D=516 fixture), and a large
+    ``lambda`` degrades the step gracefully toward plain gradient ascent,
+    while near the mode ``lambda`` shrinks and Newton's quadratic finish
+    takes over. A step is accepted only when it increases ``log_prob`` and
+    stays finite; persistent failure exits, and the downstream guards then
+    refuse the unconverged point rather than silently sampling it.
+    """
+    import numpy as np
+
+    grad_fn = jax.grad(prob.log_prob)
+    lam = 1e-3
+    for _ in range(max_iters):
+        g = grad_fn(mode)
+        if float(np.max(np.abs(np.asarray(g)))) <= tol:
+            break
+        neg_hess = -jax.hessian(prob.log_prob)(mode)
+        lp0 = float(prob.log_prob(mode))
+        eye = jnp.eye(prob.n_dim if hasattr(prob, "n_dim") else g.shape[0])
+        accepted = False
+        for _ in range(12):
+            step = jnp.linalg.solve(neg_hess + lam * eye, g)
+            trial = mode + step
+            lp = float(prob.log_prob(trial))
+            if np.isfinite(lp) and lp > lp0 and bool(np.all(np.isfinite(np.asarray(trial)))):
+                mode = trial
+                lam = max(lam / 3.0, 1e-9)
+                accepted = True
+                break
+            lam *= 10.0
+        if not accepted:
+            break
+    return mode
+
+
+def _require_converged_mode(grad_at_mode, method, map_steps, *, tol):
+    """Refuse a Laplace expansion about a point that is not a mode (#1537).
+
+    The single-galaxy laplace expanded about non-modes with no grad=0 check
+    and returned plausible wrong answers — curvature measured off a mode is
+    a covariance for the wrong distribution. The gradient's infinity norm at
+    the reached point must be small; otherwise raise naming the knob.
+    """
+    import numpy as np
+
+    gmax = float(np.max(np.abs(np.asarray(grad_at_mode))))
+    if gmax <= tol:
+        return
+    raise RuntimeError(
+        f"{method}: the point reached after map_steps={map_steps} is not a "
+        f"mode — max |grad log_prob| = {gmax:.3g} exceeds tol={tol:.3g}, and "
+        f"a Laplace covariance measured off a mode is a plausible wrong "
+        f"answer (#1537). Raise map_steps (or adjust map_learning_rate) "
+        f"until the ascent converges, or loosen laplace_grad_tol if this "
+        f"tolerance is genuinely too strict for your problem's scale."
+    )
+
+
+def _require_psd_curvature(chol, method):
+    """Refuse a non-negative-definite curvature at the expansion point.
+
+    ``jnp.linalg.cholesky`` returns NaNs, not an exception, when the negative
+    Hessian is not positive definite — which means the reached point is a
+    saddle or worse, not a maximum. Sampling from those NaNs would return a
+    posterior of NaNs (or garbage that passes a finite-check downstream);
+    refuse by name instead.
+    """
+    import numpy as np
+
+    if bool(np.all(np.isfinite(np.asarray(chol)))):
+        return
+    raise RuntimeError(
+        f"{method}: the negative Hessian at the reached point is not "
+        f"positive definite (its Cholesky factor carries non-finite "
+        f"entries), so the point is a saddle rather than a mode and no "
+        f"Gaussian covariance exists there. Raise map_steps so the ascent "
+        f"reaches an actual maximum (#1537)."
+    )
+
+
 def _require_finite_tuning(L, step_size, method, n_warmup):
     """Refuse a non-finite (L, step size) tuning instead of sampling with it.
 
@@ -506,6 +612,7 @@ def run_flat_sampler(
     ghmc_alpha=0.8,
     ghmc_delta=0.65,
     mclmc_target_accept_rate=0.65,
+    laplace_grad_tol=1e-2,
     allow_unvalidated=False,
     verbose=True,
     **unknown,
@@ -552,7 +659,14 @@ def run_flat_sampler(
     memory_mode : {"low", "high"}
         Passed to :func:`build_flat_problem`.
     map_steps, map_learning_rate : int, float
-        Gradient-ascent settings for the ``map`` driver.
+        Gradient-ascent settings for the ``map`` and ``laplace`` drivers
+        (one shared ascent — laplace IS map plus a verified-mode covariance).
+    laplace_grad_tol : float
+        Convergence tolerance on ``max |grad log_prob|`` at the point the
+        ``laplace`` ascent reaches [dimensionless in the standardized latent
+        space]. Curvature measured off a mode is a covariance for the wrong
+        distribution (#1537), so exceeding this raises rather than returning
+        plausible wrong error bars.
     ghmc_alpha : float
         GHMC momentum persistence, in [0, 1] [dimensionless]. Same default as
         the single-galaxy ``run_ghmc``. The GHMC driver always uses a diagonal
@@ -830,21 +944,41 @@ def run_flat_sampler(
             }
 
     elif driver == "map":
-        import optax
-
-        opt = optax.adam(map_learning_rate)
-        state = opt.init(prob.init_flat)
-
-        def _step(carry, _):
-            pos, st = carry
-            g = jax.grad(prob.log_prob)(pos)
-            updates, st = opt.update(jax.tree.map(lambda x: -x, g), st, pos)
-            return (optax.apply_updates(pos, updates), st), None
-
-        (best, _), _ = jax.lax.scan(_step, (prob.init_flat, state), None, length=map_steps)
+        best = _adam_map_ascent(prob, map_steps, map_learning_rate)
         # A point estimate is a length-1 "chain", so downstream extraction is shared.
         chain = best[None, :]
         extra = {"n_steps": map_steps, "log_prob": float(prob.log_prob(best))}
+
+    elif driver == "laplace":
+        # MAP + a Gaussian covariance from the curvature AT A VERIFIED MODE —
+        # the two things whose absence kept this name refused: returning the
+        # bare point estimate under 'laplace' silently dropped the error bars
+        # (the map driver exists for that), and curvature off a mode is a
+        # plausible wrong answer (#1537: the single-galaxy laplace expanded
+        # about non-modes with no grad=0 check).
+        mode = _adam_map_ascent(prob, map_steps, map_learning_rate)
+        # Adam alone plateaus at hierarchical D (measured: |grad| 84.6 after
+        # 8000 steps on the D=516 fixture); the Newton polish reaches the
+        # actual mode with the same Hessian machinery the covariance needs.
+        mode = _newton_polish(prob, mode, tol=laplace_grad_tol, max_iters=40)
+        grad_at_mode = jax.grad(prob.log_prob)(mode)
+        _require_converged_mode(grad_at_mode, method, map_steps, tol=laplace_grad_tol)
+
+        # Dense negative Hessian: D forward-over-reverse passes; at the
+        # reference D=516 this is ~D gradient-equivalents, comparable to one
+        # more MAP ascent. cov = (-H)^{-1} sampled via -H = L L^T,
+        # draw = mode + solve(L^T, eps) so cov(draw) = (L L^T)^{-1} exactly.
+        neg_hess = -jax.hessian(prob.log_prob)(mode)
+        chol = jnp.linalg.cholesky(neg_hess)
+        _require_psd_curvature(chol, method)
+        eps = jax.random.normal(key_run, (n_samples, prob.n_dim))
+        chain = mode[None, :] + jax.scipy.linalg.solve_triangular(chol.T, eps.T, lower=False).T
+        extra = {
+            "n_steps": map_steps,
+            "log_prob": float(prob.log_prob(mode)),
+            "grad_inf_norm": float(jnp.max(jnp.abs(grad_at_mode))),
+            "n_samples": n_samples,
+        }
 
     else:  # pragma: no cover - FLAT_SAMPLERS admits no other driver
         raise ValueError(f"no driver for {method!r}")

@@ -68,7 +68,7 @@ import numpy as np
 
 from tengri.components.stellar.sfh.registry import compute_field_gp, resolve_sfh
 from tengri.components.stellar.sps.dsps_wrapper import csp_age_dt
-from tengri.config.exceptions import ParameterMapError
+from tengri.config.exceptions import ParameterMapError, warn_measured
 from tengri.cosmology import age_at_z, luminosity_distance
 from tengri.forward.approx_policy import BAND_PROJECTION_KEYS, ApproxPolicy
 from tengri.forward.sed_model_types import (
@@ -1632,7 +1632,7 @@ class SEDModel:
         if not blue:
             return
         bands = ", ".join(f"{n} (rest~{lam:.0f} Å)" for n, lam in blue)
-        warnings.warn(
+        warn_measured(
             "This model resolves to n_subbands=0, which applies dust as a first-order "
             f"Taylor projection across each filter (#617); at z~{z_rep:.2f} these "
             f"rest-UV band(s) are biased versus the exact path: {bands}. The bias "
@@ -1645,6 +1645,8 @@ class SEDModel:
             "applies there too. See docs/known_limitations.md.",
             UserWarning,
             stacklevel=2,
+            representative_redshift=z_rep,
+            n_biased_bands=len(blue),
         )
 
     def __repr__(self) -> str:
@@ -2126,9 +2128,7 @@ class SEDModel:
             if dist.is_fixed:
                 val = float(dist.value)
                 if not (grid_lo_zsol <= val <= grid_hi_zsol):
-                    import warnings
-
-                    warnings.warn(
+                    warn_measured(
                         f"{name}={val:.3f} is outside the SSP grid metallicity "
                         f"range [{grid_lo_zsol:.3f}, {grid_hi_zsol:.3f}] "
                         f"log10(Z/Zsun) (absolute grid log10(Z) ∈ "
@@ -2138,14 +2138,15 @@ class SEDModel:
                         f"{name} inside the grid, or load an SSP whose grid "
                         f"covers your target metallicity.",
                         UserWarning,
+                        value=val,
+                        grid_lo_zsol=grid_lo_zsol,
+                        grid_hi_zsol=grid_hi_zsol,
                         stacklevel=3,
                     )
             else:
                 lo, hi = float(dist.lo), float(dist.hi)
                 if lo < grid_lo_zsol or hi > grid_hi_zsol:
-                    import warnings
-
-                    warnings.warn(
+                    warn_measured(
                         f"{name} prior bounds [{lo:.3f}, {hi:.3f}] extend "
                         f"beyond the SSP grid metallicity range "
                         f"[{grid_lo_zsol:.3f}, {grid_hi_zsol:.3f}] "
@@ -2155,6 +2156,10 @@ class SEDModel:
                         f"maximum (issue #442). Tighten the prior to within "
                         f"the grid range or load an SSP with broader coverage.",
                         UserWarning,
+                        prior_lo=lo,
+                        prior_hi=hi,
+                        grid_lo_zsol=grid_lo_zsol,
+                        grid_hi_zsol=grid_hi_zsol,
                         stacklevel=3,
                     )
 
@@ -6581,6 +6586,34 @@ class SEDModel:
         band_response = self._dust_emission_band_response(cached)
         if band_response is not None:
             result.setdefault("dust_ir", {})["emission_band_response"] = band_response
+
+        # ── Dust IR template libraries, keyed by component name ──
+        #
+        # A template-backed emission backend that reads its grid inside
+        # ``predict`` freezes the whole library into the graph as ``Constant``
+        # ops — 66.6 MB for Draine & Li 2014, 39.4 for THEMIS, against a
+        # bare-stellar floor of 0.05 MB (#1649). Publishing the bundle here,
+        # loaded eagerly, lets ``EmissionComponent.apply`` hand it to
+        # ``predict`` as a traced argument instead.
+        #
+        # Opt-in via ``accepts_threaded_templates`` because ``predict``
+        # signatures are per backend; the analytic ones have no library and
+        # must not receive the keyword.
+        from tengri.components.dust.emission._component_base import EmissionComponent
+
+        for component in cached:
+            if not isinstance(component, EmissionComponent):
+                continue
+            if not getattr(component, "accepts_threaded_templates", False):
+                continue
+            bundle = getattr(component, "data", None)
+            if bundle is None:
+                try:
+                    bundle = component.load(None)
+                except Exception:
+                    bundle = None
+            if bundle is not None:
+                result.setdefault("dust_ir", {})[component.name] = bundle
 
         # The other additive emitters (X-ray, radio) are sums of rank-1 terms, so
         # they get a response *per term* rather than the single L_ir * R that dust's

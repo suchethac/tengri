@@ -57,6 +57,45 @@ class ThemisIRSEDComponent(EmissionComponent):
 
     _citations_tuple: ClassVar[tuple[str, ...]] = ("jones2017",)
 
+    accepts_threaded_templates: ClassVar[bool] = True
+
+    def load(self, wave: jnp.ndarray | None = None):
+        """Load the THEMIS template dict so it can be threaded, not baked.
+
+        Returns
+        -------
+        dict or None
+            Template arrays with the two non-traceable preparation steps
+            already applied, or ``None`` when unavailable — the backend then
+            falls back to its module-level load, which bakes 39.4 MB.
+
+        Notes
+        -----
+        **JIT-compatible**: no, deliberately — runs at build time so the arrays
+        reach ``predict`` as a traced argument (#1649).
+        """
+        del wave
+        from tengri.components.dust.emission.emission import _find_data_file
+        from tengri.components.dust.emission_templates import (
+            _normalize_dl07_like_grid,
+            _qhac_axis_to_cigale,
+            load_themis_templates,
+        )
+
+        for fname in ("themis_templates_v2.h5", "themis_templates.h5"):
+            path = _find_data_file(fname)
+            if path is None:
+                continue
+            grid = dict(load_themis_templates(path))
+            # Both preparation steps read concrete values — a key census, then
+            # a concrete max to pick the qhac unit convention — so neither can
+            # run once these arrays are traced. Do them here, eagerly.
+            if "spectra_single" in grid and "single_u" not in grid:
+                grid = _normalize_dl07_like_grid(grid, q_key="qhac_grid")
+            grid["qhac_grid_cigale"] = _qhac_axis_to_cigale(grid["qhac_grid"])
+            return grid
+        return None
+
     def predict(
         self,
         p: dict[str, jnp.ndarray],
@@ -64,6 +103,7 @@ class ThemisIRSEDComponent(EmissionComponent):
         wave: jnp.ndarray,
         *,
         L_ir: float,
+        templates=None,
     ) -> tuple[jnp.ndarray, dict[str, jnp.ndarray]]:
         """Compute THEMIS dust emission.
 
@@ -86,14 +126,22 @@ class ThemisIRSEDComponent(EmissionComponent):
             contains {"sed_dust_ir": emission SED in erg/s/Hz}.
 
         """
-        from tengri.components.dust.emission import themis as themis_fn
-
-        sed = themis_fn(
-            wave,
-            L_ir,
+        kwargs = dict(
             dust_umin=p["umin"],
             dust_gamma_dl=p["gamma_dl"],
             dust_qhac=p["qhac"],
             dust_alpha=p["alpha"],
         )
+        if templates is not None:
+            # Build the interpolation closure over the THREADED arrays. Closing
+            # over tracers inside the current trace is fine; what bakes is a
+            # closure over *concrete* arrays, which is what the module-level
+            # lazy loader gives here (#1649).
+            from tengri.components.dust.emission_templates import create_themis_from_grid
+
+            sed = create_themis_from_grid(templates)(wave, L_ir, **kwargs)
+        else:
+            from tengri.components.dust.emission import themis as themis_fn
+
+            sed = themis_fn(wave, L_ir, **kwargs)
         return sed_in + sed, {"sed_dust_ir": sed}
