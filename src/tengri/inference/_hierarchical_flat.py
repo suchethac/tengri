@@ -7,16 +7,17 @@ with them but because the only flat-vector formulation lived *inside*
 ``_run_raytrace`` as a set of closures, reachable by exactly one sampler.
 
 This seam drives the NUTS / HMC / dynamic-HMC / GHMC / elliptical-slice /
-MCLMC / adjusted-MCLMC / MAP / Laplace / pathfinder family. Every other
-registered name is either driven by ``PopulationFitter``'s
+MCLMC / adjusted-MCLMC / MAP / Laplace / pathfinder / nested-slice family.
+Every other registered name is either driven by ``PopulationFitter``'s
 own runners or refused with a stated reason — see :data:`FLAT_UNSUPPORTED`. A
 name is driven here only when the driver runs the algorithm the name promises;
 a stand-in (the first draft ran plain HMC under five distinct-algorithm names)
-is silent substitution, not support. ``nss`` is the founding entry of the
-refused set:
-the prior transform it would need is exact and is provided here; what is
-missing is a real nested sampler on top of it, and a blind rejection stand-in
-returns biased samples rather than an approximation (#1429).
+is silent substitution, not support. ``nss`` was the founding entry of the
+refused set — the prior transform it needs is exact and was provided here from
+the start; what was missing was a real nested sampler on top of it, and a
+blind rejection stand-in returns biased samples rather than an approximation.
+The in-tree Nested Slice Sampler now fills that gap (#1429), and the refused
+set is empty.
 
 This module lifts that formulation out. Once the problem is
 ``(init_flat, log_likelihood, log_prior, prior_transform)`` on an unconstrained
@@ -105,23 +106,24 @@ FLAT_SAMPLERS: dict[str, str] = {
     "map": "map",
     "laplace": "laplace",
     "pathfinder": "nuts_pathfinder",
+    # The founding refusal, resolved by wiring rather than by lowering the
+    # bar: the in-tree Nested Slice Sampler (Yallup+2026 — constrained HRSS
+    # exploration WITHIN the likelihood contour, the same implementation the
+    # single-galaxy backend runs) on the standardized problem, with live
+    # points drawn from the exact iid N(0,1) prior. The blind-rejection
+    # stand-in this replaces exhausted its attempt budget at iteration
+    # 147/200 on a 2-galaxy D=18 problem and returned silently truncated —
+    # therefore biased — samples (#1429).
+    "nss": "nss",
 }
 
 #: Registered backends that this seam deliberately does NOT drive, and why.
 #: Listed so ``PopulationFitter`` can raise a specific error instead of a generic
 #: "unknown method", and so the reason survives longer than a commit message.
-FLAT_UNSUPPORTED: dict[str, str] = {
-    "nss": (
-        "nested sampling needs constrained exploration WITHIN the likelihood "
-        "contour (slice/MCMC steps from a surviving live point). A blind "
-        "rejection sampler drawn from the prior is not an acceptable stand-in: "
-        "measured on a 2-galaxy D=18 problem it exhausted its attempt budget "
-        "and terminated at iteration 147 of a requested 200, returning a "
-        "silently truncated -- and therefore biased -- sample set. The prior "
-        "transform this seam provides is exact and correct; what is missing is "
-        "the sampler on top of it. See #1429."
-    ),
-}
+#: Empty since ``nss`` — the founding entry — gained its real driver (#1429);
+#: the table stays because the next honest refusal belongs here, with its
+#: reason, not in a commit message.
+FLAT_UNSUPPORTED: dict[str, str] = {}
 
 
 @dataclass(frozen=True)
@@ -594,6 +596,55 @@ def _require_finite_tuning(L, step_size, method, n_warmup):
     )
 
 
+def _require_nondegenerate_live_set(n_live, n_dim, method):
+    """Refuse an NSS live set that cannot span the parameter space.
+
+    HRSS draws its slice directions from the live points' empirical
+    covariance, and ``n_live`` points give that matrix rank at most
+    ``n_live - 1``. With ``n_live <= D`` every direction lies in a proper
+    subspace and the orthogonal complement is NEVER explored — the returned
+    samples are confined to a hyperplane while passing every finite-check
+    downstream. That is silent bias, not slowness, so it is refused by name
+    rather than priced as a warning.
+    """
+    if n_live > n_dim:
+        return
+    raise ValueError(
+        f"{method}: nss_n_live={n_live} live points cannot span a D={n_dim} "
+        f"parameter space — the HRSS direction covariance has rank at most "
+        f"n_live-1, so slice directions never leave a proper subspace and "
+        f"the samples are silently biased. Raise nss_n_live above D (cost "
+        f"grows with both), or use mcmc_nuts / mcmc_hmc, which need no live "
+        f"set. Stochastic-field hierarchies put every field latent into D "
+        f"(n_grid per galaxy); a coarser n_grid at build time shrinks D."
+    )
+
+
+def _require_converged_evidence(n_iter, max_iterations, remaining, tol, method):
+    """Refuse a nested run that hit its iteration cap before the evidence converged.
+
+    Terminating while ``log(Z_live/Z)`` still exceeds tolerance means the
+    live set still holds unintegrated posterior mass; resampling then returns
+    a silently truncated — therefore biased — sample set, which is precisely
+    the failure that kept this name refused (the blind-rejection stand-in
+    terminated at iteration 147 of a requested 200 and handed back a
+    plausible-looking answer, #1429). Same state, different road, same loud
+    refusal.
+    """
+    if remaining < tol:
+        return
+    raise RuntimeError(
+        f"{method}: nested sampling hit nss_max_iterations={max_iterations} "
+        f"(n_iter={n_iter}) while the unintegrated evidence fraction "
+        f"log(Z_live/Z) = {remaining:.2f} still exceeds "
+        f"nss_log_evidence_tol={tol}. The live set still holds posterior "
+        f"mass, so resampling now would return the silently truncated, "
+        f"biased sample set that kept this name refused (#1429). Raise "
+        f"nss_max_iterations, or raise nss_num_delete to retire more points "
+        f"per iteration."
+    )
+
+
 def run_flat_sampler(
     fitter,
     method,
@@ -613,6 +664,11 @@ def run_flat_sampler(
     ghmc_delta=0.65,
     mclmc_target_accept_rate=0.65,
     laplace_grad_tol=1e-2,
+    nss_n_live=500,
+    nss_num_delete=50,
+    nss_num_inner_steps=None,
+    nss_log_evidence_tol=-3.0,
+    nss_max_iterations=10000,
     allow_unvalidated=False,
     verbose=True,
     **unknown,
@@ -632,7 +688,10 @@ def run_flat_sampler(
         tuning, so ``n_warmup`` and the HMC-family knobs below are ignored
         there; only ``n_burnin`` / ``n_samples`` apply. The MCLMC family is
         the mirror image: ``n_warmup`` sets the (L, step size) tuning length,
-        which consumes the transient, so ``n_burnin`` is ignored there.
+        which consumes the transient, so ``n_burnin`` is ignored there. The
+        ``nss`` driver ignores both — nested sampling has no warmup or
+        burn-in; ``n_samples`` is the number of equal-weight posterior draws
+        resampled from the dead-point history.
     n_leapfrog : int
         Leapfrog steps per HMC proposal.
     max_num_doublings : int
@@ -682,6 +741,25 @@ def run_flat_sampler(
         ``target_accept_rate``, whose 0.8 default tunes a different
         proposal mechanism. Unused by the unadjusted ``mclmc`` driver,
         which has no accept/reject step.
+    nss_n_live : int
+        Live points for the ``nss`` driver. Must exceed the problem's D —
+        the HRSS direction covariance is estimated from the live set and is
+        singular otherwise (refused loudly). The default (500, matching the
+        single-galaxy ``run_nss``) therefore refuses stochastic-field
+        hierarchies at their usual D by construction; those want
+        ``mcmc_nuts`` anyway.
+    nss_num_delete : int
+        Live points retired and replaced per NS iteration (``nss`` driver).
+    nss_num_inner_steps : int or None
+        HRSS walk length per replacement (``nss`` driver). ``None`` (the
+        default) uses D, matching the single-galaxy ``run_nss``.
+    nss_log_evidence_tol : float
+        Terminate when ``log(Z_live / Z_accumulated)`` falls below this
+        (``nss`` driver) [dimensionless]. Hitting ``nss_max_iterations``
+        first raises — the live set still holds posterior mass, and
+        resampling then is the silently-truncated bias of #1429.
+    nss_max_iterations : int
+        Safety cap on NS iterations (``nss`` driver).
     allow_unvalidated : bool
         Opt in to ``tier="broken"`` backends, exactly as ``Fitter.run`` does.
         Required for ``pathfinder`` and ``mcmc_ghmc``, the tier="broken" names
@@ -942,6 +1020,79 @@ def run_flat_sampler(
                 "divergent": int(jnp.sum(divergent)),
                 "n_warmup": n_warmup,
             }
+
+    elif driver == "nss":
+        # The real Nested Slice Sampler (Yallup+2026) on the standardized
+        # problem — the sampler whose absence kept this name refused (#1429).
+        # The prior needs no machinery at all here: live points are DRAWN
+        # from the exact iid N(0,1) prior, and the HRSS walk explores within
+        # the rising likelihood contour, so the sampler receives the
+        # LIKELIHOOD alone (handing it log_prob would double-count the prior,
+        # exactly as for ESS). Same loop shape as the single-galaxy
+        # ``run_nss``; same memory-motivated max_shrinkage=20 (100 compiled a
+        # 20+ GB vmap(while_loop) graph there).
+        from tengri.inference.backends.nested.nss import as_top_level_api
+        from tengri.inference.backends.nested.utils import (
+            ess as ns_ess,
+            finalize as ns_finalize,
+            sample as ns_sample,
+        )
+
+        _require_nondegenerate_live_set(nss_n_live, prob.n_dim, method)
+        num_inner = prob.n_dim if nss_num_inner_steps is None else nss_num_inner_steps
+
+        # NSS's native compile-once mode: a 2-arg likelihood plus data_args
+        # carried in the sampler state, so the data stays a traced value —
+        # the seam's (ld2, data_args) contract through the sampler's own
+        # mechanism rather than a closure.
+        algo = as_top_level_api(
+            prob.log_prior,
+            prob.log_likelihood_with_data,
+            num_inner,
+            num_delete=nss_num_delete,
+            max_steps=10,
+            max_shrinkage=20,
+            data_args=data_args,
+        )
+        init_key, loop_key = jax.random.split(key_run)
+        live = algo.init(
+            jax.random.normal(init_key, (nss_n_live, prob.n_dim)), data_args=data_args
+        )
+        step = jax.jit(algo.step)
+
+        dead = []
+        n_iter = 0
+        while True:
+            loop_key, sk = jax.random.split(loop_key)
+            live, dead_info = step(sk, live)
+            # Keep the dead particles, drop update_info immediately — it is
+            # the replacement step's MCMC internals, 3-4x larger than the
+            # particles and unused by sample/ess (same choice as run_nss).
+            dead.append(dead_info._replace(update_info=None))
+            n_iter += 1
+            remaining = float(live.integrator.logZ_live - live.integrator.logZ)
+            if verbose and n_iter % 10 == 0:
+                log_z_est = float(jnp.logaddexp(live.integrator.logZ, live.integrator.logZ_live))
+                print(f"  NSS iter {n_iter}: log Z = {log_z_est:.2f}, remaining = {remaining:.2f}")
+            if remaining < nss_log_evidence_tol or n_iter >= nss_max_iterations:
+                break
+
+        _require_converged_evidence(
+            n_iter, nss_max_iterations, remaining, nss_log_evidence_tol, method
+        )
+        log_z = float(jnp.logaddexp(live.integrator.logZ, live.integrator.logZ_live))
+        ns_run = ns_finalize(live, dead, update_info=False)
+        sample_key, ess_key = jax.random.split(jax.random.fold_in(key_run, 2))
+        chain = ns_sample(sample_key, ns_run, n_samples).position
+        extra = {
+            "log_evidence": log_z,
+            "ess": float(ns_ess(ess_key, ns_run)),
+            "n_live": nss_n_live,
+            "num_delete": nss_num_delete,
+            "num_inner_steps": num_inner,
+            "n_iterations": n_iter,
+            "n_dead": n_iter * nss_num_delete,
+        }
 
     elif driver == "map":
         best = _adam_map_ascent(prob, map_steps, map_learning_rate)
