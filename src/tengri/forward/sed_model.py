@@ -222,6 +222,20 @@ class WavePrecomp:
     ``data_args`` as a runtime input, #1316). ``Catalog`` remains the
     taught surface for a table of galaxies with a redshift column: one
     ingest, one validation, one compiled program.
+
+    **Accuracy has an SNR ceiling, not just a percentage** (#1671). The
+    LUT's forward photometry bias (measured 0.13-0.26 % on a 4-band
+    reference model) is constant in SNR — so no forward check can see it —
+    but it enters the posterior gradient multiplied by SNR: ~5 % relative
+    gradient error at SNR 30, ~50 % at SNR 300 on the same model. It is a
+    bias, not noise: it moves the posterior mode, and better data makes it
+    worse. Fits price this automatically — at run time one exact-vs-LUT
+    forward estimates ``max(bias x SNR)`` and a
+    :class:`~tengri.config.exceptions.PrecompBiasWarning` fires with the
+    number when it is material. For final inference at high SNR, rerun with
+    ``approx=None`` (exact path) or compare the two posteriors. The
+    spectroscopy analog (:class:`SpectrumPrecomp`) was measured as a
+    ~1-sigma posterior shift on a 50-pixel, 5 %-noise fixture (#1688).
     """
 
     n_z: int = 250
@@ -6797,33 +6811,59 @@ class SEDModel:
         if band_response is not None:
             result.setdefault("dust_ir", {})["emission_band_response"] = band_response
 
-        # ── Dust IR template libraries, keyed by component name ──
+        # ── Component template libraries, keyed [namespace][component name] ──
         #
-        # A template-backed emission backend that reads its grid inside
-        # ``predict`` freezes the whole library into the graph as ``Constant``
-        # ops — 66.6 MB for Draine & Li 2014, 39.4 for THEMIS, against a
-        # bare-stellar floor of 0.05 MB (#1649). Publishing the bundle here,
-        # loaded eagerly, lets ``EmissionComponent.apply`` hand it to
-        # ``predict`` as a traced argument instead.
+        # A template-backed component that reads its library inside ``predict``
+        # freezes the whole thing into the graph as ``Constant`` ops — 66.6 MB
+        # for Draine & Li 2014, 39.4 for THEMIS, 3.7 for the MAPPINGS V shock
+        # grid, against a bare-stellar floor of 0.05 MB (#1649, #1694).
+        # Publishing the bundle here, loaded eagerly, lets
+        # ``SEDModelComponent.apply`` hand it to ``predict`` as a traced
+        # argument instead.
         #
-        # Opt-in via ``accepts_threaded_templates`` because ``predict``
-        # signatures are per backend; the analytic ones have no library and
-        # must not receive the keyword.
-        from tengri.components.dust.emission._component_base import EmissionComponent
-
+        # Driven by the component's own ``accepts_threaded_templates`` flag
+        # rather than a list of classes, so a template-backed component added
+        # later threads the day it lands — it does not have to be named here.
+        # This walk used to be gated on ``isinstance(component, EmissionComponent)``,
+        # which is why the shock grid went on baking after the whole dust
+        # subsystem was fixed.
         for component in cached:
-            if not isinstance(component, EmissionComponent):
-                continue
             if not getattr(component, "accepts_threaded_templates", False):
                 continue
-            bundle = getattr(component, "data", None)
+            resolve = getattr(component, "templates_for_threading", None)
+            if resolve is None:
+                # Every component registered by this package inherits the seam
+                # (pinned by tests/contract/test_component_template_threading.py),
+                # so this only fires for a class registered from outside it. Say
+                # what to do rather than surfacing a bare AttributeError.
+                raise TypeError(
+                    f"Component {component.name!r} sets accepts_threaded_templates "
+                    f"but does not inherit TemplateThreading, so it has no "
+                    f"templates_for_threading(). Add "
+                    f"tengri.components.template_threading.TemplateThreading as a "
+                    f"base class."
+                )
+            bundle = resolve()
             if bundle is None:
-                try:
-                    bundle = component.load(None)
-                except Exception:
-                    bundle = None
-            if bundle is not None:
-                result.setdefault("dust_ir", {})[component.name] = bundle
+                continue
+            namespace = getattr(component, "template_namespace", "") or component.name
+            slot = result.setdefault(namespace, {})
+            if not isinstance(slot, dict):
+                # Some namespaces predate the name-keyed layout and hold a bare
+                # bundle (``result["nebular"]`` is the backend's grid itself,
+                # read by ``NebularSEDComponent`` as ``template_data["nebular"]``).
+                # Writing a name key into one would either raise deep inside a
+                # NamedTuple or silently corrupt a dict-like grid, and the damage
+                # would surface as wrong physics far from here.
+                raise ValueError(
+                    f"Component {component.name!r} declares "
+                    f"template_namespace={namespace!r}, but that namespace already "
+                    f"holds a bare {type(slot).__name__} bundle rather than a "
+                    f"name-keyed dict. Choose a distinct namespace (leaving "
+                    f"``template_namespace`` unset uses the component name, which "
+                    f"is unique by registry construction)."
+                )
+            slot[component.name] = bundle
 
         # The other additive emitters (X-ray, radio) are sums of rank-1 terms, so
         # they get a response *per term* rather than the single L_ir * R that dust's

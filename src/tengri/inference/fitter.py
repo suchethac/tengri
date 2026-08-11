@@ -500,6 +500,139 @@ def _has_line_adjacent_channel(model) -> bool:
     )
 
 
+#: Estimated relative posterior-gradient error above which the LUT bias warns.
+#: 0.05 is #1671's own headline: the measured 0.13 % photometry bias crosses
+#: it near SNR 30-40, i.e. exactly where the measurement showed the gradient
+#: going materially wrong while every forward check stayed clean.
+_LUT_BIAS_GRAD_WARN = 0.05
+
+
+def _central_params(spec):
+    """Free parameters at their declared prior medians, via ``unstandardize(0)``.
+
+    The probe point for the LUT-bias estimate. ``unstandardize(0.0)`` is the
+    declared prior's median for every distribution class — the same single
+    source of truth the hierarchical seam standardizes through (#1651) — so
+    no second defaults mechanism is invented. Stochastic-field latents probe
+    at the zero draw (the field's own prior median).
+    """
+    params = {}
+    for name in spec.free_params:
+        params[name] = spec.get_distribution(name).unstandardize(0.0)
+    if getattr(spec, "stochastic", False):
+        params["sfh_field_xi"] = jnp.zeros(spec.n_grid)
+    return params
+
+
+def _lut_forward_bias(exact_model, lut_model, data_type):
+    """Per-channel relative forward bias of the LUT, ``|lut - exact| / |exact|``.
+
+    One exact and one LUT forward at the central parameters. Cached on the
+    LUT clone keyed to the exact model's identity: a catalog constructs a
+    fitter per galaxy against the same resolved clone, and the bias is a
+    property of the model pair, not of the galaxy.
+
+    Parameters
+    ----------
+    exact_model : SEDModel or ForwardModel
+        The caller's un-resolved model — the exact path. Must be the SAME
+        model the LUT clone was resolved from: pairing models that differ in
+        anything but the LUT measures physics, not approximation.
+    lut_model : SEDModel or ForwardModel
+        The resolved clone.
+    data_type : {"photometry", "spectroscopy"}
+
+    Returns
+    -------
+    ndarray, shape (n_channels,)
+        Relative bias per band / pixel [dimensionless].
+    """
+    cache = getattr(lut_model, "_lut_forward_bias_cache", None)
+    if cache is not None and cache[0] is exact_model:
+        return cache[1]
+    params = _central_params(exact_model.spec)
+    if data_type == "photometry":
+        m_exact = np.asarray(exact_model.predict_photometry(params), dtype=float)
+        m_lut = np.asarray(lut_model.predict_photometry(params), dtype=float)
+    else:
+        m_exact = np.asarray(exact_model.predict_spectrum(params), dtype=float)
+        m_lut = np.asarray(lut_model.predict_spectrum(params), dtype=float)
+    bias = np.abs(m_lut - m_exact) / np.maximum(np.abs(m_exact), np.finfo(float).tiny)
+    # A frozen model just recomputes; the advisory still works.
+    with contextlib.suppress(Exception):
+        lut_model._lut_forward_bias_cache = (exact_model, bias)
+    return bias
+
+
+def _warn_if_lut_bias_amplified(exact_model, lut_model, data, noise, data_type, *, surface):
+    """#1671's measurement made operational: warn when ``bias x SNR`` is material.
+
+    The LUT's forward bias is constant in SNR, so no forward check can see
+    it; the posterior gradient error it produces is ``~ bias x SNR`` (the
+    chi-square gradient weighs the systematic offset by ``1/sigma``), moves
+    the mode, and grows with data quality (#1671; the spectroscopy sibling
+    was measured as a ~1-sigma posterior shift, #1688). This estimates
+    ``max_i(bias_i x SNR_i)`` from one exact-vs-LUT forward on THIS model
+    and this fit's data, and warns with the number and the remedy above
+    :data:`_LUT_BIAS_GRAD_WARN`.
+
+    Advisory contract: this function must never break a fit. Any failure in
+    the probe (a forward that cannot run at the central parameters, shape
+    mismatches, exotic data layouts) degrades to silence — the fit proceeds
+    exactly as it did before the advisory existed. ``data_type="joint"`` is
+    deliberately skipped: its data vector interleaves both channels and a
+    wrong pairing would produce a wrong number, which is worse than none.
+
+    Parameters
+    ----------
+    data, noise : array_like
+        The fit's observed vector and 1-sigma noise, flattened; batch
+        surfaces pass the per-galaxy concatenation.
+    surface : str
+        The fitting surface name, quoted in the warning.
+    """
+    if data_type not in ("photometry", "spectroscopy"):
+        return
+    try:
+        bias = _lut_forward_bias(exact_model, lut_model, data_type)
+        flat_data = np.asarray(data, dtype=float).reshape(-1)
+        flat_noise = np.asarray(noise, dtype=float).reshape(-1)
+        n = int(bias.shape[0])
+        if n == 0 or flat_data.size == 0 or flat_data.size % n != 0:
+            return
+        snr = np.abs(flat_data) / np.maximum(flat_noise, np.finfo(float).tiny)
+        est_all = bias[None, :] * snr.reshape(-1, n)
+        i_flat = int(np.nanargmax(est_all))
+        est = float(est_all.reshape(-1)[i_flat])
+        channel = i_flat % n
+        snr_at = float(snr[i_flat])
+        bias_at = float(bias[channel])
+    except Exception:
+        return
+    if not np.isfinite(est) or est <= _LUT_BIAS_GRAD_WARN:
+        return
+    from tengri.config.exceptions import PrecompBiasWarning, warn_measured
+
+    warn_measured(
+        f"{surface}: the precompute LUT's forward bias, amplified by this "
+        f"fit's SNR, gives an estimated relative posterior-gradient error "
+        f"of {est:.0%} (worst channel {channel}: forward bias "
+        f"{bias_at:.2%} at SNR {snr_at:.0f}). The bias is constant in SNR "
+        f"— invisible to any forward check — but enters the gradient "
+        f"multiplied by SNR, moves the mode, and better data makes it "
+        f"worse (#1671; spectroscopy sibling measured in #1688). For "
+        f"final inference at this SNR, rerun with approx=None (the exact "
+        f"path) or compare the two posteriors. Filter PrecompBiasWarning "
+        f"if this trade is deliberate.",
+        PrecompBiasWarning,
+        stacklevel=3,
+        gradient_error_estimate=est,
+        worst_channel=channel,
+        forward_bias=bias_at,
+        snr=snr_at,
+    )
+
+
 def _resolve_batch_fit_approx(model, approx, data_type):
     """Route a batch-fit model through the fit-time precompute policy.
 
@@ -935,6 +1068,15 @@ class Fitter:
         # wave-grid path; an explicit config (or tuple) overrides. Spec:
         # docs/superpowers/specs/2026-07-15-fit-precomp-default-design.md.
         self.model = self._resolve_fit_approx(model, approx)
+        # For the #1671 bias advisory in run(): when resolution produced a LUT
+        # clone, the caller's un-resolved object is the exact reference. When
+        # the caller built the LUT into the model themselves there is no exact
+        # reference and the check is skipped (with_approx(None) is not a safe
+        # substitute — see #1671's measurement-hygiene note). Deferred to
+        # run() so that merely constructing a fitter stays cheap: the probe
+        # costs one exact forward, and only an executed fit should pay it.
+        self._pre_approx_model = model if self.model is not model else None
+        self._lut_bias_checked = False
         self.spec = self.model.spec
 
         # Re-apply the fitted-mode emission-line amplitude merge. The
@@ -1104,22 +1246,51 @@ class Fitter:
             return obs.data_type
         return "photometry"
 
-    @staticmethod
-    def _fits_line_fluxes(model) -> bool:
+    def _line_fluxes_for(self, model):
+        """The line-flux config this fit scores against, for ``model``'s schema.
+
+        Parameters
+        ----------
+        model : SEDModel
+            The model whose ``observation`` carries the line schema.
+
+        Returns
+        -------
+        LineFluxData or None
+            The ``line_flux_data=`` override when one was supplied, else the
+            Observation's own ``line_fluxes``.
+
+        Notes
+        -----
+        THE one place a line-flux channel is resolved, because a channel with
+        two sources read separately is a channel two callers can disagree
+        about. The approx predicate read the attribute alone, so a fit
+        supplying its fluxes per galaxy (``line_flux_data=``, #1599) published
+        ``line_flux_waves`` and set ``has_line_fluxes`` in the loss while
+        classifying as photometry-only — and on a model built with
+        ``approx=WavePrecomp()`` it was then handed back untouched, losing the
+        ``FeaturePrecomp`` top-up at ~21x the per-gradient cost, with no
+        warning. A third source means editing this function and nothing else.
+        """
+        if self._line_flux_override is not None:
+            return self._line_flux_override
+        obs = getattr(model, "observation", None)
+        return getattr(obs, "line_fluxes", None) if obs is not None else None
+
+    def _fits_line_fluxes(self, model) -> bool:
         """Whether this fit has a measured emission-line-flux channel.
 
-        Reads ``observation.line_fluxes``, which is exactly what
-        :meth:`_build_data_args` reads to publish ``line_flux_waves`` and hence
+        Resolves through :meth:`_line_fluxes_for` — the same call
+        :meth:`_build_data_args` makes to publish ``line_flux_waves``, and hence
         what makes ``build_loss_fn`` set ``has_line_fluxes``. Single-sourcing
         the condition matters: the whole point is that the LUT is added when
         (and only when) the loss would otherwise pay for the full-grid forward,
         so the two must not be able to disagree.
 
         ``_data_args`` itself is not available here — it is built after the
-        approx policy resolves — so the underlying attribute is read directly.
+        approx policy resolves — so the channel is resolved directly.
         """
-        obs = getattr(model, "observation", None)
-        return getattr(obs, "line_fluxes", None) is not None
+        return self._line_fluxes_for(model) is not None
 
     def _resolved_line_fluxes(self):
         """The line-flux config this fit actually scores against.
@@ -1139,10 +1310,7 @@ class Fitter:
         two read different objects, a fit can compile the Gaussian adapter and
         then be handed a censored mask (#1599).
         """
-        if self._line_flux_override is not None:
-            return self._line_flux_override
-        obs = getattr(self.model, "observation", None)
-        return getattr(obs, "line_fluxes", None) if obs is not None else None
+        return self._line_fluxes_for(self.model)
 
     def _fits_lines(self, model) -> bool:
         """Whether any emission-line channel is fit, measured or marginalized.
@@ -2838,6 +3006,21 @@ class Fitter:
 
         # Resolve deprecated aliases and validate method
         method = resolve_method(method)
+
+        # #1671 made operational: this fit runs on a resolved precompute LUT,
+        # so price the LUT's forward bias against this fit's SNR once — the
+        # amplified estimate (bias x SNR) is what moves the posterior mode,
+        # and no forward-model check can see it. Once per fitter instance.
+        if not self._lut_bias_checked and self._pre_approx_model is not None:
+            self._lut_bias_checked = True
+            _warn_if_lut_bias_amplified(
+                self._pre_approx_model,
+                self.model,
+                self.data,
+                self.noise,
+                self.data_type,
+                surface="Fitter",
+            )
 
         # --- Smart lean: drop only stale L3 entries before this run ---
         # Default: lean=True. The smart-lean path (below) preserves the

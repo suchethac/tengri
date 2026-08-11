@@ -70,7 +70,22 @@ import sys
 #: zero in **float64**, and its test passed because the assertion was an
 #: inequality the collapse pushed the right way (#1604). It is now floored in the
 #: sigma domain at the working dtype's smallest normal.
-EXPECTED_SITES = 97
+#:
+#: 98 -> 100 on main: the #1671 bias advisory (``_lut_forward_bias`` /
+#: ``_warn_if_lut_bias_amplified`` in ``inference/fitter.py``). Both are the
+#: "zero is a legitimate answer" kind, inside an advisory that must never
+#: break a fit: a zero-flux channel's relative bias contributes 0 and drops
+#: out of the max (correct — it carries no bias information), and a
+#: zero-noise channel clamps SNR toward +huge, which OVER-warns rather than
+#: silences. The NaN-propagating form would invert the failure direction:
+#: one degenerate channel would poison ``max(bias x SNR)`` into NaN and
+#: silence the warning for every healthy channel.
+#:
+#: 97 + 100 - 98 = 99 at the ninth-round merge: the two counts moved off the
+#: same base of 98 in opposite directions and the merged tree carries BOTH
+#: sets of edits. The number below is the tool's own measured count on the
+#: merged tree, not that arithmetic — the arithmetic is only what predicted it.
+EXPECTED_SITES = 99
 
 SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 

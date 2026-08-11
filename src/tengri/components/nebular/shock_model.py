@@ -129,11 +129,41 @@ class ShockNebular(SEDModelComponent):
     inputs: ClassVar[dict[str, str]] = {}
     outputs: ClassVar[dict[str, str]] = {"sed_shock": "erg/s/Hz"}
 
+    #: The MAPPINGS V ratio cubes thread as a JIT argument rather than baking
+    #: into the graph. Without this the selected cube was an XLA ``Constant`` on
+    #: every compile — 3.73 MB against a 0.05 MB bare-stellar floor (#1694).
+    accepts_threaded_templates: ClassVar[bool] = True
+
+    def load(self, wave: jnp.ndarray | None = None) -> Any | None:
+        """Load the MAPPINGS V ratio cubes at build time.
+
+        Parameters
+        ----------
+        wave : ndarray, optional
+            Unused — the shock grid is wavelength-independent (it carries its
+            own line wavelengths). Present for the :meth:`load` contract.
+
+        Returns
+        -------
+        ShockTemplateGrid or None
+            ``None`` when ``data/mappings_templates.h5`` is absent, in which
+            case :meth:`predict` falls back to the hardcoded Allen+2008 subset
+            exactly as before.
+
+        Notes
+        -----
+        **JIT-compatible**: no — build-time only, which is the point.
+        """
+        from tengri.components.nebular.shock import load_shock_template_grid
+
+        return load_shock_template_grid()
+
     def predict(
         self,
         p: dict[str, Any],
         sed_in: jnp.ndarray,
         wave: jnp.ndarray,
+        templates: Any | None = None,
     ) -> tuple[jnp.ndarray, dict[str, jnp.ndarray]]:
         r"""Add MAPPINGS V shock emission to the running SED.
 
@@ -148,6 +178,11 @@ class ShockNebular(SEDModelComponent):
             Hα normalization only.
         wave : ndarray, shape (n_wave,)
             Rest-frame wavelength grid [Angstrom].
+        templates : ShockTemplateGrid, optional
+            MAPPINGS V ratio cubes, supplied by :meth:`apply` from the threaded
+            ``template_data`` so they arrive as a JIT argument rather than a
+            baked constant (#1694). ``None`` falls back to the module-level
+            cache — correct, but 3.73 MB per compile.
 
         Returns
         -------
@@ -246,6 +281,7 @@ class ShockNebular(SEDModelComponent):
             shock_b_over_sqrt_n=p["b_over_sqrt_n"],
             shock_abundance=self.config.abundance,
             shock_component=self.config.component,
+            templates=templates,
         )
         if _f32:
             shock_sed = apply_log10_scale(shock_sed, _SHOCK_LHA_LOG_REF)
@@ -333,7 +369,15 @@ class ShockNebular(SEDModelComponent):
         )
         # Full grid: identical call to the exact path, so the LUT is built from
         # the same shock SED the exact path adds to sed_intrinsic.
-        sed_out, published = self.predict(p, sed_in, state.wave)
+        #
+        # ``templates=`` matters more here than on the exact path, not less:
+        # ``approx="auto"`` resolves to WavePrecomp for every photometry fit, so
+        # this branch is what an inference run actually compiles. Threading only
+        # in ``super().apply`` would have fixed the forward path and left the
+        # 3.73 MB constant in place everywhere it is paid most (#1694).
+        sed_out, published = self.predict(
+            p, sed_in, state.wave, templates=self.threaded_templates(template_data)
+        )
 
         fw = state.derived.get("phot_filter_waves_padded")
         ft = state.derived.get("phot_filter_trans_padded")

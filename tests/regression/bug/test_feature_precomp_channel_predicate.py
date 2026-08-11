@@ -61,6 +61,29 @@ def _indices():
     return SpectralIndexData(index_defs=defs, values=jnp.array([1.4]), errors=jnp.array([0.02]))
 
 
+def _bare_fitter():
+    """A ``Fitter`` carrying only the attributes the policy predicates read.
+
+    ``Fitter.__init__`` wants data and a built model; these tests exercise the
+    predicates alone, so the instance is created bare and the attributes are
+    set by hand.
+
+    Centralized because it was hand-rolled at four sites, and #1691 — which
+    made ``_fits_line_fluxes`` an instance method reading
+    ``self._line_flux_override`` — broke three of them in one merge. The fourth
+    survived only because :meth:`Fitter._auto_approx_config` returns early for
+    a line-adjacent channel *before* ``_fits_lines`` is evaluated, so it was a
+    latent failure rather than a passing case. One constructor means the next
+    attribute a predicate starts reading is a one-line change here.
+    """
+    fitter = Fitter.__new__(Fitter)
+    fitter.data_type = "photometry"
+    fitter._eline_marginalize = False
+    fitter._eline_fitted = False
+    fitter._line_flux_override = None
+    return fitter
+
+
 @pytest.mark.parametrize(
     ("label", "kwargs", "expected"),
     [
@@ -112,7 +135,7 @@ def test_a_ratio_fit_is_not_classified_photometry_only():
     satisfied both halves.
     """
     model = _Model(_Obs(line_ratios=_ratios()))
-    assert not Fitter._fits_lines(Fitter.__new__(Fitter), model), (
+    assert not Fitter._fits_lines(_bare_fitter(), model), (
         "fixture no longer reproduces the misclassification: _fits_lines already "
         "counts ratios, so the guard below proves nothing"
     )
@@ -131,10 +154,7 @@ def test_a_line_flux_plus_ratio_fit_is_also_excluded():
     Widening ``_fits_lines`` cannot help here: it is already true. Only a
     predicate about what the LUT can serve excludes it.
     """
-    fitter = Fitter.__new__(Fitter)
-    fitter.data_type = "photometry"
-    fitter._eline_marginalize = False
-    fitter._eline_fitted = False
+    fitter = _bare_fitter()
 
     obs = _Obs(line_ratios=_ratios(), line_fluxes=object())
     model = _Model(obs)
@@ -158,10 +178,7 @@ def test_no_warning_advises_a_lut_that_cannot_be_used():
     """
     import warnings
 
-    fitter = Fitter.__new__(Fitter)
-    fitter.data_type = "photometry"
-    fitter._eline_marginalize = False
-    fitter._eline_fitted = False
+    fitter = _bare_fitter()
 
     model = _Model(_Obs(line_ratios=_ratios(), line_fluxes=object()))
     model.approx = None
@@ -176,10 +193,7 @@ def test_no_warning_advises_a_lut_that_cannot_be_used():
 
 def test_auto_approx_config_withholds_the_lut_from_ratio_fits():
     """The resolved config for a ratio fit must not contain FeaturePrecomp."""
-    fitter = Fitter.__new__(Fitter)
-    fitter.data_type = "photometry"
-    fitter._eline_marginalize = False
-    fitter._eline_fitted = False
+    fitter = _bare_fitter()
 
     model = _Model(_Obs(line_ratios=_ratios()))
     cfg = Fitter._auto_approx_config(fitter, model)

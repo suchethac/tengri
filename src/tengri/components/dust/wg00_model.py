@@ -29,6 +29,7 @@ from typing import Any
 
 import jax.numpy as jnp
 
+from tengri.components.template_threading import TemplateThreading
 from tengri.parameters.priors import Fixed
 from tengri.protocols.component import (
     DerivedKey,
@@ -83,7 +84,7 @@ class WG00AttenuationSEDComponentState(SEDComponentState):
 
 
 @dataclass(frozen=True)
-class WG00AttenuationSEDComponent:
+class WG00AttenuationSEDComponent(TemplateThreading):
     r"""SEDComponent for Witt & Gordon (2000) screen attenuation (FSPS ``dust_type=3``).
 
     Notes

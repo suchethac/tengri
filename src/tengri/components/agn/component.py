@@ -41,6 +41,7 @@ import jax.numpy as jnp
 from tengri.components.agn._params import PARAMS as _AGN_PARAMS
 from tengri.components.agn.blocks._protocol import collect_block_templates
 from tengri.components.agn.unified import resolve_agn_model
+from tengri.components.template_threading import TemplateThreading
 from tengri.components.xray.xray import COS_INC_REF_30DEG as _XRAY_COS_INC_REF_30DEG
 from tengri.parameters.resolve import require_redshift
 from tengri.protocols.component import (
@@ -160,7 +161,7 @@ class AGNSEDComponentState(SEDComponentState):
 
 
 @dataclass(frozen=True)
-class AGNSEDComponent:
+class AGNSEDComponent(TemplateThreading):
     """SEDComponent adapter for the unified AGN model registry.
 
     Notes

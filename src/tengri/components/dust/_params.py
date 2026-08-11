@@ -340,12 +340,12 @@ ATTENUATION_PARAMS: tuple[ParamDeclaration, ...] = (
         "dust_slope",
         Fixed(-0.7),
         "Dust power-law index",
-        # Deliberately NO free_prior -- see the shared note on the four
-        # law-dependent shape modifiers below (``dust_bump_strength``).
-        # The range this would take once the group wildcard is law-scoped:
-        # Uniform(-1.5, -0.3), bracketing Charlot & Fall (2000)'s two canonical
-        # values, n = -0.7 for the diffuse ISM (this default) and n = -1.3 for
-        # birth clouds.
+        # Brackets Charlot & Fall (2000)'s two canonical values: n = -0.7 for
+        # the diffuse ISM (this default) and n = -1.3 for birth clouds.
+        # Reached only by the laws that name it -- see the note on
+        # ``dust_bump_strength`` for why that scoping is what makes it
+        # declarable.
+        free_prior=Uniform(-1.5, -0.3, "Dust power-law index", default=-0.7),
     ),
     ParamDeclaration(
         "dust_f_obscuration",
@@ -368,41 +368,42 @@ ATTENUATION_PARAMS: tuple[ParamDeclaration, ...] = (
         "UV bump strength at 2175A (Kriek & Conroy 2013)",
         lambda lo, hi: lo >= 0,
         "must be >= 0",
-        # Deliberately NO free_prior -- and this covers ``dust_slope``,
-        # ``dust_delta`` and ``dust_Rv`` too. Each has a perfectly good range
-        # (noted per-parameter), but every one is read by only *some*
-        # attenuation laws, and the ``dust`` group wildcard is not scoped to the
-        # selected law. ``calzetti`` -- the default, and what all four recipes
-        # use -- is literally ``def calzetti(wavelength, **_kwargs)``: it
-        # discards all four and fixes R_V = 4.05 internally. Declaring them
-        # widened ``dust: all_params: FREE`` from the documented {tau_bc,
-        # tau_diff} to six parameters, four of them bit-exactly inert under the
-        # default law -- #1482's failure, re-created one group over.
+        # This note covers ``dust_slope``, ``dust_delta`` and ``dust_Rv`` too.
+        # Each is read by only *some* attenuation laws, so all four were held
+        # back while the ``dust`` group wildcard was unscoped: ``calzetti`` --
+        # the default, and what all four recipes use -- is literally
+        # ``def calzetti(wavelength, **_kwargs)``, discarding all four and
+        # fixing R_V = 4.05 internally. Declaring them then widened
+        # ``dust: all_params: FREE`` from the documented {tau_bc, tau_diff} to
+        # six parameters, four of them bit-exactly inert under the default law
+        # -- #1482's failure, one group over.
         #
-        # These become declarable once the group wildcard narrows to the
-        # selected law the way ``dust.emission`` narrows to the selected engine
-        # (parse_groups' ``dust_emission_wildcard_params``). That is the
-        # follow-up; until then the honest state is pinned-and-explicit.
+        # ``parse_groups`` now narrows the group wildcard to the parameters the
+        # selected ``law_bc``/``law_diff``/``law_neb`` actually name, read off
+        # their signatures (``_law_shape_params``). Under calzetti these four
+        # resolve to ``wildcard_fixed_inactive``; under cardelli ``dust_Rv``
+        # frees and the other three do not. So the range below is reachable
+        # exactly when some selected law reads it.
         #
-        # The range this would take: Uniform(0, 2). It is a *multiplier* on the
-        # KC13 bump amplitude, not the amplitude: attenuation.py computes
+        # A *multiplier* on the KC13 bump amplitude, not the amplitude:
+        # attenuation.py:426 computes
         # ``e_b = dust_bump_strength * (0.85 - 1.9 * dust_delta)`` (KC13 Eq. 3),
         # so 0 is bump-free (this default) and 1 is KC13 as published.
+        free_prior=Uniform(0.0, 2.0, "UV bump strength at 2175A", default=0.0),
     ),
     ParamDeclaration(
         "dust_delta",
         Fixed(0.0),
         "Attenuation curve slope modification",
-        # Deliberately NO free_prior -- see the shared note on
-        # ``dust_bump_strength`` above.
+        # Reached only by the laws that name it -- see ``dust_bump_strength``.
         #
-        # The range this would take: Uniform(-1.0, 0.4). Kriek & Conroy (2013)
-        # measure a mean delta = -0.2 across 0.5 < z < 2 star-forming galaxies,
-        # 0 recovering Calzetti and more negative values steepening toward
-        # SMC-like curves. The upper end is not taste: KC13 Eq. 3 gives
-        # e_b = 0.85 - 1.9*delta, which turns NEGATIVE above delta = 0.447 -- an
-        # inverted bump -- so 0.4 is where the bump amplitude stays positive
-        # across the whole range.
+        # Kriek & Conroy (2013) measure a mean delta = -0.2 across 0.5 < z < 2
+        # star-forming galaxies, 0 recovering Calzetti and more negative values
+        # steepening toward SMC-like curves. The upper end is not taste: KC13
+        # Eq. 3 gives e_b = 0.85 - 1.9*delta, which turns NEGATIVE above
+        # delta = 0.447 -- an inverted bump -- so 0.4 is where the bump
+        # amplitude stays positive across the whole range.
+        free_prior=Uniform(-1.0, 0.4, "Attenuation curve slope modification", default=0.0),
     ),
     ParamDeclaration(
         "dust_Rv",
@@ -410,16 +411,15 @@ ATTENUATION_PARAMS: tuple[ParamDeclaration, ...] = (
         "Total-to-selective extinction R_V (Cardelli)",
         lambda lo, hi: lo > 0,
         "must be > 0",
-        # Deliberately NO free_prior -- see the shared note on
-        # ``dust_bump_strength`` above. This is the clearest case of the four:
-        # only ``cardelli`` reads it, and ``calzetti`` fixes R_V = 4.05 in the
-        # curve itself, so under the default law the value is not merely
-        # ignored, it is contradicted.
+        # The clearest case of the four for why the wildcard must be law-scoped:
+        # ``cardelli`` and ``conroy2010`` read it, while ``calzetti`` fixes
+        # R_V = 4.05 in the curve itself -- so under the default law the value
+        # is not merely ignored, it is contradicted. See ``dust_bump_strength``.
         #
-        # The range this would take: Uniform(2.0, 6.0). R_V = 3.1 is the Milky
-        # Way diffuse-ISM mean (Cardelli, Clayton & Mathis 1989) and
-        # sightline-to-sightline variation spans roughly 2-6, dense clouds at
-        # the high end.
+        # R_V = 3.1 is the Milky Way diffuse-ISM mean (Cardelli, Clayton &
+        # Mathis 1989) and sightline-to-sightline variation spans roughly 2-6,
+        # dense clouds at the high end.
+        free_prior=Uniform(2.0, 6.0, "Total-to-selective extinction R_V", default=3.1),
     ),
 )
 

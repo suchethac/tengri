@@ -342,14 +342,26 @@ jobs:
       # and in no guard call. Finding it requires importing and evaluating.
       - run: python tools/check_float32_representable_constants.py
       - run: pytest tests/components/sps/test_alpha_fe.py tests/components/stellar/test_stellar_skeleton.py -q --no-header
-      # The `benchmark` tier: five tests that assert a wall-clock RATIO (fast path
+      # The `benchmark` tier: four tests that assert a wall-clock RATIO (fast path
       # vs exact path, cached vs cold). They are real regression guards — they catch
       # a precompute path silently degrading to the slow one — but they measure at
       # the ~30-60 us scale, where scheduler noise under `-n auto` swamps the signal:
-      # `test_fast_path_not_slower` failed the default run at 324 us vs 32 us, then
-      # passed 3/3 standalone. So they are deselected from the parallel gate in
+      # a wall-clock ratio failed the default run at 324 us vs 32 us, then passed
+      # 3/3 standalone. So they are deselected from the parallel gate in
       # pyproject and run HERE, serially (`-n 0`), where the ratio means something.
       # Serial is the whole point — do not "speed this up" with -n.
+      #
+      # It was five. `test_fast_path_not_slower` (dust precompute) left the tier
+      # in 2026-08 because a wall-clock ratio could not do its job: with the age
+      # grid closed over, XLA constant-folds the exact path down to the fast
+      # path's own cost — both compile to 1717 FLOPs, so a silent fallback was
+      # undetectable — while the 3x bound was loose enough to admit runner
+      # jitter and tight enough to trip on it (43.4 vs 13.3 us on main,
+      # 2026-08-11), skipping the whole `test` matrix downstream. It now
+      # compares compiled FLOPs with the grid traced (2573 vs 1717), which is
+      # deterministic and runs in the ordinary parallel sweep. Prefer that shape
+      # for any new guard here: measure compiled cost, not wall clock, whenever
+      # the question is "does this path do less work".
       - run: pytest tests/ -q --no-header -m 'benchmark and not slow and not crossval' -n 0
 
   test:

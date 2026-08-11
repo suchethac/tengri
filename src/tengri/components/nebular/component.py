@@ -17,8 +17,10 @@ line paths — and add the resulting line + continuum SED to ``sed_intrinsic``.
 
 from __future__ import annotations
 
+import inspect
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
+from functools import cache
 from typing import Any
 
 import jax.numpy as jnp
@@ -26,6 +28,7 @@ import numpy as np
 
 from tengri.components.nebular._constants import _LSUN_ERG
 from tengri.components.nebular.baked_in import BakedInBackend
+from tengri.components.template_threading import TemplateThreading
 from tengri.parameters.priors import Fixed, Uniform
 from tengri.parameters.resolve import require_redshift
 from tengri.protocols.component import (
@@ -38,6 +41,68 @@ from tengri.protocols.component import (
 from tengri.utils.scale import log10_magnitude
 
 __all__ = ["NebularSEDComponent", "NebularSEDComponentConfig"]
+
+#: Nebular parameters only some photoionization backends model. CB19 carries
+#: them as three of its six interpolation axes; CLOUDY, Cue and the baked-in
+#: backend have no such axes. They are threaded per backend by
+#: :func:`_backend_accepted_params` rather than added to the shared kwargs
+#: unconditionally.
+_BACKEND_OPTIONAL_PARAMS: tuple[str, ...] = ("neb_log_nH", "neb_co", "neb_dno")
+
+#: Backend methods the shared kwargs dict is splatted into. A parameter is
+#: threaded only when *every* method that exists names it, so a backend that
+#: models an axis in one call and not the other is never handed a value one of
+#: them would drop.
+_BACKEND_KWARG_SINKS: tuple[str, ...] = (
+    "predict_nebular_sed",
+    "predict_nebular_line_luminosities",
+)
+
+
+@cache
+def _backend_accepted_params(backend_cls: type) -> frozenset[str]:
+    """Which :data:`_BACKEND_OPTIONAL_PARAMS` this backend class names.
+
+    Parameters
+    ----------
+    backend_cls : type
+        Backend class (not instance), so the result caches per class.
+
+    Returns
+    -------
+    frozenset of str
+        Subset of :data:`_BACKEND_OPTIONAL_PARAMS` named by every method in
+        :data:`_BACKEND_KWARG_SINKS` the class defines.
+
+    Notes
+    -----
+    **JIT-compatible**: no — signature introspection, cached per class and
+    evaluated at apply time before entering any JAX transform.
+
+    Every backend's ``predict_nebular_sed`` ends in ``**kwargs``, so passing an
+    unmodeled parameter raises nothing — it is silently dropped, which is
+    indistinguishable from being read. The named parameters are therefore the
+    only honest test of whether a backend models an axis.
+
+    This is the general form of a defect measured on CB19: the component built
+    one shared kwargs dict that never contained ``neb_log_nH``, ``neb_co`` or
+    ``neb_dno``, so the backend received its signature defaults on every call
+    while the sampler was free to propose values. Sweeping each across its full
+    declared support moved the SED by exactly 0.0 — three free dimensions that
+    could not affect the fit, on a backend whose own docstring advertises being
+    differentiable through them.
+    """
+    accepted = set(_BACKEND_OPTIONAL_PARAMS)
+    for method_name in _BACKEND_KWARG_SINKS:
+        method = getattr(backend_cls, method_name, None)
+        if method is None:
+            continue
+        try:
+            named = set(inspect.signature(method).parameters)
+        except (TypeError, ValueError):  # pragma: no cover - C-implemented callables
+            return frozenset()
+        accepted &= named
+    return frozenset(accepted)
 
 
 @dataclass(frozen=True)
@@ -96,7 +161,7 @@ class NebularSEDComponentState(SEDComponentState):
 
 
 @dataclass(frozen=True)
-class NebularSEDComponent:
+class NebularSEDComponent(TemplateThreading):
     r"""SEDComponent adapter wrapping :class:`BakedInBackend`.
 
     Notes
@@ -523,6 +588,13 @@ class NebularSEDComponent:
             # profile width (Prospector-style). Default 100 km/s.
             "line_sigma_kms": jnp.asarray(params.get("neb_eline_sigma_kms", 100.0)),
         }
+        # Axes only some backends model (CB19's log_nH / log_CO / dNO). Passed
+        # only to a backend that names them; a value absent from ``params``
+        # falls through to the backend's own signature default, which matches
+        # the registry default for each, so the two cannot disagree.
+        for _name in _backend_accepted_params(type(self.backend)):
+            if _name in params:
+                common_kwargs[_name] = jnp.asarray(params[_name])
         # ── Diffuse-ionized-gas (DIG) mixing (issue #259) ─────────────
         # The DIG component is a second photoionization regime with a
         # lower ionization parameter (log U_DIG = log U_HII + Δlog U,
