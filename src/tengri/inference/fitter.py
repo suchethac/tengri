@@ -601,24 +601,25 @@ def _warn_if_lut_bias_amplified(exact_model, lut_model, data, noise, data_type, 
         return
     if not np.isfinite(est) or est <= _LUT_BIAS_GRAD_WARN:
         return
-    import warnings
+    from tengri.config.exceptions import PrecompBiasWarning, warn_measured
 
-    from tengri.config.exceptions import PrecompBiasWarning
-
-    warnings.warn(
-        PrecompBiasWarning(
-            f"{surface}: the precompute LUT's forward bias, amplified by this "
-            f"fit's SNR, gives an estimated relative posterior-gradient error "
-            f"of {est:.0%} (worst channel {channel}: forward bias "
-            f"{bias_at:.2%} at SNR {snr_at:.0f}). The bias is constant in SNR "
-            f"— invisible to any forward check — but enters the gradient "
-            f"multiplied by SNR, moves the mode, and better data makes it "
-            f"worse (#1671; spectroscopy sibling measured in #1688). For "
-            f"final inference at this SNR, rerun with approx=None (the exact "
-            f"path) or compare the two posteriors. Filter PrecompBiasWarning "
-            f"if this trade is deliberate."
-        ),
+    warn_measured(
+        f"{surface}: the precompute LUT's forward bias, amplified by this "
+        f"fit's SNR, gives an estimated relative posterior-gradient error "
+        f"of {est:.0%} (worst channel {channel}: forward bias "
+        f"{bias_at:.2%} at SNR {snr_at:.0f}). The bias is constant in SNR "
+        f"— invisible to any forward check — but enters the gradient "
+        f"multiplied by SNR, moves the mode, and better data makes it "
+        f"worse (#1671; spectroscopy sibling measured in #1688). For "
+        f"final inference at this SNR, rerun with approx=None (the exact "
+        f"path) or compare the two posteriors. Filter PrecompBiasWarning "
+        f"if this trade is deliberate.",
+        PrecompBiasWarning,
         stacklevel=3,
+        gradient_error_estimate=est,
+        worst_channel=channel,
+        forward_bias=bias_at,
+        snr=snr_at,
     )
 
 
