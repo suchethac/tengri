@@ -222,6 +222,20 @@ class WavePrecomp:
     ``data_args`` as a runtime input, #1316). ``Catalog`` remains the
     taught surface for a table of galaxies with a redshift column: one
     ingest, one validation, one compiled program.
+
+    **Accuracy has an SNR ceiling, not just a percentage** (#1671). The
+    LUT's forward photometry bias (measured 0.13-0.26 % on a 4-band
+    reference model) is constant in SNR — so no forward check can see it —
+    but it enters the posterior gradient multiplied by SNR: ~5 % relative
+    gradient error at SNR 30, ~50 % at SNR 300 on the same model. It is a
+    bias, not noise: it moves the posterior mode, and better data makes it
+    worse. Fits price this automatically — at run time one exact-vs-LUT
+    forward estimates ``max(bias x SNR)`` and a
+    :class:`~tengri.config.exceptions.PrecompBiasWarning` fires with the
+    number when it is material. For final inference at high SNR, rerun with
+    ``approx=None`` (exact path) or compare the two posteriors. The
+    spectroscopy analog (:class:`SpectrumPrecomp`) was measured as a
+    ~1-sigma posterior shift on a 50-pixel, 5 %-noise fixture (#1688).
     """
 
     n_z: int = 250

@@ -858,6 +858,12 @@ class _CatalogFitterOriginal:
         self.approx = approx
         self.galaxies = list(galaxies)
         self.n_galaxies = len(self.galaxies)
+        # For the #1671 bias advisory in run(): the exact reference when
+        # resolution produced a LUT clone. Deferred to run() so construction
+        # stays cheap; priced once for the whole catalog (the probe caches on
+        # the clone — one exact forward, not one per galaxy).
+        self._pre_approx_model = model if self.model is not model else None
+        self._lut_bias_checked = False
         self.data_type = data_type
         self._dummy_fitter = None
         self._catalog_linear_engine = None
@@ -976,6 +982,33 @@ class _CatalogFitterOriginal:
         """
         from tengri.inference._backend_registry import refuse_if_broken
         from tengri.inference.fitter import resolve_method
+
+        # #1671 made operational: this catalog fit runs on a resolved
+        # precompute LUT, so price the LUT's forward bias against the whole
+        # catalog's SNR once and warn with the number when the amplified
+        # estimate is material. Once per catalog fitter instance.
+        if not self._lut_bias_checked and self._pre_approx_model is not None:
+            self._lut_bias_checked = True
+            from tengri.inference.fitter import _warn_if_lut_bias_amplified
+
+            try:
+                all_flux = np.concatenate(
+                    [np.asarray(g["flux_obs"]).reshape(-1) for g in self.galaxies]
+                )
+                all_noise = np.concatenate(
+                    [np.asarray(g["noise"]).reshape(-1) for g in self.galaxies]
+                )
+            except Exception:
+                all_flux = all_noise = None
+            if all_flux is not None:
+                _warn_if_lut_bias_amplified(
+                    self._pre_approx_model,
+                    self.model,
+                    all_flux,
+                    all_noise,
+                    self.data_type,
+                    surface="CatalogFitter",
+                )
 
         # Auto-select store mode based on catalog size if not specified
         if store is None:

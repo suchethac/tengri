@@ -531,6 +531,11 @@ class PopulationFitter:
             return _resolve_batch_fit_approx(model_factory(*args, **kwargs), approx, data_type)
 
         self.model_factory = _fit_factory
+        # Kept for the #1671 bias advisory at fit time: the exact-path
+        # reference must be built from the RAW factory at the SAME arguments
+        # as the resolved model — pairing models that differ in anything but
+        # the LUT measures physics, not approximation.
+        self._raw_model_factory = model_factory
 
     @classmethod
     def _unknown_method_message(cls, method: str, method_map: dict) -> str:

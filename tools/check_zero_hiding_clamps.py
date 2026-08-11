@@ -55,7 +55,17 @@ import sys
 #: decreasing data to +/-6e28. The surviving implementation in
 #: ``utils/grid_interp`` gates the division *inputs* on the monotonicity
 #: condition instead, so no clamp is needed.
-EXPECTED_SITES = 98
+#:
+#: 98 -> 100: the #1671 bias advisory (``_lut_forward_bias`` /
+#: ``_warn_if_lut_bias_amplified`` in ``inference/fitter.py``). Both are the
+#: "zero is a legitimate answer" kind, inside an advisory that must never
+#: break a fit: a zero-flux channel's relative bias contributes 0 and drops
+#: out of the max (correct — it carries no bias information), and a
+#: zero-noise channel clamps SNR toward +huge, which OVER-warns rather than
+#: silences. The NaN-propagating form would invert the failure direction:
+#: one degenerate channel would poison ``max(bias x SNR)`` into NaN and
+#: silence the warning for every healthy channel.
+EXPECTED_SITES = 100
 
 SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 
