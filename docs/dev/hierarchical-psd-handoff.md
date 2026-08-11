@@ -1744,18 +1744,46 @@ sweep, which is what allowed the confound above to be settled.)
 
 ---
 
-## 5. The funnel (not yet addressed)
+## 5. The funnel (remedy now usable; not yet measured)
 
 `s = L(σ,τ)·ξ` is **bilinear**, so the (σ, ξ) geometry is a funnel. Symptoms:
 static HMC R̂(σ) = 4.42 at 1000/1000 and still 1.61 at 4000/4000 while ξ's own
 R̂ is 0.994–0.998; and seed-to-seed swings of σ from 0.597 to 1.000.
 
-Machinery exists but is **not usable yet**: `compute_field_gp(..., centering=a)`
-is wired (commit `dfec36027`), with `drw_partial_gp_from_zeta` and
-`drw_latent_log_prior` from #1355. To sample `a < 1` the loss needs its prior
-term corrected at `src/tengri/inference/loss_functions.py:478` — the prior on ζ
-becomes `N(0, σ_s^(2−2a) I)`, and the `−n(1−a)·log σ_s` normalizer is **not
-optional**.
+**The machinery is now usable — this section said otherwise, and that was stale
+(2026-08-11).** It read "not usable yet: … the loss needs its prior term
+corrected at `loss_functions.py:478`". That correction landed with #1566.
+`_prior_penalty` takes `centering`, calls `drw_latent_log_prior` when `a ≠ 1`,
+and **raises** when `psd_sigma_dex` is absent rather than silently scoring `a<1`
+as if `a=1`; `build_loss_fn` threads `spec.field_centering` into it. Select it
+with `sfh={'field_centering': a}`.
+
+The stale text mattered: it told the next reader the one remedy for this funnel
+was blocked, when it was not.
+
+**Verified as a reparameterization, not a different model.** `a = 1` and `a < 1`
+must describe the same `p(σ, s)`. Converting both latent densities to the field
+density and scanning σ over 0.2–1.5 dex:
+
+======  ==========================
+``a``   field-density residual std
+======  ==========================
+1.00    1.2e-15
+0.75    2.1e-15
+0.50    2.4e-15
+0.25    2.1e-15
+0.00    1.9e-15
+======  ==========================
+
+Flat to floating point, zero slope in σ, so the `−n(1−a)·log σ_s` normalizer is
+present and correct. Pinned by
+``tests/regression/bug/test_field_centering_is_a_reparameterization.py``.
+
+**A warning for anyone re-deriving this.** The *raw latent-space* difference
+between `a` and `a=1` is `n(1−a)·log σ_s` and is **supposed to be** — it is the
+Jacobian of `ζ = σ_s^(1−a) ξ`. Testing for a flat latent-space residual inverts
+the verdict: flat would mean the normalizer was *dropped*. Compare field
+densities, not latent ones.
 
 **NUTS has never been run here.** Every fit this session is `mcmc_hmc` with
 fixed `n_leapfrog_steps=100` — the sampler least equipped for varying curvature.
