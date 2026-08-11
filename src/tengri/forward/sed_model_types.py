@@ -4,10 +4,11 @@
 from __future__ import annotations
 
 import dataclasses
-import warnings
 from typing import NamedTuple
 
 import jax.numpy as jnp
+
+from tengri.config.exceptions import warn_measured
 
 # ── MockData container ────────────────────────────────────────────
 
@@ -267,11 +268,14 @@ class PriorPredictive:
         total = flux_np.size
         frac_bad = (n_nan + n_inf) / max(total, 1)
         if n_nan + n_inf > 0:
-            warnings.warn(
+            warn_measured(
                 f"prior_predictive: {n_nan} NaN and {n_inf} Inf values in flux draws "
                 f"({frac_bad:.1%} of total). Check priors for extreme parameter combinations.",
                 UserWarning,
                 stacklevel=2,
+                frac_bad=frac_bad,
+                n_nan=n_nan,
+                n_inf=n_inf,
             )
         return {"n_nan": n_nan, "n_inf": n_inf, "frac_bad": frac_bad, "ok": (n_nan + n_inf == 0)}
 

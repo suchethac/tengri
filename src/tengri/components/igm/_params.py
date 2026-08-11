@@ -25,21 +25,37 @@ from tengri.parameters.priors import Fixed, Uniform
 from tengri.protocols.component import ParamDeclaration, declared_default
 
 PARAMS: tuple[ParamDeclaration, ...] = (
+    # The three CGM damping-wing knobs describe a sigmoid in redshift, so their
+    # ranges come from the epoch the sigmoid has to span rather than from a
+    # tabulated grid. Bounds are reasoned from established landmarks and stated
+    # here rather than attributed to a paper that does not set them.
     ParamDeclaration(
         "igm_z_mid",
         Fixed(7.0),
         "CGM damping-wing sigmoid midpoint redshift [dimensionless]",
+        # Brackets the reionization epoch: transmission in the Lyman-alpha
+        # forest shows it is essentially complete by z ~ 5.5, and it is well
+        # underway by z ~ 12. A midpoint outside that is not a midpoint.
+        free_prior=Uniform(5.0, 12.0, "Damping-wing midpoint redshift", default=7.0),
     ),
     ParamDeclaration(
         "igm_dz",
         Fixed(0.5),
         "CGM damping-wing sigmoid width [dimensionless]",
+        # Below ~0.1 the sigmoid is a step at any redshift sampling the model
+        # uses; above ~3 it is broader than the epoch it is meant to describe
+        # and stops being a transition at all.
+        free_prior=Uniform(0.1, 3.0, "Damping-wing width", default=0.5),
     ),
     ParamDeclaration(
         "igm_log_nhi",
         Fixed(20.0),
         "CGM plateau log10(N_HI / cm^-2) [dimensionless]",
         units="log10(cm^-2)",
+        # Spans Lyman-limit systems (log N_HI ~ 17.2, where the gas first turns
+        # optically thick at the Lyman edge) through the damped Lyman-alpha
+        # threshold at 20.3 and a little beyond.
+        free_prior=Uniform(17.0, 21.0, "CGM plateau column", units="log10(cm^-2)", default=20.0),
     ),
 )
 
@@ -59,6 +75,8 @@ PATCHY_PARAMS: tuple[ParamDeclaration, ...] = (
         "Ionized bubble radius in proper Mpc for patchy IGM (Mason+2018; 0.1-100)",
         lambda lo, hi: lo > 0,
         "must be > 0",
+        # The interval this description already states, alongside its source.
+        free_prior=Uniform(0.1, 100.0, "Ionized bubble radius", units="Mpc", default=10.0),
     ),
 )
 
@@ -78,6 +96,12 @@ DLA_PARAMS: tuple[ParamDeclaration, ...] = (
         "dla_z",
         Fixed(0.0),
         "Redshift of DLA absorber (defaults to source z if fixed at 0)",
+        # Deliberately NO free_prior. 0 is not a value here, it is a sentinel
+        # meaning "put the absorber at the source redshift". A prior would give
+        # that sentinel measure zero and silently change what the default means
+        # -- and no interval is right in any case, since a foreground absorber
+        # can sit anywhere between the observer and the source. Free it
+        # explicitly against your own source redshift.
     ),
     ParamDeclaration(
         "dla_temp",
@@ -86,6 +110,11 @@ DLA_PARAMS: tuple[ParamDeclaration, ...] = (
         lambda lo, hi: lo > 0,
         "must be > 0",
         units="K",
+        # DLA gas is cool neutral hydrogen; the range spans the cold neutral
+        # medium up to the warm phase, with the canonical 1e4 K as default. It
+        # enters the Voigt profile only through the thermal width, which goes as
+        # sqrt(T), so the observable spans a factor ~2.4 across this range.
+        free_prior=Uniform(3.0e3, 3.0e4, "DLA gas temperature", units="K", default=1e4),
     ),
     ParamDeclaration(
         "dla_b_turb",
@@ -94,6 +123,11 @@ DLA_PARAMS: tuple[ParamDeclaration, ...] = (
         lambda lo, hi: lo >= 0,
         "must be >= 0",
         units="km/s",
+        # Added in quadrature with the thermal width, so 0 (the default) means
+        # a purely thermal profile. The ceiling is set by where "turbulence"
+        # stops being a sensible description of a single absorber's kinematics
+        # and becomes unresolved velocity structure.
+        free_prior=Uniform(0.0, 50.0, "DLA turbulent broadening", units="km/s", default=0.0),
     ),
 )
 

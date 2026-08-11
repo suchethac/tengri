@@ -27,6 +27,7 @@ Re-exported here from emission.py:
 
 """
 
+import functools
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -120,7 +121,7 @@ DUST_EMISSION_MODELS: dict[str, Callable] = {}
 # Template-based DL07: create from grid file
 
 
-def create_dl07_from_grid(grid_path: str) -> Callable:
+def create_dl07_from_grid(grid_path: str | dict) -> Callable:
     r"""Create a DL07 emission model function backed by tabulated templates.
 
     Loads the HDF5 grid once and returns a function matching the emission
@@ -148,7 +149,11 @@ def create_dl07_from_grid(grid_path: str) -> Callable:
     >>> DUST_EMISSION_MODELS["dl07_tabulated"] = dl07  # optional: register
     >>> sed_ir = dl07(wavelength, L_absorbed, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=2.5)
     """
-    templates = load_draine_li_templates(grid_path)
+    # A dict means the caller already loaded the grid — typically the component,
+    # so the arrays can be threaded into jit rather than baked (#1649). Building
+    # this closure over traced arrays is fine; only capture of *concrete* arrays
+    # freezes into the graph.
+    templates = grid_path if isinstance(grid_path, dict) else load_draine_li_templates(grid_path)
 
     # Pre-extract arrays for the closure
     single_u = templates["single_u"]  # (n_qpah, n_umin, n_wave)
@@ -358,6 +363,132 @@ def load_draine_li_templates(filepath: str) -> dict:
 # Create DL14 and register functions
 
 
+def dl14_sed_from_grid(
+    templates: dict,
+    wavelength_aa: jnp.ndarray,
+    L_absorbed: float,
+    dust_umin: float = 1.0,
+    dust_gamma_dl: float = 0.01,
+    dust_qpah: float = 2.5,
+    dust_alpha_dl14: float = 2.0,
+    **_kwargs,
+) -> jnp.ndarray:
+    """DL14 emission from tabulated templates.
+
+    j_nu = (1-gamma) * single_U(q_PAH, U_min)
+         + gamma * R * powerlaw(q_PAH, U_min, alpha)
+
+    where ``R = R(U_min, U_max, alpha)`` is the DL14/DL07 Eq. 33 relative
+    luminosity of the power-law (PDR) component (U_max=1e7). It converts the
+    dust-mass fraction ``gamma`` into the correct luminosity weighting; see
+    ``_pdr_luminosity_weight``.
+
+    Normalized to L_absorbed via energy balance.
+
+    Parameters
+    ----------
+    wavelength_aa : array_like, shape (n_wave,)
+        Rest-frame wavelength grid [Å].
+    L_absorbed : float
+        Total absorbed luminosity [Lsun].
+    dust_umin : float
+        Minimum radiation field intensity [dimensionless]. Default: 1.0.
+    dust_gamma_dl : float
+        Mixing fraction for power-law component [dimensionless]. Default: 0.01.
+    dust_qpah : float
+        PAH mass fraction [dimensionless]. Default: 2.5.
+    dust_alpha_dl14 : float
+        Radiation field power-law slope [dimensionless]. Default: 2.0.
+    **_kwargs
+        Extra keyword arguments (ignored).
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Dust emission L_ν [Lsun/Hz].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+
+    **Gradient-safe**: yes — differentiable everywhere.
+    """
+    single_u = jnp.asarray(templates["single_u"])  # (n_qpah, n_umin, n_wave)
+    powerlaw = jnp.asarray(templates["powerlaw"])  # (n_qpah, n_umin, n_alpha, n_wave)
+    tmpl_wave = jnp.asarray(templates["wavelength"])
+    umin_grid = jnp.asarray(templates["umin_grid"])
+    qpah_grid = jnp.asarray(templates["qpah_grid"])
+    alpha_grid = jnp.asarray(templates["alpha_grid"])
+
+    # Clip parameters to grid bounds
+    dust_umin_c = jnp.clip(dust_umin, umin_grid[0], umin_grid[-1])
+    dust_qpah_c = jnp.clip(dust_qpah, qpah_grid[0], qpah_grid[-1])
+    dust_alpha_c = jnp.clip(dust_alpha_dl14, alpha_grid[0], alpha_grid[-1])
+
+    # Interpolation indices and fractions
+    n_u = umin_grid.shape[0]
+    n_q = qpah_grid.shape[0]
+    n_a = alpha_grid.shape[0]
+
+    i_u = jnp.clip(jnp.searchsorted(umin_grid, dust_umin_c) - 1, 0, n_u - 2)
+    i_q = jnp.clip(jnp.searchsorted(qpah_grid, dust_qpah_c) - 1, 0, n_q - 2)
+    i_a = jnp.clip(jnp.searchsorted(alpha_grid, dust_alpha_c) - 1, 0, n_a - 2)
+
+    fu = (dust_umin_c - umin_grid[i_u]) / (umin_grid[i_u + 1] - umin_grid[i_u])
+    fq = (dust_qpah_c - qpah_grid[i_q]) / (qpah_grid[i_q + 1] - qpah_grid[i_q])
+    fa = (dust_alpha_c - alpha_grid[i_a]) / (alpha_grid[i_a + 1] - alpha_grid[i_a])
+
+    # Bilinear interpolation for single-U (q_PAH, U_min)
+    def _bilinear(grid):
+        """Perform 2D linear interpolation over qpah and Umin axes."""
+        return (
+            (1.0 - fq) * (1.0 - fu) * grid[i_q, i_u]
+            + (1.0 - fq) * fu * grid[i_q, i_u + 1]
+            + fq * (1.0 - fu) * grid[i_q + 1, i_u]
+            + fq * fu * grid[i_q + 1, i_u + 1]
+        )
+
+    # Trilinear interpolation for powerlaw (q_PAH, U_min, alpha)
+    def _trilinear(grid):
+        """Perform 3D linear interpolation over qpah, Umin, and alpha axes."""
+
+        # Interpolate at alpha[i_a] and alpha[i_a+1] via bilinear in (q, u)
+        def _bilinear_at_alpha(ia_idx):
+            """Interpolate bilinearly at fixed alpha index."""
+            return (
+                (1.0 - fq) * (1.0 - fu) * grid[i_q, i_u, ia_idx]
+                + (1.0 - fq) * fu * grid[i_q, i_u + 1, ia_idx]
+                + fq * (1.0 - fu) * grid[i_q + 1, i_u, ia_idx]
+                + fq * fu * grid[i_q + 1, i_u + 1, ia_idx]
+            )
+
+        lo = _bilinear_at_alpha(i_a)
+        hi = _bilinear_at_alpha(i_a + 1)
+        return (1.0 - fa) * lo + fa * hi
+
+    # Mix single-U (diffuse) and power-law (PDR) components. ``gamma`` is a
+    # dust-mass fraction; weight the PDR template by its DL14 relative
+    # luminosity R(U_min, U_max, alpha) so it is applied as a luminosity
+    # fraction (see ``_pdr_luminosity_weight``; same fix as DL07).
+    r_power = _pdr_luminosity_weight(dust_umin_c, _DL14_UMAX_POWERLAW, dust_alpha_c)
+    template = (1.0 - dust_gamma_dl) * _bilinear(single_u) + (
+        dust_gamma_dl * r_power
+    ) * _trilinear(powerlaw)
+
+    # Normalize template to enforce energy balance: ∫L_nu dnu = L_absorbed.
+    # Templates may be stored in arbitrary units; normalization makes scaling exact.
+    # (Same approach as DL07 loader; DL14 stores j_nu so no L_lambda→L_nu conversion.)
+    nu_tmpl = _C_CGS / (tmpl_wave * _AA_TO_CM)
+    sort_tmpl = jnp.argsort(nu_tmpl)
+    tmpl_integral = jnp.trapezoid(template[sort_tmpl], nu_tmpl[sort_tmpl])
+    template_norm = template / jnp.maximum(jnp.abs(tmpl_integral), 1e-100)
+
+    # Interpolate normalized template onto target wavelength grid
+    sed = resample_template(wavelength_aa, tmpl_wave, template_norm, left=0.0, right=0.0)
+
+    return L_absorbed * sed
+
+
 def create_dl14_from_grid(grid_path: str) -> Callable:
     r"""Create a DL14 emission model function backed by tabulated templates.
 
@@ -389,133 +520,7 @@ def create_dl14_from_grid(grid_path: str) -> Callable:
     ...     wav, L_abs, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=2.5, dust_alpha_dl14=2.0
     ... )
     """
-    templates = load_dl14_templates(grid_path)
-
-    single_u = templates["single_u"]  # (n_qpah, n_umin, n_wave)
-    powerlaw = templates["powerlaw"]  # (n_qpah, n_umin, n_alpha, n_wave)
-    tmpl_wave = templates["wavelength"]
-    umin_grid = templates["umin_grid"]
-    qpah_grid = templates["qpah_grid"]
-    alpha_grid = templates["alpha_grid"]
-
-    def dl14_tabulated(
-        wavelength_aa: jnp.ndarray,
-        L_absorbed: float,
-        dust_umin: float = 1.0,
-        dust_gamma_dl: float = 0.01,
-        dust_qpah: float = 2.5,
-        dust_alpha_dl14: float = 2.0,
-        **_kwargs,
-    ) -> jnp.ndarray:
-        """DL14 emission from tabulated templates.
-
-        j_nu = (1-gamma) * single_U(q_PAH, U_min)
-             + gamma * R * powerlaw(q_PAH, U_min, alpha)
-
-        where ``R = R(U_min, U_max, alpha)`` is the DL14/DL07 Eq. 33 relative
-        luminosity of the power-law (PDR) component (U_max=1e7). It converts the
-        dust-mass fraction ``gamma`` into the correct luminosity weighting; see
-        ``_pdr_luminosity_weight``.
-
-        Normalized to L_absorbed via energy balance.
-
-        Parameters
-        ----------
-        wavelength_aa : array_like, shape (n_wave,)
-            Rest-frame wavelength grid [Å].
-        L_absorbed : float
-            Total absorbed luminosity [Lsun].
-        dust_umin : float
-            Minimum radiation field intensity [dimensionless]. Default: 1.0.
-        dust_gamma_dl : float
-            Mixing fraction for power-law component [dimensionless]. Default: 0.01.
-        dust_qpah : float
-            PAH mass fraction [dimensionless]. Default: 2.5.
-        dust_alpha_dl14 : float
-            Radiation field power-law slope [dimensionless]. Default: 2.0.
-        **_kwargs
-            Extra keyword arguments (ignored).
-
-        Returns
-        -------
-        ndarray, shape (n_wave,)
-            Dust emission L_ν [Lsun/Hz].
-
-        Notes
-        -----
-        **JIT-compatible**: yes — all operations are ``jnp`` primitives.
-
-        **Gradient-safe**: yes — differentiable everywhere.
-        """
-        # Clip parameters to grid bounds
-        dust_umin_c = jnp.clip(dust_umin, umin_grid[0], umin_grid[-1])
-        dust_qpah_c = jnp.clip(dust_qpah, qpah_grid[0], qpah_grid[-1])
-        dust_alpha_c = jnp.clip(dust_alpha_dl14, alpha_grid[0], alpha_grid[-1])
-
-        # Interpolation indices and fractions
-        n_u = len(umin_grid)
-        n_q = len(qpah_grid)
-        n_a = len(alpha_grid)
-
-        i_u = jnp.clip(jnp.searchsorted(umin_grid, dust_umin_c) - 1, 0, n_u - 2)
-        i_q = jnp.clip(jnp.searchsorted(qpah_grid, dust_qpah_c) - 1, 0, n_q - 2)
-        i_a = jnp.clip(jnp.searchsorted(alpha_grid, dust_alpha_c) - 1, 0, n_a - 2)
-
-        fu = (dust_umin_c - umin_grid[i_u]) / (umin_grid[i_u + 1] - umin_grid[i_u])
-        fq = (dust_qpah_c - qpah_grid[i_q]) / (qpah_grid[i_q + 1] - qpah_grid[i_q])
-        fa = (dust_alpha_c - alpha_grid[i_a]) / (alpha_grid[i_a + 1] - alpha_grid[i_a])
-
-        # Bilinear interpolation for single-U (q_PAH, U_min)
-        def _bilinear(grid):
-            """Perform 2D linear interpolation over qpah and Umin axes."""
-            return (
-                (1.0 - fq) * (1.0 - fu) * grid[i_q, i_u]
-                + (1.0 - fq) * fu * grid[i_q, i_u + 1]
-                + fq * (1.0 - fu) * grid[i_q + 1, i_u]
-                + fq * fu * grid[i_q + 1, i_u + 1]
-            )
-
-        # Trilinear interpolation for powerlaw (q_PAH, U_min, alpha)
-        def _trilinear(grid):
-            """Perform 3D linear interpolation over qpah, Umin, and alpha axes."""
-
-            # Interpolate at alpha[i_a] and alpha[i_a+1] via bilinear in (q, u)
-            def _bilinear_at_alpha(ia_idx):
-                """Interpolate bilinearly at fixed alpha index."""
-                return (
-                    (1.0 - fq) * (1.0 - fu) * grid[i_q, i_u, ia_idx]
-                    + (1.0 - fq) * fu * grid[i_q, i_u + 1, ia_idx]
-                    + fq * (1.0 - fu) * grid[i_q + 1, i_u, ia_idx]
-                    + fq * fu * grid[i_q + 1, i_u + 1, ia_idx]
-                )
-
-            lo = _bilinear_at_alpha(i_a)
-            hi = _bilinear_at_alpha(i_a + 1)
-            return (1.0 - fa) * lo + fa * hi
-
-        # Mix single-U (diffuse) and power-law (PDR) components. ``gamma`` is a
-        # dust-mass fraction; weight the PDR template by its DL14 relative
-        # luminosity R(U_min, U_max, alpha) so it is applied as a luminosity
-        # fraction (see ``_pdr_luminosity_weight``; same fix as DL07).
-        r_power = _pdr_luminosity_weight(dust_umin_c, _DL14_UMAX_POWERLAW, dust_alpha_c)
-        template = (1.0 - dust_gamma_dl) * _bilinear(single_u) + (
-            dust_gamma_dl * r_power
-        ) * _trilinear(powerlaw)
-
-        # Normalize template to enforce energy balance: ∫L_nu dnu = L_absorbed.
-        # Templates may be stored in arbitrary units; normalization makes scaling exact.
-        # (Same approach as DL07 loader; DL14 stores j_nu so no L_lambda→L_nu conversion.)
-        nu_tmpl = _C_CGS / (tmpl_wave * _AA_TO_CM)
-        sort_tmpl = jnp.argsort(nu_tmpl)
-        tmpl_integral = jnp.trapezoid(template[sort_tmpl], nu_tmpl[sort_tmpl])
-        template_norm = template / jnp.maximum(jnp.abs(tmpl_integral), 1e-100)
-
-        # Interpolate normalized template onto target wavelength grid
-        sed = resample_template(wavelength_aa, tmpl_wave, template_norm, left=0.0, right=0.0)
-
-        return L_absorbed * sed
-
-    return dl14_tabulated
+    return functools.partial(dl14_sed_from_grid, load_dl14_templates(grid_path))
 
 
 def load_dl14_templates(filepath: str) -> dict:
@@ -974,7 +979,7 @@ def load_dale2014_templates(filepath: str) -> dict:
     return result
 
 
-def create_schreiber2018_from_grid(grid_path: str) -> Callable:
+def create_schreiber2018_from_grid(grid_path: str | dict) -> Callable:
     r"""Create a Schreiber+2018 (S17) cold-dust model backed by tabulated templates.
 
     This is the tabulated counterpart of the analytic ``schreiber2016`` model:
@@ -1018,20 +1023,14 @@ def create_schreiber2018_from_grid(grid_path: str) -> Callable:
            (https://doi.org/10.1051/0004-6361/201731506).
     .. [2] Martinez-Ramirez et al. 2024, A&A, 688, A46 (AGNfitter-rX packaging).
     """
-    import h5py as _h5py
-    import numpy as np
+    # A dict means the caller already loaded the grid — typically the component,
+    # so the arrays can be threaded into jit rather than baked (#1649).
+    grid = grid_path if isinstance(grid_path, dict) else load_schreiber2018_templates(grid_path)
 
-    with _h5py.File(grid_path, "r") as f:
-        g = f["schreiber2018"]
-        tdust_np = np.asarray(g["tdust"][:], dtype=np.float64)
-        wave_np = np.asarray(g["wavelength"][:], dtype=np.float64)
-        dust_np = np.asarray(g["dust"][:], dtype=np.float64)
-        pah_np = np.asarray(g["pah"][:], dtype=np.float64)
-
-    tdust = jnp.array(tdust_np, dtype=jnp.float64)
-    tmpl_wave = jnp.array(wave_np, dtype=jnp.float64)
-    dust_templates = jnp.array(dust_np, dtype=jnp.float64)
-    pah_templates = jnp.array(pah_np, dtype=jnp.float64)
+    tdust = jnp.asarray(grid["tdust"])
+    tmpl_wave = jnp.asarray(grid["wavelength"])
+    dust_templates = jnp.asarray(grid["dust"])
+    pah_templates = jnp.asarray(grid["pah"])
 
     def schreiber2018_tabulated(
         wavelength_aa: jnp.ndarray,
@@ -2403,7 +2402,15 @@ def create_themis_from_grid(template_data: dict | str) -> Callable:
     powerlaw = template_data["powerlaw"]  # (n_qhac, n_umin, n_wave)
     tmpl_wave = template_data["wavelength_aa"]
     umin_grid = template_data["umin_grid"]
-    qhac_grid = _qhac_axis_to_cigale(template_data["qhac_grid"])
+    # ``_qhac_axis_to_cigale`` reads a concrete max to pick a unit convention,
+    # so it cannot run on traced arrays. When the caller threaded this grid in
+    # (see EmissionComponent.threaded_templates) it supplies the axis already
+    # converted, under a distinct key. The membership test is Python-level and
+    # therefore safe under trace; the conversion itself stays eager (#1649).
+    if "qhac_grid_cigale" in template_data:
+        qhac_grid = template_data["qhac_grid_cigale"]
+    else:
+        qhac_grid = _qhac_axis_to_cigale(template_data["qhac_grid"])
 
     # Optional: alpha-dependent PDR component
     alpha_grid = template_data.get("alpha_grid", None)

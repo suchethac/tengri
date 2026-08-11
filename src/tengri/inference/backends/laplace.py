@@ -15,14 +15,13 @@ then transforms samples to physical space.
 from __future__ import annotations
 
 import time
-import warnings
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 from jax.flatten_util import ravel_pytree
 
-from tengri.config.exceptions import LaplaceNotAtModeWarning
+from tengri.config.exceptions import LaplaceNotAtModeWarning, warn_measured
 from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physical
 
 # Newton decrement above which the expansion point is reported as off-mode
@@ -249,7 +248,7 @@ def run_laplace(
     indefinite = not bool(jnp.all(eigenvalues_clipped > 0))
     if indefinite:
         n_bad = int(jnp.sum(eigenvalues_clipped <= 0))
-        warnings.warn(
+        warn_measured(
             f"Laplace Hessian is indefinite at the expansion point: "
             f"{n_bad}/{n_dim} eigenvalues are non-positive (most negative "
             f"{float(jnp.min(eigenvalues_clipped)):.4g}), gradient norm "
@@ -261,9 +260,13 @@ def run_laplace(
             f"from a different start.",
             LaplaceNotAtModeWarning,
             stacklevel=2,
+            grad_norm=grad_norm,
+            newton_decrement=decrement,
+            n_nonpositive_eigenvalues=n_bad,
+            min_eigenvalue=float(jnp.min(eigenvalues_clipped)),
         )
     elif decrement > stationarity_tol:
-        warnings.warn(
+        warn_measured(
             f"Laplace expansion point is not a mode: Newton decrement "
             f"{decrement:.4g} nats (tolerance {stationarity_tol:g}), gradient "
             f"norm {grad_norm:.4g}. The loss still drops by ~{decrement:.4g} "
@@ -274,6 +277,9 @@ def run_laplace(
             f"Set stationarity_tol to silence this.",
             LaplaceNotAtModeWarning,
             stacklevel=2,
+            grad_norm=grad_norm,
+            newton_decrement=decrement,
+            stationarity_tol=stationarity_tol,
         )
 
     if verbose:

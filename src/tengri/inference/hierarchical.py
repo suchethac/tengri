@@ -673,14 +673,16 @@ class PopulationFitter:
               requires ``allow_unvalidated=True``. Always uses a diagonal mass
               matrix.
             - ``"map"`` — Adam MAP on the flat vector.
+            - ``"laplace"`` — the same MAP ascent plus a Gaussian covariance
+              from the negative Hessian at a GRADIENT-VERIFIED mode: an
+              unconverged ascent or non-negative-definite curvature raises
+              rather than returning error bars measured off a mode (#1537).
             - ``"pathfinder"`` — tier="broken" (OOM-killed the process on a
               measured 2-galaxy problem); requires ``allow_unvalidated=True``.
-            - ``"laplace"`` — refused with ``NotImplementedError`` and a
-              reason (see
-              :data:`~tengri.inference._hierarchical_flat.FLAT_UNSUPPORTED`):
-              its real driver is not wired at the seam yet, and running a
-              stand-in algorithm under the requested name would be silent
-              substitution.
+            - ``"nss"`` — the sole remaining refusal
+              (:data:`~tengri.inference._hierarchical_flat.FLAT_UNSUPPORTED`):
+              a real nested sampler is missing, and a blind rejection
+              stand-in returns biased samples.
 
         key : PRNGKey, optional
             Random key for reproducibility. If None, uses PRNGKey(0).
