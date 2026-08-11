@@ -148,6 +148,18 @@ with `mcmc_nuts` mutually within each other's central 90% intervals on both
 hyperparameters — the #1429 acceptance bar. Two keys put the evidence
 scatter at ~2.4 nats at `n_live=100`; raise `nss_n_live` when the fit is
 *for* model comparison. The rank guard (`nss_n_live > D`) was fired live on
-the D=516 fixture. **Not yet executed**: population spectroscopy under
-`SpectrumPrecomp` (no in-tree fixture); the policy is stub-tested only.
+the D=516 fixture.
+
+Population spectroscopy under `SpectrumPrecomp` is executed as of
+2026-08-11 — the one path #1641 had shipped stub-tested only. The
+`approx="auto"` resolution is asserted live on the fit-time factory's output
+and a real `mcmc_hmc` fit runs through the seam on a 2-galaxy, 50-pixel
+spectroscopic hierarchy (in-tree:
+`test_population_spectroscopy_resolves_the_spectrum_lut_and_runs`). The
+exact-path control arm measured the LUT's price at this SNR: 9.66x faster
+(165.9 → 17.2 s) and a **systematic ~1-sigma posterior offset** in
+`psd_sigma` (LUT 2.030 vs exact 2.053, each mean outside the other's central
+90% interval; τ unresolved) — the spectroscopy sibling of #1671's
+WavePrecomp gradient bias, filed as #1688. Execution verified; the
+approximation's cost is now a number instead of an assumption.
 `FLAT_UNSUPPORTED` is empty — every registered backend is genuinely driven.
