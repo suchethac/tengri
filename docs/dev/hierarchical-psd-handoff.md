@@ -1846,11 +1846,33 @@ Still unmatched, any of which could be the difference: this section's runs used
 4000/4000 rather than 400/400, an unstated population size, and §2 quotes truths
 of sigma = 0.75 / tau = 150 Myr where the sweep uses 0.6 / 350.
 
+**``dense_mass_matrix`` is now ELIMINATED as the difference.** Third attempt,
+changing that one variable against the table above and holding model, mock, key,
+400/400, N=2 and bounds fixed: ``dense_mass_matrix=True`` gives max
+R-hat(sigma) = **1.020**, marginally *healthier* than ``False``'s 1.043. It was
+the strongest candidate — the only setting on which this section contradicts
+itself — and it is not the cause.
+
+**The leading hypothesis is now POPULATION SIZE, by §2's own order-statistic
+argument.** §2 warns that min-ESS misleads because "a minimum over 1024 galaxies
+is necessarily below a minimum over 8". R-hat here is reported as a **maximum**
+over galaxies, so the same argument runs in reverse: a max over 8 is necessarily
+**above** a max over 2. This section's pilot ran N=8; all three attempts above
+ran N=2 or a single galaxy. If per-galaxy R-hat(sigma) has a heavy right tail —
+which is what a funnel biting *some* galaxies would produce — then 4.42 can be
+the worst of 8 while the worst of 2 sits near 1.0, with **no disagreement
+between the runs at all**.
+
+That is testable at 4x the compute of attempt 2 and should be tried before any
+further sampler-side guessing. It also predicts that the *median* per-galaxy
+R-hat in this section's own runs was near 1.0; if a stored bank still has the
+per-galaxy values, checking that is nearly free and settles it without a rerun.
+
 **Whoever next touches this should record the run configuration alongside the
-number.** A headline diagnostic that cannot be rebuilt from the document costs
-~30 minutes per guess, and each failure is ambiguous between "the symptom is
-fragile" and "I mismatched a setting" — which is exactly the ambiguity the two
-attempts above are stuck in.
+number** — and prefer a per-galaxy distribution over a max. A headline
+diagnostic that cannot be rebuilt from the document costs ~30 minutes per guess,
+and each failure is ambiguous between "the symptom is fragile", "I mismatched a
+setting", and "I did not draw enough galaxies to see the tail".
 
 One datum worth keeping despite the INCONCLUSIVE: at ``a = 0.5`` mixing was
 **worse** (1.412) than at ``a = 1`` (1.043). Weak — N=2 and the symptom is
