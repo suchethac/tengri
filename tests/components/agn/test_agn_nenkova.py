@@ -23,6 +23,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tests._grad_parity import assert_grad_matches_fd
 from tests._jit_parity import assert_jit_matches_eager
 
 jax.config.update("jax_enable_x64", True)
@@ -160,7 +161,7 @@ def test_grad_flows_through_tau(torus_fn, wavelength) -> None:
         sed = torus_fn(wavelength, agn_log_lbol=44.0, agn_tau=tau)
         return jnp.log1p(jnp.sum(sed))
 
-    g = jax.grad(scalar_loss)(40.0)
+    g = assert_grad_matches_fd(scalar_loss, 40.0)
     assert jnp.isfinite(g)
     assert abs(float(g)) > 0.0, "gradient w.r.t. tau is identically zero"
 
@@ -183,8 +184,8 @@ def test_public_nenkova_torus_is_jit_safe(wavelength) -> None:
         lambda tau: nenkova_torus(wavelength, agn_log_lbol=44.0, agn_tau=tau), jnp.array(30.0)
     )
     chex.assert_tree_all_finite(sed)
-    g = jax.grad(lambda tau: jnp.sum(nenkova_torus(wavelength, agn_log_lbol=44.0, agn_tau=tau)))(
-        50.0
+    g = assert_grad_matches_fd(
+        lambda tau: jnp.sum(nenkova_torus(wavelength, agn_log_lbol=44.0, agn_tau=tau)), 50.0
     )
     assert jnp.isfinite(g)
 
@@ -264,7 +265,7 @@ def test_agn_tau_threads_through_model_layer() -> None:
     rel = np.linalg.norm(sed_hi[mir] - sed_lo[mir]) / (np.linalg.norm(sed_lo[mir]) + 1e-300)
     assert rel > 1e-2, f"agn_tau does not affect the MIR SED (rel change {rel:.2e})"
 
-    grad = jax.grad(lambda t: jnp.sum(model.predict_rest_sed({**p, "agn_tau": t}).sed))(
-        jnp.float64(40.0)
+    grad = assert_grad_matches_fd(
+        lambda t: jnp.sum(model.predict_rest_sed({**p, "agn_tau": t}).sed), jnp.float64(40.0)
     )
     assert jnp.isfinite(grad) and float(grad) != 0.0

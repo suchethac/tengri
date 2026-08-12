@@ -37,6 +37,7 @@ from numpy.testing import assert_allclose
 from scipy.interpolate import PchipInterpolator
 
 from tengri.utils.grid_interp import pchip_interp_1d
+from tests._grad_parity import assert_grad_matches_fd
 
 jax.config.update("jax_enable_x64", True)
 
@@ -82,7 +83,7 @@ def test_zigzag_on_uniform_spacing_has_finite_vjp():
     y = jnp.array([1.0, 2.0, 1.0, 2.0, 1.0])  # symmetric zig-zag
     xq = jnp.linspace(6.0, 10.0, 32)
 
-    g = jax.grad(lambda yv: jnp.sum(pchip_interp_1d(x, yv, xq) ** 2))(y)
+    g = assert_grad_matches_fd(lambda yv: jnp.sum(pchip_interp_1d(x, yv, xq) ** 2), y)
     chex.assert_tree_all_finite(g)
 
 

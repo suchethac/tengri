@@ -24,6 +24,7 @@ import jax.numpy as jnp
 jax.config.update("jax_enable_x64", True)
 
 from tengri.observation.photometry import compute_flux_density
+from tests._grad_parity import assert_grad_matches_fd
 
 
 def _fake_sed_l_nu(wave_aa: jnp.ndarray) -> jnp.ndarray:
@@ -168,6 +169,8 @@ def test_filter_jit_and_grad_compatible():
         return compute_flux_density(sed_in, wave_rest, fw, ft, z, dl_cm)
 
     val = float(jitted(sed))
-    grad = jax.grad(lambda s: compute_flux_density(s, wave_rest, fw, ft, z, dl_cm).sum())(sed)
+    grad = assert_grad_matches_fd(
+        lambda s: compute_flux_density(s, wave_rest, fw, ft, z, dl_cm).sum(), sed
+    )
     assert jnp.isfinite(val) and val > 0
     assert bool(jnp.all(jnp.isfinite(grad))), "non-finite gradient through filter convolution"

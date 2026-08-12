@@ -14,7 +14,6 @@ factor will fail here.
 
 from __future__ import annotations
 
-import jax
 import jax.numpy as jnp
 import pytest
 from dsps.photometry.photometry_kernels import (
@@ -26,6 +25,7 @@ from dsps.photometry.photometry_kernels import (
 
 from tengri.cosmology import PLANCK18
 from tengri.observation.redshift_kernel import shift_to_obs_frame
+from tests._grad_parity import assert_grad_matches_fd
 from tests._jit_parity import assert_jit_matches_eager
 
 pytestmark = pytest.mark.contract
@@ -86,8 +86,9 @@ def test_kernel_is_jittable_and_grad_safe(fiducial_sed):
     assert out.shape == wave_obs.shape
     assert jnp.all(jnp.isfinite(out))
 
-    g = jax.grad(lambda z: jnp.sum(shift_to_obs_frame(wave_rest, L_nu, wave_obs, z, PLANCK18)))(
-        jnp.asarray(0.5)
+    g = assert_grad_matches_fd(
+        lambda z: jnp.sum(shift_to_obs_frame(wave_rest, L_nu, wave_obs, z, PLANCK18)),
+        jnp.asarray(0.5),
     )
     assert jnp.isfinite(g)
 

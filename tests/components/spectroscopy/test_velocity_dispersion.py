@@ -18,6 +18,7 @@ import pytest
 from numpy.testing import assert_allclose
 
 from tengri.observation.spectrum import velocity_broaden
+from tests._grad_parity import assert_grad_matches_fd
 from tests._jit_parity import assert_jit_matches_eager
 
 pytestmark = pytest.mark.bounds
@@ -136,7 +137,7 @@ class TestVelocityBroadenGradients:
         def loss(f):
             return jnp.sum(velocity_broaden(f, wave, 150.0) ** 2)
 
-        g = jax.grad(loss)(flux)
+        g = assert_grad_matches_fd(loss, flux)
         chex.assert_tree_all_finite(g)
 
     def test_jit_compatible(self, wave, sharp_spectrum):

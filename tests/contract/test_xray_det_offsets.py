@@ -33,6 +33,7 @@ import pytest
 
 from tengri.components.xray.xray import xray_total, xray_xrb
 from tengri.components.xray.xray_model import XRayAirdSEDComponent
+from tests._grad_parity import assert_grad_matches_fd
 
 jax.config.update("jax_enable_x64", True)
 
@@ -242,7 +243,7 @@ def test_xray_xrb_gradient_finite_in_hmxb_offset() -> None:
             )
         )
 
-    grad = jax.grad(L_total_vs_hmxb_offset)(0.0)
+    grad = assert_grad_matches_fd(L_total_vs_hmxb_offset, 0.0)
     assert jnp.isfinite(grad), f"gradient not finite: {grad}"
     # Gradient w.r.t. log offset should be positive (brighter offset → brighter X-ray)
     assert grad > 0.0
@@ -268,7 +269,7 @@ def test_xray_xrb_gradient_finite_in_lmxb_offset() -> None:
             )
         )
 
-    grad = jax.grad(L_total_vs_lmxb_offset)(0.0)
+    grad = assert_grad_matches_fd(L_total_vs_lmxb_offset, 0.0)
     assert jnp.isfinite(grad), f"gradient not finite: {grad}"
     # Gradient w.r.t. log offset should be positive
     assert grad > 0.0

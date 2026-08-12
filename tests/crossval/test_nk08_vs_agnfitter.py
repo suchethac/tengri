@@ -38,6 +38,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tests._grad_parity import assert_grad_matches_fd
+
 jax.config.update("jax_enable_x64", True)
 
 pytestmark = pytest.mark.crossval
@@ -220,5 +222,5 @@ def test_gradient_flows():
         return power
 
     cos_inc_val = 0.5
-    grad = jax.grad(sed_total_power)(jnp.asarray(cos_inc_val))
+    grad = assert_grad_matches_fd(sed_total_power, jnp.asarray(cos_inc_val))
     assert np.isfinite(grad) and grad != 0.0, "Gradient should be finite and non-zero"

@@ -35,6 +35,7 @@ from tengri.components.stellar.sfh.psd_models import drw_variance
 from tengri.cosmology import age_at_z0 as _age_at_z0
 from tengri.observation.eline_priors import marginalize_emission_lines_cloudy
 from tengri.utils.grid import grid_spacing, log_age_to_age_yr, make_log_age_grid
+from tests._grad_parity import assert_grad_matches_fd
 
 _AGE_UNIV_YR = float(_age_at_z0()) * 1e9
 
@@ -270,7 +271,7 @@ class TestGradientDirection:
                 )
             )
 
-        grad = jax.grad(total_flux)(0.5)
+        grad = assert_grad_matches_fd(total_flux, 0.5)
         assert float(grad) < 0, "More dust should decrease total flux"
 
     def test_higher_sfr_norm_increases_sfr(self):
@@ -280,7 +281,7 @@ class TestGradientDirection:
         def total_sfr(norm):
             return jnp.sum(double_powerlaw(t, 1.0, 1.0, 1e9, norm))
 
-        grad = jax.grad(total_sfr)(10.0)
+        grad = assert_grad_matches_fd(total_sfr, 10.0)
         assert float(grad) > 0, "Higher norm should increase total SFR"
 
     def test_gp_xi_gradient_not_vanishing(self):
@@ -293,7 +294,7 @@ class TestGradientDirection:
             gp = gp_from_xi(xi, sqrt_power, N_GRID)
             return jnp.sum(gp**2)
 
-        grad = jax.grad(f)(xi)
+        grad = assert_grad_matches_fd(f, xi)
 
         # Gradient should not be all zeros or all tiny
         grad_rms = float(jnp.sqrt(jnp.mean(grad**2)))

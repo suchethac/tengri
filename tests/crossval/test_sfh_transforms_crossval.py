@@ -13,6 +13,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tests._grad_parity import assert_grad_matches_fd
+
 jax.config.update("jax_enable_x64", True)
 
 pytestmark = pytest.mark.crossval
@@ -88,7 +90,7 @@ class TestGPSFHCrossval:
         def loss(xi):
             return jnp.sum(gp_from_xi(xi, sqrt_power, len(xi)) ** 2)
 
-        grad = jax.grad(loss)(jnp.zeros(n))
+        grad = assert_grad_matches_fd(loss, jnp.zeros(n))
         chex.assert_tree_all_finite(grad)
 
 

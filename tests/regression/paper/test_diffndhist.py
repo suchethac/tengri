@@ -15,6 +15,7 @@ import jax.numpy as jnp
 import pytest
 
 from tengri.utils.diffndhist import tw_ndhist, tw_ndhist_weighted
+from tests._grad_parity import assert_grad_matches_fd
 
 pytestmark = pytest.mark.regression_paper
 
@@ -120,7 +121,7 @@ class TestDifferentiability:
             return jnp.sum(hist**2)
 
         data = jnp.array([[3.0], [7.0]])
-        grads = jax.grad(loss)(data)
+        grads = assert_grad_matches_fd(loss, data)
         chex.assert_equal_shape([grads, data])
         chex.assert_tree_all_finite(grads)
 
@@ -147,7 +148,7 @@ class TestDifferentiability:
             return jnp.sum(hist**2)
 
         sig = jnp.array([[0.5], [0.5]])
-        grads = jax.grad(loss)(sig)
+        grads = assert_grad_matches_fd(loss, sig)
         chex.assert_equal_shape([grads, sig])
         chex.assert_tree_all_finite(grads)
 

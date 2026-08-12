@@ -22,6 +22,7 @@ from tengri.components.igm.dla import (
     dla_transmission,
     dla_transmission_obs,
 )
+from tests._grad_parity import assert_grad_matches_fd
 
 pytestmark = pytest.mark.regression_paper
 
@@ -219,7 +220,7 @@ class TestGradientsAndJIT:
         def loss(log_n):
             return jnp.mean(dla_transmission(wave_rest, log_n))
 
-        g = jax.grad(loss)(20.5)
+        g = assert_grad_matches_fd(loss, 20.5)
         assert jnp.isfinite(g)
         assert g < 0, "Increasing N_HI should decrease mean transmission"
 
@@ -229,7 +230,7 @@ class TestGradientsAndJIT:
         def loss(temp):
             return jnp.mean(dla_transmission(wave_rest, 20.5, temp=temp))
 
-        g = jax.grad(loss)(1e4)
+        g = assert_grad_matches_fd(loss, 1e4)
         assert jnp.isfinite(g)
 
     def test_gradient_wrt_turbulence_finite(self, wave_rest):
@@ -238,7 +239,7 @@ class TestGradientsAndJIT:
         def loss(b):
             return jnp.mean(dla_transmission(wave_rest, 20.5, b_turb_kms=b))
 
-        g = jax.grad(loss)(10.0)
+        g = assert_grad_matches_fd(loss, 10.0)
         assert jnp.isfinite(g)
 
     def test_gradient_stability_at_voigt_z_boundary(self):

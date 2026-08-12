@@ -28,6 +28,7 @@ import numpy as np
 import pytest
 
 from tengri.utils.physics_constants import C_AA  # speed of light [Å/s]
+from tests._grad_parity import assert_grad_matches_fd
 
 jax.config.update("jax_enable_x64", True)
 
@@ -297,6 +298,6 @@ class TestRichards2006RuntimeConsistency:
             sed = richards2006_disc(wavelength, log_lbol=log_lbol)
             return jnp.sum(sed)
 
-        grad = jax.grad(loss)(45.0)
+        grad = assert_grad_matches_fd(loss, 45.0)
         assert np.isfinite(grad), f"Gradient is {grad} (NaN/inf)"
         assert abs(grad) > 0, "Gradient is zero"

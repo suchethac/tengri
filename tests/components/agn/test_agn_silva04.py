@@ -14,6 +14,7 @@ import jax.numpy as jnp
 import pytest
 
 from tengri._data_setup import find_data
+from tests._grad_parity import assert_grad_matches_fd
 from tests._jit_parity import assert_jit_matches_eager
 
 jax.config.update("jax_enable_x64", True)
@@ -116,7 +117,7 @@ def test_grad_flows_through_log_nh(torus_fn, wavelength) -> None:
         sed = torus_fn(wavelength, agn_log_nh_silva=nh)
         return jnp.log1p(jnp.sum(sed))
 
-    g = jax.grad(scalar_loss)(23.0)
+    g = assert_grad_matches_fd(scalar_loss, 23.0)
     assert jnp.isfinite(g)
 
 

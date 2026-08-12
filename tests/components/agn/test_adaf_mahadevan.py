@@ -16,6 +16,8 @@ import numpy as np
 import pytest
 from scipy.special import kve as scipy_kve
 
+from tests._grad_parity import assert_grad_matches_fd
+
 jax.config.update("jax_enable_x64", True)
 
 pytestmark = pytest.mark.regression_paper
@@ -37,7 +39,7 @@ class TestBesselK2:
     def test_k2e_is_differentiable(self):
         from tengri.components.agn.adaf import _bessel_k2e
 
-        g = jax.grad(lambda t: _bessel_k2e(t))(3.0)
+        g = assert_grad_matches_fd(lambda t: _bessel_k2e(t), 3.0)
         assert np.isfinite(float(g))
 
 

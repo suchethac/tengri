@@ -14,6 +14,7 @@ import numpy as np
 import pytest
 
 from tengri import SpectrumPrecomp, WavePrecomp
+from tests._grad_parity import assert_grad_matches_fd
 
 pytestmark = pytest.mark.regression_paper
 
@@ -226,7 +227,7 @@ class TestSpectrumLUTGuards:
         def loss(a):
             return jnp.sum(m.predict_observables({"sfh_dpl_alpha": a}).spec_fnu ** 2)
 
-        g = jax.grad(loss)(jnp.asarray(1.5))
+        g = assert_grad_matches_fd(loss, jnp.asarray(1.5))
         assert jnp.isfinite(g)
 
 

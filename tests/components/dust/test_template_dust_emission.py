@@ -17,6 +17,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tests._grad_parity import assert_grad_matches_fd
 from tests._jit_parity import assert_jit_matches_eager
 
 jax.config.update("jax_enable_x64", True)
@@ -545,8 +546,55 @@ class TestDL14ExtendedRange:
                 )
             )
 
+        # Finiteness only at alpha=2 itself: the slope genuinely jumps across
+        # the pole (one-sided derivatives 0.02706658 on the left, 0.03072682
+        # on the right, stable to 1e-6 in the step), and jax.grad returns the
+        # left branch. A central difference averages the two, so it is not a
+        # valid reference exactly here. The smooth-region discrepancy is
+        # covered by test_dl14_alpha_gradient_matches_finite_difference below.
         grad = jax.grad(total)(2.0)
         chex.assert_tree_all_finite(grad)
+
+    @pytest.mark.xfail(
+        strict=True,
+        reason=(
+            "d(SED)/d(dust_alpha_dl14) disagrees with a central finite "
+            "difference by 7-17% away from the alpha=2 pole. Not a probe "
+            "artefact: the numerical value is stable to 6 significant figures "
+            "across eps from 1e-2 to 1e-7 at alpha = 1.5, 1.7, 2.3 and 2.6, so "
+            "it is neither truncation error (which falls as eps^2) nor "
+            "cancellation (which grows as eps -> 0), and each point is in a "
+            "smooth region rather than at the kink."
+        ),
+    )
+    @pytest.mark.parametrize("alpha", [1.5, 1.7, 2.3, 2.6])
+    def test_dl14_alpha_gradient_matches_finite_difference(self, ir_wave, alpha):
+        """The alpha gradient should equal the true derivative, and does not.
+
+        Measured on 2026-08-12, analytic vs numerical (eps=1e-6):
+
+            alpha=1.5   0.008909278  vs  0.010426604   (+17.0%)
+            alpha=1.7   0.046344128  vs  0.051327080   (+10.8%)
+            alpha=2.3   0.016126882  vs  0.014962845   ( -7.2%)
+            alpha=2.6   0.003728402  vs  0.003467146   ( -7.0%)
+
+        This mattered enough to record because every fitter here (MAP, VI,
+        NUTS) descends this gradient, and a 7-17% error does not crash — it
+        biases the step direction whenever ``dust_alpha_dl14`` is freed. The
+        previous test at this site asserted only ``isfinite``, which is true
+        of a wrong gradient too, so nothing here could have caught it.
+
+        Marked ``strict`` so this turns red the moment it starts passing:
+        that is the signal the derivative was fixed and the mark should go.
+        """
+        from tengri.components.dust.emission import draine_li2014
+
+        def total(a):
+            return jnp.sum(
+                draine_li2014(ir_wave, 1e10, dust_umin=1.0, dust_gamma_dl=0.05, dust_alpha_dl14=a)
+            )
+
+        assert_grad_matches_fd(total, alpha, rtol=1e-3)
 
     def test_dl14_extended_qpah_range(self, ir_wave):
         """DL14 should handle extended q_PAH range (up to 7.32%)."""

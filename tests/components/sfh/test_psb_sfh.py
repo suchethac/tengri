@@ -17,6 +17,7 @@ import pytest
 
 from tengri.components.stellar.sfh.mean_sfh import AGEMAX_YR, psb_wild2020
 from tengri.components.stellar.sfh.registry import SFH_REGISTRY, resolve_sfh
+from tests._grad_parity import assert_grad_matches_fd
 
 pytestmark = pytest.mark.bounds
 
@@ -163,7 +164,7 @@ class TestJITAndGradients:
             kw = {k: v for k, v in default_params.items() if k != "log_total_mass"}
             return jnp.mean(psb_wild2020(t_lookback, lp, **kw))
 
-        g = jax.grad(loss)(default_params["log_total_mass"])
+        g = assert_grad_matches_fd(loss, default_params["log_total_mass"])
         assert jnp.isfinite(g)
         assert g > 0
 

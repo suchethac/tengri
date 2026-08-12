@@ -24,6 +24,7 @@ from tengri.components.xray.xray import (
     xray_bolometric_correction_duras,
     xray_total_lopez24,
 )
+from tests._grad_parity import assert_grad_matches_fd
 from tests._jit_parity import assert_jit_matches_eager
 
 
@@ -168,7 +169,7 @@ class TestLopez24Corona:
                 )
             )
 
-        grad = jax.grad(loss)(0.3)
+        grad = assert_grad_matches_fd(loss, 0.3)
         assert jnp.isfinite(grad)
         # L_X = νLν / 10**α_IRX decreases with α_IRX -> negative gradient.
         assert grad < 0.0
@@ -183,7 +184,7 @@ class TestLopez24Corona:
                 )
             )
 
-        grad = jax.grad(loss)(1e30)
+        grad = assert_grad_matches_fd(loss, 1e30)
         assert jnp.isfinite(grad)
         assert grad > 0.0
 

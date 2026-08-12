@@ -17,6 +17,7 @@ from tengri.components.agn._nthcomp import (
     _is_table_available,
     nthcomp_lnu_interp,
 )
+from tests._grad_parity import assert_grad_matches_fd
 
 
 @pytest.mark.skipif(not _is_table_available(), reason="nthcomp templates not loaded")
@@ -36,7 +37,7 @@ class TestNthcompGradientStability:
             return jnp.sum(frac)
 
         # This should NOT produce NaN or Inf
-        grad = jax.grad(loss)(val)
+        grad = assert_grad_matches_fd(loss, val)
         assert jnp.isfinite(grad), f"Expected finite gradient, got {grad}"
 
     def test_clamp_interp_index_gradient_at_boundary(self):

@@ -84,6 +84,7 @@ class TestItFailsWhenItShould:
         """A tolerance argument that never reached chex would make every
         caller's override silently inert. The leaky kernel differs by exactly
         1.0, so a tolerance either side of that pins the wiring."""
+
         def leaky_factory():
             calls = {"n": 0}
 

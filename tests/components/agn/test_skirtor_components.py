@@ -17,6 +17,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tests._grad_parity import assert_grad_matches_fd
+
 jax.config.update("jax_enable_x64", True)
 
 
@@ -203,6 +205,6 @@ class TestJITAndGradients:
             r = fn(wavelength, agn_log_lbol=lbol)
             return jnp.sum(r.total)
 
-        grad = jax.grad(loss)(44.0)
+        grad = assert_grad_matches_fd(loss, 44.0)
         assert jnp.isfinite(grad)
         assert grad > 0.0

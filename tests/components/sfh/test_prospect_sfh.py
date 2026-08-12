@@ -32,6 +32,7 @@ from tengri.components.stellar.sfh.mean_sfh import (
     spline,
 )
 from tengri.utils.grid_interp import _pchip_slopes
+from tests._grad_parity import assert_grad_matches_fd
 
 _T = jnp.logspace(7, 10.14, 128)  # lookback times 10 Myr – 13.8 Gyr
 
@@ -138,7 +139,7 @@ class TestSplineSfh:
         def scalar_sum(nodes):
             return jnp.sum(spline(_T, nodes, _NODE_AGES_4))
 
-        grad = jax.grad(scalar_sum)(sfr_nodes)
+        grad = assert_grad_matches_fd(scalar_sum, sfr_nodes)
         chex.assert_tree_all_finite(grad)
         chex.assert_equal_shape([grad, sfr_nodes])
 

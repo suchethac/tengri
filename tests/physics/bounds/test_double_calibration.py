@@ -14,6 +14,7 @@ from tengri.observation.calibration import (
     calibration_polynomial,
     double_calibration_polynomial,
 )
+from tests._grad_parity import assert_grad_matches_fd
 from tests._jit_parity import assert_jit_matches_eager
 
 pytestmark = pytest.mark.unit
@@ -105,7 +106,7 @@ class TestDoubleCalibrationPolynomial:
             cal = double_calibration_polynomial(wavelength, c_blue, jnp.zeros(2), wave_split)
             return jnp.sum(cal)
 
-        grad_val = jax.grad(scalar_fn)(jnp.array([0.1, -0.05]))
+        grad_val = assert_grad_matches_fd(scalar_fn, jnp.array([0.1, -0.05]))
         chex.assert_tree_all_finite(grad_val)
 
 

@@ -32,6 +32,7 @@ from tengri.utils.sed_quantities import (
     compute_mass_weighted_age,
     compute_mass_weighted_metallicity,
 )
+from tests._grad_parity import assert_grad_matches_fd
 
 jax.config.update("jax_enable_x64", True)
 
@@ -114,5 +115,5 @@ def test_gradient_is_not_poisoned_by_the_nan_branch():
     the weights are nonzero.
     """
     w = jnp.zeros(N_AGE).at[3].set(2.0)
-    g = jax.grad(lambda ww: compute_mass_weighted_age(ww, AGES_YR))(w)
+    g = assert_grad_matches_fd(lambda ww: compute_mass_weighted_age(ww, AGES_YR), w)
     assert jnp.all(jnp.isfinite(g)), f"non-finite gradient: {g}"

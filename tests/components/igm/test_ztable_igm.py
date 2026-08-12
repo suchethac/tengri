@@ -20,6 +20,7 @@ from tengri.components.stellar.sps.precompute import (
     interpolate_igm_ztable,
     precompute_photometry_ztable,
 )
+from tests._grad_parity import assert_grad_matches_fd
 
 pytestmark = pytest.mark.bounds
 
@@ -228,7 +229,7 @@ class TestIGMGradients:
         def loss(z):
             return jnp.sum(interpolate_igm_ztable(zt.igm_trans_table, zt.z_grid, z))
 
-        g = jax.grad(loss)(3.0)
+        g = assert_grad_matches_fd(loss, 3.0)
         assert abs(float(g)) > 1e-10, f"Gradient should be nonzero at z=3: {float(g)}"
 
     def test_gradient_combined_ssp_and_igm(self, ssp_data, filters):

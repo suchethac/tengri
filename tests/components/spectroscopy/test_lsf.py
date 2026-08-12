@@ -22,6 +22,7 @@ from tengri.observation.spectrum import (
     nirspec_g140m_resolution,
     nirspec_prism_resolution,
 )
+from tests._grad_parity import assert_grad_matches_fd
 from tests._jit_parity import assert_jit_matches_eager
 
 pytestmark = pytest.mark.bounds
@@ -235,7 +236,7 @@ class TestLSFGradients:
         def loss(spec):
             return jnp.sum(apply_lsf(spec, wave, resolution=100.0) ** 2)
 
-        g = jax.grad(loss)(delta_spectrum)
+        g = assert_grad_matches_fd(loss, delta_spectrum)
         assert jnp.all(jnp.isfinite(g))
 
     def test_gradient_finite_variable_r(self, wave, delta_spectrum):
@@ -245,7 +246,7 @@ class TestLSFGradients:
         def loss(spec):
             return jnp.sum(apply_lsf(spec, wave, resolution=R_var) ** 2)
 
-        g = jax.grad(loss)(delta_spectrum)
+        g = assert_grad_matches_fd(loss, delta_spectrum)
         assert jnp.all(jnp.isfinite(g))
 
     def test_gradient_wrt_resolution_matches_finite_difference(self, wave, delta_spectrum):

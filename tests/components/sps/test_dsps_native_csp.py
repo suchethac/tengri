@@ -22,6 +22,7 @@ from tengri.components.stellar.sps.dsps_wrapper import (
     compute_dsps_met_table_weights,
     compute_dsps_native_weights,
 )
+from tests._grad_parity import assert_grad_matches_fd
 
 jax.config.update("jax_enable_x64", True)
 
@@ -439,7 +440,7 @@ def test_met_table_grad_wrt_lgmet():
         return jnp.sum(aw)
 
     lgmet = jnp.array(LGMET_TABLE)
-    grad = jax.grad(total_mass)(lgmet)
+    grad = assert_grad_matches_fd(total_mass, lgmet)
     assert jnp.all(jnp.isfinite(grad)), f"Non-finite gradient: {grad}"
 
 

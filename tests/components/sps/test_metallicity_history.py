@@ -24,6 +24,7 @@ from tengri.components.stellar.sfh.metallicity_history import (
     tabulated_metallicity_on_ssp_grid,
     two_step_metallicity,
 )
+from tests._grad_parity import assert_grad_matches_fd
 from tests._jit_parity import assert_jit_matches_eager
 
 pytestmark = pytest.mark.bounds
@@ -99,7 +100,7 @@ class TestTwoStepMetallicity:
         def loss(step_age):
             return jnp.mean(two_step_metallicity(ssp_lg_age_gyr, -3.0, -1.5, step_age))
 
-        g = jax.grad(loss)(1.0)
+        g = assert_grad_matches_fd(loss, 1.0)
         assert jnp.isfinite(g)
 
     def test_output_shape(self, ssp_lg_age_gyr):
@@ -189,7 +190,7 @@ class TestMetallicityBins:
             return jnp.mean(metallicity_bins_on_ssp_grid(ssp_lg_age_gyr, bin_edges_log_yr, mets))
 
         mets = jnp.linspace(-3.0, -1.0, n_bins)
-        g = jax.grad(loss)(mets)
+        g = assert_grad_matches_fd(loss, mets)
         chex.assert_tree_all_finite(g)
         assert jnp.all(g > 0), "Increasing any bin Z should increase mean"
 
@@ -303,7 +304,7 @@ class TestTabulatedMetallicity:
             )
 
         met_log_z_abs = jnp.linspace(-3.0, -1.5, 20)
-        g = jax.grad(loss)(met_log_z_abs)
+        g = assert_grad_matches_fd(loss, met_log_z_abs)
         chex.assert_tree_all_finite(g)
 
     def test_clamped_outside_range(self, ssp_lg_age_gyr):

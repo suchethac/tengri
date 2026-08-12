@@ -23,6 +23,7 @@ from tengri.components.stellar.sps.precompute import (
     precompute_photometry_ztable,
 )
 from tengri.utils.cosmology import luminosity_distance
+from tests._grad_parity import assert_grad_matches_fd
 
 jax.config.update("jax_enable_x64", True)
 
@@ -221,7 +222,7 @@ class TestZTableGradients:
             )
             return jnp.sum(ssp_phot) + jnp.sum(eff_rest)
 
-        g = jax.grad(loss)(0.5)
+        g = assert_grad_matches_fd(loss, 0.5)
         assert abs(float(g)) > 1e-10, f"Gradient w.r.t. z is too small: {float(g)}"
 
     def test_jit_compatible(self, ssp_data, filters):

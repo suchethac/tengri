@@ -18,6 +18,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tests._grad_parity import assert_grad_matches_fd
+
 pytestmark = pytest.mark.contract
 
 jax.config.update("jax_enable_x64", True)
@@ -321,5 +323,5 @@ class TestDiscReshapeAffectsPredict:
             sed, _ = comp.predict(self._params(delta), jnp.zeros_like(wave), wave)
             return jnp.sum(sed)
 
-        g = jax.grad(scalar)(0.2)
+        g = assert_grad_matches_fd(scalar, 0.2)
         assert jnp.isfinite(g)

@@ -159,6 +159,12 @@ class TestAGNFusedPhotometry:
         def loss_fn(p):
             return jnp.sum(model.predict_photometry(p))
 
+        # Finiteness only, deliberately: a finite-difference cross-check needs
+        # f evaluable at params +/- h along the probe direction, and nudging a
+        # full parameter dict along a random tangent walks bounded parameters
+        # out of their physical domain, so the probe returns NaN and can judge
+        # nothing. Per-parameter probes inside the valid range would be the way
+        # to strengthen this — see tests/_grad_parity.py.
         grads = jax.grad(loss_fn)(params)
         for name, grad_val in grads.items():
             if grad_val is not None:

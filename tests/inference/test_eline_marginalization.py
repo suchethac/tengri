@@ -24,6 +24,7 @@ from tengri.observation.eline_marginalization import (
     marginalize_emission_lines,
     predict_with_marginalized_lines,
 )
+from tests._grad_parity import assert_grad_matches_fd
 
 pytestmark = pytest.mark.bounds
 
@@ -210,7 +211,7 @@ class TestGradients:
             ln_l, _, _ = marginalize_emission_lines(residual, noise, G)
             return ln_l
 
-        grad = jax.grad(loss)(jnp.ones_like(wave))
+        grad = assert_grad_matches_fd(loss, jnp.ones_like(wave))
         chex.assert_tree_all_finite(grad)
 
     def test_grad_wrt_noise(self, simple_setup):
@@ -224,7 +225,7 @@ class TestGradients:
             ln_l, _, _ = marginalize_emission_lines(residual, noise, G)
             return ln_l
 
-        grad = jax.grad(loss)(jnp.ones_like(wave) * 0.1)
+        grad = assert_grad_matches_fd(loss, jnp.ones_like(wave) * 0.1)
         chex.assert_tree_all_finite(grad)
 
     def test_grad_through_predict(self, simple_setup):
@@ -239,7 +240,7 @@ class TestGradients:
             model_full = predict_with_marginalized_lines(continuum, G, a_hat)
             return jnp.sum((data - model_full) ** 2)
 
-        grad = jax.grad(loss)(jnp.ones_like(wave))
+        grad = assert_grad_matches_fd(loss, jnp.ones_like(wave))
         chex.assert_tree_all_finite(grad)
 
 

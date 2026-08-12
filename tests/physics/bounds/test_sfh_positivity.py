@@ -20,6 +20,7 @@ from tengri.components.stellar.sfh.nonparametric import (
     psb_continuity,
 )
 from tengri.utils.cosmology import age_at_z
+from tests._grad_parity import assert_grad_matches_fd
 from tests._jit_parity import assert_jit_matches_eager
 
 pytestmark = pytest.mark.bounds
@@ -331,7 +332,7 @@ class TestPSBContinuitySFH:
         chex.assert_tree_all_finite(sfr)
 
     def test_grad_wrt_log_total_mass(self, age_yr, default_edges):
-        g = jax.grad(
+        g = assert_grad_matches_fd(
             lambda m: jnp.sum(
                 psb_continuity(
                     age_yr,
@@ -342,12 +343,13 @@ class TestPSBContinuitySFH:
                     ratio_young=0.0,
                     ratio_old_0=0.0,
                 )
-            )
-        )(10.0)
+            ),
+            10.0,
+        )
         assert jnp.isfinite(g) and g > 0
 
     def test_grad_wrt_ratio_young(self, age_yr, default_edges):
-        g = jax.grad(
+        g = assert_grad_matches_fd(
             lambda r: jnp.sum(
                 psb_continuity(
                     age_yr,
@@ -358,8 +360,9 @@ class TestPSBContinuitySFH:
                     ratio_young=r,
                     ratio_old_0=0.0,
                 )
-            )
-        )(0.0)
+            ),
+            0.0,
+        )
         assert jnp.isfinite(g)
 
 

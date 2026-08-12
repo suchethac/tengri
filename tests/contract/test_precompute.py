@@ -12,6 +12,7 @@ from tengri.components.stellar.sps.precompute import (
     fast_spectrum,
     interpolate_ssp_phot_metallicity,
 )
+from tests._grad_parity import assert_grad_matches_fd
 
 jax.config.update("jax_enable_x64", True)
 
@@ -105,7 +106,7 @@ class TestFastSpectrum:
             return jnp.sum(fast_spectrum(weights, ssp_pix, dust, 1.0) ** 2)
 
         w = jnp.ones(n_age) / n_age
-        g = jax.grad(loss)(w)
+        g = assert_grad_matches_fd(loss, w)
         chex.assert_tree_all_finite(g)
 
 

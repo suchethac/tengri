@@ -16,6 +16,7 @@ from tengri.components.stellar.sfh.nonparametric import (
     continuity_flex,
     continuity_flex_prior_logp,
 )
+from tests._grad_parity import assert_grad_matches_fd
 
 pytestmark = pytest.mark.bounds
 
@@ -121,7 +122,7 @@ class TestContinuityFlexSFH:
                 continuity_flex(t, 10.0, ratio_young=ratio_young, flex_0=0.0, ratio_old=0.0)
             )
 
-        g = jax.grad(total_sfr)(0.5)
+        g = assert_grad_matches_fd(total_sfr, 0.5)
         assert jnp.isfinite(g)
 
     def test_gradient_through_flex_ratio(self):
@@ -131,7 +132,7 @@ class TestContinuityFlexSFH:
         def total_sfr(flex_0):
             return jnp.sum(continuity_flex(t, 10.0, ratio_young=0.0, flex_0=flex_0, ratio_old=0.0))
 
-        g = jax.grad(total_sfr)(0.3)
+        g = assert_grad_matches_fd(total_sfr, 0.3)
         assert jnp.isfinite(g)
 
     def test_prior_logp_zero_ratios(self):

@@ -13,6 +13,7 @@ pytestmark = pytest.mark.bounds
 jax.config.update("jax_enable_x64", True)
 
 from tengri.analysis.diagnostics.spectral import equivalent_width
+from tests._grad_parity import assert_grad_matches_fd
 from tests._jit_parity import assert_jit_matches_eager
 
 _C_AA_S = 2.99792458e18
@@ -81,5 +82,5 @@ class TestEquivalentWidthJIT:
         def loss(s):
             return equivalent_width(wave, s, 6564.61)
 
-        grad = jax.grad(loss)(l_nu)
+        grad = assert_grad_matches_fd(loss, l_nu)
         chex.assert_tree_all_finite(grad)

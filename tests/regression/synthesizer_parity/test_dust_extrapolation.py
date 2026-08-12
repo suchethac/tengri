@@ -15,6 +15,8 @@ with hard wavelength caps. Tengri must avoid the same pitfall.
 
 from __future__ import annotations
 
+import importlib.util
+
 import chex
 import jax
 import jax.numpy as jnp
@@ -28,6 +30,71 @@ from tengri.components.dust.attenuation import (
     DUST_LAWS,
 )
 from tests._jit_parity import assert_jit_matches_eager
+
+# ---------------------------------------------------------------------------
+# The law sweep
+# ---------------------------------------------------------------------------
+# The five property tests below each carried their own copy of the same
+# hand-written list of law names. All five copies had 21 entries; ``DUST_LAWS``
+# has 22. ``reddy15`` was registered and swept by none of them — so it had no
+# finiteness, non-negativity, V-band normalization, far-IR or UV-slope
+# coverage at all. Five hand-maintained enumerations of "every law" is five
+# chances to miss one, and this file used all five.
+#
+# The set is now derived from the registry, so a law added tomorrow is swept
+# without editing this file, which is the whole point.
+
+_GRAIN_MODEL_LAWS = frozenset({"wd01_smcbar", "wd01_mwrv31", "d03_mwrv31", "hd23_mwrv31"})
+
+requires_dust_extinction = pytest.mark.skipif(
+    importlib.util.find_spec("dust_extinction") is None,
+    reason=(
+        "grain-model dust laws are backed by the optional `dust-extinction` "
+        "package (pip install dust-extinction)"
+    ),
+)
+
+#: Every registered law, with the grain models skipped rather than failed when
+#: their optional backend is absent. They previously raised ImportError, which
+#: reported 20 red tests on a machine that was merely missing an extra — noise
+#: that hides real breakage in the same file.
+EVERY_DUST_LAW = [
+    pytest.param(name, marks=[requires_dust_extinction]) if name in _GRAIN_MODEL_LAWS else name
+    for name in sorted(DUST_LAWS)
+]
+
+
+class TestTheLawSweepIsHonest:
+    """Guards on the sweep itself — a derived list that silently derived
+    nothing would make every test below pass vacuously."""
+
+    def test_the_sweep_covers_every_registered_law(self):
+        swept = {p.values[0] if hasattr(p, "values") else p for p in EVERY_DUST_LAW}
+        assert swept == set(DUST_LAWS), (
+            f"sweep and registry disagree: missing {sorted(set(DUST_LAWS) - swept)}, "
+            f"unknown {sorted(swept - set(DUST_LAWS))}"
+        )
+
+    def test_the_sweep_is_not_empty(self):
+        assert len(EVERY_DUST_LAW) > 15, (
+            f"only {len(EVERY_DUST_LAW)} laws discovered — DUST_LAWS stopped "
+            f"being enumerable, so the properties below prove nothing."
+        )
+
+    def test_reddy15_is_swept(self):
+        """Named explicitly: it is the law five hand-written lists all missed,
+        so a regression here says which failure recurred."""
+        swept = {p.values[0] if hasattr(p, "values") else p for p in EVERY_DUST_LAW}
+        assert "reddy15" in swept
+
+    def test_the_grain_model_names_still_exist(self):
+        """A renamed grain law would silently lose its skip marker and start
+        failing with ImportError again."""
+        assert set(DUST_LAWS) >= _GRAIN_MODEL_LAWS, (
+            f"these are marked as grain models but are not registered: "
+            f"{sorted(_GRAIN_MODEL_LAWS - set(DUST_LAWS))}"
+        )
+
 
 # ---------------------------------------------------------------------------
 # Shared fixtures
@@ -69,32 +136,7 @@ class TestDustAttenuationFiniteness:
     laws are finite (no NaN/inf) and non-negative (no negative transmission).
     """
 
-    @pytest.mark.parametrize(
-        "law_name",
-        [
-            "power_law",
-            "vw07_bc",
-            "vw07_diff",
-            "calzetti",
-            "kriek_conroy",
-            "smc",
-            "lmc",
-            "prevot_smc",
-            "cardelli",
-            "li08",
-            "salim",
-            "leitherer02",
-            "noll09",
-            "salim_sbl18",
-            "tea",
-            "narayanan_z",
-            "conroy2010",
-            "wd01_smcbar",
-            "wd01_mwrv31",
-            "d03_mwrv31",
-            "hd23_mwrv31",
-        ],
-    )
+    @pytest.mark.parametrize("law_name", EVERY_DUST_LAW)
     def test_attenuation_is_finite_everywhere(
         self, law_name, wide_wavelength_grid, tau_v_reference
     ):
@@ -112,32 +154,7 @@ class TestDustAttenuationFiniteness:
             f"finite count {jnp.sum(jnp.isfinite(k))}/{len(k)}"
         )
 
-    @pytest.mark.parametrize(
-        "law_name",
-        [
-            "power_law",
-            "vw07_bc",
-            "vw07_diff",
-            "calzetti",
-            "kriek_conroy",
-            "smc",
-            "lmc",
-            "prevot_smc",
-            "cardelli",
-            "li08",
-            "salim",
-            "leitherer02",
-            "noll09",
-            "salim_sbl18",
-            "tea",
-            "narayanan_z",
-            "conroy2010",
-            "wd01_smcbar",
-            "wd01_mwrv31",
-            "d03_mwrv31",
-            "hd23_mwrv31",
-        ],
-    )
+    @pytest.mark.parametrize("law_name", EVERY_DUST_LAW)
     def test_attenuation_is_nonnegative(self, law_name, wide_wavelength_grid, tau_v_reference):
         """Attenuation curve k(λ) ≥ 0 everywhere; transmission never exceeds 1.
 
@@ -153,32 +170,7 @@ class TestDustAttenuationFiniteness:
             f"min={jnp.min(k):.6e}, count={jnp.sum(k < 0)}"
         )
 
-    @pytest.mark.parametrize(
-        "law_name",
-        [
-            "power_law",
-            "vw07_bc",
-            "vw07_diff",
-            "calzetti",
-            "kriek_conroy",
-            "smc",
-            "lmc",
-            "prevot_smc",
-            "cardelli",
-            "li08",
-            "salim",
-            "leitherer02",
-            "noll09",
-            "salim_sbl18",
-            "tea",
-            "narayanan_z",
-            "conroy2010",
-            "wd01_smcbar",
-            "wd01_mwrv31",
-            "d03_mwrv31",
-            "hd23_mwrv31",
-        ],
-    )
+    @pytest.mark.parametrize("law_name", EVERY_DUST_LAW)
     def test_v_band_normalization(self, law_name, tau_v_reference):
         """k(5500 Å) ≈ 1 (within 10%) — locks V-band normalization.
 
@@ -201,32 +193,7 @@ class TestDustAttenuationFiniteness:
             f"got k(V)={k_v[0]:.6f} (rel error {rel_error:.1%})"
         )
 
-    @pytest.mark.parametrize(
-        "law_name",
-        [
-            "power_law",
-            "vw07_bc",
-            "vw07_diff",
-            "calzetti",
-            "kriek_conroy",
-            "smc",
-            "lmc",
-            "prevot_smc",
-            "cardelli",
-            "li08",
-            "salim",
-            "leitherer02",
-            "noll09",
-            "salim_sbl18",
-            "tea",
-            "narayanan_z",
-            "conroy2010",
-            "wd01_smcbar",
-            "wd01_mwrv31",
-            "d03_mwrv31",
-            "hd23_mwrv31",
-        ],
-    )
+    @pytest.mark.parametrize("law_name", EVERY_DUST_LAW)
     def test_far_ir_non_extrapolation(self, law_name, tau_v_reference):
         """k(λ ≥ 30 µm) ≤ 0.1 × k(V) — catches unphysical far-IR extrapolation.
 
@@ -252,32 +219,7 @@ class TestDustAttenuationFiniteness:
             f"ratio k(30µm)/k(V)={k_fir / k_v:.2f} > 0.1"
         )
 
-    @pytest.mark.parametrize(
-        "law_name",
-        [
-            "power_law",
-            "vw07_bc",
-            "vw07_diff",
-            "calzetti",
-            "kriek_conroy",
-            "smc",
-            "lmc",
-            "prevot_smc",
-            "cardelli",
-            "li08",
-            "salim",
-            "leitherer02",
-            "noll09",
-            "salim_sbl18",
-            "tea",
-            "narayanan_z",
-            "conroy2010",
-            "wd01_smcbar",
-            "wd01_mwrv31",
-            "d03_mwrv31",
-            "hd23_mwrv31",
-        ],
-    )
+    @pytest.mark.parametrize("law_name", EVERY_DUST_LAW)
     def test_uv_stronger_than_v(self, law_name):
         """k(1500 Å) > k(V) — UV attenuation exceeds V-band.
 

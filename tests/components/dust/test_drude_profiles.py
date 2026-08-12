@@ -15,6 +15,7 @@ from tengri.components.dust.drude_profiles import (
     decompose_pah,
     drude_profile,
 )
+from tests._grad_parity import assert_grad_matches_fd
 
 jax.config.update("jax_enable_x64", True)
 
@@ -127,7 +128,7 @@ class TestPAHTemplate:
         def total(strengths):
             return jnp.sum(compute_pah_template(_WAVE_UM, strengths=strengths))
 
-        g = jax.grad(total)(s)
+        g = assert_grad_matches_fd(total, s)
         chex.assert_tree_all_finite(g)
 
     def test_major_features_are_peaks(self):
@@ -185,7 +186,7 @@ class TestDecomposePAH:
         def total_strength(sed):
             return jnp.sum(decompose_pah(_WAVE_UM, sed)["strengths"])
 
-        g = jax.grad(total_strength)(sed)
+        g = assert_grad_matches_fd(total_strength, sed)
         chex.assert_tree_all_finite(g)
 
     def test_continuum_subtraction(self):

@@ -11,6 +11,7 @@ jax.config.update("jax_enable_x64", True)
 
 from tengri.components.stellar.sfh.mean_sfh import constant_then_exponential
 from tengri.components.stellar.sfh.registry import SFH_REGISTRY, resolve_sfh
+from tests._grad_parity import assert_grad_matches_fd
 from tests._jit_parity import assert_jit_matches_eager
 
 pytestmark = pytest.mark.bounds
@@ -104,7 +105,7 @@ class TestConstantThenExponentialSFH:
         def scalar_fn(log_m):
             return jnp.sum(constant_then_exponential(t, log_m, 1e9, 5e9, 10e9))
 
-        grad_val = jax.grad(scalar_fn)(10.0)
+        grad_val = assert_grad_matches_fd(scalar_fn, 10.0)
         assert jnp.isfinite(grad_val)
 
 

@@ -17,6 +17,7 @@ import numpy.testing as npt
 jax.config.update("jax_enable_x64", True)
 
 from tengri.observation.noise import PoissonNoiseLikelihood, StudentTLikelihood
+from tests._grad_parity import assert_grad_matches_fd
 from tests._jit_parity import assert_jit_matches_eager
 
 # ── PoissonNoiseLikelihood ────────────────────────────────────────
@@ -119,7 +120,7 @@ class TestPoissonNoiseLikelihood:
             return -jnp.sum(lp)  # Negative because log_prob returns likelihood
 
         pred0 = jnp.array([100.0])
-        grad_val = jax.grad(loss)(pred0)
+        grad_val = assert_grad_matches_fd(loss, pred0)
         assert jnp.isfinite(grad_val[0])
 
     def test_outlier_same_as_inlier(self):

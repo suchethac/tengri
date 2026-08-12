@@ -15,6 +15,7 @@ from tengri.inference.fitter import Fitter
 from tengri.inference.posterior import Posterior
 from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Gaussian, Uniform
+from tests._grad_parity import assert_grad_matches_fd
 
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 _SSP_FILE = _DATA_DIR / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
@@ -91,7 +92,7 @@ class TestLossFunction:
         loss_fn = fitter._build_loss_fn()
         data_args = fitter._data_args
         init = fitter._initialize_unbounded(jax.random.PRNGKey(0))
-        grad = jax.grad(lambda p: loss_fn(p, data_args))(init)
+        grad = assert_grad_matches_fd(lambda p: loss_fn(p, data_args), init)
         for name, g in grad.items():
             assert jnp.all(jnp.isfinite(g)), f"Non-finite gradient for {name}"
 

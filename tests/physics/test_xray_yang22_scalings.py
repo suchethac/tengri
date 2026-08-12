@@ -28,6 +28,7 @@ from tengri.components.xray.xray import (
     xray_total,
     xray_xrb,
 )
+from tests._grad_parity import assert_grad_matches_fd
 
 jax.config.update("jax_enable_x64", True)
 
@@ -121,7 +122,7 @@ def test_hmxb_smooth_in_metallicity() -> None:
     def hmxb_at_Z(Z: float) -> float:
         return xray_xrb(wave, sfr=1.0, stellar_mass=0.0, metallicity_z=Z)[0]
 
-    grad = jax.grad(hmxb_at_Z)(jnp.array(0.02))
+    grad = assert_grad_matches_fd(hmxb_at_Z, jnp.array(0.02))
     assert jnp.isfinite(grad)
     # At Z=Z_sun the quartic has negative slope (−62.12 + ...). Numerical:
     # d log L / dZ = (−62.12 + 1138.88·0.02 − 5501.4·0.0004 + 7873.3·8e-6)

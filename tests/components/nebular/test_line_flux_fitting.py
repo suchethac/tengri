@@ -18,6 +18,7 @@ from tengri.observation.line_flux_data import LineFluxData
 from tengri.observation.observation import Observation
 from tengri.observation.photometry import FilterCurve
 from tengri.observation.photometry_config import Photometry
+from tests._grad_parity import assert_grad_matches_fd
 
 # ── Helpers ───────────────────────────────────────────────────────
 
@@ -209,7 +210,7 @@ class TestLineFluxChi2:
             wavelengths=jnp.array([6564.61]),
         )
 
-        grad = jax.grad(lf.chi2)(jnp.array([0.9e-16]))
+        grad = assert_grad_matches_fd(lf.chi2, jnp.array([0.9e-16]))
         assert jnp.isfinite(grad).all()
         assert grad[0] != 0.0
 
@@ -245,7 +246,7 @@ class TestLineFluxChi2:
             errors=jnp.array([0.1e-16]),
             wavelengths=jnp.array([6564.61]),
         )
-        grad = jax.grad(lf.log_likelihood)(jnp.array([0.9e-16]))
+        grad = assert_grad_matches_fd(lf.log_likelihood, jnp.array([0.9e-16]))
         assert jnp.isfinite(grad).all()
 
 
@@ -308,7 +309,7 @@ class TestLineFluxUpperLimits:
         ll = lf.log_likelihood(model)
         assert jnp.isfinite(ll)
 
-        grad = jax.grad(lf.log_likelihood)(model)
+        grad = assert_grad_matches_fd(lf.log_likelihood, model)
         assert jnp.isfinite(grad).all()
 
 
