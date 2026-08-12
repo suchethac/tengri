@@ -867,9 +867,18 @@ def parse_groups(**kwargs) -> Parameters:
         # ``wildcard_fixed_inactive`` is deliberate block scoping, not a failure,
         # so only the active branch is tracked.
         if tag == "wildcard_free":
-            wildcard_free_outcome.setdefault(group, []).append(
-                (param_name, not final_dist.is_fixed)
-            )
+            freed = not final_dist.is_fixed
+            wildcard_free_outcome.setdefault(group, []).append((param_name, freed))
+            # Report the *outcome*, not the request. A wildcard-FREE that found
+            # no declared prior leaves the parameter Fixed, and tagging it
+            # "[all_params FREE]" put a row reading FREE inside the Fixed block
+            # of ``spec.summary()`` — the one table a user consults to answer
+            # "what did I hold constant?" (#1726). WildcardPartialFreeWarning
+            # says so at build time, but a notebook can miss or filter it, and
+            # the summary is what gets read afterwards. Same principle as the
+            # "_grid" tags below: shown, never silent (#1586).
+            if not freed:
+                tag = "wildcard_free_pinned"
 
         # Apply the resolved distribution when the user addressed this group
         # (a per-param override or wildcard), or for any AGN param whenever the
@@ -947,6 +956,11 @@ def parse_groups(**kwargs) -> Parameters:
 #: Marks a provenance tag whose prior was intersected with a component's grid.
 _GRID_NARROWED_SUFFIX = "_grid"
 
+#: Marks a wildcard-FREE that found no declared prior and left the parameter
+#: Fixed. Both suffixes annotate the *outcome* of a resolution whose *intent*
+#: is carried by the base tag, so :func:`_base_provenance` strips either.
+_WILDCARD_PINNED_SUFFIX = "_pinned"
+
 #: Least fraction of a declared range that may survive an automatic narrowing.
 #:
 #: Trimming a modest dead tail is a tidy-up. Cutting a 2.5 dex prior down to
@@ -957,7 +971,7 @@ _MIN_RETAINED_FRACTION = 0.10
 
 
 def _base_provenance(tag: str) -> str:
-    """Strip the grid-narrowing marker, leaving how the value was *chosen*.
+    """Strip outcome markers, leaving how the value was *chosen*.
 
     ``wildcard_free_grid`` still means "this came from ``all_params: FREE``";
     the suffix only records that the declared range was then intersected with
@@ -965,6 +979,13 @@ def _base_provenance(tag: str) -> str:
     :func:`parameters_to_groups` has to see the base tag, or a narrowed
     parameter loses its wildcard intent and gets emitted as an explicit
     override instead of collapsing back into ``all_params``.
+
+    ``wildcard_free_pinned`` is the same shape (#1726): the wildcard did reach
+    the parameter, it simply found no declared prior and left it Fixed. The
+    suffix exists so ``spec.summary()`` can report the outcome rather than the
+    request, and must not make the parameter round-trip as an explicit override
+    — the user asked for ``all_params: FREE`` and that is what ``to_groups()``
+    should hand back.
 
     Parameters
     ----------
@@ -974,9 +995,12 @@ def _base_provenance(tag: str) -> str:
     Returns
     -------
     str
-        The tag without the grid-narrowing marker.
+        The tag without its outcome marker.
     """
-    return tag[: -len(_GRID_NARROWED_SUFFIX)] if tag.endswith(_GRID_NARROWED_SUFFIX) else tag
+    for suffix in (_GRID_NARROWED_SUFFIX, _WILDCARD_PINNED_SUFFIX):
+        if tag.endswith(suffix):
+            return tag[: -len(suffix)]
+    return tag
 
 
 #: Provenance tags whose prior came from the *declaration*, not from the user.
