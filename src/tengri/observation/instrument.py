@@ -238,8 +238,8 @@ def _premade_rows() -> tuple[dict[str, object], ...]:
 
     Each factory constructs an :class:`Instrument` and loads its filter set, so
     it is bound once and every column read off that one object. The rows are
-    returned frozen-by-convention and copied by :meth:`Instrument.list`, so a
-    caller mutating its table cannot corrupt the next lookup.
+    memoized here and copied by :meth:`Instrument.list`, so a caller mutating
+    its table cannot corrupt the next lookup.
     """
     rows = []
     for fac in _PREMADE_FACTORIES:
@@ -257,7 +257,7 @@ def _premade_rows() -> tuple[dict[str, object], ...]:
 
 
 def _reset_premade_rows_cache() -> None:
-    """Drop the memoised rows — for tests that monkeypatch the factories."""
+    """Drop the memoized rows — for tests that monkeypatch the factories."""
     _premade_rows.cache_clear()
 
 

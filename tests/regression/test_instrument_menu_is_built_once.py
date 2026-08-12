@@ -38,7 +38,7 @@ def counted_factories(monkeypatch):
     """Swap in factories that count their own construction calls.
 
     Returns the tally dict. Both properties below are read off it, so neither
-    test names the caching *mechanism* — only the observable behaviour.
+    test names the caching *mechanism* — only the observable behavior.
     """
     calls: dict[str, int] = {}
 
