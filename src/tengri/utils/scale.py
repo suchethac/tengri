@@ -69,8 +69,8 @@ def representable_floor(value: float) -> float:
     return max(float(value), float(jnp.finfo(jnp.result_type(float)).tiny))
 
 
-def representable_exponent(value: float) -> float:
-    r"""Lower a base-10 exponent bound to the largest ``10**x`` the dtype can hold.
+def representable_exponent(value: float, *, base: float = 10.0) -> float:
+    r"""Lower an exponent bound to the largest ``base**x`` the dtype can hold.
 
     The ceiling-side mirror of :func:`representable_floor`, and the same defect in
     the opposite direction: a saturating bound written for float64 does not merely
@@ -80,32 +80,45 @@ def representable_exponent(value: float) -> float:
     Parameters
     ----------
     value : float
-        The intended exponent ceiling, as written at the call site [dex].
+        The intended exponent ceiling, as written at the call site [dex for
+        ``base=10``, nats for ``base=e``].
+    base : float, keyword-only, optional
+        Base of the power the bound feeds. ``10.0`` (default) for
+        ``10**clip(x, lo, hi)``; :data:`math.e` for ``exp(clip(x, lo, hi))``.
+        One function rather than a per-base copy — the arithmetic is identical
+        and only ``log(max)/log(base)`` changes.
 
     Returns
     -------
     float
         ``min(value, x_max)`` where ``x_max`` is the largest float for which
-        ``10**x`` is finite in the working dtype — a static Python float, safe as
-        a :func:`jax.numpy.clip` bound under JIT.
+        ``base**x`` is finite in the working dtype — a static Python float, safe
+        as a :func:`jax.numpy.clip` bound under JIT.
 
     Notes
     -----
     **JIT-compatible**: yes — resolved at trace time from
     ``jnp.result_type(float)``, so it is a compile-time constant.
 
-    float32 tops out at 3.4028e38, i.e. :math:`10^{38.53}`. A clip to ±50 dex
-    therefore saturates to a value float32 cannot represent, so the guarded
-    expression returns ``inf`` for every input the guard fires on. Measured: both
-    Cue emission paths clipped to ±50 dex with the comment *"the clip is the only
-    defense against NaN/inf poisoning a JAX gradient"*, and in pure float32 that
-    clip was the sole reason the whole forward state went non-finite -- poisoning
-    the dust energy balance, ``L_absorbed``, ``L_ir`` and every gradient through
-    them (#1206).
+    float32 tops out at 3.4028e38, i.e. :math:`10^{38.53}` or :math:`e^{88.72}`.
+    A clip to ±50 dex therefore saturates to a value float32 cannot represent, so
+    the guarded expression returns ``inf`` for every input the guard fires on.
+    Measured: both Cue emission paths clipped to ±50 dex with the comment *"the
+    clip is the only defense against NaN/inf poisoning a JAX gradient"*, and in
+    pure float32 that clip was the sole reason the whole forward state went
+    non-finite -- poisoning the dust energy balance, ``L_absorbed``, ``L_ir`` and
+    every gradient through them (#1206).
 
-    The bound is stepped strictly below ``log10(max)`` rather than set equal to
-    it: ``10**log10(max)`` rounds *up* to ``inf`` in the last bits, so the exact
-    value is not itself usable.
+    **The natural-exp form fails silently, which is worse.** ``qsogen``'s Planck
+    terms are ``1 / (exp(clip(x, 0, 500)) - 1)``. In float32 ``exp(500)`` is
+    ``inf``, so the *value* is ``0.0`` -- physically right for a Planck tail, so
+    nothing announces it -- while the *gradient* is ``NaN``. Measured at ``x=600``:
+    float64 gives value 7.1e-218 and derivative ``-0.0``; float32 gives ``0.0``
+    and ``nan``.
+
+    The bound is stepped strictly below ``log(max)/log(base)`` rather than set
+    equal to it: ``base**that`` rounds *up* to ``inf`` in the last bits, so the
+    exact value is not itself usable.
 
     **float64 is unchanged by construction.** Its ceiling is :math:`10^{308.25}`,
     above every exponent bound the tree writes, so the ``min`` returns the
@@ -128,11 +141,12 @@ def representable_exponent(value: float) -> float:
     # alone is a numpy scalar (which is why representable_floor gets away with
     # ``jnp``), but taking a log of it is a JAX operation and the result traces.
     dtype = numpy.dtype(jnp.result_type(float))
-    # One ULP *of the working dtype* below log10(max): 10**log10(max) rounds up to
+    # One ULP *of the working dtype* below log_base(max): base**that rounds up to
     # inf in the last bits, so the exact value is not usable. Stepping in float64
     # would not move it far enough to matter — float64's ULP at 38.5 is ~7e-15,
     # float32's is ~4e-6.
-    ceiling = numpy.nextafter(numpy.log10(numpy.finfo(dtype).max).astype(dtype), dtype.type(0.0))
+    limit = numpy.log(numpy.finfo(dtype).max) / numpy.log(base)
+    ceiling = numpy.nextafter(dtype.type(limit), dtype.type(0.0))
     return min(float(value), float(ceiling))
 
 

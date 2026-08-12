@@ -48,6 +48,20 @@ _POW10_CLIP = re.compile(
     r"(?:10\.0\s*\*\*|pow10\()\s*(?:jnp\.)?clip\([^,]+,\s*[^,]+,\s*([0-9]+\.?[0-9]*)\s*\)"
 )
 
+#: ``jnp.exp(jnp.clip(x, lo, HI))`` -- the natural-log twin, and the reason this sweep
+#: covers two patterns instead of one. The first version of this guard swept only the
+#: ``10**`` form and was green while three qsogen Planck terms carried a literal
+#: ``500.0`` against float32's ``e**88.72`` ceiling: a guard is only as wide as its
+#: census, including this one.
+#:
+#: Only the **positive** form is swept. ``exp(-clip(x, 0, 500))`` is correct as
+#: written -- ``exp(-500)`` underflows to ``0.0``, which is the right answer with a
+#: ``-0.0`` gradient -- and capping its magnitude to 88.72 would return 3e-39 instead,
+#: i.e. turn a correct zero into a wrong non-zero.
+_EXP_CLIP = re.compile(
+    r"(?:jnp\.)?exp\(\s*(?:jnp\.)?clip\([^,]+,\s*[^,]+,\s*([0-9]+\.?[0-9]*)\s*\)"
+)
+
 
 def test_float64_is_untouched():
     """The cap must be a no-op in float64, so no existing result can move."""
@@ -128,15 +142,40 @@ def test_cue_forward_is_finite_in_pure_float32(ssp_bare):
     )
 
 
-def test_no_call_site_clips_a_base_ten_exponent_above_the_float32_ceiling():
+@pytest.mark.parametrize(
+    ("pattern", "base_name", "ceiling", "call"),
+    [
+        (
+            "_POW10_CLIP",
+            "10",
+            float(np.log10(np.finfo(np.float32).max)),
+            "representable_exponent(HI)",
+        ),
+        (
+            "_EXP_CLIP",
+            "e",
+            float(np.log(np.finfo(np.float32).max)),
+            "representable_exponent(HI, base=math.e)",
+        ),
+    ],
+)
+def test_no_call_site_clips_an_exponent_above_the_float32_ceiling(
+    pattern, base_name, ceiling, call
+):
     """Census: nobody may reintroduce a literal exponent bound float32 cannot hold.
 
     Swept from source rather than from a list of known sites, for the reason the
-    module docstring gives. A new ``10.0 ** jnp.clip(x, lo, 50.0)`` anywhere in the
-    package fails here, whether or not anyone remembers this issue.
+    module docstring gives. A new ``10.0 ** jnp.clip(x, lo, 50.0)`` or
+    ``jnp.exp(jnp.clip(x, lo, 500.0))`` anywhere in the package fails here, whether
+    or not anyone remembers this issue.
+
+    Both bases are swept because the first version of this guard swept only ``10**``
+    and was green while three qsogen Planck terms carried a literal ``500.0``. The
+    ``exp`` form is the worse of the two: ``1/(exp(inf)-1)`` is ``0.0``, which is the
+    *correct* value for a Planck tail, so the forward pass is bit-identical and only
+    the gradient goes NaN.
     """
-    with jax.enable_x64(False):
-        f32_ceiling = float(np.log10(np.finfo(np.float32).max))
+    regex = {"_POW10_CLIP": _POW10_CLIP, "_EXP_CLIP": _EXP_CLIP}[pattern]
 
     files = sorted(_SRC.rglob("*.py"))
     assert files, f"the sweep found no source files under {_SRC} -- it is vacuous"
@@ -144,13 +183,52 @@ def test_no_call_site_clips_a_base_ten_exponent_above_the_float32_ceiling():
     offenders = []
     for path in files:
         for lineno, line in enumerate(path.read_text().splitlines(), start=1):
-            match = _POW10_CLIP.search(line)
-            if match and float(match.group(1)) > f32_ceiling:
+            # Prose describing the pattern is not an instance of it. Docstrings that
+            # explain this very defect quote the broken form in RST literals, and a
+            # comment above a fixed call site may still name the old bound. Both are
+            # documentation; only executable code can overflow.
+            if "``" in line or line.lstrip().startswith("#"):
+                continue
+            match = regex.search(line)
+            if match and float(match.group(1)) > ceiling:
                 offenders.append(f"{path.relative_to(_SRC)}:{lineno}: {line.strip()}")
 
     assert not offenders, (
-        "a base-10 exponent is clipped to a bound float32 cannot represent "
-        f"(its ceiling is 10**{f32_ceiling:.2f}), so the clip returns inf for every "
-        "input it fires on. Wrap the bound in representable_exponent():\n  "
-        + "\n  ".join(offenders)
+        f"a base-{base_name} exponent is clipped to a bound float32 cannot represent "
+        f"(its ceiling is {base_name}**{ceiling:.2f}), so the clip returns inf for "
+        f"every input it fires on. Wrap the bound in {call}:\n  " + "\n  ".join(offenders)
     )
+
+
+def test_the_exp_form_poisons_only_the_gradient(ssp_bare):
+    """The ``exp`` twin is silent: identical forward value, NaN gradient.
+
+    Pinned as its own test because it is the reason the census sweeps two patterns.
+    A forward-value comparison -- the check most float32 guards make -- cannot see
+    this defect at all: measured, ``1/(exp(clip(x, 0, 500)) - 1)`` returns the *same*
+    number with the broken and the fixed bound, because ``1/(inf - 1)`` is ``0.0``
+    and ``0.0`` is the physically correct Planck tail.
+    """
+    from tengri.components.agn.qsogen import _hot_dust_blackbody
+
+    wave = np.logspace(2.7, 5.0, 400)
+
+    def gradient(x64, dtype):
+        with jax.enable_x64(x64):
+            w = jnp.asarray(wave, dtype)
+            cont = jnp.ones_like(w)
+
+            def total(tbb):
+                sed = _hot_dust_blackbody(w, cont, tbb=tbb, bbnorm=jnp.asarray(1.0, dtype))
+                return jnp.sum(jnp.asarray(sed, dtype))
+
+            return float(jax.grad(total)(jnp.asarray(1200.0, dtype)))
+
+    g64 = gradient(True, jnp.float64)
+    g32 = gradient(False, jnp.float32)
+    assert np.isfinite(g32), (
+        f"d(hot dust blackbody)/d(tbb) is {g32} in pure float32 -- the exp() bound is "
+        "back above float32's e**88.72 ceiling, so exp() saturates to inf and the "
+        "reverse pass forms 0 * inf"
+    )
+    assert abs(g32 - g64) / abs(g64) < 1e-4, f"float32 {g32} vs float64 {g64}"
