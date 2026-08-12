@@ -236,6 +236,7 @@ _CANONICAL_UNITS: dict[str, str] = {
     "dust_attenuation_factor": "",
     "sed_dust_attenuated": "erg/s/Hz",
     "sed_dust_ir": "erg/s/Hz",
+    "L_ir_emission": "erg/s",
     # AGN outputs
     "L_agn_bol": "erg/s",
     "L_agn_torus": "erg/s",

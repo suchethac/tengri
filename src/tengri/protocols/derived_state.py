@@ -228,6 +228,9 @@ class DerivedState:
     dust_attenuation_factor: jnp.ndarray | None = None
     sed_dust_attenuated: jnp.ndarray | None = None
     sed_dust_ir: jnp.ndarray | None = None
+    #: Bolometric IR luminosity from dust emission component [erg/s].
+    #: Published by dust-emission components that close the energy balance.
+    L_ir_emission: jnp.ndarray | None = None
     # Dust attenuation per filter. A(λ_eff) and its
     # wavelength derivative A'(λ_eff) at each filter pivot, used
     # to apply Taylor-expansion attenuation in
