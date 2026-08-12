@@ -91,6 +91,38 @@ def test_float32_caps_below_its_ceiling_and_the_power_is_finite():
         )
 
 
+def test_the_bound_is_sized_for_the_derivative_not_just_the_value():
+    """``d/dx base**x = base**x·ln(base)``, so the value being finite is not enough.
+
+    The first version of this helper capped the *value* at ``log10(finfo.max)``.
+    That leaves the forward pass finite and the reverse pass NaN: at the cap the
+    derivative is ``3.4e38 x 2.303 = 7.8e38`` -> ``inf``, and ``clip`` contributes a
+    zero gradient there, so the chain rule forms ``0 * inf``. Measured on Cue at the
+    cap: forward ``3.4028e38`` (finite), gradient ``nan``, while float64 gave ``0.0``.
+
+    ``representable_floor`` documents the same value-vs-derivative distinction for
+    the floor side, where division's VJP needs the denominator *squared*. This is
+    its ceiling mirror, and it costs 0.36 dex for base 10 and nothing for base e.
+    """
+    import math
+
+    for base in (10.0, math.e):
+        with jax.enable_x64(False):
+            cap = representable_exponent(1e9, base=base)  # unreachably high request
+            derivative = float(base ** jnp.asarray(cap, jnp.float32)) * math.log(base)
+        assert np.isfinite(derivative), (
+            f"base={base}: at the cap {cap} the derivative base**cap*ln(base) is "
+            f"{derivative}, so a saturating clip produces 0 * inf = NaN in reverse "
+            "mode even though the forward value is finite"
+        )
+
+    # base e costs nothing, because ln(e) == 1.
+    with jax.enable_x64(False):
+        assert representable_exponent(1e9, base=math.e) == pytest.approx(
+            float(np.log(np.finfo(np.float32).max)), rel=1e-6
+        )
+
+
 def test_setup_the_unfixed_bound_really_overflows():
     """Guard the guard: if ``10**50`` were finite in float32 this suite is vacuous."""
     with jax.enable_x64(False):

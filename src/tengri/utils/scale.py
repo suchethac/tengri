@@ -141,11 +141,20 @@ def representable_exponent(value: float, *, base: float = 10.0) -> float:
     # alone is a numpy scalar (which is why representable_floor gets away with
     # ``jnp``), but taking a log of it is a JAX operation and the result traces.
     dtype = numpy.dtype(jnp.result_type(float))
-    # One ULP *of the working dtype* below log_base(max): base**that rounds up to
-    # inf in the last bits, so the exact value is not usable. Stepping in float64
-    # would not move it far enough to matter — float64's ULP at 38.5 is ~7e-15,
-    # float32's is ~4e-6.
-    limit = numpy.log(numpy.finfo(dtype).max) / numpy.log(base)
+    # The DERIVATIVE, not the value, sets the bound: d/dx base**x = base**x·ln(base),
+    # so the headroom needed is ``max / ln(base)``. Capping the value alone leaves the
+    # forward finite and the reverse pass NaN — clip contributes a zero gradient
+    # there, and 0 * inf is NaN. Measured on Cue at the cap: forward 3.4028e38
+    # (finite), gradient NaN, while float64 gives a clean 0.0.
+    #
+    # It costs 0.36 dex for base 10 and nothing for base e (ln(e) = 1), and
+    # representable_floor's docstring already records the same value-vs-derivative
+    # distinction for the floor side (#1397, #1436, #1439).
+    headroom = numpy.finfo(dtype).max / max(numpy.log(base), 1.0)
+    # One ULP *of the working dtype* below the limit: base**that rounds up to inf in
+    # the last bits, so the exact value is not usable. Stepping in float64 would not
+    # move it far enough to matter — float64's ULP at 38.5 is ~7e-15, float32's ~4e-6.
+    limit = numpy.log(headroom) / numpy.log(base)
     ceiling = numpy.nextafter(dtype.type(limit), dtype.type(0.0))
     return min(float(value), float(ceiling))
 
