@@ -79,7 +79,7 @@ print(f"  sfr_100myr            = {pred.sfh.sfr_100myr:.3f} Msun/yr")
 print(f"  sfr_10myr             = {pred.sfh.sfr_10myr:.3f} Msun/yr")
 print(f"  ssfr                  = {pred.sfh.ssfr:.3e} yr^-1")
 print(f"  mass_weighted_age     = {pred.sfh.mass_weighted_age_gyr:.2f} Gyr")
-print(f"  mass_weighted_Z       = {pred.sfh.mass_weighted_metallicity:.3f} (log10 Z)")
+print(f"  mass_weighted_Z       = {pred.sfh.mass_weighted_metallicity:.3f} (log10 Z/Zsun)")
 
 # %%
 # SED quantities (full SED computation triggered on first access)

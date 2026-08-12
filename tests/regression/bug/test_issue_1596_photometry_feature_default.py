@@ -59,7 +59,8 @@ class _StubFitterSelf:
     _eline_marginalize = False
     _eline_fitted = False
 
-    _fits_line_fluxes = staticmethod(Fitter._fits_line_fluxes)
+    _line_fluxes_for = Fitter._line_fluxes_for
+    _fits_line_fluxes = Fitter._fits_line_fluxes
     _fits_lines = Fitter._fits_lines
     _auto_approx_config = Fitter._auto_approx_config
     _add_feature_precomp = Fitter._add_feature_precomp
@@ -136,3 +137,58 @@ def test_spectral_indices_also_disable_the_feature_topup():
     model.observation = obs
     cfgs = _resolved_cfgs(model)
     assert not any(isinstance(c, FeaturePrecomp) for c in cfgs)
+
+
+class _StubModernModel(_StubModel):
+    """A model BUILT with ``approx=WavePrecomp()``."""
+
+    def _has_modern_approx(self):
+        return True
+
+
+def test_the_line_flux_override_counts_as_a_line_channel():
+    """``line_flux_data=`` is a line-flux channel, so the predicate must see it.
+
+    ``_build_data_args`` resolves the channel through ``_resolved_line_fluxes``
+    -- the ``line_flux_data=`` override (#1599 per-galaxy values) *or* the
+    Observation's own ``line_fluxes`` -- while the predicate read only the
+    latter. So a fit supplying its line fluxes per galaxy publishes
+    ``line_flux_waves`` and sets ``has_line_fluxes`` in the loss, yet classifies
+    as photometry-only. The two must read the same sources or they disagree
+    about whether the fit needs the line LUT.
+    """
+    model = _StubModel(features_tabulate=True)
+    model.observation = _StubObs()  # line_fluxes stays None
+    fitter = _StubFitterSelf(model)
+    fitter._line_flux_override = object()  # LineFluxData stand-in
+
+    assert fitter._fits_lines(model), (
+        "a line-flux channel supplied via line_flux_data= was not counted as a "
+        "line channel; the predicate censuses observation.line_fluxes only, "
+        "while _build_data_args resolves both sources"
+    )
+
+
+def test_the_line_flux_override_gets_the_feature_topup():
+    """The #1596 cliff must not reopen for the per-galaxy spelling.
+
+    On a model built with ``approx=WavePrecomp()`` the ``"auto"`` policy tops up
+    ``FeaturePrecomp`` only when ``_fits_lines`` is true. Spelled via
+    ``observation.line_fluxes`` the same fit is topped up; spelled via
+    ``line_flux_data=`` it was returned untouched -- no LUT and no warning,
+    i.e. exactly the ~21x per-gradient cliff ``_add_feature_precomp`` exists
+    to prevent, on the two public paths the docs recommend together.
+    """
+    model = _StubModernModel(features_tabulate=True)
+    model.observation = _StubObs()  # line_fluxes stays None
+    fitter = _StubFitterSelf(model)
+    fitter._line_flux_override = object()
+
+    resolved = fitter._resolve_fit_approx(model, "auto")
+    assert resolved is not model, (
+        "the model was returned untouched: a line-flux fit via line_flux_data= "
+        "got no FeaturePrecomp top-up and no warning"
+    )
+    cfg = resolved.received_cfg
+    cfgs = cfg if isinstance(cfg, tuple) else (cfg,)
+    assert any(isinstance(c, FeaturePrecomp) for c in cfgs)

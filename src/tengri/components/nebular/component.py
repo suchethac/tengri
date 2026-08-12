@@ -17,13 +17,16 @@ line paths — and add the resulting line + continuum SED to ``sed_intrinsic``.
 
 from __future__ import annotations
 
+import inspect
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from functools import cache
 from typing import Any
 
 import jax.numpy as jnp
 
 from tengri.components.nebular.baked_in import BakedInBackend
+from tengri.components.template_threading import TemplateThreading
 from tengri.parameters.priors import Fixed, Uniform
 from tengri.parameters.resolve import require_redshift
 from tengri.protocols.component import (
@@ -35,6 +38,68 @@ from tengri.protocols.component import (
 )
 
 __all__ = ["NebularSEDComponent", "NebularSEDComponentConfig"]
+
+#: Nebular parameters only some photoionization backends model. CB19 carries
+#: them as three of its six interpolation axes; CLOUDY, Cue and the baked-in
+#: backend have no such axes. They are threaded per backend by
+#: :func:`_backend_accepted_params` rather than added to the shared kwargs
+#: unconditionally.
+_BACKEND_OPTIONAL_PARAMS: tuple[str, ...] = ("neb_log_nH", "neb_co", "neb_dno")
+
+#: Backend methods the shared kwargs dict is splatted into. A parameter is
+#: threaded only when *every* method that exists names it, so a backend that
+#: models an axis in one call and not the other is never handed a value one of
+#: them would drop.
+_BACKEND_KWARG_SINKS: tuple[str, ...] = (
+    "predict_nebular_sed",
+    "predict_nebular_line_luminosities",
+)
+
+
+@cache
+def _backend_accepted_params(backend_cls: type) -> frozenset[str]:
+    """Which :data:`_BACKEND_OPTIONAL_PARAMS` this backend class names.
+
+    Parameters
+    ----------
+    backend_cls : type
+        Backend class (not instance), so the result caches per class.
+
+    Returns
+    -------
+    frozenset of str
+        Subset of :data:`_BACKEND_OPTIONAL_PARAMS` named by every method in
+        :data:`_BACKEND_KWARG_SINKS` the class defines.
+
+    Notes
+    -----
+    **JIT-compatible**: no — signature introspection, cached per class and
+    evaluated at apply time before entering any JAX transform.
+
+    Every backend's ``predict_nebular_sed`` ends in ``**kwargs``, so passing an
+    unmodeled parameter raises nothing — it is silently dropped, which is
+    indistinguishable from being read. The named parameters are therefore the
+    only honest test of whether a backend models an axis.
+
+    This is the general form of a defect measured on CB19: the component built
+    one shared kwargs dict that never contained ``neb_log_nH``, ``neb_co`` or
+    ``neb_dno``, so the backend received its signature defaults on every call
+    while the sampler was free to propose values. Sweeping each across its full
+    declared support moved the SED by exactly 0.0 — three free dimensions that
+    could not affect the fit, on a backend whose own docstring advertises being
+    differentiable through them.
+    """
+    accepted = set(_BACKEND_OPTIONAL_PARAMS)
+    for method_name in _BACKEND_KWARG_SINKS:
+        method = getattr(backend_cls, method_name, None)
+        if method is None:
+            continue
+        try:
+            named = set(inspect.signature(method).parameters)
+        except (TypeError, ValueError):  # pragma: no cover - C-implemented callables
+            return frozenset()
+        accepted &= named
+    return frozenset(accepted)
 
 
 @dataclass(frozen=True)
@@ -93,7 +158,7 @@ class NebularSEDComponentState(SEDComponentState):
 
 
 @dataclass(frozen=True)
-class NebularSEDComponent:
+class NebularSEDComponent(TemplateThreading):
     r"""SEDComponent adapter wrapping :class:`BakedInBackend`.
 
     Notes
@@ -481,6 +546,13 @@ class NebularSEDComponent:
             # profile width (Prospector-style). Default 100 km/s.
             "line_sigma_kms": jnp.asarray(params.get("neb_eline_sigma_kms", 100.0)),
         }
+        # Axes only some backends model (CB19's log_nH / log_CO / dNO). Passed
+        # only to a backend that names them; a value absent from ``params``
+        # falls through to the backend's own signature default, which matches
+        # the registry default for each, so the two cannot disagree.
+        for _name in _backend_accepted_params(type(self.backend)):
+            if _name in params:
+                common_kwargs[_name] = jnp.asarray(params[_name])
         # ── Diffuse-ionized-gas (DIG) mixing (issue #259) ─────────────
         # The DIG component is a second photoionization regime with a
         # lower ionization parameter (log U_DIG = log U_HII + Δlog U,
@@ -504,9 +576,20 @@ class NebularSEDComponent:
         # model does not use — SEDModel.predict_spectrum guards against it), and
         # the Cue NN forward is genuinely gone (not merely pruned), which is where
         # the ~1.2 ms/eval saving comes from.
+        # ONE predicate, read by every fast-path branch below (the zeroed
+        # continuum, the skipped line catalog, and the publish block). Deriving
+        # it twice is what let the publish block drift into emitting the
+        # observed band without its rest-frame twin (#1665).
+        #
+        # The rest-band channel is part of the condition, not an extra: a table
+        # that cannot serve BOTH publishes must not take the fast path at all.
+        # Grids built before #1665 therefore fall back to the exact path —
+        # slower, correct — instead of silently dropping the nebular
+        # contribution from every rest-frame band.
         use_grid = (
             self.grid_table is not None
             and getattr(self.grid_table, "log_phot_per_qh", None) is not None
+            and getattr(self.grid_table, "log_restband_per_qh", None) is not None
         )
 
         if use_grid:
@@ -721,7 +804,7 @@ class NebularSEDComponent:
         # ``nebular_phot_lnu_precomp`` for consumption by predict_via_precomp.
         derived_overrides = dict(sed_nebular=nebular_sed, sed_shock=zeros)
         grid = self.grid_table
-        if grid is not None and getattr(grid, "log_phot_per_qh", None) is not None:
+        if use_grid:
             # FAST path (#950): reconstruct the intrinsic nebular photometry from
             # the per-Q_H grid, ``L_nu = 10^{log_nion + interp(grid)}``, instead of the
             # per-eval filter integration below. The downstream contract is
@@ -733,11 +816,20 @@ class NebularSEDComponent:
             # ``predict_photometry``. log10(Q_H) is the stellar-published ``log_nion``.
             from tengri.components.nebular.nebular_grid_precompute import (
                 reconstruct_nebular_phot,
+                reconstruct_nebular_restband,
             )
 
             log_nion = state.derived["log_nion"]
+            interp_point = self._grid_interp_point(grid, params, state)
             derived_overrides["nebular_phot_lnu_precomp"] = reconstruct_nebular_phot(
-                log_nion, self._grid_interp_point(grid, params, state), grid
+                log_nion, interp_point, grid
+            )
+            # The rest-frame twin, from the same interpolation point (#1665).
+            # The exact path emits these two together; emitting only the first
+            # left every rest-frame consumer summing a band with the nebular
+            # emission missing — 13/13 spectral indices wrong, worst +1733 %.
+            derived_overrides["nebular_restband_lnu_precomp"] = reconstruct_nebular_restband(
+                log_nion, interp_point, grid
             )
         elif (
             self._state is not None

@@ -46,43 +46,16 @@ class EmissionComponent(SEDModelComponent):
     # Shared class attributes for all emission components
     parameter_prefix: str = "dust_"
 
-    #: Opt-in: when True, :meth:`apply` passes this component's template bundle
-    #: to :meth:`predict` as ``templates=``, taken from
-    #: ``template_data["dust_ir"][self.name]`` and falling back to ``self.data``.
+    #: Every dust emission backend shares the ``"dust_ir"`` namespace, so its
+    #: library lands beside the energy-balance LUT and band response already
+    #: published for this subsystem, rather than in a slot of its own.
     #:
-    #: It is opt-in rather than automatic because ``predict`` signatures are
-    #: written per backend; passing an unexpected keyword to every one of them
-    #: would break the analytic components, which have no library at all. A
-    #: template-backed backend sets this and accepts ``templates=None``.
-    #:
-    #: Without threading, a backend that loads its grid inside ``predict``
-    #: freezes the whole library into the graph as ``Constant`` ops — measured
-    #: at 66.6 MB for Draine & Li 2014 (#1649).
-    accepts_threaded_templates: ClassVar[bool] = False
-
-    def threaded_templates(self, template_data: Mapping[str, Any] | None) -> Any | None:
-        """Return this component's pre-loaded template bundle, if any.
-
-        Parameters
-        ----------
-        template_data : mapping, optional
-            The nested threading dict; the ``"dust_ir"`` slot is namespaced by
-            component ``name``.
-
-        Returns
-        -------
-        object or None
-            The threaded bundle, else ``self.data`` (set by ``precompute`` via
-            :meth:`load`), else ``None`` — in which case the backend falls back
-            to its own module-level load and bakes.
-        """
-        if isinstance(template_data, dict):
-            dust_ir = template_data.get("dust_ir")
-            if isinstance(dust_ir, dict):
-                found = dust_ir.get(self.name)
-                if found is not None:
-                    return found
-        return getattr(self, "data", None)
+    #: The opt-in flag itself (:attr:`accepts_threaded_templates`), the lookup,
+    #: and the eager loader live on
+    #: :class:`~tengri.components.template_threading.TemplateThreading` — dust
+    #: emission was simply the first subsystem to need them (#1649, generalized
+    #: to every registered component in #1694).
+    template_namespace: ClassVar[str] = "dust_ir"
 
     # Cross-component contract: all components consume L_ir and produce dust IR SED.
     # SEDModelComponent.__init_subclass__ collects these dicts into the DerivedKey

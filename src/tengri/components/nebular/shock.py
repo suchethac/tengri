@@ -37,6 +37,7 @@ import functools
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import NamedTuple
 
 import jax.numpy as jnp
 import numpy as np
@@ -275,6 +276,77 @@ def _load_mappings_grids() -> dict | None:
     return grids
 
 
+class ShockTemplateGrid(NamedTuple):
+    """The four MAPPINGS V ratio cubes, in a form that threads through ``jax.jit``.
+
+    Read from the module-level cache inside a trace, the *selected* ratio cube
+    freezes into the graph as an XLA ``Constant`` — 3.73 MB for the
+    ``(5, 6, 37, 35, 24)`` float32 array, on every compile, against a 0.05 MB
+    bare-stellar floor (#1694). Passed as an argument instead, it is a
+    ``Parameter``.
+
+    Only the cubes are carried here. The grid *axes* (velocity, B-field,
+    density), their triweight edges, the line wavelengths, and the two name
+    lists stay concrete, read from :func:`_load_mappings_grids` as before:
+    together they are ~730 bytes, so baking them is free, and keeping them
+    concrete is what lets :func:`_validate_shock_params` compare a user's
+    velocity against ``float(v_arr[0])`` and lets the abundance string resolve
+    to a static integer index. Threading those too would turn every one of
+    those Python-level guards into a ``TracerArrayConversionError``.
+
+    Being a :class:`~typing.NamedTuple` of plain arrays, this is already a JAX
+    pytree — no custom registration, and no exposure to the "arrays cannot be
+    passed as metadata fields" failure that a hand-rolled ``aux_data`` split
+    invites (see :class:`~tengri.components.nebular.cue.CueWeights`, #464).
+
+    Attributes
+    ----------
+    shock_ratios, precursor_ratios, combined_ratios : ndarray
+        Line ratios relative to Hbeta, shape
+        ``(n_abund, n_n, n_v, n_b, n_lines)`` [dimensionless]. Sparse grid
+        cells are NaN in the file and stored as 0.0 here.
+    hbeta_log_lum_erg_s : ndarray
+        Hbeta luminosity normalization [log10(erg/s)].
+
+    Notes
+    -----
+    **JIT-compatible**: yes — that is the point of the type. Pass an instance
+    as an argument rather than closing over it.
+    """
+
+    shock_ratios: jnp.ndarray
+    precursor_ratios: jnp.ndarray
+    combined_ratios: jnp.ndarray
+    hbeta_log_lum_erg_s: jnp.ndarray
+
+
+def load_shock_template_grid() -> ShockTemplateGrid | None:
+    """Load the MAPPINGS V ratio cubes in threadable form.
+
+    Returns
+    -------
+    ShockTemplateGrid or None
+        ``None`` when ``data/mappings_templates.h5`` is absent or carries no
+        ``mappings5`` group — the caller then falls back to the hardcoded
+        Allen+2008 subset, exactly as before threading existed.
+
+    Notes
+    -----
+    **JIT-compatible**: no — call at build time. The returned value is what
+    threads.
+    """
+    grids = _load_mappings_grids()
+    if grids is None or "mappings5" not in grids:
+        return None
+    g = grids["mappings5"]
+    return ShockTemplateGrid(
+        shock_ratios=g["shock_ratios"],
+        precursor_ratios=g["precursor_ratios"],
+        combined_ratios=g["combined_ratios"],
+        hbeta_log_lum_erg_s=g["hbeta_log_lum_erg_s"],
+    )
+
+
 # ── Public API ────────────────────────────────────────────────────
 
 
@@ -284,6 +356,7 @@ def shock_line_ratios(
     shock_b_over_sqrt_n: float = 1.0,
     shock_abundance: str = "solar",
     shock_component: str = "combined",
+    templates: ShockTemplateGrid | None = None,
 ) -> dict[str, float]:
     """Return emission line luminosity ratios relative to Hβ.
 
@@ -316,6 +389,13 @@ def shock_line_ratios(
         Which emission component to return.  One of ``"shock"``,
         ``"precursor"``, ``"combined"`` (default).  Raises ``ValueError``
         for unknown values.
+    templates : ShockTemplateGrid, optional
+        Pre-loaded ratio cubes, threaded as a JIT argument so they are not
+        baked into the compiled graph as constants (#1694). ``None`` (the
+        default) reads them from the module-level cache, which is correct but
+        costs 3.73 MB per compile. Supplied automatically by
+        :class:`~tengri.components.nebular.shock_model.ShockNebular` on the
+        model path; callers using this function directly rarely need it.
 
     Returns
     -------
@@ -386,7 +466,13 @@ def shock_line_ratios(
             "precursor": "precursor_ratios",
             "combined": "combined_ratios",
         }
-        ratio_array = g[component_map.get(shock_component, "combined_ratios")]
+        ratio_field = component_map.get(shock_component, "combined_ratios")
+        # Prefer the threaded cube: read from ``g`` it is a closure-captured
+        # concrete array and XLA inlines all 3.73 MB of it into every compile
+        # (#1694). ``templates`` carries the identical values as a traced
+        # argument. The axes below stay concrete either way — they are ~730
+        # bytes and the bounds checks above need real numbers.
+        ratio_array = getattr(templates, ratio_field) if templates is not None else g[ratio_field]
         # shape: (N_abund, N_n, N_v, N_B, N_lines)
 
         # Clip all three continuous axes to grid bounds before interpolation
@@ -438,6 +524,7 @@ def _shock_line_arrays(
     shock_b_over_sqrt_n: float = 1.0,
     shock_abundance: str = "solar",
     shock_component: str = "combined",
+    templates: ShockTemplateGrid | None = None,
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     """Compute shock line wavelengths and absolute luminosities.
 
@@ -446,6 +533,8 @@ def _shock_line_arrays(
 
     The absolute scaling anchors on ``l_shock_halpha``:
     ``L_line = (ratio / r_ha) * l_shock_halpha``.
+
+    ``templates`` is forwarded to :func:`shock_line_ratios`; see it for why.
     """
     ratios = shock_line_ratios(
         shock_velocity,
@@ -453,6 +542,7 @@ def _shock_line_arrays(
         shock_b_over_sqrt_n=shock_b_over_sqrt_n,
         shock_abundance=shock_abundance,
         shock_component=shock_component,
+        templates=templates,
     )
 
     grids = _load_mappings_grids()
@@ -486,6 +576,7 @@ def compute_shock_sed(
     shock_component: str = "combined",
     line_sigma_aa: float = 0.0,
     line_sigma_kms: float = 0.0,
+    templates: ShockTemplateGrid | None = None,
 ) -> jnp.ndarray:
     """Compute shock emission line SED.
 
@@ -510,6 +601,10 @@ def compute_shock_sed(
         ``"shock"``, ``"precursor"``, or ``"combined"``.
     line_sigma_aa : float
         Gaussian line width in Å.  ``0`` → delta function into nearest pixel.
+    templates : ShockTemplateGrid, optional
+        Pre-loaded ratio cubes threaded as a JIT argument instead of baked into
+        the graph as 3.73 MB of constants (#1694). Forwarded to
+        :func:`shock_line_ratios`; ``None`` reads the module-level cache.
 
     Returns
     -------
@@ -534,6 +629,7 @@ def compute_shock_sed(
         shock_b_over_sqrt_n=shock_b_over_sqrt_n,
         shock_abundance=shock_abundance,
         shock_component=shock_component,
+        templates=templates,
     )
 
     return _place_line_profiles(line_waves, line_lums, wavelength, line_sigma_aa, line_sigma_kms)

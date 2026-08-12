@@ -70,6 +70,18 @@ Gradient calls (`jax.grad(predict_photometry)`) are 9–19× faster with
 - Nebular (CLOUDY, baked-in): 0% (rides along in the stellar precompute).
 - Typical / kitchen-sink: <1%.
 
+**The error budget has an SNR ceiling, not just a percentage** (#1671). The
+LUT's forward bias is *constant in SNR* — no forward check can see it — but it
+enters the posterior **gradient** multiplied by SNR: a measured 0.13% forward
+bias was a ~5% gradient error at SNR 30 and ~50% at SNR 300, on the same
+model. It is a bias, not noise: it moves the posterior mode, and better data
+makes it worse. The spectroscopy LUT (`SpectrumPrecomp`) showed the same
+behavior as a ~1σ posterior shift on a 50-pixel, 5%-noise fit (#1688). Fits
+price this automatically at run time: one exact-vs-LUT forward estimates
+`max(bias × SNR)` on the actual model, and a filterable `PrecompBiasWarning`
+fires with the number when it is material. For final inference at high SNR,
+rerun with `approx=None` or compare the two posteriors.
+
 Full breakdown by emitter family, gradient timings across SFH types, and the coverage matrix are in [`bench/reports/2026-05-06_forward_model_speedup.md`](https://github.com/suchethac/tengri/blob/main/bench/reports/2026-05-06_forward_model_speedup.md).
 
 ## MAP Optimization

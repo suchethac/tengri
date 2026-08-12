@@ -80,6 +80,8 @@ from typing import NamedTuple
 
 import jax.numpy as jnp
 
+from tengri._mapping import ReadOnlyPropertyMapping
+
 
 class _SEDCallable:
     """A callable SED accessor that refuses to be mistaken for an array.
@@ -1645,7 +1647,7 @@ class IonizingProperties(_CachedBase):
 # ── Property catalog accessor ────────────────────────────────────
 
 
-class PropertyCatalog:
+class PropertyCatalog(ReadOnlyPropertyMapping):
     """View of computed properties with dict-like and attribute access.
 
     A PropertyCatalog is a dict-like accessor bound to a Prediction that
@@ -1689,8 +1691,9 @@ class PropertyCatalog:
         pred = object.__getattribute__(self, "_prediction")
         catalog = pred._model._ensure_property_catalog()
         if name not in catalog:
-            available = sorted(catalog.keys())
-            raise KeyError(f"Unknown property {name!r}. Available: {available}")
+            from tengri.forward.properties import missing_property_message
+
+            raise KeyError(missing_property_message(name, available=catalog))
         entry = catalog[name]
         state = pred._ensure_state()
         return entry.fn(state, pred._params)
@@ -1704,10 +1707,6 @@ class PropertyCatalog:
         """Iterate over property names."""
         pred = object.__getattribute__(self, "_prediction")
         return iter(sorted(pred._model._ensure_property_catalog().keys()))
-
-    def keys(self):
-        """Return property names."""
-        return list(self)
 
     def get(self, name: str, default=None):
         """Return the property value for ``name``, or ``default`` if absent.
@@ -1752,26 +1751,9 @@ class PropertyCatalog:
         """
         return [(name, self[name]) for name in self]
 
-    def to_dict(self, names=None) -> dict:
-        """Export properties as a dict.
-
-        Parameters
-        ----------
-        names : tuple[str] or list[str], optional
-            Property names to export. If None, exports all available.
-
-        Returns
-        -------
-        dict[str, scalar]
-            Mapping of name → computed value.
-        """
-        if names is None:
-            names = list(self)
-        return {name: self[name] for name in names}
-
-    def __setattr__(self, name, value):
-        """Prevent attribute assignment."""
-        raise AttributeError("PropertyCatalog is read-only")
+    # ``keys`` / ``to_dict`` / read-only ``__setattr__`` come from
+    # ReadOnlyPropertyMapping (#1431). ``get`` / ``values`` / ``items`` stay
+    # here: they return plain lists, which a Mapping base would turn into views.
 
 
 from tengri.parameters.resolve import resolve_fixed_params
@@ -2534,6 +2516,10 @@ class Prediction:
 
     def _rest_sed_on(self, wave):
         """Rest-frame L_nu, optionally resampled onto ``wave`` [Angstrom]."""
+        # The fast-nebular grid zeroes the Cue continuum, so ``sed_intrinsic``
+        # would come back without the nebular continuum or the lines (#1665).
+        # Same census as predict_spectrum / predict_spectral_indices.
+        self._model._refuse_on_fast_nebular("pred.rest_sed()")
         state = self._ensure_state()
         sed = state.sed_intrinsic
         if wave is None:
@@ -2620,12 +2606,16 @@ class Prediction:
     def _obs_sed_on(self, wave_obs):
         """Observed-frame F_nu, optionally resampled onto ``wave_obs`` [Angstrom].
 
+        Refuses on a fast-nebular model for the same reason as
+        :meth:`_rest_sed_on` — this is the same SED, on a different axis (#1665).
+
         ``wave_obs`` is OBSERVED-frame, matching this SED's own axis
         (:attr:`wave_obs`) and :meth:`spectrum`. The deprecated
         ``model.predict_obs_sed(params, wave=...)`` took a *rest*-frame grid
         and redshifted it — an observed-frame result with a rest-frame
         argument. That asymmetry was a footgun; it is not reproduced here.
         """
+        self._model._refuse_on_fast_nebular("pred.obs_sed()")
         result = self._model._predict_obs_sed(self._params)
         if wave_obs is None:
             return result.sed

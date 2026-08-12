@@ -142,8 +142,13 @@ class PopulationSEDModel:
     data_type : str, default ``"photometry"``
         Inference channel; passed to the underlying
         :class:`tengri.PopulationFitter`.
-    name : str, default ``"population_sed_model"``
-        SubModel identifier.
+
+    Attributes
+    ----------
+    name : str
+        The :class:`tengri.protocols.SubModel` identifier,
+        ``"population_sed_model"``. Read-only — the protocol calls it a
+        *stable* identifier, and this constructor has never accepted it.
 
     Notes
     -----
@@ -161,7 +166,11 @@ class PopulationSEDModel:
         default_factory=lambda: dict(_DEFAULT_PRIORS)
     )
     data_type: str = "photometry"
-    name: str = "population_sed_model"
+    #: The :class:`SubModel` identifier. ``init=False`` because the protocol
+    #: calls it a *stable* identifier: this constructor never accepted it, and
+    #: an ordinary field declaration advertised otherwise to
+    #: ``dataclasses.fields()`` and to the docstring above.
+    name: str = field(default="population_sed_model", init=False)
 
     def __init__(
         self,
@@ -187,7 +196,6 @@ class PopulationSEDModel:
         object.__setattr__(self, "shared", tuple(shared))
         object.__setattr__(self, "priors", dict(priors))
         object.__setattr__(self, "data_type", data_type)
-        object.__setattr__(self, "name", "population_sed_model")
 
     def __hash__(self) -> int:
         """Identity-based hash.

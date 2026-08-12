@@ -407,8 +407,9 @@ same commit) **plus one executed fit** — every wiring in the 2026-08 series
 found a runtime-only defect (blackjax API drift, NaN tuning → frozen chain,
 prior double-counting). A name may map only to a driver that runs the
 algorithm the name promises; stand-ins are silent substitution, the seam's
-founding bug. Frozen chains, non-finite tuning, unknown kwargs, and
-broken-tier access all raise loudly by design — do not weaken these guards.
+founding bug. Frozen chains, non-finite tuning, unknown kwargs, broken-tier
+access, NSS live sets that cannot span D, and NSS evidence integrals cut off
+by the iteration cap all raise loudly by design — do not weaken these guards.
 
 ## Critical gotchas
 

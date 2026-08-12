@@ -53,6 +53,8 @@ __all__ = [
     "llambda_to_lnu",
     "lnu_to_fnu",
     "lnu_to_llambda",
+    "log_z_abs_to_logzsol",
+    "logzsol_to_log_z_abs",
     "lsun_to_erg_per_s",
     "maggies_to_fnu",
     "njy_to_fnu",
@@ -484,6 +486,76 @@ def fnu_to_lnu(
 
 
 # ── Optical Depth & Attenuation ───────────────────────────────────
+
+
+# ── Metallicity convention ────────────────────────────────────────
+
+
+@jit
+def logzsol_to_log_z_abs(logzsol: jnp.ndarray) -> jnp.ndarray:
+    r"""Convert metallicity from solar-relative to absolute.
+
+    .. math::
+
+        \log_{10} Z = \log_{10}(Z/Z_\odot) + \log_{10} Z_\odot
+
+    :math:`\log_{10} Z_\odot` is ``LOG10_ZSUN`` = -1.8477 (Asplund 2009,
+    :math:`Z_\odot` = 0.0142, matching MIST).
+
+    Parameters
+    ----------
+    logzsol : array_like
+        Metallicity relative to solar [dex, log10(Z/Zsun)].
+
+    Returns
+    -------
+    ndarray
+        Absolute metallicity [dex, log10(Z)] — the SSP grid's own convention.
+
+    Notes
+    -----
+    **JIT-compatible**: yes.
+
+    This is the direction ``param_map`` applies on the way *in*. The inverse,
+    :func:`log_z_abs_to_logzsol`, is what a user-facing readout needs: without
+    it a summary of ``met_logzsol`` comes back 1.85 dex below the value that
+    was set.
+    """
+    from tengri.utils.physics_constants import LOG10_ZSUN
+
+    return logzsol + LOG10_ZSUN
+
+
+@jit
+def log_z_abs_to_logzsol(log_z_abs: jnp.ndarray) -> jnp.ndarray:
+    r"""Convert metallicity from absolute to solar-relative.
+
+    .. math::
+
+        \log_{10}(Z/Z_\odot) = \log_{10} Z - \log_{10} Z_\odot
+
+    Parameters
+    ----------
+    log_z_abs : array_like
+        Absolute metallicity [dex, log10(Z)], as the SSP grid stores it.
+
+    Returns
+    -------
+    ndarray
+        Metallicity relative to solar [dex, log10(Z/Zsun)] — the convention
+        every user-facing metallicity uses, ``met_logzsol`` included.
+
+    Notes
+    -----
+    **JIT-compatible**: yes.
+
+    Apply this at a publish boundary, not inside the physics: the SSP grid,
+    ``state.derived["log_metallicity_history"]`` and the interpolators all work
+    in absolute log10(Z) and must keep doing so.
+    """
+    from tengri.utils.physics_constants import LOG10_ZSUN
+
+    return log_z_abs - LOG10_ZSUN
 
 
 @jit

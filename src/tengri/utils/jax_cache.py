@@ -90,6 +90,20 @@ DEFAULT_MAX_CACHE_BYTES = 8 * 1024**3
 #: user asking to opt out of the cap wants.
 UNBOUNDED_CACHE = -1
 
+#: Suffixes JAX's ``LRUCache`` gives the two files that make up one cache entry:
+#: ``KEY-cache`` holds the compiled artifact, ``KEY-atime`` an 8-byte
+#: little-endian nanosecond timestamp used to order eviction.
+#:
+#: Mirrored rather than imported: ``jax._src.lru_cache`` is private, and an
+#: ImportError here would break ``import tengri`` outright. The copies are pinned
+#: against the originals by ``tests/contract/test_jax_cache.py`` so a rename
+#: upstream fails a test instead of silently turning :func:`repair_orphaned_atimes`
+#: into a no-op.
+_CACHE_SUFFIX = "-cache"
+_ATIME_SUFFIX = "-atime"
+_ATIME_BYTES = 8
+_ATIME_BYTEORDER = "little"
+
 
 def _eviction_supported() -> bool:
     """True if JAX can actually enforce a cache size cap here.
@@ -250,6 +264,13 @@ def enable_persistent_cache(
             _ENV_MAX_GB,
         )
 
+    if cap != UNBOUNDED_CACHE:
+        # Hand JAX a directory it can actually evict from. Eviction is the only
+        # consumer of the -atime markers -- and the only thing a missing one
+        # breaks -- so an unbounded cache needs no sweep (#1661). Costs one
+        # directory listing; entries are stat'd only if they need repairing.
+        repair_orphaned_atimes(target)
+
     if _ENABLED_DIR is None and logger.isEnabledFor(logging.INFO):
         # Only measured for this log line, and the walk is O(files) stat calls
         # (~3.5 us each) on every import. Skip it when nobody is listening.
@@ -271,6 +292,111 @@ def enable_persistent_cache(
 
     _ENABLED_DIR = target
     return target
+
+
+def orphaned_entries(cache_dir: str | os.PathLike[str] | None = None) -> list[str]:
+    """Cache keys whose ``-cache`` file has lost its ``-atime`` companion.
+
+    A non-empty result means the cache cannot accept **any** new entry: JAX's
+    eviction sweep reads every marker unconditionally and raises on the first
+    one missing, and that sweep runs on every write (#1661). Reads are
+    unaffected, so nothing else reveals the condition.
+
+    Parameters
+    ----------
+    cache_dir : str or PathLike or None
+        Directory to inspect. Defaults to the currently enabled cache, falling
+        back to :func:`_default_cache_dir`.
+
+    Returns
+    -------
+    list of str
+        Orphaned cache keys, unordered. Empty if the directory is absent or
+        unreadable.
+    """
+    target = _resolve_dir(cache_dir)
+    try:
+        names = {entry.name for entry in os.scandir(target)}
+    except OSError:
+        # Absent, unreadable, or racing with clear_cache(). Callers treat this
+        # as "nothing to do"; a diagnostic must not raise, and a repair that
+        # raised would break ``import tengri``.
+        return []
+
+    cut = len(_CACHE_SUFFIX)
+    return [
+        name[:-cut]
+        for name in names
+        if name.endswith(_CACHE_SUFFIX) and f"{name[:-cut]}{_ATIME_SUFFIX}" not in names
+    ]
+
+
+def repair_orphaned_atimes(cache_dir: str | os.PathLike[str] | None = None) -> int:
+    """Give every cache entry the ``-atime`` companion JAX's eviction requires.
+
+    A cache entry is two files, ``KEY-cache`` and ``KEY-atime``.
+    ``LRUCache._evict_if_needed`` walks every ``*-cache`` file and reads its
+    companion with no ``exists()`` check and no ``try``, so **one** entry missing
+    its marker raises ``FileNotFoundError`` for the whole sweep. ``put()`` runs
+    that sweep before writing, so a single orphan makes every subsequent cache
+    write fail. ``get()`` never runs it, which is why the failure is silent:
+    reads keep working and the cache simply stops growing (#1661).
+
+    Missing markers are reconstructed from the artifact's own mtime -- a faithful
+    "last known access" -- rather than deleted with the entry. The entries that
+    orphan most often are the large ones, because ``put()`` writes the artifact
+    and its marker as two operations and the window between them scales with
+    value size; those are exactly the compiles worth keeping.
+
+    Parameters
+    ----------
+    cache_dir : str or PathLike or None
+        Directory to repair. Defaults to the currently enabled cache, falling
+        back to :func:`_default_cache_dir`.
+
+    Returns
+    -------
+    int
+        Number of entries repaired. ``0`` if the directory is absent or
+        unreadable.
+
+    Notes
+    -----
+    Healthy markers are left untouched. Eviction chooses victims by ascending
+    timestamp, so restamping live entries would flatten that ordering and make
+    eviction arbitrary.
+
+    Deliberately takes no file lock. JAX holds one across a whole ``put``,
+    including the artifact write, so contending for it would block ``import
+    tengri`` behind another process's multi-hundred-MB write. Every outcome of
+    losing the race is benign -- a concurrent ``put`` overwrites our marker with
+    its own, and a concurrent eviction leaves a stray marker that nothing reads
+    -- so per-entry ``OSError`` is skipped rather than raised.
+    """
+    target = _resolve_dir(cache_dir)
+    repaired = 0
+    for key in orphaned_entries(target):
+        try:
+            mtime_ns = os.stat(os.path.join(target, f"{key}{_CACHE_SUFFIX}")).st_mtime_ns
+            (target / f"{key}{_ATIME_SUFFIX}").write_bytes(
+                mtime_ns.to_bytes(_ATIME_BYTES, _ATIME_BYTEORDER)
+            )
+        except OSError:
+            # Raced with another process's put or eviction. Both outcomes are
+            # benign, and one unrepairable entry must not abandon the rest.
+            continue
+        repaired += 1
+
+    if repaired:
+        logger.warning(
+            "Repaired %d orphaned entr%s in the JAX compilation cache at %s. "
+            "Cache writes were failing until now; reads were unaffected, so the "
+            "cache served hits while quietly refusing to grow (#1661).",
+            repaired,
+            "y" if repaired == 1 else "ies",
+            target,
+        )
+    return repaired
 
 
 def is_cache_enabled() -> bool:

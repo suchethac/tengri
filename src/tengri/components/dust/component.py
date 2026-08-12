@@ -30,6 +30,7 @@ from typing import Any
 import jax.numpy as jnp
 
 from tengri.components.dust.attenuation import calzetti, resolve_dust_law
+from tengri.components.template_threading import TemplateThreading
 from tengri.parameters.priors import Fixed
 from tengri.protocols.component import (
     DerivedKey,
@@ -84,7 +85,7 @@ class DustAttenuationSEDComponentState(SEDComponentState):
 
 
 @dataclass(frozen=True)
-class DustAttenuationSEDComponent:
+class DustAttenuationSEDComponent(TemplateThreading):
     r"""SEDComponent adapter for a single-component screen attenuation law.
 
     Notes

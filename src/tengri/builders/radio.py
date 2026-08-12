@@ -44,6 +44,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from tengri._completion import curated_dir
 from tengri.builders._factory import make_factory, short_form
 from tengri.components.radio.component import AGN_RADIO_MODELS
 from tengri.parameters.registry import recipe_parameters
@@ -225,12 +226,4 @@ def available() -> list[str]:
 __all__ = ["agn", "available", "axes", "sf", *sorted(_LEGACY_FACTORIES)]
 
 
-def __dir__() -> list[str]:
-    """Restrict tab-completion to the names this namespace actually offers.
-
-    ``__all__`` governs ``from ... import *`` but not ``dir()``, so without
-    this the module's own imports -- ``Any``, ``Callable``, the ``__future__``
-    ``annotations`` object, and internal helpers like ``make_factory`` --
-    showed up as completions beside the physics (#1288).
-    """
-    return sorted(__all__)
+__dir__ = curated_dir(__all__)

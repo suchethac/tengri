@@ -22,11 +22,19 @@ are equally unexecuted by anything else:
 * ``describe()``'s "registered in N places" note, whose hard-coded
   ``describe_agn_block(...)`` suggestion silently became wrong for radio blocks
   once a second categorized menu existed (#1276).
+
+A fourth arm reads the advice out of the source rather than waiting for someone
+to trigger it. Those three arms are only as wide as what reaches them, and the
+raised-error arm is a hand-maintained list of four ``TRIGGERS`` against eighteen
+``raise`` sites that emit a ``group={...}`` snippet. That is how
+``Catalog.from_histories`` shipped advising ``met={'type': 'table'}`` — a group
+key the grammar does not have (#1677) — at a site no trigger reached.
 """
 
 from __future__ import annotations
 
 import ast
+import re
 from pathlib import Path
 
 import pytest
@@ -212,3 +220,144 @@ def test_snippet_extractor_handles_nesting() -> None:
     assert ("radio", {"sf": {"type": "bell2003"}}) in found, (
         "nested suggestion was truncated — a non-greedy match would do this"
     )
+
+
+# ── Fourth arm: the census, not a trigger list ──────────────────────
+#
+# The three arms above are only as wide as what reaches them, and TRIGGERS is a
+# hand-maintained list of four. Eighteen `raise` sites across ten modules emit a
+# `group={...}` snippet, so fourteen of them were never checked — which is how
+# `Catalog.from_sfh` shipped advising `met={'type': 'table'}`, a group key the
+# grammar does not have (#1677).
+#
+# Reaching every site by triggering it means reproducing eighteen distinct
+# failure preconditions. Reading the advice straight out of the source does not,
+# and a literal in a `raise` is exactly what the user will be shown.
+
+_SRC = Path(__file__).resolve().parents[2] / "src" / "tengri"
+
+#: Names that are NOT build-grammar keys, so a dict literal against them is not
+#: build advice. This is deliberately a denylist of known non-grammar kwargs and
+#: **not** an allowlist of valid groups: filtering down to names the grammar
+#: already accepts would make the check structurally incapable of catching
+#: advice that names a group which does not exist — which is exactly how #1677
+#: (`met={'type': 'table'}`) reads. An allowlist here passes the neuter check
+#: for the wrong reason; this was caught by running one.
+_NOT_GRAMMAR_KEYS = frozenset({"priors", "params", "data", "kwargs", "metadata"})
+
+#: An f-string interpolation survives `ast.unparse` as a bare `{name}` and
+#: `literal_eval`s into that placeholder text. The live message substitutes a
+#: real value, so those snippets are not judgeable from source.
+_PLACEHOLDER = re.compile(r"\{[A-Za-z_][\w.\[\]'\"()]*\}")
+
+#: Verbs that make the snippet after them something to REMOVE, not to follow.
+#: Not every dict literal in a message is a recommendation: the CLOUDY wNE
+#: error says "keep this SSP and drop the ``neb={'type': 'cloudy'}`` group",
+#: quoting the construct precisely so the reader can delete it. Feeding that to
+#: the grammar asks the wrong question — and answers it by accident, since it
+#: parses whenever a CLOUDY grid happens to be installed.
+_REMOVAL_CUES = ("drop", "remove", "delete", "without", "instead of", "rather than")
+
+#: How far back to look for one of those cues. Long enough to catch "drop the
+#: `neb=...` group", short enough not to swallow an unrelated earlier clause.
+_CUE_WINDOW = 48
+
+
+def _is_removal_advice(text: str, at: int) -> bool:
+    """Does the message tell the reader to take this snippet OUT?"""
+    return any(cue in text[max(0, at - _CUE_WINDOW) : at].lower() for cue in _REMOVAL_CUES)
+
+
+def _literal_advice_in_source() -> list[tuple[str, int, str, dict]]:
+    """Every fully-literal ``group={...}`` snippet inside a ``raise`` in src/."""
+    out: list[tuple[str, int, str, dict]] = []
+    for path in sorted(_SRC.rglob("*.py")):
+        try:
+            tree = ast.parse(path.read_text(), filename=str(path))
+        except SyntaxError:  # pragma: no cover - src/ always parses
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Raise):
+                continue
+            # f-strings render literal braces doubled; collapse before matching.
+            text = ast.unparse(node).replace("{{", "{").replace("}}", "}")
+            for name, value in _dict_snippets(text):
+                if name in _NOT_GRAMMAR_KEYS or not name.islower():
+                    continue
+                if _PLACEHOLDER.search(repr(value)):
+                    continue
+                # Conservative: skip only when EVERY occurrence of this snippet
+                # in the message is something the reader is told to remove.
+                sites = [m.start() for m in re.finditer(re.escape(name) + r"=\{", text)]
+                if sites and all(_is_removal_advice(text, i) for i in sites):
+                    continue
+                out.append((str(path.relative_to(_SRC)), node.lineno, name, value))
+    return out
+
+
+def test_the_source_census_finds_advice_to_check() -> None:
+    """A census that silently collapses would make the check below vacuous.
+
+    The failure mode this pins is a change to ``ast.unparse`` output or to the
+    brace-collapsing above quietly matching nothing, which reads identically to
+    "all advice is valid".
+    """
+    found = _literal_advice_in_source()
+    assert len(found) >= 5, (
+        f"expected the source scan to find several literal advice snippets, got "
+        f"{found!r}. An empty census passes the next test for the wrong reason."
+    )
+
+
+def test_removal_advice_is_not_treated_as_a_recommendation() -> None:
+    """ "Drop ``x={...}``" quotes a construct to delete, not one to adopt.
+
+    Assumed otherwise at first, and CI caught it: the CLOUDY wNE error says
+    "keep this SSP and drop the ``neb={'type': 'cloudy'}`` group", and the arm
+    below dutifully fed that to the grammar. It passed locally only because a
+    CLOUDY grid happened to be installed, and failed on a runner without one —
+    an accidental answer to the wrong question.
+    """
+    assert _is_removal_advice(
+        "keep this SSP and drop the neb={", len("keep this SSP and drop the ")
+    )
+    assert _is_removal_advice("remove the dust={", len("remove the "))
+    assert not _is_removal_advice("Use either: radio={", len("Use either: "))
+    assert not _is_removal_advice("Pass one via neb={", len("Pass one via "))
+
+
+def test_the_exemption_does_not_swallow_the_bug_it_sits_next_to() -> None:
+    """The #1677 advice must still be judged, cues or not.
+
+    An exemption that quietly widened until it covered everything would leave
+    the arm green and blind — the failure mode this whole file exists to catch.
+    """
+    message = (
+        "met= needs a model built with stellar={'met_mode': 'table'}; either "
+        "rebuild with a tabulated metallicity or drop met=."
+    )
+    names = [name for name, _ in _dict_snippets(message)]
+    assert "stellar" in names
+    at = message.index("stellar={")
+    assert not _is_removal_advice(message, at), (
+        "the trailing 'drop met=.' must not exempt the recommendation that precedes it"
+    )
+
+
+def test_every_literal_advice_snippet_in_src_is_accepted_by_the_grammar() -> None:
+    """Advice written as a literal in a raise must parse — at every site.
+
+    This is the arm that does not depend on someone remembering to add a
+    trigger. `TRIGGERS` reaches four sites; this reaches every one whose
+    suggestion is spelled out in the source.
+    """
+    failures = []
+    for relpath, lineno, name, value in _literal_advice_in_source():
+        try:
+            parse_groups(**{name: value})
+        except Exception as exc:
+            failures.append(
+                f"  {relpath}:{lineno} advises {name}={value!r}\n"
+                f"      but that raises {type(exc).__name__}: {exc}"
+            )
+    assert not failures, "error-message advice the grammar refuses:\n" + "\n".join(failures)

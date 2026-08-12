@@ -33,6 +33,7 @@ from tengri.citations.associations import (
 )
 from tengri.citations.citation import Citation
 from tengri.citations.registry import cite
+from tengri.citations.resolve import citation_keys_for
 
 
 def _dedup(keys: list[str]) -> list[str]:
@@ -402,63 +403,6 @@ def _collect_keys_for_one(
     return _dedup(keys)
 
 
-# Map registered model/alternative names → BibTeX-keys present in the
-# tengri.citations registry (references.bib).  Best-effort: registered
-# alternatives without a corresponding bib entry simply aren't added —
-# they remain visible via ``tengri.cite_components(...)`` (which uses
-# the live free-form citation strings) but won't appear in formal
-# print_citations output until someone adds the bib entry.
-_LIVE_NAME_TO_BIBKEY: dict[str, str] = {
-    # SFH models
-    "dpl": "bagpipes",
-    "continuity": "leja2019",
-    "dirichlet": "leja2019",
-    "dense_basis": "iyer2020",
-    # AGN models (the unified-model registry)
-    "skirtor": "skirtor",
-    "stalevski": "skirtor",
-    "kubota_done": "kubota_done2018",
-    "kubota_done_full": "kubota_done2018",
-    "multicolor_agn": "kubota_done2018",
-    "adaf": "mahadevan1997",
-    "qsogen": "temple2021_qsogen",
-    "grahsp": "buchner2024",
-    "agn_grahsp": "buchner2024",
-    # Dust attenuation laws
-    "calzetti": "calzetti2000",
-    "cardelli": "cardelli1989",
-    "kriek_conroy": "kriek_conroy2013",
-    "noll09": "noll2009",
-    "salim": "salim2018",
-    "salim_sbl18": "salim2018",
-    "li08": "li2008_ext",
-    "smc": "gordon2003_smc",
-    "lmc": "gordon2003_smc",
-    "power_law": "charlot_fall2000",
-    # Dust attenuation *model* selector (dust_model, not a per-component law)
-    "wg00": "witt_gordon2000",  # Witt & Gordon (2000) RT screen (FSPS dust_type=3)
-    # Dust emission templates (registered alternatives strip suffixes)
-    "dl07": "draine_li2007",
-    "dl07_tabulated": "draine_li2007",
-    "draine_li2007": "draine_li2007",
-    "dl14": "draine2014",
-    "dl14_tabulated": "draine2014",
-    "dale2014": "dale2014",
-    "dale2014_tabulated": "dale2014",
-    "casey2012": "casey2012",
-    "mbb": "casey2012",
-    # Inference methods
-    "mcmc_nuts": "blackjax",
-    "mcmc": "blackjax",
-    "vi": "nifty",
-    "vi_nonlinear_fast": "nifty",
-    "mcmc_raytrace": "raytrace_behroozi",
-    "pathfinder": "pathfinder",
-    "nss": "nss",
-    "mcmc_ess": "ess_murray2010",
-}
-
-
 def _keys_from_live_registry(obj: Any) -> list[str]:
     """Walk obj's structural choices and map to bibtex keys.
 
@@ -470,17 +414,11 @@ def _keys_from_live_registry(obj: Any) -> list[str]:
     spec = getattr(obj, "spec", obj)
 
     def _push(name):
-        if not name:
-            return
-        n = str(name).lower()
-        if n in _LIVE_NAME_TO_BIBKEY:
-            out.append(_LIVE_NAME_TO_BIBKEY[n])
-            return
-        # Try stripping common suffixes (e.g. "dl07_tabulated" → "dl07")
-        if n.endswith("_tabulated"):
-            n2 = n[: -len("_tabulated")]
-            if n2 in _LIVE_NAME_TO_BIBKEY:
-                out.append(_LIVE_NAME_TO_BIBKEY[n2])
+        # citation_keys_for owns the name → key mapping for BOTH public
+        # surfaces, including the "_tabulated" suffix strip this used to do
+        # locally. Two maps is how collect_citations and
+        # print_components_bibtex came to disagree on 21 component names.
+        out.extend(citation_keys_for(str(name).lower() if name else name))
 
     sfh_types = getattr(spec, "mean_sfh_type", None)
     if isinstance(sfh_types, str):

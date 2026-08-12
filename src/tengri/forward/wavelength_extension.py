@@ -47,12 +47,9 @@ def _find_data_file(filename: str) -> str | None:
     previous candidate list also bound ``Path.cwd()`` at *import*, so a process
     that changed directory afterwards kept searching the old one.
     """
-    from tengri._data_setup import find_data
+    from tengri._data_setup import find_data_str
 
-    found = find_data(filename)
-    if found is not None:
-        return str(found)
-    return None
+    return find_data_str(filename)
 
 
 # ── Schema declarations ───────────────────────────────────────────

@@ -172,6 +172,7 @@ __version__ = "0.1.0"
 import sys
 
 from tengri import builders, components as _components, preprocessing, presets, recipes
+from tengri._completion import curated_dir
 from tengri._data_setup import data_path, download_ssp, list_available_ssps, list_known_ssps
 from tengri._logo import LOGO, LOGO_BANNER, print_logo
 from tengri.citations import (
@@ -811,13 +812,7 @@ _CURATED_DIR = (
 )
 
 
-def __dir__() -> list[str]:
-    """Curated tab-completion list — keeps `tengri.<TAB>` readable.
-
-    Everything else remains accessible via attribute access; only the
-    completion surface is trimmed.
-    """
-    return list(_CURATED_DIR)
+__dir__ = curated_dir(_CURATED_DIR)
 
 
 # Backward-compatibility shims for renamed public symbols. Each old name
