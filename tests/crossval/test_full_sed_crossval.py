@@ -46,11 +46,19 @@ jax.config.update("jax_enable_x64", True)
 #: rather than at the call site so this file runs across the supported range.
 _trapezoid = getattr(np, "trapezoid", None) or np.trapz
 
+#: Speed of light [Angstrom / s], for the L_nu integrations below.
+_C_AA = 2.99792458e18
+
 pytestmark = pytest.mark.crossval
 
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 _REF_PATH = _DATA_DIR / "external_sed_reference.npz"
 _SSP_PATH = _DATA_DIR / "fsps_prsc_miles_chabrier.h5"
+#: The CLOUDY grid TestNebularTengri needs. Absent, those tests raised
+#: FileNotFoundError out of h5py, which reads like a tengri defect rather than
+#: a missing optional data file — the same reason the reference npz above is
+#: guarded (#1728).
+_CLOUDY_GRID_PATH = _DATA_DIR / "cloudy_grid_pdva.h5"
 
 if not _REF_PATH.is_file():
     pytest.skip(
@@ -1491,6 +1499,13 @@ def _build_tengri_nebular_sed(
 
     Returns (wave_Å, L_nu per Msun formed in erg/s/Hz).
     Galaxy is a constant-SFR burst of duration age_gyr at SFR = 10^log_sfr Msun/yr.
+
+    ``sfh_const_log_total_mass`` is a **total mass**, not a rate. It was being
+    handed ``log_sfr`` directly, so the SED described a galaxy of 10 Msun and
+    was then divided by an m_formed of 1e9 — low by eight orders of magnitude,
+    which is the "ratio tengri/FSPS = 0.000" this file reported (#1728). Same
+    mix-up as `_build_tengri_sed` above; the mass is derived from the requested
+    SFR and duration.
     """
     from tengri import Parameters
     from tengri.forward.sed_model import SEDModel
@@ -1506,7 +1521,7 @@ def _build_tengri_nebular_sed(
         met_logzsol=Fixed(logzsol),
         sfh_const_start_gyr=Fixed(age_gyr),
         sfh_const_end_gyr=Fixed(0.0),
-        sfh_const_log_total_mass=Fixed(log_sfr),
+        sfh_const_log_total_mass=Fixed(float(np.log10(m_formed))),
         neb_logU=Fixed(logU),
         neb_logZ_gas=Fixed(logzsol),
         dust_tau_bc=Fixed(tau_bc),
@@ -1530,6 +1545,38 @@ def _line_peak(
     return float(np.max(sed[mask])) if mask.any() else 0.0
 
 
+def _line_flux(
+    wave: np.ndarray,
+    sed_nu: np.ndarray,
+    center_aa: float,
+    half_width: float = 120.0,
+    cont_half_width: float = 400.0,
+) -> float:
+    """Continuum-subtracted integrated line flux [erg/s per Msun].
+
+    Peak height is not comparable between codes: it depends on how finely each
+    one renders the line. The FSPS reference grid carries 7 points across
+    +/-120 A of Halpha (~33 A spacing, the line unresolved) where tengri's
+    carries 267, so the same line flux appears as an 8.7x difference in peak
+    and a 2.1x difference when integrated. Integrating in frequency, with a
+    local linear continuum removed from the side bands, is resolution-
+    independent and is what "how much Halpha" actually means (#1728).
+    """
+    near = np.abs(wave - center_aa) <= half_width
+    side = (np.abs(wave - center_aa) > half_width) & (np.abs(wave - center_aa) <= cont_half_width)
+    if near.sum() < 2 or side.sum() < 2:
+        return 0.0
+
+    continuum = np.interp(wave[near], wave[side], sed_nu[side])
+    nu = _C_AA / wave[near]
+    order = np.argsort(nu)
+    return abs(float(np.trapezoid((sed_nu[near] - continuum)[order], nu[order])))
+
+
+@pytest.mark.skipif(
+    not _CLOUDY_GRID_PATH.is_file(),
+    reason=f"CLOUDY grid not found at {_CLOUDY_GRID_PATH}",
+)
 class TestNebularTengri:
     """Test tengri's nebular emission pipeline (CLOUDY pdva grid).
 
@@ -1611,25 +1658,33 @@ class TestNebularTengri:
         )
 
     def test_tengri_nebular_ha_amplitude_vs_fsps(self, ssp_data, ref, ref_wave):
-        """Hα peak amplitude per Msun within factor 3 of FSPS.
+        """Hα *integrated line flux* per Msun within factor 3 of FSPS.
 
         Both are age=0.1 Gyr, logU=-2, solar metallicity per Msun formed.
         Factor-of-3 tolerance accommodates CLOUDY pdva vs FSPS nebular grid
         differences while catching order-of-magnitude unit bugs.
+
+        Compared by integrated flux, not peak height. The FSPS reference grid
+        has ~33 A spacing near Halpha — 7 points across the window where tengri
+        has 267, i.e. the line is unresolved there — so peak height measures the
+        grid rather than the physics. The same SEDs differ by 8.7x in peak and
+        **2.1x integrated** (#1728). The old comparison already carried a guard
+        for the degenerate case ("resolution too low for peak test") but not for
+        this one, where the reference is coarse rather than empty.
         """
         key = "fsps_nebular_neb_young_u2"
         if key not in ref:
             pytest.skip(f"Reference key {key!r} not in npz")
 
         wave, sed = _build_tengri_nebular_sed(ssp_data, age_gyr=0.1, logU=-2.0)
-        ha_tengri = _line_peak(wave, sed, self._HA_AA)
-        ha_fsps = _line_peak(ref_wave, ref[key], self._HA_AA)
+        ha_tengri = _line_flux(wave, sed, self._HA_AA)
+        ha_fsps = _line_flux(ref_wave, ref[key], self._HA_AA)
         if ha_fsps <= 0.0:
-            pytest.skip("FSPS reference Hα peak is zero — resolution too low for peak test")
+            pytest.skip("FSPS reference Hα flux is zero — no line in the reference")
         ratio = ha_tengri / ha_fsps
         assert 0.33 <= ratio <= 3.0, (
             f"Hα per Msun tengri/FSPS = {ratio:.3f} (expect 0.33–3.0). "
-            f"tengri={ha_tengri:.3e}, FSPS={ha_fsps:.3e} erg/s/Hz/Msun. "
+            f"tengri={ha_tengri:.3e}, FSPS={ha_fsps:.3e} erg/s/Msun (integrated). "
             "Factor > 3 indicates a nebular grid normalization or unit bug."
         )
 
