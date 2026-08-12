@@ -472,15 +472,26 @@ def _memoized_approx_clone(model, cfg):
 def _has_line_adjacent_channel(model) -> bool:
     """Whether the observation carries a channel that reads line internals.
 
+    Both members are now **measured**, not precautionary (#1665).
+
     ``line_ratios`` needs the nebular backend's DISCRETE line catalog
-    (``line_waves``/``line_lums``), which the feature-LUT path does not
-    publish — enabling ``FeaturePrecomp`` under it broke
-    ``test_ratio_term_constrains_fit`` on main (594a60552).
-    ``spectral_indices`` is included as unverified against the LUT rather
-    than known-broken: the ratio channel was also "plausibly orthogonal"
-    until it was measured. ``line_fluxes`` is deliberately NOT here — that
-    channel is the one ``FeaturePrecomp`` exists to serve, and its top-up is
-    handled by the callers' ``_fits_lines`` paths.
+    (``line_waves``/``line_lums``). The precise mechanism is narrower than
+    594a60552 recorded: ``FeaturePrecomp`` *alone* publishes that catalog
+    fine — it is the ``WavePrecomp`` + ``FeaturePrecomp`` **pair** that drops
+    it, because the per-Q_H photometry channel only exists when WavePrecomp
+    supplied filters, and that is what arms the fast grid branch.
+
+    ``spectral_indices`` was included as "unverified rather than known-broken".
+    It is now known-broken and quantified: under the pair, all 13 indices move
+    off the exact path — ``HgA`` by **+1733%**, ``Hbeta`` +734%, the Balmer
+    family 29–1733% — because the fast grid zeroes ``nebular_sed`` and indices
+    are measured on the rest-frame SED. So this gate is load-bearing; do not
+    relax it for speed.
+
+    ``line_fluxes`` is deliberately NOT here — that channel is the one
+    ``FeaturePrecomp`` exists to serve. But a fit may carry line fluxes *and*
+    an index/ratio channel, and then the LUT must still be refused: the
+    ``_fits_lines`` top-up paths consult this predicate for exactly that case.
 
     Separate from :meth:`Fitter._fits_lines` because that predicate was being
     asked two *opposite* questions: :meth:`Fitter._auto_approx_config` appends
@@ -1351,12 +1362,14 @@ class Fitter:
             base = WavePrecomp()
         else:
             return None
-        if _has_line_adjacent_channel(model):
-            # A ratio/index channel needs the discrete catalog the LUT does not
-            # publish, and pays the full-grid forward anyway — the LUT would be
-            # a wrapper around the cost it exists to avoid, and a broken one.
-            return base
-        return (base, FeaturePrecomp()) if self._fits_lines(model) else base
+        # A line-flux channel earns the LUT, but an index/ratio channel on the
+        # SAME fit vetoes it: those read the rest-frame SED / discrete catalog,
+        # which the fast grid does not serve (#1665). Such a fit pays the
+        # full-grid forward regardless, so the LUT would be a wrapper around
+        # the cost it exists to avoid, and a broken one. Correctness outranks
+        # the ~21x line speedup, and the refusal is loud rather than silent.
+        wants_lut = self._fits_lines(model) and not _has_line_adjacent_channel(model)
+        return (base, FeaturePrecomp()) if wants_lut else base
 
     def _add_feature_precomp(self, model, *, warn_on_failure=True):
         """Top up a build-time ``approx=`` with ``FeaturePrecomp``.
@@ -1403,6 +1416,11 @@ class Fitter:
 
         state = getattr(model, "approx", None)
         if state is None or state.feature_precomp:
+            return model
+        # One seam for every caller of this top-up (#1665): a model whose
+        # observation also carries an index or ratio channel must stay off the
+        # feature LUT, whatever route asked for it.
+        if _has_line_adjacent_channel(model):
             return model
         existing = tuple(getattr(model, "approx_configs", ()))
         try:

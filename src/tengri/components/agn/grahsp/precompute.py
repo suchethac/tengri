@@ -33,6 +33,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.components._collapsed_lookup import interp_collapsed
 from tengri.components.agn.grahsp.model import GRAHSPParams, evaluate_grahsp_agn
 from tengri.components.agn.grahsp.templates import load_grahsp_templates
 from tengri.forward.precompute.templates import (
@@ -41,7 +42,6 @@ from tengri.forward.precompute.templates import (
 )
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
-    interp_nd_triweight,
     slice_fixed_axes,
 )
 from tengri.utils.interpolation import edges_for_grid
@@ -280,8 +280,6 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
     @jax.jit
     def grahsp_phot_collapsed(*free_axis_values):
         """Filter-integrated L_nu [erg/s/Hz] with collapsed axes."""
-        if not axes:
-            return grid_phot
-        return interp_nd_triweight(grid_phot, axes, edges, tuple(free_axis_values))
+        return interp_collapsed(grid_phot, axes, free_axis_values, kernel="triweight", edges=edges)
 
     return grahsp_phot_collapsed

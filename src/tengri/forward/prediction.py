@@ -2514,6 +2514,9 @@ class Prediction:
 
     def _rest_sed_on(self, wave):
         """Rest-frame L_nu, optionally resampled onto ``wave`` [Angstrom]."""
+        # The fast-nebular grid zeroes the Cue continuum, so ``sed_intrinsic``
+        # would come back without the nebular continuum or the lines (#1665).
+        # Same census as predict_spectrum / predict_spectral_indices.
         state = self._ensure_state()
         sed = state.sed_intrinsic
         if wave is None:
@@ -2599,6 +2602,9 @@ class Prediction:
 
     def _obs_sed_on(self, wave_obs):
         """Observed-frame F_nu, optionally resampled onto ``wave_obs`` [Angstrom].
+
+        Refuses on a fast-nebular model for the same reason as
+        :meth:`_rest_sed_on` — this is the same SED, on a different axis (#1665).
 
         ``wave_obs`` is OBSERVED-frame, matching this SED's own axis
         (:attr:`wave_obs`) and :meth:`spectrum`. The deprecated

@@ -195,6 +195,20 @@ class NebularGridTable:
         snapped to the SSP metallicity nodes: the exact emissivity has C0 kinks
         there, and a cubic's two-sided tangent straddles them (#1020). Empty
         tuple means PCHIP everywhere (the pre-#1020 default).
+    log_restband_per_qh : ndarray, shape ``(*grid_dims, n_filter)`` or None
+        The **rest-frame** twin of ``log_phot_per_qh``: the same filters
+        integrated at ``redshift=0`` instead of at the model redshift, so the
+        band sits in the rest frame and samples the rest SED at its own pivot
+        (#1148). Reconstructs ``nebular_restband_lnu_precomp``.
+
+        This channel exists because the two publishes are **twins** — the exact
+        path emits them together, so a grid carrying only the observed band
+        makes every rest-frame consumer silently lose the nebular contribution.
+        That was #1665: all 13 spectral indices moved, worst ``HgA`` by +1733%,
+        with no exception raised. ``None`` only on tables built before #1665;
+        :func:`precompute_nebular_grid` now always populates it alongside
+        ``log_phot_per_qh``, and a table missing it disables the fast path
+        rather than serving a half-answer.
     """
 
     axis_names: tuple
@@ -203,6 +217,7 @@ class NebularGridTable:
     wavelengths: jnp.ndarray
     log_phot_per_qh: jnp.ndarray | None = None
     axis_kinds: tuple = ()
+    log_restband_per_qh: jnp.ndarray | None = None
 
 
 def _ssp_met_nodes(model):
@@ -455,14 +470,14 @@ def precompute_nebular_grid(
     axis_kinds = tuple(axis_kinds)
 
     def _row(point_values):
-        """(line_per_qh, phot_per_qh|None) at one grid point — one eager Cue forward.
+        """(line, phot|None, restband|None) at one grid point — one eager Cue forward.
 
         Kept for the single reference evaluation below (photometry-channel probe +
         vmap sanity check); the full grid is built vmapped, not by looping this.
         """
         row = jnp.asarray([float(v) for v in point_values])
-        line, phot = _row_traced(row, want_phot=True)
-        return line, (None if phot is None else phot)
+        line, phot, rest = _row_traced(row, want_phot=True)
+        return line, (None if phot is None else phot), (None if rest is None else rest)
 
     def _row_traced(row, *, want_phot):
         """Per-Q_H line (and optionally phot) vector at one grid point, tracer-safe.
@@ -483,13 +498,18 @@ def precompute_nebular_grid(
         )
         line_per_qh = jnp.asarray(flux) * ref_divisor * inv_qh
         if not want_phot:
-            return line_per_qh, None
+            return line_per_qh, None, None
         # intrinsic nebular filter-integrated rest-frame L_nu per Q_H (the exact
         # per-eval publish, captured once at build time). Absent when the model
         # has no WavePrecomp filters (line-only grid).
         neb_phot = state.derived.get("nebular_phot_lnu_precomp")
         phot_per_qh = None if neb_phot is None else jnp.asarray(neb_phot) * inv_qh
-        return line_per_qh, phot_per_qh
+        # ...and its rest-frame twin, captured in the SAME forward (#1665).
+        # Capturing only the observed band is what silently stripped the nebular
+        # contribution out of every rest-frame band on the fast path.
+        neb_rest = state.derived.get("nebular_restband_lnu_precomp")
+        rest_per_qh = None if neb_rest is None else jnp.asarray(neb_rest) * inv_qh
+        return line_per_qh, phot_per_qh, rest_per_qh
 
     if not axis_names:
         grid_shape: tuple = ()
@@ -500,8 +520,20 @@ def precompute_nebular_grid(
 
     # One eager reference forward: detects the photometry channel (line-only grids
     # have none) and anchors the vmap sanity check below.
-    ref_line, ref_phot = _row(points[0])
+    ref_line, ref_phot, ref_rest = _row(points[0])
     has_phot = ref_phot is not None
+    if has_phot and ref_rest is None:
+        # The exact path publishes the observed band and its rest-frame twin
+        # together, so a reference model that emits one without the other is a
+        # contract break upstream, not a grid variant. Refuse at BUILD time —
+        # shipping the half-grid is what made #1665 silent for a whole release.
+        raise RuntimeError(
+            "nebular fast grid: the reference model published "
+            "'nebular_phot_lnu_precomp' but not 'nebular_restband_lnu_precomp'. "
+            "The two are twins (#1148/#1665); a grid carrying only the observed "
+            "band silently drops the nebular contribution from every rest-frame "
+            "band. Refusing to build a half-grid."
+        )
 
     pts_arr = jnp.asarray([[float(v) for v in pt] for pt in points])  # (n_points, n_axes)
 
@@ -528,21 +560,22 @@ def precompute_nebular_grid(
         @jax.jit
         @jax.vmap
         def _eval_both(row):
-            line, phot = _row_traced(row, want_phot=True)
-            return line, phot
+            line, phot, rest = _row_traced(row, want_phot=True)
+            return line, phot, rest
 
-        # (n_points, n_line), (n_points, n_phot)
-        line_all, phot_all = _in_chunks(_eval_both, pts_arr, 2)
+        # (n_points, n_line), (n_points, n_phot), (n_points, n_phot)
+        line_all, phot_all, rest_all = _in_chunks(_eval_both, pts_arr, 3)
     else:
 
         @jax.jit
         @jax.vmap
         def _eval_line(row):
-            line, _ = _row_traced(row, want_phot=False)
+            line, _, _ = _row_traced(row, want_phot=False)
             return line
 
         line_all = _in_chunks(_eval_line, pts_arr, 1)  # (n_points, n_line)
         phot_all = None
+        rest_all = None
 
     # Sanity: the vmapped first node must reproduce the eager reference forward.
     if not bool(jnp.allclose(line_all[0], ref_line, rtol=1e-5, atol=0.0)):
@@ -557,6 +590,7 @@ def precompute_nebular_grid(
 
     log_line = _stack_log(line_all)
     log_phot = None if phot_all is None else _stack_log(phot_all)
+    log_rest = None if rest_all is None else _stack_log(rest_all)
 
     return NebularGridTable(
         axis_names=axis_names,
@@ -565,6 +599,7 @@ def precompute_nebular_grid(
         wavelengths=wavelengths,
         log_phot_per_qh=log_phot,
         axis_kinds=axis_kinds,
+        log_restband_per_qh=log_rest,
     )
 
 
@@ -685,15 +720,90 @@ def reconstruct_nebular_phot(log_nion, params, table) -> jnp.ndarray:
     :func:`reconstruct_nebular_lines` still take linear ``nion`` (their erg/s
     output is deferred to #1206 items 2/3).
     """
-    if table.log_phot_per_qh is None:
+    return _reconstruct_band_channel(log_nion, params, table, "log_phot_per_qh", "photometry")
+
+
+def _reconstruct_band_channel(log_nion, params, table, field, label) -> jnp.ndarray:
+    """Shared core of the two per-filter reconstructions (#1665).
+
+    ``reconstruct_nebular_phot`` and :func:`reconstruct_nebular_restband` differ
+    only in which grid channel they read — same axes, same interpolation, same
+    ``L_nu = 10^(log_nion + log_channel)`` closing step. One body so the twins
+    cannot drift apart, which is the failure this issue was.
+
+    Parameters
+    ----------
+    log_nion : float
+        log10 ionizing photon rate [dex re photons/s].
+    params : Mapping
+        Parameter dict; free-axis values locate the query point.
+    table : NebularGridTable
+        The grid from :func:`precompute_nebular_grid`.
+    field : str
+        Grid attribute to read (``'log_phot_per_qh'`` / ``'log_restband_per_qh'``).
+    label : str
+        Human name of the channel for the error message (``'photometry'`` /
+        ``'rest-band'``).
+
+    Returns
+    -------
+    ndarray, shape (n_filter,)
+        Intrinsic nebular filter-integrated rest-frame ``L_nu`` [erg/s/Hz].
+
+    Notes
+    -----
+    **JIT-compatible / gradient-safe**: yes — node-exact PCHIP + log-domain add.
+    """
+    log_channel = getattr(table, field, None)
+    if log_channel is None:
         raise ValueError(
-            "NebularGridTable has no photometry channel (log_phot_per_qh is None). "
+            f"NebularGridTable has no {label} channel ({field} is None). "
             "Rebuild precompute_nebular_grid from a model built with "
             "approx=WavePrecomp() and photometric filters."
         )
     if not table.axis_names:
-        log_ppq = table.log_phot_per_qh
+        log_cpq = log_channel
     else:
         point = tuple(jnp.asarray(params[name]).reshape(()) for name in table.axis_names)
-        log_ppq = interp_nd_pchip(table.log_phot_per_qh, table.axes, point, _kinds(table))
-    return pow10(jnp.asarray(log_nion) + log_ppq)  # rest-frame L_nu; consumer applies dust + z
+        log_cpq = interp_nd_pchip(log_channel, table.axes, point, _kinds(table))
+    return pow10(jnp.asarray(log_nion) + log_cpq)  # rest-frame L_nu; consumer applies dust + z
+
+
+def reconstruct_nebular_restband(log_nion, params, table) -> jnp.ndarray:
+    r"""Intrinsic nebular **rest-band** ``L_nu`` from the grid — the twin of phot.
+
+    Same filters as :func:`reconstruct_nebular_phot`, integrated at
+    ``redshift=0`` so the band sits in the rest frame (#1148). Reconstructs
+    ``nebular_restband_lnu_precomp``, which every rest-frame consumer
+    (spectral indices, rest-frame colors) reads.
+
+    Parameters
+    ----------
+    log_nion : float
+        log10 ionizing photon rate for this evaluation [dex re photons/s]
+        (stellar-published; == log10(q_h)).
+    params : Mapping
+        Parameter dict — the free-axis values locate the query point.
+    table : NebularGridTable
+        The grid from :func:`precompute_nebular_grid`, built from a
+        ``WavePrecomp`` model so ``log_restband_per_qh`` is populated.
+
+    Returns
+    -------
+    ndarray, shape (n_filter,)
+        Intrinsic nebular rest-frame band-integrated ``L_nu`` [erg/s/Hz].
+
+    Raises
+    ------
+    ValueError
+        If the table predates #1665 and carries no rest-band channel — rebuild
+        the grid rather than serving the observed band in its place.
+
+    Notes
+    -----
+    **JIT-compatible / gradient-safe**: yes — node-exact PCHIP + log-domain add.
+
+    Omitting this publish on the fast path was #1665: all 13 spectral indices
+    moved off the exact path, worst ``HgA`` by +1733%, silently.
+    """
+    return _reconstruct_band_channel(log_nion, params, table, "log_restband_per_qh", "rest-band")

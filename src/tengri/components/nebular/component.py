@@ -629,12 +629,20 @@ class NebularSEDComponent(TemplateThreading):
         # consumers that go through the contract. A reader that takes the
         # published key without declaring it stays invisible here (#1673).
         #
-        # One flag, used for BOTH the continuum and the photometry publication
-        # below: two checks of the same condition are free to drift apart, and
-        # this defect is what that costs.
+        # The rest-band channel is part of the condition, not an extra: a table
+        # that cannot serve BOTH publishes must not take the fast path at all.
+        # Grids built before #1665 therefore fall back to the exact path —
+        # slower, correct — instead of silently dropping the nebular
+        # contribution from every rest-frame band.
+        #
+        # ONE flag, read by every fast-path branch below (the zeroed continuum,
+        # the skipped line catalog, and the publish block): two checks of the
+        # same condition are free to drift apart, and #1665 and #1673 are each
+        # what that costs. The conditions compose — every one of them must hold.
         use_grid = (
             self.grid_table is not None
             and getattr(self.grid_table, "log_phot_per_qh", None) is not None
+            and getattr(self.grid_table, "log_restband_per_qh", None) is not None
             and not self.must_materialize_sed
         )
 
@@ -895,11 +903,20 @@ class NebularSEDComponent(TemplateThreading):
             # ``predict_photometry``. log10(Q_H) is the stellar-published ``log_nion``.
             from tengri.components.nebular.nebular_grid_precompute import (
                 reconstruct_nebular_phot,
+                reconstruct_nebular_restband,
             )
 
             log_nion = state.derived["log_nion"]
+            interp_point = self._grid_interp_point(grid, params, state)
             derived_overrides["nebular_phot_lnu_precomp"] = reconstruct_nebular_phot(
-                log_nion, self._grid_interp_point(grid, params, state), grid
+                log_nion, interp_point, grid
+            )
+            # The rest-frame twin, from the same interpolation point (#1665).
+            # The exact path emits these two together; emitting only the first
+            # left every rest-frame consumer summing a band with the nebular
+            # emission missing — 13/13 spectral indices wrong, worst +1733 %.
+            derived_overrides["nebular_restband_lnu_precomp"] = reconstruct_nebular_restband(
+                log_nion, interp_point, grid
             )
         elif (
             self._state is not None

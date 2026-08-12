@@ -25,6 +25,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.components._collapsed_lookup import interp_collapsed
 from tengri.components.agn.nenkova_agnfitter import _load_nenkova_agnfitter_arrays
 from tengri.forward.precompute.templates import (
     precompute_template_photometry,
@@ -328,7 +329,7 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
         """
         # Same unit convention as build_nenkova_agnfitter_photometry_lookup: L_ν [erg/s/Hz]
         l_bol_lsun = 10.0**agn_log_lbol
-        phot_per_lsun = interp_nd_pchip(grid_phot, axes, tuple(free_axis_values))
+        phot_per_lsun = interp_collapsed(grid_phot, axes, free_axis_values, kernel="pchip")
         return l_bol_lsun * agn_torus_frac * phot_per_lsun
 
     return nenkova_agnfitter_phot_collapsed
