@@ -43,7 +43,7 @@ def _physical_ssp(ssp):
 def _model(ssp):
     return SEDModel.build(
         ssp_data=ssp,
-        stellar={"logzsol": Uniform(-1.0, 0.2), "*": FIXED},
+        met={"logzsol": Uniform(-1.0, 0.2), "*": FIXED},
         sfh={
             "type": "delayed",
             "tau_gyr": Fixed(1.0),
