@@ -657,10 +657,13 @@ class Catalog:
         ... )
         >>> flux = cat.predict()
 
-        Straight from a snapshot, where metallicity is a mass fraction:
+        Straight from a snapshot, where metallicity is a mass fraction. The
+        stellar history and the gas-phase value are separate knobs and do not
+        track each other, so a snapshot that stores both passes both:
 
         >>> cat = Catalog.from_histories(
-        ...     fwd, t_gyr=t, sfr=sfr, met=Z_gas, met_unit="z_mass_fraction"
+        ...     fwd, t_gyr=t, sfr=sfr,
+        ...     met=Z_star, met_gas=Z_gas, met_unit="z_mass_fraction"
         ... )
         """
         cfg = _stellar_config(fwd)

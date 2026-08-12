@@ -644,8 +644,24 @@ def test_simulate_carries_the_metallicity_history(fwd_table_met, histories):
     assert np.asarray(mock.photometry).shape == (_N, 5)
     mwz = np.asarray(mock.properties["mass_weighted_metallicity"])
     assert np.all(np.isfinite(mwz))
-    assert np.all((mwz > met.min() + LOG10_ZSUN) & (mwz < met.max() + LOG10_ZSUN)), (
+
+    # Both sides of this comparison are logzsol: ``met`` because the fixture
+    # feeds the default ``met_unit='logzsol'``, and the property because
+    # ``_mass_weighted_metallicity_fn`` subtracts LOG10_ZSUN before publishing.
+    # Adding the offset to only one side is the 1.85 dex (factor 70) slip that
+    # the property's own docstring exists to warn about; it put this window
+    # below every value the history can produce.
+    #
+    # The window still has teeth: a history that was silently dropped falls
+    # back to the declared default met_logzsol = 0.0, which is outside it.
+    assert np.all((mwz > met.min()) & (mwz < met.max())), (
         f"a mass-weighted metallicity must lie inside the history it averages; "
-        f"got {mwz} against absolute log10(Z) range "
-        f"[{met.min() + LOG10_ZSUN:.3f}, {met.max() + LOG10_ZSUN:.3f}]"
+        f"got {mwz} against logzsol range [{met.min():.3f}, {met.max():.3f}]"
+    )
+
+    # The three galaxies share one Z(t) and one SFH *shape*, differing only by a
+    # constant SFR factor (1, 5, 20). A mass-weighted mean is a ratio, so that
+    # factor cancels — equality here is the scale invariance, not a stuck value.
+    assert np.allclose(mwz, mwz[0], rtol=1e-9), (
+        f"a constant SFR rescale must cancel in a mass-weighted ratio; got {mwz}"
     )
