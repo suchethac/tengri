@@ -109,14 +109,14 @@ def _build(ssp, obs, *, met_mode, approx):
     from tengri import FIXED, SEDModel
     from tengri.parameters.priors import Fixed, Uniform
 
-    stellar = {"met_mode": "table"} if met_mode == "table" else {"met_logzsol": Uniform(-2.0, 0.4)}
+    met = {"type": "table"} if met_mode == "table" else {"logzsol": Uniform(-2.0, 0.4)}
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         return SEDModel.build(
             ssp,
             observation=obs,
             sfh={"type": "table"},
-            stellar=stellar,
+            met=met,
             neb={
                 "type": "cue",
                 "all_params": FIXED,
