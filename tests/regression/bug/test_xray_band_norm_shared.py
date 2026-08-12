@@ -9,7 +9,7 @@ edges and constants. Three copies of one convention drift independently; the
 sibling failure in #1527 is two callers of a single helper that already
 disagree about its contract. ``_cutoff_powerlaw_band_norm`` is now the single
 definition, and :func:`test_band_norm_matches_inline_form` pins it to the
-inline arithmetic it replaced so the refactor is provably behaviour-preserving.
+inline arithmetic it replaced so the refactor is provably behavior-preserving.
 
 **#1755** — the ``xray_xrb_terms`` docstring claimed the Lehmer et al. (2016)
 Eq. 15 relation "yields ~2.6e39 erg/s per M_sun/yr" at Z=0.02, where its own
@@ -26,6 +26,8 @@ import numpy as np
 import pytest
 
 from tengri.components.xray.xray import _cutoff_powerlaw_band_norm
+
+pytestmark = pytest.mark.regression_bug
 
 # Lehmer et al. 2016, ApJ 825, 7, Eq. 15 — the polynomial the docstring quotes.
 _LEHMER_COEFFS = (40.28, -62.12, 569.44, -1833.80, 1968.33)
@@ -82,10 +84,10 @@ def test_band_norm_matches_inline_form(
 ) -> None:
     """The shared helper reproduces the inline arithmetic exactly (#1119).
 
-    The three call sites are behaviour-preserving only if the helper computes
+    The three call sites are behavior-preserving only if the helper computes
     the same expression in the same order. This asserts bit-equality, not
     tolerance — a reordering that changed the last ulp would still be a
-    behaviour change to the X-ray goldens.
+    behavior change to the X-ray goldens.
     """
     from tengri.components.xray.xray import _KEV_TO_HZ
 
