@@ -104,11 +104,12 @@ class _StubFitterSelf:
     _eline_marginalize = False
     _eline_fitted = False
 
-    # ``_fits_line_fluxes`` delegates to ``_line_fluxes_for`` since #1691 (the
-    # override and the observation attribute are one channel), so the stub has
-    # to carry both — as a bound method, not a staticmethod.
-    _line_fluxes_for = Fitter._line_fluxes_for
+    # Bound plainly, like every sibling below it: #1691 made
+    # ``_fits_line_fluxes`` an instance method reading
+    # ``self._line_flux_override`` (a per-galaxy line-flux channel needs
+    # instance state), so a ``staticmethod`` wrapper now swallows ``self``.
     _fits_line_fluxes = Fitter._fits_line_fluxes
+    _line_fluxes_for = Fitter._line_fluxes_for
     _fits_lines = Fitter._fits_lines
     _auto_approx_config = Fitter._auto_approx_config
     _add_feature_precomp = Fitter._add_feature_precomp

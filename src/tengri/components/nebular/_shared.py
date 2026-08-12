@@ -6,6 +6,8 @@ Functions extracted from individual backends to eliminate duplication.
 
 from __future__ import annotations
 
+import math as _math
+
 import jax
 import jax.numpy as jnp
 
@@ -18,6 +20,13 @@ from tengri.components.nebular._constants import (
     _LYMAN_LIMIT,
 )
 from tengri.utils.physics_constants import C_KM_S as _C_KM_S, K_BOLTZ as _K_BOLTZ
+from tengri.utils.scale import pow10
+
+#: ``log10`` of the two constants deferred out of the Q_H integrand (#1568).
+#: Python floats, evaluated once at import in float64, so they enter the graph
+#: as constants and never as a float32-rounded array.
+_LOG10_LSUN_ERG = float(_math.log10(_LSUN_ERG))
+_LOG10_H_PLANCK = float(_math.log10(_H_PLANCK))
 
 # ── Line placement ────────────────────────────────────────────────
 
@@ -294,7 +303,13 @@ def sanitize_qh_table(qh_raw, *, backend_name: str):
     if n_bad:
         largest_finite = float(jnp.max(jnp.where(finite, jnp.abs(qh_raw), 0.0)))
         ceiling = float(jnp.finfo(jnp.result_type(qh_raw)).max)
-        if largest_finite > 0.01 * ceiling:
+        # ``n_bad == size`` is the case the survivor test cannot see (#1568).
+        # With nothing finite, ``largest_finite`` is 0.0 and the threshold below
+        # is never crossed, so a *totally* overflowed table fell through and was
+        # zeroed in full — the worst case, not an edge case. A grid with no
+        # usable UV integrates to a finite 0.0 rather than a non-finite value,
+        # so an all-non-finite table cannot be the honest-missing-data case.
+        if largest_finite > 0.01 * ceiling or n_bad == qh_raw.size:
             raise QHTableOverflowError(
                 f"{backend_name}: {n_bad} of {qh_raw.size} Q_H grid entries overflowed "
                 f"{jnp.result_type(qh_raw)} (largest finite entry {largest_finite:.3e} sits "
@@ -362,17 +377,79 @@ def compute_qh(ssp_wave: jnp.ndarray, ssp_flux: jnp.ndarray) -> float:
         with Q_H > 1e100). Does not affect physically realistic rates (~1e31).
 
     """
+    return pow10(compute_qh_log10(ssp_wave, ssp_flux))
+
+
+@jax.jit
+def compute_qh_log10(ssp_wave: jnp.ndarray, ssp_flux: jnp.ndarray) -> float:
+    r"""``log10(Q_H)`` [dex re photons/s/Msun] — the range-safe core integral.
+
+    Same quantity as :func:`compute_qh`, computed so that no intermediate leaves
+    float32 range. :func:`compute_qh` is a thin ``pow10`` wrapper over this, so
+    the two cannot drift.
+
+    .. math::
+
+        \log_{10} Q_H = \log_{10}\!\left(-\int_{\lambda<912\,\mathrm{\AA}}
+        \frac{\hat{L}_\nu}{\nu}\,d\nu\right)
+        + \log_{10} \hat{L}_{\rm peak} + \log_{10} L_\odot - \log_{10} h
+
+    where :math:`\hat{L}_\nu = L_\nu / \hat{L}_{\rm peak}` is the SSP flux
+    normalized by its own peak [dimensionless] and :math:`h` is Planck's
+    constant [erg s].
+
+    Parameters
+    ----------
+    ssp_wave : array, shape (n_wave,)
+        SSP wavelength grid [Angstrom], rest-frame, increasing.
+    ssp_flux : array, shape (n_wave,)
+        SSP spectral luminosity density [Lsun/Hz/Msun].
+
+    Returns
+    -------
+    float
+        ``log10`` of the ionizing photon rate [dex re photons/s/Msun].
+        ``-inf`` when there is no ionizing flux — the exact-zero sentinel, so
+        ``pow10`` returns exactly 0.0 as the linear form always did.
+
+    Notes
+    -----
+    **JIT-compatible / gradient-safe**: yes. The where-dummy keeps the backward
+    pass free of NaN where the integral vanishes.
+
+    **Why the peak is factored out first (#1568)**: the division by
+    :math:`h\nu` is the step that leaves range —
+    :math:`h\nu \approx 2\times10^{-11}`, so a healthy
+    :math:`L_\nu \sim 10^{30}` becomes :math:`\sim10^{41}` *before* the
+    trapezoid, and the integral itself reaches :math:`\sim10^{46}` against a
+    float32 ceiling of 3.4e38. Normalizing by the peak and deferring both
+    constants to a log-space sum keeps the integrand at
+    :math:`\sim10^{-16}` and the accumulated integral at order unity. Same
+    treatment as ``_integrate_nion_log10`` on the stellar path.
+
+    The float64 clamp that used to sit here (``finfo(float64).max / n_wave``,
+    guarding trapezoid overflow for artificially young SSPs with
+    :math:`Q_H > 10^{100}`) is gone rather than ported: it was a float64
+    literal, hence ``inf`` and inert in float32, and in the normalized form
+    there is nothing left for it to guard.
+    """
     nu = _C_CGS / (ssp_wave * 1e-8)  # Hz
-    l_nu = ssp_flux * _LSUN_ERG  # erg/s/Hz/Msun
-    photon_rate = l_nu / (_H_PLANCK * nu)
     mask = ssp_wave < _LYMAN_LIMIT
-    # Clamp per-element to prevent float64 trapezoid accumulation overflow for
-    # young pure SSPs.  The cap is loose enough (~1e306) that it never fires for
-    # physically realistic rates (~1e31) — it only prevents rate×dnu overflow.
-    safe_max = jnp.finfo(jnp.float64).max / ssp_wave.shape[0]
-    integrand = jnp.where(mask, jnp.minimum(photon_rate, safe_max), 0.0)
-    qh = -jnp.trapezoid(integrand, nu)
-    return jnp.maximum(qh, 0.0)
+
+    # Factor the peak out BEFORE dividing by nu — that division is the one that
+    # leaves float32 range, so it must act on an O(1) quantity.
+    peak = jnp.max(jnp.abs(ssp_flux))
+    peak_safe = jnp.where(peak > 0, peak, jnp.ones_like(peak))
+    integrand = jnp.where(mask, (ssp_flux / peak_safe) / nu, 0.0)
+    norm = -jnp.trapezoid(integrand, nu)
+
+    # ``jnp.maximum(qh, 0.0)`` in the linear form mapped a negative integral to
+    # zero; ``-inf`` here is the same statement, and pow10 reproduces the 0.0.
+    positive = norm > 0
+    safe = jnp.where(positive, norm, 1.0)
+    log_norm = jnp.where(positive, jnp.log10(safe), -jnp.inf)
+
+    return log_norm + jnp.log10(peak_safe) + _LOG10_LSUN_ERG - _LOG10_H_PLANCK
 
 
 # Vectorized over (metallicity, age) grid dimensions

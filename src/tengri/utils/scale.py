@@ -12,7 +12,9 @@ See issue #1186.
 
 from __future__ import annotations
 
+import jax
 import jax.numpy as jnp
+import numpy
 
 LN10 = 2.302585092994046
 LOG10_4PI = float(jnp.log10(4.0 * jnp.pi))  # ~1.09921
@@ -67,6 +69,148 @@ def representable_floor(value: float) -> float:
     return max(float(value), float(jnp.finfo(jnp.result_type(float)).tiny))
 
 
+def representable_exponent(value: float, *, base: float = 10.0) -> float:
+    r"""Lower an exponent bound to the largest ``base**x`` the dtype can hold.
+
+    The ceiling-side mirror of :func:`representable_floor`, and the same defect in
+    the opposite direction: a saturating bound written for float64 does not merely
+    stop protecting in float32, it **manufactures the** ``inf`` **it exists to
+    prevent**.
+
+    Parameters
+    ----------
+    value : float
+        The intended exponent ceiling, as written at the call site [dex for
+        ``base=10``, nats for ``base=e``].
+    base : float, keyword-only, optional
+        Base of the power the bound feeds. ``10.0`` (default) for
+        ``10**clip(x, lo, hi)``; :data:`math.e` for ``exp(clip(x, lo, hi))``.
+        One function rather than a per-base copy — the arithmetic is identical
+        and only ``log(max)/log(base)`` changes.
+
+    Returns
+    -------
+    float
+        ``min(value, x_max)`` where ``x_max`` is the largest float for which
+        ``base**x`` is finite in the working dtype — a static Python float, safe
+        as a :func:`jax.numpy.clip` bound under JIT.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — resolved at trace time from
+    ``jnp.result_type(float)``, so it is a compile-time constant.
+
+    float32 tops out at 3.4028e38, i.e. :math:`10^{38.53}` or :math:`e^{88.72}`.
+    A clip to ±50 dex therefore saturates to a value float32 cannot represent, so
+    the guarded expression returns ``inf`` for every input the guard fires on.
+    Measured: both Cue emission paths clipped to ±50 dex with the comment *"the
+    clip is the only defense against NaN/inf poisoning a JAX gradient"*, and in
+    pure float32 that clip was the sole reason the whole forward state went
+    non-finite -- poisoning the dust energy balance, ``L_absorbed``, ``L_ir`` and
+    every gradient through them (#1206).
+
+    **The natural-exp form fails silently, which is worse.** ``qsogen``'s Planck
+    terms are ``1 / (exp(clip(x, 0, 500)) - 1)``. In float32 ``exp(500)`` is
+    ``inf``, so the *value* is ``0.0`` -- physically right for a Planck tail, so
+    nothing announces it -- while the *gradient* is ``NaN``. Measured at ``x=600``:
+    float64 gives value 7.1e-218 and derivative ``-0.0``; float32 gives ``0.0``
+    and ``nan``.
+
+    The bound is stepped strictly below ``log(max)/log(base)`` rather than set
+    equal to it: ``base**that`` rounds *up* to ``inf`` in the last bits, so the
+    exact value is not itself usable.
+
+    **float64 is unchanged by construction.** Its ceiling is :math:`10^{308.25}`,
+    above every exponent bound the tree writes, so the ``min`` returns the
+    original literal and float64 results are bit-identical.
+
+    This caps a *magnitude*, so it deliberately says nothing about ``-inf``, which
+    remains the legitimate "this term is exactly zero" sentinel of
+    :func:`log10_magnitude`.
+
+    Examples
+    --------
+    >>> import jax
+    >>> from tengri.utils.scale import representable_exponent
+    >>> with jax.enable_x64(True):
+    ...     representable_exponent(50.0) == 50.0  # float64: untouched
+    True
+    """
+    # numpy, not jnp: this is called at trace time from inside jitted forwards, and
+    # ``float()`` of a jnp array there is a ConcretizationTypeError. ``finfo.max``
+    # alone is a numpy scalar (which is why representable_floor gets away with
+    # ``jnp``), but taking a log of it is a JAX operation and the result traces.
+    dtype = numpy.dtype(jnp.result_type(float))
+    # The DERIVATIVE, not the value, sets the bound: d/dx base**x = base**x·ln(base),
+    # so the headroom needed is ``max / ln(base)``. Capping the value alone leaves the
+    # forward finite and the reverse pass NaN — clip contributes a zero gradient
+    # there, and 0 * inf is NaN. Measured on Cue at the cap: forward 3.4028e38
+    # (finite), gradient NaN, while float64 gives a clean 0.0.
+    #
+    # It costs 0.36 dex for base 10 and nothing for base e (ln(e) = 1), and
+    # representable_floor's docstring already records the same value-vs-derivative
+    # distinction for the floor side (#1397, #1436, #1439).
+    headroom = numpy.finfo(dtype).max / max(numpy.log(base), 1.0)
+    # One ULP *of the working dtype* below the limit: base**that rounds up to inf in
+    # the last bits, so the exact value is not usable. Stepping in float64 would not
+    # move it far enough to matter — float64's ULP at 38.5 is ~7e-15, float32's ~4e-6.
+    limit = numpy.log(headroom) / numpy.log(base)
+    ceiling = numpy.nextafter(dtype.type(limit), dtype.type(0.0))
+    return min(float(value), float(ceiling))
+
+
+def whiten(x, sigma):
+    r""":math:`x / \sigma`, with the division made binding on the compiler.
+
+    The single seam through which every noise-weighting in tengri passes —
+    :math:`\chi^2` residuals, Gauss-Newton metrics, and the normal equations of
+    the analytic emission-line marginalization.
+
+    Dividing by :math:`\sigma` once is always representable; forming
+    :math:`1/\sigma^2` never is, at the :math:`\sigma \sim 10^{-30}` of a real
+    flux (:math:`1/\sigma^2 \sim 10^{59}` against a float32 ceiling of
+    :math:`3.4\times10^{38}`). Applying this **twice** is therefore the only
+    float32-safe spelling of :math:`N^{-1}`:
+
+    .. math::
+
+        J^\mathsf{T} N^{-1} J v \;=\; (J/\sigma)^\mathsf{T} (J/\sigma)\, v
+
+    Writing it in that order is not sufficient. Under ``jax.jit``, when
+    ``sigma`` is a compile-time constant, XLA re-associates
+    :math:`(x/\sigma)/\sigma` into :math:`x \cdot (1/\sigma^2)` and
+    constant-folds the reciprocal to ``inf``; ``0 * inf`` is ``NaN`` (#1535).
+    Measured: without the barrier the double division is finite eagerly and
+    NaN under ``jit``, with a literal ``inf`` in the compiled HLO. The
+    ``optimization_barrier`` makes the intended order a *data dependency*,
+    which the compiler must respect — a source-level grouping is only a
+    suggestion.
+
+    Parameters
+    ----------
+    x : array_like
+        Quantity to whiten — a residual, a Jacobian-vector product, or a
+        data-space vector.
+    sigma : array_like
+        1-σ uncertainty [same units as ``x``], broadcastable against ``x``.
+
+    Returns
+    -------
+    ndarray
+        ``x / sigma`` [dimensionless], shape of the broadcast inputs.
+
+    Notes
+    -----
+    JIT/grad/vmap-safe, and it is only under JIT that the barrier does
+    anything. ``optimization_barrier`` is semantically the identity, so values
+    and derivatives are unchanged — verified bit-exact in float64.
+
+    Lives here rather than beside the Gaussian likelihood so that
+    ``observation/`` can use it without importing ``inference/`` (#1588).
+    """
+    return jax.lax.optimization_barrier(x / sigma)
+
+
 def pow10(x):
     """10**x, computed as ``exp(x·ln10)`` to preserve the input dtype.
 
@@ -86,6 +230,74 @@ def pow10(x):
     weak typing; ``exp(x·ln10)`` does not.
     """
     return jnp.exp(x * LN10)
+
+
+def _not_computable(log_value, sign=1.0):
+    """True where a log-domain term is ``+inf``/``NaN`` rather than a usable value.
+
+    ``-inf`` is excluded on purpose: it is the legitimate "this term is exactly
+    zero" sentinel, not a failure.
+    """
+    bad_log = ~jnp.isfinite(log_value) & ~jnp.isneginf(log_value)
+    return bad_log | ~jnp.isfinite(jnp.asarray(sign))
+
+
+def log10_magnitude(value):
+    r"""``log10|value|`` with "exactly zero" and "not computable" kept apart.
+
+    The single spelling of the log-domain magnitude contract. Every producer of
+    a ``log_*`` quantity re-derived this by hand, and four of them independently
+    got the same half of it wrong (#1527).
+
+    .. math::
+
+        \mathrm{log10\_magnitude}(v) = \begin{cases}
+            \log_{10}|v| & v \ne 0,\ v \ \mathrm{finite} \\
+            -\infty      & v = 0 \\
+            +\infty      & v \ \mathrm{non\text{-}finite}
+        \end{cases}
+
+    Parameters
+    ----------
+    value : array_like
+        A signed or unsigned magnitude in linear space.
+
+    Returns
+    -------
+    ndarray
+        ``log10`` of the magnitude [dex], with the sentinels above.
+
+    Notes
+    -----
+    JIT/grad/vmap-safe. The where-dummy keeps the backward pass free of NaN at
+    ``value == 0``.
+
+    **The two sentinels are not interchangeable, and that is the point.**
+    ``-inf`` powers back through :func:`pow10` to exactly ``0.0``, so it is a
+    *value*: "this quantity really is zero". ``+inf`` does not survive as a
+    number and is not meant to — it says "no answer exists here". Folding a
+    non-finite input into ``-inf`` reports a corrupt computation as a true zero,
+    which is the failure mode that let one bad pixel silently switch off an
+    entire dust IR budget or all nebular emission.
+
+    ``+inf`` covers ``NaN`` as well as ``Inf`` deliberately: downstream there is
+    nothing useful to do differently with the two, and one sentinel for "do not
+    trust this" is far easier to test and to check for than two.
+
+    See Also
+    --------
+    log10_add
+        Sums two such quantities, preserving both sentinels.
+    tengri.config.exceptions.CorruptEnergyBalanceWarning
+        Attributes a ``+inf`` to the component that produced it.
+    """
+    value = jnp.asarray(value)
+    magnitude = jnp.abs(value)
+    finite = jnp.isfinite(value)
+    positive = finite & (magnitude > 0)
+    safe = jnp.where(positive, magnitude, 1.0)
+    zero_or_log = jnp.where(positive, jnp.log10(safe), -jnp.inf)
+    return jnp.where(finite, zero_or_log, jnp.inf)
 
 
 def apply_log10_scale(arr, log10_scale):
@@ -111,11 +323,119 @@ def apply_log10_scale(arr, log10_scale):
     -----
     JIT/grad/vmap-safe. Factors ``arr`` by its peak so the exponentiated scale
     is applied to an O(1) array; the peak's decades are folded into the exponent.
+
+    The peak is held under ``stop_gradient`` (#1415). It is a pure factorization
+    constant — ``(arr/p) * 10**(s + log10 p)`` equals ``arr * 10**s`` for *any*
+    ``p`` — so its derivative contributions cancel analytically. Left free, they
+    are two separate autodiff paths (through the numerator, and through
+    ``peak -> net -> pow10``) that must cancel numerically instead. They do in
+    float64, but in float32 one side underflows while the other survives, the
+    cancellation fails, and what is left is an uncancelled term the size of the
+    main one — gradients exactly **2x** too large. Measured on a photometry fit:
+    ``d(neg_log_posterior)/d(sfh_delayed_log_total_mass)`` was ``-5915.16``
+    against a true ``-2957.58``. Stopping the gradient leaves the single correct
+    path, ``d out/d arr = 10**log10_scale``, and float32 then tracks float64 to
+    ~1e-7.
+
+    Float64 **forward** values are untouched — ``stop_gradient`` is a no-op on the
+    forward pass. Float64 **gradients** move by at most a few ulp: measured
+    bit-identical where there is one scale seam (stellar, stellar+dust) and
+    ``<= 1.5e-15`` relative where there are several (stellar+dust IR+AGN). That is
+    the residue of a cancellation which was only ever exact to rounding, and it is
+    three orders inside the ``rtol <= 1e-12`` no-behavioral-change bar for #1206.
+
+    **Float32 reverse mode still underflows at large negative scales, and forward
+    mode does not** (#1415, open as #1388). The remaining defect is a property of
+    autodiff *mode*, not of this function. With ``log10_scale`` ~ -58 (the
+    cosmological dimming), reverse mode has to form ``d out/d arr = 10**(-58)``
+    explicitly — below float32's smallest subnormal (~1.4e-45) — so the cotangent
+    flushes to exactly zero, even when the gradient it was heading for (~1e-27) is
+    perfectly representable. Forward mode carries the tangent instead, and because
+    the tangent is divided by the same ``safe_peak`` as the primal it is O(1) when
+    ``pow10(net)`` reaches it; measured correct to ~1e-6 in pure float32 where
+    reverse mode returns 0.0.
+
+    So: no local change here can fix reverse mode. The ratio follows from relating a
+    ~1e30 quantity to a ~1e-28 one, which is what carrying the SED in scaled form
+    (#1388) removes. In the meantime reverse mode is sound wherever the incoming
+    cotangent is large enough to absorb the scale — notably the likelihood, whose
+    ~1/sigma^2 keeps the product in range, which is why float32 inference works.
     """
     # initial=0.0 makes the peak of a zero-size array 0 (max over empty has no
     # identity and raises); the where() below then maps it to 1, so an empty
     # arr passes through as an empty result instead of a trace-time error.
-    peak = jnp.max(jnp.abs(arr), initial=0.0)
-    peak = jnp.where(peak > 0, peak, jnp.ones_like(peak))
-    net = log10_scale + jnp.log10(peak)
-    return (arr / peak) * pow10(net)
+    peak = jax.lax.stop_gradient(jnp.max(jnp.abs(arr), initial=0.0))
+    usable = peak > 0
+    safe_peak = jnp.where(usable, peak, jnp.ones_like(peak))
+    # With no peak to fold in, the exponent would collapse to the raw
+    # ``log10_scale``. That is fine in float64, but a dust-luminosity scale
+    # (~43 dex) overflows float32, and ``0 * inf`` is NaN — so an all-zero
+    # array would scale to NaN rather than to zero (#1206). Zeroing the
+    # exponent keeps the identity ``0 * 10**s == 0`` at every scale, and costs
+    # nothing when there is a peak.
+    net = jnp.where(usable, log10_scale + jnp.log10(safe_peak), jnp.zeros_like(peak))
+    return (arr / safe_peak) * pow10(net)
+
+
+def log10_add(log_a, log_b, *, sign_a=1.0, sign_b=1.0):
+    """Return ``log10|s_a·10**log_a + s_b·10**log_b|`` without leaving log space.
+
+    A signed base-10 ``logaddexp``. Log-domain contracts (``log_nion``,
+    ``log_L_ir``) are exact under multiplication but not under addition, so a
+    seam that sums two such quantities would otherwise have to exponentiate
+    both — reintroducing the very out-of-range intermediate the log form
+    exists to avoid.
+
+    Parameters
+    ----------
+    log_a, log_b : array_like
+        Base-10 log magnitudes [dex]. ``-inf`` denotes an exactly zero term.
+    sign_a, sign_b : array_like, optional
+        Signs of the two terms (+1.0 or -1.0). Default +1.0. Cancellation
+        between opposite signs is resolved at the precision of the larger
+        term, as in any signed sum.
+
+    Returns
+    -------
+    ndarray
+        ``log10`` of the magnitude of the sum [dex]; ``-inf`` when the terms
+        are both zero or cancel exactly.
+
+    Notes
+    -----
+    JIT/grad/vmap-safe. Factors out the larger exponent so the exponentiated
+    terms are O(1); the where-dummy keeps the backward pass free of NaN when
+    the sum vanishes.
+    """
+    larger = jnp.maximum(log_a, log_b)
+    finite = jnp.isfinite(larger)
+    offset = jnp.where(finite, larger, 0.0)
+    total = sign_a * pow10(log_a - offset) + sign_b * pow10(log_b - offset)
+    magnitude = jnp.abs(total)
+    positive = finite & (magnitude > 0)
+    safe = jnp.where(positive, magnitude, 1.0)
+    summed = jnp.where(positive, offset + jnp.log10(safe), -jnp.inf)
+    # ``finite`` is False for BOTH infinities, but they mean opposite things:
+    # -inf is "no term here", +inf is an overflow upstream. Folding the latter
+    # into the -inf sentinel would report an overflowed term as exactly zero —
+    # a fail-open on precisely the axis this module exists to close.
+    #
+    # This used to test ``isposinf(larger)`` alone, which caught +inf and missed
+    # NaN entirely: ``maximum(43.0, nan)`` is NaN, ``isposinf(nan)`` is False,
+    # and the result fell through to the -inf branch. A NaN term vanished as
+    # though it were zero — the same fail-open, in the function whose comment
+    # argues against it (#1527). Signs are checked too: a NaN sign with a finite
+    # magnitude poisons ``total`` and lands in the same place.
+    corrupt = _not_computable(log_a, sign_a) | _not_computable(log_b, sign_b)
+    return jnp.where(corrupt, jnp.inf, summed)
+
+
+# ``max_finite_exponent()`` lived here until 2026-07. It capped x at the
+# dtype's own ``exp`` overflow (~87.7 in float32) for the two Planck-family
+# closures that spelled the occupation number ``1/expm1(x)``. Both now spell it
+# ``exp(-x) / -expm1(-x)``, whose denominator lies in (0, 1] and cannot
+# overflow at any x in any dtype, so the cap became inert — measured identical
+# values and gradients with and without it at x = 40, 60, 87, 90, 150, 400 in
+# both dtypes. Removed rather than left as a no-op with a justification that no
+# longer held (#1439). Restore it only alongside a caller that needs the raw
+# ``expm1(x)`` form — and note the derivative needs ``sqrt`` of the limit.

@@ -24,6 +24,7 @@ import jax
 import jax.numpy as jnp
 
 from tengri.inference._model_cache import _default_owner as _model_cache_owner
+from tengri.inference.likelihoods.gaussian import standardized_residual, whiten
 
 __all__ = [
     "CompileCache",
@@ -814,19 +815,27 @@ def build_jit_engine(fitter, pos_dict):
     else:
 
         def metric_vec(xi, v, data_args):
-            """M(xi) @ v = J^T N^{-1} J v + v."""
-            noise_inv = data_args["noise_inv"]
+            r"""M(xi) @ v = (J/sigma)^T (J/sigma) v + v.
+
+            Algebraically ``J^T N^{-1} J v + v``, but never forming
+            :math:`N^{-1} = 1/\sigma^2` — that is ~1e59 at a real photometric
+            sigma and simply does not exist in float32, so the shipped
+            spelling returned ``inf``, or ``NaN`` wherever ``Jv`` was exactly
+            zero. Whitening twice keeps every intermediate representable
+            (#1206). Same measure as ``diagnostics/fisher.py`` (#1542).
+            """
+            noise = data_args["noise"]
             xi_d, v_d = unflatten(xi), unflatten(v)
             _, Jv = jax.jvp(signal_response, (xi_d,), (v_d,))
             _, vjp_fn = jax.vjp(signal_response, xi_d)
-            return flatten(vjp_fn(noise_inv * Jv)[0]) + v
+            return flatten(vjp_fn(whiten(whiten(Jv, noise), noise))[0]) + v
 
         def hamiltonian(xi, data_args):
             """H(xi) = 0.5 chi2 + 0.5 ||xi||^2."""
             data = data_args["data"]
             noise = data_args["noise"]
             pred = signal_response(unflatten(xi))
-            chi2 = jnp.sum(((data - pred) / noise) ** 2)
+            chi2 = jnp.sum(standardized_residual(data, pred, noise) ** 2)
             return 0.5 * chi2 + 0.5 * jnp.sum(xi**2)
 
     def H_vg(xi, data_args):
@@ -1422,7 +1431,7 @@ def build_jit_engine(fitter, pos_dict):
             ``"nonlinear_sample"`` — reuse keys + curve (deterministic geoVI)
             ``"nonlinear_update"`` — re-curve existing residuals at new m
         data_args : dict
-            Data-dependent arguments (data, noise, noise_inv, etc.).
+            Data-dependent arguments (data, noise, sqrt_noise_inv, etc.).
 
         Returns
         -------

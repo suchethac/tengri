@@ -121,3 +121,94 @@ class TestNthcompGradientStability:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+@pytest.mark.skipif(not _is_table_available(), reason="nthcomp templates not loaded")
+class TestNthcompJVPRule:
+    """The gamma rule is a ``custom_jvp``, so both autodiff modes work (#1206)."""
+
+    NU = jnp.geomspace(1e16, 1e19, 7)
+    ARGS = (jnp.array(2.0), jnp.array(100.0), jnp.array(0.01))
+
+    def _grad_gamma(self, cotangent):
+        gamma, kte, ktbb = self.ARGS
+
+        def loss(g):
+            return jnp.sum(nthcomp_lnu_interp(self.NU, g, kte, ktbb)) * cotangent
+
+        return float(jax.grad(loss)(gamma))
+
+    def test_forward_mode_autodiff_is_supported(self):
+        """``jax.jvp`` must not raise — geoVI builds its metric with forward mode.
+
+        A ``custom_vjp`` is opaque to forward mode and raised ``TypeError: can't
+        apply forward-mode autodiff (jvp) to a custom_vjp function``, taking out
+        every geoVI fit reaching an AGN model with this kernel.
+        """
+        gamma, kte, ktbb = self.ARGS
+        primals = (self.NU, gamma, kte, ktbb)
+        tangents = (jnp.zeros_like(self.NU), jnp.array(1.0), jnp.array(0.0), jnp.array(0.0))
+
+        _, tangent_out = jax.jvp(nthcomp_lnu_interp, primals, tangents)
+
+        assert tangent_out.shape == self.NU.shape
+        assert bool(jnp.all(jnp.isfinite(tangent_out)))
+        assert bool(jnp.any(tangent_out != 0.0)), "forward mode returned an all-zero tangent"
+
+    def test_large_cotangent_does_not_collapse_to_zero(self):
+        """A big incoming cotangent must scale the gradient, not zero it.
+
+        The retired reverse rule divided the cotangent by ``max|fd_grad|`` ~1e-17
+        "to avoid overflow", which sent a 1e30 cotangent to ~1e47 — past float32's
+        3.4e38 — and a trailing ``where(isfinite, ..., 0.0)`` turned the ``inf``
+        into a silent zero. Measured before the fix: exactly ``0.0``.
+
+        Gradients are linear in the cotangent, so the ratio is the invariant;
+        pinning it catches both the collapse and any rescaling that does not
+        cancel.
+        """
+        unit = self._grad_gamma(1.0)
+        assert unit != 0.0, "baseline gradient is zero — test cannot detect the collapse"
+
+        scaled = self._grad_gamma(1e30)
+
+        assert scaled != 0.0, "large cotangent collapsed to a silent zero gradient"
+        assert jnp.isfinite(scaled)
+        assert scaled / unit == pytest.approx(1e30, rel=1e-5)
+
+    def test_float32_grid_with_float64_gamma_is_accepted(self):
+        """A float32 SED grid with a float64 ``gamma`` must still differentiate.
+
+        ``custom_jvp`` requires the tangent's dtype to MATCH the primal's — a
+        contract ``custom_vjp`` never imposed, so it is the one way that
+        conversion can regress. ``nu`` fixes the primal dtype while ``gamma``
+        fixes the tangent's, so this mixed pairing promotes the tangent to
+        float64 and JAX rejects the rule at trace time::
+
+            TypeError: Custom JVP rule must produce primal and tangent outputs
+            with corresponding shapes and dtypes.
+
+        It is a hard error, not a wrong number, and it reached CI as the
+        B1_agn_disc_torus scenario failing in the slow integration tier — no
+        unit test paired the dtypes this way.
+        """
+        _, kte, ktbb = self.ARGS
+        nu32 = self.NU.astype(jnp.float32)
+        args = (nu32, jnp.float64(2.0), jnp.float64(float(kte)), jnp.float64(float(ktbb)))
+        tangents = (
+            jnp.zeros_like(nu32),
+            jnp.float64(1.0),
+            jnp.float64(0.0),
+            jnp.float64(0.0),
+        )
+
+        primal_out, tangent_out = jax.jvp(nthcomp_lnu_interp, args, tangents)
+
+        assert tangent_out.dtype == primal_out.dtype
+        assert bool(jnp.all(jnp.isfinite(tangent_out)))
+
+        # Reverse mode over the same mixed pairing must also survive.
+        def loss(g):
+            return jnp.sum(nthcomp_lnu_interp(nu32, g, args[2], args[3])).astype(jnp.float64)
+
+        assert jnp.isfinite(jax.grad(loss)(args[1]))

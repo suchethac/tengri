@@ -5,10 +5,14 @@ Validates that reparametrizing the ionizing-SED scale as a log offset
 prevents float32 overflow in the Cue nebular ionizing flux.
 Balmer decrement H-alpha/H-beta ≈ 2.86 (Case B, independent of total mass scale).
 
-TIER A GUARANTEE (mixed-precision, forward_dtype="float32" under x64=True):
-  - test A (test_balmer_decrement_mixed_precision_f32): PASSES.
-    Ionizing SED computed in f32; scalars remain f64. The log-offset
-    reparametrization keeps the Balmer decrement finite and correct.
+TIER A, forward_dtype="float32" under x64=True — NOT a mixed-precision guarantee:
+  - test A (test_balmer_decrement_mixed_precision_f32): PASSES, but not for the
+    reason its name gives. ``forward_dtype`` casts nothing (#1433), so the two
+    builds it compares are bit-identical (measured: both 2.788906888791338) and
+    the comparison against the f64 reference cannot fail. What the test still
+    establishes is the physics: the decrement is finite and inside the Case B
+    range. Float32 safety of the ionizing SED is established by the pure-float32
+    tests below, which use ``jax.enable_x64(False)`` — the mechanism that works.
 
 TIER B STEP 1 DELIVERED (pure-float32, jax.enable_x64(False)) — the log_nion contract (#1206):
   - test C1 (test_log_q_h_pure_float32_cue_only): PASSES.
@@ -32,12 +36,19 @@ pytestmark = pytest.mark.regression_bug
 
 
 def test_balmer_decrement_mixed_precision_f32(ssp_bare):
-    """(A) Mixed-precision: forward_dtype=float32 under x64=True (Tier A guarantee).
+    """(A) The Balmer decrement is finite and Case B, at ``forward_dtype="float32"``.
 
-    Build the model with forward_dtype="float32" while JAX x64 is enabled (default).
-    The ionizing SED is computed in float32, but scalars like stellar_mass_scale
-    remain f64. This tests that the log-offset reparametrization keeps the
-    Balmer decrement finite and correct.
+    This test used to be described as the Tier A mixed-precision guarantee: "the
+    ionizing SED is computed in float32, but scalars stay f64". It is not. The
+    ``forward_dtype`` knob casts nothing (#1433), so ``m32`` and ``m64`` below are
+    the same computation and ``assert_allclose(dec32, dec64)`` compares a float64
+    result against itself — measured bit-identical, 2.788906888791338 both.
+
+    What survives is worth keeping, so the test stays: the decrement is finite and
+    inside the Case B range, on the panchromatic model, which is a real check on
+    the log-offset reparametrization. It is just not a float32 check. For that see
+    the pure-float32 tests in this file and
+    ``tests/regression/precision/test_forward_dtype_knob.py``.
     """
     # Build f64 reference (x64=True, forward_dtype="float64")
     m64 = build_model(ssp_bare, "float64")
@@ -55,23 +66,83 @@ def test_balmer_decrement_mixed_precision_f32(ssp_bare):
     assert_allclose(dec32, dec64, rtol=5e-3)
 
 
+#: Derived keys that are non-finite in pure float32 for the full model, measured.
+#: Every one is a *linear* transition publish whose log counterpart is finite —
+#: which is what makes this #1206 item 3 and nothing else.
+_LINEAR_OVERFLOW_KEYS = (
+    "L_absorbed",
+    "L_age",
+    "L_agn_bol",
+    "L_ir",
+    "line_lums",
+    "nion",
+    "stellar_mass_scale",
+)
+
+
+def test_pure_float32_non_finites_are_the_linear_transition_publishes(ssp_bare):
+    """Pins *why* the Balmer decrement below is nan, so the xfail cannot drift.
+
+    A strict xfail records that something fails, not that it fails for the
+    recorded reason — a later, unrelated regression tripping the same assertion
+    is absorbed silently. The reason on the xfail below was stale for exactly
+    that long: it blamed the SKIRTOR ``interp_nd_triweight`` dtype mismatch
+    (#1206 item 4, shipped) and the linear ``stellar_mass_scale`` needing a log
+    variant (shipped as ``log_stellar_mass_scale``). Both were fixed while the
+    test kept xfailing for a different cause.
+
+    So assert the cause directly: in pure float32 every linear erg/s (or
+    photons/s) transition publish overflows, and every log counterpart stays
+    finite. If that ever stops being true, this test fails here rather than
+    letting the xfail quietly stand for something new.
+    """
+    m64 = build_model(ssp_bare, "float64")
+    p = dict(m64.spec.sample(jax.random.PRNGKey(0)))
+    p["redshift"] = 1.0
+
+    with jax.enable_x64(False):
+        derived = build_model(ssp_bare, "float32").predict_state(p).derived
+
+    non_finite = {
+        k
+        for k in _LINEAR_OVERFLOW_KEYS
+        if k in derived and not np.all(np.isfinite(np.asarray(derived[k], dtype=np.float64)))
+    }
+    assert non_finite == set(_LINEAR_OVERFLOW_KEYS) & set(derived), (
+        "the pure-float32 overflow set has moved: expected every linear transition "
+        f"publish to overflow, got {sorted(non_finite)}. If a key became finite, item 3 "
+        "has advanced — promote it out of this list and re-check the xfail below"
+    )
+
+    for log_key in ("log_nion", "log_stellar_mass_scale", "log_L_ir"):
+        if log_key in derived:
+            value = np.asarray(derived[log_key], dtype=np.float64)
+            assert np.all(np.isfinite(value)), (
+                f"{log_key} is non-finite in pure float32 — the log contract that makes "
+                "the linear overflow survivable has itself regressed"
+            )
+
+
 @pytest.mark.xfail(
-    reason="Pure-f32 fails in AGN SKIRTOR interpolation (dtype mismatch in interp_nd_triweight),"
-    " not due to the ionizing-SED scale. The Tier A guarantee (mixed-precision) is test A."
-    " Tier B: published stellar_mass_scale scalar (~1e42) is f32-unrepresentable;"
-    " consumers (dust energy balance, nebular backends) must use log-scaled variants.",
-    strict=False,
+    reason="#1206 item 3 (breaking unit change, not yet done). Measured cause: in pure"
+    " float32 every linear transition publish overflows — stellar_mass_scale (~1e42),"
+    " nion (~1e56), L_ir / L_absorbed / L_agn_bol / L_age, and line_lums (123 of 128"
+    " lines inf at ~1e41 erg/s). balmer_decrement is a ratio of two of those lines, so"
+    " it is nan. Their log counterparts (log_stellar_mass_scale, log_nion, log_L_ir) are"
+    " all finite — see the companion test above, which pins that split. NOT the SKIRTOR"
+    " interp_nd_triweight dtype mismatch this reason used to blame: that is item 4, and"
+    " it shipped.",
+    strict=True,
 )
 def test_balmer_decrement_pure_float32(ssp_bare):
-    """(B) Pure-float32: forward_dtype=float32 under jax.enable_x64(False).
+    """(B) Pure-float32 under ``jax.enable_x64(False)``: the full model.
 
-    Disable JAX x64 globally, forcing all scalars and arrays to float32.
-    If the published stellar_mass_scale (~1e42) still causes issues, mark this
-    test as xfail and trace the consumer chain.
+    Disable JAX x64 globally, forcing all scalars and arrays to float32. Fails
+    until item 3 returns the emission-line luminosities in ``L_sun``/log10; the
+    Tier A guarantee (mixed precision) is test A, which passes.
 
-    Current failure: dtype mismatch in AGN SKIRTOR interpolation (triweight grid
-    weights, reduce operands float64 vs initial float32) — separate from the
-    ionizing-SED mass scale fix. The Tier A guarantee is test A (mixed-precision).
+    Strict: when item 3 lands this must announce itself as an unexpected pass
+    rather than keep reporting a clean xfail on work that is already done.
     """
     # Build f64 reference
     m64 = build_model(ssp_bare, "float64")
@@ -84,9 +155,6 @@ def test_balmer_decrement_pure_float32(ssp_bare):
         m32 = build_model(ssp_bare, "float32")
         dec32 = float(m32.predict(p).properties["balmer_decrement"])
 
-    # In pure f32, if balmer_decrement is still non-finite / wrong, the
-    # published stellar_mass_scale scalar (~1e42) is the culprit (Tier B fix).
-    # For now, just check it's finite and in range.
     assert np.isfinite(dec32), f"pure-f32 Balmer decrement is non-finite: {dec32}"
     assert 2.7 < dec32 < 3.1, f"pure-f32 Balmer decrement {dec32} off Case B range"
     assert_allclose(dec32, dec64, rtol=5e-3)
