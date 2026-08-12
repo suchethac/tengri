@@ -662,8 +662,7 @@ class Catalog:
         track each other, so a snapshot that stores both passes both:
 
         >>> cat = Catalog.from_histories(
-        ...     fwd, t_gyr=t, sfr=sfr,
-        ...     met=Z_star, met_gas=Z_gas, met_unit="z_mass_fraction"
+        ...     fwd, t_gyr=t, sfr=sfr, met=Z_star, met_gas=Z_gas, met_unit="z_mass_fraction"
         ... )
         """
         cfg = _stellar_config(fwd)
