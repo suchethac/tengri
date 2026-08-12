@@ -217,7 +217,7 @@ A canonical mock dataset to validate tengri against established codes:
   >2-sigma) trigger review.
 
 Status: not yet built. `tests/crossval/test_paper_reference_values.py` pins
-published reference values and is the nearest existing analogue — PARTIAL (9/63).
+published reference values and is the nearest existing analog — PARTIAL (9/63).
 
 ## Simulation-Based Calibration (SBC)
 
