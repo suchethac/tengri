@@ -237,10 +237,6 @@ class TestNLRLinePhysics:
         ratio = self._line_flux(wave, sed, 5008.24) / self._line_flux(wave, sed, 4960.30)
         assert abs(ratio - 2.98) < 0.1, f"[OIII] 5007/4959 should be ~2.98, got {ratio:.3f}"
 
-    @pytest.mark.xfail(
-        reason="#1752: NLR template emits [NII] 6583/6548 = 2.73; atomic value is ~2.96",
-        strict=True,
-    )
     def test_nii_6583_6548_ratio_in_template(self):
         """[NII] 6583/6548 = ~2.96 (atomic physics).
 

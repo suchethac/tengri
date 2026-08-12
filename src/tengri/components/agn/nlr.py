@@ -140,6 +140,23 @@ _RICHARDSON_WAVES = jnp.array(
     ]
 )
 
+#: Fixed doublet intensity ratios (Storey & Zeippen 2000).
+#:
+#: Both members of each pair decay from the *same* upper level, so the ratio is
+#: set by the two transition probabilities alone — independent of density,
+#: temperature, ionization parameter and abundance. It is a constraint, not a
+#: measurement, and a template that carries the two lines as independent
+#: numbers is free to violate it.
+#:
+#: It did. Richardson+2014 Table 3 'a42' tabulates [N II] 6548 = 0.79 against
+#: 6584 = 2.13, i.e. a ratio of 2.70 — 9% off the atomic value, in a quantity
+#: with no physical freedom (#1752). The weak member of each doublet is now
+#: derived from the strong one. The strong lines keep their tabulated values,
+#: so [O III] 5007 and [N II] 6583 — the lines BPT diagnostics are built on —
+#: are untouched, and only the tied partners move.
+_OIII_5007_4959_RATIO = 2.98
+_NII_6583_6548_RATIO = 2.96
+
 _RICHARDSON_FLUXES = jnp.array(
     [
         2.96,
@@ -151,14 +168,14 @@ _RICHARDSON_FLUXES = jnp.array(
         0.48,
         0.13,
         1.0,
-        2.87,
+        8.53 / _OIII_5007_4959_RATIO,  # [O III] 4959 — tied to 5007 (was 2.87)
         8.53,
         0.07,
         0.02,
         0.1,
         0.33,
         0.09,
-        0.79,
+        2.13 / _NII_6583_6548_RATIO,  # [N II] 6548 — tied to 6584 (was 0.79)
         2.86,
         2.13,
         0.03,

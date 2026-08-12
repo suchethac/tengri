@@ -243,10 +243,6 @@ class TestNLRLineRatios:
             err_msg="[OIII] 5007/4959 ratio deviates from Storey & Zeippen 2000",
         )
 
-    @pytest.mark.xfail(
-        reason="#1752: NLR template emits [NII] 6583/6548 = 2.73; atomic value is ~2.96",
-        strict=True,
-    )
     def test_nii_ratio(self):
         """[NII] 6583/6548 ~ 2.94 (Storey & Zeippen 2000).
 
