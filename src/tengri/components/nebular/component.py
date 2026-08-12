@@ -19,12 +19,14 @@ from __future__ import annotations
 
 import inspect
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from functools import cache
 from typing import Any
 
 import jax.numpy as jnp
+import numpy as np
 
+from tengri.components.nebular._constants import _LSUN_ERG
 from tengri.components.nebular.baked_in import BakedInBackend
 from tengri.components.template_threading import TemplateThreading
 from tengri.parameters.priors import Fixed, Uniform
@@ -36,6 +38,7 @@ from tengri.protocols.component import (
     SEDComponentConfig,
     SEDComponentState,
 )
+from tengri.utils.scale import log10_magnitude
 
 __all__ = ["NebularSEDComponent", "NebularSEDComponentConfig"]
 
@@ -186,12 +189,50 @@ class NebularSEDComponent(TemplateThreading):
     #: makes the Cue forward dead for the photometry channel (XLA prunes it).
     #: Typed loosely to avoid an import cycle; it is a ``NebularGridTable``.
     grid_table: Any | None = None
+    #: ``True`` when the continuum must be computed rather than zeroed, which
+    #: forbids the grid's photometry shortcut: serving photometry from the grid
+    #: requires zeroing the continuum, and the dust energy balance needs it to
+    #: size the absorbed budget. Set from the assembled chain by
+    #: :meth:`SEDModel.enable_fast_nebular` — derived, never asserted.
+    #:
+    #: Named for what the component must *do*, not for the one key that drives
+    #: it today: ``sed_shock`` has the same exposure and would share this gate.
+    #:
+    #: The census reads the component contract, so it cannot see a reader that
+    #: takes a published key off ``state.derived`` without declaring an input —
+    #: ``state_to_sed_components`` and the accumulated ``state.sed_intrinsic``
+    #: are both such readers. They ask :meth:`materialized` for a publishing
+    #: variant instead of being enumerated here (#1673).
+    must_materialize_sed: bool = False
     # Tuple prefix so the MAPPINGS shock backend (``shock_*``) and the
     # photoionization backends (``neb_*``, ``ionspec_*``, ``gas_*``) all
     # flow through the standard prefix-stripping path. Backends silently
     # ignore keys they don't consume — passing ``shock_*`` to Cue is
     # harmless, and vice versa.
     parameter_prefix: tuple[str, ...] = ("neb_", "shock_", "ionspec_", "gas_")
+
+    def materialized(self) -> NebularSEDComponent:
+        """Variant that computes the nebular continuum instead of zeroing it.
+
+        The publication hook :func:`~tengri.forward.orchestrator.materialized_chain`
+        asks for. Serving photometry from the per-Q_H grid requires zeroing
+        ``sed_nebular``, so any caller that reads the forward state itself needs
+        this variant rather than the one the observables kernel runs (#1673).
+
+        Returns
+        -------
+        NebularSEDComponent
+            ``self`` when the continuum is already materialized, else a copy
+            with :attr:`must_materialize_sed` set. Returning ``self`` unchanged
+            keeps the chain's identity stable for callers that cache on it.
+
+        Notes
+        -----
+        **JIT-compatible**: not applicable — composition-time only.
+        """
+        if self.must_materialize_sed:
+            return self
+        return replace(self, must_materialize_sed=True)
 
     def citations(self) -> tuple[str, ...]:
         """Nebular-backend citations (Cue / Cloudy / baked-in / shock) are
@@ -319,6 +360,7 @@ class NebularSEDComponent(TemplateThreading):
             DerivedKey("sed_nebular", "erg/s/Hz", "Photoionized continuum + lines"),
             DerivedKey("line_waves", "Angstrom", "Line vacuum wavelengths"),
             DerivedKey("line_lums", "erg/s", "Line luminosities"),
+            DerivedKey("log_line_lums", "dex", "log10(line luminosities / (erg/s)); float32-safe"),
             DerivedKey(
                 "lyc_transmission",
                 "",
@@ -571,25 +613,37 @@ class NebularSEDComponent(TemplateThreading):
         # FAST path (#950): with a per-Q_H grid attached, the nebular photometry
         # (this apply) and the emission lines (predict_line_fluxes) reconstruct
         # from the grid, so the expensive Cue continuum + line-catalog forwards
-        # are not needed. Skip them: ``nebular_sed`` becomes zeros (its only live
-        # consumers are the exact spectrum / dust-continuum paths, which a fast
-        # model does not use — SEDModel.predict_spectrum guards against it), and
-        # the Cue NN forward is genuinely gone (not merely pruned), which is where
-        # the ~1.2 ms/eval saving comes from.
-        # ONE predicate, read by every fast-path branch below (the zeroed
-        # continuum, the skipped line catalog, and the publish block). Deriving
-        # it twice is what let the publish block drift into emitting the
-        # observed band without its rest-frame twin (#1665).
+        # are not needed. Skipping them zeroes ``nebular_sed``, and the Cue NN
+        # forward is genuinely gone (not merely pruned), which is where the
+        # ~1.2 ms/eval saving comes from.
+        #
+        # That trade is only available when nothing downstream reads the
+        # continuum. It used to be taken unconditionally, on the stated grounds
+        # that the only live consumers were the exact spectrum / dust-continuum
+        # paths — but the dust energy balance reads ``sed_nebular`` to size the
+        # absorbed budget, so a model with dust emission re-emitted the stellar
+        # half alone: 11 % low in the far-IR, gradient up to 380 % wrong, in
+        # float64 and silently. ``must_materialize_sed`` is derived from the
+        # assembled chain, so a future consumer disables the shortcut by
+        # declaring the input, with nothing to keep in sync here — for
+        # consumers that go through the contract. A reader that takes the
+        # published key without declaring it stays invisible here (#1673).
         #
         # The rest-band channel is part of the condition, not an extra: a table
         # that cannot serve BOTH publishes must not take the fast path at all.
         # Grids built before #1665 therefore fall back to the exact path —
         # slower, correct — instead of silently dropping the nebular
         # contribution from every rest-frame band.
+        #
+        # ONE flag, read by every fast-path branch below (the zeroed continuum,
+        # the skipped line catalog, and the publish block): two checks of the
+        # same condition are free to drift apart, and #1665 and #1673 are each
+        # what that costs. The conditions compose — every one of them must hold.
         use_grid = (
             self.grid_table is not None
             and getattr(self.grid_table, "log_phot_per_qh", None) is not None
             and getattr(self.grid_table, "log_restband_per_qh", None) is not None
+            and not self.must_materialize_sed
         )
 
         if use_grid:
@@ -773,8 +827,37 @@ class NebularSEDComponent(TemplateThreading):
                     converted = jnp.where(in_optical, line_waves * n_refr, line_waves)
                     line_waves = jnp.where(looks_air, converted, line_waves)
 
+                # THE unit seam (#1559). Every backend returns [Lsun]; the
+                # published ``line_lums`` DerivedKey is [erg/s], and
+                # ``predict_line_fluxes`` divides by 4 pi d_L^2 with no further
+                # conversion. This one multiply is what reconciles them.
+                #
+                # It used to live inside CueBackend and nowhere else, so Cue
+                # came out right and CloudyGrid / CB19 / MappingsPhoto came out
+                # a factor L_sun too faint — invisible to every per-backend
+                # test, because a global scale cancels in the line ratios and
+                # monotonicity checks they all use.
+                #
+                # The constant is the *backend's*, not a global. Cue's network
+                # was trained on L_sun = 3.839e33 and the grid backends are
+                # tabulated against IAU 3.828e33; using one value for both puts
+                # a systematic 0.287% on whichever backend it does not belong
+                # to. That is far too small for the units test to catch, so it
+                # would have shipped.
+                lsun_erg = getattr(self.backend, "lsun_erg", _LSUN_ERG)
+
+                # The log companion (#1534) is taken on the [Lsun] side, before
+                # the multiply that leaves the float32 window: taken after, the
+                # value is already ``inf`` and its log carries nothing.
+                # ``log10_magnitude`` keeps a dark line (``-inf``) distinct from
+                # a corrupt one (``+inf``), #1527.
+                log_line_lums = log10_magnitude(line_lums) + float(np.log10(lsun_erg))
                 state = state.with_(
-                    derived=state.derived.with_(line_waves=line_waves, line_lums=line_lums)
+                    derived=state.derived.with_(
+                        line_waves=line_waves,
+                        line_lums=line_lums * lsun_erg,
+                        log_line_lums=log_line_lums,
+                    )
                 )
             except Exception as exc:
                 # Backend's line-luminosity path may fail (e.g. when
@@ -804,6 +887,10 @@ class NebularSEDComponent(TemplateThreading):
         # ``nebular_phot_lnu_precomp`` for consumption by predict_via_precomp.
         derived_overrides = dict(sed_nebular=nebular_sed, sed_shock=zeros)
         grid = self.grid_table
+        # ``use_grid``, not a second re-derivation of it: when a downstream
+        # consumer forces the exact continuum above, photometry must come from
+        # the filter integration below, or the nebular light would be counted
+        # once in ``sed_nebular`` and again from the grid.
         if use_grid:
             # FAST path (#950): reconstruct the intrinsic nebular photometry from
             # the per-Q_H grid, ``L_nu = 10^{log_nion + interp(grid)}``, instead of the
@@ -924,7 +1011,24 @@ class NebularSEDComponent(TemplateThreading):
 # Lines group property registration (Phase 1B)
 # ─────────────────────────────────────────────────────────────────────
 
-_LINE_RATIO_FLOOR = 1e-300  # Floor for safe division in ratios
+
+def _line_ratio_floor() -> float:
+    """The guard floor these line ratios divide by, made representable (#1568).
+
+    ``1e-300`` is far below float32's smallest subnormal (1.4e-45), so in
+    float32 every ``jnp.maximum(x, _line_ratio_floor())`` below was
+    ``jnp.maximum(x, 0.0)`` — the floor did not clamp, and a dark line divided
+    by another dark line gave ``0/0 = NaN`` rather than the finite ratio the
+    clamp exists to produce.
+
+    Evaluated at trace time, not import time: ``representable_floor`` resolves
+    against the *working* dtype, so a module-level constant computed once at
+    import would be pinned to whichever dtype happened to be active then.
+    float64 keeps ``1e-300`` exactly.
+    """
+    from tengri.utils.scale import representable_floor
+
+    return representable_floor(1e-300)
 
 
 def _line_luminosity_helper(state, params, line_key):
@@ -1012,7 +1116,7 @@ def _bpt_nii_fn(state, params):
     nii_6584 = extract_line_luminosity(line_waves, line_lums, KEY_LINES["nii_6584"])
     halpha = extract_line_luminosity(line_waves, line_lums, KEY_LINES["halpha"])
     return jnp.log10(
-        jnp.maximum(nii_6584, _LINE_RATIO_FLOOR) / jnp.maximum(halpha, _LINE_RATIO_FLOOR)
+        jnp.maximum(nii_6584, _line_ratio_floor()) / jnp.maximum(halpha, _line_ratio_floor())
     )
 
 
@@ -1033,7 +1137,7 @@ def _bpt_sii_fn(state, params):
     halpha = extract_line_luminosity(line_waves, line_lums, KEY_LINES["halpha"])
     sii_total = sii_6717 + sii_6731
     return jnp.log10(
-        jnp.maximum(sii_total, _LINE_RATIO_FLOOR) / jnp.maximum(halpha, _LINE_RATIO_FLOOR)
+        jnp.maximum(sii_total, _line_ratio_floor()) / jnp.maximum(halpha, _line_ratio_floor())
     )
 
 
@@ -1052,7 +1156,7 @@ def _o3hb_fn(state, params):
     oiii_5007 = extract_line_luminosity(line_waves, line_lums, KEY_LINES["oiii_5007"])
     hbeta = extract_line_luminosity(line_waves, line_lums, KEY_LINES["hbeta"])
     return jnp.log10(
-        jnp.maximum(oiii_5007, _LINE_RATIO_FLOOR) / jnp.maximum(hbeta, _LINE_RATIO_FLOOR)
+        jnp.maximum(oiii_5007, _line_ratio_floor()) / jnp.maximum(hbeta, _line_ratio_floor())
     )
 
 
@@ -1074,7 +1178,7 @@ def _r23_fn(state, params):
     hbeta = extract_line_luminosity(line_waves, line_lums, KEY_LINES["hbeta"])
     numerator = oii + oiii_4959 + oiii_5007
     return jnp.log10(
-        jnp.maximum(numerator, _LINE_RATIO_FLOOR) / jnp.maximum(hbeta, _LINE_RATIO_FLOOR)
+        jnp.maximum(numerator, _line_ratio_floor()) / jnp.maximum(hbeta, _line_ratio_floor())
     )
 
 
@@ -1093,7 +1197,7 @@ def _o32_fn(state, params):
     oiii_5007 = extract_line_luminosity(line_waves, line_lums, KEY_LINES["oiii_5007"])
     oii = extract_line_luminosity(line_waves, line_lums, KEY_LINES["oii"])
     return jnp.log10(
-        jnp.maximum(oiii_5007, _LINE_RATIO_FLOOR) / jnp.maximum(oii, _LINE_RATIO_FLOOR)
+        jnp.maximum(oiii_5007, _line_ratio_floor()) / jnp.maximum(oii, _line_ratio_floor())
     )
 
 
@@ -1111,7 +1215,7 @@ def _balmer_decrement_fn(state, params):
     line_lums = jnp.asarray(derived["line_lums"])
     halpha = extract_line_luminosity(line_waves, line_lums, KEY_LINES["halpha"])
     hbeta = extract_line_luminosity(line_waves, line_lums, KEY_LINES["hbeta"])
-    return halpha / jnp.maximum(hbeta, _LINE_RATIO_FLOOR)
+    return halpha / jnp.maximum(hbeta, _line_ratio_floor())
 
 
 from tengri.forward.properties import Property, register_properties
@@ -1221,9 +1325,66 @@ _LINES_PROPERTIES = {
     ),
 }
 
+
+def _log_line_luminosity_helper(state, params, line_key):
+    """``log10`` of a single line luminosity, read from the upstream log catalog.
+
+    Reads ``derived["log_line_lums"]`` rather than taking a ``log10`` of the linear
+    ``line_lums``. The distinction is the whole point: line luminosities are
+    ~1e40-1e42 erg/s, past float32's 3.4e38 ceiling, so the linear value is already
+    ``inf`` there and a log taken afterwards reports ``+inf`` faithfully and
+    uselessly (#1534).
+    """
+    from tengri.utils.sed_quantities import KEY_LINES, extract_log_line_luminosity
+
+    derived = state.derived
+    if "line_waves" not in derived or "log_line_lums" not in derived:
+        return jnp.asarray(jnp.nan)
+
+    return extract_log_line_luminosity(
+        jnp.asarray(derived["line_waves"]),
+        jnp.asarray(derived["log_line_lums"]),
+        KEY_LINES[line_key],
+    )
+
+
+def _make_log_line_fn(line_key):
+    """Build the accessor for one line's log companion.
+
+    A factory rather than eleven near-identical module-level functions: the linear
+    side already carries eleven copies of a one-line body, and duplicating that for
+    the log side would double a shape that is pure boilerplate.
+    """
+
+    def _fn(state, params, _key=line_key):
+        return _log_line_luminosity_helper(state, params, _key)
+
+    _fn.__name__ = f"_log_{line_key}_fn"
+    _fn.__doc__ = f"log10 of the {line_key} line luminosity [dex re erg/s]."
+    return _fn
+
+
+#: Log companions for every line property carried in erg/s, derived from the census
+#: rather than hand-listed: a line whose linear form overflows float32 and gains a
+#: companion later would otherwise be added here by memory. ``bpt_nii``, ``o32`` and
+#: the other ratio/diagnostic properties are deliberately excluded — they are already
+#: dimensionless or in dex and are float32-representable as they stand.
+_LOG_LINE_PROPERTIES = {
+    f"log_{name}": Property(
+        units="dex",
+        group="lines",
+        doc=f"log10 of {prop.doc.lower()} [dex re erg/s]; float32-safe form of `{name}`",
+        fn=_make_log_line_fn(name),
+    )
+    for name, prop in _LINES_PROPERTIES.items()
+    if prop.units == "erg/s"
+}
+
+_LINES_PROPERTIES.update(_LOG_LINE_PROPERTIES)
+
 register_properties("nebular", _LINES_PROPERTIES)
 
-del Property, register_properties, _LINES_PROPERTIES
+del Property, register_properties, _LINES_PROPERTIES, _LOG_LINE_PROPERTIES
 
 
 # Register in the unified component dispatch table so build_components resolves

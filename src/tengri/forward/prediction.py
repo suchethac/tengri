@@ -1032,12 +1032,11 @@ class SEDProperties(_CachedBase):
 
 # ── Emission line properties (lazy) ───────────────────────────────
 
-# Floor used in BPT and other line-ratio diagnostics to avoid log10(0)
-# when a line is undetected at this S/N. Set well below any realistic
-# flux (typical detection limits ≈ 1e-18 erg/s/cm²) so the floor never
-# affects detected lines but yields a finite, sortable −∞-equivalent
-# value for missing lines.
-_LINE_RATIO_FLOOR = 1e-50
+# ``_LINE_RATIO_FLOOR = 1e-50`` stood here until #1568, described as the floor
+# "used in BPT and other line-ratio diagnostics to avoid log10(0)". It had no
+# readers — the BPT ratios live in ``NebularSEDComponent`` and use that module's
+# own floor. Removed rather than made representable: a dead constant that is
+# also 0.0 in float32 is the worst of both, since it reads as a live guard.
 
 
 class LineProperties(_CachedBase):
@@ -1694,6 +1693,9 @@ class PropertyCatalog(ReadOnlyPropertyMapping):
             from tengri.forward.properties import missing_property_message
 
             raise KeyError(missing_property_message(name, available=catalog))
+        from tengri.forward.properties import warn_if_lines_are_unavailable
+
+        warn_if_lines_are_unavailable(pred._model, (name,))
         entry = catalog[name]
         state = pred._ensure_state()
         return entry.fn(state, pred._params)
@@ -2066,20 +2068,12 @@ class Prediction:
         backend = model._nebular_backend
 
         if backend is None or not hasattr(backend, "predict_nebular_line_luminosities"):
-            import warnings
-
-            backend_name = type(backend).__name__ if backend is not None else "None"
-            warnings.warn(
-                f"Nebular backend {backend_name!r} does not publish a "
-                "per-line luminosity catalog, so pred.lines.halpha, "
-                ".hbeta, .bpt_nii, etc. will return NaN. To get discrete "
-                "line luminosities, rebuild the model with neb={'type': "
-                "'cue'}, 'cloudy', or 'cb19' (each requires a "
-                "compatible SSP and any backing grid; see "
-                "tengri.list_nebular_backends() for details). See #361.",
-                UserWarning,
-                stacklevel=3,
-            )
+            # The warning moved to `warn_if_lines_are_unavailable`, which
+            # `PropertyCatalog.__getitem__` calls. Every one of the 17
+            # `_ensure_lines()` call sites reads `properties[...]` on the next
+            # line, so this surface still warns — and the dict accessor and
+            # `predict_properties`, which used to return the same NaN in
+            # silence, now warn too. Warning here as well fired it twice.
             self._cache["line_waves"] = jnp.array([])
             self._cache["line_lums"] = jnp.array([])
             self._cache["q_h_total"] = jnp.array(jnp.nan)
@@ -2519,7 +2513,6 @@ class Prediction:
         # The fast-nebular grid zeroes the Cue continuum, so ``sed_intrinsic``
         # would come back without the nebular continuum or the lines (#1665).
         # Same census as predict_spectrum / predict_spectral_indices.
-        self._model._refuse_on_fast_nebular("pred.rest_sed()")
         state = self._ensure_state()
         sed = state.sed_intrinsic
         if wave is None:
@@ -2615,7 +2608,6 @@ class Prediction:
         and redshifted it — an observed-frame result with a rest-frame
         argument. That asymmetry was a footgun; it is not reproduced here.
         """
-        self._model._refuse_on_fast_nebular("pred.obs_sed()")
         result = self._model._predict_obs_sed(self._params)
         if wave_obs is None:
             return result.sed

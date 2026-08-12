@@ -45,6 +45,15 @@ from functools import partial
 import jax
 import jax.numpy as jnp
 
+from tengri.utils.scale import representable_floor as _representable_floor, whiten as _whiten
+
+#: Guard against ``obs_err == 0`` only. Expressed in **sigma**, not variance:
+#: the previous ``maximum(obs_err**2, 1e-30)`` was a floor on the variance and
+#: so bound for every sigma below 1e-15 — i.e. every real spectrum (#1588).
+#: ``representable_floor`` raises it to the working dtype's smallest normal, so
+#: it is never itself a silent zero in float32.
+_ERR_FLOOR = 1e-300
+
 
 @partial(jax.jit, static_argnums=(1,), static_argnames=("order",))
 def chebyshev_basis(
@@ -242,28 +251,19 @@ def marginalize_calibration(
     # basis shape: (n_poly, n_wave), rows are T_1, T_2, ..., T_{n_poly}
     basis = jnp.concatenate([t1[jnp.newaxis], higher], axis=0)
 
-    # Inverse variance weights.
-    #
-    # The guard is on sigma <= 0 (a masked pixel, which gets zero weight), NOT
-    # on the magnitude of the variance. It was `1.0 / maximum(obs_err**2,
-    # 1e-30)`, and that floor is an absolute number applied to a quantity whose
-    # scale is set by the caller's flux units. A spectrum in cgs F_nu runs at
-    # ~1e-17 erg/s/cm2/Hz with errors ~1e-18, so `obs_err**2` ~ 1e-36 sits three
-    # to fourteen orders of magnitude *below* the floor and every weight was
-    # clamped to the same 1e30 — for every realistic input. The likelihood term
-    # then could not outweigh the unit-scale coefficient prior, and the returned
-    # c_hat collapsed toward zero.
-    #
-    # It failed silently and unit-dependently: the identical problem at SNR=100
-    # recovered coefficients exactly at a flux scale of 1e-10 and returned ~1e-4
-    # instead of 0.05 at 1e-17, and every obs_err from 1e-22 to 1e-15 produced a
-    # bit-identical answer, because none of them reached the floor (#1744).
-    safe_err = jnp.where(obs_err > 0.0, obs_err, 1.0)
-    inv_var = jnp.where(obs_err > 0.0, 1.0 / jnp.square(safe_err), 0.0)
+    # Whitened weights. NEVER form 1/sigma**2 (#1588): it is ~1e59 at a real
+    # flux uncertainty, and the variance-domain floor this replaced
+    # (``maximum(obs_err**2, 1e-30)``) bound on *every pixel of every realistic
+    # spectrum* — sigma < 1e-15 trips it — pinning inv_var to exactly 1e30 in
+    # **float64**. The data term then lost to the prior and the recovered
+    # polynomial collapsed toward zero: c_hat[0] 5.0e-02 -> 7.5e-04 at
+    # F_lambda ~1e-17, and -> 7.6e-26 at F_nu ~1e-28. Guard only against
+    # sigma == 0, in the sigma domain, at the working dtype's smallest normal.
+    err_safe = jnp.maximum(obs_err, _representable_floor(_ERR_FLOOR))
 
     # Design matrix: D_jk = sum_i [T_j(x_i) * m_i * T_k(x_i) * m_i / sigma_i^2]
-    # = sum_i [T_j * T_k * m^2 / sigma^2]
-    weighted_model = model_flux * jnp.sqrt(inv_var)  # m / sigma
+    # = sum_i [(T_j * m/sigma) * (T_k * m/sigma)]
+    weighted_model = _whiten(model_flux, err_safe)  # m / sigma
     # B_{j,i} = T_j(x_i) * m(x_i) / sigma(x_i)
     b_matrix = basis * weighted_model[jnp.newaxis, :]  # (n_poly, n_wave)
 
@@ -274,8 +274,10 @@ def marginalize_calibration(
 
     # Residual vector: r_j = sum_i [T_j(x_i) * m(x_i) * (d_i - m_i) / sigma_i^2]
     residual = obs_flux - model_flux
+    # r_j = sum_i [T_j * (m/sigma) * ((d-m)/sigma)] — algebraically the same as
+    # T_j * m * (d-m) / sigma^2, without ever forming 1/sigma^2.
     rhs = jnp.sum(
-        basis * model_flux[jnp.newaxis, :] * residual[jnp.newaxis, :] * inv_var[jnp.newaxis, :],
+        basis * weighted_model[jnp.newaxis, :] * _whiten(residual, err_safe)[jnp.newaxis, :],
         axis=1,
     )  # (n_poly,)
 
@@ -292,7 +294,7 @@ def marginalize_calibration(
     # Calibrated model at c_hat
     cal_poly = 1.0 + jnp.dot(c_hat, basis)  # (n_wave,)
     model_cal = cal_poly * model_flux
-    chi2 = jnp.sum((obs_flux - model_cal) ** 2 * inv_var)
+    chi2 = jnp.sum(_whiten(obs_flux - model_cal, err_safe) ** 2)
 
     # Prior penalty: c_hat^T Lambda^{-1} c_hat
     prior_penalty = prior_precision * jnp.dot(c_hat, c_hat)
@@ -303,16 +305,11 @@ def marginalize_calibration(
     log_det_sigma_post = -logdet_a  # ln|A^{-1}|
     log_det_lambda = n_poly * jnp.log(prior_sigma**2)
 
-    # Constant normalization: -N/2 * ln(2pi) - sum(ln sigma_i), over the
-    # *unmasked* pixels only. A masked pixel (sigma <= 0) carries zero weight in
-    # chi2 above, so it must not contribute a `ln 0` here either — it is not an
-    # observation. Counting it made the whole marginal likelihood non-finite,
-    # which is a poor way to say "one pixel is masked".
-    unmasked = obs_err > 0.0
-    n_eff = jnp.sum(unmasked)
-    log_norm = -0.5 * n_eff * jnp.log(2.0 * jnp.pi) - jnp.sum(
-        jnp.where(unmasked, jnp.log(jnp.where(unmasked, obs_err, 1.0)), 0.0)
-    )
+    # Constant normalization: -N/2 * ln(2pi) - sum(ln sigma_i)
+    n_wave = wavelength.shape[0]
+    # ``err_safe``, not ``obs_err``: the same zero the whitening guards would
+    # otherwise make this term -inf while chi2 stayed finite.
+    log_norm = -0.5 * n_wave * jnp.log(2.0 * jnp.pi) - jnp.sum(jnp.log(err_safe))
 
     log_likelihood_marginal = log_norm - 0.5 * (
         chi2 + prior_penalty - log_det_sigma_post + log_det_lambda

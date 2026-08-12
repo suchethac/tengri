@@ -939,10 +939,12 @@ def list_nebular_backends(*, status: str | None = None) -> _RegistryTable:
     for m in out:
         # The generic CLOUDY backend needs a user-supplied grid file:
         # ``neb={'type': 'cloudy'}`` raises "The CLOUDY nebular backend needs a
-        # grid file." Advertise the required ``gridfile`` key so the hint builds.
-        # (``cb19`` ships its own grid and stands alone.)
+        # grid file." The key is ``grid``; this hint advertised ``gridfile``,
+        # so the line printed to fix one failure raised a different one —
+        # "Unknown key 'gridfile' in group 'neb'. Did you mean: grid?" — and
+        # nothing checked either. (``cb19`` ships its own grid and stands alone.)
         if m["name"] == "cloudy":
-            m["use"] = "SEDModel.build(..., neb={'type': 'cloudy', 'gridfile': 'grid.h5'})"
+            m["use"] = "SEDModel.build(..., neb={'type': 'cloudy', 'grid': 'grid.h5'})"
     out = _filter_menu(out, "status", status, listing="list_nebular_backends")
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
@@ -1963,6 +1965,65 @@ def _menu_listers() -> tuple:
     )
 
 
+#: Menus that are not a physics group but are still menus a user can look a
+#: name up in. ``describe`` and ``search`` used to append these by hand at each
+#: call site — a second and third hand-written enumeration of "every menu".
+_EXTRA_MENU_LISTER_NAMES = ("list_components", "list_filters", "list_plots", "list_recipes")
+
+
+@functools.cache
+def _every_menu_lister() -> tuple:
+    """Every ``list_*`` menu a name can be looked up in, derived not listed.
+
+    Returns
+    -------
+    tuple of callable
+        Zero-argument listers, de-duplicated, physics groups first so that a
+        name living in several menus reports them in a stable order.
+
+    Notes
+    -----
+    :func:`_menu_listers` exists so ``describe``/``search``/``list_all`` cannot
+    fall out of sync when a physics group is added — its docstring says so, and
+    names that drift (#1120, #1446). It drifted again anyway, because the guard
+    against a hand-written list *is itself a hand-written list*:
+    ``list_instruments`` and ``list_known_ssps`` were never added, so
+    ``describe('GALEX')`` answered ``Unknown name 'GALEX'`` for a name
+    ``list_instruments()`` advertises — 30 of 490 advertised names.
+
+    So the set is discovered: every public ``tengri.list_*`` returning rows
+    with a ``name`` column is a menu. Adding a menu now costs nothing, and
+    forgetting to register it here is not possible. Measured when this replaced
+    the hand-written unions: **+2 menus, 0 lost, 460 -> 490 rows walked, and 0
+    new multi-menu names**, so no existing lookup changes its answer.
+
+    Cached because discovery *calls* each ``list_*`` to check its shape:
+    uncached that was 95 ms, **49% of a 193 ms** ``describe()``, paid again on
+    every lookup. The set of menus cannot change within a process, so it is
+    computed once. A test that monkeypatches a ``list_*`` into ``tengri`` must
+    call ``_every_menu_lister.cache_clear()``.
+    """
+    import tengri
+
+    seen: dict[str, callable] = {}
+    for fn in (*_menu_listers(), *(getattr(tengri, n, None) for n in _EXTRA_MENU_LISTER_NAMES)):
+        if fn is not None:
+            seen[fn.__name__] = fn
+    for attr in sorted(dir(tengri)):
+        if not attr.startswith("list_") or attr in seen:
+            continue
+        fn = getattr(tengri, attr, None)
+        if not callable(fn):
+            continue
+        try:
+            rows = fn()
+        except Exception:
+            continue
+        if isinstance(rows, list) and rows and isinstance(rows[0], dict) and "name" in rows[0]:
+            seen[attr] = fn
+    return tuple(seen.values())
+
+
 def _menu_name_aliases() -> dict[str, tuple[str, callable]]:
     """Map each menu's own name, in prose, to that menu.
 
@@ -2010,12 +2071,7 @@ def describe(name: str) -> _DescribeRecord:
     if name in _CORE_CLASSES:
         return _DescribeRecord(_CORE_CLASSES[name])
 
-    matches = [
-        entry
-        for fn in (*_menu_listers(), list_components, list_filters, list_plots, list_recipes)
-        for entry in fn()
-        if entry["name"] == name
-    ]
+    matches = [entry for fn in _every_menu_lister() for entry in fn() if entry["name"] == name]
     if matches:
         record = dict(matches[0])
         # Some names are registered in more than one menu or AGN category —
@@ -2660,7 +2716,10 @@ def search(query: str) -> _RegistryTable:
     # band — i.e. everything except kind/use.
     _SKIP_FIELDS = {"kind", "use"}
     hits: list[dict] = []
-    for fn in (*_menu_listers(), list_components, list_filters, list_plots):
+    # The same derived set describe() walks. This call site listed four extra
+    # menus by hand and omitted list_recipes, so all ten recipes returned zero
+    # hits from search() while describe() resolved every one.
+    for fn in _every_menu_lister():
         for entry in fn():
             haystack = " ".join(
                 str(v) for k, v in entry.items() if k not in _SKIP_FIELDS and isinstance(v, str)

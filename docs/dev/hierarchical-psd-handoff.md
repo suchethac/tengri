@@ -1744,7 +1744,7 @@ sweep, which is what allowed the confound above to be settled.)
 
 ---
 
-## 5. The funnel (remedy now usable; not yet measured)
+## 5. The funnel (reproduced; centering near a=0.75 clears it, one seed)
 
 `s = L(σ,τ)·ξ` is **bilinear**, so the (σ, ξ) geometry is a funnel. Symptoms:
 static HMC R̂(σ) = 4.42 at 1000/1000 and still 1.61 at 4000/4000 while ξ's own
@@ -1846,16 +1846,90 @@ Still unmatched, any of which could be the difference: this section's runs used
 4000/4000 rather than 400/400, an unstated population size, and §2 quotes truths
 of sigma = 0.75 / tau = 150 Myr where the sweep uses 0.6 / 350.
 
-**Whoever next touches this should record the run configuration alongside the
-number.** A headline diagnostic that cannot be rebuilt from the document costs
-~30 minutes per guess, and each failure is ambiguous between "the symptom is
-fragile" and "I mismatched a setting" — which is exactly the ambiguity the two
-attempts above are stuck in.
+**``dense_mass_matrix`` is now ELIMINATED as the difference.** Third attempt,
+changing that one variable against the table above and holding model, mock, key,
+400/400, N=2 and bounds fixed: ``dense_mass_matrix=True`` gives max
+R-hat(sigma) = **1.020**, marginally *healthier* than ``False``'s 1.043. It was
+the strongest candidate — the only setting on which this section contradicts
+itself — and it is not the cause.
 
-One datum worth keeping despite the INCONCLUSIVE: at ``a = 0.5`` mixing was
-**worse** (1.412) than at ``a = 1`` (1.043). Weak — N=2 and the symptom is
-absent — but it is evidence against assuming partial centering is free, and
-worth re-testing whenever the symptom can be reproduced.
+Population size was the next hypothesis, by §2's own order-statistic argument —
+R-hat is a **maximum** over galaxies, so a max over 8 is necessarily above a max
+over 2. **Measured on the stored bank and found real but far too small**:
+``psd_bank_nuts``'s 10 per-galaxy values run
+``[0.999 ... 1.002, 1.050]``, median 1.000, and the expected max climbs only
+1.000 → 1.050 from N=1 to N=8. The mechanism exists; it cannot manufacture 4.42.
+
+**THE ACTUAL CAUSE: the population path could not reach the regime.** The
+configuration is recorded after all — ``psd_bank_conv/bank_meta.json`` has
+truths 0.75 dex / 150 Myr at SNR 20/10, N=8, 1000/1000, 4 chains,
+``n_leapfrog_steps=100``. Run through ``fit_interim`` it does not give a
+different R-hat; it gives **no fit at all**, dying on all 8 MAP restarts. The
+bank never called ``fit_interim``: ``scripts/hierarchical_psd_fit_bank.py``
+drives ``Fitter`` directly and triples ``n_map_steps`` until the expansion point
+is a mode (hence ``psd_bank_map40k``), which is §4i-ter's remedy for #1537.
+``fit_interim`` exposed no MAP control at all, and failed advising
+``learning_rate`` / ``n_steps`` / ``n_restarts``, none of which it accepted
+(#1720, fixed by ``map_options``).
+
+So the four failed reproductions above all ran in regimes where the MAP
+converged easily — which are exactly the regimes with **no funnel**. The tool
+could not reach the hard case, so the hard case looked absent, and every failure
+was clean.
+
+**Symptom REPRODUCED, and the centering arms finally mean something.** Same
+recorded configuration, ``map_options={"n_steps": 40000}``:
+
+======  =================  ==============
+``a``   R-hat(sigma)       max R-hat(xi)
+======  =================  ==============
+1.00    **2.572**          0.971
+0.75    **1.040**          0.996
+0.50    **1.590**          0.991
+0.25    not measured       —
+0.00    **2.945**          0.983
+======  =================  ==============
+
+``a = 1`` reproduces this section's signature — sigma badly unmixed while xi
+stays healthy. **The remedy works: a = 0.75 reaches R-hat(sigma) = 1.040, below
+the 1.1 convergence threshold, from 2.572 at a = 1.** Both endpoints are bad and
+the optimum is interior; ``a = 0.5`` at 1.590 is already well off it, which is
+why an earlier read of these arms called the result merely PARTIAL.
+
+The interior optimum is the expected shape, not an anomaly:
+``drw_partial_gp_from_zeta`` cites Papaspiliopoulos, Roberts & Skold — neither
+endpoint is universally better, and when prior and likelihood are comparably
+informative an intermediate ``a`` beats both. A boolean centered/non-centered
+switch would have found only 2.572 and 2.945 and concluded centering **hurts**.
+
+``a = 0.25`` was killed twice by memory pressure and is unmeasured; it would
+refine the shape between 0 and 0.5 but cannot change the headline, since 0.75
+already clears the threshold.
+
+xi stays healthy across all measured arms (0.971 / 0.996 / 0.991 / 0.983), so no
+arm is degraded
+for an unrelated reason and the movement is attributable to the (sigma, xi)
+geometry.
+
+**Status: the funnel HAS a working remedy — ``field_centering`` near 0.75 —
+on one seed.** R-hat(sigma) goes 2.572 → 1.040, which clears the 1.1 threshold.
+
+What that does **not** yet license is a default. This is **one seed, N=8, one
+mock population**, and the optimal ``a`` is a property of the prior/likelihood
+balance, so it moves with SNR, band set and population. The four measured points
+differ by 0.5–1.9 in R-hat, far outside the ~0.05 scatter seen between repeated
+healthy arms, so the *ordering* is solid; the *location* of the minimum is not
+pinned to better than ~0.25 in ``a``.
+
+Open next steps, in order: repeat at ``a`` = 0.75 across seeds to confirm the
+minimum is not a single-draw artifact; fill ``a = 0.25``; then vary SNR to see
+how far the optimum moves before anyone considers a default. Re-test after any
+change to the MAP escalation, since the expansion point feeds the sampler.
+
+**Record the configuration AND the code path next to any number here.** The
+configuration was recorded; what the prose omitted was which driver produced it,
+and that was the load-bearing fact — same settings, different driver, and one of
+the two cannot start.
 
 ---
 

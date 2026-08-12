@@ -193,19 +193,28 @@ def test_sed_accessors_agree_with_exact_or_refuse_loudly(accessor):
     )
 
 
-def test_properties_refuse_only_the_sed_derived_ones_on_the_fast_path():
-    """The property guard must be narrow: refuse the SED-derived, serve the rest.
+def test_sed_derived_properties_are_exact_on_the_fast_path():
+    """Every nebular-continuum-dependent property must match the exact model.
 
-    ``predict_properties`` reaches the same gutted rest SED by a different route
-    (the quantities are built inside the forward pass, not through
-    ``predict_spectral_indices``), so 13 of 43 properties moved under the pair --
-    worst ``l_tir`` by **30.07%**, with the energy-balance family (irx 27%,
-    l_dust_absorbed 19%) hit hardest because deleting the nebular continuum
-    removes reprocessed luminosity the dust budget balances against.
+    ``predict_properties`` reaches the rest SED by a different route from
+    ``predict_spectral_indices`` (the quantities are built inside the forward
+    pass), so it needs its own check. Under the pair, 13 of 43 properties moved
+    -- worst ``l_tir`` by **30.07%**, the energy-balance family (irx 27%,
+    l_dust_absorbed 19%) hardest, because deleting the nebular continuum removes
+    reprocessed luminosity the dust budget balances against.
 
-    Narrowness is the point. ``stellar_mass`` and 29 others are exactly correct
-    on the fast path, and blanket-refusing them would break the fits the fast
-    path exists to serve.
+    That was fixed at the cause (#1673): ``predict_state`` materializes the
+    nebular component, so these properties are served from a complete forward
+    state. This asserts the stronger post-fix property -- **equality with the
+    exact model** -- rather than the refusal that stood in for it, in the same
+    spirit as the two ``_or_refuse_loudly`` tests above: never pin "it raises"
+    when the values are available to compare.
+
+    ``_FAST_NEBULAR_UNSAFE_PROPERTIES`` is now this census -- the properties that
+    depend on the nebular continuum, and therefore the ones worth checking -- not
+    a refusal list. ``stellar_mass`` is deliberately outside it and included here
+    as the control: it was correct on the fast path even before the fix, so it
+    cannot distinguish a real repair from a vacuous comparison.
     """
     from tengri.forward.sed_model import (
         _FAST_NEBULAR_UNSAFE_PROPERTIES,
@@ -213,41 +222,65 @@ def test_properties_refuse_only_the_sed_derived_ones_on_the_fast_path():
         WavePrecomp,
     )
 
-    model = _build((WavePrecomp(), FeaturePrecomp()), _index_data())
+    sid = _index_data()
+    names = (*sorted(_FAST_NEBULAR_UNSAFE_PROPERTIES), "stellar_mass")
+    exact = _build(_approx_arms()["exact"](), sid).predict_properties({}, names=names)
+    fast = _build((WavePrecomp(), FeaturePrecomp()), sid).predict_properties({}, names=names)
 
-    with pytest.raises(ValueError, match="fast-nebular"):
-        model.predict_properties({}, names=("l_tir",))
-
-    safe = model.predict_properties({}, names=("stellar_mass",))
-    assert np.isfinite(float(safe["stellar_mass"])), (
-        "the guard is too wide -- stellar_mass is correct on the fast path"
-    )
     assert "stellar_mass" not in _FAST_NEBULAR_UNSAFE_PROPERTIES
 
+    worst_name, worst_pct = None, 0.0
+    for name in names:
+        ref, got = float(exact[name]), float(fast[name])
+        assert np.isfinite(got), f"{name} is not finite on the fast path: {got}"
+        pct = abs(got - ref) / max(abs(ref), 1e-300) * 100.0
+        if pct > worst_pct:
+            worst_name, worst_pct = name, pct
+    assert worst_pct < _GRID_INTERP_CEILING_PCT, (
+        f"{worst_name} moved {worst_pct:.3f}% between the fast pair and the exact "
+        f"path ({float(exact[worst_name]):.6e} -> {float(fast[worst_name]):.6e}); the "
+        "nebular continuum is not reaching predict_properties (#1665/#1673)."
+    )
 
-def test_line_ratio_refusal_names_the_real_cause_not_a_backend_swap():
-    """The refusal must diagnose the fast path, not misdirect to a backend swap.
 
-    The grid path skips the discrete line-catalog publish, so a **Cue** model
-    fell through to the generic backend message and was told *"Use Cue or
+def test_line_ratios_agree_with_exact_or_refuse_without_misdirecting():
+    """Line ratios need the discrete catalog the fast grid used to skip.
+
+    Historically this refused, and the refusal itself was a second bug: a **Cue**
+    model fell through to the generic backend message and was told *"Use Cue or
     CloudyGrid"* -- advice the user had already taken, naming a cause that was
     not theirs. An error that sends you to fix the one thing you did right is
     worse than the raise it replaced.
+
+    Since #1673 the materialized state carries the discrete catalog, so the
+    values are available and are compared against the exact model. The refusal
+    branch is kept as an accepted outcome (same convention as the two
+    ``_or_refuse_loudly`` tests above) -- but if it is taken, it must still not
+    misdirect.
     """
     from tengri.forward.sed_model import FeaturePrecomp, WavePrecomp
     from tengri.observation import LineRatioData
 
     sid = _index_data()
-    model = _build((WavePrecomp(), FeaturePrecomp()), sid)
     lrd = LineRatioData.from_dict({("Halpha", "Hbeta"): (2.86, 0.3)})
+    exact = np.asarray(_build(_approx_arms()["exact"](), sid).predict_line_ratios({}, lrd))
+    model = _build((WavePrecomp(), FeaturePrecomp()), sid)
 
-    with pytest.raises(ValueError) as excinfo:
-        model.predict_line_ratios({}, lrd)
+    try:
+        got = np.asarray(model.predict_line_ratios({}, lrd))
+    except ValueError as exc:
+        msg = str(exc)
+        assert "fast-nebular" in msg, f"refusal does not name the fast path: {msg}"
+        assert "Use Cue or CloudyGrid" not in msg, (
+            "refusal still tells a Cue user to use Cue -- the pre-#1665 misdirection."
+        )
+        return
 
-    msg = str(excinfo.value)
-    assert "fast-nebular" in msg, f"refusal does not name the fast path: {msg}"
-    assert "Use Cue or CloudyGrid" not in msg, (
-        "refusal still tells a Cue user to use Cue -- the pre-#1665 misdirection."
+    dev_pct = np.abs((got - exact) / np.maximum(np.abs(exact), 1e-300)) * 100.0
+    assert float(np.max(dev_pct)) < _GRID_INTERP_CEILING_PCT, (
+        f"line ratios moved {float(np.max(dev_pct)):.3f}% between the fast pair and "
+        f"the exact path ({exact} -> {got}); the discrete line catalog is not "
+        "reaching predict_line_ratios (#1665/#1673)."
     )
 
 

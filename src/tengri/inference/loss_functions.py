@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
+from tengri.inference.likelihoods.gaussian import standardized_residual
+
 __all__ = [
     "build_loglikelihood_fn",
     "build_loglikelihood_unbounded_fn",
@@ -235,6 +237,11 @@ def _build_prediction(
     # meant to avoid — a fast path that is a no-op. So when lines are the only
     # feature channel and the model carries the precompute, the full-grid forward
     # is not built at all.
+    # NB: reading ``model.approx.feature_precomp`` here instead looks like the
+    # obvious fix for the flag/config disagreement below, and it is a PESSIMIZATION:
+    # it forces ``needs_state=False``, and computing the lines separately costs more
+    # than sharing one ``predict_state`` with the photometry channel. Measured on a
+    # 10-parameter Cue model: 5,021,451 -> 5,859,984 gradient FLOPs (+16.7%).
     fast_lines = bool(getattr(model, "_fast_line_measurement", False))
     needs_state = has_line_ratios or has_indices or (has_line_fluxes and not fast_lines)
     if not needs_state:
@@ -424,19 +431,26 @@ def _build_data_neg_log_likelihood_fn(fitter):
                 params, target_wavelengths=data_args["line_flux_waves"]
             )
             chi2_lines = jnp.sum(
-                ((data_args["line_flux_obs"] - model_lf) / data_args["line_flux_err"]) ** 2
+                standardized_residual(
+                    data_args["line_flux_obs"], model_lf, data_args["line_flux_err"]
+                )
+                ** 2
             )
             e_lh = e_lh + 0.5 * chi2_lines
         if has_line_ratios:
             model_lr = model.predict_line_ratios(params, model.observation.line_ratios)
             chi2_ratios = jnp.sum(
-                ((data_args["line_ratio_obs"] - model_lr) / data_args["line_ratio_err"]) ** 2
+                standardized_residual(
+                    data_args["line_ratio_obs"], model_lr, data_args["line_ratio_err"]
+                )
+                ** 2
             )
             e_lh = e_lh + 0.5 * chi2_ratios
         if has_indices:
             model_idx = model.predict_spectral_indices(params, index_defs)
             chi2_idx = jnp.sum(
-                ((data_args["index_obs"] - model_idx) / data_args["index_err"]) ** 2
+                standardized_residual(data_args["index_obs"], model_idx, data_args["index_err"])
+                ** 2
             )
             e_lh = e_lh + 0.5 * chi2_idx
 

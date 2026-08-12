@@ -338,15 +338,19 @@ class SEDModelComponent(TemplateThreading):
         is_concrete = "name" in vars(cls)
         if is_concrete:
             # The declared inputs/outputs/optional_inputs dicts must not shadow the
-            # same-named accessor methods once the tuples are collected. Two cases:
+            # same-named accessor methods once the tuples are collected. Three cases:
             #  (a) the dict is on THIS concrete class -> delete it so the base method resolves;
             #  (b) the dict is inherited from an intermediate ABSTRACT base (e.g.
             #      EmissionComponent, sharing the emission I/O contract) -> that dict shadows the
             #      method for this subclass, so rebind the base accessor onto the concrete class.
+            #  (c) BOTH: this concrete class OVERRODE the dict *and* an abstract base also
+            #      declares one -> deleting our dict (a) merely re-exposes the base's dict, so
+            #      the rebind (b) must run afterwards, not as an ``elif``. The tuple was already
+            #      built from the MRO union, so it carries the override either way.
             for _attr in ("inputs", "outputs", "optional_inputs"):
                 if isinstance(vars(cls).get(_attr), dict):
                     delattr(cls, _attr)
-                elif isinstance(getattr(cls, _attr, None), dict):
+                if isinstance(getattr(cls, _attr, None), dict):
                     setattr(cls, _attr, getattr(SEDModelComponent, _attr))
 
         # Citations: read class attribute (tuple of bib keys), store on class.

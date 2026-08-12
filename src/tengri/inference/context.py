@@ -113,9 +113,24 @@ class InferenceContext:
         i.e. the sum of the negative log-likelihood and the negative log-prior.
         Astronomers familiar with χ²-minimization can think of this as a
         prior-regularized χ² (up to a constant). Cached on the Fitter; safe
-        to call repeatedly. The compiled callable takes parameters in
-        **unbounded** space and closes over ``data_args`` and the
-        parameter spec.
+        to call repeatedly.
+
+        The compiled callable has signature ``(params_u, data_args)``:
+        parameters in **unbounded** space, and the data passed **as a traced
+        argument**. It closes over the parameter spec only. This docstring
+        previously said it closed over ``data_args`` too — it does not
+        (``fn(params_u)`` raises ``TypeError``), and the difference is
+        load-bearing rather than cosmetic.
+
+        Wrapping it to close over the data is now safe, but was not always.
+        Under ``jax.enable_x64(False)``, XLA used to constant-fold ``1/sigma**2``
+        to ``inf`` whenever ``sigma`` was a compile-time constant, and the χ²
+        then evaluated ``0 * inf = NaN`` — defeating the ``r = (d - mu) / sigma``
+        grouping that exists precisely to stay in range. Onset was ``sigma`` ~
+        1e-19 against real photometric fluxes of ~1e-30, so every float32 fit
+        written that way returned NaN. Fixed in #1535 by
+        :func:`~tengri.inference.likelihoods.gaussian.standardized_residual`,
+        which makes the grouping a data dependency the compiler must respect.
 
         See Also
         --------

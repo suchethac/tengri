@@ -18,7 +18,7 @@ touch this module directly.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
 import jax.numpy as jnp
@@ -88,6 +88,100 @@ def _optional_inputs(c: SEDComponent) -> tuple[DerivedKey, ...]:
     return _contract_method(c, "optional_inputs", "requires_optional")
 
 
+def components_consuming(
+    component_list: Sequence[SEDComponent], key_name: str
+) -> tuple[SEDComponent, ...]:
+    """Components in a chain that declare ``key_name`` as an input.
+
+    Reads the same ``inputs()`` / ``optional_inputs()`` contract the pipeline
+    already validates (ADR-0009), so the answer is *derived* from the chain
+    rather than restated in a second list.
+
+    Parameters
+    ----------
+    component_list : sequence of SEDComponent
+        The assembled component chain.
+    key_name : str
+        Derived-state key to look for, e.g. ``'sed_nebular'``.
+
+    Returns
+    -------
+    tuple of SEDComponent
+        Every component declaring ``key_name``, required or optional, in chain
+        order. Empty when nothing consumes it.
+
+    Notes
+    -----
+    **JIT-compatible**: not applicable — composition-time only.
+
+    Exists so a fast path can ask "does anything still need this?" instead of
+    asserting it from a hand-written census. ``sed_nebular`` was zeroed under
+    the per-Q_H nebular grid on the stated grounds that its "only live
+    consumers are the exact spectrum / dust-continuum paths"; the dust energy
+    balance consumes it too, and a model with dust emission then re-emitted
+    the stellar absorbed budget alone — 11 % low in the far-IR, with the
+    posterior gradient up to 380 % wrong, silently and in float64. A census
+    written next to the code it guards goes stale the first time a consumer is
+    added somewhere else; a derived one cannot.
+    """
+    return tuple(
+        c
+        for c in component_list
+        if any(k.name == key_name for k in (*_inputs(c), *_optional_inputs(c)))
+    )
+
+
+def _materialized(c: SEDComponent) -> SEDComponent:
+    """A component's publishing variant, or the component itself.
+
+    Duck-typed like the contract accessors above: a component with no
+    publication shortcut needs no method and is returned by identity.
+    """
+    hook = getattr(c, "materialized", None)
+    return hook() if callable(hook) else c
+
+
+def materialized_chain(component_list: Sequence[SEDComponent]) -> tuple[SEDComponent, ...]:
+    """Chain variant in which every component publishes the outputs it declares.
+
+    A component may skip publishing an output when :func:`components_consuming`
+    says nothing needs it — :class:`~tengri.components.nebular.component.NebularSEDComponent`
+    zeroes ``sed_nebular`` under the per-Q_H grid, because skipping the Cue
+    forward *is* the saving.
+
+    That census reads the ADR-0009 contract, so it finds every consumer that
+    declares an input and nothing else. A reader that takes a published key off
+    ``state.derived`` without declaring one is invisible to it, and the forward
+    state has several: ``state_to_sed_components`` behind
+    ``Posterior.sed_components``, and the accumulated ``state.sed_intrinsic``
+    behind ``pred.rest_sed()``. On a dust-free Cue model that cost the whole
+    nebular continuum — ``sed_nebular`` exactly zero and the published SED 97 %
+    short at its peak, in float64 and silently (#1673).
+
+    Those callers ask for this chain rather than each teaching the census about
+    itself. A component opts in by defining ``materialized()``; everything else
+    is returned by identity.
+
+    Parameters
+    ----------
+    component_list : sequence of SEDComponent
+        The assembled component chain.
+
+    Returns
+    -------
+    tuple of SEDComponent
+        The chain in order, each publication-skipping component replaced by its
+        publishing variant.
+
+    Notes
+    -----
+    **JIT-compatible**: not applicable — composition-time only. Variants come
+    from :func:`dataclasses.replace` over static config, so no JAX work happens
+    here and the result is safe to build outside a trace and reuse inside one.
+    """
+    return tuple(_materialized(c) for c in component_list)
+
+
 # Canonical units for every well-known cross-component derived key. Both
 # publisher and consumer must declare a units string matching the table
 # entry (where one exists). Adding a new derived key to the contract is
@@ -105,6 +199,7 @@ _CANONICAL_UNITS: dict[str, str] = {
     "lnu_age": "erg/s/Hz",
     "ssp_ages_yr": "yr",
     "age_weights": "Msun",
+    "log_stellar_mass_scale": "dex",
     # Stellar — ionizing rate + SFH grid + chemistry history
     "nion": "photons/s",
     "log_nion": "dex",
@@ -136,6 +231,8 @@ _CANONICAL_UNITS: dict[str, str] = {
     # Dust attenuation / emission outputs
     "L_ir": "erg/s",
     "L_absorbed": "erg/s",
+    "log_L_ir": "dex",
+    "log_L_agn_bol": "dex",
     "dust_attenuation_factor": "",
     "sed_dust_attenuated": "erg/s/Hz",
     "sed_dust_ir": "erg/s/Hz",

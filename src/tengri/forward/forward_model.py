@@ -441,13 +441,24 @@ class ForwardModel:
             params, index_defs, **kwargs
         )
 
-    def predict_state(self, params, fixed_values=None, ssp_data=None, template_data=None):
+    def predict_state(
+        self,
+        params,
+        fixed_values=None,
+        ssp_data=None,
+        template_data=None,
+        *,
+        observables_only=False,
+    ):
         """Delegate to :meth:`SEDModel.predict_state` on the inner SED.
 
-        The three optional arguments are the **JIT-threading** channel: when the
-        loss builder has them, it passes the SSP grid and template arrays in rather
-        than letting the forward close over them, which keeps them out of the
-        compiled program as constants.
+        The three optional positional arguments are the **JIT-threading**
+        channel: when the loss builder has them, it passes the SSP grid and
+        template arrays in rather than letting the forward close over them,
+        which keeps them out of the compiled program as constants.
+        ``observables_only`` is the publication-shortcut opt-in; see
+        :meth:`SEDModel.predict_state`. Defaulting it to ``False`` here means a
+        delegated call cannot lose a published SED by omission (#1673).
 
         This signature must track :meth:`SEDModel.predict_state`. It previously took
         ``params`` only, so the threaded feature-channel call raised ``TypeError``
@@ -460,6 +471,7 @@ class ForwardModel:
             fixed_values=fixed_values,
             ssp_data=ssp_data,
             template_data=template_data,
+            observables_only=observables_only,
         )
 
     def predict_derived(self, params):
