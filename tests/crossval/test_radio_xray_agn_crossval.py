@@ -222,11 +222,11 @@ class TestAGNCrossval:
 
     def test_unified_total_luminosity(self):
         """Unified AGN (disc+torus) should conserve total luminosity."""
-        from tengri.components.agn.unified import simple_agn
+        from tengri.components.agn.unified import multicolor_agn
 
         wave = jnp.linspace(100, 500000, 10000)
         l_nu = np.asarray(
-            simple_agn(
+            multicolor_agn(
                 wave,
                 agn_log_lbol=11.0,
                 agn_lum_ratio=1.0,
@@ -245,12 +245,12 @@ class TestAGNCrossval:
 
     def test_type1_vs_type2_covering(self):
         """Higher torus covering should shift UV→IR balance."""
-        from tengri.components.agn.unified import simple_agn
+        from tengri.components.agn.unified import multicolor_agn
 
         wave = jnp.linspace(500, 200000, 5000)
 
         l_type1 = np.asarray(
-            simple_agn(
+            multicolor_agn(
                 wave,
                 agn_log_lbol=11.0,
                 agn_lum_ratio=1.0,
@@ -258,7 +258,7 @@ class TestAGNCrossval:
             )
         )
         l_type2 = np.asarray(
-            simple_agn(
+            multicolor_agn(
                 wave,
                 agn_log_lbol=11.0,
                 agn_lum_ratio=1.0,

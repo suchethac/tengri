@@ -266,25 +266,36 @@ class TestXrayAbsoluteValues:
             assert r_100 < r_10, "Cutoff should suppress 100 keV more than 10 keV"
 
     def test_agn_corona_absolute_at_2kev(self):
-        """AGN corona at L_bol=1e45 erg/s: check L_nu(2 keV) against formula.
+        r"""AGN corona at L_bol=1e45 erg/s: check L_nu(2 keV) against the definition.
 
-        L_2500 = L_bol / (BC_2500 × nu_2500) = 1e45 / (5.15 × 1.199e15) = 1.62e29
-        L_2keV = L_2500 × 10^(alpha_ox/0.384) = 1.62e29 × 2.26e-4 = 3.66e25
-        L_nu(2keV) = L_2keV / (KEV_TO_HZ × 2) = 3.66e25 / 4.84e17 ≈ 7.6e7 erg/s/Hz
+        :math:`\alpha_{ox} = 0.384 \log_{10}(L_\nu(2\,keV) / L_\nu(2500))`
+        relates two **monochromatic** luminosities, so
+
+        .. math::
+            L_\nu(2\,keV) = L_\nu(2500) \times 10^{\alpha_{ox}/0.384}
+
+        and no frequency conversion enters. This test used to divide that by
+        ``KEV_TO_HZ * 2``, treating ``L_2keV`` as an integrated erg/s — a
+        factor of 4.84e17 (#1728). It also passed ``alpha_ox=`` and
+        ``L_agn_bol=``; the corona now takes ``l_2500_30deg_erg_hz`` and
+        *derives* alpha_ox from it via Just+2007 (#980), with
+        ``delta_alpha_ox`` as the offset knob.
+
+        Tolerance covers the high-energy cutoff, ``exp(-2/300) = 0.9934`` at
+        2 keV against a 300 keV E_cut.
         """
-        from tengri.components.xray import xray_agn_corona
+        from tengri.components.xray import alpha_ox_from_l2500, xray_agn_corona
 
         L_bol = 1e45  # erg/s (bright quasar)
-        wave = jnp.array([6.2])  # 2 keV
-        l_2kev = float(xray_agn_corona(wave, L_agn_bol=L_bol, alpha_ox=-1.4)[0])
-
-        # Analytic prediction
         BC_2500 = 5.15
         nu_2500 = 1.199e15
-        KEV_TO_HZ = 2.41799e17
         L_2500 = L_bol / (BC_2500 * nu_2500)
-        L_2keV_mono = L_2500 * 10.0 ** (-1.4 / 0.384)
-        expected = L_2keV_mono / (KEV_TO_HZ * 2.0)
+
+        wave = jnp.array([6.2])  # 2 keV
+        l_2kev = float(xray_agn_corona(wave, L_2500)[0])
+
+        alpha_ox = float(alpha_ox_from_l2500(L_2500))
+        expected = L_2500 * 10.0 ** (alpha_ox / 0.384)
 
         np.testing.assert_allclose(
             l_2kev,
@@ -294,14 +305,23 @@ class TestXrayAbsoluteValues:
         )
 
     def test_agn_corona_steeper_alpha_ox(self):
-        """Steeper alpha_ox → weaker X-rays relative to UV."""
+        """Steeper alpha_ox → weaker X-rays relative to UV.
+
+        alpha_ox is derived from L_2500 rather than set, so the offset knob
+        ``delta_alpha_ox`` is what steepens it. A more negative offset must
+        reduce the 2 keV luminosity at fixed UV.
+        """
         from tengri.components.xray import xray_agn_corona
 
         wave = jnp.array([6.2])
-        l_14 = float(xray_agn_corona(wave, L_agn_bol=1e45, alpha_ox=-1.4)[0])
-        l_18 = float(xray_agn_corona(wave, L_agn_bol=1e45, alpha_ox=-1.8)[0])
+        l_2500 = 1e45 / (5.15 * 1.199e15)
 
-        assert l_18 < l_14, "Steeper alpha_ox → less X-ray"
+        nominal = float(xray_agn_corona(wave, l_2500)[0])
+        steeper = float(xray_agn_corona(wave, l_2500, delta_alpha_ox=-0.4)[0])
+
+        assert steeper < nominal, "steeper alpha_ox must give less X-ray at fixed UV"
+        # 0.4 dex of alpha_ox is 10**(-0.4/0.384) in the 2 keV luminosity.
+        np.testing.assert_allclose(steeper / nominal, 10.0 ** (-0.4 / 0.384), rtol=0.02)
 
 
 # ── 3. Cross-component self-consistency ───────────────────────────
@@ -402,7 +422,7 @@ class TestRadioComponentDecomposition:
 
     def test_components_sum_to_total(self):
         """Components must sum to total exactly."""
-        from tengri.components.radio import radio_components, radio_total
+        from tengri.components.radio import compute_radio_components, radio_total
 
         wave = jnp.geomspace(1e8, 1e10, 200)
         kwargs = dict(
@@ -415,17 +435,17 @@ class TestRadioComponentDecomposition:
         )
 
         total = radio_total(wave, include_freefree=True, **kwargs)
-        comps = radio_components(wave, include_freefree=True, **kwargs)
+        comps = compute_radio_components(wave, include_freefree=True, **kwargs)
         comp_sum = comps["synchrotron"] + comps["freefree"] + comps["agn"]
 
         np.testing.assert_allclose(np.asarray(comp_sum), np.asarray(total), rtol=1e-10)
 
     def test_agn_dominates_radio_loud(self):
         """Radio-loud AGN (loudness=3): AGN > 90% at 1.4 GHz."""
-        from tengri.components.radio import radio_components
+        from tengri.components.radio import compute_radio_components
 
         wave = jnp.array([_C_AA / 1.4e9])
-        comps = radio_components(
+        comps = compute_radio_components(
             wave,
             L_ir=_L_IR_SFR1,
             L_agn_bol=1e45,
@@ -438,10 +458,10 @@ class TestRadioComponentDecomposition:
 
     def test_sf_dominates_radio_quiet(self):
         """Radio-quiet with strong SF: SF > 90% at 1.4 GHz."""
-        from tengri.components.radio import radio_components
+        from tengri.components.radio import compute_radio_components
 
         wave = jnp.array([_C_AA / 1.4e9])
-        comps = radio_components(
+        comps = compute_radio_components(
             wave,
             L_ir=_L_IR_SFR10,
             L_agn_bol=1e42,
@@ -454,10 +474,10 @@ class TestRadioComponentDecomposition:
 
     def test_synchrotron_absolute_value(self):
         """Synchrotron at 1.4 GHz for SFR~1 should be ~2e28 erg/s/Hz."""
-        from tengri.components.radio import radio_components
+        from tengri.components.radio import compute_radio_components
 
         wave = jnp.array([_C_AA / 1.4e9])
-        comps = radio_components(
+        comps = compute_radio_components(
             wave,
             L_ir=_L_IR_SFR1,
             L_agn_bol=0.0,
@@ -468,10 +488,10 @@ class TestRadioComponentDecomposition:
 
     def test_freefree_absolute_value(self):
         """Free-free at 1.4 GHz for SFR~1 should be ~1e27 erg/s/Hz."""
-        from tengri.components.radio import radio_components
+        from tengri.components.radio import compute_radio_components
 
         wave = jnp.array([_C_AA / 1.4e9])
-        comps = radio_components(
+        comps = compute_radio_components(
             wave,
             L_ir=_L_IR_SFR1,
             L_agn_bol=0.0,
