@@ -1404,8 +1404,7 @@ def _plot_call_hint(name: str) -> str:
         p.name
         for p in params
         if p.default is inspect.Parameter.empty
-        and p.kind
-        in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+        and p.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
     ]
     return f"tengri.plot.{name}({', '.join(required)})"
 
