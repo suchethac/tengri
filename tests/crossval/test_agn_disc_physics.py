@@ -411,13 +411,15 @@ class TestNLRPhysics:
         )
 
     def test_oiii_doublet_ratio(self):
-        """[OIII] 5007/4959 ≈ 2.98 (atomic physics, Storey & Zeippen 2000)."""
-        from tengri.components.agn.nlr import _NLR_LINE_STRENGTHS, _NLR_LINE_WAVELENGTHS
+        """[OIII] 5007/4959 ≈ 2.98 (atomic physics, Storey & Zeippen 2000).
 
-        idx_5007 = int(jnp.argmin(jnp.abs(_NLR_LINE_WAVELENGTHS - 5007.0)))
-        idx_4959 = int(jnp.argmin(jnp.abs(_NLR_LINE_WAVELENGTHS - 4959.0)))
-        ratio = float(_NLR_LINE_STRENGTHS[idx_5007] / _NLR_LINE_STRENGTHS[idx_4959])
-        assert abs(ratio - 2.98) < 0.2, f"[OIII] 5007/4959 should be ~2.98, got {ratio}"
+        Measured from the emitted spectrum. This read ``_NLR_LINE_STRENGTHS`` /
+        ``_NLR_LINE_WAVELENGTHS``, private arrays removed in a refactor (#1728).
+        """
+        from ._nlr_measure import OIII_4959, OIII_5007, doublet_ratio
+
+        ratio = doublet_ratio(OIII_5007, OIII_4959)
+        assert abs(ratio - 2.98) < 0.2, f"[OIII] 5007/4959 should be ~2.98, got {ratio:.3f}"
 
     def test_nlr_narrower_than_blr(self):
         """NLR lines (~500 km/s) must be narrower than BLR (~5000 km/s)."""

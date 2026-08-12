@@ -229,41 +229,36 @@ class TestNLRLineRatios:
     """Verify NLR forbidden line ratios match atomic physics predictions."""
 
     def test_oiii_ratio(self):
-        """[OIII] 5007/4959 = 2.98 (Storey & Zeippen 2000)."""
-        from tengri.components.agn.nlr import _NLR_LINES
+        """[OIII] 5007/4959 = 2.98 (Storey & Zeippen 2000).
 
-        lines = np.array(_NLR_LINES)
-        oiii_5007 = lines[np.abs(lines[:, 0] - 5007.0) < 5.0, 1]
-        oiii_4959 = lines[np.abs(lines[:, 0] - 4959.0) < 5.0, 1]
+        Measured from the emitted spectrum; this read the private ``_NLR_LINES``
+        table, removed in a refactor (#1728).
+        """
+        from ._nlr_measure import OIII_4959, OIII_5007, doublet_ratio
 
-        assert len(oiii_5007) > 0, "[OIII] 5007 line not found"
-        assert len(oiii_4959) > 0, "[OIII] 4959 line not found"
-
-        ratio = float(oiii_5007[0]) / float(oiii_4959[0])
-        # Storey & Zeippen (2000): 5007/4959 = 2.98
         np.testing.assert_allclose(
-            ratio,
+            doublet_ratio(OIII_5007, OIII_4959),
             2.98,
             rtol=0.02,
             err_msg="[OIII] 5007/4959 ratio deviates from Storey & Zeippen 2000",
         )
 
+    @pytest.mark.xfail(
+        reason="#1752: NLR template emits [NII] 6583/6548 = 2.73; atomic value is ~2.96",
+        strict=True,
+    )
     def test_nii_ratio(self):
-        """[NII] 6583/6548 ~ 2.94 (Storey & Zeippen 2000)."""
-        from tengri.components.agn.nlr import _NLR_LINES
+        """[NII] 6583/6548 ~ 2.94 (Storey & Zeippen 2000).
 
-        lines = np.array(_NLR_LINES)
-        nii_6583 = lines[np.abs(lines[:, 0] - 6583.0) < 5.0, 1]
-        nii_6548 = lines[np.abs(lines[:, 0] - 6548.0) < 5.0, 1]
+        Both lines leave the same upper level, so the ratio is fixed by the
+        transition probabilities and cannot vary with density, temperature,
+        ionization parameter or abundance. The template carries 2.73 (#1752).
+        """
+        from ._nlr_measure import NII_6548, NII_6583, doublet_ratio
 
-        assert len(nii_6583) > 0, "[NII] 6583 line not found"
-        assert len(nii_6548) > 0, "[NII] 6548 line not found"
-
-        ratio = float(nii_6583[0]) / float(nii_6548[0])
-        # Expected: [NII] 6583/6548 ~ 2.94
         np.testing.assert_allclose(
-            ratio,
-            3.0,
+            doublet_ratio(NII_6583, NII_6548),
+            2.96,
             rtol=0.05,
             err_msg="[NII] 6583/6548 ratio deviates from atomic physics prediction",
         )
@@ -634,46 +629,57 @@ class TestAlphaOxCrossval:
 
 
 class TestXrayAnisotropyCrossval:
-    """Cross-validate X-ray anisotropy against Yang+2022 Equation 2.
+    r"""Cross-validate X-ray anisotropy against Yang+2022, anchored at 30 deg.
 
-    f(theta) = a1 * cos(theta) + a2 * cos^2(theta) + (1 - a1 - a2)
+    .. math::
+
+        f(\mu) = \frac{a_1 \mu + a_2 \mu^2 + (1 - a_1 - a_2)}
+                      {1 - 0.13397 a_1 - 0.25 a_2}
+
+    The denominator is the numerator at :math:`\mu = \cos 30°`, so
+    :math:`f(\cos 30°) = 1`: the input spectrum is the alpha_ox-anchored 30 deg
+    corona, matching X-CIGALE (#980). These tests asserted the un-normalized
+    polynomial, i.e. the pre-#980 code (#1728).
     """
 
-    def test_30deg_anisotropy(self):
-        """For (a1=0.5, a2=0): L_X(30deg)/L_X(0) should be (1+cos30)/2.
+    #: Numerator at cos 30 deg for a1=0.5, a2=0 — the normalization constant.
+    _ANCHOR = 1.0 - 0.13397 * 0.5
 
-        f(30) = 0.5 * cos(30) + 0 + 0.5 = 0.5 * 0.866 + 0.5 = 0.933.
+    def test_30deg_anisotropy(self):
+        """30 deg is the anchor itself: f = 1 exactly.
+
+        Not 0.933. That is the *numerator* at 30 deg, and it is precisely what
+        the denominator divides out — the alpha_ox(L_2500) relation supplying
+        L_2keV is defined at this inclination, so the correction must leave it
+        unchanged here.
         """
         from tengri.components.xray import xray_anisotropy
 
         l_x = jnp.array([1.0])
-        cos_30 = np.cos(np.radians(30.0))
+        cos_30 = float(np.cos(np.radians(30.0)))
         result = float(xray_anisotropy(l_x, cos_inc=cos_30, a1=0.5, a2=0.0)[0])
-        expected = 0.5 * cos_30 + 0.5  # = 0.933
         np.testing.assert_allclose(
             result,
-            expected,
-            atol=0.001,
-            err_msg="L_X at 30 deg deviates from Yang+2022 formula",
+            1.0,
+            atol=2e-5,
+            err_msg="30 deg is the anchor inclination; f must be 1 there",
         )
 
     def test_70deg_anisotropy(self):
-        """For (a1=0.5, a2=0): L_X(70deg)/L_X(0) should be (1+cos70)/2.
-
-        f(70) = 0.5 * cos(70) + 0.5 = 0.5 * 0.342 + 0.5 = 0.671.
-        """
+        """Edge-on-ward of the anchor the corona dims, by the anchored formula."""
         from tengri.components.xray import xray_anisotropy
 
         l_x = jnp.array([1.0])
-        cos_70 = np.cos(np.radians(70.0))
+        cos_70 = float(np.cos(np.radians(70.0)))
         result = float(xray_anisotropy(l_x, cos_inc=cos_70, a1=0.5, a2=0.0)[0])
-        expected = 0.5 * cos_70 + 0.5  # = 0.671
+        expected = (0.5 * cos_70 + 0.5) / self._ANCHOR  # 0.671 / 0.933015 = 0.719
         np.testing.assert_allclose(
             result,
             expected,
             atol=0.001,
-            err_msg="L_X at 70 deg deviates from Yang+2022 formula",
+            err_msg="L_X at 70 deg deviates from the anchored Yang+2022 formula",
         )
+        assert result < 1.0, "70 deg must be fainter than the 30 deg anchor"
 
     def test_type1_type2_ratio(self):
         """L_X(30deg)/L_X(70deg) should match COSMOS Type1/Type2 (~1.4x).

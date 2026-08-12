@@ -215,29 +215,21 @@ class TestNLRLinePhysics:
     [OIII] 5008.24/4960.30, [NII] 6585.27/6549.86, Halpha 6564.61.
     """
 
-    #: Narrow enough to separate the [NII] doublet from Halpha. At the default
-    #: fwhm_kms=500 the three blend (sigma_lambda ~ 4.6 A against separations of
-    #: 14 and 21 A), and neither peak heights nor windowed fluxes are clean.
-    _FWHM_KMS = 20.0
-    _L_DISC = 1e45
-
+    #: Measurement helpers are shared with the two other files that assert NLR
+    #: doublet ratios (``test_agn_crossval``, ``test_agn_disc_physics``), so the
+    #: three cannot drift apart on line width, wavelength convention or window.
     @staticmethod
     def _sed():
-        from tengri.components.agn.nlr import compute_nlr_sed
+        from ._nlr_measure import nlr_sed
 
-        wave = jnp.linspace(3000.0, 7500.0, 200_000)
-        sed = compute_nlr_sed(
-            wave,
-            l_disc_bol_erg=TestNLRLinePhysics._L_DISC,
-            fwhm_kms=TestNLRLinePhysics._FWHM_KMS,
-        )
-        return np.asarray(wave), np.asarray(sed)
+        return nlr_sed()
 
     @classmethod
     def _line_flux(cls, wave, sed, center_aa: float, half_width_aa: float = 6.0) -> float:
         """Integrate the line over a window wide enough to hold all of it."""
-        mask = (wave > center_aa - half_width_aa) & (wave < center_aa + half_width_aa)
-        return float(np.trapezoid(sed[mask], wave[mask]))
+        from ._nlr_measure import line_flux
+
+        return line_flux(wave, sed, center_aa, half_width_aa)
 
     def test_oiii_5007_4959_ratio_in_template(self):
         """[OIII] 5007/4959 = 2.98 — fixed by the transition probabilities."""
