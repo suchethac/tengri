@@ -498,9 +498,9 @@ class CatalogPosterior:
                 f"{available or 'no keys'}."
             )
         if name not in self.properties:
-            raise KeyError(
-                f"Unknown property {name!r}. Available: {sorted(self.properties.keys())}."
-            )
+            from tengri.forward.properties import missing_property_message
+
+            raise KeyError(missing_property_message(name, self.properties))
         vals = self.properties[name]
         if isinstance(vals, list):  # ragged posteriors — per-galaxy medians
             return np.array(

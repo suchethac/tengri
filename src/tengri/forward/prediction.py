@@ -1691,8 +1691,9 @@ class PropertyCatalog(ReadOnlyPropertyMapping):
         pred = object.__getattribute__(self, "_prediction")
         catalog = pred._model._ensure_property_catalog()
         if name not in catalog:
-            available = sorted(catalog.keys())
-            raise KeyError(f"Unknown property {name!r}. Available: {available}")
+            from tengri.forward.properties import missing_property_message
+
+            raise KeyError(missing_property_message(name, catalog))
         entry = catalog[name]
         state = pred._ensure_state()
         return entry.fn(state, pred._params)
