@@ -50,6 +50,7 @@ __all__ = [
     "PropertyEntry",
     "assemble_available_properties",
     "register_properties",
+    "warn_if_lines_are_unavailable",
 ]
 
 # Module-level registry: name → list[PropertyEntry]
@@ -181,3 +182,66 @@ def assemble_available_properties(active_component_names: set[str]) -> dict[str,
         if active_entries:
             catalog[name] = active_entries[0]
     return catalog
+
+
+def line_property_names() -> frozenset[str]:
+    """Registered properties that need a per-line luminosity catalog.
+
+    Returns
+    -------
+    frozenset of str
+        Every registered property in the ``lines`` group.
+
+    Notes
+    -----
+    Read off the registry rather than listed by hand, so a new line diagnostic
+    is covered by :func:`warn_if_lines_are_unavailable` the moment it is
+    registered.
+    """
+    return frozenset(
+        name
+        for name, entries in PROPERTY_REGISTRY.items()
+        if any(entry.group == "lines" for entry in entries)
+    )
+
+
+def warn_if_lines_are_unavailable(model, names) -> None:
+    """Warn when a requested line property can only come back NaN.
+
+    Parameters
+    ----------
+    model : SEDModel
+        The model whose nebular backend is inspected.
+    names : iterable of str
+        Property names the caller asked for.
+
+    Notes
+    -----
+    ``BakedInBackend`` and the shock backends publish no per-line catalog, so
+    every ``lines`` property is NaN. ``Prediction._ensure_lines`` has warned
+    about that since #361 — but only on the ``pred.lines.*`` route. The dict
+    accessor and :meth:`~tengri.SEDModel.predict_properties`, the documented
+    jit/vmap surface for derived quantities, returned the same NaN in silence.
+    One helper, called by all three, is what keeps them from drifting again.
+
+    Fires at trace time under ``jax.jit``, like the accessor's warning.
+    """
+    import warnings
+
+    requested = line_property_names().intersection(names)
+    if not requested:
+        return
+    backend = getattr(model, "_nebular_backend", None)
+    if backend is not None and hasattr(backend, "predict_nebular_line_luminosities"):
+        return
+    backend_name = type(backend).__name__ if backend is not None else "None"
+    warnings.warn(
+        f"Nebular backend {backend_name!r} does not publish a per-line "
+        f"luminosity catalog, so {sorted(requested)[:4]} and the other "
+        f"'lines' properties will be NaN. To get discrete line luminosities, "
+        f"rebuild the model with neb={{'type': 'cue'}}, 'cloudy', or 'cb19' "
+        f"(each requires a compatible SSP and any backing grid; see "
+        f"tengri.list_nebular_backends() for details). See #361.",
+        UserWarning,
+        stacklevel=3,
+    )

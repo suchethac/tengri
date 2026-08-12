@@ -5428,6 +5428,16 @@ class SEDModel:
             available = sorted(self._property_catalog.keys())
             raise KeyError(f"Unknown properties: {sorted(unknown)}. Available: {available}")
 
+        # A 'lines' property on a backend with no per-line catalog is NaN. Say
+        # so here too: pred.lines.* has warned since #361 but this surface --
+        # the documented jit/vmap one -- returned the same NaN in silence.
+        # Only when the caller asked by name; `names=None` means "everything
+        # the model has" and would warn on every default call.
+        if names is not None:
+            from tengri.forward.properties import warn_if_lines_are_unavailable
+
+            warn_if_lines_are_unavailable(self, names_to_compute)
+
         # Rest-SED-derived properties cannot be served by the fast-nebular grid
         # (#1665). Refuse only those: stellar_mass, sfr and the other 30 are
         # perfectly correct on the fast path, and blanket-refusing them would
