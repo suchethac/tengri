@@ -453,7 +453,7 @@ def build_lookup(
         return build_template_photometry_lookup(preint["_preint"])
 
     # Collapsed case: return a wrapped lookup that takes remaining free params
-    from tengri.utils.grid_interp import interp_nd_triweight
+    from tengri.components._collapsed_lookup import interp_collapsed
     from tengri.utils.interpolation import edges_for_grid
 
     grid_phot = preint["grid_phot"]
@@ -469,11 +469,9 @@ def build_lookup(
 
         Returns filter-integrated L_nu [erg/s/Hz] at runtime.
         """
-        if not axes:
-            # No remaining axes: scalar template
-            normed = grid_phot
-        else:
-            normed = interp_nd_triweight(grid_phot, axes, edges, tuple(free_axis_values))
+        normed = interp_collapsed(
+            grid_phot, axes, free_axis_values, kernel="triweight", edges=edges
+        )
         return L_absorbed * normed
 
     return dust_phot_collapsed

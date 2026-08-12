@@ -18,6 +18,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.components._collapsed_lookup import interp_collapsed
 from tengri.components.agn._phys import C_LIGHT as _C_CGS
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
@@ -433,7 +434,9 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
         """
         # Same unit convention as build_skirtor_photometry_lookup: L_ν [erg/s/Hz]
         l_bol_lsun = 10.0**agn_log_lbol
-        phot_per_lsun = interp_nd_triweight(grid_phot, axes, edges, tuple(free_axis_values))
+        phot_per_lsun = interp_collapsed(
+            grid_phot, axes, free_axis_values, kernel="triweight", edges=edges
+        )
         return l_bol_lsun * agn_torus_frac * phot_per_lsun
 
     return skirtor_phot_collapsed

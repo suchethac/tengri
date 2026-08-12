@@ -35,6 +35,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.components._collapsed_lookup import interp_collapsed
 from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL, DEFAULT_AGN_LUM_RATIO
 from tengri.components.agn.qsogen import compute_qsogen_sed as _compute_qsogen_sed
 from tengri.forward.precompute.templates import (
@@ -43,7 +44,6 @@ from tengri.forward.precompute.templates import (
 )
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
-    interp_nd_triweight,
     slice_fixed_axes,
 )
 from tengri.utils.interpolation import edges_for_grid
@@ -313,11 +313,9 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
         Returns filter-integrated L_nu [erg/s/Hz] at runtime.
         """
         l_bol_lsun = 10.0**agn_log_lbol
-        if not axes:
-            # No remaining axes: scalar template
-            normed = grid_phot
-        else:
-            normed = interp_nd_triweight(grid_phot, axes, edges, tuple(free_axis_values))
+        normed = interp_collapsed(
+            grid_phot, axes, free_axis_values, kernel="triweight", edges=edges
+        )
         return l_bol_lsun * normed
 
     return qsogen_phot_collapsed
