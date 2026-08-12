@@ -21,7 +21,18 @@
 | `l_x_agn` | erg/s | xray | xray | X-ray luminosity from AGN |
 | `l_x_total` | erg/s | xray | xray | Total X-ray luminosity (XRB + AGN) |
 | `l_x_xrb` | erg/s | xray | xray | X-ray luminosity from X-ray binaries |
+| `log_civ_1549` | dex | lines | nebular | log10 of civ 1549 line luminosity [dex re erg/s]; float32-safe form of `civ_1549` |
+| `log_halpha` | dex | lines | nebular | log10 of hα line luminosity [dex re erg/s]; float32-safe form of `halpha` |
+| `log_hbeta` | dex | lines | nebular | log10 of hβ line luminosity [dex re erg/s]; float32-safe form of `hbeta` |
+| `log_lya` | dex | lines | nebular | log10 of lyman alpha line luminosity [dex re erg/s]; float32-safe form of `lya` |
+| `log_nii_6548` | dex | lines | nebular | log10 of nii 6548 line luminosity [dex re erg/s]; float32-safe form of `nii_6548` |
+| `log_nii_6584` | dex | lines | nebular | log10 of nii 6584 line luminosity [dex re erg/s]; float32-safe form of `nii_6584` |
+| `log_oii` | dex | lines | nebular | log10 of oii line luminosity [dex re erg/s]; float32-safe form of `oii` |
+| `log_oiii_4959` | dex | lines | nebular | log10 of oiii 4959 line luminosity [dex re erg/s]; float32-safe form of `oiii_4959` |
+| `log_oiii_5007` | dex | lines | nebular | log10 of oiii 5007 line luminosity [dex re erg/s]; float32-safe form of `oiii_5007` |
 | `log_q_h` | dex | ionizing | stellar | log10(ionizing photon production rate / (photons/s)) — float32-safe form of q_h |
+| `log_sii_6717` | dex | lines | nebular | log10 of sii 6717 line luminosity [dex re erg/s]; float32-safe form of `sii_6717` |
+| `log_sii_6731` | dex | lines | nebular | log10 of sii 6731 line luminosity [dex re erg/s]; float32-safe form of `sii_6731` |
 | `luminosity_weighted_age_gyr` | Gyr | sfh | stellar | Luminosity-weighted mean age of stellar population |
 | `luminosity_weighted_metallicity` | dex | sfh | stellar | Luminosity-weighted mean metallicity (log10 Z/Zsun) |
 | `lya` | erg/s | lines | nebular | Lyman alpha line luminosity |
