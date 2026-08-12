@@ -88,6 +88,14 @@ jobs:
       # check_doc_examples.py resolves symbols and never looked at paths.
       # Stdlib-only, same as the guards around it.
       - run: python tools/check_claude_md_paths.py
+      # The verification protocol is where README sends anyone asking what is
+      # safe to use for science, and its Test File column IS the evidence. It
+      # cited eight crossval tests; all eight were absent, every row read
+      # PENDING, and 56 real crossval files sat beside it under other names —
+      # so the ledger understated the project until someone re-typed the
+      # filenames (#1725). Resolves paths only: it cannot tell you a cited test
+      # runs, which is why the protocol carries a NOT RUN status. Stdlib-only.
+      - run: python tools/check_verification_protocol_paths.py
       # tengri implements published models and validates against the reference
       # codes; it does not port or copy their source. The wording drifted back
       # twice after being swept by hand, so it is pinned here. Stdlib-only.

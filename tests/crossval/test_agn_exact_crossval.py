@@ -469,26 +469,59 @@ class TestDiscEnergyConservation:
 
 
 class TestAnisotropyExact:
-    """f(θ) = a1*cos(θ) + a2*cos²(θ) + (1-a1-a2) — exact values."""
+    r"""Yang+2022 anisotropy, anchored at the 30° reference inclination.
+
+    .. math::
+
+        f(\mu) = \frac{a_1 \mu + a_2 \mu^2 + (1 - a_1 - a_2)}
+                      {1 - 0.13397 a_1 - 0.25 a_2}
+
+    The denominator is the numerator at :math:`\mu = \cos 30°`
+    (:math:`0.13397 = 1 - \cos 30°`, :math:`0.25 = 1 - \cos^2 30°`), so
+    :math:`f(\cos 30°) = 1`. That anchor is not decoration: the α_ox(L_2500)
+    relation supplying ``L_2keV`` is *defined* at 30°, so the input spectrum is
+    the 30° corona and face-on must come out **brighter** than it — 1.0718 at
+    the default :math:`a_1 = 0.5`, not 1.0. X-CIGALE does the same
+    (``yang20.py:231-235``); #980 pinned the convention against CIGALE 2025.1.
+
+    These expectations were computed from the formula above, independently of
+    the implementation.
+    """
 
     @pytest.mark.parametrize(
         "cos_inc,a1,a2,expected_factor",
         [
-            (1.0, 0.5, 0.0, 1.0),  # face-on
-            (0.0, 0.5, 0.0, 0.5),  # edge-on
-            (0.5, 0.5, 0.0, 0.75),  # 60 degrees
-            (1.0, 0.3, 0.2, 1.0),  # face-on, different coeffs
-            (0.0, 0.3, 0.2, 0.5),  # edge-on, different coeffs
-            (0.5, 0.3, 0.2, 0.70),  # 0.3*0.5 + 0.2*0.25 + 0.5 = 0.70
+            # a1=0.5, a2=0 -> denominator 0.933015
+            (1.0, 0.5, 0.0, 1.0717941298),  # face-on: 1.0    / 0.933015
+            (0.0, 0.5, 0.0, 0.5358970649),  # edge-on: 0.5    / 0.933015
+            (0.5, 0.5, 0.0, 0.8038455973),  # 60 deg:  0.75   / 0.933015
+            # a1=0.3, a2=0.2 -> denominator 0.909809
+            (1.0, 0.3, 0.2, 1.0991317958),  # face-on: 1.0    / 0.909809
+            (0.0, 0.3, 0.2, 0.5495658979),  # edge-on: 0.5    / 0.909809
+            (0.5, 0.3, 0.2, 0.7693922571),  # 60 deg:  0.70   / 0.909809
         ],
     )
     def test_exact_values(self, cos_inc, a1, a2, expected_factor):
-        """Anisotropy factor must match analytical formula exactly."""
+        """Anisotropy factor must match the anchored analytical formula exactly."""
         from tengri.components.xray import xray_anisotropy
 
         l_x = jnp.array([1.0])
         result = float(xray_anisotropy(l_x, cos_inc, a1, a2)[0])
-        np.testing.assert_allclose(result, expected_factor, atol=1e-10)
+        np.testing.assert_allclose(result, expected_factor, atol=1e-9)
+
+    def test_anchor_is_unity_at_30_degrees(self):
+        """The property the normalization exists for: f(cos 30°) = 1.
+
+        Pinned separately from the table above so that a change to the anchor
+        fails with a message about the anchor, not about six magic numbers.
+        """
+        from tengri.components.xray import xray_anisotropy
+
+        cos30 = float(np.cos(np.radians(30.0)))
+        l_x = jnp.array([1.0])
+        for a1, a2 in [(0.5, 0.0), (0.3, 0.2), (0.0, 0.0)]:
+            result = float(xray_anisotropy(l_x, cos30, a1, a2)[0])
+            np.testing.assert_allclose(result, 1.0, atol=2e-5)
 
 
 # ── 14. RADIO DPL — analytical shape at reference frequency ───────

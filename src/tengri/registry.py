@@ -2670,27 +2670,89 @@ def search(query: str) -> _RegistryTable:
     return _RegistryTable(hits)
 
 
+#: Every public menu, in forward-model order: what the galaxy does first, then
+#: what the telescope does, then what the fitter does.
+#:
+#: Held as *keys*, not as functions. Two of the menus (``known_ssps``,
+#: ``instruments``) live in modules that import this one, so naming their
+#: functions at module scope here is a circular import. Keys resolve to
+#: ``tengri.list_<key>`` at call time instead, which keeps the property that
+#: matters: the key and the function it calls cannot disagree, because one is
+#: spelled from the other. A key with no function behind it raises
+#: ``AttributeError`` on the first call rather than silently dropping a menu.
+#:
+#: The census test in ``tests/contract/test_list_all_is_complete.py`` enforces
+#: the other half — that no public ``list_*`` is missing from this tuple.
+#:
+#: ``list_all`` itself is excluded, and so is ``list_properties``: properties are
+#: derived outputs of a built model, not a menu of things you can select at
+#: build time, and it is not re-exported at package level.
+_ALL_MENUS: tuple[str, ...] = (
+    "components",
+    # Stars
+    "sfh_models",
+    "age_kernels",
+    "metallicity_modes",
+    "known_ssps",
+    # Dust
+    "dust_models",
+    "dust_laws",
+    "dust_emission_models",
+    # Gas
+    "nebular_backends",
+    "shock_models",
+    # AGN
+    "agn_models",
+    "agn_blocks",
+    # Everything else that emits or absorbs
+    "igm_models",
+    "radio_models",
+    "radio_blocks",
+    "xray_models",
+    # The telescope
+    "filters",
+    "instruments",
+    # The fit
+    "inference_methods",
+    "recipes",
+    "plots",
+)
+
+
 def list_all() -> dict[str, _RegistryTable]:
-    """Return everything available — useful for a single notebook cell overview.
+    """Return every menu — the single notebook cell that shows the whole code.
 
     Returns
     -------
     dict
-        Keys: components, inference_methods, agn_models, dust_laws, sfh_models,
-        nebular_backends. Each value is a `_RegistryTable` (list[dict]) that
-        prints as a table.
+        One entry per public ``list_*`` function, keyed by that function's name
+        with the ``list_`` prefix removed (``list_sfh_models`` -> ``sfh_models``).
+        Each value is a `_RegistryTable` (list[dict]) that prints as a table.
+
+    Notes
+    -----
+    The keys are not enumerated here on purpose. This docstring used to name six
+    of them while the function returned nine and the package exported twenty-one,
+    so a reader could believe tengri had no IGM, radio, X-ray, shock, or
+    metallicity menu at all (#1724). The contract is now structural: every public
+    ``list_*`` appears exactly once, and
+    ``tests/contract/test_list_all_is_complete.py`` fails if a newly added menu
+    is not wired into :data:`_ALL_MENUS`.
+
+    Every value is a fresh table built on call. This is the wide overview, so it
+    touches every registry — reach for the individual ``list_*`` when you want
+    one menu.
+
+    Examples
+    --------
+    >>> menus = tengri.list_all()
+    >>> sorted(menus)[:3]
+    ['age_kernels', 'agn_blocks', 'agn_models']
+    >>> menus["igm_models"]  # doctest: +SKIP
     """
-    return {
-        "components": list_components(),
-        "inference_methods": list_inference_methods(),
-        "agn_models": list_agn_models(),
-        "dust_laws": list_dust_laws(),
-        "dust_emission_models": list_dust_emission_models(),
-        "sfh_models": list_sfh_models(),
-        "nebular_backends": list_nebular_backends(),
-        "filters": list_filters(),
-        "plots": list_plots(),
-    }
+    import tengri
+
+    return {key: getattr(tengri, f"list_{key}")() for key in _ALL_MENUS}
 
 
 def list_properties(*, group: str | None = None) -> _RegistryTable:

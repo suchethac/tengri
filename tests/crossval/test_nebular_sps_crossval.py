@@ -63,19 +63,39 @@ class TestIGMPublishedValues:
         T = float(igm_transmission(wave_obs, z)[0])
         assert 0.2 < T < 0.9, f"T={T:.3f} at z=3, lam_rest=1000A; expected partial absorption"
 
-    def test_z3_below_lyman_limit_near_zero(self):
-        """At z=3, lambda_rest=912 A: below Lyman limit, T ~ 0.
+    def test_z3_lyman_continuum_absorbs_blueward_of_the_limit(self):
+        """At z=3, LyC absorption grows *blueward* of 912 A — not at it.
 
-        Photons below the Lyman limit at the source redshift are
-        heavily absorbed by the Lyman continuum.
+        A photon emitted at exactly the Lyman limit is above the limit at every
+        intervening absorber (its rest wavelength at redshift ``z_abs < z`` is
+        ``lam_obs / (1 + z_abs) > 912 A``), so it sees Lyman-*series* forest
+        absorption only, not the Lyman continuum. The LyC opacity switches on
+        for photons emitted shortward of the limit, and deepens as more of the
+        sightline lies below it.
+
+        This test previously asserted ``T < 0.05`` at exactly 912 A rest and
+        failed against a correct implementation, having encoded the trough one
+        boundary away from where it lives (#1728).
         """
         from tengri.components.igm import igm_transmission
 
-        lam_rest = 912.0
         z = 3.0
-        wave_obs = jnp.array([lam_rest * (1.0 + z)])
-        T = float(igm_transmission(wave_obs, z)[0])
-        assert T < 0.05, f"T={T:.3f} at z=3, lam_rest=912A; expected ~0"
+        at_limit = float(igm_transmission(jnp.array([912.0 * (1.0 + z)]), z)[0])
+        blueward = [
+            float(igm_transmission(jnp.array([lam * (1.0 + z)]), z)[0])
+            for lam in (900.0, 850.0, 800.0)
+        ]
+
+        assert at_limit > 0.5, (
+            f"T={at_limit:.3f} at the limit itself: forest absorption only, "
+            "so most of the light should survive"
+        )
+        assert blueward == sorted(blueward, reverse=True), (
+            f"LyC opacity must deepen monotonically blueward of the limit, got {blueward}"
+        )
+        assert blueward[-1] < 0.4, (
+            f"T={blueward[-1]:.3f} at lam_rest=800A; expected substantial LyC absorption"
+        )
 
     def test_z05_lya_almost_transparent(self):
         """At z=0.5, lambda_rest=1216 A: almost no absorption.
@@ -91,18 +111,36 @@ class TestIGMPublishedValues:
         assert T > 0.90, f"T={T:.3f} at z=0.5, lam_rest=1216A; expected >0.90"
 
     def test_z6_lya_gunn_peterson_trough(self):
-        """At z=6, lambda_rest=1216 A: Gunn-Peterson trough, T ~ 0.
+        """At z=6 the Gunn-Peterson trough lies *blueward* of Ly-alpha.
 
-        At z>5 the IGM is significantly neutral and the Ly-alpha
-        forest becomes a Gunn-Peterson trough.
+        Absorbers sit at ``z_abs < z_source``, so a photon emitted at Ly-alpha
+        is already redward of Ly-alpha everywhere along the sightline and
+        nothing can absorb it: ``T = 1`` exactly at and redward of 1216 A rest.
+        The trough is the light emitted shortward of Ly-alpha, which each
+        foreground absorber redshifts *into* resonance.
+
+        The step at Ly-alpha is the signature of a mean-IGM model. A proximate
+        damping wing (``igm='asada25'``) is what smooths it; Inoue+2014 alone
+        is discontinuous there by construction.
+
+        This test previously asserted ``T < 0.05`` at exactly 1216 A rest — the
+        one wavelength where the model must return 1 (#1728).
         """
         from tengri.components.igm import igm_transmission
 
-        lam_rest = 1216.0
         z = 6.0
-        wave_obs = jnp.array([lam_rest * (1.0 + z)])
-        T = float(igm_transmission(wave_obs, z)[0])
-        assert T < 0.05, f"T={T:.3f} at z=6, lam_rest=1216A; expected ~0"
+        blueward = [
+            float(igm_transmission(jnp.array([lam * (1.0 + z)]), z)[0])
+            for lam in (1100.0, 1150.0, 1200.0, 1215.0)
+        ]
+        at_lya = float(igm_transmission(jnp.array([1216.0 * (1.0 + z)]), z)[0])
+        redward = float(igm_transmission(jnp.array([1250.0 * (1.0 + z)]), z)[0])
+
+        assert max(blueward) < 0.1, (
+            f"expected a Gunn-Peterson trough blueward of Ly-alpha at z=6, got {blueward}"
+        )
+        np.testing.assert_allclose(at_lya, 1.0, atol=1e-6)
+        np.testing.assert_allclose(redward, 1.0, atol=1e-6)
 
     def test_transmission_monotonic_with_redshift(self):
         """At fixed rest wavelength, transmission should decrease with z."""
