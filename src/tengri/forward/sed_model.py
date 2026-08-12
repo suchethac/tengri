@@ -5425,8 +5425,11 @@ class SEDModel:
         # Validate all names are known
         unknown = set(names_to_compute) - set(self._property_catalog.keys())
         if unknown:
-            available = sorted(self._property_catalog.keys())
-            raise KeyError(f"Unknown properties: {sorted(unknown)}. Available: {available}")
+            from tengri.forward.properties import missing_property_message
+
+            raise KeyError(
+                missing_property_message(*sorted(unknown), available=self._property_catalog)
+            )
 
         # Rest-SED-derived properties cannot be served by the fast-nebular grid
         # (#1665). Refuse only those: stellar_mass, sfr and the other 30 are

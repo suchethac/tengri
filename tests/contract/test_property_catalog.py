@@ -222,7 +222,11 @@ class TestKeyError:
             base_model.predict_properties(params, names=("nonexistent_prop",))
 
         assert "nonexistent_prop" in str(exc_info.value)
-        assert "Unknown properties" in str(exc_info.value)
+        # The rule, not the phrasing: a name in no registry is reported as
+        # unknown. The plural "Unknown properties" was pinned here and is gone —
+        # each bad name now gets its own diagnosis, because a *registered*
+        # property missing from this model is not unknown at all (#1706).
+        assert "Unknown property" in str(exc_info.value)
 
     def test_property_catalog_getitem_unknown(self, base_model):
         """PropertyCatalog raises KeyError on unknown property."""
