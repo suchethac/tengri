@@ -632,7 +632,7 @@ class TestSFRNormalization:
             ssp_data,
             "const",
             {
-                "sfh_const_log_total_mass": 0.0,
+                "sfh_const_log_total_mass": 9.0,
                 "sfh_const_start_gyr": 1.0,
                 "sfh_const_end_gyr": 0.0,
             },
@@ -641,7 +641,7 @@ class TestSFRNormalization:
             ssp_data,
             "const",
             {
-                "sfh_const_log_total_mass": 1.0,
+                "sfh_const_log_total_mass": 10.0,
                 "sfh_const_start_gyr": 1.0,
                 "sfh_const_end_gyr": 0.0,
             },
@@ -672,7 +672,7 @@ class TestSFRNormalization:
             ssp_data,
             "const",
             {
-                "sfh_const_log_total_mass": 1.0,
+                "sfh_const_log_total_mass": 10.0,
                 "sfh_const_start_gyr": 1.0,
                 "sfh_const_end_gyr": 0.0,
             },
@@ -698,7 +698,7 @@ class TestSFRNormalization:
             ssp_data,
             "const",
             {
-                "sfh_const_log_total_mass": 1.0,
+                "sfh_const_log_total_mass": 10.0,
                 "sfh_const_start_gyr": 1.0,
                 "sfh_const_end_gyr": 0.0,
             },
@@ -763,17 +763,20 @@ class TestDelayedTauSFH:
         if key not in ref:
             pytest.skip(f"Reference key {key!r} not in npz")
 
-        # tau=1 Gyr peak, SF observed at ~3 Gyr after peak
-        # M_formed ≈ peak_sfr × tau × e (analytic integral of delayed tau)
-        peak_sfr = 10.0  # Msun/yr (log_total_mass=1.0)
+        # `sfh_dexp_log_total_mass` IS the total mass, so M_formed is just
+        # 10**it — no analytic peak_sfr * tau * e bookkeeping needed. That
+        # expression is a leftover from the rate-normalized `log_sfr` era, and
+        # pairing it with `log_total_mass=1.0` (ten solar masses) divided the
+        # SED by 2.7e10 while it described 10 Msun of stars (#1728).
         tau_gyr = 1.0
-        m_formed = peak_sfr * tau_gyr * 1e9 * np.e  # Msun
+        log_total_mass = 10.0
+        m_formed = 10.0**log_total_mass  # Msun
 
         wave, sed = _build_tengri_sed_raw(
             ssp_data,
             "dexp",
             {
-                "sfh_dexp_log_total_mass": 1.0,
+                "sfh_dexp_log_total_mass": log_total_mass,
                 "sfh_dexp_tau_gyr": tau_gyr,
                 "sfh_dexp_start_gyr": 0.0,
             },
@@ -857,24 +860,26 @@ class TestDPLSFH:
         if key not in ref:
             pytest.skip(f"Reference key {key!r} not in npz")
 
-        # Rough M_formed estimate for DPL (alpha=1.5, beta=5, tau=3 Gyr, peak=10 Msun/yr):
-        # Numerical integration; approximate ≈ peak_sfr × tau × B(1+1/alpha, 1+1/beta)
-        # For simplicity, use tau × peak_sfr × 2 as rough estimate
-        peak_sfr = 10.0
+        # `sfh_dpl_log_total_mass` IS the total mass, so M_formed is exactly
+        # 10**it. The Beta-function approximation this used to carry — and the
+        # "rough: 6e10 Msun" it produced — belongs to the rate-normalized
+        # `log_sfr` era; paired with `log_total_mass=1.0` it divided a 10 Msun
+        # SED by 6e10 (#1728). No approximation is needed now.
         tau_gyr = 3.0
-        m_formed_approx = peak_sfr * tau_gyr * 1e9 * 2.0  # rough: 6e10 Msun
+        log_total_mass = 10.0
+        m_formed = 10.0**log_total_mass  # Msun
 
         wave, sed = _build_tengri_sed_raw(
             ssp_data,
             "dpl",
             {
-                "sfh_dpl_log_total_mass": 1.0,
+                "sfh_dpl_log_total_mass": log_total_mass,
                 "sfh_dpl_alpha": 1.5,
                 "sfh_dpl_beta": 5.0,
                 "sfh_dpl_tau_gyr": tau_gyr,
             },
         )
-        sed_per_msun = sed / m_formed_approx
+        sed_per_msun = sed / m_formed
 
         l_tengri = _band_avg(wave, sed_per_msun, 5500.0)
         l_fsps = _band_avg(ref_wave, ref[key], 5500.0)
@@ -999,21 +1004,24 @@ class TestExpSFH:
         """tengri exponential SFH V-band agrees within 35% of FSPS reference.
 
         Uses dexp SFH (delayed tau); tau=1 Gyr, 5 Gyr observation age.
-        M_formed estimated analytically from delayed-tau integral.
+        M_formed is exactly ``10**sfh_dexp_log_total_mass`` — the SFH is
+        normalized to a total mass, so the analytic delayed-tau integral this
+        used to compute is unnecessary, and pairing it with
+        ``log_total_mass=1.0`` divided a 10 Msun SED by 2.7e10 (#1728).
         """
         key = "fsps_expsfh_tau1gyr"
         if key not in ref:
             pytest.skip(f"Reference key {key!r} not in npz")
 
         tau_gyr = 1.0
-        peak_sfr = 10.0
-        m_formed = peak_sfr * tau_gyr * 1.0e9 * np.e  # analytic dexp integral
+        log_total_mass = 10.0
+        m_formed = 10.0**log_total_mass  # Msun
 
         wave, sed = _build_tengri_sed_raw(
             ssp_data,
             "dexp",
             {
-                "sfh_dexp_log_total_mass": 1.0,
+                "sfh_dexp_log_total_mass": log_total_mass,
                 "sfh_dexp_tau_gyr": tau_gyr,
                 "sfh_dexp_start_gyr": 0.0,
             },
