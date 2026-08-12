@@ -759,10 +759,10 @@ class TestConstExpSFHPhysics:
 
     def test_has_constant_phase(self):
         """Some region should have constant SFR."""
-        from tengri.components.stellar.sfh import constant_then_exponential_sfh
+        from tengri.components.stellar.sfh import constant_then_exponential
 
         t = jnp.linspace(0.0, 13e9, 1000)
-        sfr = constant_then_exponential_sfh(t, log_sfr=1.0, tau=1e9, quench_age=5e9, age=10e9)
+        sfr = constant_then_exponential(t, log_sfr=1.0, tau=1e9, quench_age=5e9, age=10e9)
 
         mask = (t >= 5e9) & (t <= 10e9)
         if jnp.any(mask):
@@ -772,10 +772,10 @@ class TestConstExpSFHPhysics:
 
     def test_has_exponential_phase(self):
         """Below quench_age, SFR declines exponentially."""
-        from tengri.components.stellar.sfh import constant_then_exponential_sfh
+        from tengri.components.stellar.sfh import constant_then_exponential
 
         t = jnp.linspace(100e6, 4.5e9, 200)
-        sfr = constant_then_exponential_sfh(t, log_sfr=1.0, tau=1e9, quench_age=5e9, age=10e9)
+        sfr = constant_then_exponential(t, log_sfr=1.0, tau=1e9, quench_age=5e9, age=10e9)
 
         log_sfr_vals = jnp.log(sfr)
         if jnp.all(jnp.isfinite(log_sfr_vals)):
@@ -785,24 +785,24 @@ class TestConstExpSFHPhysics:
 
     def test_continuous_at_quench(self):
         """SFR must be continuous at the quenching boundary."""
-        from tengri.components.stellar.sfh import constant_then_exponential_sfh
+        from tengri.components.stellar.sfh import constant_then_exponential
 
         quench = 5e9
         eps = 1.0
         t_above = jnp.array([quench + eps])
         t_below = jnp.array([quench - eps])
 
-        sfr_a = constant_then_exponential_sfh(t_above, 1.0, 1e9, quench, 10e9)
-        sfr_b = constant_then_exponential_sfh(t_below, 1.0, 1e9, quench, 10e9)
+        sfr_a = constant_then_exponential(t_above, 1.0, 1e9, quench, 10e9)
+        sfr_b = constant_then_exponential(t_below, 1.0, 1e9, quench, 10e9)
 
         np.testing.assert_allclose(float(sfr_a[0]), float(sfr_b[0]), rtol=1e-6)
 
     def test_mass_integral_finite(self):
         """Total mass formed should be finite and positive."""
-        from tengri.components.stellar.sfh import constant_then_exponential_sfh
+        from tengri.components.stellar.sfh import constant_then_exponential
 
         t = jnp.linspace(0.0, 13e9, 2000)
-        sfr = constant_then_exponential_sfh(t, log_sfr=1.0, tau=1e9, quench_age=5e9, age=10e9)
+        sfr = constant_then_exponential(t, log_sfr=1.0, tau=1e9, quench_age=5e9, age=10e9)
         mass = float(jnp.trapezoid(sfr, t))
         assert mass > 0
         assert np.isfinite(mass)

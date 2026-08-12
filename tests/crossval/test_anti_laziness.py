@@ -256,6 +256,22 @@ class TestAGNParameterSensitivity:
 # ── 3. SFH MODELS — parameter sensitivity ─────────────────────────
 
 
+def _assert_parameter_matters(baseline, modified, label: str) -> None:
+    """Fail unless ``modified`` differs from ``baseline`` by a *relative* margin.
+
+    ``jnp.allclose`` carries a default ``atol=1e-8``. An SFH normalized to total
+    mass has amplitudes of order ``10**log_total_mass / 1.4e10`` — for
+    ``log_total_mass=1.0`` that is ~1e-9, entirely beneath that floor, so every
+    comparison returns "close" no matter what the parameter does. A sensitivity
+    suite in that regime cannot fail, which is worse than failing: it reports
+    that nothing is ignored while being blind to everything.
+
+    ``atol=0.0`` makes the comparison purely relative and immune to the
+    normalization the caller happens to choose (#1728).
+    """
+    assert not jnp.allclose(baseline, modified, rtol=0.01, atol=0.0), f"{label} is IGNORED"
+
+
 class TestSFHParameterSensitivity:
     """SFH models must respond to all their parameters."""
 
@@ -283,16 +299,21 @@ class TestSFHParameterSensitivity:
                     param: val,
                 },
             )
-            assert not jnp.allclose(sfr_default, sfr_mod, rtol=0.01), (
-                f"DPL parameter {param} is IGNORED"
-            )
+            _assert_parameter_matters(sfr_default, sfr_mod, f"DPL parameter {param}")
 
     def test_tsnorm_all_params_matter(self):
-        """tsnorm: all 5 params must affect the SFH."""
+        """tsnorm: all 5 params must affect the SFH.
+
+        ``log_total_mass=10.0`` for the same reason the DPL test above uses it:
+        it keeps SFR amplitudes near 1 Msun/yr. At the 1.0 this used to pass,
+        amplitudes sat at ~1e-9 and the comparison could not resolve anything —
+        it reported ``peak_lbt is IGNORED`` for a parameter that moves the peak
+        from 3.21 to 0.19 Gyr, a 109% relative change (#1728).
+        """
         from tengri.components.stellar.sfh import tsnorm
 
         defaults = {
-            "log_total_mass": 1.0,
+            "log_total_mass": 10.0,
             "peak_lbt": 5e9,
             "width": 2e9,
             "skew": 0.5,
@@ -301,48 +322,41 @@ class TestSFHParameterSensitivity:
         sfr_default = tsnorm(self._T, **defaults)
 
         mods = {
-            "log_total_mass": 2.0,
+            "log_total_mass": 11.0,
             "peak_lbt": 2e9,
             "width": 0.5e9,
             "skew": -0.5,
             "trunc": 8.0,
         }
         for param, val in mods.items():
-            params = {**defaults, param: val}
-            sfr_mod = tsnorm(self._T, **params)
-            assert not jnp.allclose(sfr_default, sfr_mod, rtol=0.01), (
-                f"tsnorm parameter {param} is IGNORED"
-            )
+            sfr_mod = tsnorm(self._T, **{**defaults, param: val})
+            _assert_parameter_matters(sfr_default, sfr_mod, f"tsnorm parameter {param}")
 
     def test_continuity_ratios_not_ignored(self):
         """Continuity SFH: each ratio must change the SFH."""
-        from tengri.components.stellar.sfh import continuity_sfh
+        from tengri.components.stellar.sfh import continuity
 
         age = jnp.geomspace(1e6, 13.7e9, 500)
         defaults = {f"ratio_{i}": 0.0 for i in range(6)}
-        sfr_default = continuity_sfh(age, log_total_mass=10.0, **defaults)
+        sfr_default = continuity(age, log_total_mass=10.0, **defaults)
 
         for i in range(6):
             params = {**defaults, f"ratio_{i}": 1.0}
-            sfr_mod = continuity_sfh(age, log_total_mass=10.0, **params)
-            assert not jnp.allclose(sfr_default, sfr_mod, rtol=0.01), (
-                f"Continuity ratio_{i} is IGNORED"
-            )
+            sfr_mod = continuity(age, log_total_mass=10.0, **params)
+            _assert_parameter_matters(sfr_default, sfr_mod, f"Continuity ratio_{i}")
 
     def test_dirichlet_zfracs_not_ignored(self):
         """Dirichlet SFH: each z_frac must change the SFH."""
-        from tengri.components.stellar.sfh import dirichlet_sfh
+        from tengri.components.stellar.sfh import dirichlet
 
         age = jnp.geomspace(1e6, 13.7e9, 500)
         defaults = {f"z_frac_{i}": 0.5 for i in range(6)}
-        sfr_default = dirichlet_sfh(age, log_total_mass=10.0, **defaults)
+        sfr_default = dirichlet(age, log_total_mass=10.0, **defaults)
 
         for i in range(6):
             params = {**defaults, f"z_frac_{i}": 0.01}
-            sfr_mod = dirichlet_sfh(age, log_total_mass=10.0, **params)
-            assert not jnp.allclose(sfr_default, sfr_mod, rtol=0.01), (
-                f"Dirichlet z_frac_{i} is IGNORED"
-            )
+            sfr_mod = dirichlet(age, log_total_mass=10.0, **params)
+            _assert_parameter_matters(sfr_default, sfr_mod, f"Dirichlet z_frac_{i}")
 
 
 # ── 4. SHOCK EMISSION — velocity sensitivity ──────────────────────
@@ -358,7 +372,7 @@ class TestShockParameterSensitivity:
         r_100 = shock_line_ratios(100.0)
         r_500 = shock_line_ratios(500.0)
 
-        for line in ["OIII_5007", "NII_6583", "SII_6716", "OI_6300", "Halpha"]:
+        for line in ["O3_5007A", "NII_6583A", "SII_6716A", "OI_6300A", "HA_6563A"]:
             v1 = float(r_100[line])
             v2 = float(r_500[line])
             assert abs(v1 - v2) > 0.01, (
@@ -367,11 +381,11 @@ class TestShockParameterSensitivity:
 
     def test_shock_sed_velocity_changes_shape(self):
         """Shock SED shape must change with velocity, not just scale."""
-        from tengri.components.nebular.shock import shock_emission_sed
+        from tengri.components.nebular.shock import compute_shock_sed
 
         wave = jnp.linspace(3000.0, 8000.0, 2000)
-        l_slow = shock_emission_sed(wave, shock_velocity=150.0, l_shock_halpha=1e8)
-        l_fast = shock_emission_sed(wave, shock_velocity=500.0, l_shock_halpha=1e8)
+        l_slow = compute_shock_sed(wave, shock_velocity=150.0, l_shock_halpha=1e8)
+        l_fast = compute_shock_sed(wave, shock_velocity=500.0, l_shock_halpha=1e8)
 
         # Normalize both to unit integral and compare shapes
         l_slow_norm = l_slow / jnp.sum(l_slow)
@@ -595,14 +609,14 @@ class TestEmissionLinesAtCorrectWavelengths:
 
     def test_blr_lines_at_atomic_wavelengths(self):
         """BLR emission must peak at known line wavelengths, not elsewhere."""
-        from tengri.components.agn.blr import blr_emission
+        from tengri.components.agn.blr import compute_blr_sed
 
         l_disc = 3.83e44
         expected_lines = [1216.0, 1549.0, 2800.0, 4861.0, 6563.0]
 
         for line_wave in expected_lines:
             wave = jnp.linspace(line_wave - 200, line_wave + 200, 1000)
-            l_nu = blr_emission(wave, l_disc_bol_erg=l_disc)
+            l_nu = compute_blr_sed(wave, l_disc_bol_erg=l_disc)
             peak = float(wave[jnp.argmax(l_nu)])
             assert abs(peak - line_wave) < 30.0, (
                 f"BLR line expected at {line_wave:.0f} A, peaked at {peak:.0f} A"
@@ -610,14 +624,14 @@ class TestEmissionLinesAtCorrectWavelengths:
 
     def test_nlr_lines_at_atomic_wavelengths(self):
         """NLR emission must peak at known forbidden line wavelengths."""
-        from tengri.components.agn.nlr import nlr_emission
+        from tengri.components.agn.nlr import compute_nlr_sed
 
         l_disc = 3.83e44
         expected_lines = [5007.0, 6563.0]
 
         for line_wave in expected_lines:
             wave = jnp.linspace(line_wave - 100, line_wave + 100, 500)
-            l_nu = nlr_emission(wave, l_disc_bol_erg=l_disc)
+            l_nu = compute_nlr_sed(wave, l_disc_bol_erg=l_disc)
             if float(jnp.max(l_nu)) > 0:
                 peak = float(wave[jnp.argmax(l_nu)])
                 assert abs(peak - line_wave) < 20.0, (
@@ -626,11 +640,11 @@ class TestEmissionLinesAtCorrectWavelengths:
 
     def test_shock_lines_at_atomic_wavelengths(self):
         """Shock emission must produce lines at correct wavelengths."""
-        from tengri.components.nebular.shock import shock_emission_sed
+        from tengri.components.nebular.shock import compute_shock_sed
 
         expected_lines = [4861.0, 5007.0, 6563.0]  # Hβ, [OIII], Hα
         wave = jnp.linspace(4800.0, 6700.0, 5000)
-        l_nu = shock_emission_sed(wave, shock_velocity=300.0, l_shock_halpha=1e8)
+        l_nu = compute_shock_sed(wave, shock_velocity=300.0, l_shock_halpha=1e8)
 
         # Find peaks
         for line_wave in expected_lines:

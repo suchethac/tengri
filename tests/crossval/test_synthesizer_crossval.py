@@ -177,7 +177,7 @@ class TestSFHParametricVsSynthesizer:
         assert diffs.max() < 0.001, f"DelayedExponential max relative diff: {diffs.max():.4f}"
 
     def test_continuity_flex_sfh(self):
-        """tengri continuity_flex_sfh vs synthesizer ContinuityFlex.
+        """tengri continuity_flex vs synthesizer ContinuityFlex.
 
         Uses synthesizer's exact anchor times to avoid the ~0.1% mismatch
         from the slightly different t_max defaults (13.7 vs 13.677 Gyr).
@@ -185,7 +185,7 @@ class TestSFHParametricVsSynthesizer:
         """
         from synthesizer.parametric.sf_hist import ContinuityFlex
 
-        from tengri.components.stellar.sfh.nonparametric import continuity_flex_sfh
+        from tengri.components.stellar.sfh.nonparametric import continuity_flex
 
         ratio_young = 0.4
         flex_ratios = np.array([0.15, -0.3, 0.1])
@@ -207,7 +207,7 @@ class TestSFHParametricVsSynthesizer:
         t_yr = _sfh_age_grid(n=60)
         sfr_synth = np.array([sfh_synth._sfr(float(t)) for t in t_yr])
         sfr_tengri = np.array(
-            continuity_flex_sfh(
+            continuity_flex(
                 jnp.array(t_yr),
                 log_total_mass=0.0,
                 bin_edges_gyr=anchors,
@@ -249,14 +249,14 @@ class TestNonparametricSFHVsSynthesizer:
 
     @classmethod
     def _make_agebins_gyr(cls) -> np.ndarray:
-        """Return bin edge array in Gyr for tengri continuity_sfh."""
+        """Return bin edge array in Gyr for tengri continuity."""
         return cls._EDGES_GYR
 
     def test_continuity_sfh_flat(self):
         """Zero ratios → flat SFH: both tengri and synthesizer should agree."""
         from synthesizer.parametric.sf_hist import Continuity
 
-        from tengri.components.stellar.sfh.nonparametric import continuity_sfh
+        from tengri.components.stellar.sfh.nonparametric import continuity
 
         agebins_unyt = self._make_agebins_unyt()
         n_ratios = agebins_unyt.shape[0] - 1  # 5 ratios for 6 bins
@@ -269,7 +269,7 @@ class TestNonparametricSFHVsSynthesizer:
         t_yr = _sfh_age_grid(n=50)
         sfr_synth = np.array([sfh_synth._sfr(t) for t in t_yr])
         sfr_tengri = np.array(
-            continuity_sfh(
+            continuity(
                 jnp.array(t_yr),
                 log_total_mass=0.0,
                 bin_edges_gyr=jnp.array(self._make_agebins_gyr()),
@@ -285,7 +285,7 @@ class TestNonparametricSFHVsSynthesizer:
         """Non-zero ratios: tengri and synthesizer should agree to 1%."""
         from synthesizer.parametric.sf_hist import Continuity
 
-        from tengri.components.stellar.sfh.nonparametric import continuity_sfh
+        from tengri.components.stellar.sfh.nonparametric import continuity
 
         ratios = np.array([0.5, -0.3, 0.2, -0.1, 0.4])
         agebins_unyt = self._make_agebins_unyt()
@@ -295,7 +295,7 @@ class TestNonparametricSFHVsSynthesizer:
         t_yr = _sfh_age_grid(n=50)
         sfr_synth = np.array([sfh_synth._sfr(t) for t in t_yr])
         sfr_tengri = np.array(
-            continuity_sfh(
+            continuity(
                 jnp.array(t_yr),
                 log_total_mass=0.0,
                 bin_edges_gyr=jnp.array(self._make_agebins_gyr()),

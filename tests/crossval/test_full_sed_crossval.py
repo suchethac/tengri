@@ -1149,7 +1149,7 @@ class TestTauSFHCrossVal:
         # Both codes must agree the longer-tau galaxy is bluer
         assert delta_tengri > 0, (
             f"tengri Δ(UV/V) = {delta_tengri:.4f} is not positive — "
-            "time-convention sign error in declining_exponential_sfh."
+            "time-convention sign error in declining_exponential."
         )
         assert delta_fsps > 0, f"FSPS Δ(UV/V) = {delta_fsps:.4f} is not positive (sanity check)"
 
@@ -1195,13 +1195,13 @@ class TestTauSFHCrossVal:
         assert color5 > color1, (
             f"tengri 'tau': tau=5 not bluer than tau=1. "
             f"tau5 UV/V = {color5:.4f}, tau1 UV/V = {color1:.4f}. "
-            "Check time-convention sign in declining_exponential_sfh."
+            "Check time-convention sign in declining_exponential."
         )
 
     def test_tau_model_vs_table_mode_consistency(self, ssp_data):
         """tau SFH type and table SFH mode must give the same SED within 2%.
 
-        The 'tau' type evaluates declining_exponential_sfh(t_lb) analytically.
+        The 'tau' type evaluates declining_exponential(t_lb) analytically.
         The 'table' mode samples SFR(T_cosmic) = peak*exp(-T_cosmic/tau) on a
         500-point grid and passes it via sfh_t_gyr/sfh_sfr.
         Both represent the same physical SFH; any residual is integration error.
@@ -1840,7 +1840,7 @@ class TestDustEmission:
 class TestTabularSFH:
     """Cross-validate step-function non-parametric SFH from FSPS sfh=3.
 
-    FSPS tabular SFH is the reference for tengri's continuity_sfh / dirichlet_sfh.
+    FSPS tabular SFH is the reference for tengri's continuity / dirichlet.
     Tests verify: SEDs sensible, physically expected color trends hold.
     """
 
@@ -1899,15 +1899,15 @@ class TestTabularSFH:
         )
 
     def test_tengri_nonparametric_color_trend(self, ssp_data):
-        """tengri continuity_sfh: rising SFH should be bluer than quenching SFH.
+        """tengri continuity: rising SFH should be bluer than quenching SFH.
 
         This checks the tengri implementation independently of FSPS.
         Uses the same SFR-per-bin values as TABSFH_CASES in the reference generator.
         """
         try:
-            from tengri.components.stellar.sfh.nonparametric import continuity_sfh
+            from tengri.components.stellar.sfh.nonparametric import continuity
         except ImportError:
-            pytest.skip("continuity_sfh not importable")
+            pytest.skip("continuity not importable")
 
         bin_edges = jnp.array([0.0, 0.1, 0.5, 2.0, 6.0])
         sfr_rising = jnp.array([5.0, 2.0, 0.8, 0.2])
@@ -1916,7 +1916,7 @@ class TestTabularSFH:
         wave = jnp.asarray(ssp_data.ssp_wave)
 
         def uv_over_v(sfr_bins):
-            t_obs, sfr_t = continuity_sfh(bin_edges, sfr_bins, n_pts=200)
+            t_obs, sfr_t = continuity(bin_edges, sfr_bins, n_pts=200)
             # Compute CSP: approximate as sum of SSPs weighted by SFR dt
             from tengri.components.stellar.sps.dsps_wrapper import compute_csp_weights
 
@@ -1930,11 +1930,11 @@ class TestTabularSFH:
             cr = uv_over_v(sfr_rising)
             cq = uv_over_v(sfr_quenching)
         except Exception as exc:
-            pytest.skip(f"continuity_sfh computation failed: {exc}")
+            pytest.skip(f"continuity computation failed: {exc}")
 
         assert cr > cq, (
             f"tengri rising SFH UV/V ({cr:.3f}) not greater than quenching ({cq:.3f}). "
-            "Check searchsorted bin assignment in continuity_sfh."
+            "Check searchsorted bin assignment in continuity."
         )
 
 

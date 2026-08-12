@@ -209,11 +209,11 @@ class TestBLRBalmerDecrement:
 
     def test_blr_emission_produces_flux(self):
         """BLR emission should produce non-zero line flux around H-alpha."""
-        from tengri.components.agn.blr import blr_emission
+        from tengri.components.agn.blr import compute_blr_sed
 
         wavelength = jnp.linspace(6400.0, 6700.0, 500)
         l_bol_erg = 1e44
-        l_nu = blr_emission(wavelength, l_disc_bol_erg=l_bol_erg)
+        l_nu = compute_blr_sed(wavelength, l_disc_bol_erg=l_bol_erg)
         # Should have a clear peak near H-alpha
         peak_idx = int(jnp.argmax(l_nu))
         peak_wave = float(wavelength[peak_idx])
@@ -270,10 +270,10 @@ class TestNLRLineRatios:
 
     def test_nlr_emission_nonzero(self):
         """NLR emission should produce detectable flux at [OIII] 5007."""
-        from tengri.components.agn.nlr import nlr_emission
+        from tengri.components.agn.nlr import compute_nlr_sed
 
         wavelength = jnp.linspace(4900.0, 5100.0, 200)
-        l_nu = nlr_emission(wavelength, l_disc_bol_erg=1e44)
+        l_nu = compute_nlr_sed(wavelength, l_disc_bol_erg=1e44)
         peak_idx = int(jnp.argmax(l_nu))
         peak_wave = float(wavelength[peak_idx])
         assert abs(peak_wave - 5007.0) < 15.0, (

@@ -119,9 +119,9 @@ class TestQSOgenPhysics:
 
     def test_default_produces_quasar_sed(self):
         """Default parameters reproduce a typical Type 1 quasar SED."""
-        from tengri.components.agn.qsogen import qsogen_sed
+        from tengri.components.agn.qsogen import compute_qsogen_sed
 
-        l_nu = qsogen_sed(WAVE_OPT)
+        l_nu = compute_qsogen_sed(WAVE_OPT)
         chex.assert_tree_all_finite(l_nu)
         assert float(jnp.sum(l_nu)) > 0
 
@@ -131,10 +131,10 @@ class TestQSOgenPhysics:
         Temple+2021 Eq. 1: L_ν ∝ ν^{plslp1} for λ > plbrk.
         More negative plslp1 → redder UV.
         """
-        from tengri.components.agn.qsogen import qsogen_sed
+        from tengri.components.agn.qsogen import compute_qsogen_sed
 
-        l_blue = qsogen_sed(WAVE_OPT, agn_plslp1=0.0)
-        l_red = qsogen_sed(WAVE_OPT, agn_plslp1=-1.0)
+        l_blue = compute_qsogen_sed(WAVE_OPT, agn_plslp1=0.0)
+        l_red = compute_qsogen_sed(WAVE_OPT, agn_plslp1=-1.0)
 
         uv_mask = (WAVE_OPT > 1400) & (WAVE_OPT < 1600)
         opt_mask = (WAVE_OPT > 5000) & (WAVE_OPT < 6000)
@@ -148,11 +148,11 @@ class TestQSOgenPhysics:
 
         Higher bbnorm → stronger NIR bump.
         """
-        from tengri.components.agn.qsogen import qsogen_sed
+        from tengri.components.agn.qsogen import compute_qsogen_sed
 
         wave_nir = jnp.geomspace(5000.0, 50000.0, 500)
-        l_no_dust = qsogen_sed(wave_nir, agn_bbnorm=0.0)
-        l_dust = qsogen_sed(wave_nir, agn_bbnorm=5.0)
+        l_no_dust = compute_qsogen_sed(wave_nir, agn_bbnorm=0.0)
+        l_dust = compute_qsogen_sed(wave_nir, agn_bbnorm=5.0)
 
         nir_mask = (wave_nir > 10000) & (wave_nir < 30000)
         opt_mask = (wave_nir > 5000) & (wave_nir < 7000)
@@ -164,10 +164,10 @@ class TestQSOgenPhysics:
 
     def test_ebv_reddens_sed(self):
         """SMC reddening (agn_ebv > 0) should suppress UV flux."""
-        from tengri.components.agn.qsogen import qsogen_sed
+        from tengri.components.agn.qsogen import compute_qsogen_sed
 
-        l_clean = qsogen_sed(WAVE_OPT, agn_ebv=0.0)
-        l_red = qsogen_sed(WAVE_OPT, agn_ebv=0.3)
+        l_clean = compute_qsogen_sed(WAVE_OPT, agn_ebv=0.0)
+        l_red = compute_qsogen_sed(WAVE_OPT, agn_ebv=0.3)
 
         uv_mask = (WAVE_OPT > 1400) & (WAVE_OPT < 1600)
         # UV should be suppressed
@@ -177,10 +177,10 @@ class TestQSOgenPhysics:
 
     def test_emission_lines_add_flux(self):
         """Temple+2021: emission lines add flux above continuum."""
-        from tengri.components.agn.qsogen import qsogen_sed
+        from tengri.components.agn.qsogen import compute_qsogen_sed
 
-        l_no_lines = qsogen_sed(WAVE_OPT, agn_emline_scale=0.0)
-        l_lines = qsogen_sed(WAVE_OPT, agn_emline_scale=1.0)
+        l_no_lines = compute_qsogen_sed(WAVE_OPT, agn_emline_scale=0.0)
+        l_lines = compute_qsogen_sed(WAVE_OPT, agn_emline_scale=1.0)
 
         # Total flux with lines should be higher
         assert float(jnp.sum(l_lines)) >= float(jnp.sum(l_no_lines) * 0.99), (
@@ -192,11 +192,11 @@ class TestQSOgenPhysics:
 
         bcnorm controls Balmer pseudo-continuum strength.
         """
-        from tengri.components.agn.qsogen import qsogen_sed
+        from tengri.components.agn.qsogen import compute_qsogen_sed
 
         wave = jnp.linspace(3000.0, 4000.0, 500)
-        l_no_bc = qsogen_sed(wave, agn_bcnorm=0.0)
-        l_bc = qsogen_sed(wave, agn_bcnorm=1.0)
+        l_no_bc = compute_qsogen_sed(wave, agn_bcnorm=0.0)
+        l_bc = compute_qsogen_sed(wave, agn_bcnorm=1.0)
 
         # Balmer continuum should add flux below 3646A
         bc_mask = wave < 3646.0
