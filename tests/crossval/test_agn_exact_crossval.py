@@ -314,16 +314,68 @@ class TestBeloborodovExact:
 
 
 class TestJust2007Exact:
-    """alpha_ox = -0.137 * log10(L_2500) + 2.638 — Just+2007 Eq.3."""
+    """alpha_ox = -0.137 * log10(L_2500) + 2.638 — Just+2007 Eq.3.
 
-    @pytest.mark.parametrize("log_l2500", [27.0, 28.0, 29.0, 30.0, 31.0, 32.0])
+    Valid for ``28 <= log10(L_2500) <= 33``; outside that the relation is held
+    at the boundary rather than extrapolated (#861).
+    """
+
+    #: Just+2007's fitted range, from ``_ALPHA_OX_CALIB_RANGE["just2007"]``.
+    LO, HI = 28.0, 33.0
+
+    @staticmethod
+    def _relation(log_l2500: float) -> float:
+        return -0.137 * log_l2500 + 2.638
+
+    @pytest.mark.parametrize("log_l2500", [28.0, 29.0, 30.0, 31.0, 32.0, 33.0])
     def test_exact_formula(self, log_l2500):
-        """Must match the linear relation exactly."""
+        """Inside the calibrated range, match the linear relation exactly."""
         from tengri.components.xray import alpha_ox_from_l2500
 
         result = float(alpha_ox_from_l2500(10.0**log_l2500))
-        expected = -0.137 * log_l2500 + 2.638
-        np.testing.assert_allclose(result, expected, atol=0.001)
+        np.testing.assert_allclose(result, self._relation(log_l2500), atol=0.001)
+
+    @pytest.mark.parametrize("log_l2500", [19.0, 24.0, 27.0, 27.9])
+    def test_held_at_the_boundary_below_the_calibrated_range(self, log_l2500):
+        """Below 28, alpha_ox is held at its faintest-calibrated value.
+
+        This test used to parametrize 27.0 alongside the valid points and assert
+        pure linearity there, so it was asserting the extrapolation the code
+        deliberately refuses (#1728). The refusal is the physics: these are
+        anti-correlations, so alpha_ox rises without bound as L_2500 falls and
+        turns positive below log10(L_2500) ~ 19 — that is L_2keV > L_2500, an
+        X-ray corona brighter than the disc that produced it, which pushes the
+        total X-ray past L_bol. pcigale likewise never extrapolates.
+        """
+        from tengri.components.xray import alpha_ox_from_l2500
+
+        result = float(alpha_ox_from_l2500(10.0**log_l2500))
+        np.testing.assert_allclose(result, self._relation(self.LO), atol=0.001)
+
+    def test_alpha_ox_never_turns_positive(self):
+        """The unphysical regime the clamp exists to prevent, over 15 decades.
+
+        A positive alpha_ox means the corona outshines the disc feeding it. If
+        the clamp is ever removed or its range widened downward, this fails
+        before anything reaches a fit.
+        """
+        from tengri.components.xray import alpha_ox_from_l2500
+
+        for log_l2500 in np.linspace(18.0, 33.0, 61):
+            result = float(alpha_ox_from_l2500(10.0**log_l2500))
+            assert result < 0.0, (
+                f"alpha_ox = {result:.3f} at log L_2500 = {log_l2500:.1f}: "
+                "L_2keV would exceed L_2500"
+            )
+
+    def test_monotonic_and_clamped_at_both_ends(self):
+        """More luminous AGN are X-ray weaker, and neither tail runs away."""
+        from tengri.components.xray import alpha_ox_from_l2500
+
+        values = [float(alpha_ox_from_l2500(10.0**x)) for x in np.linspace(20.0, 36.0, 33)]
+        assert values == sorted(values, reverse=True), "alpha_ox must decrease with L_2500"
+        np.testing.assert_allclose(values[0], self._relation(self.LO), atol=0.001)
+        np.testing.assert_allclose(values[-1], self._relation(self.HI), atol=0.001)
 
 
 # ── 10. POLAR DUST — SMC A_λ = R_V * E(B-V) * k(λ) ────────────────
