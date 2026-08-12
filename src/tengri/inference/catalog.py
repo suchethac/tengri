@@ -542,7 +542,7 @@ class Catalog:
         ----------
         fwd : ForwardModel
             Model built with ``sfh={'type': 'table'}`` (and
-            ``stellar={'met_mode': 'table'}`` if ``met`` is given).
+            ``met={'type': 'table'}`` if ``met`` is given).
         t_gyr : array_like, shape (n_t,) or (N, n_t)
             Cosmic time [Gyr], strictly increasing. A 1-D grid is shared by
             every galaxy and broadcast.
