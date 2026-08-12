@@ -1463,7 +1463,7 @@ def _normalize_dl07_like_grid(raw: dict, q_key: str = "qpah_grid") -> dict:
 # DH02_CE01 (Dale & Helou 2002 + Chary & Elbaz 2001) cold-dust model
 
 
-def create_dh02_ce01_from_grid(grid_path: str) -> Callable:
+def create_dh02_ce01_from_grid(grid_path: str | dict) -> Callable:
     r"""Create a DH02_CE01 cold-dust emission model from tabulated templates.
 
     Evaluates the DH02_CE01 template library published with AGNfitter-rX
@@ -1475,9 +1475,13 @@ def create_dh02_ce01_from_grid(grid_path: str) -> Callable:
 
     Parameters
     ----------
-    grid_path : str
+    grid_path : str or dict
         Path to ``dh02_ce01_grid.h5`` (built by
-        ``scripts/build_dh02_ce01_grid.py``).
+        ``scripts/build_dh02_ce01_grid.py``), or an already-loaded template dict
+        as returned by :func:`load_dh02_ce01_lnu_grid`. Accepting the loaded
+        form lets the component thread its grid as a JIT argument instead of
+        closing over concrete arrays, which bakes them into the graph
+        (``create_themis_from_grid`` takes the same two forms).
 
     Returns
     -------
@@ -1499,7 +1503,7 @@ def create_dh02_ce01_from_grid(grid_path: str) -> Callable:
     .. [3] Martínez-Ramírez, L. N. et al., 2024, A&A, 688, A46.
            (https://doi.org/10.1051/0004-6361/202449329) — AGNfitter-rX packaging.
     """
-    templates = load_dh02_ce01_lnu_grid(grid_path)
+    templates = grid_path if isinstance(grid_path, dict) else load_dh02_ce01_lnu_grid(grid_path)
 
     irlum_axis = templates["irlum_axis"]
     wavelength_grid = templates["wavelength"]

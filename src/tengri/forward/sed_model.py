@@ -7574,13 +7574,22 @@ class SEDModel:
             if not requires_template_data:
                 continue
 
-            # Skip components that use threaded templates: they should not have
-            # self.data set at build time, as that would cause concrete arrays
-            # to be closure-captured and baked into JIT traces instead of being
-            # passed as JIT arguments. The threading system publishes their data
-            # via _template_data_for_jit, making it a traced argument.
-            accepts_threaded = getattr(comp, "accepts_threaded_templates", False)
-            if accepts_threaded:
+            # Some components resolve their own templates inside ``predict``,
+            # against the traced ``wave``. Caching those here would replace
+            # traced values with concrete ones, which are then closure-captured
+            # and baked into the graph -- measured at 4.97 MB for astrodust, and
+            # at 29.94 MB on builds 2+ in the case recorded on
+            # ``_template_data_for_jit``. ``astrodust.predict`` documents the
+            # same trap from the tracer-leak side.
+            #
+            # This is deliberately its own flag rather than a reuse of
+            # ``accepts_threaded_templates``. That one already means "I publish a
+            # bundle from ``templates_for_threading()``", and
+            # ``test_every_opted_in_component_can_resolve_a_bundle`` enforces it;
+            # borrowing it here made astrodust declare a bundle it cannot
+            # produce, which is the advertise-without-delivering shape #1738 is
+            # about.
+            if getattr(comp, "resolves_templates_at_trace_time", False):
                 continue
 
             # Base precompute: load data, set up _state

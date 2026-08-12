@@ -73,6 +73,39 @@ class DH02CE01IRSEDComponent(EmissionComponent):
     #: The papers are cited in the References section above.
     _citations_tuple: ClassVar[tuple[str, ...]] = ()
 
+    accepts_threaded_templates: ClassVar[bool] = True
+
+    def load(self, wave: jnp.ndarray | None = None):
+        """Load the DH02+CE01 grid so it can be threaded rather than baked.
+
+        Parameters
+        ----------
+        wave : ndarray, optional
+            Unused. The tabulated grid is wavelength-independent; ``predict``
+            resamples onto its own ``wave``, so the bundle can be resolved once
+            at build time and threaded in.
+
+        Returns
+        -------
+        dict or None
+            Template arrays from :func:`load_dh02_ce01_lnu_grid`, or ``None``
+            when ``dh02_ce01_grid.h5`` is absent -- the component then falls
+            back to the module-level lazy loader, which bakes 1.3 MB.
+
+        Notes
+        -----
+        **JIT-compatible**: no, deliberately -- runs at build time so the arrays
+        reach :meth:`predict` as a traced argument rather than a constant.
+        """
+        del wave
+        from tengri.components.dust.emission.emission import _find_data_file
+        from tengri.components.dust.emission_templates import load_dh02_ce01_lnu_grid
+
+        path = _find_data_file("dh02_ce01_grid.h5")
+        if path is None:
+            return None
+        return load_dh02_ce01_lnu_grid(path)
+
     def predict(
         self,
         p: dict[str, jnp.ndarray],
@@ -80,6 +113,7 @@ class DH02CE01IRSEDComponent(EmissionComponent):
         wave: jnp.ndarray,
         *,
         L_ir: float,
+        templates=None,
     ) -> tuple[jnp.ndarray, dict[str, jnp.ndarray]]:
         r"""Compute DH02+CE01 dust emission.
 
@@ -112,9 +146,19 @@ class DH02CE01IRSEDComponent(EmissionComponent):
         nothing; the closure clips the result into the tabulated range anyway.
         """
         del p
-        from tengri.components.dust.emission import DUST_EMISSION_MODELS
         from tengri.utils.physics_constants import L_SUN
 
         log_lir = jnp.log10(jnp.maximum(jnp.asarray(L_ir) / L_SUN, 1e-30))
-        sed = DUST_EMISSION_MODELS["dh02_ce01"](wave, L_ir, dust_log_lir=log_lir)
+        if templates is not None:
+            # Build the interpolation over the THREADED arrays. Closing over
+            # tracers inside the current trace is fine; what bakes is a closure
+            # over concrete arrays, which is what the module-level lazy loader
+            # below produces.
+            from tengri.components.dust.emission_templates import create_dh02_ce01_from_grid
+
+            sed = create_dh02_ce01_from_grid(templates)(wave, L_ir, dust_log_lir=log_lir)
+        else:
+            from tengri.components.dust.emission import DUST_EMISSION_MODELS
+
+            sed = DUST_EMISSION_MODELS["dh02_ce01"](wave, L_ir, dust_log_lir=log_lir)
         return sed_in + sed, {"sed_dust_ir": sed}

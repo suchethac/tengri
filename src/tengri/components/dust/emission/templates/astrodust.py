@@ -146,7 +146,13 @@ class AstrodustIRSEDComponent(EmissionComponent):
 
     name = "astrodust"
     config: AstrodustIRConfig = AstrodustIRConfig()
-    accepts_threaded_templates: ClassVar[bool] = True
+
+    #: ``load`` resamples onto the ``wave`` it is given, so its arrays are
+    #: tracers under a trace and concrete constants outside one. Neither may be
+    #: cached on the instance: the first leaks a tracer, the second bakes 4.97 MB
+    #: into the graph. The build-time resolution pass therefore skips this
+    #: component and ``predict`` resolves per call (#1738).
+    resolves_templates_at_trace_time: ClassVar[bool] = True
 
     # Free parameter (user-facing name, prefix-stripped): starlight intensity.
     lgU = Uniform(
@@ -341,13 +347,8 @@ class AstrodustIRSEDComponent(EmissionComponent):
         """
         L_ir = jnp.asarray(inputs.get("L_ir", 0.0))
 
-        # Use the threaded templates if available (passed as ``templates`` kwarg),
-        # else fall back to lazy load. The threading path ensures templates flow
-        # as JIT arguments, not constants baked into the trace. Lazy load is for
-        # backward compatibility and testing.
         data = inputs.get("templates")
         if data is None:
-            # Fallback: lazy load from process cache if threading is not active
             data = self.load(wave)
         if data is None:
             return sed_in, {}
