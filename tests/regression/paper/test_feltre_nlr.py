@@ -30,6 +30,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri._data_setup import find_data
+from tests._jit_parity import assert_jit_matches_eager
 
 # parents[2] is tests/ from tests/regression/paper/, so this pointed at
 # tests/data/ — which never exists, and the tests below never ran (#1431).
@@ -358,12 +359,12 @@ def test_agn_ionspec_slope_one_no_nan() -> None:
 
 def test_agn_ionspec_jit_compatible() -> None:
     """agn_ionspec_from_alpha_pl runs under jax.jit without error."""
-    import jax
 
     from tengri.components.nebular.agn_nebular import agn_ionspec_from_alpha_pl
 
-    jitted = jax.jit(lambda a: agn_ionspec_from_alpha_pl(a)["ionspec_index1"])
-    result = jitted(jnp.array(-1.7))
+    result = assert_jit_matches_eager(
+        lambda a: agn_ionspec_from_alpha_pl(a)["ionspec_index1"], jnp.array(-1.7)
+    )
     assert jnp.isfinite(result)
 
 
@@ -440,12 +441,10 @@ def test_log_qh_safe_denominator_path() -> None:
 
 def test_log_qh_jit_compatible() -> None:
     """_log_qh_from_lacc runs under jax.jit without error."""
-    import jax
 
     from tengri.components.nebular.agn_nebular import _log_qh_from_lacc
 
-    jitted = jax.jit(_log_qh_from_lacc)
-    result = jitted(jnp.array(1e45), jnp.array(-1.7))
+    result = assert_jit_matches_eager(_log_qh_from_lacc, jnp.array(1e45), jnp.array(-1.7))
     assert jnp.isfinite(result)
 
 

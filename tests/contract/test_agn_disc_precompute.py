@@ -20,6 +20,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tests._jit_parity import assert_jit_matches_eager
+
 pytestmark = pytest.mark.contract
 
 jax.config.update("jax_enable_x64", True)
@@ -60,8 +62,7 @@ class TestPowerlawDiscAdapter:
             waves, trans, redshift=1.0, parameters=None, model="powerlaw_disc"
         )
         lookup = disc_precompute.build_lookup(result, model="powerlaw_disc")
-        jit_lookup = jax.jit(lookup)
-        out = jit_lookup(jnp.float64(1.0), jnp.float64(-1.5))
+        out = assert_jit_matches_eager(lookup, jnp.float64(1.0), jnp.float64(-1.5))
         chex.assert_tree_all_finite(np.asarray(out))
 
 
@@ -85,10 +86,11 @@ class TestSSDiscAdapter:
             waves, trans, redshift=0.5, parameters=None, model="ss_disc"
         )
         lookup = disc_precompute.build_lookup(result, model="ss_disc")
-        jit_lookup = jax.jit(lookup)
         # Axes are (agn_log_mbh, agn_log_lbol) after #902; query at M_bh=1e8,
         # log10(L_bol/L_sun)=11 (sub-Eddington).
-        out = jit_lookup(jnp.float64(1.0), jnp.float64(8.0), jnp.float64(11.0))
+        out = assert_jit_matches_eager(
+            lookup, jnp.float64(1.0), jnp.float64(8.0), jnp.float64(11.0)
+        )
         chex.assert_tree_all_finite(np.asarray(out))
 
     def test_second_axis_is_not_degenerate(self, filter_set):

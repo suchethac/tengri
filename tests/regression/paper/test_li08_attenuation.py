@@ -23,6 +23,7 @@ import numpy as np
 
 jax.config.update("jax_enable_x64", True)
 from tengri.components.dust.attenuation import DUST_LAWS, li08
+from tests._jit_parity import assert_jit_matches_eager
 
 
 def fd_grad(f, x: float, eps: float = 1e-4) -> float:
@@ -142,8 +143,7 @@ class TestJAXCompatibility:
     """JAX JIT and autodiff compatibility."""
 
     def test_jit_compatible(self):
-        f = jax.jit(li08)
-        k = f(WAVS)
+        k = assert_jit_matches_eager(li08, WAVS)
         chex.assert_shape(k, (8,))
 
     def test_gradient_wrt_c1(self):

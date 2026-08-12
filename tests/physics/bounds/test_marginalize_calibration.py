@@ -13,6 +13,7 @@ from tengri.observation.calibration import (
     calibration_polynomial,
     marginalize_calibration,
 )
+from tests._jit_parity import assert_jit_matches_eager
 
 pytestmark = pytest.mark.bounds
 
@@ -151,8 +152,13 @@ class TestMarginalizeCalibration:
     def test_jit_compatible(self, wavelength, simple_spectrum):
         """Function should be JIT-compilable."""
         obs_err = 0.01 * simple_spectrum
-        fn = jax.jit(lambda m, d, e, w: marginalize_calibration(m, d, e, w, n_poly=3))
-        log_like, c_hat, _c_hat_err = fn(simple_spectrum, simple_spectrum, obs_err, wavelength)
+        log_like, c_hat, _c_hat_err = assert_jit_matches_eager(
+            lambda m, d, e, w: marginalize_calibration(m, d, e, w, n_poly=3),
+            simple_spectrum,
+            simple_spectrum,
+            obs_err,
+            wavelength,
+        )
         assert jnp.isfinite(log_like)
         chex.assert_shape(c_hat, (3,))
 

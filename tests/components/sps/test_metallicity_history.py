@@ -24,6 +24,7 @@ from tengri.components.stellar.sfh.metallicity_history import (
     tabulated_metallicity_on_ssp_grid,
     two_step_metallicity,
 )
+from tests._jit_parity import assert_jit_matches_eager
 
 pytestmark = pytest.mark.bounds
 
@@ -77,8 +78,7 @@ class TestTwoStepMetallicity:
         assert_allclose(result, -2.0, atol=1e-6)
 
     def test_jit_compatible(self, ssp_lg_age_gyr):
-        jit_fn = jax.jit(two_step_metallicity)
-        result = jit_fn(ssp_lg_age_gyr, -3.0, -1.5, 1.0)
+        result = assert_jit_matches_eager(two_step_metallicity, ssp_lg_age_gyr, -3.0, -1.5, 1.0)
         chex.assert_tree_all_finite(result)
 
     def test_gradient_wrt_metallicities(self, ssp_lg_age_gyr):
@@ -131,8 +131,9 @@ class TestPSBTwoStepMetallicity:
         assert_allclose(psb, ts)
 
     def test_jit_compatible(self, ssp_lg_age_gyr):
-        jit_fn = jax.jit(psb_two_step_metallicity)
-        result = jit_fn(ssp_lg_age_gyr, -3.0, -1.5, 0.5)
+        result = assert_jit_matches_eager(
+            psb_two_step_metallicity, ssp_lg_age_gyr, -3.0, -1.5, 0.5
+        )
         chex.assert_tree_all_finite(result)
 
 
@@ -176,8 +177,9 @@ class TestMetallicityBins:
     def test_jit_compatible(self, ssp_lg_age_gyr, bin_edges_log_yr):
         n_bins = len(bin_edges_log_yr) - 1
         mets = jnp.linspace(-3.0, -1.0, n_bins)
-        jit_fn = jax.jit(metallicity_bins_on_ssp_grid)
-        result = jit_fn(ssp_lg_age_gyr, bin_edges_log_yr, mets)
+        result = assert_jit_matches_eager(
+            metallicity_bins_on_ssp_grid, ssp_lg_age_gyr, bin_edges_log_yr, mets
+        )
         chex.assert_tree_all_finite(result)
 
     def test_gradient_wrt_metallicities(self, ssp_lg_age_gyr, bin_edges_log_yr):
@@ -235,8 +237,13 @@ class TestMetallicityBinsContinuity:
     def test_jit_compatible(self, ssp_lg_age_gyr, bin_edges_log_yr):
         n_bins = len(bin_edges_log_yr) - 1
         d_log_z = jnp.zeros(n_bins - 1)
-        jit_fn = jax.jit(metallicity_bins_continuity_on_ssp_grid)
-        result = jit_fn(ssp_lg_age_gyr, bin_edges_log_yr, -2.0, d_log_z)
+        result = assert_jit_matches_eager(
+            metallicity_bins_continuity_on_ssp_grid,
+            ssp_lg_age_gyr,
+            bin_edges_log_yr,
+            -2.0,
+            d_log_z,
+        )
         chex.assert_tree_all_finite(result)
 
     def test_gradient_wrt_base_and_deltas(self, ssp_lg_age_gyr, bin_edges_log_yr):
@@ -282,8 +289,9 @@ class TestTabulatedMetallicity:
     def test_jit_compatible(self, ssp_lg_age_gyr):
         met_log_age_yr = jnp.linspace(6.0, 10.14, 20)
         met_log_z_abs = jnp.linspace(-3.0, -1.5, 20)
-        jit_fn = jax.jit(tabulated_metallicity_on_ssp_grid)
-        result = jit_fn(ssp_lg_age_gyr, met_log_age_yr, met_log_z_abs)
+        result = assert_jit_matches_eager(
+            tabulated_metallicity_on_ssp_grid, ssp_lg_age_gyr, met_log_age_yr, met_log_z_abs
+        )
         chex.assert_tree_all_finite(result)
 
     def test_gradient_flows(self, ssp_lg_age_gyr):

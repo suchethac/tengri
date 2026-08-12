@@ -15,6 +15,7 @@ from tengri.components.stellar.sfh.psd_models import (
     psd_matern,
     psd_to_sqrt_power,
 )
+from tests._jit_parity import assert_jit_matches_eager
 
 jax.config.update("jax_enable_x64", True)
 
@@ -83,9 +84,8 @@ class TestPSDDRW:
 
     def test_psd_drw_is_jittable(self):
         """PSD function can be JIT-compiled."""
-        fn = jax.jit(psd_drw)
         omega = jnp.linspace(0, 10, 50)
-        p = fn(omega, 1.0, 1e8)
+        p = assert_jit_matches_eager(psd_drw, omega, 1.0, 1e8)
         chex.assert_shape(p, (50,))
 
     def test_psd_drw_has_gradients(self):

@@ -27,8 +27,6 @@ from tengri.components.stellar.sfh.nonparametric import (
     _stick_breaking,
     bursty_continuity_prior_logp,
     continuity,
-    continuity_flex,
-    continuity_flex_prior_logp,
     continuity_prior_logp,
     dirichlet,
     make_agebins_from_zred,
@@ -347,54 +345,12 @@ class TestBurstyContinuityPrior:
         assert jnp.isfinite(logp_small_split) and jnp.isfinite(logp_large_split)
 
 
-# ── ContinuityFlex SFH (Leja+2019) ───────────────────────────────
-
-
-class TestContinuityFlexSFH:
-    """Tests for continuity_flex and continuity_flex_prior_logp."""
-
-    def _age_grid(self):
-        return jnp.logspace(6.0, 10.14, 256)
-
-    def test_shape(self):
-        t = self._age_grid()
-        sfr = continuity_flex(
-            t,
-            log_total_mass=10.0,
-            ratio_young=0.0,
-            flex_0=0.0,
-            flex_1=0.0,
-            flex_2=0.0,
-            ratio_old=0.0,
-        )
-        chex.assert_shape(sfr, (256,))
-
-    def test_non_negative(self):
-        t = self._age_grid()
-        sfr = continuity_flex(
-            t,
-            log_total_mass=10.0,
-            ratio_young=2.0,
-            flex_0=-1.0,
-            flex_1=1.5,
-            ratio_old=-2.0,
-        )
-        assert jnp.all(sfr >= 0.0)
-
-    def test_jit_compatible(self):
-        t = self._age_grid()
-
-        def _fn(ry, f0, f1, ro):
-            return continuity_flex(t, 10.0, ratio_young=ry, flex_0=f0, flex_1=f1, ratio_old=ro)
-
-        sfr = jax.jit(_fn)(0.3, 0.1, -0.2, -0.4)
-        chex.assert_tree_all_finite(sfr)
-
-    def test_prior_logp_zero_ratios(self):
-        """All-zero ratios should give maximum log-probability."""
-        logp_zero = continuity_flex_prior_logp(0.0, jnp.array([0.0, 0.0]), 0.0)
-        logp_nonzero = continuity_flex_prior_logp(1.0, jnp.array([1.0, 1.0]), 1.0)
-        assert float(logp_zero) > float(logp_nonzero)
+# ``TestContinuityFlexSFH`` used to live here as well. It duplicated the class
+# in tests/components/sfh/test_continuity_flex.py — same bodies, same literals —
+# while omitting four of its tests (mass conservation, flat SFH from zero
+# ratios, n_flex_ratios=0, custom anchor edges). continuity_flex is not a
+# dense-basis model, so the canonical file is the only home; the one test that
+# existed only here (test_prior_logp_zero_ratios) moved there with it.
 
 
 # ── Singletons ────────────────────────────────────────────────────

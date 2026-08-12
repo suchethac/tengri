@@ -19,6 +19,8 @@ import jax
 import jax.numpy as jnp
 import pytest
 
+from tests._jit_parity import assert_jit_matches_eager
+
 # ────────────────────────────────────────────────────────────────────────────
 
 
@@ -342,9 +344,9 @@ def test_fritz_jit_compiles(fritz_grid_path: Path, wavelength_aa: jnp.ndarray) -
     from tengri.components.agn.fritz import create_fritz_from_grid
 
     fritz_fn = create_fritz_from_grid(str(fritz_grid_path))
-    fritz_jit = jax.jit(fritz_fn)
 
-    L_nu = fritz_jit(
+    L_nu = assert_jit_matches_eager(
+        fritz_fn,
         wavelength_aa,
         agn_log_lbol=44.0,
         agn_torus_frac=0.5,

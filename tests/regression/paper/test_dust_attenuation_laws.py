@@ -38,6 +38,7 @@ from tengri.components.dust.attenuation import (
     reddy15,
     salim_sbl18,
 )
+from tests._jit_parity import assert_jit_matches_eager
 
 # Full-range wavelengths (Angstrom)
 WAVS = np.array([1000.0, 1200.0, 1500.0, 2175.0, 3000.0, 5500.0, 10000.0, 20000.0])
@@ -83,9 +84,8 @@ class TestLeitherer02:
 
     def test_jit_compatible(self):
         """Should work inside jax.jit."""
-        f = jax.jit(leitherer02)
         wavs = jnp.array([1500.0, 5500.0])
-        result = f(wavs)
+        result = assert_jit_matches_eager(leitherer02, wavs)
         chex.assert_shape(result, (2,))
 
     def test_gradient(self):
@@ -169,8 +169,9 @@ class TestNoll09:
 
     def test_jit_compatible(self):
         """Should work inside jax.jit."""
-        f = jax.jit(lambda w: noll09(w, dust_bump_strength=2.0, dust_delta=-0.1))
-        result = f(jnp.array(WAVS))
+        result = assert_jit_matches_eager(
+            lambda w: noll09(w, dust_bump_strength=2.0, dust_delta=-0.1), jnp.array(WAVS)
+        )
         chex.assert_equal_shape([result, WAVS])
 
     def test_gradient_wrt_params(self):
@@ -258,8 +259,9 @@ class TestSalimSBL18:
 
     def test_jit_compatible(self):
         """Should work inside jax.jit."""
-        f = jax.jit(lambda w: salim_sbl18(w, dust_bump_strength=2.0, dust_delta=-0.1))
-        result = f(jnp.array(WAVS))
+        result = assert_jit_matches_eager(
+            lambda w: salim_sbl18(w, dust_bump_strength=2.0, dust_delta=-0.1), jnp.array(WAVS)
+        )
         chex.assert_equal_shape([result, WAVS])
 
     def test_gradient_wrt_params(self):
@@ -419,9 +421,8 @@ class TestReddy15:
 
     def test_jit_compatible(self):
         """Should work inside jax.jit."""
-        f = jax.jit(reddy15)
         wavs = jnp.array([1500.0, 5500.0, 20000.0])
-        result = f(wavs)
+        result = assert_jit_matches_eager(reddy15, wavs)
         chex.assert_shape(result, (3,))
 
     def test_gradient(self):

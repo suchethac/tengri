@@ -14,6 +14,7 @@ from tengri.components.radio import (
     radio_star_forming,
     radio_total_dpl,
 )
+from tests._jit_parity import assert_jit_matches_eager
 
 # Enable 64-bit precision
 jax.config.update("jax_enable_x64", True)
@@ -201,8 +202,7 @@ class TestJAXCompatibility:
     def test_jit_compatible(self):
         """radio_agn_dpl should work under jax.jit."""
         wave = _WAVE_RADIO
-        jitted = jax.jit(radio_agn_dpl)
-        L = jitted(wave, _L_AGN_BOL, radio_loudness=1.0)
+        L = assert_jit_matches_eager(radio_agn_dpl, wave, _L_AGN_BOL, radio_loudness=1.0)
         chex.assert_equal_shape([L, wave])
         chex.assert_tree_all_finite(L)
 

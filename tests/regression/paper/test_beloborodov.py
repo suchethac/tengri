@@ -32,6 +32,7 @@ from tengri.components.agn.disc import (
     compute_l2500,
     kubota_done_disc,
 )
+from tests._jit_parity import assert_jit_matches_eager
 
 # ── beloborodov_gamma_hot ─────────────────────────────────────────
 
@@ -67,8 +68,7 @@ class TestBeloborodovGammaHot:
 
     def test_jit(self):
         """beloborodov_gamma_hot works under jax.jit."""
-        fn = jax.jit(beloborodov_gamma_hot)
-        gamma = fn(1.0, 1.0)
+        gamma = assert_jit_matches_eager(beloborodov_gamma_hot, 1.0, 1.0)
         expected = 7.0 / 3.0
         assert jnp.isclose(gamma, expected, atol=1e-6)
 

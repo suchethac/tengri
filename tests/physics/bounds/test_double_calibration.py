@@ -14,6 +14,7 @@ from tengri.observation.calibration import (
     calibration_polynomial,
     double_calibration_polynomial,
 )
+from tests._jit_parity import assert_jit_matches_eager
 
 pytestmark = pytest.mark.unit
 
@@ -90,8 +91,8 @@ class TestDoubleCalibrationPolynomial:
         chex.assert_tree_all_finite(cal)
 
     def test_jit_compatible(self, wavelength, wave_split):
-        fn = jax.jit(double_calibration_polynomial)
-        cal = fn(
+        cal = assert_jit_matches_eager(
+            double_calibration_polynomial,
             wavelength,
             jnp.array([0.1, -0.05]),
             jnp.array([0.05, 0.02]),

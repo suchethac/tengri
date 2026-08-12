@@ -24,6 +24,7 @@ from tengri.components.nebular._constants import (
     _LOG10_ZSUN,
     _LOG_OH_OFFSET,
 )
+from tests._jit_parity import assert_jit_matches_eager
 
 
 def fd_grad(f, x: float, eps: float = 1e-4) -> float:
@@ -303,8 +304,9 @@ class TestComputeAnalyticNebularContinuum:
         """compute_analytic_nebular_continuum is JIT-compilable."""
         from tengri.components.nebular._shared import compute_analytic_nebular_continuum
 
-        jitted = jax.jit(compute_analytic_nebular_continuum)
-        cont = jitted(wave_optical, 1e49, -1.848)
+        cont = assert_jit_matches_eager(
+            compute_analytic_nebular_continuum, wave_optical, 1e49, -1.848
+        )
         chex.assert_tree_all_finite(cont)
 
 

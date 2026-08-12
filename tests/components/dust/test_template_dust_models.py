@@ -26,6 +26,7 @@ from tengri.components.dust.emission import (
     create_bosa_from_grid,
     create_themis_from_grid,
 )
+from tests._jit_parity import assert_jit_matches_eager
 
 jax.config.update("jax_enable_x64", True)
 
@@ -210,8 +211,7 @@ class TestAstrodust:
     def test_jit_compatible(self, astrodust_grid, wavelength):
         """Astrodust model is JIT-compatible."""
         fn = create_astrodust_from_grid(astrodust_grid)
-        jit_fn = jax.jit(lambda w, l: fn(w, l, dust_umin=1.0))
-        result = jit_fn(wavelength, 1e10)
+        result = assert_jit_matches_eager(lambda w, l: fn(w, l, dust_umin=1.0), wavelength, 1e10)
         chex.assert_equal_shape([result, wavelength])
         chex.assert_tree_all_finite(result)
 
@@ -291,8 +291,9 @@ class TestBOSA:
     def test_jit_compatible(self, bosa_grid, wavelength):
         """BOSA model is JIT-compatible."""
         fn = create_bosa_from_grid(bosa_grid)
-        jit_fn = jax.jit(lambda w, l: fn(w, l, dust_log_ssfr=-10.0))
-        result = jit_fn(wavelength, 1e10)
+        result = assert_jit_matches_eager(
+            lambda w, l: fn(w, l, dust_log_ssfr=-10.0), wavelength, 1e10
+        )
         chex.assert_equal_shape([result, wavelength])
         chex.assert_tree_all_finite(result)
 
@@ -363,8 +364,9 @@ class TestTHEMIS:
     def test_jit_compatible(self, themis_grid, wavelength):
         """THEMIS model is JIT-compatible."""
         fn = create_themis_from_grid(themis_grid)
-        jit_fn = jax.jit(lambda w, l: fn(w, l, dust_umin=1.0, dust_qhac=0.17))
-        result = jit_fn(wavelength, 1e10)
+        result = assert_jit_matches_eager(
+            lambda w, l: fn(w, l, dust_umin=1.0, dust_qhac=0.17), wavelength, 1e10
+        )
         chex.assert_equal_shape([result, wavelength])
         chex.assert_tree_all_finite(result)
 

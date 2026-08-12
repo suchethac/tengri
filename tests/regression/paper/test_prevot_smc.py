@@ -27,6 +27,7 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
 
 
 from tengri.components.dust.attenuation import DUST_LAWS, prevot_smc
+from tests._jit_parity import assert_jit_matches_eager
 
 
 class TestRegistry:
@@ -104,9 +105,8 @@ class TestPrevotSMCFunction:
 
     def test_jit_compatible(self):
         """prevot_smc should work inside jax.jit."""
-        f = jax.jit(prevot_smc)
         wavs = jnp.array([1000.0, 5500.0, 10000.0])
-        result = f(wavs)
+        result = assert_jit_matches_eager(prevot_smc, wavs)
         chex.assert_shape(result, (3,))
         chex.assert_tree_all_finite(result)
 

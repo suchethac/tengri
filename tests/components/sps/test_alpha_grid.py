@@ -27,6 +27,7 @@ from tengri.components.stellar.sps.dsps_wrapper import (
     interpolate_met_alpha,
     interpolate_met_alpha_evolving,
 )
+from tests._jit_parity import assert_jit_matches_eager
 
 jax.config.update("jax_enable_x64", True)
 
@@ -400,8 +401,8 @@ class TestInterpolateMetAlphaEvolving:
         g = alpha_ssp_grid
         n_age = len(g["ssp_lg_age_gyr"])
 
-        jit_fn = jax.jit(interpolate_met_alpha_evolving)
-        result = jit_fn(
+        result = assert_jit_matches_eager(
+            interpolate_met_alpha_evolving,
             g["ssp_flux"],
             g["ssp_lgmet"],
             g["ssp_alpha_fe"],

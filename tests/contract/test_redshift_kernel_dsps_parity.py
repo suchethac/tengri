@@ -26,6 +26,7 @@ from dsps.photometry.photometry_kernels import (
 
 from tengri.cosmology import PLANCK18
 from tengri.observation.redshift_kernel import shift_to_obs_frame
+from tests._jit_parity import assert_jit_matches_eager
 
 pytestmark = pytest.mark.contract
 
@@ -79,8 +80,9 @@ def test_kernel_is_jittable_and_grad_safe(fiducial_sed):
     wave_rest, L_nu = fiducial_sed
     wave_obs = jnp.linspace(2000.0, 30000.0, 200)
 
-    jitted = jax.jit(lambda z: shift_to_obs_frame(wave_rest, L_nu, wave_obs, z, PLANCK18))
-    out = jitted(jnp.asarray(0.5))
+    out = assert_jit_matches_eager(
+        lambda z: shift_to_obs_frame(wave_rest, L_nu, wave_obs, z, PLANCK18), jnp.asarray(0.5)
+    )
     assert out.shape == wave_obs.shape
     assert jnp.all(jnp.isfinite(out))
 

@@ -9,6 +9,7 @@ import jax
 import jax.numpy as jnp
 
 from tengri.components.agn.nlr import compute_nlr_sed_richardson2014
+from tests._jit_parity import assert_jit_matches_eager
 
 jax.config.update("jax_enable_x64", True)
 
@@ -51,8 +52,7 @@ class TestRichardsonNLR:
     def test_jit_compatible(self):
         """Function is JIT-compilable."""
         wave = jnp.linspace(3000, 10000, 200)
-        fn = jax.jit(compute_nlr_sed_richardson2014)
-        sed = fn(wave, l_disc_bol_erg=1e44)
+        sed = assert_jit_matches_eager(compute_nlr_sed_richardson2014, wave, l_disc_bol_erg=1e44)
         chex.assert_tree_all_finite(sed)
 
     def test_scales_with_luminosity(self):

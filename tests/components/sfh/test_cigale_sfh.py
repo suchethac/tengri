@@ -31,6 +31,7 @@ from tengri.components.stellar.sfh.mean_sfh import (
     periodic,
     sfh2exp,
 )
+from tests._jit_parity import assert_jit_matches_eager
 
 
 def fd_grad(f, x: float, eps: float = 1e-5) -> float:
@@ -414,9 +415,8 @@ class TestBuat08:
 
     def test_is_jittable(self):
         """buat08 is JIT-compatible."""
-        fn = jax.jit(buat08)
         t = jnp.logspace(7, 10, 100)
-        sfr = fn(t, 10.0, 220.0)
+        sfr = assert_jit_matches_eager(buat08, t, 10.0, 220.0)
         chex.assert_shape(sfr, (100,))
 
     def test_has_gradients(self):

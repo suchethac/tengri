@@ -18,6 +18,7 @@ import pytest
 from numpy.testing import assert_allclose
 
 from tengri.observation.spectrum import velocity_broaden
+from tests._jit_parity import assert_jit_matches_eager
 
 pytestmark = pytest.mark.bounds
 jax.config.update("jax_enable_x64", True)
@@ -140,6 +141,7 @@ class TestVelocityBroadenGradients:
 
     def test_jit_compatible(self, wave, sharp_spectrum):
         """Works inside jax.jit."""
-        fn = jax.jit(lambda f, s: velocity_broaden(f, wave, s))
-        result = fn(sharp_spectrum, 150.0)
+        result = assert_jit_matches_eager(
+            lambda f, s: velocity_broaden(f, wave, s), sharp_spectrum, 150.0
+        )
         chex.assert_tree_all_finite(result)

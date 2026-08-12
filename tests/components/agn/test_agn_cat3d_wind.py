@@ -16,6 +16,7 @@ import jax.numpy as jnp
 import pytest
 
 from tengri._data_setup import find_data
+from tests._jit_parity import assert_jit_matches_eager
 
 pytestmark = []
 
@@ -109,10 +110,12 @@ def test_each_axis_actually_interpolated(torus_fn, wavelength) -> None:
 
 
 def test_jit_compatible(torus_fn, wavelength) -> None:
-    jitted = jax.jit(
-        lambda ci, a, fwd: torus_fn(wavelength, agn_cos_inc=ci, agn_a_cat3d=a, agn_fwd_cat3d=fwd)
+    sed = assert_jit_matches_eager(
+        lambda ci, a, fwd: torus_fn(wavelength, agn_cos_inc=ci, agn_a_cat3d=a, agn_fwd_cat3d=fwd),
+        0.4,
+        -1.5,
+        0.3,
     )
-    sed = jitted(0.4, -1.5, 0.3)
     chex.assert_tree_all_finite(sed)
 
 

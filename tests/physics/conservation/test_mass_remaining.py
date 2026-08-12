@@ -12,6 +12,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tests._jit_parity import assert_jit_matches_eager
+
 pytestmark = pytest.mark.conservation
 
 jax.config.update("jax_enable_x64", True)
@@ -410,9 +412,8 @@ class TestComputeMassRemainingFraction:
         """Function is JIT-compilable."""
         from tengri.components.stellar.sps.mass_remaining import compute_mass_remaining_fraction
 
-        jitted = jax.jit(compute_mass_remaining_fraction)
         ages = jnp.array([1.0, 5.0, 10.0])
-        result = jitted(ages)
+        result = assert_jit_matches_eager(compute_mass_remaining_fraction, ages)
         chex.assert_tree_all_finite(result)
         chex.assert_equal_shape([result, ages])
 

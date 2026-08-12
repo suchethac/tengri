@@ -25,6 +25,7 @@ from tengri.components.dust.attenuation import (
     vw07_bc,
     vw07_diff,
 )
+from tests._jit_parity import assert_jit_matches_eager
 
 jax.config.update("jax_enable_x64", True)
 
@@ -120,13 +121,11 @@ class TestTwoComponentIntegration:
 
 class TestJITAndGradients:
     def test_jit_vw07_bc(self, wavelengths):
-        jit_fn = jax.jit(vw07_bc)
-        k = jit_fn(wavelengths)
+        k = assert_jit_matches_eager(vw07_bc, wavelengths)
         chex.assert_tree_all_finite(k)
 
     def test_jit_vw07_diff(self, wavelengths):
-        jit_fn = jax.jit(vw07_diff)
-        k = jit_fn(wavelengths)
+        k = assert_jit_matches_eager(vw07_diff, wavelengths)
         chex.assert_tree_all_finite(k)
 
     def test_extra_kwargs_ignored(self, wavelengths):

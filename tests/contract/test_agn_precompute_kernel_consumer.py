@@ -24,6 +24,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tests._jit_parity import assert_jit_matches_eager
+
 pytestmark = pytest.mark.contract
 
 jax.config.update("jax_enable_x64", True)
@@ -60,9 +62,8 @@ class TestPowerlawDiscPrecomputeConsumer:
         lookup = adapter.build_lookup(result, model="powerlaw_disc")
 
         # Test JIT compilation
-        jitted_lookup = jax.jit(lookup)
         # powerlaw_disc has 1 axis: agn_alpha_pl (power-law index)
-        phot = jitted_lookup(jnp.float64(10.5), jnp.float64(-1.0))
+        phot = assert_jit_matches_eager(lookup, jnp.float64(10.5), jnp.float64(-1.0))
 
         assert phot.shape == (len(waves),), f"Expected shape ({len(waves)},), got {phot.shape}"
         chex.assert_tree_all_finite(np.asarray(phot))
@@ -80,9 +81,10 @@ class TestSSDiscPrecomputeConsumer:
         result = adapter.precompute(waves, trans, redshift=0.1, parameters=None, model="ss_disc")
         lookup = adapter.build_lookup(result, model="ss_disc")
 
-        jitted_lookup = jax.jit(lookup)
         # ss_disc has 2 axes: agn_log_mbh, agn_log_lbol (#902)
-        phot = jitted_lookup(jnp.float64(10.5), jnp.float64(8.0), jnp.float64(11.0))
+        phot = assert_jit_matches_eager(
+            lookup, jnp.float64(10.5), jnp.float64(8.0), jnp.float64(11.0)
+        )
 
         assert phot.shape == (len(waves),), f"Expected shape ({len(waves)},), got {phot.shape}"
         chex.assert_tree_all_finite(np.asarray(phot))
@@ -101,9 +103,8 @@ class TestCigaleDiscPrecomputeConsumer:
         )
         lookup = adapter.build_lookup(result, model="cigale_disc")
 
-        jitted_lookup = jax.jit(lookup)
         # cigale_disc has no axes (pure scaling)
-        phot = jitted_lookup(jnp.float64(10.5))
+        phot = assert_jit_matches_eager(lookup, jnp.float64(10.5))
 
         # Note: cigale_disc may return 1D or 2D depending on precompute path
         assert phot.shape[-1] == len(waves), f"Expected last dim {len(waves)}, got {phot.shape}"
@@ -121,9 +122,10 @@ class TestQSOgenPrecomputeConsumer:
         result = adapter.precompute(waves, trans, redshift=0.1, parameters=None)
         lookup = adapter.build_lookup(result)
 
-        jitted_lookup = jax.jit(lookup)
         # Signature: (agn_log_lbol, *free_axes) for qsogen with 2 free axes
-        phot = jitted_lookup(jnp.float64(10.5), jnp.float64(-0.35), jnp.float64(0.1))
+        phot = assert_jit_matches_eager(
+            lookup, jnp.float64(10.5), jnp.float64(-0.35), jnp.float64(0.1)
+        )
 
         assert phot.shape == (len(waves),), f"Expected shape ({len(waves)},), got {phot.shape}"
         chex.assert_tree_all_finite(np.asarray(phot))
@@ -147,9 +149,10 @@ class TestSilva04PrecomputeConsumer:
         )
         lookup = adapter.build_lookup(result)
 
-        jitted_lookup = jax.jit(lookup)
         # Signature: (agn_log_lbol, *free_axes, agn_torus_frac=...)
-        phot = jitted_lookup(jnp.float64(10.5), jnp.float64(21.5), agn_torus_frac=jnp.float64(0.5))
+        phot = assert_jit_matches_eager(
+            lookup, jnp.float64(10.5), jnp.float64(21.5), agn_torus_frac=jnp.float64(0.5)
+        )
 
         assert phot.shape == (len(waves),), f"Expected shape ({len(waves)},), got {phot.shape}"
         chex.assert_tree_all_finite(np.asarray(phot))
@@ -173,10 +176,10 @@ class TestCat3dPrecomputeConsumer:
         )
         lookup = adapter.build_lookup(result)
 
-        jitted_lookup = jax.jit(lookup)
         # Signature: (agn_log_lbol, *free_axes, agn_torus_frac=...)
         # cat3d has 3 axes: cos_inc, a, fwd
-        phot = jitted_lookup(
+        phot = assert_jit_matches_eager(
+            lookup,
             jnp.float64(10.5),
             jnp.float64(0.5),  # cat3d_cos_inc
             jnp.float64(0.5),  # cat3d_a

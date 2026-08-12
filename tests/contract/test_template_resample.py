@@ -22,6 +22,7 @@ import numpy as np
 import pytest
 
 from tengri.utils.grid_interp import resample_template
+from tests._jit_parity import assert_jit_matches_eager
 
 jax.config.update("jax_enable_x64", True)
 
@@ -168,8 +169,9 @@ def test_jit_and_vmap_safe():
     wave_out = jnp.asarray(np.logspace(3.1, 5.9, 64))
     batch = jnp.asarray(np.logspace(0.0, -3.0, 20) * np.arange(1, 6)[:, None])
 
-    fn = jax.jit(jax.vmap(lambda f: resample_template(wave_out, wave_in, f)))
-    out = fn(batch)
+    out = assert_jit_matches_eager(
+        jax.vmap(lambda f: resample_template(wave_out, wave_in, f)), batch
+    )
     assert out.shape == (5, 64)
     assert np.all(np.isfinite(np.asarray(out)))
 

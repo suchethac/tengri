@@ -13,6 +13,7 @@ from tengri.components.stellar.sfh.gp_sfh import (
     gp_from_xi,
 )
 from tengri.components.stellar.sfh.psd_models import psd_to_sqrt_power
+from tests._jit_parity import assert_jit_matches_eager
 
 jax.config.update("jax_enable_x64", True)
 
@@ -48,9 +49,8 @@ class TestGPFromXi:
 
     def test_is_jittable(self, sqrt_power):
         """gp_from_xi can be JIT-compiled."""
-        fn = jax.jit(lambda xi: gp_from_xi(xi, sqrt_power, N_GRID))
         xi = jax.random.normal(jax.random.PRNGKey(0), shape=(N_GRID,))
-        x = fn(xi)
+        x = assert_jit_matches_eager(lambda xi: gp_from_xi(xi, sqrt_power, N_GRID), xi)
         chex.assert_shape(x, (N_GRID,))
 
     def test_has_gradients(self, sqrt_power):

@@ -9,6 +9,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tests._jit_parity import assert_jit_matches_eager
+
 jax.config.update("jax_enable_x64", True)
 
 
@@ -117,8 +119,9 @@ class TestSingleComponentDust:
     def test_jit_compilable(self, wavelengths):
         from tengri.components.dust.attenuation import single_component_dust
 
-        jitted = jax.jit(lambda w, t: single_component_dust(w, tau_v=t))
-        trans = jitted(wavelengths, 1.0)
+        trans = assert_jit_matches_eager(
+            lambda w, t: single_component_dust(w, tau_v=t), wavelengths, 1.0
+        )
         chex.assert_tree_all_finite(trans)
 
     def test_differentiable(self, wavelengths):
@@ -182,8 +185,9 @@ class TestSingleComponentDustFast:
     def test_jit_compilable(self, wavelengths, n_ages):
         from tengri.components.dust.attenuation import single_component_dust_fast
 
-        jitted = jax.jit(lambda w, t: single_component_dust_fast(w, n_ages=n_ages, tau_v=t))
-        trans = jitted(wavelengths, 1.0)
+        trans = assert_jit_matches_eager(
+            lambda w, t: single_component_dust_fast(w, n_ages=n_ages, tau_v=t), wavelengths, 1.0
+        )
         chex.assert_tree_all_finite(trans)
 
     def test_differentiable(self, wavelengths, n_ages):

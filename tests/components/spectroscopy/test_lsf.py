@@ -22,6 +22,7 @@ from tengri.observation.spectrum import (
     nirspec_g140m_resolution,
     nirspec_prism_resolution,
 )
+from tests._jit_parity import assert_jit_matches_eager
 
 pytestmark = pytest.mark.bounds
 
@@ -261,13 +262,15 @@ class TestLSFGradients:
 
     def test_jit_constant_r(self, wave, delta_spectrum):
         """JIT compilation works for constant R (structural compatibility)."""
-        fn = jax.jit(lambda s: apply_lsf(s, wave, resolution=100.0))
-        result = fn(delta_spectrum)
+        result = assert_jit_matches_eager(
+            lambda s: apply_lsf(s, wave, resolution=100.0), delta_spectrum
+        )
         assert jnp.all(jnp.isfinite(result))
 
     def test_jit_variable_r(self, wave, delta_spectrum):
         """JIT compilation works for variable R (structural compatibility)."""
         R_var = 30.0 + 55.0 * (wave / 1e4 - 0.6)
-        fn = jax.jit(lambda s: apply_lsf(s, wave, resolution=R_var))
-        result = fn(delta_spectrum)
+        result = assert_jit_matches_eager(
+            lambda s: apply_lsf(s, wave, resolution=R_var), delta_spectrum
+        )
         assert jnp.all(jnp.isfinite(result))

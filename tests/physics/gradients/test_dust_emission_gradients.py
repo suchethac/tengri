@@ -17,6 +17,7 @@ from tengri.components.dust.emission import (
     modified_blackbody,
     planck_bnu,
 )
+from tests._jit_parity import assert_jit_matches_eager
 
 jax.config.update("jax_enable_x64", True)
 
@@ -53,8 +54,7 @@ class TestJITCompatibility:
     def test_jit(self, wavelengths, L_absorbed):
         from tengri.components.dust.emission import energy_balance_split
 
-        jitted = jax.jit(energy_balance_split)
-        sed = jitted(wavelengths, L_absorbed)
+        sed = assert_jit_matches_eager(energy_balance_split, wavelengths, L_absorbed)
         chex.assert_equal_shape([sed, wavelengths])
         chex.assert_tree_all_finite(sed)
 
@@ -168,8 +168,7 @@ class TestPlanckBnuGradient:
 
         from tengri.components.dust.emission import planck_bnu
 
-        jitted = jax.jit(planck_bnu)
-        bnu = jitted(wave_ir, 30.0)
+        bnu = assert_jit_matches_eager(planck_bnu, wave_ir, 30.0)
         chex.assert_tree_all_finite(bnu)
 
     def test_gradient_wrt_temperature(self, wave_ir):
@@ -196,8 +195,7 @@ class TestModifiedBlackbodyGradient:
 
         from tengri.components.dust.emission import modified_blackbody
 
-        jitted = jax.jit(modified_blackbody)
-        sed = jitted(wave_fir, 1e10)
+        sed = assert_jit_matches_eager(modified_blackbody, wave_fir, 1e10)
         chex.assert_tree_all_finite(sed)
 
     def test_gradient_wrt_L_absorbed(self, wave_fir):
@@ -232,8 +230,7 @@ class TestCasey2012Gradient:
 
         from tengri.components.dust.emission import casey2012
 
-        jitted = jax.jit(casey2012)
-        sed = jitted(wave_ir, 1e10)
+        sed = assert_jit_matches_eager(casey2012, wave_ir, 1e10)
         chex.assert_tree_all_finite(sed)
 
     def test_gradient_wrt_L_absorbed(self, wave_ir):

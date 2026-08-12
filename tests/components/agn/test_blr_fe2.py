@@ -16,6 +16,7 @@ from tengri.components.agn.blr import (
     _fe2_pseudo_continuum,
     compute_blr_sed,
 )
+from tests._jit_parity import assert_jit_matches_eager
 
 
 def fd_grad(f, x: float, eps: float = 1e-4) -> float:
@@ -80,8 +81,9 @@ class TestFe2PseudoContinuum:
 
     def test_jit_compatible(self, wavelength):
         """Function should be JIT-compilable."""
-        fn = jax.jit(lambda w: _fe2_pseudo_continuum(w, fwhm_kms=3000.0, fe2_strength=1.0))
-        result = fn(wavelength)
+        result = assert_jit_matches_eager(
+            lambda w: _fe2_pseudo_continuum(w, fwhm_kms=3000.0, fe2_strength=1.0), wavelength
+        )
         chex.assert_equal_shape([result, wavelength])
         chex.assert_tree_all_finite(result)
 
@@ -132,7 +134,8 @@ class TestBlrEmissionWithFe2:
 
     def test_jit_with_fe2(self, wavelength):
         """compute_blr_sed with Fe II should be JIT-compilable."""
-        fn = jax.jit(lambda w: compute_blr_sed(w, l_disc_bol_erg=1e45, agn_fe2_strength=1.0))
-        result = fn(wavelength)
+        result = assert_jit_matches_eager(
+            lambda w: compute_blr_sed(w, l_disc_bol_erg=1e45, agn_fe2_strength=1.0), wavelength
+        )
         chex.assert_tree_all_finite(result)
         chex.assert_equal_shape([result, wavelength])

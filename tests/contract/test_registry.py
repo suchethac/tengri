@@ -23,6 +23,7 @@ from tengri.components.stellar.sfh.registry import (
 # Age of the universe today [yr], from the default cosmology — never a
 # literal. SFH formation anchor (age_gyr) for dpl/lnorm shape tests.
 from tengri.cosmology import age_at_z0 as _age_at_z0
+from tests._jit_parity import assert_jit_matches_eager
 
 _AGE_UNIV_YR = float(_age_at_z0()) * 1e9
 
@@ -260,7 +261,7 @@ class TestComposedFunction:
         """Composed function is JIT-compatible."""
         fn, _, _, _ = resolve_sfh(["tsnorm", "burst", "field"])
         t = jnp.logspace(6, 10, 200)
-        jit_fn = jax.jit(
+        sfr = assert_jit_matches_eager(
             lambda t_: fn(
                 t_,
                 log_total_mass=1.0,
@@ -273,9 +274,9 @@ class TestComposedFunction:
                 log_tmax_myr=1.0,
                 gp_x=jnp.zeros(200),
                 k0_half=0.0,
-            )
+            ),
+            t,
         )
-        sfr = jit_fn(t)
         chex.assert_tree_all_finite(sfr)
 
 

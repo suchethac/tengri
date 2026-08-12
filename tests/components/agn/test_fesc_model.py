@@ -11,6 +11,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tests._jit_parity import assert_jit_matches_eager
+
 jax.config.update("jax_enable_x64", True)
 
 
@@ -83,8 +85,7 @@ class TestFescChisholm:
         """Function can be JIT-compiled."""
         from tengri.components.nebular.fesc_model import fesc_chisholm2022
 
-        jit_fesc = jax.jit(fesc_chisholm2022)
-        result = jit_fesc(-2.0)
+        result = assert_jit_matches_eager(fesc_chisholm2022, -2.0)
         assert jnp.isfinite(result)
 
     def test_differentiable(self):
@@ -136,6 +137,5 @@ class TestComputeUVSlope:
 
         wave = jnp.linspace(1200.0, 3000.0, 500)
         l_nu = jnp.ones_like(wave) * 1e28
-        jit_fn = jax.jit(compute_uv_slope)
-        result = jit_fn(wave, l_nu)
+        result = assert_jit_matches_eager(compute_uv_slope, wave, l_nu)
         assert jnp.isfinite(result)

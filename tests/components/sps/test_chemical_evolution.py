@@ -29,6 +29,7 @@ from tengri.components.stellar.sfh.chemical_evolution import (
 )
 from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Fixed, Uniform
+from tests._jit_parity import assert_jit_matches_eager
 
 pytestmark = pytest.mark.bounds
 
@@ -166,8 +167,7 @@ class TestJAXCompatibility:
 
     def test_jit_compatible(self, age_grid, constant_sfr):
         """closed_box_metallicity should be JIT-compilable."""
-        jit_fn = jax.jit(closed_box_metallicity)
-        log_z = jit_fn(age_grid, constant_sfr)
+        log_z = assert_jit_matches_eager(closed_box_metallicity, age_grid, constant_sfr)
         chex.assert_tree_all_finite(log_z)
 
     def test_gradient_wrt_yield(self, age_grid, constant_sfr):
@@ -224,8 +224,9 @@ class TestJAXCompatibility:
         log_age_grid = jnp.linspace(6.0, 10.1, 64)
         sfr = jnp.ones(64)
 
-        jit_fn = jax.jit(chem_evol_metallicity_on_ssp_grid)
-        log_z_abs = jit_fn(ssp_log_ages, log_age_grid, sfr)
+        log_z_abs = assert_jit_matches_eager(
+            chem_evol_metallicity_on_ssp_grid, ssp_log_ages, log_age_grid, sfr
+        )
         chex.assert_tree_all_finite(log_z_abs)
         chex.assert_equal_shape([log_z_abs, ssp_log_ages])
 

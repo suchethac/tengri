@@ -27,6 +27,7 @@ jax.config.update("jax_enable_x64", True)
 from tengri.components.dust.attenuation import (
     DUST_LAWS,
 )
+from tests._jit_parity import assert_jit_matches_eager
 
 # ---------------------------------------------------------------------------
 # Shared fixtures
@@ -320,10 +321,9 @@ class TestDustAttenuationJitCompatibility:
         interp1d with mode='extrapolate'), JIT will fail.
         """
         law_func = DUST_LAWS[law_name].callable
-        jitted_law = jax.jit(law_func)
 
         # Should compile and run without error
-        k = jitted_law(wide_wavelength_grid)
+        k = assert_jit_matches_eager(law_func, wide_wavelength_grid)
         chex.assert_tree_all_finite(k)
 
     @pytest.mark.parametrize(

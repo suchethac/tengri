@@ -23,6 +23,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tests._jit_parity import assert_jit_matches_eager
+
 jax.config.update("jax_enable_x64", True)
 
 _GRID_PATH = Path(__file__).resolve().parents[3] / "data" / "nenkova08_torus_grid.h5"
@@ -141,8 +143,11 @@ def test_jit_with_traced_tau(torus_fn, wavelength) -> None:
     Regression for the scipy/``float(agn_tau)`` defect that made the torus
     unusable in inference (every backend traces fitted parameters).
     """
-    jitted = jax.jit(lambda lbol, tau: torus_fn(wavelength, agn_log_lbol=lbol, agn_tau=tau))
-    sed = jitted(jnp.array(44.0), jnp.array(30.0))
+    sed = assert_jit_matches_eager(
+        lambda lbol, tau: torus_fn(wavelength, agn_log_lbol=lbol, agn_tau=tau),
+        jnp.array(44.0),
+        jnp.array(30.0),
+    )
     chex.assert_equal_shape([sed, wavelength])
     chex.assert_tree_all_finite(sed)
 
@@ -174,8 +179,9 @@ def test_public_nenkova_torus_is_jit_safe(wavelength) -> None:
     """The public ``nenkova_torus`` entry point is itself JIT/grad-safe."""
     from tengri.components.agn.torus import nenkova_torus
 
-    jitted = jax.jit(lambda tau: nenkova_torus(wavelength, agn_log_lbol=44.0, agn_tau=tau))
-    sed = jitted(jnp.array(30.0))
+    sed = assert_jit_matches_eager(
+        lambda tau: nenkova_torus(wavelength, agn_log_lbol=44.0, agn_tau=tau), jnp.array(30.0)
+    )
     chex.assert_tree_all_finite(sed)
     g = jax.grad(lambda tau: jnp.sum(nenkova_torus(wavelength, agn_log_lbol=44.0, agn_tau=tau)))(
         50.0

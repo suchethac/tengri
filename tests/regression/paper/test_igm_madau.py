@@ -27,6 +27,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components.igm import igm_transmission_madau
+from tests._jit_parity import assert_jit_matches_eager
 
 
 def fd_grad(f, x: float, eps: float = 1e-4) -> float:
@@ -122,9 +123,8 @@ class TestMadau1995IGM:
 
     def test_jit_compatible(self):
         """Madau 1995 function is JIT-compilable."""
-        jitted_fn = jax.jit(igm_transmission_madau)
         wave_obs = jnp.array([1000.0, 2000.0, 4000.0, 8000.0])
-        T = jitted_fn(wave_obs, z=2.5)
+        T = assert_jit_matches_eager(igm_transmission_madau, wave_obs, z=2.5)
         chex.assert_tree_all_finite(T)
 
     def test_gradient_wrt_z_finite(self):

@@ -14,6 +14,7 @@ import jax.numpy as jnp
 import pytest
 
 from tengri._data_setup import find_data
+from tests._jit_parity import assert_jit_matches_eager
 
 jax.config.update("jax_enable_x64", True)
 
@@ -104,8 +105,7 @@ def test_nh_axis_actually_interpolated(torus_fn, wavelength) -> None:
 
 
 def test_jit_compatible(torus_fn, wavelength) -> None:
-    jitted = jax.jit(lambda nh: torus_fn(wavelength, agn_log_nh_silva=nh))
-    sed = jitted(23.0)
+    sed = assert_jit_matches_eager(lambda nh: torus_fn(wavelength, agn_log_nh_silva=nh), 23.0)
     chex.assert_tree_all_finite(sed)
 
 

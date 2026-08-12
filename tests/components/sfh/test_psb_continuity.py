@@ -14,6 +14,7 @@ import pytest
 jax.config.update("jax_enable_x64", True)
 
 from tengri.components.stellar.sfh.nonparametric import psb_continuity
+from tests._jit_parity import assert_jit_matches_eager
 
 pytestmark = pytest.mark.bounds
 
@@ -77,6 +78,13 @@ class TestPSBContinuitySFH:
 
     def test_jit_compatible(self, age_yr, default_edges):
         # bin_edges_gyr is a fixed structural arg — bake it in via partial before JIT
-        fn = jax.jit(functools.partial(psb_continuity, bin_edges_gyr=default_edges))
-        sfr = fn(age_yr, 10.0, tlast_gyr=0.5, tflex_gyr=2.0, ratio_young=0.0, ratio_old_0=0.0)
+        sfr = assert_jit_matches_eager(
+            functools.partial(psb_continuity, bin_edges_gyr=default_edges),
+            age_yr,
+            10.0,
+            tlast_gyr=0.5,
+            tflex_gyr=2.0,
+            ratio_young=0.0,
+            ratio_old_0=0.0,
+        )
         chex.assert_tree_all_finite(sfr)

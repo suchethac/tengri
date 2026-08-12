@@ -18,6 +18,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tests._jit_parity import assert_jit_matches_eager
+
 jax.config.update("jax_enable_x64", True)
 
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
@@ -123,15 +125,15 @@ class TestAstrodustEmission:
         assert abs(float(ratio) - 2.0) < 0.01
 
     def test_jit_compilation(self, astrodust_fn):
-        fn_jit = jax.jit(
-            lambda w: astrodust_fn(
-                w, L_absorbed=1e10, dust_umin=2.0, dust_gamma_dl=0.02, dust_qpah=3.0
-            )
-        )
         sed_eager = astrodust_fn(
             WAVE_AA, L_absorbed=1e10, dust_umin=2.0, dust_gamma_dl=0.02, dust_qpah=3.0
         )
-        sed_jit = fn_jit(WAVE_AA)
+        sed_jit = assert_jit_matches_eager(
+            lambda w: astrodust_fn(
+                w, L_absorbed=1e10, dust_umin=2.0, dust_gamma_dl=0.02, dust_qpah=3.0
+            ),
+            WAVE_AA,
+        )
         assert jnp.allclose(sed_eager, sed_jit, rtol=1e-6)
 
     def test_parameter_sensitivity(self, astrodust_fn):
@@ -225,9 +227,10 @@ class TestBosaEmission:
         assert abs(float(ratio) - 2.0) < 0.08
 
     def test_jit_compilation(self, bosa_fn):
-        fn_jit = jax.jit(lambda w: bosa_fn(w, L_absorbed=1e10, dust_log_ssfr=-10.0))
         sed_eager = bosa_fn(WAVE_AA, L_absorbed=1e10, dust_log_ssfr=-10.0)
-        sed_jit = fn_jit(WAVE_AA)
+        sed_jit = assert_jit_matches_eager(
+            lambda w: bosa_fn(w, L_absorbed=1e10, dust_log_ssfr=-10.0), WAVE_AA
+        )
         assert jnp.allclose(sed_eager, sed_jit, rtol=1e-6)
 
     def test_ssfr_shifts_peak(self, bosa_fn):
@@ -326,15 +329,15 @@ class TestThemisEmission:
         assert abs(float(ratio) - 2.0) < 0.01
 
     def test_jit_compilation(self, themis_fn):
-        fn_jit = jax.jit(
-            lambda w: themis_fn(
-                w, L_absorbed=1e10, dust_umin=2.0, dust_gamma_dl=0.02, dust_qhac=0.17
-            )
-        )
         sed_eager = themis_fn(
             WAVE_AA, L_absorbed=1e10, dust_umin=2.0, dust_gamma_dl=0.02, dust_qhac=0.17
         )
-        sed_jit = fn_jit(WAVE_AA)
+        sed_jit = assert_jit_matches_eager(
+            lambda w: themis_fn(
+                w, L_absorbed=1e10, dust_umin=2.0, dust_gamma_dl=0.02, dust_qhac=0.17
+            ),
+            WAVE_AA,
+        )
         assert jnp.allclose(sed_eager, sed_jit, rtol=1e-6)
 
     def test_parameter_sensitivity(self, themis_fn):

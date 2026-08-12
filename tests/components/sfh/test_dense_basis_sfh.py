@@ -37,6 +37,7 @@ from tengri.components.stellar.sfh.dense_basis import (
     matern32_kernel,
 )
 from tengri.components.stellar.sfh.registry import resolve_sfh
+from tests._jit_parity import assert_jit_matches_eager
 
 # Shared test fixtures
 AGE_YR = jnp.geomspace(1e6, 13.7e9, 200)
@@ -562,35 +563,35 @@ class TestJITNaNRegression:
 
     def test_high_sfr_no_nan_jit(self) -> None:
         """log_sfr_inst=2.93 (near prior upper bound) must not produce NaN under JIT."""
-        jit_sfh = jax.jit(
+        sfr = assert_jit_matches_eager(
             lambda log_sfr: dense_basis(
                 AGE_YR,
                 log_total_mass=10.0,
                 log_sfr_inst=log_sfr,
                 tx_frac_0=0.408,
                 tx_frac_1=0.610,
-            )
+            ),
+            2.93,
         )
-        sfr = jit_sfh(2.93)
         chex.assert_tree_all_finite(sfr)
 
     def test_very_high_sfr_no_nan_jit(self) -> None:
         """Extreme SFR (log=3.0) must not produce NaN under JIT."""
-        jit_sfh = jax.jit(
+        sfr = assert_jit_matches_eager(
             lambda log_sfr: dense_basis(
                 AGE_YR,
                 log_total_mass=8.0,
                 log_sfr_inst=log_sfr,
                 tx_frac_0=0.3,
                 tx_frac_1=0.6,
-            )
+            ),
+            3.0,
         )
-        sfr = jit_sfh(3.0)
         chex.assert_tree_all_finite(sfr)
 
     def test_low_sfr_no_nan_jit(self) -> None:
         """log_sfr_inst=-2.0 (prior lower bound) must not produce NaN under JIT."""
-        jit_sfh = jax.jit(
+        sfr = assert_jit_matches_eager(
             lambda log_sfr: dense_basis(
                 AGE_YR,
                 log_total_mass=12.0,
@@ -598,9 +599,9 @@ class TestJITNaNRegression:
                 tx_frac_0=0.3,
                 tx_frac_1=0.6,
                 tx_frac_2=0.85,
-            )
+            ),
+            -2.0,
         )
-        sfr = jit_sfh(-2.0)
         chex.assert_tree_all_finite(sfr)
 
     def test_random_prior_samples_no_nan_jit(self) -> None:

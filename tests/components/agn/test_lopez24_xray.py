@@ -24,6 +24,7 @@ from tengri.components.xray.xray import (
     xray_bolometric_correction_duras,
     xray_total_lopez24,
 )
+from tests._jit_parity import assert_jit_matches_eager
 
 
 @pytest.fixture()
@@ -49,8 +50,7 @@ class TestBolometricCorrectionDuras:
         assert k_high > k_low
 
     def test_jit(self):
-        fn = jax.jit(xray_bolometric_correction_duras)
-        k = fn(1e44)
+        k = assert_jit_matches_eager(xray_bolometric_correction_duras, 1e44)
         assert jnp.isfinite(k)
 
 
@@ -152,8 +152,9 @@ class TestLopez24Corona:
         assert not jnp.allclose(with_aniso, without_aniso)
 
     def test_jit(self, xray_wavelength):
-        fn = jax.jit(lambda w: xray_agn_corona_lopez24(w, l_12um_erg_hz=1e30))
-        result = fn(xray_wavelength)
+        result = assert_jit_matches_eager(
+            lambda w: xray_agn_corona_lopez24(w, l_12um_erg_hz=1e30), xray_wavelength
+        )
         chex.assert_tree_all_finite(result)
 
     def test_gradient_wrt_alpha_irx(self, xray_wavelength):
@@ -220,6 +221,7 @@ class TestTotalLopez24:
         assert jnp.sum(with_agn) > jnp.sum(no_agn)
 
     def test_jit(self, xray_wavelength):
-        fn = jax.jit(lambda w: xray_total_lopez24(w, l_12um_erg_hz=1e30))
-        result = fn(xray_wavelength)
+        result = assert_jit_matches_eager(
+            lambda w: xray_total_lopez24(w, l_12um_erg_hz=1e30), xray_wavelength
+        )
         chex.assert_tree_all_finite(result)

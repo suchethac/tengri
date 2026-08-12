@@ -18,6 +18,7 @@ from tengri.components.xray import (
     xray_anisotropy,
     xray_xrb,
 )
+from tests._jit_parity import assert_jit_matches_eager
 
 # Enable 64-bit for precise comparisons
 jax.config.update("jax_enable_x64", True)
@@ -209,8 +210,9 @@ class TestXrayAgnCoronaFromDisc:
 
     def test_jit_compilation(self):
         """Function should be JIT-compilable."""
-        jitted = jax.jit(lambda w, l: xray_agn_corona_from_disc(w, l, apply_anisotropy=True))
-        result = jitted(WAVE_XRAY, 1e30)
+        result = assert_jit_matches_eager(
+            lambda w, l: xray_agn_corona_from_disc(w, l, apply_anisotropy=True), WAVE_XRAY, 1e30
+        )
         chex.assert_equal_shape([result, WAVE_XRAY])
         chex.assert_tree_all_finite(result)
 

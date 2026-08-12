@@ -19,6 +19,8 @@ from tengri.components.stellar.sfh.nonparametric import (
     make_agebins_from_zred,
     psb_continuity,
 )
+from tengri.utils.cosmology import age_at_z
+from tests._jit_parity import assert_jit_matches_eager
 
 pytestmark = pytest.mark.bounds
 
@@ -167,38 +169,84 @@ class TestDirichletSFH:
 
 # ── make_agebins_from_zred ────────────────────────────────────────
 
+# Spans the low-z regime (young edges fixed at 30/100 Myr) and the high-z
+# regime where t_univ is short enough that the bins compress (min spacing
+# drops from 30 Myr to 1 Myr above z~3).
+ZREDS = [0.0, 0.1, 0.5, 1.0, 2.0, 3.0, 4.0, 6.0, 8.0, 10.0]
+
 
 class TestMakeAgebinsFromZred:
-    """Tests for Prospector-β redshift-aware age bin construction."""
+    """Prospector-β redshift-aware age bins.
 
-    def test_edges_monotone(self):
-        edges = make_agebins_from_zred(1.0)
-        assert np.all(np.diff(edges) >= 0.0), "bin edges must be monotonically non-decreasing"
+    Consolidated from two byte-identical copies of this class (this file and
+    the former ``tests/components/sfh/test_agebins_from_zred.py``), and
+    tightened on the way:
 
-    def test_starts_at_zero(self):
-        edges = make_agebins_from_zred(2.0)
-        assert edges[0] == 0.0
+    * The three ``test_capped_at_tuniv_z{2,4,6}`` tests asserted
+      ``edges[-1] <= 3.5 / 1.8 / 1.0`` against true ages of 3.288 / 1.544 /
+      0.934 Gyr — 6-17% of slack, so a cosmology that drifted by 10% still
+      passed. The last edge *is* ``age_at_z(zred)`` exactly (checked here to
+      rtol=1e-12), so the bound is now the identity it was approximating.
+    * ``np.diff(edges) >= 0`` admitted a zero-width bin, which is the failure
+      that matters: a bin with no elapsed time divides mass by ``dt=0``
+      downstream. Now strictly increasing.
+    * Both properties are swept over ten redshifts spanning z=0-10 rather
+      than checked at one or three hand-picked values, at no extra cost —
+      ``make_agebins_from_zred`` is a setup-time numpy utility.
+    """
 
-    def test_capped_at_tuniv_z2(self):
-        edges = make_agebins_from_zred(2.0)
-        # Age of universe at z=2 is ~3.3 Gyr; edges must not exceed it
-        assert edges[-1] <= 3.5, f"edges exceed tuniv at z=2: {edges[-1]:.2f} Gyr"
+    @pytest.mark.parametrize("zred", ZREDS)
+    def test_edges_strictly_increasing(self, zred):
+        """Zero-width bins divide by dt=0 downstream, so equality is a bug."""
+        edges = make_agebins_from_zred(zred)
+        gaps = np.diff(edges)
+        assert np.all(gaps > 0.0), (
+            f"z={zred}: bin edges must strictly increase; smallest gap "
+            f"{gaps.min():.3e} Gyr at index {int(np.argmin(gaps))}"
+        )
 
-    def test_capped_at_tuniv_z4(self):
-        edges = make_agebins_from_zred(4.0)
-        assert edges[-1] <= 1.8, f"edges exceed tuniv at z=4: {edges[-1]:.2f} Gyr"
+    @pytest.mark.parametrize("zred", ZREDS)
+    def test_starts_at_zero(self, zred):
+        """The youngest bin must reach the observation epoch itself."""
+        edges = make_agebins_from_zred(zred)
+        assert edges[0] == 0.0, f"z={zred}: first edge is {edges[0]}, not 0"
 
-    def test_capped_at_tuniv_z6(self):
-        edges = make_agebins_from_zred(6.0)
-        assert edges[-1] <= 1.0, f"edges exceed tuniv at z=6: {edges[-1]:.2f} Gyr"
+    @pytest.mark.parametrize("zred", ZREDS)
+    def test_last_edge_is_exactly_the_age_of_the_universe(self, zred):
+        """Not merely 'capped at' t_univ — the oldest bin edge *is* t_univ.
+
+        Asserting the identity rather than a padded upper bound is what makes
+        this catch a cosmology regression: the previous ``<= 3.5`` at z=2 had
+        6% of headroom over the true 3.288 Gyr.
+        """
+        edges = make_agebins_from_zred(zred)
+        t_univ = float(age_at_z(zred))
+        assert edges[-1] == pytest.approx(t_univ, rel=1e-12), (
+            f"z={zred}: oldest edge {edges[-1]:.6f} Gyr != age_at_z {t_univ:.6f} Gyr"
+        )
+
+    @pytest.mark.parametrize("zred", ZREDS)
+    def test_no_bin_predates_the_big_bang(self, zred):
+        """Lookback age can never exceed t_univ at that redshift."""
+        edges = make_agebins_from_zred(zred)
+        t_univ = float(age_at_z(zred))
+        assert np.all(edges <= t_univ + 1e-12), (
+            f"z={zred}: {int((edges > t_univ).sum())} edge(s) older than the universe"
+        )
 
     def test_returns_numpy_not_jax(self):
+        """Setup-time utility: a traced array here would silently bake bin
+        edges into a jit signature."""
         edges = make_agebins_from_zred(1.0)
         assert isinstance(edges, np.ndarray), "should return numpy array (setup-time utility)"
+        assert not isinstance(edges, jnp.ndarray), "must not be a jax array"
 
-    def test_n_bins_argument(self):
-        edges = make_agebins_from_zred(1.0, n_bins=5)
-        assert len(edges) == 6, f"n_bins=5 → 6 edges, got {len(edges)}"
+    @pytest.mark.parametrize("n_bins", [3, 5, 8, 12])
+    def test_n_bins_argument(self, n_bins):
+        """n bins means n+1 edges, and the count must not silently clamp."""
+        edges = make_agebins_from_zred(1.0, n_bins=n_bins)
+        assert len(edges) == n_bins + 1, f"n_bins={n_bins} → {n_bins + 1} edges, got {len(edges)}"
+        assert np.all(np.diff(edges) > 0.0), f"n_bins={n_bins} produced a zero-width bin"
 
     def test_low_zred_has_young_bins(self):
         edges = make_agebins_from_zred(0.5)
@@ -271,8 +319,15 @@ class TestPSBContinuitySFH:
         import functools
 
         # bin_edges_gyr is a fixed structural arg — bake it in via partial before JIT
-        fn = jax.jit(functools.partial(psb_continuity, bin_edges_gyr=default_edges))
-        sfr = fn(age_yr, 10.0, tlast_gyr=0.5, tflex_gyr=2.0, ratio_young=0.0, ratio_old_0=0.0)
+        sfr = assert_jit_matches_eager(
+            functools.partial(psb_continuity, bin_edges_gyr=default_edges),
+            age_yr,
+            10.0,
+            tlast_gyr=0.5,
+            tflex_gyr=2.0,
+            ratio_young=0.0,
+            ratio_old_0=0.0,
+        )
         chex.assert_tree_all_finite(sfr)
 
     def test_grad_wrt_log_total_mass(self, age_yr, default_edges):

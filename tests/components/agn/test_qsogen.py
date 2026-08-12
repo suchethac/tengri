@@ -15,6 +15,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tests._jit_parity import assert_jit_matches_eager
+
 jax.config.update("jax_enable_x64", True)
 
 
@@ -379,8 +381,7 @@ class TestComputeQsogenSed:
         """compute_qsogen_sed is JIT-compilable."""
         from tengri.components.agn.qsogen import compute_qsogen_sed
 
-        jitted = jax.jit(compute_qsogen_sed)
-        sed = jitted(broad_wave)
+        sed = assert_jit_matches_eager(compute_qsogen_sed, broad_wave)
         chex.assert_tree_all_finite(sed)
 
     def test_gradient_wrt_lbol(self, broad_wave):

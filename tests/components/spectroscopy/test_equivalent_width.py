@@ -13,6 +13,7 @@ pytestmark = pytest.mark.bounds
 jax.config.update("jax_enable_x64", True)
 
 from tengri.analysis.diagnostics.spectral import equivalent_width
+from tests._jit_parity import assert_jit_matches_eager
 
 _C_AA_S = 2.99792458e18
 
@@ -70,8 +71,7 @@ class TestEquivalentWidthJIT:
 
     def test_jit(self, wave):
         l_nu = _flat_continuum_with_emission(wave, 6564.61, 50.0)
-        fn = jax.jit(lambda w, s: equivalent_width(w, s, 6564.61))
-        ew = fn(wave, l_nu)
+        ew = assert_jit_matches_eager(lambda w, s: equivalent_width(w, s, 6564.61), wave, l_nu)
         assert jnp.isfinite(ew)
 
     def test_gradient(self, wave):

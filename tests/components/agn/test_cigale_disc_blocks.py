@@ -17,13 +17,13 @@ These tests pin (a) registration, (b) energy conservation
 from __future__ import annotations
 
 import chex
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
 
 import tengri.components.agn.blocks  # noqa: F401 — triggers registrations
 from tengri.components.agn.blocks._protocol import AGN_BLOCKS, resolve_agn_block
+from tests._jit_parity import assert_jit_matches_eager
 
 # Module taxonomy: most cases verify the registry/adapter contract; the
 # energy-conservation test below carries an explicit ``conservation`` marker.
@@ -75,8 +75,7 @@ def test_lbol_scales_linearly(name: str) -> None:
 def test_jit_compatible(name: str) -> None:
     block = resolve_agn_block("disc", name)
     wave_aa = jnp.geomspace(100.0, 1.0e7, 200)
-    jitted = jax.jit(lambda wl, lb: block(wl, lb))
-    L = jitted(wave_aa, 10.0)
+    L = assert_jit_matches_eager(lambda wl, lb: block(wl, lb), wave_aa, 10.0)
     assert jnp.all(jnp.isfinite(L))
 
 

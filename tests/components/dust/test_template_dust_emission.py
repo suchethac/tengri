@@ -17,6 +17,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tests._jit_parity import assert_jit_matches_eager
+
 jax.config.update("jax_enable_x64", True)
 
 
@@ -320,8 +322,7 @@ class TestDale2014Tabulated:
         from tengri.components.dust.emission.emission import DUST_EMISSION_MODELS
 
         dale = DUST_EMISSION_MODELS["dale2014"]
-        dale_jit = jax.jit(dale)
-        sed = dale_jit(ir_wave, 1e10, dust_alpha_dale=2.0)
+        sed = assert_jit_matches_eager(dale, ir_wave, 1e10, dust_alpha_dale=2.0)
         chex.assert_tree_all_finite(sed)
 
     def test_differentiable(self, ir_wave):

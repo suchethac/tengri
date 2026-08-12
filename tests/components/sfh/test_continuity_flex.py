@@ -14,6 +14,7 @@ jax.config.update("jax_enable_x64", True)
 
 from tengri.components.stellar.sfh.nonparametric import (
     continuity_flex,
+    continuity_flex_prior_logp,
 )
 
 pytestmark = pytest.mark.bounds
@@ -132,3 +133,16 @@ class TestContinuityFlexSFH:
 
         g = jax.grad(total_sfr)(0.3)
         assert jnp.isfinite(g)
+
+    def test_prior_logp_zero_ratios(self):
+        """All-zero ratios should give maximum log-probability.
+
+        Moved here from ``tests/components/sfh/test_dense_basis.py``, which
+        carried a ``TestContinuityFlexSFH`` class that was otherwise a strict
+        subset of this one. This was the single test that lived only in that
+        copy — the file docstring above already promised prior-log-probability
+        coverage that was not actually here.
+        """
+        logp_zero = continuity_flex_prior_logp(0.0, jnp.array([0.0, 0.0]), 0.0)
+        logp_nonzero = continuity_flex_prior_logp(1.0, jnp.array([1.0, 1.0]), 1.0)
+        assert float(logp_zero) > float(logp_nonzero)
