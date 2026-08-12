@@ -133,7 +133,7 @@ class TestMulticolorDiscPeak:
         wavelength = jnp.geomspace(10.0, 50000.0, 2000)
         l_nu = multicolor_disc(
             wavelength,
-            agn_log_lbol=44.0,
+            agn_log_lbol=10.42,
             agn_log_mbh=8.0,
             agn_log_ledd=-1.0,
             agn_a_spin=0.0,
@@ -157,13 +157,13 @@ class TestMulticolorDiscPeak:
 
         l_nu_low = multicolor_disc(
             wavelength,
-            agn_log_lbol=44.0,
+            agn_log_lbol=10.42,
             agn_log_mbh=7.0,
             agn_log_ledd=-1.0,
         )
         l_nu_high = multicolor_disc(
             wavelength,
-            agn_log_lbol=44.0,
+            agn_log_lbol=10.42,
             agn_log_mbh=9.0,
             agn_log_ledd=-1.0,
         )
@@ -380,14 +380,14 @@ class TestGeometricMasking:
         wavelength = jnp.linspace(1000.0, 10000.0, 500)
         l_type1 = unified_nlr_blr(
             wavelength,
-            agn_log_lbol=44.0,
+            agn_log_lbol=10.42,
             agn_cos_inc=1.0,  # face-on, Type 1
             agn_theta_torus=30.0,
             agn_lum_ratio=1.0,
         )
         l_type2 = unified_nlr_blr(
             wavelength,
-            agn_log_lbol=44.0,
+            agn_log_lbol=10.42,
             agn_cos_inc=0.0,  # edge-on, Type 2
             agn_theta_torus=30.0,
             agn_lum_ratio=1.0,
@@ -432,14 +432,14 @@ class TestPolarDust:
         wavelength = jnp.linspace(1000.0, 10000.0, 500)
         l_unreddened = unified_nlr_blr(
             wavelength,
-            agn_log_lbol=44.0,
+            agn_log_lbol=10.42,
             agn_cos_inc=1.0,
             agn_polar_ebv=0.0,
             agn_lum_ratio=1.0,
         )
         l_reddened = unified_nlr_blr(
             wavelength,
-            agn_log_lbol=44.0,
+            agn_log_lbol=10.42,
             agn_cos_inc=1.0,
             agn_polar_ebv=0.1,
             agn_lum_ratio=1.0,
@@ -467,7 +467,7 @@ class TestKubotaDone3Zone:
 
         wavelength = jnp.geomspace(1.0, 100000.0, 5000)
         params = dict(
-            agn_log_lbol=44.0,
+            agn_log_lbol=10.42,
             agn_log_mbh=8.0,
             agn_log_ledd=-1.0,
             agn_a_spin=0.0,
@@ -499,7 +499,7 @@ class TestKubotaDone3Zone:
 
         wavelength = jnp.geomspace(1.0, 100000.0, 5000)
         params = dict(
-            agn_log_lbol=44.0,
+            agn_log_lbol=10.42,
             agn_log_mbh=8.0,
             agn_log_ledd=-1.0,
             agn_a_spin=0.0,
@@ -527,7 +527,7 @@ class TestKubotaDone3Zone:
         wavelength = jnp.geomspace(1.0, 100000.0, 5000)
         l_nu = kubota_done_disc(
             wavelength,
-            agn_log_lbol=44.0,
+            agn_log_lbol=10.42,
             agn_log_mbh=8.0,
             agn_log_ledd=-1.0,
             agn_f_hard=0.02,
