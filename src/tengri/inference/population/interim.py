@@ -57,6 +57,64 @@ _TRUTH_TO_BOUNDS = {
 }
 
 
+#: Backend-supplied names this wrapper never forwards: they are set per galaxy.
+_MAP_OPTIONS_RESERVED = frozenset({"context", "key", "init_from"})
+
+
+def _map_option_names():
+    """Names the ``map`` backend accepts, minus the ones set per galaxy.
+
+    Read off the backend signature rather than hardcoded, so a new MAP option
+    becomes reachable here the day it is added instead of drifting out of sync.
+    """
+    import inspect
+
+    from tengri.inference._backend_registry import get_backend
+
+    params = inspect.signature(get_backend("map").runner).parameters
+    return frozenset(params) - _MAP_OPTIONS_RESERVED
+
+
+def _validate_map_options(map_options):
+    """Reject a MAP option the backend will not accept (#1720).
+
+    ``fit_interim`` used to fail with advice naming ``learning_rate``,
+    ``n_steps`` and ``n_restarts`` while accepting none of them. Forwarding an
+    unrecognized key instead would surface deep inside the MAP backend with no
+    hint that it arrived through ``map_options``.
+
+    Parameters
+    ----------
+    map_options : dict or None
+        Options for the MAP that initializes each galaxy's HMC. ``None`` means
+        no separate MAP stage, which is the historical behavior.
+
+    Raises
+    ------
+    TypeError
+        If ``map_options`` is not a mapping. ``**`` on a sequence fails
+        obscurely inside the call.
+    ValueError
+        If a key is not a MAP backend option. The message lists the valid set.
+    """
+    if map_options is None:
+        return
+    if not hasattr(map_options, "keys"):
+        raise TypeError(
+            f"map_options must be a dict of MAP backend options, got "
+            f"{type(map_options).__name__}. Example: map_options={{'n_steps': 40000}}."
+        )
+    valid = _map_option_names()
+    unknown = sorted(set(map_options) - valid)
+    if unknown:
+        raise ValueError(
+            f"map_options {unknown} are not options of the MAP backend. It takes: "
+            f"{sorted(valid)}. These initialize each galaxy's HMC; sampler settings "
+            f"like n_leapfrog_steps or dense_mass_matrix are arguments of fit_interim "
+            f"itself, not of map_options (issue #1720)."
+        )
+
+
 def _assert_interim_bounds_are_physical(interim_bounds):
     """Refuse interim priors that admit unphysical ``(sigma, tau)`` (#1585).
 
@@ -180,6 +238,7 @@ def fit_interim(
     n_samples=None,
     n_chains=None,
     thin=8,
+    map_options=None,
 ):
     """Per-galaxy interim fit over the hyperparameter space.
 
@@ -218,6 +277,30 @@ def fit_interim(
         little and buys a linear reduction in that table.
     n_chains : int, optional
         Number of independent MCMC chains [count]. If None, uses backend default.
+    map_options : dict, optional
+        Options for an explicit MAP stage that initializes each galaxy's HMC,
+        e.g. ``{"n_steps": 40000}`` or ``{"learning_rate": 1e-3}``. Default
+        ``None`` runs no separate MAP, which is the historical behavior: the HMC
+        backend initializes itself on a fixed budget.
+
+        Reach for this when a fit dies with *"all N MAP restarts diverged to a
+        non-finite loss"*. That message recommends ``learning_rate``,
+        ``n_steps`` and ``n_restarts``, and before #1720 this function accepted
+        none of them, so its own advice could not be followed.
+
+        The regime is real, not hypothetical. The configuration recorded in
+        ``psd_bank_conv/bank_meta.json`` — truths 0.75 dex / 150 Myr at SNR
+        20/10, behind §5 of ``docs/dev/hierarchical-psd-handoff.md`` — diverges
+        from every restart under the default budget. The bank that produced
+        those numbers never called this function;
+        ``scripts/hierarchical_psd_fit_bank.py`` drives ``Fitter`` directly and
+        triples ``n_steps`` until the expansion point is a mode, which is
+        §4i-ter's remedy for #1537. This parameter is how that becomes
+        reachable from the population path.
+
+        Keys are validated against the MAP backend, so a sampler setting passed
+        here (``n_leapfrog_steps``, say) is refused with the valid list rather
+        than surfacing deep inside the optimizer.
 
     Returns
     -------
@@ -249,6 +332,7 @@ def fit_interim(
     # make_population validated against.
     _assert_interim_bounds_are_physical(interim_bounds)
     _assert_truth_within_interim_bounds(mock, interim_bounds)
+    _validate_map_options(map_options)
 
     n_galaxies = len(mock.table)
     log_age_grid = model.log_age_grid
@@ -315,6 +399,16 @@ def fit_interim(
             hmc_kwargs["n_warmup"] = n_warmup
         if n_chains is not None:
             hmc_kwargs["n_chains"] = n_chains
+
+        if map_options is not None:
+            # Explicit MAP stage, then hand its point to the sampler -- the
+            # pattern scripts/hierarchical_psd_fit_bank.py uses to reach the
+            # regime behind §5 of the handoff doc. Without it the HMC backend
+            # runs its own fixed-budget MAP internally, which diverges from
+            # every restart at SNR 20/10 and leaves no starting point at all
+            # (#1720). Escalating n_steps here is §4i-ter's remedy for #1537.
+            map_post = fitter.run("map", key=k_i, **{"verbose": False, **map_options})
+            hmc_kwargs["init_from"] = map_post
 
         post_i = fitter.run(
             "mcmc_hmc",
