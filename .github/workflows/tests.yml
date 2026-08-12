@@ -980,3 +980,48 @@ jobs:
         with:
           path: ~/.cache/tengri_jax_cache
           key: ${{ steps.jax_cache.outputs.cache-primary-key }}
+
+  # Cross-validation against FSPS / CIGALE / bagpipes / AGNfitter / Synthesizer.
+  #
+  # This tree was in NO job at all — every suite above passes
+  # `--ignore=tests/crossval` or `-m 'not crossval'` — and it rotted accordingly:
+  # measured on 2026-08-13 at 217 failures and 19 errors out of ~1,210, almost
+  # all of it tests that had stopped importing their own subjects after
+  # renames. Nothing was ever red, because nothing ever ran (#1728).
+  #
+  # It cost ~80-140 s serially to find all of that. The expense was never the
+  # reason it went ungated; it simply was not wired up.
+  #
+  # NOT a PR gate yet, deliberately. ~45 failures remain — genuine numerical
+  # comparisons that need physics judgment, plus reference data CI does not
+  # carry — and a required check that is red on arrival teaches people to
+  # ignore it, which is the failure mode this job exists to end. Nightly makes
+  # the state *visible*, which was the missing ingredient. Promote to a PR gate
+  # once the tier is green; #1728 tracks that.
+  #
+  # Serial (`-n 0`): xdist workers each hold a JAX process with SSP grids and
+  # were observed dying on a 16 GB runner, and a crashed worker reports as an
+  # infrastructure error rather than a test failure — which is precisely the
+  # kind of ambiguity this tier is meant to remove.
+  crossval:
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'schedule'
+      || github.event_name == 'workflow_dispatch'
+      || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'run-crossval'))
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: pip install -e ".[dev]"
+      # Reference grids are not in the repo; the affected modules skip
+      # themselves when absent, so a missing file is reported as a skip rather
+      # than an error. Check the skip count, not just the exit status.
+      - name: Run cross-validation tier
+        run: pytest tests/crossval -q --no-header -m crossval -n 0 -rf
+        env:
+          JAX_PLATFORMS: cpu
