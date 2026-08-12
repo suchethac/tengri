@@ -49,6 +49,7 @@ __all__ = [
     "Property",
     "PropertyEntry",
     "assemble_available_properties",
+    "missing_property_message",
     "register_properties",
     "warn_if_lines_are_unavailable",
 ]
@@ -182,6 +183,77 @@ def assemble_available_properties(active_component_names: set[str]) -> dict[str,
         if active_entries:
             catalog[name] = active_entries[0]
     return catalog
+
+
+def _grammar_hint(component_name: str) -> str:
+    """How to add the missing component, naming only things that exist.
+
+    Two things are checked rather than assumed. The component name is *not*
+    always the grammar group — ``nebular`` declares the line properties but the
+    group is ``neb`` — so the group is named only when the grammar accepts it.
+    And the menu verb is named only when it is actually exported. Advice that
+    does not resolve is worse than no advice.
+    """
+    from tengri.parameters.groups import _GROUP_STRUCTURAL_KEYS
+
+    if component_name not in _GROUP_STRUCTURAL_KEYS:
+        return ""
+    hint = f" Add the {component_name!r} group when you build the model"
+    import tengri
+
+    lister = f"list_{component_name}_models"
+    if hasattr(tengri, lister):
+        hint += f" — tengri.{lister}() lists the choices"
+    return hint + "."
+
+
+def _diagnose(name: str, known: list[str]) -> str:
+    """One property's diagnosis, without the shared list of what *is* available."""
+    if name in PROPERTY_REGISTRY:
+        components = sorted({e.component_name for e in PROPERTY_REGISTRY[name]})
+        owner = " or ".join(repr(c) for c in components)
+        hint = _grammar_hint(components[0]) if len(components) == 1 else ""
+        return (
+            f"{name!r} comes from the {owner} component, which this model does "
+            f"not include, so it cannot be computed.{hint} It is a real "
+            f"property — tengri.describe_property({name!r}) documents it."
+        )
+    import difflib
+
+    close = difflib.get_close_matches(name, known, n=3, cutoff=0.6)
+    suggestion = f" Did you mean {close}?" if close else ""
+    return f"Unknown property {name!r}.{suggestion}"
+
+
+def missing_property_message(*names: str, available: dict | set | list) -> str:
+    """Why a property lookup failed — misspelling, or a component not built?
+
+    Parameters
+    ----------
+    *names : str
+        The properties the caller asked for that could not be served.
+    available : dict | set | list
+        The names this model can compute.
+
+    Returns
+    -------
+    str
+        Message body for the raised :exc:`KeyError`. One diagnosis per name,
+        then the available list **once** — repeating 43 names per bad name
+        turned a two-name mistake into a 1600-character wall.
+
+    Notes
+    -----
+    ``list_properties()`` advertises every registered property regardless of
+    what any one model contains, so "not available here" is the *common* case
+    and "you misspelled it" is the rare one. Reporting both as ``Unknown
+    property`` sent readers hunting for a typo in a name they had just copied
+    off the menu — the component was simply not in their model.
+    """
+    known = sorted(available)
+    diagnoses = [_diagnose(name, known) for name in names]
+    body = "\n".join(diagnoses) if len(diagnoses) > 1 else diagnoses[0]
+    return f"{body}\nAvailable on this model: {known}"
 
 
 def line_property_names() -> frozenset[str]:

@@ -3146,7 +3146,18 @@ _TINY = 1e-30  # Floor for safe division
 
 
 def _stellar_mass_fn(state, params):
-    """Total stellar mass currently alive [Msun]."""
+    """Total stellar mass **formed** by the SFH [Msun].
+
+    Notes
+    -----
+    This is the time-integral of the SFH, ``10**log_mstar_formed`` — *not* the
+    mass still alive today. Stellar evolution returns a third to a half of it to
+    the ISM, so it runs 1.5-1.9x above
+    :func:`_stellar_mass_surviving_fn` on ordinary populations.
+
+    The two names look interchangeable and are not; whichever one a paper
+    quotes has to be the one it means.
+    """
     log_mstar_formed = jnp.asarray(state.derived["log_mstar_formed"])
     return jnp.power(10.0, log_mstar_formed)
 
@@ -3224,14 +3235,36 @@ def _mass_weighted_age_gyr_fn(state, params):
 
 
 def _mass_weighted_metallicity_fn(state, params):
-    """Mass-weighted mean metallicity (log10 Z/Zsun) [dex]."""
+    r"""Mass-weighted mean metallicity [dex, log10(Z/Zsun)].
+
+    .. math::
+
+        \langle \log_{10} Z/Z_\odot \rangle_M =
+            \frac{\sum_i \log_{10} Z_i \, m_i}{\sum_i m_i} - \log_{10} Z_\odot
+
+    :math:`m_i = \mathrm{SFR}_i \, \Delta t_i` are the per-bin masses [Msun]
+    and :math:`\log_{10} Z_i` the SFH's metallicity history, which is stored
+    **absolute** because that is the SSP grid's convention.
+
+    Notes
+    -----
+    **JIT-compatible**: yes.
+
+    The subtraction is the whole point. Without it this returned absolute
+    log10(Z) under a docstring, a registry entry and a published table that all
+    said log10(Z/Zsun) — 1.85 dex, a factor of 70 in Z. The decisive test is
+    not the wording but ``met_mode='delta'``: one metallicity, so a
+    mass-weighted mean over it must reproduce the input, and it did not.
+    """
+    from tengri.utils.conversions import log_z_abs_to_logzsol
+
     sfh_lbt = jnp.asarray(state.derived["sfh_grid_lbt_yr"])
     sfr_history = jnp.asarray(state.derived["sfr_history"])
     log_z_history = jnp.asarray(state.derived["log_metallicity_history"])
     bin_widths = jnp.gradient(sfh_lbt)
     bin_mass = jnp.maximum(sfr_history * bin_widths, 0.0)
     bin_mass_total = jnp.maximum(jnp.sum(bin_mass), _TINY)
-    return jnp.sum(log_z_history * bin_mass) / bin_mass_total
+    return log_z_abs_to_logzsol(jnp.sum(log_z_history * bin_mass) / bin_mass_total)
 
 
 # ─ Phase 1B: SED group ─
@@ -3442,7 +3475,18 @@ def _luminosity_weighted_age_gyr_fn(state, params):
 
 
 def _luminosity_weighted_metallicity_fn(state, params):
-    """Luminosity-weighted mean metallicity [dex, log10(Z/Zsun)]."""
+    """Luminosity-weighted mean metallicity [dex, log10(Z/Zsun)].
+
+    Notes
+    -----
+    **JIT-compatible**: yes.
+
+    Weighted on the SSP age grid, then converted out of the grid's absolute
+    log10(Z) — see :func:`_mass_weighted_metallicity_fn` for why the
+    subtraction is not cosmetic.
+    """
+    from tengri.utils.conversions import log_z_abs_to_logzsol
+
     derived = state.derived
     nan_scalar = jnp.asarray(jnp.nan)
 
@@ -3457,7 +3501,7 @@ def _luminosity_weighted_metallicity_fn(state, params):
                 jnp.asarray(derived["sfh_grid_lbt_yr"]),
                 jnp.asarray(derived["log_metallicity_history"]),
             )
-            return jnp.sum(lz_per_ssp * L_age) / L_total
+            return log_z_abs_to_logzsol(jnp.sum(lz_per_ssp * L_age) / L_total)
         else:
             return nan_scalar
     else:
@@ -3502,7 +3546,8 @@ _SFH_PROPERTIES = {
     "stellar_mass": Property(
         units="Msun",
         group="sfh",
-        doc="Total stellar mass currently alive",
+        doc="Total stellar mass formed by the SFH — its time-integral, "
+        "1.5-1.9x above stellar_mass_surviving",
         fn=_stellar_mass_fn,
     ),
     "stellar_mass_surviving": Property(
@@ -3526,7 +3571,8 @@ _SFH_PROPERTIES = {
     "ssfr": Property(
         units="1/yr",
         group="sfh",
-        doc="Specific star formation rate (SFR / stellar_mass)",
+        doc="Specific star formation rate (sfr_100myr / stellar_mass_surviving; "
+        "falls back to the formed mass when the SSP has no mass-remaining table)",
         fn=_ssfr_fn,
     ),
     "mass_weighted_age_gyr": Property(

@@ -1667,70 +1667,6 @@ def print_components_bibtex(obj=None) -> None:
     @article{Draine_2007, ...}
     ...
     """
-    # Map registry-entry names → bib-key in tengri.citations.registry.REGISTRY.
-    # Best-effort — the registry currently knows ~50 keys; new contributor
-    # models that lack a bibtex entry print a TODO comment instead.
-    _NAME_TO_BIBKEY: dict[str, str] = {
-        # SFH
-        "dpl": "bagpipes",
-        "continuity": "leja2019",
-        "dirichlet": "leja2019",
-        "dense_basis": "iyer2020",
-        # AGN
-        "skirtor": "skirtor",
-        "stalevski": "skirtor",
-        "kubota_done": "kubota_done2018",
-        "kubota_done_full": "kubota_done2018",
-        "multicolor_agn": "kubota_done2018",
-        "adaf": "mahadevan1997",
-        "qsogen": "temple2021_qsogen",
-        # AGN composable blocks — bibkeys verified against each block's
-        # registered ``citation=`` string (never guessed). Blocks whose paper
-        # has no bundled BibTeX (fritz, cat3d_wind, feltre, richards2006,
-        # boroson_green, …) fall through to the free-form citation note.
-        "grahsp": "buchner2024",
-        "grahsp_sbpl": "buchner2024",
-        "grahsp_biatten": "buchner2024",
-        "nenkova": "clumpy_nenkova2008",
-        "nenkova_agnfitter": "clumpy_nenkova2008",
-        "multicolor": "shakura_sunyaev1973",
-        "synthesizer": "synthesizer",
-        "synthesizer_spectra": "synthesizer",
-        "qsogen_smc": "temple2021_qsogen",
-        "qsogen_balmer": "temple2021_qsogen",
-        # Dust attenuation
-        "calzetti": "calzetti2000",
-        "cardelli": "cardelli1989",
-        "kriek_conroy": "kriek_conroy2013",
-        "noll09": "noll2009",
-        "salim": "salim2018",
-        "salim_sbl18": "salim2018",
-        "li08": "li2008_ext",
-        "smc": "gordon2003_smc",
-        "lmc": "gordon2003_smc",
-        "power_law": "charlot_fall2000",
-        # Dust emission
-        "dl07": "draine_li2007",
-        "draine_li2007": "draine_li2007",
-        "dl14": "draine2014",
-        "dale2014": "dale2014",
-        "casey2012": "casey2012",
-        "mbb": "casey2012",
-        # Nebular
-        "cue": "cue",
-        "cloudy_grid": "cloudy",
-        # Inference
-        "mcmc_nuts": "blackjax",
-        "vi": "nifty",
-        "vi_nonlinear_fast": "nifty",
-        "mcmc_raytrace": "raytrace_behroozi",
-        "pathfinder": "pathfinder",
-        "nss": "nss",
-        # Frameworks (always-on)
-        "tengri": "tengri",
-        "DSPS": "dsps",
-        "JAX": "jax",
-    }
 
     rows = cite_components(obj)
     _display("% ────────────────────────────────────────────────────────────────")
@@ -1743,15 +1679,22 @@ def print_components_bibtex(obj=None) -> None:
 
     try:
         from tengri.citations import cite as _cite_lookup
+        from tengri.citations.resolve import citation_keys_for
     except ImportError:
         _cite_lookup = None
+
+        def citation_keys_for(_name):
+            return []
 
     seen_keys: set[str] = set()
     for row in rows:
         name = row["name"]
         comp = row["component"]
-        bibkey = _NAME_TO_BIBKEY.get(name) or _NAME_TO_BIBKEY.get(name.lower())
-        if bibkey and bibkey not in seen_keys and _cite_lookup is not None:
+        emitted = False
+        for bibkey in citation_keys_for(name):
+            if bibkey in seen_keys or _cite_lookup is None:
+                emitted = emitted or bibkey in seen_keys
+                continue
             try:
                 citation = _cite_lookup(bibkey)
                 bib_method = getattr(citation, "to_bibtex", None)
@@ -1760,14 +1703,23 @@ def print_components_bibtex(obj=None) -> None:
                     _display(bib_method())
                     _display("")
                     seen_keys.add(bibkey)
-                    continue
+                    emitted = True
             except Exception:
-                pass
-        # Fallback: free-form citation note
+                continue
+        if emitted:
+            continue
+        # Fallback: free-form citation note. Say what is actually missing —
+        # a *mapping* from this component name to a key, not necessarily the
+        # entry. Four references (Charlot & Fall 2000, Bell 2003, Inoue+2014,
+        # Yang+2020) were in references.bib the whole time and still printed
+        # "no bib entry", so readers pasted the output and silently lost them.
         cit = row.get("citation", "")
         if cit:
             _display(f"% [{comp}] {name}: {cit}")
-            _display("%   (no bib entry in tengri.citations — please add manually)")
+            _display(
+                f"%   (no BibTeX key is mapped to {name!r} — add one to "
+                "tengri.citations.associations)"
+            )
             _display("")
 
 

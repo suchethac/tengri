@@ -42,6 +42,41 @@ ALL_RECIPES = (
     "dust_demo",
 )
 
+#: Recipes exercised end-to-end, split by the SSP their docstrings require.
+#: Named here rather than inline in ``parametrize`` so the coverage test below
+#: can read them, instead of a second hand-written copy drifting from the first.
+BUILD_AND_PREDICT_WNE = {"mock_recovery_minimal", "photoz", "high_z", "dust_demo"}
+BUILD_AND_PREDICT_CUE = {"star_forming_photometry", "quiescent_z0", "stochastic_sfh_jwst"}
+
+#: Recipes deliberately not built here, with the reason on the record. An
+#: exemption stated in one place can be reviewed; an omission from two
+#: hand-written lists cannot be told from an oversight.
+BUILD_EXEMPT = {
+    "agn_panchromatic": "heavy AGN template libraries; covered by the structure "
+    "and frozen-free-param layers",
+    "composable_agn": "heavy AGN template libraries; covered by the structure "
+    "and frozen-free-param layers",
+    "unified_agn": "grid-gated on data/synthesizer_grids/, absent in CI",
+}
+
+
+def _recipe_functions() -> set[str]:
+    """Every public recipe factory actually defined in :mod:`tengri.recipes`.
+
+    Read off the live module, so the tests below cannot be satisfied by a
+    stale pinned list agreeing with itself.
+    """
+    import inspect
+
+    return {
+        name
+        for name, obj in vars(recipes).items()
+        if not name.startswith("_")
+        and inspect.isfunction(obj)
+        and (getattr(obj, "__module__", "") or "").startswith("tengri")
+    }
+
+
 # Frozen contract: the exact free-parameter set of every recipe (sorted).
 # unified_agn is excluded — it is grid-gated on data/synthesizer_grids/.
 # Regenerate a line ONLY for a deliberate recipe change:
@@ -183,6 +218,44 @@ class TestRecipesSurface:
         actual = {name for name in dir(recipes) if not name.startswith("_")}
         missing = set(ALL_RECIPES) - actual
         assert not missing, f"Missing recipes: {missing}"
+
+    def test_no_recipe_exists_that_is_not_pinned(self):
+        """The converse, which nothing checked.
+
+        The assertion above is one-directional: it catches a pinned recipe that
+        was deleted, never a recipe that was added and never pinned. Every other
+        test in this file parametrizes over a pinned list, so an unpinned recipe
+        would ship with no free-param contract, no structure test and no
+        build-and-predict — silently, and green. Same asymmetry #1606 found
+        between the two API-coverage directions.
+        """
+        actual = _recipe_functions()
+        unpinned = actual - set(ALL_RECIPES)
+        assert not unpinned, (
+            f"recipes exist but are not in ALL_RECIPES: {sorted(unpinned)}. "
+            f"Add them there and to RECIPE_FREE_PARAMS, then either give them a "
+            f"build-and-predict case or list them in BUILD_EXEMPT with a reason."
+        )
+
+    def test_every_recipe_is_build_tested_or_exempt_on_the_record(self):
+        """A recipe must build, or say in one place why it is not built here.
+
+        ``TestRecipesBuildAndPredict`` parametrizes two hand-written lists. The
+        three AGN recipes are absent from both on purpose — their template
+        libraries are heavy and they are covered by the structure and
+        frozen-free-param layers instead — but that reasoning lived in a
+        docstring, where a fourth omission would have looked identical to it.
+        """
+        covered = BUILD_AND_PREDICT_WNE | BUILD_AND_PREDICT_CUE
+        accounted = covered | set(BUILD_EXEMPT)
+        unaccounted = _recipe_functions() - accounted
+        assert not unaccounted, (
+            f"recipes with neither a build-and-predict case nor an exemption: "
+            f"{sorted(unaccounted)}"
+        )
+        assert not (covered & set(BUILD_EXEMPT)), (
+            "a recipe is both build-tested and exempt; the exemption is stale"
+        )
 
     @pytest.mark.parametrize("name", sorted(RECIPE_FREE_PARAMS))
     def test_recipe_free_params_frozen(self, name):
@@ -383,16 +456,14 @@ class TestRecipesBuildAndPredict:
     recipes that parse but cannot build, and NaN-producing defaults.
     """
 
-    @pytest.mark.parametrize("name", ["mock_recovery_minimal", "photoz", "high_z", "dust_demo"])
+    @pytest.mark.parametrize("name", sorted(BUILD_AND_PREDICT_WNE))
     def test_wne_compatible_recipes_build_and_predict(
         self, name, ssp_data_wne, synthetic_tophat_obs
     ):
         """Recipes whose SSP requirement is wNE or 'any' (per their docstrings)."""
         _build_and_predict(name, ssp_data_wne, synthetic_tophat_obs)
 
-    @pytest.mark.parametrize(
-        "name", ["star_forming_photometry", "quiescent_z0", "stochastic_sfh_jwst"]
-    )
+    @pytest.mark.parametrize("name", sorted(BUILD_AND_PREDICT_CUE))
     def test_cue_recipes_build_and_predict(self, name, ssp_data_bc03, synthetic_tophat_obs):
         """Cue-backed recipes need a bare-stellar SSP (skips when bc03 grid absent).
 

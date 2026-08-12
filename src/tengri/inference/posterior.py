@@ -86,7 +86,9 @@ class PosteriorProperties(ReadOnlyPropertyMapping, Mapping):
 
         available = model.available_properties
         if name not in available:
-            raise KeyError(f"Unknown property {name!r}. Available: {sorted(available)}")
+            from tengri.forward.properties import missing_property_message
+
+            raise KeyError(missing_property_message(name, available=available))
 
         if post.samples is None:
             # MAP: one point, no sample axis. Same key, zero extra axes.

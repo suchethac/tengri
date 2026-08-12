@@ -5425,8 +5425,11 @@ class SEDModel:
         # Validate all names are known
         unknown = set(names_to_compute) - set(self._property_catalog.keys())
         if unknown:
-            available = sorted(self._property_catalog.keys())
-            raise KeyError(f"Unknown properties: {sorted(unknown)}. Available: {available}")
+            from tengri.forward.properties import missing_property_message
+
+            raise KeyError(
+                missing_property_message(*sorted(unknown), available=self._property_catalog)
+            )
 
         # A 'lines' property on a backend with no per-line catalog is NaN. Say
         # so here too: pred.lines.* has warned since #361 but this surface --
@@ -5509,8 +5512,11 @@ class SEDModel:
             - ``sfr_10myr`` : float. SFR time-averaged over last 10 Myr [M☉/yr]
             - ``ssfr`` : float. Specific SFR (SFR/M_surv or SFR/M_formed) [yr⁻¹]
             - ``mass_weighted_age_gyr`` : float. Mass-weighted age [Gyr]
-            - ``mass_weighted_metallicity`` : float. Mass-weighted log₁₀(Z/Z☉) or
-              absolute log₁₀(Z) depending on metallicity mode
+            - ``mass_weighted_metallicity`` : float. Mass-weighted log₁₀(Z/Z☉)
+              [dex], the same convention ``met_logzsol`` is set in. The old
+              "or absolute log₁₀(Z) depending on metallicity mode" hedge was
+              wrong twice over: the value was absolute in *every* mode, and
+              the computation has no metallicity-mode branch to vary on (#1703)
 
         Notes
         -----
@@ -5631,12 +5637,19 @@ class SEDModel:
 
         # Mass-weighted age and metallicity
         mw_age = compute_mass_weighted_age(weights, self.ssp_ages_yr)
-        mw_z = compute_mass_weighted_metallicity(
-            weights,
-            self.ssp_ages_yr,
-            p.get("log_z_abs", 0.0),
-            log_z_initial=p.get("log_z_abs_initial"),
-            log_z_final=p.get("log_z_abs_final"),
+        # The helper works in the grid's absolute log10(Z) (its inputs are the
+        # ``log_z_abs*`` params); convert on the way out, as the property
+        # catalog does, so this deprecated surface reports the same number.
+        from tengri.utils.conversions import log_z_abs_to_logzsol
+
+        mw_z = log_z_abs_to_logzsol(
+            compute_mass_weighted_metallicity(
+                weights,
+                self.ssp_ages_yr,
+                p.get("log_z_abs", 0.0),
+                log_z_initial=p.get("log_z_abs_initial"),
+                log_z_final=p.get("log_z_abs_final"),
+            )
         )
 
         return SFHQuantities(
