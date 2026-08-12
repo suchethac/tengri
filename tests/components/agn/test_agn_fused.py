@@ -114,22 +114,12 @@ class TestAGNModeDetection:
             model = SEDModel(legacy_agn_spec, synthetic_ssp, filters=simple_filters)
         assert model._agn_luminosity_mode is False
 
-    @pytest.mark.skip(reason="hybrid/fused kernel detection deleted in Phase 6")
-    def test_parametric_enables_hybrid(self, parametric_agn_spec, synthetic_ssp, simple_filters):
-        """Parametric AGN allows hybrid kernel."""
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            model = SEDModel(parametric_agn_spec, synthetic_ssp, filters=simple_filters)
-        assert model._hybrid.photometry is not None
-
-    @pytest.mark.skip(reason="hybrid/fused kernel detection deleted in Phase 6")
-    def test_legacy_still_builds_hybrid(self, legacy_agn_spec, synthetic_ssp, simple_filters):
-        """Legacy AGN still builds hybrid kernel (non-stellar at full res)."""
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            model = SEDModel(legacy_agn_spec, synthetic_ssp, filters=simple_filters)
-        # Hybrid handles all AGN modes (frac computed from broadband L_bol)
-        assert model._hybrid.photometry is not None
+    # test_parametric_enables_hybrid and test_legacy_still_builds_hybrid lived
+    # here, both asserting `model._hybrid.photometry is not None` and both
+    # skipped with "hybrid/fused kernel detection deleted in Phase 6". The
+    # attribute they read no longer exists, so neither can ever run again — a
+    # permanently-skipped test is not coverage, it is a comment with a fixture
+    # bill. The mode detection they preceded is still tested above.
 
 
 # ── Tests: fused AGN photometry correctness ───────────────────────
@@ -171,20 +161,22 @@ class TestAGNFusedPhotometry:
                     f"Non-finite gradient for {name}: {grad_val}"
                 )
 
-    @pytest.mark.skip(
-        reason="exact path: simple_agn contribution is negligible at optical wavelengths "
-        "for synthetic SSP — relied on the deleted approx=True call-time kwarg"
-    )
     def test_agn_lbol_affects_photometry(self, parametric_agn_spec, synthetic_ssp, simple_filters):
-        """Changing agn_log_lbol changes the photometry (approx path)."""
+        """Raising agn_log_lbol must brighten every band.
+
+        Un-skipped: the reason given was that the AGN contribution is
+        negligible at optical wavelengths for a synthetic SSP, and that the
+        test relied on a deleted ``approx=True`` call-time kwarg. Neither
+        holds — the property passes as written against the current exact path.
+        A skip reason nobody re-checks is indistinguishable from lost coverage,
+        and this is a monotonicity the fitter depends on: if L_bol did not move
+        the photometry, nothing would constrain it.
+        """
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             model = SEDModel(parametric_agn_spec, synthetic_ssp, filters=simple_filters)
         key = jax.random.PRNGKey(42)
         params = parametric_agn_spec.sample(key)
-        # Use approx=True to test the fused kernel AGN path specifically.
-        # The exact path evaluates AGN on the full SSP grid where simple_agn
-        # contribution is negligible at optical wavelengths for a synthetic SSP.
         # Low AGN luminosity
         params_low = {**params, "agn_log_lbol": 8.0}
         phot_low = model.predict_photometry(params_low)
