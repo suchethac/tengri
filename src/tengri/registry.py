@@ -2001,6 +2001,21 @@ def _every_menu_lister() -> tuple:
     the hand-written unions: **+2 menus, 0 lost, 460 -> 490 rows walked, and 0
     new multi-menu names**, so no existing lookup changes its answer.
 
+    The population scanned is the **union of both export lists**, and that
+    matters as much as deriving the set at all. ``dir(tengri)`` is not the
+    public surface: it is curated down to ~30 obvious entry points on purpose
+    ("not the 175-item kitchen sink of every public symbol",
+    :mod:`tengri.__init__`). Scanning it alone made the derivation inherit the
+    curation — ``list_parameters``, ``list_properties``,
+    ``list_filter_conventions`` and ``list_available_ssps`` are exported and
+    not curated, so they stayed invisible and **410 further advertised names
+    stayed refused**, 358 of them parameters. Unioning ``__all__`` is the rule
+    #1608 established when the same blind spot made ``check_api_coverage.py``
+    report 0 missing while 6 were. Measured at that widening: **+4 menus, 0
+    lost, 490 -> 935 rows walked, 463 -> 887 names (+424), and 0 answers
+    changed** — the last of which is true only because of the scan order
+    below, not for free.
+
     Cached because discovery *calls* each ``list_*`` to check its shape:
     uncached that was 95 ms, **49% of a 193 ms** ``describe()``, paid again on
     every lookup. The set of menus cannot change within a process, so it is
@@ -2013,7 +2028,15 @@ def _every_menu_lister() -> tuple:
     for fn in (*_menu_listers(), *(getattr(tengri, n, None) for n in _EXTRA_MENU_LISTER_NAMES)):
         if fn is not None:
             seen[fn.__name__] = fn
-    for attr in sorted(dir(tengri)):
+    # Curated names first, export-only names after. Order is not cosmetic:
+    # ``describe`` reports ``matches[0]``, so a menu discovered earlier wins a
+    # name that several menus print. Scanning the union in one sorted pass put
+    # ``list_available_ssps`` ahead of ``list_known_ssps`` and moved all 21 SSP
+    # names onto the newly-found menu — 21 answers changed, for a change whose
+    # whole claim is that it adds names without altering any.
+    curated = sorted(dir(tengri))
+    export_only = sorted(set(tengri.__all__) - set(dir(tengri)))
+    for attr in (*curated, *export_only):
         if not attr.startswith("list_") or attr in seen:
             continue
         fn = getattr(tengri, attr, None)
@@ -2739,21 +2762,26 @@ def list_all() -> dict[str, _RegistryTable]:
     Returns
     -------
     dict
-        Keys: components, inference_methods, agn_models, dust_laws, sfh_models,
-        nebular_backends. Each value is a `_RegistryTable` (list[dict]) that
-        prints as a table.
+        One key per menu, named after its lister without the ``list_`` prefix
+        (``list_dust_laws`` -> ``dust_laws``). Each value is a
+        `_RegistryTable` (list[dict]) that prints as a table.
+
+    Notes
+    -----
+    The keys are derived from the same census :func:`describe` and
+    :func:`search` sweep, not listed here. :func:`_menu_listers` names this
+    function as one of the three that "all walk this one tuple" — it was the
+    one that never walked it, returning a hand-written dict of nine literals
+    while 25 menus existed. So it showed 9 of 25, and its own ``Returns``
+    section named only six of the nine it did return, while
+    :mod:`tengri.__init__` tells readers it "enumerates every registry live".
+
+    Deriving the keys preserves all nine that were there — every one is its
+    lister's name minus the prefix — and adds the sixteen that were missing,
+    so this widens the result without renaming anything: 9 -> 25 categories,
+    921 rows.
     """
-    return {
-        "components": list_components(),
-        "inference_methods": list_inference_methods(),
-        "agn_models": list_agn_models(),
-        "dust_laws": list_dust_laws(),
-        "dust_emission_models": list_dust_emission_models(),
-        "sfh_models": list_sfh_models(),
-        "nebular_backends": list_nebular_backends(),
-        "filters": list_filters(),
-        "plots": list_plots(),
-    }
+    return {fn.__name__.removeprefix("list_"): fn() for fn in _every_menu_lister()}
 
 
 def list_properties(*, group: str | None = None) -> _RegistryTable:

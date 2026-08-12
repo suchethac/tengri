@@ -1237,9 +1237,19 @@ def _format_stuck(group: str, stuck: list[str]) -> tuple[str, str, str]:
         Comma-joined names, truncated with a ``(+N more)`` tail.
     top : str
         Top-level group name — what the caller writes as the kwarg.
-    short : str
-        First stuck name with its group prefix stripped — the short form the
-        caller writes inside the group dict.
+    example : str
+        A ready-to-paste snippet freeing the first stuck parameter, nested at
+        the level the grammar accepts.
+
+    Notes
+    -----
+    The snippet used to be assembled by the callers as
+    ``f"{top}={{{short!r}: Uniform(lo, hi)}}"``, which flattens a sub-block
+    parameter to its top-level group: for ``dust.emission`` that produced
+    ``dust={'alpha_dale': Uniform(lo, hi)}``. The dust level used to accept
+    that spelling and silently discard it, so the advice appeared to work and
+    changed nothing; it is now refused outright. Either way the recommendation
+    has to name the nesting the parameter actually lives at.
     """
     # Show enough that the caller can see what they meant to free without
     # scrolling; groups run to ~22 params at the widest (dust.emission).
@@ -1249,9 +1259,12 @@ def _format_stuck(group: str, stuck: list[str]) -> tuple[str, str, str]:
     )
     top = group.split(".")[0]
     prefix = f"{top}_"
-    example = stuck[0]
-    short = example[len(prefix) :] if example.startswith(prefix) else example
-    return shown, top, short
+    first = stuck[0]
+    short = first[len(prefix) :] if first.startswith(prefix) else first
+    sub = group.split(".", 1)[1] if "." in group else None
+    inner = f"{{{short!r}: Uniform(lo, hi)}}"
+    example = f"{top}={{{sub!r}: {inner}}}" if sub else f"{top}={inner}"
+    return shown, top, example
 
 
 def _check_wildcard_freed_something(
@@ -1300,7 +1313,7 @@ def _check_wildcard_freed_something(
             # Freed everything it covered — exactly what was asked for.
             continue
 
-        shown, top, short = _format_stuck(group, stuck)
+        shown, _top, example = _format_stuck(group, stuck)
 
         if len(stuck) < len(entries):
             warnings.warn(
@@ -1310,7 +1323,7 @@ def _check_wildcard_freed_something(
                 f"  {shown}\n"
                 f"The fit will run with that physics held constant. Pass "
                 f"explicit priors for the ones you meant to vary, e.g. "
-                f"{top}={{{short!r}: Uniform(lo, hi)}}, or filter "
+                f"{example}, or filter "
                 f"WildcardPartialFreeWarning if this is deliberate.",
                 WildcardPartialFreeWarning,
                 stacklevel=3,
@@ -1324,8 +1337,7 @@ def _check_wildcard_freed_something(
             f"FREE resolves to each parameter's registry default, and these "
             f"default to Fixed — so the wildcard would leave every one of them "
             f"pinned and the fit would silently not vary this physics.\n"
-            f"Pass explicit priors instead, e.g. "
-            f"{top}={{{short!r}: Uniform(lo, hi)}}."
+            f"Pass explicit priors instead, e.g. {example}."
         )
 
 
@@ -2818,7 +2830,6 @@ def _validate_user_keys(
     "AI slop" failure mode of the nested-dict API before this validator
     was added (issue tracked in the forward-model cleanup arc).
     """
-    dust_emission_active = structural_params.dust_emission is not None
     valid_top_groups = {"sfh", "met", "dust", "neb", "shock", "igm", "radio", "xray", "agn"}
 
     # Build the AGN cross-level acceptance set (shared params land in any sub-block).
@@ -2853,12 +2864,18 @@ def _validate_user_keys(
                 param_names = param_names | _short_names_for_group(
                     f"agn.{sub_name}", param_partition
                 )
-        elif top_key == "dust" and dust_emission_active:
-            # Dust top-level accepts the dust.emission param short names
-            # for legacy code that flattens emission params at the dust
-            # level. Treat as a soft acceptance (still resolved via the
-            # dust.emission group path).
-            param_names = param_names | _short_names_for_group("dust.emission", param_partition)
+        # NOTE: the dust top level deliberately does NOT accept dust.emission
+        # short names. It used to, "for legacy code that flattens emission
+        # params at the dust level ... still resolved via the dust.emission
+        # group path" — but the resolution half was never wired. Measured:
+        # **22 of 22** emission params written at the dust level were accepted
+        # and silently discarded, with no error and no warning, so
+        # ``dust={'emission': {...}, 'qpah': Uniform(1, 4)}`` ran the fit with
+        # qpah pinned at its default and one fewer free dimension than the
+        # author wrote. A form that silently does nothing can have no working
+        # caller, so refusing it cannot break code that works today.
+        # (``agn`` genuinely resolves its cross-level names — 14/14 applied —
+        # which is why that union below stays.)
         elif top_key == "igm":
             # The IGM top-level accepts DLA param short names for the
             # builder-factory output form ``igm={'dla': True, 'log_n_hi': ...}``,
@@ -2941,13 +2958,53 @@ def _check_dict_keys(
         for full_name in param_partition:
             suggestion_pool.add(_extract_short_name(full_name, {}))
             suggestion_pool.add(full_name)
+        # A parameter written one level too high is the common case, and
+        # "Unknown key 'alpha' ... Did you mean: alpha?" — the message this
+        # produced before — tells the reader to write exactly what they wrote.
+        # Name the sub-block instead.
+        owner = _subblock_owning(str(key), group, param_partition)
+        if owner is not None:
+            sub = owner.split(".", 1)[1]
+            raise ValueError(
+                f"{key!r} is a {owner!r} parameter, not a {group!r} one, so writing "
+                f"it here would be silently ignored. Nest it: "
+                f"{group}={{{sub!r}: {{{key!r}: ...}}}}."
+            )
         suggestions = difflib.get_close_matches(str(key), list(suggestion_pool), n=2, cutoff=0.6)
+        # A suggestion identical to the rejected key is noise, not help.
+        suggestions = [s for s in suggestions if s != str(key)]
         suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
         raise ValueError(
             f"Unknown key {key!r} in group {group!r}.{suggest_str} "
             f"Valid structural keys for this group are: "
             f"{sorted(_GROUP_STRUCTURAL_KEYS.get(group, frozenset({'type', '*'})))}."
         )
+
+
+def _subblock_owning(key: str, group: str, param_partition: dict[str, str]) -> str | None:
+    """The ``group.sub`` block that declares ``key``, if one does.
+
+    Parameters
+    ----------
+    key : str
+        The rejected key, short or fully prefixed.
+    group : str
+        The group the key was written under.
+    param_partition : dict
+        Full parameter name -> owning group.
+
+    Returns
+    -------
+    str or None
+        ``"dust.emission"``-style owner, or ``None`` when no sub-block of
+        ``group`` declares it.
+    """
+    for sub in _GROUP_STRUCTURAL_KEYS:
+        if not sub.startswith(f"{group}."):
+            continue
+        if key in _short_names_for_group(sub, param_partition):
+            return sub
+    return None
 
 
 def _build_agn_search_view(param_name: str, agn_dict: dict, group: str) -> dict:
