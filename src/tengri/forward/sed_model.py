@@ -104,6 +104,45 @@ from tengri.utils.scale import LOG10_4PI, apply_log10_scale
 #: between the two and is refused a constant band response.
 _L_IR_PROBE = 1.0e44
 
+#: Properties whose value is read off the rest-frame SED, which the fast-nebular
+#: grid path deletes the nebular contribution from (#950 zeroes ``nebular_sed``;
+#: that deleted Cue forward IS the speedup). ``predict_properties`` refuses these
+#: when a per-Q_H grid is attached, and serves the other 30 normally.
+#:
+#: The census is established by **measurement**, not by reading which helpers
+#: touch ``sed``: a broadband integral can be insensitive to the missing nebular
+#: flux at printed precision, and guarding the read list would over-refuse. Each
+#: name below was measured to move under ``approx=(WavePrecomp(),
+#: FeaturePrecomp())`` against exact on an FSPS/MILES Cue model at z=0.05 --
+#: 13 of 43 properties, worst first:
+#:
+#:   l_tir 30.07%   irx_fuv 29.26%   irx 27.22%   l_dust_absorbed 18.67%
+#:   xi_ion 6.20%   fuv_flux 5.84%   rest_uv_color 2.78%   l_bol 2.19%
+#:   nuv_flux 2.05%   uv_slope_beta 2.01%   dn4000 1.00%   balmer_break 0.64%
+#:   m_uv 0.08%
+#:
+#: The energy-balance quantities are the worst hit, which is the tell: deleting
+#: the nebular continuum removes reprocessed luminosity the dust budget is
+#: balanced against, so l_tir/irx/l_dust_absorbed move by ~20-30% while the
+#: shape indices move by ~1-3%.
+_FAST_NEBULAR_UNSAFE_PROPERTIES = frozenset(
+    {
+        "balmer_break",
+        "dn4000",
+        "fuv_flux",
+        "irx",
+        "irx_fuv",
+        "l_bol",
+        "l_dust_absorbed",
+        "l_tir",
+        "m_uv",
+        "nuv_flux",
+        "rest_uv_color",
+        "uv_slope_beta",
+        "xi_ion",
+    }
+)
+
 
 def _chain_consumes(chain, key: str) -> bool:
     """Does any component in ``chain`` declare ``key`` as a (possibly optional) input?
@@ -3958,6 +3997,51 @@ class SEDModel:
             raise ValueError("No filters set. Pass filters or observation= to SEDModel().")
         return self.predict_observables_jit(params).phot_fnu
 
+    def _refuse_on_fast_nebular(self, caller):
+        """Refuse a rest-frame-SED consumer on a fast-nebular model (#950, #1665).
+
+        With a per-Q_H nebular grid attached the Cue continuum forward is
+        skipped (``nebular_sed = 0``), so anything *measured off the rest-frame
+        SED* is missing both the nebular continuum and the emission lines.
+        Photometry and line fluxes stay correct — they reconstruct from the
+        grid — which is precisely why the damage is invisible from the fit that
+        selected the fast path.
+
+        One helper called by every such consumer, because **the census is the
+        part that goes wrong**: #950 guarded ``predict_spectrum`` and stopped
+        there, so ``predict_spectral_indices`` kept measuring a gutted rest SED.
+        Under ``approx=(WavePrecomp(), FeaturePrecomp())`` that moved all 13
+        spectral indices off the exact path — worst ``HgA`` by **+1733%**, the
+        five Balmer indices by 29–1733% — with no exception and no warning
+        (#1665). Adding a rest-SED consumer means adding a call here.
+
+        Parameters
+        ----------
+        caller : str
+            Public method name, quoted back to the user in the error.
+
+        Raises
+        ------
+        ValueError
+            Whenever a per-Q_H nebular grid is attached to this model.
+
+        Notes
+        -----
+        **JIT-compatible**: yes — the check reads a static Python attribute set
+        at build time, so it resolves at trace time and emits no ops.
+        """
+        if getattr(self, "_nebular_grid_table", None) is None:
+            return
+        raise ValueError(
+            f"{caller} is not available on a fast-nebular model: a per-Q_H "
+            "nebular grid is attached (approx=(WavePrecomp(), FeaturePrecomp()), "
+            "or enable_fast_nebular), so the Cue continuum forward is skipped and "
+            "the rest-frame SED omits the nebular continuum and emission lines. "
+            "Use approx=WavePrecomp() alone — exact for this quantity and still "
+            "LUT-fast for photometry — or drop approx= entirely, for spectra, "
+            "spectral indices, line ratios, and .lines."
+        )
+
     def predict_spectrum(
         self,
         params,
@@ -4056,19 +4140,9 @@ class SEDModel:
         predict : Lazy access to all SED and SFH quantities.
         predict_photometry : Filter-integrated flux (simpler, faster).
         """
-        # Fast-nebular guard (#950): with a per-Q_H grid attached the Cue
-        # continuum forward is skipped (nebular_sed = 0), so the spectrum would
-        # be missing the nebular continuum + emission lines. Refuse loudly rather
-        # than silently return a nebular-less spectrum — the fast path is for
-        # photometry + line fluxes only.
-        if getattr(self, "_nebular_grid_table", None) is not None:
-            raise ValueError(
-                "predict_spectrum is not available on a fast-nebular model "
-                "(enable_fast_nebular attached a per-Q_H grid, so the Cue "
-                "continuum forward is skipped and the spectrum would omit the "
-                "nebular emission). Use the exact model (built without "
-                "enable_fast_nebular) for spectra, line ratios, and .lines."
-            )
+        # Fast-nebular guard (#950): the fast path is for photometry + line
+        # fluxes only. Shared with every other rest-SED consumer (#1665).
+        self._refuse_on_fast_nebular("predict_spectrum")
 
         # A caller-supplied ``wave_obs`` is evaluated directly on that grid,
         # independent of any configured spectroscopy channel or the cached
@@ -4660,6 +4734,12 @@ class SEDModel:
         **JIT-compatible**: no — delegates to the nebular backend via
         :meth:`predict_state`.
         """
+        # Diagnose the fast-nebular case FIRST (#1665). The grid path skips the
+        # discrete line-catalog publish, so a Cue model would otherwise fall
+        # through to the backend message below and be told to "use Cue" -- advice
+        # the user has already taken, naming a cause that is not theirs.
+        self._refuse_on_fast_nebular("predict_line_ratios")
+
         if state is None:
             state = self.predict_state(params)
         if "line_waves" not in state.derived or "line_lums" not in state.derived:
@@ -4733,6 +4813,11 @@ class SEDModel:
         """
         from tengri.forward.result import SEDResult
         from tengri.observation.spectral_indices import measure_index_jax
+
+        # Indices are measured off the rest-frame SED, which the fast-nebular
+        # grid path gutted (#1665). Same guard as predict_spectrum — this
+        # consumer was simply missing from that census.
+        self._refuse_on_fast_nebular("predict_spectral_indices")
 
         if fast:
             return self._feature_fast_indices(params, tuple(index_defs))
@@ -5342,6 +5427,14 @@ class SEDModel:
         if unknown:
             available = sorted(self._property_catalog.keys())
             raise KeyError(f"Unknown properties: {sorted(unknown)}. Available: {available}")
+
+        # Rest-SED-derived properties cannot be served by the fast-nebular grid
+        # (#1665). Refuse only those: stellar_mass, sfr and the other 30 are
+        # perfectly correct on the fast path, and blanket-refusing them would
+        # break exactly the fits the fast path exists for.
+        unsafe = sorted(_FAST_NEBULAR_UNSAFE_PROPERTIES.intersection(names_to_compute))
+        if unsafe and getattr(self, "_nebular_grid_table", None) is not None:
+            self._refuse_on_fast_nebular(f"predict_properties(names={unsafe})")
 
         # Compute the state once
         state = self.predict_state(params)
@@ -5958,6 +6051,9 @@ class SEDModel:
             DeprecationWarning,
             stacklevel=2,
         )
+        # Deprecated, but it reaches the rest SED by its own route rather than
+        # through predict_spectrum, so it needs the census guard too (#1665).
+        self._refuse_on_fast_nebular("predict_spectrum_components")
         return self._spectrum_via_state(params, wave_obs=wave_obs)
 
     def predict_emission_lines(self, params):
