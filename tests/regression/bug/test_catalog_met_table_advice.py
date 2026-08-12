@@ -10,7 +10,7 @@ made one mistake was handed a second one.
 ``"table"`` is the single metallicity mode that *cannot* be inferred from
 parameter names, because it declares no fittable parameters
 (``met_registry._MET_MODE_DISCRIMINATORS``). It has to be named explicitly, and
-the way to name it through the build grammar is ``stellar={'met_mode': 'table'}``.
+the way to name it through the build grammar is ``met={'type': 'table'}``.
 
 The general guard is the fourth arm of
 ``tests/contract/test_error_message_advice_parses.py``, which reads every
@@ -35,7 +35,7 @@ def test_the_advised_form_selects_the_tabulated_mode() -> None:
     A snippet the grammar merely tolerates would satisfy the contract guard and
     still leave the user exactly where they started.
     """
-    spec = parse_groups(stellar={"met_mode": "table"})
+    spec = parse_groups(met={"type": "table"})
     assert spec.met_mode == "table", (
         f"stellar={{'met_mode': 'table'}} parsed but produced met_mode="
         f"{spec.met_mode!r}; the advice would send a stuck user in a circle."
@@ -65,7 +65,7 @@ def test_the_message_names_a_form_the_grammar_accepts() -> None:
     from tengri.inference.catalog import Catalog
 
     source = Catalog.from_histories.__doc__ or ""
-    assert "stellar={'met_mode': 'table'}" in source, (
+    assert "met={'type': 'table'}" in source, (
         "the from_histories docstring should name the working build form; it is the "
         "published API reference for this call"
     )

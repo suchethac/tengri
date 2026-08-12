@@ -107,7 +107,7 @@ Reference: Conroy 2013, ARA&A, 51, 393 (SPS and the age-metallicity degeneracy).
         ssp,
         observation=obs,
         sfh={"type": "table"},
-        stellar={"met_mode": "table"},
+        met={"type": "table"},
         dust={"type": "two_component", "all_params": tengri.FIXED, "tau_bc": 0.4},
         redshift=tengri.Fixed(Z_OBS),
     )
@@ -127,7 +127,7 @@ Reference: Conroy 2013, ARA&A, 51, 393 (SPS and the age-metallicity degeneracy).
         ssp,
         observation=obs,
         sfh={"type": "table"},
-        stellar={"met_logzsol": tengri.Uniform(grid_lo, grid_hi)},
+        met={"logzsol": tengri.Uniform(grid_lo, grid_hi)},
         dust={"type": "two_component", "all_params": tengri.FIXED, "tau_bc": 0.4},
         redshift=tengri.Fixed(Z_OBS),
     )
@@ -218,7 +218,7 @@ Reference: Conroy 2013, ARA&A, 51, 393 (SPS and the age-metallicity degeneracy).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.641 seconds)
+   **Total running time of the script:** (0 minutes 8.842 seconds)
 
 
 .. _sphx_glr_download_auto_examples_workflows_plot_workflow_simulation_seds.py:

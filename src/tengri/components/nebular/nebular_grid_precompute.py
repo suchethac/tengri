@@ -344,7 +344,7 @@ def _refuse_tabulated_metallicity(model):
         return
     raise ValueError(
         "FeaturePrecomp cannot serve a tabulated metallicity. Its grid axes are "
-        "the model's free parameters, and stellar={'met_mode': 'table'} declares "
+        "the model's free parameters, and met={'type': 'table'} declares "
         "none — so met_logzsol is absent, the metallicity axis silently drops, "
         "and the whole table would be built at one reference metallicity. "
         "Measured that way against the exact path, OIII_5007 came out 17.5% "

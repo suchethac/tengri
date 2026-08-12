@@ -500,7 +500,7 @@ class Catalog:
         ----------
         fwd : ForwardModel
             Model built with ``sfh={'type': 'table'}`` (and
-            ``stellar={'met_mode': 'table'}`` if ``met`` is given).
+            ``met={'type': 'table'}`` if ``met`` is given).
         t_gyr : array_like, shape (n_t,) or (N, n_t)
             Cosmic time [Gyr], strictly increasing. A 1-D grid is shared by
             every galaxy and broadcast.
@@ -630,7 +630,7 @@ class Catalog:
 
         if met is not None and cfg.metallicity_model != "table":
             raise ValueError(
-                f"met= needs a model built with stellar={{'met_mode': 'table'}}; "
+                f"met= needs a model built with met={{'type': 'table'}}; "
                 f"this model's metallicity_model is {cfg.metallicity_model!r}. "
                 f"Either rebuild with a tabulated metallicity or drop met=. "
                 f"('table' is the one metallicity mode that cannot be inferred "
@@ -639,7 +639,7 @@ class Catalog:
             )
         if met is None and cfg.metallicity_model == "table" and not _has_build_time_met(cfg):
             raise ValueError(
-                "this model was built with stellar={'met_mode': 'table'}, so its "
+                "this model was built with met={'type': 'table'}, so its "
                 "metallicity arrives at runtime the same way its SFH does — but "
                 "no met= history was given and the component carries no build-time "
                 "table either. Pass met= alongside sfr=, or rebuild without "

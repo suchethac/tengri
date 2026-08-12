@@ -181,6 +181,16 @@ model = SEDModel.build(
   wildcard (`FREE`/`FIXED`; default `FIXED`; the `'*'` synonym is still accepted
   but slated for deprecation), and per-parameter short-form overrides (e.g.
   `'beta'` inside the sfh group resolves to `sfh_dpl_beta`).
+- **`met` is the metallicity group**, parallel to `sfh`: `met={'type': 'table'}`,
+  `met={'type': 'ramp', 'logzsol_0': ...}`, `met={'logzsol': Uniform(...)}`.
+  The `stellar={'met_mode': ...}` spelling of #311 is **gone** (#1720) — it was
+  the one group naming its structural key something other than `'type'`, and the
+  only group whose name did not match what it configured, which is how #1677
+  shipped advice the grammar refused. Passing `stellar=` raises with the
+  translation. `tengri.list_metallicity_modes()` is the live menu.
+  **The group census is derived**, not restated: `valid_groups` comes from
+  `_GROUP_STRUCTURAL_KEYS`, and `SEDModel.build`'s signature is the one
+  remaining hand-maintained copy — add a group to both.
 - Sub-blocks: `dust.emission`, plus the six AGN composable selectors —
   `agn.disc`, `agn.torus`, `agn.nlr`, `agn.blr`, `agn.feii`, `agn.atten`
   (the deprecated `agn.lines` alias expands to an nlr/blr pair). Each nests

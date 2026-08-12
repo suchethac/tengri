@@ -374,7 +374,7 @@ def test_from_histories_rejects_met_without_a_table_metallicity(fwd_table_sfh):
     from tengri import Catalog
 
     t, sfr = _flat_histories([1.0])
-    with pytest.raises(ValueError, match=r"stellar=\{'met_mode': 'table'\}"):
+    with pytest.raises(ValueError, match=r"met=\{'type': 'table'\}"):
         Catalog.from_histories(fwd_table_sfh, t_gyr=t, sfr=sfr, met=np.zeros_like(sfr))
 
 
@@ -392,9 +392,9 @@ def test_the_met_advice_is_a_form_the_grammar_accepts(fwd_table_sfh):
     with pytest.raises(ValueError) as excinfo:
         Catalog.from_histories(fwd_table_sfh, t_gyr=t, sfr=sfr, met=np.zeros_like(sfr))
 
-    spec = parse_groups(stellar={"met_mode": "table"})
+    spec = parse_groups(met={"type": "table"})
     assert spec.met_mode == "table"
-    assert "stellar={'met_mode': 'table'}" in str(excinfo.value)
+    assert "met={'type': 'table'}" in str(excinfo.value)
 
 
 def test_predict_without_columns_needs_from_histories(fwd_table_sfh):

@@ -333,12 +333,12 @@ def test_the_exemption_does_not_swallow_the_bug_it_sits_next_to() -> None:
     the arm green and blind — the failure mode this whole file exists to catch.
     """
     message = (
-        "met= needs a model built with stellar={'met_mode': 'table'}; either "
+        "met= needs a model built with met={'type': 'table'}; either "
         "rebuild with a tabulated metallicity or drop met=."
     )
     names = [name for name, _ in _dict_snippets(message)]
-    assert "stellar" in names
-    at = message.index("stellar={")
+    assert "met" in names
+    at = message.index("met={")
     assert not _is_removal_advice(message, at), (
         "the trailing 'drop met=.' must not exempt the recommendation that precedes it"
     )
@@ -353,6 +353,19 @@ def test_every_literal_advice_snippet_in_src_is_accepted_by_the_grammar() -> Non
     """
     failures = []
     for relpath, lineno, name, value in _literal_advice_in_source():
+        if _has_ellipsis(value):
+            # ``met={'type': ...}`` names the group and the key but leaves the
+            # value for the reader — prose, not a runnable line, the same
+            # category as an f-string interpolation. Executing it would fail on
+            # the placeholder rather than on anything the writer got wrong.
+            #
+            # NOT skipped, though: the whole point of this arm is that #1677 was
+            # a wrong *group name*, and a placeholder value hides nothing about
+            # the name. It is still checked, so the arm would still have caught
+            # `met={'type': ...}` back when `met` did not exist — the neuter
+            # check that matters here.
+            failures.extend(_bad_group_name(relpath, lineno, name, value))
+            continue
         try:
             parse_groups(**{name: value})
         except Exception as exc:
@@ -361,3 +374,33 @@ def test_every_literal_advice_snippet_in_src_is_accepted_by_the_grammar() -> Non
                 f"      but that raises {type(exc).__name__}: {exc}"
             )
     assert not failures, "error-message advice the grammar refuses:\n" + "\n".join(failures)
+
+
+def _has_ellipsis(value) -> bool:
+    """Does this snippet leave a value for the reader to fill in?"""
+    if value is Ellipsis:
+        return True
+    if isinstance(value, dict):
+        return any(_has_ellipsis(v) for v in value.values())
+    if isinstance(value, (list, tuple)):
+        return any(_has_ellipsis(v) for v in value)
+    return False
+
+
+def _bad_group_name(relpath, lineno, name, value) -> list[str]:
+    """Check the group name — the part a placeholder value leaves intact.
+
+    Only the name. Keys are deliberately *not* checked: ``met={'logzsol': ...}``
+    is legitimate advice naming a per-parameter override, and those are not
+    structural keys, so judging keys here would flag correct advice. The name is
+    what #1677 got wrong, and the name is what this still catches.
+    """
+    from tengri.parameters.groups import _GROUP_STRUCTURAL_KEYS
+
+    valid_groups = {k for k in _GROUP_STRUCTURAL_KEYS if "." not in k}
+    if name in valid_groups:
+        return []
+    return [
+        f"  {relpath}:{lineno} advises {name}={value!r}\n"
+        f"      but '{name}' is not a grammar group. Valid: {sorted(valid_groups)}"
+    ]

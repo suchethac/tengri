@@ -73,7 +73,7 @@ model_zt = tengri.SEDModel.build(
     ssp,
     observation=obs,
     sfh={"type": "table"},
-    stellar={"met_mode": "table"},
+    met={"type": "table"},
     dust={"type": "two_component", "all_params": tengri.FIXED, "tau_bc": 0.4},
     redshift=tengri.Fixed(Z_OBS),
 )
@@ -93,7 +93,7 @@ model_mean = tengri.SEDModel.build(
     ssp,
     observation=obs,
     sfh={"type": "table"},
-    stellar={"met_logzsol": tengri.Uniform(grid_lo, grid_hi)},
+    met={"logzsol": tengri.Uniform(grid_lo, grid_hi)},
     dust={"type": "two_component", "all_params": tengri.FIXED, "tau_bc": 0.4},
     redshift=tengri.Fixed(Z_OBS),
 )

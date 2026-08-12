@@ -15,7 +15,7 @@ code:
   ``Z = 2e-4``, and *in-grid*, so no range check could ever see it.
 * A ``NaN`` metallicity node left the flux bit-identical: silently dropped. A
   ``NaN`` SFR passed the ``sfr < 0`` guard, which every NaN passes.
-* A model built ``stellar={'met_mode': 'table'}`` and given no ``met=`` was
+* A model built ``met={'type': 'table'}`` and given no ``met=`` was
   accepted at construction and failed inside the first ``predict()``, which is
   the fail-late ``from_histories`` exists to prevent.
 
@@ -86,11 +86,11 @@ def _build(ssp, obs, *, met_mode=None, met_logzsol=None, approx=None, neb="none"
     from tengri import FIXED, ForwardModel, SEDModel
     from tengri.parameters.priors import Fixed, Uniform
 
-    stellar = {}
+    met_group = {}
     if met_mode is not None:
-        stellar["met_mode"] = met_mode
+        met_group["type"] = met_mode
     if met_logzsol is not None:
-        stellar["met_logzsol"] = Fixed(met_logzsol)
+        met_group["logzsol"] = Fixed(met_logzsol)
 
     neb_group = {"type": neb} if isinstance(neb, str) else dict(neb)
     if neb_group["type"] != "none":
@@ -112,7 +112,7 @@ def _build(ssp, obs, *, met_mode=None, met_logzsol=None, approx=None, neb="none"
             },
             neb=neb_group,
             redshift=Fixed(_Z_OBS),
-            **({"stellar": stellar} if stellar else {}),
+            **({"met": met_group} if met_group else {}),
             **({"approx": approx} if approx is not None else {}),
         )
         return ForwardModel.build(sed=sed, observation=obs)

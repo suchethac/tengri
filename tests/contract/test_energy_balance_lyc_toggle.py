@@ -39,7 +39,7 @@ def _build(ssp, include_lyc: bool, *, tau_diff: float = 1.0):
         dust["eb_include_lyc"] = True
     return SEDModel.build(
         ssp_data=ssp,
-        stellar={"logzsol": Fixed(0.0), "*": FIXED},
+        met={"logzsol": Fixed(0.0), "*": FIXED},
         sfh={
             "type": "delayed",
             "tau_gyr": Fixed(1.0),
@@ -130,7 +130,7 @@ def _build_emitting(ssp, include_lyc: bool, approx):
         ssp_data=ssp,
         observation=obs,
         approx=approx,
-        stellar={"logzsol": Fixed(0.0), "*": FIXED},
+        met={"logzsol": Fixed(0.0), "*": FIXED},
         sfh={
             "type": "delayed",
             "tau_gyr": Fixed(1.0),
