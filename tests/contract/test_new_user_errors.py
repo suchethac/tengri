@@ -492,18 +492,32 @@ def test_sfh_mixture_modulator_use_strings_build(synthetic_ssp_wide, synthetic_t
         assert model is not None
 
 
-def test_cloudy_nebular_use_string_names_the_gridfile():
-    """The generic CLOUDY backend hint must name its required ``gridfile``.
+def test_cloudy_nebular_use_string_names_the_grid_key():
+    """The generic CLOUDY backend hint must name its required grid key.
 
     ``neb={'type': 'cloudy'}`` raises "The CLOUDY nebular backend needs a grid
     file"; the ``use:`` hint used to omit it. ``cb19`` ships its own grid and
     keeps the bare form.
+
+    This asserted the literal substring ``"gridfile"`` — and the grammar's key
+    is ``grid``, so it pinned a hint that raises ``Unknown key 'gridfile' in
+    group 'neb'``. A hint written *because* the previous one failed failed
+    differently, and a substring assertion cannot tell the two apart. Both
+    halves are now checked by **parsing** the advertised dict.
     """
+    import ast
+
     import tengri
+    from tengri.parameters.groups import parse_groups
 
     rows = {r["name"]: r for r in tengri.list_nebular_backends()}
-    assert "gridfile" in rows["cloudy"]["use"], rows["cloudy"]["use"]
-    assert "gridfile" not in rows["cb19"]["use"], rows["cb19"]["use"]
+    cloudy = ast.literal_eval(rows["cloudy"]["use"].split("neb=", 1)[1].rstrip(")"))
+    assert "grid" in cloudy, f"the cloudy hint names no grid key: {rows['cloudy']['use']}"
+    parse_groups(neb=cloudy, redshift=Fixed(0.1))
+
+    cb19 = ast.literal_eval(rows["cb19"]["use"].split("neb=", 1)[1].rstrip(")"))
+    assert "grid" not in cb19, f"cb19 ships its own grid: {rows['cb19']['use']}"
+    parse_groups(neb=cb19, redshift=Fixed(0.1))
 
 
 def test_line_list_select_positional_list_names_the_fix():

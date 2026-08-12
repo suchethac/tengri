@@ -939,10 +939,12 @@ def list_nebular_backends(*, status: str | None = None) -> _RegistryTable:
     for m in out:
         # The generic CLOUDY backend needs a user-supplied grid file:
         # ``neb={'type': 'cloudy'}`` raises "The CLOUDY nebular backend needs a
-        # grid file." Advertise the required ``gridfile`` key so the hint builds.
-        # (``cb19`` ships its own grid and stands alone.)
+        # grid file." The key is ``grid``; this hint advertised ``gridfile``,
+        # so the line printed to fix one failure raised a different one —
+        # "Unknown key 'gridfile' in group 'neb'. Did you mean: grid?" — and
+        # nothing checked either. (``cb19`` ships its own grid and stands alone.)
         if m["name"] == "cloudy":
-            m["use"] = "SEDModel.build(..., neb={'type': 'cloudy', 'gridfile': 'grid.h5'})"
+            m["use"] = "SEDModel.build(..., neb={'type': 'cloudy', 'grid': 'grid.h5'})"
     out = _filter_menu(out, "status", status, listing="list_nebular_backends")
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
