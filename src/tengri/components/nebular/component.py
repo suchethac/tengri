@@ -1325,9 +1325,66 @@ _LINES_PROPERTIES = {
     ),
 }
 
+
+def _log_line_luminosity_helper(state, params, line_key):
+    """``log10`` of a single line luminosity, read from the upstream log catalog.
+
+    Reads ``derived["log_line_lums"]`` rather than taking a ``log10`` of the linear
+    ``line_lums``. The distinction is the whole point: line luminosities are
+    ~1e40-1e42 erg/s, past float32's 3.4e38 ceiling, so the linear value is already
+    ``inf`` there and a log taken afterwards reports ``+inf`` faithfully and
+    uselessly (#1534).
+    """
+    from tengri.utils.sed_quantities import KEY_LINES, extract_log_line_luminosity
+
+    derived = state.derived
+    if "line_waves" not in derived or "log_line_lums" not in derived:
+        return jnp.asarray(jnp.nan)
+
+    return extract_log_line_luminosity(
+        jnp.asarray(derived["line_waves"]),
+        jnp.asarray(derived["log_line_lums"]),
+        KEY_LINES[line_key],
+    )
+
+
+def _make_log_line_fn(line_key):
+    """Build the accessor for one line's log companion.
+
+    A factory rather than eleven near-identical module-level functions: the linear
+    side already carries eleven copies of a one-line body, and duplicating that for
+    the log side would double a shape that is pure boilerplate.
+    """
+
+    def _fn(state, params, _key=line_key):
+        return _log_line_luminosity_helper(state, params, _key)
+
+    _fn.__name__ = f"_log_{line_key}_fn"
+    _fn.__doc__ = f"log10 of the {line_key} line luminosity [dex re erg/s]."
+    return _fn
+
+
+#: Log companions for every line property carried in erg/s, derived from the census
+#: rather than hand-listed: a line whose linear form overflows float32 and gains a
+#: companion later would otherwise be added here by memory. ``bpt_nii``, ``o32`` and
+#: the other ratio/diagnostic properties are deliberately excluded — they are already
+#: dimensionless or in dex and are float32-representable as they stand.
+_LOG_LINE_PROPERTIES = {
+    f"log_{name}": Property(
+        units="dex",
+        group="lines",
+        doc=f"log10 of {prop.doc.lower()} [dex re erg/s]; float32-safe form of `{name}`",
+        fn=_make_log_line_fn(name),
+    )
+    for name, prop in _LINES_PROPERTIES.items()
+    if prop.units == "erg/s"
+}
+
+_LINES_PROPERTIES.update(_LOG_LINE_PROPERTIES)
+
 register_properties("nebular", _LINES_PROPERTIES)
 
-del Property, register_properties, _LINES_PROPERTIES
+del Property, register_properties, _LINES_PROPERTIES, _LOG_LINE_PROPERTIES
 
 
 # Register in the unified component dispatch table so build_components resolves

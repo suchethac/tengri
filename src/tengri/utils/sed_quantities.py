@@ -43,10 +43,11 @@ References
 import jax
 import jax.numpy as jnp
 import numpy as np
+from jax.scipy.special import logsumexp
 
 from tengri.utils.magnitudes import fnu_to_ab_mag, lnu_to_absolute_ab_mag
 from tengri.utils.physics_constants import C_AA, L_SUN, PC_CM
-from tengri.utils.scale import pow10
+from tengri.utils.scale import LN10, pow10
 
 # Re-export for convenience
 __all__ = [
@@ -824,6 +825,65 @@ def extract_line_luminosity(
         total = total + _lookup_one(tw)
 
     return total
+
+
+def extract_log_line_luminosity(
+    line_waves: jnp.ndarray, log_line_lums: jnp.ndarray, target_waves: tuple[float, ...]
+) -> jnp.ndarray:
+    r"""``log10`` of :func:`extract_line_luminosity`, without forming the linear value.
+
+    The float32-safe companion. Line luminosities are ~1e40-1e42 erg/s, past
+    float32's 3.4e38 ceiling, so the linear extraction is ``inf`` there and a
+    ``log10`` taken afterwards inherits it — a log companion computed *after* the
+    overflow is a no-op (#1534). This reads the upstream ``log_line_lums`` instead
+    and never leaves the log domain.
+
+    Parameters
+    ----------
+    line_waves : array, shape (n_lines,)
+        Rest-frame line wavelengths [Angstrom].
+    log_line_lums : array, shape (n_lines,)
+        ``log10`` line luminosities [dex re erg/s]. **Unit-preserving in the same
+        sense as the linear form**: the output is ``log10`` of whatever unit the
+        input is the ``log10`` of.
+    target_waves : tuple of float
+        Target wavelength(s) [Angstrom]. For doublets, pass both components.
+
+    Returns
+    -------
+    ndarray, scalar
+        ``log10`` of the summed luminosity [dex]. NaN if ``line_waves`` is empty,
+        matching the linear form.
+
+    Notes
+    -----
+    **JIT-compatible**: yes. **Gradient-safe**: yes — ``logsumexp`` is smooth, and a
+    component that is exactly zero enters as ``-inf`` and drops out of the sum
+    without producing NaN.
+
+    .. math::
+
+        \log_{10} \sum_k L_k = \frac{1}{\ln 10}\,
+            \mathrm{logsumexp}_k\!\left(\ln 10 \cdot \log_{10} L_k\right)
+
+    **The sum is the whole difficulty.** Doublets ([OII] 3727+3730, and the
+    ``key_lines`` entries that pair components) sum their matched entries, and a
+    sum is not a log-domain operation — taking the max, or adding the logs, would
+    both be wrong. ``logsumexp`` is exact for it and is the same primitive
+    ``_derive_cue_params_from_ssp`` uses for ``total_logqion``.
+
+    For a single-wavelength target the sum has one term and this reduces to the
+    stored value exactly, so the common case costs nothing in accuracy.
+    """
+    if line_waves.shape[0] == 0:
+        return jnp.array(jnp.nan)
+
+    def _lookup_one(target):
+        idx = jnp.argmin(jnp.abs(line_waves - target))
+        return log_line_lums[idx]
+
+    stacked = jnp.stack([_lookup_one(tw) for tw in target_waves])
+    return logsumexp(LN10 * stacked) / LN10
 
 
 # ── Radio quantities (empirical scaling relations) ────────────────
