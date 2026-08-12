@@ -541,12 +541,44 @@ class SpectrumPrecomp:
 
 @dataclasses.dataclass(frozen=True)
 class FeaturePrecomp:
-    r"""Configuration for the emission-line precompute (the *feature* LUT path).
+    r"""Configuration for the nebular precompute (the *feature* LUT path).
 
-    Pass this to :class:`SEDModel` via ``approx=`` to serve emission-line fluxes
-    from a build-time lookup instead of the per-evaluation forward. It is the
-    line-channel sibling of :class:`WavePrecomp` (photometry) and
-    :class:`SpectrumPrecomp` (spectroscopy), and composes with either.
+    Pass this to :class:`SEDModel` via ``approx=`` to serve the nebular
+    calculation from a build-time lookup instead of the per-evaluation forward.
+    It composes with :class:`WavePrecomp` (photometry) and
+    :class:`SpectrumPrecomp` (spectroscopy).
+
+    .. warning::
+
+       **The name misleads: this is not a line-channel-only optimization.** For
+       the Cue backend the grid replaces the *emulator call itself*, so a fit
+       with **no line channel at all** benefits — often the most, because a
+       photometry-only Cue fit otherwise re-runs Cue on every likelihood
+       evaluation. Measured on a 10-parameter Cue model with free ``neb_logU``
+       / ``neb_logZ_gas``, against an A/A control whose noise floor was 1.23x:
+       a photometry-only fit's compiled MAP step goes 0.645 s to 0.093 s
+       (**7x**) on adding this. With a line channel present the same model
+       already sits near 0.16 s and neither opt-in resolves at all.
+       :class:`WavePrecomp` alone does not resolve either (1.07x, under the
+       floor). Measure before assuming either way, and quote a ratio only
+       against its own noise floor; see ``docs/dev/api_migration_v0.x.md`` for
+       the full grid.
+
+       That a photometry-only fit was *slower* than the same fit with an extra
+       data channel was a defect, not a property of the method — #1596, fixed:
+       the ``"auto"`` fit policy now attempts this LUT for any photometry-only
+       fit whose backend can tabulate, and #1683 extended that to a model built
+       with ``approx=WavePrecomp()``, which both fit resolvers had returned
+       untouched.
+
+       Passing it explicitly still matters for **prediction**. No fit policy
+       reaches ``model.predict_photometry`` / :meth:`SEDModel.predict`, which
+       run whatever the build-time ``approx=`` says — so a build-time opt-in is
+       what a forward-model benchmark or a mock-generation loop is choosing.
+       The converse is the trap: ``Fitter(approx="auto")`` (the default)
+       re-resolves the build-time knob, so *fit* arms that differ only in
+       ``SEDModel.build(approx=...)`` can be one configuration wearing three
+       labels.
 
     The line wavelengths default to those of ``Observation.line_fluxes`` — the
     model already knows which lines it is being fitted against — so the common
