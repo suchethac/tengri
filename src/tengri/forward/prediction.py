@@ -1693,6 +1693,9 @@ class PropertyCatalog(ReadOnlyPropertyMapping):
             from tengri.forward.properties import missing_property_message
 
             raise KeyError(missing_property_message(name, available=catalog))
+        from tengri.forward.properties import warn_if_lines_are_unavailable
+
+        warn_if_lines_are_unavailable(pred._model, (name,))
         entry = catalog[name]
         state = pred._ensure_state()
         return entry.fn(state, pred._params)
@@ -2065,20 +2068,12 @@ class Prediction:
         backend = model._nebular_backend
 
         if backend is None or not hasattr(backend, "predict_nebular_line_luminosities"):
-            import warnings
-
-            backend_name = type(backend).__name__ if backend is not None else "None"
-            warnings.warn(
-                f"Nebular backend {backend_name!r} does not publish a "
-                "per-line luminosity catalog, so pred.lines.halpha, "
-                ".hbeta, .bpt_nii, etc. will return NaN. To get discrete "
-                "line luminosities, rebuild the model with neb={'type': "
-                "'cue'}, 'cloudy', or 'cb19' (each requires a "
-                "compatible SSP and any backing grid; see "
-                "tengri.list_nebular_backends() for details). See #361.",
-                UserWarning,
-                stacklevel=3,
-            )
+            # The warning moved to `warn_if_lines_are_unavailable`, which
+            # `PropertyCatalog.__getitem__` calls. Every one of the 17
+            # `_ensure_lines()` call sites reads `properties[...]` on the next
+            # line, so this surface still warns — and the dict accessor and
+            # `predict_properties`, which used to return the same NaN in
+            # silence, now warn too. Warning here as well fired it twice.
             self._cache["line_waves"] = jnp.array([])
             self._cache["line_lums"] = jnp.array([])
             self._cache["q_h_total"] = jnp.array(jnp.nan)

@@ -5569,6 +5569,29 @@ class SEDModel:
                 missing_property_message(*sorted(unknown), available=self._property_catalog)
             )
 
+        # A 'lines' property on a backend with no per-line catalog is NaN. Say
+        # so here too: pred.lines.* has warned since #361 but this surface --
+        # the documented jit/vmap one -- returned the same NaN in silence.
+        # Only when the caller asked by name; `names=None` means "everything
+        # the model has" and would warn on every default call.
+        if names is not None:
+            from tengri.forward.properties import warn_if_lines_are_unavailable
+
+            warn_if_lines_are_unavailable(self, names_to_compute)
+
+        # main carries a ``_refuse_on_fast_nebular`` guard on this line (#1665).
+        # It is deliberately NOT taken here, for the reason recorded in full at
+        # ``predict_photometry``: #1673 fixed the cause rather than the symptom,
+        # so ``predict_state`` materializes the nebular component and every
+        # property below is bit-exact on the fast path (measured rel 0.0). The
+        # method it calls no longer exists on this branch, and
+        # ``_FAST_NEBULAR_UNSAFE_PROPERTIES`` survives as the census of
+        # nebular-dependent properties worth CHECKING, not a refusal list --
+        # see ``test_sed_derived_properties_are_exact_on_the_fast_path``, which
+        # calls this surface on the fast path and asserts equality with the
+        # exact model. Reinstating the refusal would make that test raise
+        # instead of compare.
+
         # Compute the state once
         state = self.predict_state(params)
 
