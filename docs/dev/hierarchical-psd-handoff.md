@@ -1948,12 +1948,25 @@ control reached only 1.168. So the contrast replicates in **direction** (0.75
 beats 1.0 at both seeds) but not in the pre-registered sense, and 1.168 is not
 relabeled "close enough" after the fact.
 
-Open next steps, in order: more seeds, reporting the **distribution** of
-per-galaxy R-hat rather than a max — a max over N is not comparable across
-different N, and as seed 77 shows, not stable across draws either; fill
-``a = 0.25``; then vary SNR to see how far the optimum moves before anyone
-considers a default. Re-test after any change to the MAP escalation, since the
-expansion point feeds the sampler.
+**Use the distribution fields that already exist — every number above is a max,
+and that was a mistake.** ``InterimResult`` returns three summaries, not one:
+
+* ``rhat`` — max over galaxies (what this section has been quoting)
+* ``rhat_median`` — median over galaxies
+* ``rhat_frac_above_1p01`` — fraction of galaxies above 1.01
+
+``interim.py`` even says why: *"the median and the fraction above 1.01 can both
+respond to N, so they are what to read when asking whether adding galaxies
+helps."* A max cannot — it is an order statistic that rises with N by
+construction and, as seed 77 shows, is unstable across draws. Every measurement
+in this section quotes the one summary least suited to the question, because
+whoever ran them (including this session) reached for ``result.rhat`` without
+noticing the siblings.
+
+Open next steps, in order: more seeds, reporting ``rhat_median`` and
+``rhat_frac_above_1p01`` alongside the max; fill ``a = 0.25``; then vary SNR to
+see how far the optimum moves before anyone considers a default. Re-test after
+any change to the MAP escalation, since the expansion point feeds the sampler.
 
 **Record the configuration AND the code path next to any number here.** The
 configuration was recorded; what the prose omitted was which driver produced it,
