@@ -55,6 +55,11 @@ def _model(ssp):
             "tau_bc": 0.0,
         },
         neb={"type": "cue", "all_params": FIXED},
+        # The X-ray block is here so the pair sweep actually covers `l_x_*`. Without
+        # it those properties are not published and every assertion below would pass
+        # while saying nothing about them -- the same fixture gap that let
+        # `log_line_lums` ship broken (#1534).
+        xray={"type": "yang20", "all_params": FIXED},
         redshift=Fixed(0.1),
         approx=None,
     )
@@ -85,6 +90,40 @@ def test_the_sweep_is_not_vacuous(linear_and_log):
     assert "halpha" in names, f"halpha lost its companion; pairs found: {names}"
     for doublet in _DOUBLETS:
         assert doublet in names, f"{doublet} (a doublet) is not covered: {names}"
+    for xray in ("l_x_xrb", "l_x_total"):
+        assert xray in names, (
+            f"{xray} is not covered. Its linear form overflows float32 at ANY star "
+            f"formation rate — the HMXB coefficient alone is 2.6e39. Pairs: {names}"
+        )
+
+
+def test_every_float32_unrepresentable_property_has_a_companion(ssp_bare):
+    """The census: no published property may exceed float32's ceiling uncovered.
+
+    Derived from the float64 magnitudes rather than a hand-written list, so a new
+    erg/s property added later fails here instead of being remembered. Measuring
+    "non-finite in float32" instead would be contaminated — Cue's pure-f32 forward
+    is non-finite (#1719), so properties well inside float32 read NaN downstream
+    for reasons that have nothing to do with units.
+    """
+    f32_max = float(np.finfo(np.float32).max)
+    with jax.enable_x64(True):
+        model = _model(ssp_bare)
+        names = tuple(model.available_properties)
+        values = model.predict_properties(_PARAMS, names=names)
+
+    uncovered = [
+        n
+        for n in names
+        if not n.startswith("log_")
+        and np.isfinite(float(np.asarray(values[n]).ravel()[0]))
+        and abs(float(np.asarray(values[n]).ravel()[0])) > f32_max
+        and f"log_{n}" not in names
+    ]
+    assert not uncovered, (
+        "these published properties exceed float32's ceiling with no log_ companion, "
+        f"so a float32 user has no route to them: {uncovered}"
+    )
 
 
 def test_the_companion_carries_the_right_value_in_float64(linear_and_log):
