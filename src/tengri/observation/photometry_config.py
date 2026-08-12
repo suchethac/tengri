@@ -107,6 +107,19 @@ class Photometry:
         if len(self.filters) == 0:
             raise ValueError("Photometry requires at least one filter.")
 
+        # Reject anything that is not a FilterCurve before the derivations
+        # below touch ``f.name``/``f.wave`` — a bare list of strings used to
+        # die with an inscrutable ``AttributeError: 'str' object has no
+        # attribute 'name'`` (#1735).
+        if any(not isinstance(f, FilterCurve) for f in self.filters):
+            bad = next(f for f in self.filters if not isinstance(f, FilterCurve))
+            raise TypeError(
+                f"Photometry(filters=...) expects FilterCurve objects, got "
+                f"{type(bad).__name__} ({bad!r}). To build from filter names "
+                f'use Photometry.from_names(["sdss_g", ...]); '
+                f"tengri.list_filters() lists the available names."
+            )
+
         # Normalize a string convention (e.g. "energy") to the enum so the
         # JIT static-argument cache key is stable.
         if not isinstance(self.convention, FilterConvention):
