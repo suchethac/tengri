@@ -46,6 +46,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components.nebular.line_precompute import _four_pi_dl2
+from tengri.components.stellar.reference_history import reference_history_params
 from tengri.parameters.translate import LOG10_ZSUN
 from tengri.utils.grid_interp import interp_nd_pchip
 from tengri.utils.scale import pow10
@@ -308,6 +309,53 @@ def _nion_of_state(state) -> jnp.ndarray:
     return jnp.sum(nion) if jnp.ndim(nion) else nion
 
 
+def _refuse_tabulated_metallicity(model):
+    """Refuse a tabulated metallicity, whose LUT axis cannot exist (#1718).
+
+    The axes are ``tuple(p for p in _CANDIDATE_AXES if p in free)`` — free
+    *parameters*. ``met_mode='table'`` declares none, so ``met_logzsol`` is not
+    merely fixed, it is absent, and the metallicity axis disappears from the grid
+    with nothing raised. The table is then built at a single reference
+    metallicity and reconstructed at that one value for every galaxy.
+
+    Measured against the exact path on a tabulated SFH whose Z(t) runs -2.1 to
+    +0.4: **OIII_5007 off by 17.5%**, NII_6584 by 5.3%, against 0.3% for the same
+    model with a parametric metallicity. Metal-line ratios are what a nebular
+    fit is *for*, so this is refused rather than warned about.
+
+    This is the same reasoning as ``_REQUIRED_FIXED`` in ``line_precompute``,
+    which refuses a *free* ionization parameter because the single-metallicity
+    axis makes reconstruction wrong away from its reference. Here the axis is
+    missing outright.
+
+    A tabulated **SFH** is fine and deliberately still allowed: the table is
+    per-Q_H and so SFH-independent to 0.3% end-to-end (see
+    ``components/stellar/reference_history.py`` for the measurement).
+
+    Raises
+    ------
+    ValueError
+        If the model's ``metallicity_model`` is ``'table'``.
+    """
+    from tengri.components.stellar.reference_history import stellar_config_of
+
+    cfg = stellar_config_of(model)
+    if cfg is None or getattr(cfg, "metallicity_model", None) != "table":
+        return
+    raise ValueError(
+        "FeaturePrecomp cannot serve a tabulated metallicity. Its grid axes are "
+        "the model's free parameters, and stellar={'met_mode': 'table'} declares "
+        "none — so met_logzsol is absent, the metallicity axis silently drops, "
+        "and the whole table would be built at one reference metallicity. "
+        "Measured that way against the exact path, OIII_5007 came out 17.5% "
+        "wrong and NII_6584 5.3%, which is precisely the line-ratio information "
+        "a nebular fit exists to use. Either drop FeaturePrecomp and keep the "
+        "exact line path (WavePrecomp alone is unaffected and still applies), or "
+        "use a parametric metallicity — a tabulated SFH with a free met_logzsol "
+        "is supported and agrees with exact to 0.3% (#1718)."
+    )
+
+
 def precompute_nebular_grid(
     model,
     wavelengths,
@@ -394,6 +442,8 @@ def precompute_nebular_grid(
     axis_names = tuple(p for p in _CANDIDATE_AXES if p in free)
     ranges = ranges or {}
 
+    _refuse_tabulated_metallicity(model)
+
     met_nodes = _ssp_met_nodes(model) if snap_met_to_ssp_nodes else None
 
     # Per-axis resolution matched to the physics. A scalar ``n_grid`` resolves every
@@ -438,6 +488,12 @@ def precompute_nebular_grid(
     else:
         ref_params = dict(ref_params)
     ref_z = ref_params.get("redshift", 0.0)
+    # A tabulated SFH declares no parameters, so `spec.sample` cannot produce
+    # its runtime arrays and the stellar component raises before the first row.
+    # This table is per-Q_H and so independent of the SFH that built it (#1718),
+    # which is why a stand-in serves — and why one already has to, since the
+    # whole grid is built at a single sampled SFH for parametric models too.
+    ref_params = {**reference_history_params(model, redshift=ref_z), **ref_params}
     ref_divisor = _four_pi_dl2(ref_z)  # observed flux -> luminosity
 
     axes, axis_kinds = [], []

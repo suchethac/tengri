@@ -44,6 +44,8 @@ import dataclasses
 import jax
 import jax.numpy as jnp
 
+from tengri.components.stellar.reference_history import reference_history_params
+
 #: Nebular ionization parameters that MUST be fixed for the table to be valid —
 #: they change ``line_per_qh`` (line ratios), so a free one would make the
 #: single-metallicity-axis table wrong away from its baked reference value.
@@ -150,6 +152,15 @@ def precompute_line_per_qh(
         ref_params = dict(model.spec.sample(jax.random.PRNGKey(0)))
     else:
         ref_params = dict(ref_params)
+
+    # Same #1718 gap as the grid builder: `spec.sample` cannot produce the
+    # runtime arrays of a tabulated SFH, which declares no parameters. Legitimate
+    # to stand in for, and for the reason this module already states below —
+    # the table is per-Q_H, a property of the gas, not of the reference SFH.
+    ref_params = {
+        **reference_history_params(model, redshift=ref_params.get("redshift", 0.0)),
+        **ref_params,
+    }
 
     # Recover distance-independent LUMINOSITY: predict_line_fluxes returns
     # observed flux L / (4 pi d_L(z_ref)^2); multiply by the reference divisor
