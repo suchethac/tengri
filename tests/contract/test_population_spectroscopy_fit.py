@@ -31,8 +31,6 @@ from tengri.forward.forward_model import ForwardModel
 from tengri.forward.population_sed_model import PopulationSEDModel
 from tengri.observation.spectroscopy import Spectroscopy
 
-jax.config.update("jax_enable_x64", True)
-
 pytestmark = pytest.mark.contract
 
 _N_GAL = 3

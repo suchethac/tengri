@@ -19,8 +19,6 @@ from numpy.testing import assert_allclose
 
 pytestmark = pytest.mark.bounds
 
-jax.config.update("jax_enable_x64", True)
-
 
 def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     """Central finite-difference gradient. O(eps^2) accurate."""
@@ -49,8 +47,6 @@ from tengri.components.stellar.sfh.mean_sfh import (
 from tengri.cosmology import age_at_z0 as _age_at_z0
 
 _AGE_UNIV_YR = float(_age_at_z0()) * 1e9
-
-jax.config.update("jax_enable_x64", True)
 
 
 # ── Helpers ───────────────────────────────────────────────────────

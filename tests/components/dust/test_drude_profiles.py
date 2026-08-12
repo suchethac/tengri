@@ -5,7 +5,6 @@ import chex
 import pytest
 
 pytestmark = pytest.mark.bounds
-import jax
 import jax.numpy as jnp
 
 from tengri.components.dust.drude_profiles import (
@@ -16,8 +15,6 @@ from tengri.components.dust.drude_profiles import (
     drude_profile,
 )
 from tests._grad_parity import assert_grad_matches_fd
-
-jax.config.update("jax_enable_x64", True)
 
 # Reference wavelength grid: 2–20 μm at 0.01 μm spacing.
 _WAVE_UM = jnp.linspace(2.0, 20.0, 1800)

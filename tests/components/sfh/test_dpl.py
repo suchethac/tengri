@@ -2,12 +2,9 @@
 """Tests for parametric double-power-law SFH model (DPL)."""
 
 import chex
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
-
-jax.config.update("jax_enable_x64", True)
 
 
 def fd_grad(f, x: float, eps: float = 1e-4) -> float:

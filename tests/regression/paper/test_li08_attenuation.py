@@ -21,7 +21,6 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-jax.config.update("jax_enable_x64", True)
 from tengri.components.dust.attenuation import DUST_LAWS, li08
 from tests._jit_parity import assert_jit_matches_eager
 

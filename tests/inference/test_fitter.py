@@ -1,14 +1,12 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Tests for the Fitter class."""
 
+from pathlib import Path
+
 import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
-
-jax.config.update("jax_enable_x64", True)
-
-from pathlib import Path
 
 from tengri.forward.sed_model import SEDModel
 from tengri.inference.fitter import Fitter

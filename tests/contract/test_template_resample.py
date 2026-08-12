@@ -24,8 +24,6 @@ import pytest
 from tengri.utils.grid_interp import resample_template
 from tests._jit_parity import assert_jit_matches_eager
 
-jax.config.update("jax_enable_x64", True)
-
 
 @pytest.mark.limit
 def test_power_law_is_exact():

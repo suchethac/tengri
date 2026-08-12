@@ -17,8 +17,6 @@ import pytest
 
 pytestmark = pytest.mark.bounds
 
-jax.config.update("jax_enable_x64", True)
-
 # ── SSP gate ──────────────────────────────────────────────────────
 
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"

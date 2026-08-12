@@ -26,8 +26,6 @@ import pytest
 from tests._grad_parity import assert_grad_matches_fd
 from tests._jit_parity import assert_jit_matches_eager
 
-jax.config.update("jax_enable_x64", True)
-
 _GRID_PATH = Path(__file__).resolve().parents[3] / "data" / "nenkova08_torus_grid.h5"
 _has_grid = _GRID_PATH.is_file()
 

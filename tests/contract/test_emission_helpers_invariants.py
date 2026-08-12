@@ -16,13 +16,10 @@ No SSP data needed. All tests use synthetic jnp arrays.
 from __future__ import annotations
 
 import chex
-import jax
 import jax.numpy as jnp
 import pytest
 
 pytestmark = pytest.mark.contract
-
-jax.config.update("jax_enable_x64", True)
 
 from tengri.forward.emission_helpers import (
     _C_AA,

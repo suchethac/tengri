@@ -9,9 +9,6 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-jax.config.update("jax_enable_x64", True)
-
-
 from tengri.components.agn.blr import (
     _fe2_pseudo_continuum,
     compute_blr_sed,

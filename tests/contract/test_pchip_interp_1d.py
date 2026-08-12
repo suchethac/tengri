@@ -39,9 +39,6 @@ from scipy.interpolate import PchipInterpolator
 from tengri.utils.grid_interp import pchip_interp_1d
 from tests._grad_parity import assert_grad_matches_fd
 
-jax.config.update("jax_enable_x64", True)
-
-
 # ── Regressions for the two deleted copies ────────────────────────
 
 

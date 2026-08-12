@@ -6,12 +6,9 @@ and correctly conserve the total stellar mass.
 """
 
 import chex
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
-
-jax.config.update("jax_enable_x64", True)
 
 from tengri.components.stellar.sfh.nonparametric import (
     continuity,

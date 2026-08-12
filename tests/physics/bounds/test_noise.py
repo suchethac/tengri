@@ -15,8 +15,6 @@ import jax.numpy as jnp
 import numpy.testing as npt
 import pytest
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri.observation.noise import (
     compute_effective_noise,
     compute_std_inv,

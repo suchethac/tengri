@@ -19,12 +19,9 @@ References
 - Tutorial: https://dense-basis.readthedocs.io/en/latest/tutorials/fitting_different_SFH_shapes.html
 """
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
-
-jax.config.update("jax_enable_x64", True)
 
 pytestmark = pytest.mark.crossval
 

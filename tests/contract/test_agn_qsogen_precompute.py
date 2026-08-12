@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import chex
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -12,8 +11,6 @@ import pytest
 from tests._jit_parity import assert_jit_matches_eager
 
 pytestmark = pytest.mark.contract
-
-jax.config.update("jax_enable_x64", True)
 
 
 @pytest.fixture(scope="module")

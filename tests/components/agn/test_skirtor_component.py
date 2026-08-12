@@ -17,12 +17,9 @@ import re
 from pathlib import Path
 
 import chex
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
-
-jax.config.update("jax_enable_x64", True)
 
 from tengri.components.agn.skirtor_model import SKIRTORTorus, SKIRTORTorusConfig
 from tengri.components.sed_model_component import _REGISTRY, SEDModelComponent

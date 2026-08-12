@@ -13,8 +13,6 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri.observation.noise_model import NoiseModel
 from tengri.observation.observation import Observation
 from tengri.observation.photometry import FilterCurve

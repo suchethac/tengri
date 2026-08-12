@@ -19,7 +19,6 @@ References
 """
 
 import chex
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -27,7 +26,6 @@ import pytest
 from tests._grad_parity import assert_grad_matches_fd
 
 pytestmark = pytest.mark.regression_paper
-jax.config.update("jax_enable_x64", True)
 
 _C_KMS = 2.99792458e5
 

@@ -10,8 +10,6 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri.components.stellar.sfh.nonparametric import (
     continuity_flex,
     continuity_flex_prior_logp,

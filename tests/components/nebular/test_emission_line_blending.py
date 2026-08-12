@@ -20,8 +20,6 @@ from tengri.observation.spectrum import blend_emission_lines
 
 pytestmark = pytest.mark.bounds
 
-jax.config.update("jax_enable_x64", True)
-
 
 def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     """Central finite difference: (f(x+eps) - f(x-eps)) / (2*eps)."""

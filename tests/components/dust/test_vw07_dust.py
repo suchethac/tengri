@@ -14,7 +14,6 @@ import chex
 import pytest
 
 pytestmark = pytest.mark.bounds
-import jax
 import jax.numpy as jnp
 from numpy.testing import assert_allclose
 
@@ -26,8 +25,6 @@ from tengri.components.dust.attenuation import (
     vw07_diff,
 )
 from tests._jit_parity import assert_jit_matches_eager
-
-jax.config.update("jax_enable_x64", True)
 
 
 @pytest.fixture

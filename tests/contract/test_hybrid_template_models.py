@@ -23,14 +23,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
 
 pytestmark = pytest.mark.bounds
-
-jax.config.update("jax_enable_x64", True)
 
 from tengri.components.dust.dust_emission_precompute import (
     build_astrodust_photometry_lookup,

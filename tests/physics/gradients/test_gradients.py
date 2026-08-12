@@ -39,8 +39,6 @@ from tests._grad_parity import assert_grad_matches_fd
 
 _AGE_UNIV_YR = float(_age_at_z0()) * 1e9
 
-jax.config.update("jax_enable_x64", True)
-
 
 pytestmark = pytest.mark.gradient
 

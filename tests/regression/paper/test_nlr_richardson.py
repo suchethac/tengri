@@ -11,8 +11,6 @@ import jax.numpy as jnp
 from tengri.components.agn.nlr import compute_nlr_sed_richardson2014
 from tests._jit_parity import assert_jit_matches_eager
 
-jax.config.update("jax_enable_x64", True)
-
 
 class TestRichardsonNLR:
     """Test suite for compute_nlr_sed_richardson2014 function."""

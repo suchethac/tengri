@@ -17,8 +17,6 @@ import pytest
 from tengri import Fitter, Fixed, Parameters, SEDModel, Uniform
 from tengri.inference._backend_registry import _BACKENDS
 
-jax.config.update("jax_enable_x64", True)
-
 # ``native_vi_linear`` (MGVI) is registered tier="broken" (#1287): it segfaults
 # on DPL/dense_basis photometry mocks — exactly what these tests build — so
 # ``fitter.run("native_vi_linear")`` raises ``BackendError`` by default. Skip

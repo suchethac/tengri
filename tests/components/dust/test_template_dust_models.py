@@ -28,8 +28,6 @@ from tengri.components.dust.emission import (
 )
 from tests._jit_parity import assert_jit_matches_eager
 
-jax.config.update("jax_enable_x64", True)
-
 
 def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     """Central finite difference with a *scale-aware* step.

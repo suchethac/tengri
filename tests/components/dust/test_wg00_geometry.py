@@ -23,9 +23,6 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
-jax.config.update("jax_enable_x64", True)
-
-
 @pytest.fixture
 def wavelength():
     """Standard wavelength grid spanning UV to NIR (1000-25000 A)."""

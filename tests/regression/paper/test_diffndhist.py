@@ -19,8 +19,6 @@ from tests._grad_parity import assert_grad_matches_fd
 
 pytestmark = pytest.mark.regression_paper
 
-jax.config.update("jax_enable_x64", True)
-
 
 class TestTwNdhist1D:
     """1-D histogram smoke tests."""

@@ -13,14 +13,11 @@ Tests cover:
 from pathlib import Path
 
 import chex
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
 
 from tests._jit_parity import assert_jit_matches_eager
-
-jax.config.update("jax_enable_x64", True)
 
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
 

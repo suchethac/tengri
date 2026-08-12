@@ -23,8 +23,6 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-jax.config.update("jax_enable_x64", True)
-
 synthesizer = pytest.importorskip("synthesizer", reason="synthesizer not installed")
 unyt = pytest.importorskip("unyt", reason="unyt not installed")
 from unyt import unyt_array, unyt_quantity

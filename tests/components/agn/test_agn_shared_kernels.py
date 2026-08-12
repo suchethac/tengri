@@ -14,7 +14,6 @@ pytestmark = pytest.mark.bounds
 import jax
 import jax.numpy as jnp
 
-jax.config.update("jax_enable_x64", True)
 from tengri.components.agn._phys import (
     ANGSTROM_CM,
     C_LIGHT,

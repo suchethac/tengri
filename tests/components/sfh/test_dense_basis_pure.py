@@ -21,8 +21,6 @@ from numpy.testing import assert_allclose
 
 pytestmark = pytest.mark.bounds
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri.components.stellar.sfh.dense_basis import (
     _build_quantile_points_pure,
     dense_basis_pure,

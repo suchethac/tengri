@@ -18,8 +18,6 @@ import pytest
 
 pytestmark = pytest.mark.contract
 
-jax.config.update("jax_enable_x64", True)
-
 _DATA = Path(__file__).resolve().parents[4] / "data"
 _MAPPINGS_H5 = _DATA / "mappings_templates.h5"
 

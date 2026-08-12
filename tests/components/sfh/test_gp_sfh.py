@@ -15,8 +15,6 @@ from tengri.components.stellar.sfh.gp_sfh import (
 from tengri.components.stellar.sfh.psd_models import psd_to_sqrt_power
 from tests._jit_parity import assert_jit_matches_eager
 
-jax.config.update("jax_enable_x64", True)
-
 N_GRID = 256
 
 

@@ -29,8 +29,6 @@ from tests._jit_parity import assert_jit_matches_eager
 
 pytestmark = pytest.mark.bounds
 
-jax.config.update("jax_enable_x64", True)
-
 LOG10_ZSUN = -1.8477116556169435
 
 

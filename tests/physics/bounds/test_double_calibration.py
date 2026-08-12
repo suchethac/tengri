@@ -2,12 +2,9 @@
 """Tests for double (piecewise) calibration polynomial."""
 
 import chex
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
-
-jax.config.update("jax_enable_x64", True)
 
 from tengri.observation.calibration import (
     apply_double_calibration,

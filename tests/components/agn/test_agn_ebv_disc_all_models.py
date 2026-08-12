@@ -13,15 +13,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import jax
 import jax.numpy as jnp
 import pytest
 
 from tests._grad_parity import assert_grad_matches_fd
 
 pytestmark = pytest.mark.bounds
-
-jax.config.update("jax_enable_x64", True)
 
 _DATA_DIR = Path(__file__).resolve().parents[4] / "data"
 _SILVA04 = _DATA_DIR / "silva04_torus_grid.h5"

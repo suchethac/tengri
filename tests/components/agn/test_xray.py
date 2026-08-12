@@ -29,7 +29,6 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
-jax.config.update("jax_enable_x64", True)
 # 2-10 keV wavelength/frequency grid for band integration
 _E_GRID = jnp.linspace(2.0, 10.0, 500)  # keV
 _NU_GRID = _E_GRID * _KEV_TO_HZ  # Hz

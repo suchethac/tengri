@@ -9,8 +9,6 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri.components.agn.polar_dust import (
     _type1_mask,
     polar_dust_emission,

@@ -27,8 +27,6 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-jax.config.update("jax_enable_x64", True)
-
 pytestmark = pytest.mark.contract
 
 # Wavelength grid inside the dust-IR template coverage (~1 µm to 3 mm).

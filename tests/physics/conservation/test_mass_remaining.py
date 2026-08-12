@@ -16,8 +16,6 @@ from tests._jit_parity import assert_jit_matches_eager
 
 pytestmark = pytest.mark.conservation
 
-jax.config.update("jax_enable_x64", True)
-
 
 # ── IMF shape tests ───────────────────────────────────────────────
 

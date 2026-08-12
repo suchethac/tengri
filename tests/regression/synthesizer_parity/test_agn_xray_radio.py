@@ -14,8 +14,6 @@ import pytest
 
 pytestmark = pytest.mark.regression_paper
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri.components.agn.unified import unified_nlr_blr
 from tengri.utils.physics_constants import L_SUN as L_SUN_ERG
 

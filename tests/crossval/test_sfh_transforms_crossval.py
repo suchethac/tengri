@@ -15,8 +15,6 @@ import pytest
 
 from tests._grad_parity import assert_grad_matches_fd
 
-jax.config.update("jax_enable_x64", True)
-
 pytestmark = pytest.mark.crossval
 
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"

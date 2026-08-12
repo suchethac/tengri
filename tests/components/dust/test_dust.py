@@ -13,8 +13,6 @@ from numpy.testing import assert_allclose
 from tengri.components.dust.attenuation import two_component_dust
 from tests._jit_parity import assert_jit_matches_eager
 
-jax.config.update("jax_enable_x64", True)
-
 _CF_KWARGS = {"law_bc": "power_law", "law_diff": "power_law"}
 
 

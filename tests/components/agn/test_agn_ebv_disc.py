@@ -18,13 +18,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import jax
 import jax.numpy as jnp
 import pytest
 
 from tests._grad_parity import assert_grad_matches_fd
-
-jax.config.update("jax_enable_x64", True)
 
 _GRID_PATH = Path(__file__).resolve().parents[4] / "data" / "silva04_torus_grid.h5"
 _has_grid = _GRID_PATH.is_file()

@@ -22,15 +22,12 @@ which the suppress exists to tolerate.
 
 import re
 
-import jax
 import jax.numpy as jnp
 import pytest
 
 import tengri
 from tengri import Observation, Photometry, SEDModel
 from tengri.observation.photometry import FilterCurve
-
-jax.config.update("jax_enable_x64", True)
 
 pytestmark = pytest.mark.regression_bug
 

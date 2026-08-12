@@ -16,15 +16,12 @@ Each function is tested for:
 from typing import ClassVar
 
 import chex
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
 
 pytestmark = pytest.mark.bounds
-
-jax.config.update("jax_enable_x64", True)
 
 from tengri.components.stellar.sfh.mean_sfh import (
     snorm_burst,

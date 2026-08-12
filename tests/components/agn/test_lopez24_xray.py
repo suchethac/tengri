@@ -15,10 +15,8 @@ import chex
 import pytest
 
 pytestmark = pytest.mark.bounds
-import jax
 import jax.numpy as jnp
 
-jax.config.update("jax_enable_x64", True)
 from tengri.components.xray.xray import (
     xray_agn_corona_lopez24,
     xray_bolometric_correction_duras,

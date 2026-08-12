@@ -24,8 +24,6 @@ import jax
 import numpy as np
 import pytest
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri.components.igm import igm as igm_mod, igm_transmission
 
 pytestmark = pytest.mark.regression_paper

@@ -25,8 +25,6 @@ import pytest
 
 pytestmark = pytest.mark.regression_paper
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri.components.dust.emission import casey2012, cmb_corrected_temperature
 from tests._jit_parity import assert_jit_matches_eager
 

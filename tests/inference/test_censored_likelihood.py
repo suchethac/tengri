@@ -14,8 +14,6 @@ import jax
 import jax.numpy as jnp
 import numpy.testing as npt
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri.observation.noise import (
     DETECTED,
     LOWER_LIMIT,

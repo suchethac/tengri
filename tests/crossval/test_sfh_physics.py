@@ -15,7 +15,6 @@ References
 """
 
 import chex
-import jax
 import jax.numpy as jnp
 import pytest
 
@@ -24,8 +23,6 @@ import pytest
 from tengri.cosmology import age_at_z0 as _age_at_z0
 
 _AGE_UNIV_YR = float(_age_at_z0()) * 1e9
-
-jax.config.update("jax_enable_x64", True)
 
 pytestmark = pytest.mark.crossval
 

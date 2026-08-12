@@ -10,11 +10,8 @@ same bar every other non-parametric SFH (continuity, dirichlet,
 continuity_flex) already clears.
 """
 
-import jax
 import numpy as np
 import pytest
-
-jax.config.update("jax_enable_x64", True)
 
 from tengri import FIXED, Fixed, SEDModel
 

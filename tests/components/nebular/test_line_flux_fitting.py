@@ -6,13 +6,11 @@ and the additive chi2 contribution in the loss/loglikelihood functions.
 No SSP data needed — uses mocks for the forward model.
 """
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
 
 pytestmark = pytest.mark.bounds
-jax.config.update("jax_enable_x64", True)
 
 from tengri.observation.line_flux_data import LineFluxData
 from tengri.observation.observation import Observation

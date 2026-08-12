@@ -26,9 +26,6 @@ from tengri.utils.grid_interp import (
 )
 from tengri.utils.interpolation import edges_for_grid
 
-jax.config.update("jax_enable_x64", True)
-
-
 pytestmark = pytest.mark.bounds
 
 # ── Fixtures: synthetic templates and filters ─────────────────────

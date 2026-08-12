@@ -18,8 +18,6 @@ from scipy.special import kve as scipy_kve
 
 from tests._grad_parity import assert_grad_matches_fd
 
-jax.config.update("jax_enable_x64", True)
-
 pytestmark = pytest.mark.regression_paper
 
 

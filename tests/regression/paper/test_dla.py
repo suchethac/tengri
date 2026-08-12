@@ -26,8 +26,6 @@ from tests._grad_parity import assert_grad_matches_fd
 
 pytestmark = pytest.mark.regression_paper
 
-jax.config.update("jax_enable_x64", True)
-
 
 @pytest.fixture
 def wave_rest():

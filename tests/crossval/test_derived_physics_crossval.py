@@ -17,13 +17,10 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tests.crossval.conftest import SSP_EXISTS
-
-jax.config.update("jax_enable_x64", True)
-
 from tengri.forward.sed_model import SEDModel
 from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Uniform
+from tests.crossval.conftest import SSP_EXISTS
 
 pytestmark = [
     pytest.mark.crossval,

@@ -1,14 +1,12 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Tests for the Ray Tracing Sampler integration."""
 
+from pathlib import Path
+
 import chex
 import jax
 import jax.numpy as jnp
 import pytest
-
-jax.config.update("jax_enable_x64", True)
-
-from pathlib import Path
 
 from tengri.forward.sed_model import SEDModel
 from tengri.inference.backends.mcmc.raytrace import sample_hamiltonian, sample_raytrace

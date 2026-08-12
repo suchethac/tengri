@@ -11,13 +11,11 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
 
 pytestmark = pytest.mark.contract
-jax.config.update("jax_enable_x64", True)
 
 
 # ── Helpers: build minimal specs + mock models without SSP data ───

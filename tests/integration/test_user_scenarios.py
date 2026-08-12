@@ -20,8 +20,6 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-jax.config.update("jax_enable_x64", True)
-
 # Ensure we use CPU (JAX Metal causes test failures per CLAUDE.md)
 os.environ.setdefault("JAX_PLATFORMS", "cpu")
 

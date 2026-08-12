@@ -35,9 +35,6 @@ from tengri.components.xray.xray import xray_total, xray_xrb
 from tengri.components.xray.xray_model import XRayAirdSEDComponent
 from tests._grad_parity import assert_grad_matches_fd
 
-jax.config.update("jax_enable_x64", True)
-
-
 # ─────────────────────────────────────────────── xray_xrb offset tests
 
 

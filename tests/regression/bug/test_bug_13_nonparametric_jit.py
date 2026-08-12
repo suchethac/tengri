@@ -5,13 +5,10 @@ See ADR / docs/known_bugs.md for full context.
 """
 
 import chex
-import jax
 import jax.numpy as jnp
 import pytest
 
 from tests._jit_parity import assert_jit_matches_eager
-
-jax.config.update("jax_enable_x64", True)
 
 pytestmark = pytest.mark.regression_bug
 

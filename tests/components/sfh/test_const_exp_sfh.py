@@ -2,12 +2,9 @@
 """Tests for constant_then_exponential and its registry entry."""
 
 import chex
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
-
-jax.config.update("jax_enable_x64", True)
 
 from tengri.components.stellar.sfh.mean_sfh import constant_then_exponential
 from tengri.components.stellar.sfh.registry import SFH_REGISTRY, resolve_sfh

@@ -12,8 +12,6 @@ import jax
 import numpy as np
 import pytest
 
-jax.config.update("jax_enable_x64", True)
-
 _SSP_PATH = Path("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
 _SSP_EXISTS = _SSP_PATH.exists()
 pytestmark = pytest.mark.skipif(not _SSP_EXISTS, reason="SSP data not found")

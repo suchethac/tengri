@@ -24,8 +24,6 @@ from tests._jit_parity import assert_jit_matches_eager
 
 pytestmark = pytest.mark.contract
 
-jax.config.update("jax_enable_x64", True)
-
 
 @pytest.fixture(scope="module")
 def filter_set():

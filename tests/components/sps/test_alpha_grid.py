@@ -29,8 +29,6 @@ from tengri.components.stellar.sps.dsps_wrapper import (
 )
 from tests._jit_parity import assert_jit_matches_eager
 
-jax.config.update("jax_enable_x64", True)
-
 pytestmark = pytest.mark.bounds
 
 

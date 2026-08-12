@@ -9,13 +9,10 @@ to hard masks as pixel spacing → 0).
 Invoke with:  pytest -m crossval tests/crossval/test_spectral_indices_crossval.py
 """
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
 from numpy.testing import assert_allclose
-
-jax.config.update("jax_enable_x64", True)
 
 pytestmark = pytest.mark.crossval
 

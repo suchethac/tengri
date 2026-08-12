@@ -28,8 +28,6 @@ import pytest
 
 pytestmark = pytest.mark.conservation
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri.forward.sed_model import SEDModel, WavePrecomp
 from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Fixed, Uniform

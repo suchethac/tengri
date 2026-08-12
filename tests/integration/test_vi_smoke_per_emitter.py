@@ -32,8 +32,6 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri import Fitter, Parameters, SEDModel
 from tengri.inference._backend_registry import get_backend
 from tengri.parameters.priors import Uniform

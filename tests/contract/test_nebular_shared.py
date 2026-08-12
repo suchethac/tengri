@@ -18,8 +18,6 @@ import pytest
 
 pytestmark = pytest.mark.contract
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri.components.nebular._constants import (
     _LOG10_ZSUN,
     _LOG_OH_OFFSET,

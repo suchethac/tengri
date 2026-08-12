@@ -17,12 +17,9 @@ References
 - Witt & Gordon 2000, ApJ, 528, 799
 """
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
-
-jax.config.update("jax_enable_x64", True)
 
 try:
     import astropy.units as u

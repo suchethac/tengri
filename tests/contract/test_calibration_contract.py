@@ -23,7 +23,6 @@ silently at some point:
 
 from __future__ import annotations
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -31,8 +30,6 @@ import pytest
 import tengri
 from tengri import FIXED, Fixed, Observation, SEDModel, Spectroscopy
 from tengri.config.exceptions import ConfigError
-
-jax.config.update("jax_enable_x64", True)
 
 pytestmark = pytest.mark.contract
 

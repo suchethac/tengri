@@ -27,8 +27,6 @@ from tests._jit_parity import assert_jit_matches_eager
 
 _AGE_UNIV_YR = float(_age_at_z0()) * 1e9
 
-jax.config.update("jax_enable_x64", True)
-
 
 class TestRegistryContents:
     """Verify all expected models are registered."""

@@ -16,14 +16,11 @@ References
 - Planck Collaboration 2018 — cosmological parameters
 """
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
 
 pytestmark = pytest.mark.bounds
-
-jax.config.update("jax_enable_x64", True)
 
 
 # ── 1. Balmer decrement physics (Case B recombination + dust) ─────

@@ -5,14 +5,11 @@ Non-negativity, temperature monotonicity, and limiting cases.
 """
 
 import chex
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
 
 pytestmark = pytest.mark.bounds
-
-jax.config.update("jax_enable_x64", True)
 
 
 # ── Fixtures ──────────────────────────────────────────────────────

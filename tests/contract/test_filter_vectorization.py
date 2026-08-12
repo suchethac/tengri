@@ -12,8 +12,6 @@ import pytest
 
 pytestmark = pytest.mark.bounds
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri.observation.photometry import (
     compute_flux_density,
     compute_flux_density_batch,

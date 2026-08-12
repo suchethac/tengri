@@ -9,15 +9,12 @@ absent so the unit suite stays green on CI images without model data.
 from __future__ import annotations
 
 import chex
-import jax
 import jax.numpy as jnp
 import pytest
 
 from tengri._data_setup import find_data
 from tests._grad_parity import assert_grad_matches_fd
 from tests._jit_parity import assert_jit_matches_eager
-
-jax.config.update("jax_enable_x64", True)
 
 # parents[4] is one level above the repo root from tests/components/agn/, so
 # this guard was permanently true and the tests below never ran (#1431).

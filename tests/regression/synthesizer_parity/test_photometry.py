@@ -21,8 +21,6 @@ pytestmark = pytest.mark.regression_paper
 import jax
 import jax.numpy as jnp
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri.observation.photometry import compute_flux_density
 from tests._grad_parity import assert_grad_matches_fd
 

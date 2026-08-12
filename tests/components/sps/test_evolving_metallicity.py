@@ -28,8 +28,6 @@ from tests._grad_parity import assert_grad_matches_fd
 
 pytestmark = pytest.mark.bounds
 
-jax.config.update("jax_enable_x64", True)
-
 
 def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     """Central finite difference: (f(x+eps) - f(x-eps)) / (2*eps)."""

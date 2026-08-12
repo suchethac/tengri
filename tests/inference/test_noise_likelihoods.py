@@ -14,8 +14,6 @@ import jax
 import jax.numpy as jnp
 import numpy.testing as npt
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri.observation.noise import PoissonNoiseLikelihood, StudentTLikelihood
 from tests._grad_parity import assert_grad_matches_fd
 from tests._jit_parity import assert_jit_matches_eager

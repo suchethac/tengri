@@ -24,8 +24,6 @@ import pytest
 jax = pytest.importorskip("jax")
 jnp = pytest.importorskip("jax.numpy")
 
-jax.config.update("jax_enable_x64", True)
-
 pytestmark = [pytest.mark.crossval]
 
 

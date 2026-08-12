@@ -4,13 +4,11 @@
 from __future__ import annotations
 
 import chex
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
 
 pytestmark = pytest.mark.bounds
-jax.config.update("jax_enable_x64", True)
 
 from tengri.analysis.diagnostics.spectral import equivalent_width
 from tests._grad_parity import assert_grad_matches_fd

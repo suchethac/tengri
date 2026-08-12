@@ -29,7 +29,6 @@ import numpy as np
 import pytest
 
 pytestmark = pytest.mark.bounds
-jax.config.update("jax_enable_x64", True)
 
 
 # ── Inline implementations matching prediction.py (no external data required)

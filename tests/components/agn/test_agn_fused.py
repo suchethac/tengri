@@ -28,7 +28,6 @@ _SKIRTOR_CANDIDATES = [
 ]
 _SKIRTOR_PATH = next((p for p in _SKIRTOR_CANDIDATES if p.is_file()), None)
 _has_skirtor_data = _SKIRTOR_PATH is not None
-jax.config.update("jax_enable_x64", True)
 
 
 # ── Fixtures ─────────────────────────────────────────────────────

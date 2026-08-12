@@ -23,8 +23,6 @@ from numpy.testing import assert_allclose
 
 pytestmark = pytest.mark.bounds
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri.components.stellar.sfh.mean_sfh import (
     buat08,
     delayed_bq,

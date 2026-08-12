@@ -22,7 +22,6 @@ that wrapper: ``jnp.maximum(nan, 1e-30)`` is ``nan`` and ``log10(nan)`` is
 ``jnp.where`` has to sit upstream of it.
 """
 
-import jax
 import jax.numpy as jnp
 import pytest
 
@@ -33,8 +32,6 @@ from tengri.utils.sed_quantities import (
     compute_mass_weighted_metallicity,
 )
 from tests._grad_parity import assert_grad_matches_fd
-
-jax.config.update("jax_enable_x64", True)
 
 N_AGE = 8
 AGES_YR = jnp.logspace(6.0, 10.0, N_AGE)

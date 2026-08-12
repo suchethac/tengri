@@ -12,7 +12,6 @@ import numpy as np
 import pytest
 
 pytestmark = pytest.mark.bounds
-jax.config.update("jax_enable_x64", True)
 
 from tengri.observation.photometry import FilterCurve
 from tengri.observation.photometry_config import Photometry

@@ -24,8 +24,6 @@ import pytest
 pytestmark = pytest.mark.regression_paper
 from scipy.integrate import simpson
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri.components.nebular import _DEFAULT_CUE_WEIGHTS_PATH
 from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor
 from tengri.components.nebular.cue import CueBackend

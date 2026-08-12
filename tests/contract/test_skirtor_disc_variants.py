@@ -22,8 +22,6 @@ from tests._grad_parity import assert_grad_matches_fd
 
 pytestmark = pytest.mark.contract
 
-jax.config.update("jax_enable_x64", True)
-
 
 @pytest.fixture(scope="module")
 def wave_grid():
