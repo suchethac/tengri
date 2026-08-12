@@ -5428,10 +5428,7 @@ class SEDModel:
             from tengri.forward.properties import missing_property_message
 
             raise KeyError(
-                "; ".join(
-                    missing_property_message(name, self._property_catalog)
-                    for name in sorted(unknown)
-                )
+                missing_property_message(*sorted(unknown), available=self._property_catalog)
             )
 
         # Rest-SED-derived properties cannot be served by the fast-nebular grid

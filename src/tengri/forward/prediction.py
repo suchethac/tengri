@@ -1693,7 +1693,7 @@ class PropertyCatalog(ReadOnlyPropertyMapping):
         if name not in catalog:
             from tengri.forward.properties import missing_property_message
 
-            raise KeyError(missing_property_message(name, catalog))
+            raise KeyError(missing_property_message(name, available=catalog))
         entry = catalog[name]
         state = pred._ensure_state()
         return entry.fn(state, pred._params)

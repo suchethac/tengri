@@ -500,7 +500,7 @@ class CatalogPosterior:
         if name not in self.properties:
             from tengri.forward.properties import missing_property_message
 
-            raise KeyError(missing_property_message(name, self.properties))
+            raise KeyError(missing_property_message(name, available=self.properties))
         vals = self.properties[name]
         if isinstance(vals, list):  # ragged posteriors — per-galaxy medians
             return np.array(

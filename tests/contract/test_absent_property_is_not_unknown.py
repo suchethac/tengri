@@ -95,7 +95,7 @@ class TestTheMessage:
     @pytest.mark.parametrize("name", sorted(PROPERTY_REGISTRY))
     def test_the_message_names_the_component_and_how_to_add_it(self, name):
         component = PROPERTY_REGISTRY[name][0].component_name
-        message = missing_property_message(name, {"stellar_mass"})
+        message = missing_property_message(name, available={"stellar_mass"})
         assert component in message, (
             f"the message for {name!r} never names {component!r}, the component "
             f"the reader has to add: {message[:200]}"
@@ -103,14 +103,27 @@ class TestTheMessage:
         assert "describe_property" in message
 
     def test_a_misspelling_is_still_reported_as_unknown_with_near_misses(self):
-        message = missing_property_message("steller_mass", {"stellar_mass", "sfr_10myr"})
+        message = missing_property_message("steller_mass", available={"stellar_mass", "sfr_10myr"})
         assert "Unknown property" in message
         assert "stellar_mass" in message, f"a one-character typo got no suggestion: {message}"
 
     def test_a_name_nothing_resembles_gets_no_invented_suggestion(self):
-        message = missing_property_message("qqqqqqqq", {"stellar_mass"})
+        message = missing_property_message("qqqqqqqq", available={"stellar_mass"})
         assert "Unknown property" in message
         assert "Did you mean" not in message
+
+    def test_several_bad_names_list_what_is_available_once(self):
+        """Repeating 43 names per bad name turned two mistakes into a wall."""
+        available = {f"prop_{i}" for i in range(43)}
+        message = missing_property_message("l_x_total", "qqqqqqqq", available=available)
+        assert message.count("Available on this model:") == 1, (
+            f"the available list is repeated per bad name:\n{message}"
+        )
+        assert "l_x_total" in message and "qqqqqqqq" in message, (
+            "one of the two bad names was dropped from the message"
+        )
+        # Each name gets its own line, so the two diagnoses stay legible.
+        assert message.count("\n") >= 2, message
 
 
 class TestTheHintOnlyNamesThingsThatExist:

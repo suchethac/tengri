@@ -88,7 +88,7 @@ class PosteriorProperties(ReadOnlyPropertyMapping, Mapping):
         if name not in available:
             from tengri.forward.properties import missing_property_message
 
-            raise KeyError(missing_property_message(name, available))
+            raise KeyError(missing_property_message(name, available=available))
 
         if post.samples is None:
             # MAP: one point, no sample axis. Same key, zero extra axes.
