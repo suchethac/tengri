@@ -29,6 +29,42 @@ F = TypeVar("F", bound=Callable)
 CORE_CITATIONS: list[str] = ["tengri", "jax", "dsps"]
 
 
+#: Star-formation-history model name → citation keys.
+#:
+#: Every other subsystem had a table; SFH did not, so the SFH papers lived only
+#: in the two hand-written name→key maps and neither ``collect_citations`` nor
+#: ``print_components_bibtex`` cited ``delayed`` at all. Each entry below was
+#: checked against ``references.bib`` on volume and page, not on author+year:
+#: a fuzzy match wanted to send ``conroy2010`` (ApJ 708, 58) to ``Conroy_2010a``
+#: (ApJ 712, 833), which is a different paper, so that one is deliberately absent.
+SFH_CITATIONS: dict[str, list[str]] = {
+    "dpl": ["bagpipes"],
+    # Boquien+2019 (A&A 622, A103) for the CIGALE form, Carnall+2018
+    # (MNRAS 480, 4379) for the Bagpipes one — the menu row names both.
+    "delayed": ["cigale", "bagpipes"],
+    "continuity": ["leja2019"],
+    "continuity_flex": ["leja2019"],
+    "dirichlet": ["leja2019"],
+    "dense_basis": ["iyer2020"],
+    # The SFH shape is Leja+2019; the Wang+2024 prior paper has no bundled
+    # BibTeX entry yet, so only the half that exists is claimed.
+    "prospector_beta": ["leja2019"],
+    None: [],
+}
+
+#: Radio *model* name → citation keys.
+#:
+#: :data:`RADIO_CITATIONS` is a flat list of keys that apply whenever radio is
+#: active; this maps the selectable model names on top of it. ``condon92``
+#: names both papers in its own menu row.
+RADIO_MODEL_CITATIONS: dict[str, list[str]] = {
+    "condon92": ["condon1992", "yang2020"],
+    "bell2003": ["bell2003"],
+    "none": [],
+    None: [],
+}
+
+
 # Dust attenuation laws. Keys match tengri.config.settings.DustConfig.law_*
 # and DustConfig.model values.
 DUST_LAW_CITATIONS: dict[str, list[str]] = {

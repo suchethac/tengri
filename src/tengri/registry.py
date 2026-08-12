@@ -1644,127 +1644,6 @@ def cite_components(obj=None) -> _RegistryTable:
     return _RegistryTable(out)
 
 
-# Map registry-entry names → bib-key in tengri.citations.registry.REGISTRY.
-# This is only *half* the mapping: :func:`_bibkeys_for` unions it with the
-# ``*_CITATIONS`` tables in ``tengri.citations.associations``, which already
-# record what most components cite. Keeping only this hand-written half is how
-# Charlot & Fall 2000, Bell 2003, Inoue+2014 and Yang+2020 printed
-# "no bib entry" while sitting in ``references.bib`` all along.
-#
-# Module level, not function local, so a contract test can census it.
-_NAME_TO_BIBKEY: dict[str, str] = {
-    # SFH
-    "dpl": "bagpipes",
-    "continuity": "leja2019",
-    "dirichlet": "leja2019",
-    "dense_basis": "iyer2020",
-    # AGN
-    "skirtor": "skirtor",
-    "stalevski": "skirtor",
-    "kubota_done": "kubota_done2018",
-    "kubota_done_full": "kubota_done2018",
-    "multicolor_agn": "kubota_done2018",
-    "adaf": "mahadevan1997",
-    "qsogen": "temple2021_qsogen",
-    # AGN composable blocks — bibkeys verified against each block's
-    # registered ``citation=`` string (never guessed). Blocks whose paper
-    # has no bundled BibTeX (fritz, cat3d_wind, feltre, richards2006,
-    # boroson_green, …) fall through to the free-form citation note.
-    "grahsp": "buchner2024",
-    "grahsp_sbpl": "buchner2024",
-    "grahsp_biatten": "buchner2024",
-    "nenkova": "clumpy_nenkova2008",
-    "nenkova_agnfitter": "clumpy_nenkova2008",
-    "multicolor": "shakura_sunyaev1973",
-    "synthesizer": "synthesizer",
-    "synthesizer_spectra": "synthesizer",
-    "qsogen_smc": "temple2021_qsogen",
-    "qsogen_balmer": "temple2021_qsogen",
-    # Dust attenuation
-    "calzetti": "calzetti2000",
-    "cardelli": "cardelli1989",
-    "kriek_conroy": "kriek_conroy2013",
-    "noll09": "noll2009",
-    "salim": "salim2018",
-    "salim_sbl18": "salim2018",
-    "li08": "li2008_ext",
-    "smc": "gordon2003_smc",
-    "lmc": "gordon2003_smc",
-    "power_law": "charlot_fall2000",
-    # Dust emission
-    "dl07": "draine_li2007",
-    "draine_li2007": "draine_li2007",
-    "dl14": "draine2014",
-    "dale2014": "dale2014",
-    "casey2012": "casey2012",
-    "mbb": "casey2012",
-    # Nebular
-    "cue": "cue",
-    "cloudy_grid": "cloudy",
-    # Inference
-    "mcmc_nuts": "blackjax",
-    "vi": "nifty",
-    "vi_nonlinear_fast": "nifty",
-    "mcmc_raytrace": "raytrace_behroozi",
-    "pathfinder": "pathfinder",
-    "nss": "nss",
-    # Frameworks (always-on)
-    "tengri": "tengri",
-    "DSPS": "dsps",
-    "JAX": "jax",
-}
-
-
-def _association_bibkeys(name: str) -> list[str]:
-    """BibTeX keys the citation association tables already record for ``name``.
-
-    ``tengri.citations.associations`` carries a ``*_CITATIONS`` table per
-    subsystem — ``DUST_MODEL_CITATIONS``, ``IGM_CITATIONS``, ``XRAY_CITATIONS``
-    and so on — mapping a component name to its keys. Reading them here means
-    the BibTeX emitter and :func:`tengri.collect_citations` share one source
-    instead of the emitter keeping a second hand-written map that drifts.
-
-    Parameters
-    ----------
-    name : str
-        Component name as it appears in a :func:`cite_components` row.
-
-    Returns
-    -------
-    list[str]
-        Registry keys, in table order; empty when no table names this component.
-    """
-    try:
-        from tengri.citations import associations as _assoc
-    except ImportError:  # pragma: no cover - citations is a hard dependency
-        return []
-
-    keys: list[str] = []
-    for attr in sorted(dir(_assoc)):
-        if not attr.endswith("_CITATIONS"):
-            continue
-        table = getattr(_assoc, attr)
-        if isinstance(table, dict):
-            keys.extend(table.get(name) or [])
-        elif isinstance(table, list) and name in table:
-            # Flat tables (RADIO_CITATIONS) list registry keys directly, so a
-            # component whose own name is one of them resolves to itself.
-            keys.append(name)
-    return list(dict.fromkeys(keys))
-
-
-def _bibkeys_for(name: str, explicit: dict[str, str]) -> list[str]:
-    """Every BibTeX key for a component: the explicit map, then associations.
-
-    The two sources are a union, not a fallback chain with a winner — ``dpl``
-    is only in the explicit map (it points at Bagpipes, which no association
-    table records), while ``two_component`` is only in the associations.
-    """
-    keys = [k for k in (explicit.get(name), explicit.get(name.lower())) if k]
-    keys.extend(_association_bibkeys(name))
-    return list(dict.fromkeys(keys))
-
-
 def print_components_bibtex(obj=None) -> None:
     """Print BibTeX entries for every component used by ``obj``.
 
@@ -1800,15 +1679,19 @@ def print_components_bibtex(obj=None) -> None:
 
     try:
         from tengri.citations import cite as _cite_lookup
+        from tengri.citations.resolve import citation_keys_for
     except ImportError:
         _cite_lookup = None
+
+        def citation_keys_for(_name):
+            return []
 
     seen_keys: set[str] = set()
     for row in rows:
         name = row["name"]
         comp = row["component"]
         emitted = False
-        for bibkey in _bibkeys_for(name, _NAME_TO_BIBKEY):
+        for bibkey in citation_keys_for(name):
             if bibkey in seen_keys or _cite_lookup is None:
                 emitted = emitted or bibkey in seen_keys
                 continue

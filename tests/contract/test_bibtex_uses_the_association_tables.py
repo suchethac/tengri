@@ -12,24 +12,39 @@ was in ``references.bib`` the whole time — with DOI, ADS URL and a
 ``registry_key``. So were Bell 2003, Inoue+2014 and Yang+2020. A reader pasted
 the output and silently lost them, because a LaTeX comment is not an entry.
 
-The cause was a second map. ``_NAME_TO_BIBKEY`` in ``registry.py`` was a
-hand-written component-name -> key dict, while
-``tengri.citations.associations`` already carried a ``*_CITATIONS`` table per
-subsystem doing the same job for :func:`tengri.collect_citations`. The emitter
-consulted only its own copy, and that copy had drifted.
+The cause was three maps of the same thing, each incomplete in a different way:
 
-The fix reads both. Measured over every menu row carrying a citation:
+===================================  =====  ==============================
+map                                  names  read by
+===================================  =====  ==============================
+``registry.py::_NAME_TO_BIBKEY``        48  ``print_components_bibtex``
+``collect.py::_LIVE_NAME_TO_BIBKEY``    41  ``collect_citations``
+``associations.py::*_CITATIONS``       101  ``collect_citations`` (explicit)
+===================================  =====  ==============================
+
+14 names were in the first and not the second, 7 the other way, and 23 lived in
+a hand-written map with no association table at all — so the two public
+citation surfaces handed a reader different bibliographies for the same model.
+No name mapped to *conflicting* keys; every difference was a gap, which is why
+nothing ever looked wrong.
+
+Both maps are now gone. ``tengri.citations.resolve.citation_keys_for`` is the
+one resolver and both surfaces call it. SFH gained the association table it
+never had — which is why ``delayed`` (CIGALE *and* Bagpipes) reached neither
+surface. Measured over every menu row carrying a citation:
 
     rows with a citation : 117
     resolved BEFORE      : 45
-    resolved AFTER       : 69   (+24)
+    resolved AFTER       : 78   (+33)
 
-The 24 are not scattered — whole subsystems were dark: every IGM model, eight
-dust-emission models, both dust models, shock, and X-ray.
+Whole subsystems were dark: every IGM model, eight dust-emission models, both
+dust models, shock, X-ray, and every SFH type.
 
-48 rows still resolve to nothing. Those are mostly AGN blocks whose papers are
-genuinely absent from ``references.bib``; adding them is bibliography work, not
-a mapping fix, and this file does not assert them away.
+39 rows still resolve to nothing. Those are AGN blocks and SFH variants whose
+papers are genuinely absent from ``references.bib`` — checked on volume and
+page, not author+year, because a fuzzy match wanted to send ``conroy2010``
+(ApJ 708, 58) to ``Conroy_2010a`` (ApJ 712, 833), a different paper. Adding
+them is bibliography work, and this file does not assert them away.
 """
 
 from __future__ import annotations
@@ -43,7 +58,11 @@ import pytest
 import tengri
 from tengri import FIXED, Fixed, Observation, Photometry, SEDModel
 from tengri.citations import cite
-from tengri.registry import _NAME_TO_BIBKEY, _association_bibkeys, _bibkeys_for
+from tengri.citations.resolve import (
+    NAME_TO_BIBKEY,
+    association_keys_for,
+    citation_keys_for,
+)
 
 pytestmark = [pytest.mark.contract, pytest.mark.regression_bug]
 
@@ -112,10 +131,10 @@ class TestTheCensus:
         """The union, not one map: association keys must reach the emitter."""
         missed = []
         for _menu, name, _citation in _cited_menu_rows():
-            association = _association_bibkeys(name)
+            association = association_keys_for(name)
             if not association:
                 continue
-            resolved = _bibkeys_for(name, _NAME_TO_BIBKEY)
+            resolved = citation_keys_for(name)
             if not set(association) <= set(resolved):
                 missed.append((name, association, resolved))
         assert not missed, (
@@ -133,19 +152,19 @@ class TestTheCensus:
         """
         only_explicit = [
             name
-            for name in _NAME_TO_BIBKEY
-            if not _association_bibkeys(name) and _emits_bibtex([_NAME_TO_BIBKEY[name]])
+            for name in NAME_TO_BIBKEY
+            if not association_keys_for(name) and _emits_bibtex([NAME_TO_BIBKEY[name]])
         ]
         assert only_explicit, (
             "every explicit mapping is now duplicated in the association "
-            "tables; if that is deliberate, delete _NAME_TO_BIBKEY rather than "
+            "tables; if that is deliberate, delete NAME_TO_BIBKEY rather than "
             "keeping two copies."
         )
 
     def test_no_name_means_two_different_things_across_tables(self):
         """Matching by name across every table must not import a wrong paper.
 
-        ``_association_bibkeys`` scans all ``*_CITATIONS`` tables, so a name
+        ``association_keys_for`` scans all ``*_CITATIONS`` tables, so a name
         that means one thing under dust and another under X-ray would cite the
         wrong paper. Today four names appear in more than one table and none
         contradicts: three carry identical keys, and ``synthesizer`` is a
@@ -183,11 +202,65 @@ class TestTheCensus:
         )
 
 
+class TestTheTwoSurfacesAgree:
+    """One resolver, so the two public citation surfaces cannot drift apart."""
+
+    def test_there_is_only_one_name_to_key_map(self):
+        """The maps in registry.py and collect.py are gone, not merely bypassed.
+
+        Three maps existed: 48 names in ``registry.py``, 41 in ``collect.py``,
+        101 across the association tables. 14 names were in the first and not
+        the second and 7 the other way, so ``collect_citations`` and
+        ``print_components_bibtex`` handed a reader different bibliographies
+        for the same model. Leaving a bypassed copy in place invites the next
+        edit to land in the wrong one.
+        """
+        import tengri.citations.collect as collect
+        import tengri.registry as registry
+
+        assert not hasattr(registry, "_NAME_TO_BIBKEY"), (
+            "registry.py still defines its own name→key map; it must use "
+            "tengri.citations.resolve.citation_keys_for."
+        )
+        assert not hasattr(collect, "_LIVE_NAME_TO_BIBKEY"), (
+            "collect.py still defines its own name→key map; it must use "
+            "tengri.citations.resolve.citation_keys_for."
+        )
+
+    def test_the_sfh_model_reaches_both_surfaces(self, ssp_data_fsps):
+        """``delayed`` cites CIGALE and Bagpipes, and reached neither surface.
+
+        SFH was the one subsystem with no association table, so its papers
+        lived only in the hand-written maps — and ``delayed`` was in neither.
+        """
+        obs = Observation(photometry=Photometry.from_names(["sdss_u", "sdss_g"]))
+        model = SEDModel.build(
+            ssp_data=ssp_data_fsps,
+            observation=obs,
+            sfh={"type": "delayed", "all_params": FIXED},
+            dust={"type": "two_component", "law_bc": "calzetti", "all_params": FIXED},
+            neb={"type": "none"},
+            redshift=Fixed(0.1),
+        )
+        collected = {getattr(c, "key", str(c)) for c in tengri.collect_citations(model)}
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            tengri.print_components_bibtex(model)
+        emitted = set(re.findall(r"^@\w+\{([^,]+),", buffer.getvalue(), flags=re.M))
+
+        assert {"cigale", "bagpipes"} <= collected, (
+            f"collect_citations does not cite the delayed-tau SFH papers; got {sorted(collected)}"
+        )
+        assert {"Boquien_2019", "Carnall_2018"} <= emitted, (
+            f"the BibTeX omits the delayed-tau SFH papers; got {sorted(emitted)}"
+        )
+
+
 class TestTheFourThatShipped:
     @pytest.mark.parametrize(("name", "bibkey"), sorted(DROPPED.items()))
     def test_the_entry_exists_in_the_bibliography(self, name, bibkey):
         """The premise: these were never missing, only unmapped."""
-        keys = _bibkeys_for(name, _NAME_TO_BIBKEY)
+        keys = citation_keys_for(name)
         assert keys, f"{name!r} maps to no BibTeX key at all"
         assert _emits_bibtex(keys), (
             f"{name!r} maps to {keys} and none of them yields BibTeX — this "
@@ -196,7 +269,7 @@ class TestTheFourThatShipped:
 
     @pytest.mark.parametrize(("name", "bibkey"), sorted(DROPPED.items()))
     def test_it_is_reachable_from_the_component_name(self, name, bibkey):
-        keys = _bibkeys_for(name, _NAME_TO_BIBKEY)
+        keys = citation_keys_for(name)
         entries = []
         for key in keys:
             try:
@@ -216,7 +289,7 @@ class TestTheEmittedDocument:
         droppable = [
             name
             for name in (n.strip() for n in commented)
-            if _emits_bibtex(_bibkeys_for(name, _NAME_TO_BIBKEY))
+            if _emits_bibtex(citation_keys_for(name))
         ]
         assert not droppable, (
             f"{droppable} print as LaTeX comments although a BibTeX entry "
