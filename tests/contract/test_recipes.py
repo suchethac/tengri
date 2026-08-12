@@ -61,19 +61,33 @@ BUILD_EXEMPT = {
 
 
 def _recipe_functions() -> set[str]:
-    """Every public recipe factory actually defined in :mod:`tengri.recipes`.
+    """Every public recipe factory this module *owns*.
 
     Read off the live module, so the tests below cannot be satisfied by a
     stale pinned list agreeing with itself.
+
+    Owned means defined here **or** exported here, and neither test alone is
+    enough. ``__module__`` alone would miss a recipe moved into a submodule and
+    re-exported; ``__all__`` alone would miss one defined here and forgotten
+    from ``__all__``, which is precisely the oversight this census exists to
+    catch. Their union admits both and still excludes a helper merely imported
+    into the namespace.
+
+    The predicate used to be ``__module__.startswith("tengri")``, which was
+    looser than this docstring's own word "defined": #1690 imported
+    ``tengri._completion.curated_dir`` into ``tengri.recipes`` and the census
+    reported it as an unpinned recipe. The ``__dir__`` override installed on
+    the same line hides it from ``dir()``, but this scan reads ``vars()``.
     """
     import inspect
 
+    exported = set(getattr(recipes, "__all__", ()) or ())
     return {
         name
         for name, obj in vars(recipes).items()
         if not name.startswith("_")
         and inspect.isfunction(obj)
-        and (getattr(obj, "__module__", "") or "").startswith("tengri")
+        and (getattr(obj, "__module__", None) == recipes.__name__ or name in exported)
     }
 
 
@@ -236,6 +250,43 @@ class TestRecipesSurface:
             f"Add them there and to RECIPE_FREE_PARAMS, then either give them a "
             f"build-and-predict case or list them in BUILD_EXEMPT with a reason."
         )
+
+    def test_the_census_ignores_helpers_merely_imported_into_the_module(self):
+        """A helper in the namespace is not a recipe.
+
+        The predicate was ``__module__.startswith("tengri")``, looser than the
+        word "defined" in its own docstring. #1690 imported
+        ``tengri._completion.curated_dir`` into ``tengri.recipes`` and this
+        census reported it as an unpinned recipe — turning a guard against
+        untested recipes into a guard against importing anything.
+
+        Narrowing it must not narrow what it catches, so both directions are
+        pinned here and in
+        :meth:`test_the_census_still_catches_a_recipe_defined_elsewhere`.
+        """
+        from tengri._completion import curated_dir
+
+        assert curated_dir.__module__ != recipes.__name__
+        assert "curated_dir" not in getattr(recipes, "__all__", ())
+        assert "curated_dir" not in _recipe_functions()
+
+    def test_the_census_still_catches_a_recipe_defined_elsewhere(self, monkeypatch):
+        """Owned means defined here **or** exported here.
+
+        ``__module__`` alone would miss a recipe moved to a submodule and
+        re-exported — a refactor that must not silently drop it from the
+        census.
+        """
+
+        def submodule_recipe():  # pragma: no cover - never called
+            return {}
+
+        submodule_recipe.__module__ = "tengri.recipes.agn"
+        monkeypatch.setattr(recipes, "submodule_recipe", submodule_recipe, raising=False)
+        monkeypatch.setattr(
+            recipes, "__all__", [*recipes.__all__, "submodule_recipe"], raising=False
+        )
+        assert "submodule_recipe" in _recipe_functions()
 
     def test_every_recipe_is_build_tested_or_exempt_on_the_record(self):
         """A recipe must build, or say in one place why it is not built here.
