@@ -1822,6 +1822,41 @@ fit at D ~ 20. Reproducing it needs that configuration. A probe that cannot
 exhibit the disease cannot test a cure, and a treatment arm looks equally clean
 either way — which is why the control matters more than the arms.
 
+**Second attempt, in the interim configuration — ALSO failed to reproduce it.**
+``fit_interim`` (its own static HMC at ``n_leapfrog_steps=100``) with sigma and
+tau free as per-galaxy nuisances, D matched at 11 free parameters plus the field
+latents (~27 against this section's 26), 2 galaxies, 400/400,
+``dense_mass_matrix=False``, bounds (0.01, 1.0) and (10, 500) Myr:
+
+======  =================  ==============
+``a``   max R-hat(sigma)   max R-hat(xi)
+======  =================  ==============
+1.00    1.043              0.986
+0.50    **1.412**          0.979
+0.00    1.066              0.979
+======  =================  ==============
+
+``a=1`` gives 1.043, not 4.42, so INCONCLUSIVE fired again.
+
+**Two failed reproductions make this a finding about the section, not the
+sampler: R-hat(sigma) = 4.42 is not a generic property of this model class, and
+the configuration that produced it is not recorded here well enough to rebuild.**
+Still unmatched, any of which could be the difference: this section's runs used
+``dense_mass_matrix=True`` (its own note then advises ``False``), 1000/1000 and
+4000/4000 rather than 400/400, an unstated population size, and §2 quotes truths
+of sigma = 0.75 / tau = 150 Myr where the sweep uses 0.6 / 350.
+
+**Whoever next touches this should record the run configuration alongside the
+number.** A headline diagnostic that cannot be rebuilt from the document costs
+~30 minutes per guess, and each failure is ambiguous between "the symptom is
+fragile" and "I mismatched a setting" — which is exactly the ambiguity the two
+attempts above are stuck in.
+
+One datum worth keeping despite the INCONCLUSIVE: at ``a = 0.5`` mixing was
+**worse** (1.412) than at ``a = 1`` (1.043). Weak — N=2 and the symptom is
+absent — but it is evidence against assuming partial centering is free, and
+worth re-testing whenever the symptom can be reproduced.
+
 ---
 
 ## 6. How to run it
