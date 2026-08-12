@@ -1616,8 +1616,9 @@ def _translate_structural(groups: dict) -> dict:
                 "the 'stellar' group is gone (#1720); its one setting was the "
                 "metallicity mode, and that now lives in 'met', which selects "
                 "with 'type' like every other group. "
-                "met={'type': 'table'} becomes met={'type': 'table'}, and "
-                "met={'logzsol': ...} becomes met={'logzsol': ...}. "
+                "A 'met_mode' key becomes met={'type': ...} — so the tabulated "
+                "mode is met={'type': 'table'} — and a 'met_logzsol' key becomes "
+                "met={'logzsol': ...}. "
                 "Two spellings of one setting was the maintenance cost this "
                 "removes; tengri.list_metallicity_modes() shows the current form."
             )

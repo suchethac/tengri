@@ -63,6 +63,16 @@ def test_the_removed_stellar_group_says_how_to_translate():
     assert "met={'type': 'table'}" in message, "give the literal replacement line"
     assert "met={'logzsol': ...}" in message, "and the per-parameter form too"
 
+    # A translation has to name what is being translated *from*. Asserting only
+    # the replacement forms is what let this message ship reading
+    # "met={'type': 'table'} becomes met={'type': 'table'}" — both halves
+    # rewritten to the new spelling by the rename sweep that created them, so
+    # every assertion above still passed and the source-scanning guard in
+    # test_error_message_advice_parses.py was *satisfied* by the corruption,
+    # since the mangled text parses and the correct text does not.
+    assert "met_mode" in message, "name the old structural key, or there is no mapping"
+    assert "met_logzsol" in message, "name the old parameter key too"
+
 
 def test_short_form_parameters_route_into_the_met_group():
     """``met={'logzsol_0': ...}`` must reach ``met_logzsol_0``, not vanish.
