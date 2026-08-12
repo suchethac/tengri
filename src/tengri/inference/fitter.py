@@ -695,20 +695,8 @@ def _resolve_batch_fit_approx(model, approx, data_type):
 
         state = getattr(model, "approx", None)
         if data_type == "photometry":
-            if state is not None and state.wave_precomp:
-                # The wave LUT is already configured — but this returned before
-                # the feature top-up below could run, so a model built
-                # ``approx=WavePrecomp()`` opted out of the dominant lever by
-                # being explicit (#1683). Worse here than on the single-galaxy
-                # surface: these are the fits that evaluate the forward model
-                # the most. Append only FeaturePrecomp; re-appending the wave
-                # LUT would duplicate it.
-                if getattr(state, "feature_precomp", False) or _has_line_adjacent_channel(model):
-                    return model
-                existing = tuple(getattr(model, "approx_configs", ()))
-                with contextlib.suppress(Exception):
-                    return _memoized_approx_clone(model, (*existing, FeaturePrecomp()))
-                return model
+            has_wave = state is not None and state.wave_precomp
+            has_feature = state is not None and getattr(state, "feature_precomp", False)
             cfg = WavePrecomp()
             # Attempt the feature top-up first: for a backend that can
             # tabulate its features (Cue's per-Q_H grid replaces the emulator
@@ -727,10 +715,21 @@ def _resolve_batch_fit_approx(model, approx, data_type):
             # first spelling checked line_fluxes only, the channel matrix's
             # classic unwritten cell (#1460/#1480/#1599). spectral_indices is
             # excluded as unverified rather than known-broken.
-            if not _has_line_adjacent_channel(model):
+            #
+            # #1683: a model that ALREADY carries WavePrecomp returned here
+            # untouched until this branch was restructured, so a batch fit built
+            # with approx=WavePrecomp() never reached the top-up either — the
+            # mirror of the single-galaxy gap, and the worse half: population
+            # and catalog fits evaluate the forward model the most. When the
+            # wave LUT is already configured, only the feature LUT is appended;
+            # re-appending WavePrecomp would duplicate it.
+            if not has_feature and not _has_line_adjacent_channel(model):
                 existing = tuple(getattr(model, "approx_configs", ()))
+                extra = (FeaturePrecomp(),) if has_wave else (cfg, FeaturePrecomp())
                 with contextlib.suppress(Exception):
-                    return _memoized_approx_clone(model, (*existing, cfg, FeaturePrecomp()))
+                    return _memoized_approx_clone(model, (*existing, *extra))
+            if has_wave:
+                return model
         elif data_type in ("spectroscopy", "joint"):
             if state is not None and getattr(state, "spectrum_precomp", False):
                 return model
@@ -1371,7 +1370,7 @@ class Fitter:
         wants_lut = self._fits_lines(model) and not _has_line_adjacent_channel(model)
         return (base, FeaturePrecomp()) if wants_lut else base
 
-    def _add_feature_precomp(self, model, *, warn_on_failure=True):
+    def _add_feature_precomp(self, model, *, warn_on_failure: bool = True):
         """Top up a build-time ``approx=`` with ``FeaturePrecomp``.
 
         A model built with ``approx=WavePrecomp()`` used to be returned
@@ -1476,26 +1475,30 @@ class Fitter:
             has = getattr(model, "_has_modern_approx", None)
             if callable(has) and has():
                 # Respect the build-time approx, but do not let it suppress the
-                # feature LUT — top it up rather than bailing.
+                # line LUT — top it up rather than bailing.
                 #
-                # Same exclusion as ``_auto_approx_config``: a fit carrying
-                # line fluxes *and* ratios answers ``_fits_lines`` true, and
-                # topping it up would hand the LUT to a channel that needs the
-                # discrete catalog the LUT does not publish.
-                resolved = model
-                if not _has_line_adjacent_channel(model):
-                    fits_lines = self._fits_lines(model)
-                    # A photometry-only fit gets the same top-up (#1683). This
-                    # branch used to return here, so #1596's fix — which lives
-                    # below, past the early return — was unreachable for any
-                    # model built with approx=WavePrecomp(): naming the wave LUT
-                    # explicitly cost the feature LUT, 22x in likelihood-gradient
-                    # FLOPs on a 10-parameter Cue model. Failure is expected for
-                    # a backend with nothing to tabulate, so only the lines case
-                    # — whose cost is the documented ~21x — announces it.
-                    if fits_lines or self.data_type == "photometry":
-                        resolved = self._add_feature_precomp(model, warn_on_failure=fits_lines)
-                return resolved
+                # The lines branch deliberately does NOT repeat the ratio/index
+                # exclusion that this branch carried at the call site before the
+                # thirteenth merge. It lives inside ``_add_feature_precomp`` as
+                # "one seam for every caller of this top-up" (#1665), so a
+                # line-flux + ratio fit is still refused — just refused in one
+                # place. Restating it here is what let the two spellings drift
+                # apart in the first place.
+                if self._fits_lines(model):
+                    return self._add_feature_precomp(model)
+                # #1683: #1596 in its BUILD-TIME spelling. The fix that landed
+                # in #1656 tops up only the branch below, where the model carries
+                # no approx at all; a photometry-only Cue model built WITH
+                # approx=WavePrecomp() still returned here untouched. So
+                # naming the wave LUT explicitly cost the feature LUT — the
+                # same "slower than passing nothing at all" pathology this
+                # method's docstring records for lines, measured at ~22x the
+                # per-gradient FLOPs on a 10-parameter Cue model. Silent on
+                # failure: a backend with nothing to tabulate is the common
+                # case here, not an anomaly worth warning about.
+                if self.data_type == "photometry" and not _has_line_adjacent_channel(model):
+                    return self._add_feature_precomp(model, warn_on_failure=False)
+                return model
             cfg = self._auto_approx_config(model)
             if cfg is None:
                 return model
