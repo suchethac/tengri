@@ -1058,22 +1058,30 @@ def _build_tengri_tau_sed(
     tau_bc: float = 0.0,
     tau_diff: float = 0.0,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Build tengri SED for declining-tau model, normalized by M_formed.
+    """Build tengri SED for the declining-tau (FSPS sfh=1) model.
+
+    Composed as a tabulated SFH rather than selected by name. There is no
+    ``'tau'`` SFH type: ``declining_exponential`` was **deliberately**
+    unregistered because confusing it with CIGALE's ``sfhdelayed`` — which is
+    tau-*delayed* and rises from zero — produced a silent wavelength-dependent
+    residual in an early audit (#406). The registry note directs anyone needing
+    the FSPS-``sfh=1`` shape to compose it manually, which is what the ``table``
+    path below does.
+
+    These tests had been passing ``sfh_type="tau"`` and failing with
+    ``KeyError: "Unknown SFH model 'tau'"`` ever since (#1728, #1750).
 
     Returns (wave_Å, L_nu per Msun formed in erg/s/Hz).
-    Time conversion: FSPS/bagpipes T_cosmic ↔ tengri t_lb via t_lb = age - T_cosmic.
     """
-    sfh_params = {
-        "sfh_tau_log_total_mass": log_total_mass,
-        "sfh_tau_tau_gyr": tau_gyr,
-        "sfh_tau_age_gyr": age_gyr,
-    }
-    wave, sed = _build_tengri_sed_raw(
-        ssp_data, "tau", sfh_params, logzsol=logzsol, tau_bc=tau_bc, tau_diff=tau_diff
+    return _build_tengri_tau_sed_table(
+        ssp_data,
+        tau_gyr=tau_gyr,
+        age_gyr=age_gyr,
+        log_total_mass=log_total_mass,
+        logzsol=logzsol,
+        tau_bc=tau_bc,
+        tau_diff=tau_diff,
     )
-    total_mass = 10.0**log_total_mass
-    m_formed = _tau_m_formed(total_mass, tau_gyr * 1e9, age_gyr * 1e9)
-    return wave, sed / m_formed
 
 
 def _build_tengri_tau_sed_table(
@@ -1083,6 +1091,7 @@ def _build_tengri_tau_sed_table(
     log_total_mass: float = 1.0,
     logzsol: float = 0.0,
     tau_bc: float = 0.0,
+    tau_diff: float = 0.0,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Build tengri SED for declining-tau model via the 'table' SFH mode.
 
@@ -1105,7 +1114,7 @@ def _build_tengri_tau_sed_table(
         mean_sfh_type="table",
         met_logzsol=Fixed(logzsol),
         dust_tau_bc=Fixed(tau_bc),
-        dust_tau_diff=Fixed(0.0),
+        dust_tau_diff=Fixed(tau_diff),
         dust_slope=Fixed(-0.7),
         redshift=0.01,
     )
