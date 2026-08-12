@@ -65,7 +65,7 @@ _SSP_PATH = "data/fsps_prsc_miles_chabrier.h5"
 #: **every one of them sits at a luminosity share of 5.5e-15 or below** (the
 #: worst, 8.2 dex, at 3.3e-18). Those are segments whose ionizing flux is
 #: numerically zero — the HeII segment of a 10-100 Myr population — so the power
-#: law is being fit to nothing and its normalisation is unconstrained. Requiring
+#: law is being fit to nothing and its normalization is unconstrained. Requiring
 #: their logs to agree measures the conditioning of a fit to zero, not physics.
 #:
 #: End-to-end confirmation that the excluded entries are inert: photometry from a
@@ -105,7 +105,7 @@ def _ionizing_spectra_f64(max_bins=24):
     # beside it failed on 198 entries, and both failures were selection, not
     # tolerance. The degradation lives at log_age 7.0-8.0 (10-100 Myr, age
     # indices 30-50 on this grid) in segment 0, where the ionizing flux is
-    # ~1e-17.7 of the normalisation and underflows float32. Draft 1 took the
+    # ~1e-17.7 of the normalization and underflows float32. Draft 1 took the
     # single youngest bin with ionizing flux; draft 2 filled greedily (all 15
     # metallicities at age 0, then age 6, ...) and hit the cap two ages in.
     # Both sampled only the young, bright populations -- precisely the ones that
