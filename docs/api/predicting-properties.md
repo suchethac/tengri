@@ -95,7 +95,15 @@ print(describe_property("stellar_mass"))
 #   units        Msun
 #   group        sfh
 #   component    stellar
-#   description  Total stellar mass currently alive
+#   description  Total stellar mass formed by the SFH — its time-integral,
+#                1.5-1.9x above stellar_mass_surviving
+```
+
+```{warning}
+`stellar_mass` is the mass **formed** — the time-integral of the SFH. Stellar
+evolution returns a third to a half of it to the ISM, so it runs 1.5-1.9x above
+`stellar_mass_surviving` on ordinary populations. Quote whichever one your
+comparison sample uses; they are not interchangeable.
 ```
 
 ### Accessing properties: two forms

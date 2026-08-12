@@ -45,8 +45,8 @@
 | `sfr_10myr` | Msun/yr | sfh | stellar | Star formation rate averaged over past 10 Myr |
 | `sii_6717` | erg/s | lines | nebular | SII 6717 line luminosity |
 | `sii_6731` | erg/s | lines | nebular | SII 6731 line luminosity |
-| `ssfr` | 1/yr | sfh | stellar | Specific star formation rate (SFR / stellar_mass) |
-| `stellar_mass` | Msun | sfh | stellar | Total stellar mass currently alive |
+| `ssfr` | 1/yr | sfh | stellar | Specific star formation rate (sfr_100myr / stellar_mass_surviving; falls back to the formed mass when the SSP has no mass-remaining table) |
+| `stellar_mass` | Msun | sfh | stellar | Total stellar mass formed by the SFH — its time-integral, 1.5-1.9x above stellar_mass_surviving |
 | `stellar_mass_surviving` | Msun | sfh | stellar | Total surviving stellar mass |
 | `uv_slope_beta` | — | sed | stellar | UV slope (β in L_ν ∝ ν^β) |
 | `xi_ion` | Hz/erg | ionizing | stellar | Ionizing photon efficiency |

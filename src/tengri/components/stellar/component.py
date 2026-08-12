@@ -3146,7 +3146,18 @@ _TINY = 1e-30  # Floor for safe division
 
 
 def _stellar_mass_fn(state, params):
-    """Total stellar mass currently alive [Msun]."""
+    """Total stellar mass **formed** by the SFH [Msun].
+
+    Notes
+    -----
+    This is the time-integral of the SFH, ``10**log_mstar_formed`` — *not* the
+    mass still alive today. Stellar evolution returns a third to a half of it to
+    the ISM, so it runs 1.5-1.9x above
+    :func:`_stellar_mass_surviving_fn` on ordinary populations.
+
+    The two names look interchangeable and are not; whichever one a paper
+    quotes has to be the one it means.
+    """
     log_mstar_formed = jnp.asarray(state.derived["log_mstar_formed"])
     return jnp.power(10.0, log_mstar_formed)
 
@@ -3502,7 +3513,8 @@ _SFH_PROPERTIES = {
     "stellar_mass": Property(
         units="Msun",
         group="sfh",
-        doc="Total stellar mass currently alive",
+        doc="Total stellar mass formed by the SFH — its time-integral, "
+        "1.5-1.9x above stellar_mass_surviving",
         fn=_stellar_mass_fn,
     ),
     "stellar_mass_surviving": Property(
@@ -3526,7 +3538,8 @@ _SFH_PROPERTIES = {
     "ssfr": Property(
         units="1/yr",
         group="sfh",
-        doc="Specific star formation rate (SFR / stellar_mass)",
+        doc="Specific star formation rate (sfr_100myr / stellar_mass_surviving; "
+        "falls back to the formed mass when the SSP has no mass-remaining table)",
         fn=_ssfr_fn,
     ),
     "mass_weighted_age_gyr": Property(
