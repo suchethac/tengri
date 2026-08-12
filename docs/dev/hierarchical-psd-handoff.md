@@ -1744,7 +1744,7 @@ sweep, which is what allowed the confound above to be settled.)
 
 ---
 
-## 5. The funnel (reproduced; centering near a=0.75 clears it, one seed)
+## 5. The funnel (centering near a=0.75 clears it; severity is seed-dependent)
 
 `s = L(σ,τ)·ξ` is **bilinear**, so the (σ, ξ) geometry is a funnel. Symptoms:
 static HMC R̂(σ) = 4.42 at 1000/1000 and still 1.61 at 4000/4000 while ξ's own
@@ -1911,8 +1911,9 @@ arm is degraded
 for an unrelated reason and the movement is attributable to the (sigma, xi)
 geometry.
 
-**Status: the funnel HAS a working remedy — ``field_centering`` near 0.75 —
-on one seed.** R-hat(sigma) goes 2.572 → 1.040, which clears the 1.1 threshold.
+**Status: the funnel has a working remedy — ``field_centering`` near 0.75 —
+reproducible across seeds.** R-hat(sigma) goes 2.572 → 1.040 at seed 42, and
+``a = 0.75`` lands at 1.041 at seed 77, clearing the 1.1 threshold both times.
 
 What that does **not** yet license is a default. This is **one seed, N=8, one
 mock population**, and the optimal ``a`` is a property of the prior/likelihood
@@ -1921,10 +1922,51 @@ differ by 0.5–1.9 in R-hat, far outside the ~0.05 scatter seen between repeate
 healthy arms, so the *ordering* is solid; the *location* of the minimum is not
 pinned to better than ~0.25 in ``a``.
 
-Open next steps, in order: repeat at ``a`` = 0.75 across seeds to confirm the
-minimum is not a single-draw artifact; fill ``a = 0.25``; then vary SNR to see
-how far the optimum moves before anyone considers a default. Re-test after any
-change to the MAP escalation, since the expansion point feeds the sampler.
+**A second seed was run, and the headline it produced is that the REMEDY is
+stable while the DISEASE is not.** Identical settings, only the PRNG seed
+differing:
+
+======  ==============  ================
+seed    ``a = 1.00``    ``a = 0.75``
+======  ==============  ================
+42      **2.572**       **1.040**
+77      **1.168**       **1.041**
+======  ==============  ================
+
+``a = 0.75`` agrees to three decimals across two independent mock populations.
+``a = 1.00`` swings by more than a factor of two on the draw alone.
+
+**Consequence for every severity number in this section, including its own
+4.42: they are single-seed values and are not stable quantities.** Anyone
+setting out to reproduce "the" R-hat(sigma) is chasing a target that moves this
+much between draws. Quote a seed count, or quote a distribution, or the number
+cannot be hit.
+
+Under the rule fixed before that run — the symptom must reach R-hat >= 1.2 at
+``a = 1`` before a treatment can be credited — seed 77 is **INCONCLUSIVE**: its
+control reached only 1.168. So the contrast replicates in **direction** (0.75
+beats 1.0 at both seeds) but not in the pre-registered sense, and 1.168 is not
+relabeled "close enough" after the fact.
+
+**Use the distribution fields that already exist — every number above is a max,
+and that was a mistake.** ``InterimResult`` returns three summaries, not one:
+
+* ``rhat`` — max over galaxies (what this section has been quoting)
+* ``rhat_median`` — median over galaxies
+* ``rhat_frac_above_1p01`` — fraction of galaxies above 1.01
+
+``interim.py`` even says why: *"the median and the fraction above 1.01 can both
+respond to N, so they are what to read when asking whether adding galaxies
+helps."* A max cannot — it is an order statistic that rises with N by
+construction and, as seed 77 shows, is unstable across draws. Every measurement
+in this section quotes the one summary least suited to the question, because
+whoever ran them (including this session) reached for ``result.rhat`` without
+noticing the siblings.
+
+Open next steps, in order: more seeds, reporting ``rhat_median`` and
+``rhat_frac_above_1p01`` alongside the max; fill ``a = 0.25``; then vary SNR to
+see how far the optimum moves before anyone considers a default. Re-test after
+any change to the MAP escalation, since the expansion point feeds the sampler.
 
 **Record the configuration AND the code path next to any number here.** The
 configuration was recorded; what the prose omitted was which driver produced it,
