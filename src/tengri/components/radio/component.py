@@ -273,14 +273,24 @@ class RadioSEDComponent(TemplateThreading):
         dict
             Keyword arguments for :meth:`emission_terms`: ``L_ir`` [erg/s],
             ``L_agn_bol`` [erg/s], ``L_4400_intrinsic`` [erg/s/Hz], ``log_mstar``
-            [dex Msun].
+            [dex Msun]. When the dust / AGN components publish the float32-safe
+            log companions ``log_L_ir`` / ``log_L_agn_bol`` (#1206), they are
+            forwarded too so :meth:`emission_terms` can bypass the ~1e43 / ~1e46
+            linear luminosities that overflow float32.
         """
-        return {
+        inputs = {
             "L_ir": jnp.asarray(derived.get("L_ir", 0.0)),
             "L_agn_bol": jnp.asarray(derived.get("L_agn_bol", 0.0)),
             "L_4400_intrinsic": jnp.asarray(derived.get("L_4400_intrinsic", 0.0)),
             "log_mstar": jnp.asarray(derived.get("log_mstar", 10.0)),
         }
+        log_L_ir = derived.get("log_L_ir")
+        if log_L_ir is not None:
+            inputs["log_L_ir"] = jnp.asarray(log_L_ir)
+        log_L_agn_bol = derived.get("log_L_agn_bol")
+        if log_L_agn_bol is not None:
+            inputs["log_L_agn_bol"] = jnp.asarray(log_L_agn_bol)
+        return inputs
 
     def emission_terms(
         self,
@@ -291,6 +301,8 @@ class RadioSEDComponent(TemplateThreading):
         L_agn_bol: jnp.ndarray,
         L_4400_intrinsic: jnp.ndarray,
         log_mstar: jnp.ndarray,
+        log_L_ir: jnp.ndarray | None = None,
+        log_L_agn_bol: jnp.ndarray | None = None,
     ) -> dict[str, jnp.ndarray]:
         r"""The additive terms of the radio SED, unsummed.
 
@@ -338,6 +350,17 @@ class RadioSEDComponent(TemplateThreading):
         model = self.config.agn_radio_model
         z = jnp.asarray(require_redshift(params, "components.radio.component.emission_terms"))
 
+        # Float32 routing (#1206): only when the forward grid is float32 do we
+        # bypass the linear ``L_ir`` (~1e43) / ``L_agn_bol`` (~1e46) — which
+        # overflow float32 max (3.4e38) — by handing the log companions to the
+        # radio kernels (they form the representable ~1e28 radio luminosity via
+        # ``pow10``). In float64 the logs are withheld so the exact linear path
+        # is bit-for-bit unchanged. Both require the producer to have published
+        # the log (dust → ``log_L_ir``, AGN → ``log_L_agn_bol``).
+        _use_log = wave.dtype == jnp.float32
+        _log_L_ir = log_L_ir if _use_log else None
+        _log_L_agn = log_L_agn_bol if _use_log else None
+
         # FIRRC evolution coefficients for the evolving SF-radio models. The
         # active ``sfr_mode`` (static config) selects which model-specific
         # triplet is consumed; bell2003 / none ignore them (pass None → the
@@ -359,6 +382,7 @@ class RadioSEDComponent(TemplateThreading):
                 mass_slope=firrc_mass_slope,
                 z_slope=firrc_z_slope,
                 apply_suppression=True,
+                log_L_ir=_log_L_ir,
             )
             ff = (
                 radio_freefree(
@@ -366,6 +390,7 @@ class RadioSEDComponent(TemplateThreading):
                     L_ir,
                     jnp.asarray(params["radio_T_e"]),
                     jnp.asarray(params["radio_alpha_ff"]),
+                    log_L_ir=_log_L_ir,
                 )
                 if self.config.include_freefree
                 else jnp.zeros_like(wave)
@@ -391,6 +416,8 @@ class RadioSEDComponent(TemplateThreading):
                 T_e=jnp.asarray(params["radio_T_e"]),
                 alpha_ff=jnp.asarray(params["radio_alpha_ff"]),
                 l_bband=L_4400_intrinsic,
+                log_L_ir=_log_L_ir,
+                log_L_agn_bol=_log_L_agn,
             )
 
         # model == "dpl"
@@ -415,6 +442,8 @@ class RadioSEDComponent(TemplateThreading):
             T_e=jnp.asarray(params["radio_T_e"]),
             alpha_ff=jnp.asarray(params["radio_alpha_ff"]),
             l_bband=L_4400_intrinsic,
+            log_L_ir=_log_L_ir,
+            log_L_agn_bol=_log_L_agn,
         )
 
     def precompute(

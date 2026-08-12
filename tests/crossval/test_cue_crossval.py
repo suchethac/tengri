@@ -92,15 +92,19 @@ class TestCueVsTFReference:
         CUE JAX returns all 138 lines; TF Emulator filters to 128.
         We match by wavelength to compare the overlapping lines.
 
-        Unit convention: ``predict_nebular_line_luminosities`` returns erg/s
-        (it multiplies by ``L_SUN_CUE = 3.839e33`` at the boundary, see
-        ``cue.py:1481``). The TF reference in ``cue_reference_outputs.npz``
-        is in Lsun. We convert here so the comparison is unit-consistent —
-        prior to #477 this test was silently asserting erg/s ≈ Lsun, which
-        masked any real comparison and was off by a factor of L_sun.
-        """
-        from tengri.utils.physics_constants import L_SUN_CUE
+        Unit convention: ``predict_nebular_line_luminosities`` returns **[Lsun]**,
+        the same unit the TF reference in ``cue_reference_outputs.npz`` is stored
+        in — upstream Cue's native output. No conversion here.
 
+        History, because this line has moved twice. The method used to multiply
+        by ``L_SUN_CUE`` at the boundary and this test divided it back out
+        (#477 — before that it silently asserted erg/s ≈ Lsun, comparing nothing).
+        #1559 removed the multiply, moving the single erg/s conversion to
+        ``NebularSEDComponent`` where the published ``line_lums`` key needs it,
+        so the compensating divide here had nothing left to cancel. That the
+        upstream reference is in Lsun is the evidence that this is the faithful
+        direction: the erg/s was tengri's, not Cue's.
+        """
         params = _TEST_PARAMS[input_idx]
         wav_jax, lum_jax = cue_backend.predict_nebular_line_luminosities(
             cloudyfsps_only=False, **params
@@ -109,7 +113,7 @@ class TestCueVsTFReference:
         wav_ref = reference["line_wavelengths"]
 
         wav_jax_np = np.asarray(wav_jax)
-        lum_jax_np = np.asarray(lum_jax) / L_SUN_CUE  # erg/s → Lsun (match TF ref)
+        lum_jax_np = np.asarray(lum_jax)  # already [Lsun], same as the TF ref
 
         # Match TF lines to JAX by wavelength (TF may output fewer)
         n_ref = len(lum_ref)

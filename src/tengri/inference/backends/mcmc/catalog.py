@@ -25,13 +25,13 @@ and therefore different posterior geometries.
 from __future__ import annotations
 
 import jax
-import jax.numpy as jnp
 
 from tengri.inference.backends.mcmc._shared import (
     _get_flat_logdensity,
     _hmc_full_scan,
     _nuts_full_scan,
 )
+from tengri.inference.likelihoods.gaussian import inv_noise_std
 
 _SAMPLERS = ("nuts", "hmc")
 
@@ -101,7 +101,7 @@ def build_catalog_mcmc_engine(
     **JIT/vmap-compatible.** The returned ``run_one`` closes over the static
     log-posterior and the shared ``data_args`` template (including the big
     ``_jit_inputs`` arrays); each call substitutes the galaxy's ``data``/``noise``
-    and its derived ``noise_inv``. The underlying scan cores
+    and its derived ``sqrt_noise_inv``. The underlying scan cores
     (``_nuts_full_scan`` / ``_hmc_full_scan``) are pre-JIT'd with ``data_args``
     traced, so different galaxies never trigger recompilation.
     """
@@ -119,12 +119,10 @@ def build_catalog_mcmc_engine(
         # log-posterior receives exactly the pytree it was built for — the shared
         # _jit_inputs (SSP grid, templates) stay captured, only data/noise/presence vary.
         # Per-galaxy presence masks (0/1) enable heterogeneous catalogs (missing bands).
-        noise_inv = 1.0 / noise**2
         data_args = dict(template_data_args)
         data_args["data"] = data
         data_args["noise"] = noise
-        data_args["noise_inv"] = noise_inv
-        data_args["sqrt_noise_inv"] = jnp.sqrt(noise_inv)
+        data_args["sqrt_noise_inv"] = inv_noise_std(noise)
         data_args["presence"] = presence
         # Per-galaxy redshift override (#1337 phase 2). ``thread_redshift`` is a
         # build-time Python bool, so the branch resolves during tracing: the

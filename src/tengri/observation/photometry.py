@@ -497,8 +497,13 @@ def _compute_flux_density_padded(
     wave_obs = wave_rest * (1.0 + redshift)
     fw_safe = _ascending_padded_filter_wave(filter_wave_padded)
     mean_lnu = _filter_integral_union(sed_rest, wave_obs, fw_safe, filter_trans_padded, convention)
-    flux_scale = lnu_to_fnu(1.0, dl_cm, redshift)
-    return flux_scale * mean_lnu
+    # Apply the (1+z)/(4π d_L²) dimming to the filter-integrated L_ν directly.
+    # Extracting it as a standalone ``flux_scale = lnu_to_fnu(1.0, ...)`` is
+    # ~1e-58 and underflows float32 to zero on its own (peak 1.0 absorbs none
+    # of the -58 decades); applied to ``mean_lnu`` (~1e30), apply_log10_scale
+    # folds the offset into that peak and the product stays in range. Identical
+    # in float64 (#1206).
+    return lnu_to_fnu(mean_lnu, dl_cm, redshift)
 
 
 @functools.partial(jax.jit, static_argnames=("convention",))

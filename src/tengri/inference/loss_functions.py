@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import jax.numpy as jnp
 
+from tengri.inference.likelihoods.gaussian import standardized_residual
+
 __all__ = [
     "build_loglikelihood_fn",
     "build_loglikelihood_unbounded_fn",
@@ -429,19 +431,26 @@ def _build_data_neg_log_likelihood_fn(fitter):
                 params, target_wavelengths=data_args["line_flux_waves"]
             )
             chi2_lines = jnp.sum(
-                ((data_args["line_flux_obs"] - model_lf) / data_args["line_flux_err"]) ** 2
+                standardized_residual(
+                    data_args["line_flux_obs"], model_lf, data_args["line_flux_err"]
+                )
+                ** 2
             )
             e_lh = e_lh + 0.5 * chi2_lines
         if has_line_ratios:
             model_lr = model.predict_line_ratios(params, model.observation.line_ratios)
             chi2_ratios = jnp.sum(
-                ((data_args["line_ratio_obs"] - model_lr) / data_args["line_ratio_err"]) ** 2
+                standardized_residual(
+                    data_args["line_ratio_obs"], model_lr, data_args["line_ratio_err"]
+                )
+                ** 2
             )
             e_lh = e_lh + 0.5 * chi2_ratios
         if has_indices:
             model_idx = model.predict_spectral_indices(params, index_defs)
             chi2_idx = jnp.sum(
-                ((data_args["index_obs"] - model_idx) / data_args["index_err"]) ** 2
+                standardized_residual(data_args["index_obs"], model_idx, data_args["index_err"])
+                ** 2
             )
             e_lh = e_lh + 0.5 * chi2_idx
 

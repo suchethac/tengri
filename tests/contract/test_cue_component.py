@@ -29,25 +29,40 @@ def test_cue_predict_all_lines_clip_bounded_at_50dex():
     dex is the discipline: any normalization slip ≥ 50 dex now hits the
     ceiling/floor uniformly and is visible in inspection.
 
-    Source-pinning regression: re-loosening the clip would silently undo
-    that defense. We grep the source rather than calling the function so
-    the assertion fails immediately on any future widening.
+    Asserts the **rule** (the effective bound is never wider than ±50 dex) rather
+    than the source string that used to express it. The bound is now
+    ``representable_exponent(50.0)``, which returns 50.0 in float64 and 38.53 in
+    float32 -- because ``10**50`` is ``inf`` in float32, so the literal made the
+    clip emit the very ``inf`` it exists to prevent (#1206). That is strictly
+    *tighter* than ±50 and preserves this defense; a string match could not tell
+    the two apart, and pinning the instance would have blocked the fix.
     """
     import inspect
+    import math
+
+    import jax
 
     from tengri.components.nebular import cue
+    from tengri.utils.scale import representable_exponent
 
-    source = inspect.getsource(cue.predict_all_lines)
-    assert "jnp.clip(exponent, -50.0, 50.0)" in source, (
-        "predict_all_lines clip widened from ±50 dex; see #477 follow-up for "
-        "why ±100 silently masked the gas_logq normalization bug."
-    )
+    for name, func in (
+        ("predict_all_lines", cue.predict_all_lines),
+        ("predict_continuum", cue.predict_continuum),
+    ):
+        source = inspect.getsource(func)
+        assert "jnp.clip(exponent, -50.0, representable_exponent(50.0))" in source, (
+            f"{name} no longer clips its exponent to a representable ±50 dex; see the "
+            "#477 follow-up for why ±100 silently masked the gas_logq normalization "
+            "bug, and #1206 for why the upper bound must be dtype-aware."
+        )
 
-    cont_source = inspect.getsource(cue.predict_continuum)
-    assert "jnp.clip(exponent, -50.0, 50.0)" in cont_source, (
-        "predict_continuum clip widened from ±50 dex; same rationale as the "
-        "lines path — keep both clips in lockstep."
-    )
+    for x64, label in ((True, "float64"), (False, "float32")):
+        with jax.enable_x64(x64):
+            bound = representable_exponent(50.0)
+            assert bound <= 50.0, f"{label} clip widened to {bound} dex, past the ±50 discipline"
+            assert math.isfinite(10.0**bound), (
+                f"{label} clip saturates to 10**{bound}, which that dtype cannot hold"
+            )
 
 
 def test_cue_predict_all_lines_clip_saturates_on_synthetic_bug():

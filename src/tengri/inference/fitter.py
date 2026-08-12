@@ -68,6 +68,7 @@ from tengri.config.exceptions import ParameterError
 from tengri.inference._model_cache import _default_owner as _model_cache_owner
 from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physical
 from tengri.inference.jit_engine import build_jit_engine
+from tengri.inference.likelihoods.gaussian import inv_noise_std
 from tengri.inference.loss_functions import (
     build_loglikelihood_fn,
     build_loglikelihood_unbounded_fn,
@@ -491,6 +492,15 @@ def _has_line_adjacent_channel(model) -> bool:
     ``FeaturePrecomp`` exists to serve. But a fit may carry line fluxes *and*
     an index/ratio channel, and then the LUT must still be refused: the
     ``_fits_lines`` top-up paths consult this predicate for exactly that case.
+
+    Separate from :meth:`Fitter._fits_lines` because that predicate was being
+    asked two *opposite* questions: :meth:`Fitter._auto_approx_config` appends
+    the LUT *when* it is true, and the #1596 photometry top-up attaches the LUT
+    when it is *false*. A photometry + line-ratio fit answered "no lines" to
+    both, so it was classed photometry-only, handed the LUT, and then asked
+    ``predict_line_ratios`` for a catalog the LUT does not publish. Widening
+    ``_fits_lines`` would have fixed the second site by breaking the first —
+    it would append the LUT for exactly the fits that cannot use it.
     """
     obs = getattr(model, "observation", None)
     if obs is None:
@@ -1313,7 +1323,12 @@ class Fitter:
         return self._line_fluxes_for(self.model)
 
     def _fits_lines(self, model) -> bool:
-        """Whether any emission-line channel is fit, measured or marginalized."""
+        """Whether any emission-line channel is fit, measured or marginalized.
+
+        Answers only "is there a line channel". Whether the LUT may *serve* it
+        is :func:`_has_line_adjacent_channel` — see there for why the two are
+        deliberately separate predicates.
+        """
         return bool(
             getattr(self, "_eline_marginalize", False)
             or getattr(self, "_eline_fitted", False)
@@ -1348,8 +1363,10 @@ class Fitter:
             return None
         # A line-flux channel earns the LUT, but an index/ratio channel on the
         # SAME fit vetoes it: those read the rest-frame SED / discrete catalog,
-        # which the fast grid does not serve (#1665). Correctness outranks the
-        # ~21x line speedup, and the refusal is loud rather than silent.
+        # which the fast grid does not serve (#1665). Such a fit pays the
+        # full-grid forward regardless, so the LUT would be a wrapper around
+        # the cost it exists to avoid, and a broken one. Correctness outranks
+        # the ~21x line speedup, and the refusal is loud rather than silent.
         wants_lut = self._fits_lines(model) and not _has_line_adjacent_channel(model)
         return (base, FeaturePrecomp()) if wants_lut else base
 
@@ -1358,35 +1375,41 @@ class Fitter:
 
         A model built with ``approx=WavePrecomp()`` used to be returned
         untouched by the ``"auto"`` policy, so naming WavePrecomp explicitly
-        made a lines fit *slower than passing nothing at all* — the exact
-        opposite of what the argument reads like it does.
+        made a fit *slower than passing nothing at all* — the exact opposite of
+        what the argument reads like it does. That was fixed for a lines fit
+        first and for a photometry-only one in #1683; both spellings now reach
+        here.
 
         The existing configs are carried over rather than rebuilt, so a
         configured ``catalog_z_range`` survives; see
-        :attr:`SEDModel.approx_configs`.
-
-        Adding the LUT can legitimately fail — a nebular backend that publishes
-        neither a discrete catalog nor SSP-window lines has no fast path. That
-        is a reason to stay exact and say so, never to break a fit that worked,
-        so the failure is caught.
+        :attr:`SEDModel.approx_configs`. Only ``FeaturePrecomp`` is appended —
+        re-appending the wave LUT would duplicate it.
 
         Parameters
         ----------
-        model : SEDModel or ForwardModel
-            Never mutated; ``with_approx`` clones.
-        warn_on_failure : bool, default True
-            Whether a failed top-up warns. True for a **line** fit, where the
-            fallback costs a measured ~21x per gradient and the user asked for
-            the channel that pays for the LUT. False for the photometry-only
-            attempt (#1596), where failure is the *expected* answer for every
-            backend that is not Cue-like — there the raise IS the detection,
-            and warning on it would fire on the common case.
+        model : SEDModel
+            The fit's model. Never mutated; ``with_approx`` clones.
+        warn_on_failure : bool, keyword-only, optional
+            Whether an unavailable LUT is worth telling the caller about.
+            ``True`` for a line channel, where the documented cost of going
+            without is ~21x per gradient. ``False`` for the photometry-only
+            top-up, where a backend with nothing to tabulate is the *expected*
+            case rather than an anomaly — warning there would fire on every
+            non-Cue model and name a remedy the caller cannot apply.
 
         Returns
         -------
-        SEDModel or ForwardModel
-            The topped-up clone, or ``model`` when the LUT is already present
-            or could not be added.
+        SEDModel
+            The topped-up clone, or ``model`` unchanged when the LUT is already
+            configured or could not be enabled.
+
+        Notes
+        -----
+        Adding the LUT can legitimately fail — a nebular backend that publishes
+        neither a discrete catalog nor SSP-window lines has no fast path. That
+        is a reason to stay exact, never to break a fit that worked, so the
+        failure is caught either way; ``warn_on_failure`` decides only whether
+        it is announced.
         """
         from tengri.forward.sed_model import FeaturePrecomp
 
@@ -1453,6 +1476,14 @@ class Fitter:
             if callable(has) and has():
                 # Respect the build-time approx, but do not let it suppress the
                 # line LUT — top it up rather than bailing.
+                #
+                # The lines branch deliberately does NOT repeat the ratio/index
+                # exclusion that this branch carried at the call site before the
+                # thirteenth merge. It lives inside ``_add_feature_precomp`` as
+                # "one seam for every caller of this top-up" (#1665), so a
+                # line-flux + ratio fit is still refused — just refused in one
+                # place. Restating it here is what let the two spellings drift
+                # apart in the first place.
                 if self._fits_lines(model):
                     return self._add_feature_precomp(model)
                 # #1683: #1596 in its BUILD-TIME spelling. The fix that landed
@@ -1506,6 +1537,12 @@ class Fitter:
         like the model simply being slow.
         """
         if not self._fits_lines(model):
+            return
+        if _has_line_adjacent_channel(model):
+            # The LUT is withheld here on purpose — a ratio/index channel needs
+            # the discrete catalog it does not publish. Warning would point at a
+            # remedy that cannot be applied, and advice you cannot act on reads
+            # as a defect in the caller's model.
             return
         state = getattr(model, "approx", None)
         if state is not None and state.feature_precomp:
@@ -1645,12 +1682,10 @@ class Fitter:
         flux grid (15×93×5994 floats) into the HLO as a constant —
         ballooning compile time from <5 s to 40 s on photometry.
         """
-        noise_inv = 1.0 / self.noise**2
         args = {
             "data": self.data,
             "noise": self.noise,
-            "noise_inv": noise_inv,
-            "sqrt_noise_inv": jnp.sqrt(noise_inv),
+            "sqrt_noise_inv": inv_noise_std(self.noise),
             "n_data": jnp.int32(len(self.data)),
         }
         if self.data_mask is not None:
@@ -3863,12 +3898,10 @@ class Fitter:
         # Stack galaxy data into batch arrays (n_gal, n_obs)
         flux_batch = jnp.stack([jnp.asarray(g["flux_obs"]) for g in batch])
         noise_batch = jnp.stack([jnp.asarray(g["noise"]) for g in batch])
-        noise_inv_batch = 1.0 / noise_batch**2
         batch_data_args = {
             "data": flux_batch,
             "noise": noise_batch,
-            "noise_inv": noise_inv_batch,
-            "sqrt_noise_inv": jnp.sqrt(noise_inv_batch),
+            "sqrt_noise_inv": inv_noise_std(noise_batch),
         }
 
         # Get shared logdensity (cached on Model, stable identity)
@@ -4376,12 +4409,10 @@ class Fitter:
         # Stack galaxy data into batch arrays (n_gal, n_obs)
         flux_batch = jnp.stack([jnp.asarray(g["flux_obs"]) for g in batch])
         noise_batch = jnp.stack([jnp.asarray(g["noise"]) for g in batch])
-        noise_inv_batch = 1.0 / noise_batch**2
         batch_data_args = {
             "data": flux_batch,
             "noise": noise_batch,
-            "noise_inv": noise_inv_batch,
-            "sqrt_noise_inv": jnp.sqrt(noise_inv_batch),
+            "sqrt_noise_inv": inv_noise_std(noise_batch),
         }
 
         # Initialize params for each galaxy independently

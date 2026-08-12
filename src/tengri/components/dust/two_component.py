@@ -60,6 +60,7 @@ from tengri.protocols.component import (
     SEDComponentState,
 )
 from tengri.utils.physics_constants import C_AA
+from tengri.utils.scale import pow10
 
 __all__ = [
     "DustSEDComponent",
@@ -259,6 +260,11 @@ class DustSEDComponent(TemplateThreading):
         return (
             DerivedKey("L_ir", "erg/s", "Total absorbed UV/optical/NIR luminosity"),
             DerivedKey("L_absorbed", "erg/s", "Alias for L_ir (deprecated)"),
+            DerivedKey(
+                "log_L_ir",
+                "dex",
+                "log10(L_ir / (erg/s)); the float32-safe form of L_ir",
+            ),
             DerivedKey("sed_dust_attenuated", "erg/s/Hz", "Attenuated stellar SED"),
         )
 
@@ -625,46 +631,67 @@ class DustSEDComponent(TemplateThreading):
             if isinstance(_dir, dict):
                 eb_lut = _dir.get("energy_balance_lut")
         jw = state.derived.get("joint_weights")
-        mass_scale = state.derived.get("stellar_mass_scale")
+        # The log10 offset, not the linear ~1e43 scale: the latter is ``inf``
+        # in pure float32 for any galaxy above ~9e4 Msun, and logging it here
+        # would recover ``inf`` rather than the finite value the producer
+        # already has (#1206). Stellar publishes both keys together.
+        log_mass_scale = state.derived.get("log_stellar_mass_scale")
         # FSPS-parity toggle (#961): None disables the canonical LyC mask so
         # all absorbed energy heats dust. The fast-path LUT bakes the same
         # choice at build time (sed_model passes config.eb_include_lyc).
         _eb_cutoff = None if self.config.eb_include_lyc else 912.0
-        if eb_lut is not None and jw is not None and mass_scale is not None:
+        if eb_lut is not None and jw is not None and log_mass_scale is not None:
             # Fast path (WavePrecomp): the stellar bolometric absorption comes
             # from a precomputed (tau_bc, tau_diff) LUT contracted with the
             # runtime DSPS weights — no full-wavelength stellar cube. The
             # nebular term is a single-SED integral (cheap), kept exact. Same
             # signed ∫(L_intrinsic - L_attenuated) dν, then abs(); when the
             # full cube is not otherwise needed XLA dead-code-eliminates it.
-            from tengri.components.dust.energy_balance_precompute import lut_l_absorbed_stellar
-            from tengri.forward.energy_balance import bolometric_absorbed
+            from tengri.components.dust.energy_balance_precompute import (
+                lut_l_absorbed_stellar_log10,
+            )
+            from tengri.forward.energy_balance import bolometric_absorbed_log10
+            from tengri.utils.scale import log10_add
 
-            stellar_absorbed = lut_l_absorbed_stellar(
+            log_stellar, sign_stellar = lut_l_absorbed_stellar_log10(
                 eb_lut,
                 jnp.asarray(jw),
-                jnp.asarray(mass_scale),
+                jnp.asarray(log_mass_scale),
                 jnp.asarray(params["dust_tau_bc"]),
                 jnp.asarray(params["dust_tau_diff"]),
             )
-            neb_absorbed = bolometric_absorbed(
+            log_neb, sign_neb = bolometric_absorbed_log10(
                 sed_neb, sed_neb_attenuated, nu, wave=wave, lyman_cutoff_aa=_eb_cutoff
             )
-            L_absorbed = jnp.abs(stellar_absorbed + neb_absorbed)
+            # Signed log-space sum: reproduces abs(stellar + nebular) exactly,
+            # including the case where the two terms carry opposite signs.
+            log_L_absorbed = log10_add(log_stellar, log_neb, sign_a=sign_stellar, sign_b=sign_neb)
         else:
-            from tengri.forward.energy_balance import bolometric_absorbed
+            from tengri.forward.energy_balance import bolometric_absorbed_log10
 
-            L_absorbed = jnp.abs(
-                bolometric_absorbed(
-                    sed_intrinsic_stellar + sed_neb,
-                    sed_attenuated + sed_neb_attenuated,
-                    nu,
-                    wave=wave,
-                    lyman_cutoff_aa=_eb_cutoff,
-                )
+            log_L_absorbed, _ = bolometric_absorbed_log10(
+                sed_intrinsic_stellar + sed_neb,
+                sed_attenuated + sed_neb_attenuated,
+                nu,
+                wave=wave,
+                lyman_cutoff_aa=_eb_cutoff,
             )
+        from tengri.forward.energy_balance import warn_if_corrupt
+
+        warn_if_corrupt(log_L_absorbed, component="two_component")
         eta_balance = jnp.asarray(params.get("dust_eta_balance", 1.0))
-        L_ir = jnp.maximum(L_absorbed * eta_balance, 0.0)
+        # ``eta_balance`` relaxes energy balance multiplicatively, so it is a
+        # log offset. A non-positive factor means no re-emitted energy at all,
+        # which is -inf in log space (and exactly 0.0 back in linear space) —
+        # matching the ``jnp.maximum(..., 0.0)`` clip of the linear form.
+        eta_positive = eta_balance > 0
+        log_L_ir = jnp.where(
+            eta_positive,
+            log_L_absorbed + jnp.log10(jnp.where(eta_positive, eta_balance, 1.0)),
+            -jnp.inf,
+        )
+        L_absorbed = pow10(log_L_absorbed)
+        L_ir = pow10(log_L_ir)
 
         # ── 4. Combine stellar + nebular SEDs (emission handled by components) ─
         # Preserve any non-stellar contribution that may have been added
@@ -699,6 +726,7 @@ class DustSEDComponent(TemplateThreading):
         derived_overrides = dict(
             L_ir=L_ir,
             L_absorbed=L_absorbed,
+            log_L_ir=log_L_ir,
             sed_dust_attenuated=sed_attenuated,
             # Re-publish the nebular continuum as its dust-reddened (observed)
             # form, consistent with ``sed_dust_attenuated`` being the observed
