@@ -57,10 +57,19 @@ class TestPlotFilterCurves:
         assert len(lines) == 6
 
     def test_normalize_flag(self):
-        """Normalized curves should have peak ≤ 1.0."""
+        """Normalized curves should have peak ≤ 1.0.
+
+        The line count is asserted first because the peak check lives inside
+        the loop: had ``plot_filter_curves`` drawn nothing, the loop would run
+        zero times and this test would pass while proving nothing. Neighbouring
+        tests in this class already pin the count; these two did not.
+        """
         ax = plot_filter_curves(OPTICAL_FILTERS[:2], normalize=True, show_eff_wave=False)
-        for line in ax.get_lines():
+        lines = ax.get_lines()
+        assert len(lines) == 2, f"expected one line per filter, drew {len(lines)}"
+        for line in lines:
             ydata = line.get_ydata()
+            assert len(ydata) > 0, "line drawn with no data"
             assert np.max(ydata) <= 1.0 + 1e-10
 
     def test_no_normalize_has_lines(self):
@@ -92,9 +101,16 @@ class TestPlotFilterCurves:
         assert len(ax_out.get_lines()) == 2
 
     def test_custom_alpha(self):
-        """Alpha parameter propagates to all line objects."""
+        """Alpha parameter propagates to all line objects.
+
+        Count asserted before the loop for the same reason as
+        ``test_normalize_flag``: "alpha reached every line" is vacuously true
+        of no lines at all.
+        """
         ax = plot_filter_curves(OPTICAL_FILTERS[:2], alpha=0.3, show_eff_wave=False)
-        for line in ax.get_lines():
+        lines = ax.get_lines()
+        assert len(lines) == 2, f"expected one line per filter, drew {len(lines)}"
+        for line in lines:
             assert line.get_alpha() == pytest.approx(0.3)
 
     def test_xlabel_set(self):

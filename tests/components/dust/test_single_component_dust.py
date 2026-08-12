@@ -10,6 +10,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tests._bounds import assert_non_negative
+from tests._dust_laws import every_dust_law
 from tests._jit_parity import assert_jit_matches_eager
 
 
@@ -94,19 +95,16 @@ class TestSingleComponentDust:
         trans = single_component_dust(wavelengths, tau_v=0.0, f_obscuration=0.5, law="power_law")
         assert jnp.allclose(trans, 1.0)
 
-    @pytest.mark.parametrize(
-        "law_name",
-        [
-            "power_law",
-            "calzetti",
-            "kriek_conroy",
-            "smc",
-            "cardelli",
-            "li08",
-            "salim",
-        ],
-    )
+    @pytest.mark.parametrize("law_name", every_dust_law())
     def test_all_laws_work(self, wavelengths, law_name):
+        """Named "all laws" and listing seven of twenty-two, until now.
+
+        The hand-written list held power_law, calzetti, kriek_conroy, smc,
+        cardelli, li08 and salim. The other fifteen — including reddy15, which
+        no test in the tree touched — went through this wrapper untested. All
+        eighteen non-grain laws pass these properties; the four grain models
+        skip when the optional dust-extinction backend is absent.
+        """
         from tengri.components.dust.attenuation import single_component_dust
 
         trans = single_component_dust(wavelengths, tau_v=1.0, law=law_name)

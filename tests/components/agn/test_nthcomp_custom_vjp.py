@@ -104,7 +104,18 @@ class TestNthcompCustomVJP:
         nthcomp_lnu_interp_custom.defvjp(fwd, bwd)
         # Test the custom VJP version
         nu_test = jnp.array([1e14, 2e14, 5e14])
-        gamma = jnp.array(1.5)
+        # Interior of the gamma table, and not on a node. The grid runs
+        # 1.5 -> 3.5 in steps of 0.105263, so gamma=2.0 sits inside the cell
+        # [1.921, 2.026] with room for a +/-1e-4 probe on both sides.
+        #
+        # This used to evaluate at gamma=1.5, which is the *first node* of the
+        # grid. There the central difference in fd_grad samples 1.5 - 1e-4,
+        # which _clamp_interp_index pins to the table edge — so the reference
+        # averaged a clamped zero left-slope with the true right-slope and came
+        # out roughly half of the analytic value. The comparison disagreed by
+        # 114%, and rtol was set to 1.5 to accommodate exactly that. The custom
+        # VJP was never wrong; the reference was being taken across the clamp.
+        gamma = jnp.array(2.0)
         kTe_keV = jnp.array(0.2)
         kTbb_keV = jnp.array(0.001)
         scalar = 1e46
@@ -115,11 +126,17 @@ class TestNthcompCustomVJP:
 
         grad_jax = float(jax.grad(f)(gamma))
         grad_fd = fd_grad(f, float(gamma))
+        # 5%, down from 150%. The residual (measured: 2.5%) is the bwd rule's
+        # own accuracy, not a defect: it takes a *one-sided* difference with
+        # eps=1e-5 after casting gamma to float32, and 1e-5 on a value near 2
+        # is ~5e-6 relative — the edge of float32 resolution. fd_grad here is
+        # central and float64. Tightening below this would be pinning float32
+        # rounding, not the derivative.
         np.testing.assert_allclose(
             grad_jax,
             grad_fd,
-            rtol=1.5,
-            atol=1e28,
+            rtol=0.05,
+            atol=0.0,
             err_msg="nthcomp_lnu_interp_custom: FD check ∂/∂gamma",
         )
 
