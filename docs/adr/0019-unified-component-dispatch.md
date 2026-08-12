@@ -136,11 +136,24 @@ Each phase ships independently green with a CI invariant that flips green and st
 7. **Use in the builder via grammar `type='<name>'`:**
 
    ```python
+   # An IR-emission component (outputs include 'sed_dust_ir') is selected as
+   # the dust *emission* type, and its parameters go in that sub-block:
    model = SEDModel.build(
        ssp_data=ssp,
-       dust={'type': 'my_model', 'T': Fixed(35.0), 'beta': Uniform(1.0, 2.0)},
+       dust={'type': 'two_component', 'law_bc': 'calzetti',
+             'emission': {'type': 'my_model', 'T': Fixed(35.0),
+                          'beta_ir': Uniform(1.0, 2.0)}},
    )
    ```
+
+   The group a `type='<name>'` goes in follows what the component publishes,
+   not the component's own name. `_valid_dust_emission_types()` accepts a
+   registry entry whose `outputs` include `sed_dust_ir`; the `dust` *type* slot
+   is for attenuation models (`single_component`, `two_component`, `wg00`) and
+   rejects an emission name with `Unknown dust type`. This example previously
+   showed `dust={'type': 'my_model', 'T': ..., 'beta': ...}` — which raises for
+   the shipped `modified_blackbody` too, and whose parameters, written at the
+   dust level, used to be accepted and silently discarded.
 
 **Exceptions (bare Protocol only):**
 
