@@ -142,6 +142,46 @@ class TestTheCensus:
             "keeping two copies."
         )
 
+    def test_no_name_means_two_different_things_across_tables(self):
+        """Matching by name across every table must not import a wrong paper.
+
+        ``_association_bibkeys`` scans all ``*_CITATIONS`` tables, so a name
+        that means one thing under dust and another under X-ray would cite the
+        wrong paper. Today four names appear in more than one table and none
+        contradicts: three carry identical keys, and ``synthesizer`` is a
+        superset (the AGN blocks add the JOSS paper). A superset over-cites,
+        which is recoverable; disjoint sets would silently mis-attribute.
+        """
+        from tengri.citations import associations as assoc
+
+        where: dict[str, dict[str, frozenset]] = {}
+        for attr in sorted(dir(assoc)):
+            if not attr.endswith("_CITATIONS"):
+                continue
+            table = getattr(assoc, attr)
+            if isinstance(table, dict):
+                for name, keys in table.items():
+                    if name is not None and keys:
+                        where.setdefault(name, {})[attr] = frozenset(keys)
+            elif isinstance(table, list):
+                for name in table:
+                    where.setdefault(name, {})[attr] = frozenset({name})
+
+        contradictions = []
+        for name, tables in where.items():
+            keysets = list(tables.values())
+            if len(keysets) < 2:
+                continue
+            widest = max(keysets, key=len)
+            if not all(k <= widest for k in keysets):
+                contradictions.append((name, dict(tables)))
+        assert not contradictions, (
+            f"these names carry incompatible citation sets in different "
+            f"association tables, so resolving by name alone would attribute "
+            f"the wrong paper: {contradictions}. Disambiguate by subsystem "
+            f"before matching across tables."
+        )
+
 
 class TestTheFourThatShipped:
     @pytest.mark.parametrize(("name", "bibkey"), sorted(DROPPED.items()))
