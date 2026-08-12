@@ -19,6 +19,64 @@ from typing import NamedTuple
 
 import jax
 import jax.numpy as jnp
+from jax import dtypes as jax_dtypes
+
+
+def canonical_dsps_kwargs(**kwargs):
+    """Cast every float operand of a DSPS kernel call to one working dtype.
+
+    Parameters
+    ----------
+    **kwargs
+        Array/scalar operands to forward to a DSPS kernel. Integer and boolean
+        operands (indices, counts, masks) pass through untouched.
+
+    Returns
+    -------
+    dict
+        The same keys. Floating operands are cast to
+        ``canonicalize_dtype(result_type(*floating_values))``; every other
+        operand is returned as-is.
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe**: yes.
+
+    Only *floating* operands are canonicalized, and only they contribute to the
+    promotion. Folding an integer into ``result_type`` would promote it to float
+    and hand a DSPS kernel a float where it expects an index — the cast this
+    function exists to prevent, in the opposite direction.
+
+    The SSP grids (``ssp_lgmet``, ``ssp_lg_age_gyr``, ``ssp_flux``) are cached
+    host arrays built once at load time, so they stay float64 even inside
+    ``jax.enable_x64(False)`` while fitted parameters arrive as float32
+    tracers. DSPS then sizes its internal buffers from the float64 grids and
+    scatters float32-derived values into them::
+
+        FutureWarning: scatter inputs have incompatible types: cannot safely
+        cast value from dtype=float32 to dtype=float64 ...
+        In future JAX releases this will result in an error.
+
+    Measured: a field-SFH forward pass emitted six of these in pure float32 and
+    none in float64; canonicalizing first takes it to zero.
+
+    Under ``x64=True`` the canonical float *is* float64, so this is a no-op
+    there and float64 results are bit-unchanged — the property that makes the
+    pattern safe to apply at every DSPS boundary. Same treatment as
+    :func:`tengri.utils.interpolation.compute_grid_weights` (#1206, #1448).
+
+    This lives beside the DSPS bindings so every call site in the tree can
+    reach it without importing back into ``components/stellar/component.py``.
+    """
+    arrays = {key: jnp.asarray(value) for key, value in kwargs.items()}
+    floating = {
+        key: value for key, value in arrays.items() if jnp.issubdtype(value.dtype, jnp.floating)
+    }
+    if not floating:
+        return arrays
+    dt = jax_dtypes.canonicalize_dtype(jnp.result_type(*floating.values()))
+    return {key: (value.astype(dt) if key in floating else value) for key, value in arrays.items()}
+
 
 # Imported at module scope, not inside ``load_ssp``, so the fetch is a visible
 # dependency of this module rather than a hidden one. ``_data_setup`` imports
@@ -258,19 +316,30 @@ def load_ssp(name: str | None = None, *, download: bool = False) -> "SSPData":
     )
 
 
-def _load_float(dataset) -> jnp.ndarray:
+def _load_float(dataset, dtype=None) -> jnp.ndarray:
     """Read an HDF5 float dataset at tengri's working precision (#1099).
 
     Several repackaged grids store float32 (``bc03_*``, ``pgny_*``). Left as
     float32, ``stellar_mass_scale = total_mass x L_sun`` ~ 1e42 overflows the
     float32 ceiling of 3.4e38 to ``inf`` — silently — and poisons the ionizing
-    SED the nebular backends consume. The upcast is lossless: every float32 is
-    exactly a float64, so no stored value changes.
+    SED the nebular backends consume. The default upcast is lossless: every
+    float32 is exactly a float64, so no stored value changes.
+
+    Parameters
+    ----------
+    dataset : h5py.Dataset
+        The HDF5 dataset to read.
+    dtype : DTypeLike, optional
+        Target dtype. ``None`` (default) follows tengri's working precision
+        (``jnp.result_type(float)``); an explicit dtype (e.g. ``jnp.float32``)
+        forces it regardless of the ``jax_enable_x64`` flag — the opt-in for a
+        fully 32-bit pipeline (#1206), safe now that the ~1e42/1e56 scale seams
+        are carried in log space.
     """
-    return jnp.asarray(dataset[:], dtype=jnp.result_type(float))
+    return jnp.asarray(dataset[:], dtype=dtype if dtype is not None else jnp.result_type(float))
 
 
-def load_ssp_data(filepath: str, *, download: bool = False) -> SSPData:
+def load_ssp_data(filepath: str, *, dtype=None, download: bool = False) -> SSPData:
     """Load SSP templates from a DSPS-format HDF5 file.
 
     Reads stellar population synthesis templates stored in HDF5 format
@@ -283,6 +352,15 @@ def load_ssp_data(filepath: str, *, download: bool = False) -> SSPData:
     filepath : str
         Path to HDF5 file. Expected fields: ssp_wave, ssp_flux,
         ssp_lg_age_gyr, ssp_lgmet. Optional: ssp_mass_remaining, ssp_alpha_fe.
+    dtype : DTypeLike, optional
+        Dtype for every loaded float array. ``None`` (default) follows tengri's
+        working precision (float64 under ``jax_enable_x64``, its default). Pass
+        ``jnp.float32`` for a fully 32-bit pipeline: it halves the host-side
+        grid — the ``ssp_flux`` cube is the model's largest single array — and
+        is applied regardless of the ``jax_enable_x64`` flag. Safe now that the
+        ~1e42 ``stellar_mass_scale`` and ~1e56 ``nion`` seams are carried in log
+        space (#1206); before that, a float32 grid overflowed them silently,
+        which is why the default still upcasts.
     download : bool, optional
         Fetch the grid from the hosted catalog when ``filepath`` does not
         exist and its basename is one the catalog ships. Default ``False``,
@@ -328,12 +406,45 @@ def load_ssp_data(filepath: str, *, download: bool = False) -> SSPData:
     **File format**: Standard DSPS HDF5 layout. See DSPS documentation
     and distributed templates on halos.as.arizona.edu for format details.
 
+    **Precision**: this knob sets the dtype of the *host grid*. Under the default
+    x64 config a float32 grid gives correct results — intermediates promote to
+    float64 — so it halves grid memory (66.9 MB -> 33.5 MB for a typical SSP)
+    with no change to the answer.
+
+    It does **not**, on its own, buy a correct pure-float32 forward pass.
+    Overflow tracks the *compute* precision, not the storage dtype: pairing this
+    with ``jax.enable_x64(False)`` sends two published **linear** keys out of
+    range, and they return ``inf`` rather than raising. Measured on
+    ``ssp_prsc_miles`` at 1e10 Msun, where only the x64 setting differs:
+
+    .. code-block:: text
+
+        configuration                     grid dtype   stellar_mass_scale   nion
+        dtype=None,    x64 on (default)   float64      3.828e43             2.55e49
+        dtype=float32, x64 on             float32      3.828e43             2.55e49
+        dtype=None,    x64 off            float32      inf                  inf
+        dtype=float32, x64 off            float32      inf                  inf
+
+    Both exceed the float32 maximum of 3.4e38 by construction, so no grid dtype
+    can rescue them: ``stellar_mass_scale`` is ``total_mass * L_sun`` and
+    ``nion`` is an ionizing-photon rate. Their log-domain counterparts
+    (``log_stellar_mass_scale``, ``log_nion``) stay finite and are the float32-safe
+    reads — note that ``log_nion`` is finite in **every** row above, so a test that
+    asserts on it will not notice the linear key going ``inf``. The remaining linear
+    keys are issue #1206 item 3 (a breaking unit change, deliberately deferred); see
+    ``docs/dev/float32-tier-b-boundary.md``.
+
     Examples
     --------
     >>> from tengri.components.stellar.sps import load_ssp_data
     >>> ssp = load_ssp_data("data/ssp_bc03.h5")
     >>> print(ssp.ssp_wave.shape, ssp.ssp_flux.shape)
     (6000,) (50, 300, 6000)
+
+    >>> import jax.numpy as jnp
+    >>> ssp32 = load_ssp_data("data/ssp_bc03.h5", dtype=jnp.float32)  # doctest: +SKIP
+    >>> ssp32.ssp_flux.dtype  # doctest: +SKIP
+    dtype('float32')
 
     """
     try:
@@ -383,8 +494,8 @@ def load_ssp_data(filepath: str, *, download: bool = False) -> SSPData:
         )
 
     with h5py.File(filepath, "r") as f:
-        ssp_lg_age_gyr = _load_float(f["ssp_lg_age_gyr"])
-        ssp_lgmet = _load_float(f["ssp_lgmet"])
+        ssp_lg_age_gyr = _load_float(f["ssp_lg_age_gyr"], dtype=dtype)
+        ssp_lgmet = _load_float(f["ssp_lgmet"], dtype=dtype)
 
         # IMF discovery (#307): HDF5 attribute wins, else parse filename
         # tail. Surfaced as ``ssp.imf`` so model spec / summary / gallery
@@ -419,27 +530,32 @@ def load_ssp_data(filepath: str, *, download: bool = False) -> SSPData:
         # flat 0.29 % absolute-flux offset. Rescale on load so the
         # in-memory arrays are IAU-Lsun-normalized and every downstream
         # conversion is exact.
-        ssp_flux = _load_float(f["ssp_flux"])
+        ssp_flux = _load_float(f["ssp_flux"], dtype=dtype)
         native_lsun = _detect_native_lsun(f, fp.name)
         if native_lsun is not None:
             from tengri.utils.physics_constants import L_SUN
 
             if abs(native_lsun / L_SUN - 1.0) > 1e-12:
+                # Python-float scalar keeps ssp_flux's dtype under JAX weak typing.
                 ssp_flux = ssp_flux * (native_lsun / L_SUN)
 
         if "ssp_mass_remaining" in f:
-            mass_remaining = _load_float(f["ssp_mass_remaining"])
+            mass_remaining = _load_float(f["ssp_mass_remaining"], dtype=dtype)
         else:
             mass_remaining = _synthesize_mass_remaining(
                 filepath, ssp_lg_age_gyr, ssp_lgmet, imf_tag=imf
             )
+            # The synthesizer works at default precision; honor the request so
+            # every array in the returned grid shares one dtype.
+            if dtype is not None and mass_remaining is not None:
+                mass_remaining = jnp.asarray(mass_remaining, dtype=dtype)
 
         alpha_fe = None
         if "ssp_alpha_fe" in f:
-            alpha_fe = _load_float(f["ssp_alpha_fe"])
+            alpha_fe = _load_float(f["ssp_alpha_fe"], dtype=dtype)
 
         return SSPData(
-            ssp_wave=_load_float(f["ssp_wave"]),
+            ssp_wave=_load_float(f["ssp_wave"], dtype=dtype),
             ssp_flux=ssp_flux,
             ssp_lg_age_gyr=ssp_lg_age_gyr,
             ssp_lgmet=ssp_lgmet,
@@ -960,14 +1076,16 @@ def compute_dsps_native_weights(
     sfr_asc = jnp.where(is_invalid_pos, 0.0, sfr_asc_raw)
 
     result = calc_rest_sed_sfh_table_lognormal_mdf(
-        gal_t_table=t_cosmic_asc,
-        gal_sfr_table=sfr_asc,
-        gal_lgmet=lgmet,
-        gal_lgmet_scatter=lgmet_scatter,
-        ssp_lgmet=ssp_lgmet,
-        ssp_lg_age_gyr=ssp_lg_age_gyr,
-        ssp_flux=ssp_flux,
-        t_obs=t_obs_gyr,
+        **canonical_dsps_kwargs(
+            gal_t_table=t_cosmic_asc,
+            gal_sfr_table=sfr_asc,
+            gal_lgmet=lgmet,
+            gal_lgmet_scatter=lgmet_scatter,
+            ssp_lgmet=ssp_lgmet,
+            ssp_lg_age_gyr=ssp_lg_age_gyr,
+            ssp_flux=ssp_flux,
+            t_obs=t_obs_gyr,
+        )
     )
 
     # ``result.weights`` is the joint (n_met, n_age) probability

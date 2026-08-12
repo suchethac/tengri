@@ -31,6 +31,7 @@ read directly from ``params`` as an independent free parameter.
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
@@ -52,7 +53,42 @@ from tengri.protocols.component import (
 )
 from tengri.utils.physics_constants import L_SUN
 
-__all__ = ["AGNSEDComponent", "AGNSEDComponentConfig"]
+#: log10 of the solar luminosity [dex], for folding the AGN bolometric scale
+#: into log space (float32 safety, #1206). L_SUN ~3.828e33 erg/s.
+_LOG10_L_SUN: float = float(jnp.log10(L_SUN))
+
+#: Reference AGN ``agn_log_lbol`` (= log10(L_bol/L_sun)) at which every block is
+#: evaluated for the float32 factoring (#1206). Chosen so L_bol = 1e10 erg/s: low
+#: enough that the *squares* of the internal bolometric integrals stay in float32
+#: range (``(1e10)**2 = 1e20 << 3.4e38``), yet high enough that the runner's
+#: ``max(faceon/L_sun, 1e-30)`` zero-protection floor never engages (faceon/L_sun
+#: ~1e-23, seven decades clear). The true 10^agn_log_lbol is re-applied afterward.
+_AGN_LBOL_REF: float = 10.0 - _LOG10_L_SUN
+
+#: AGN disc blocks that are NOT yet float32-safe (#1206). Each returns NaN/inf in
+#: pure float32 (JAX-Metal) from a distinct grid-dependent overflow (a ``0*inf`` in
+#: the block/runner, *not* the L_bol magnitude the shape-class fixes address). This
+#: used to name ``forward_dtype="float32"`` as a second way in; that knob casts
+#: nothing (#1433), so it cannot reach float32 arithmetic here. See
+#: ``docs/dev/float32-tier-b-boundary.md`` §8 and
+#: ``tests/regression/precision/test_agn_disc_float32_inventory.py``. The
+#: float32-safe discs are ``multicolor``, ``kubota_done``, ``adaf`` (physical,
+#: L_bol-dependent shape) and ``powerlaw`` / ``richards2006`` / ``skirtor`` /
+#: ``qsogen`` / ``schartmann2005`` / ``adaf_lopez2024`` (shape-invariant).
+#: ``grahsp_sbpl`` is blocked on a linear erg/s *parameter* (``agn_grahsp_l5100``
+#: is ``inf`` in float32), not a kernel overflow — it needs a log-space parameter.
+_NON_FLOAT32_SAFE_DISCS: frozenset[str] = frozenset({"grahsp_sbpl"})
+
+
+class Float32UnsafeAGNWarning(UserWarning):
+    """A non-float32-safe AGN disc block is being evaluated in float32 (#1206)."""
+
+
+__all__ = [
+    "AGNSEDComponent",
+    "AGNSEDComponentConfig",
+    "Float32UnsafeAGNWarning",
+]
 
 
 @dataclass(frozen=True)
@@ -172,6 +208,12 @@ class AGNSEDComponent(TemplateThreading):
         """
         return (
             DerivedKey("L_agn_bol", "erg/s", "AGN bolometric luminosity"),
+            DerivedKey(
+                "log_L_agn_bol",
+                "dex",
+                "log10(L_agn_bol / (erg/s)); float32-safe form "
+                "(L_agn_bol ~1e46 overflows float32)",
+            ),
             DerivedKey("sed_agn", "erg/s/Hz", "AGN SED contribution on pipeline wave grid"),
             DerivedKey(
                 "L_2500_intrinsic",
@@ -314,10 +356,11 @@ class AGNSEDComponent(TemplateThreading):
         """
         wave = state.wave
 
-        # Convert log10(L_bol/Lsun) → erg/s once for both the model
-        # call and the L_agn_bol publication.
+        import jax as _jax
+
+        from tengri.utils.scale import pow10 as _pow10
+
         agn_log_lbol = jnp.asarray(params["agn_log_lbol"])
-        L_agn_bol = jnp.power(10.0, agn_log_lbol) * L_SUN
 
         # CIGALE-faithful cross-component coupling
         # ────────────────────────────────────────────────────────────
@@ -332,17 +375,38 @@ class AGNSEDComponent(TemplateThreading):
         # CIGALE bit-for-bit. ``lambda_fracAGN="0/0"`` (CIGALE's
         # whole-IR default) is assumed; the alternative wavelength-
         # window flow is not yet wired.
+        #
+        # Every luminosity here (``L_absorbed`` ~1e43, ``L_agn_bol`` ~1e46) is
+        # ``inf`` in pure float32, so the ratio ``agn_power / L_agn_bol`` is
+        # formed in LOG space (from the float32-safe ``log_L_ir``), never as
+        # inf/inf. ``agn_ir_frac == 0`` leaves the coupling inert (the user
+        # torus_frac), with the log branch still finite so its unused-branch
+        # gradient cannot leak (#1206).
         agn_ir_frac = jnp.asarray(params.get("agn_ir_frac", 0.0))
-        L_absorbed = jnp.asarray(state.derived.get("L_absorbed", 0.0))
         # Avoid divide-by-zero / negative leak when fracAGN ≥ 1.
         _one_minus_frac = jnp.maximum(1.0 - agn_ir_frac, 1e-6)
-        agn_power_from_stellar = L_absorbed * agn_ir_frac / _one_minus_frac
         agn_torus_frac_user = jnp.asarray(params.get("agn_torus_frac", 0.5))
-        agn_torus_frac_effective = jnp.where(
-            agn_ir_frac > 0.0,
-            agn_power_from_stellar / jnp.maximum(L_agn_bol, 1e-30),
-            agn_torus_frac_user,
+        _log_L_absorbed = state.derived.get("log_L_ir")
+        if _log_L_absorbed is None:
+            _log_L_absorbed = jnp.log10(
+                jnp.maximum(jnp.asarray(state.derived.get("L_absorbed", 0.0)), 1e-30)
+            )
+        # log10(agn_power / L_agn_bol)
+        #   = log10(L_absorbed) + log10(frac/(1−frac)) − agn_log_lbol − log10(L_sun)
+        _log_torus_frac = (
+            _log_L_absorbed
+            + jnp.log10(jnp.maximum(agn_ir_frac, 1e-30))
+            - jnp.log10(_one_minus_frac)
+            - agn_log_lbol
+            - _LOG10_L_SUN
         )
+        agn_torus_frac_effective = jnp.where(
+            agn_ir_frac > 0.0, _pow10(_log_torus_frac), agn_torus_frac_user
+        )
+        # Published byproduct only [erg/s]; ~1e46 and ``inf`` in float32.
+        # stop_gradient so that inf cannot poison the reverse pass via 0*inf;
+        # consumers needing it linearly run in float64.
+        L_agn_bol = _jax.lax.stop_gradient(_pow10(agn_log_lbol + _LOG10_L_SUN))
 
         # Resolve the AGN model from the registry. resolve_agn_model is
         # a factory-time lookup but the returned callable is pure JAX
@@ -418,20 +482,85 @@ class AGNSEDComponent(TemplateThreading):
         # and L_4400_intrinsic. For monolithic models, both default to 0.0
         # (X-ray falls back to L_bol BC or SKIRTOR's published L_2500_30deg;
         # radio falls back to L_bol bolometric correction).
+        #
+        # Float32 boundary (#1206). Evaluating every AGN block at the true
+        # ``agn_log_lbol`` overflows float32: the CIGALE-joint disc renorm forms
+        # ``trapz(L_torus)`` and ``trapz(L_disc)`` ~ L_bol (~1e44 erg/s, past
+        # float32 max 3.4e38) at ``blocks/runner.py``. So in **float32 only** we
+        # evaluate every block at a low reference L_bol (``_AGN_LBOL_REF`` →
+        # 1e10 erg/s, comfortably in range) and re-apply the
+        # ``10^(agn_log_lbol − _AGN_LBOL_REF)`` scale in log space via
+        # apply_log10_scale. That output factoring is EXACT for shape-invariant
+        # blocks — the SKIRTOR torus template and the power-law disc scale
+        # linearly with L_bol — and, since the ``agn_log_lbol_shape`` hand-off
+        # below, exact for the multicolor disc too: the true L_bol drives the
+        # temperature and geometry while only the MAGNITUDE is factored, and the
+        # magnitude is linear by construction. Measured in float64, where float32
+        # round-off cannot mask a shape error: max relative deviation from a
+        # direct evaluation at the true L_bol is 2.2e-16 (one ulp) at
+        # log L_bol = 11-14. Without the shape hand-off the same comparison is
+        # off by 100% at log L_bol = 11 and 3685% at 14 — that is what this
+        # comment used to describe. In **float64** we evaluate at the true
+        # ``agn_log_lbol`` and
+        # publish the block outputs unchanged — the reference implementation,
+        # bit-for-bit identical to pre-#1206 main for every disc type.
+        from tengri.utils.scale import apply_log10_scale
+
+        _use_ref = wave.dtype == jnp.float32
+        if _use_ref and self.config.agn_disc_block in _NON_FLOAT32_SAFE_DISCS:
+            # Warns once per trace (Python side-effect at trace time). These discs
+            # produce NaN/inf in float32; the fit will silently corrupt. #1206.
+            warnings.warn(
+                f"AGN disc_block={self.config.agn_disc_block!r} is not float32-safe "
+                "(#1206): it returns NaN/inf in pure float32 (JAX-Metal). "
+                "For float32 use a supported disc — "
+                "'multicolor', 'kubota_done', 'adaf' (physical), or 'powerlaw' / "
+                "'richards2006' / 'skirtor' / 'qsogen' / 'schartmann2005' "
+                "(shape-invariant) — or run in float64. See "
+                "docs/dev/float32-tier-b-boundary.md §8.",
+                Float32UnsafeAGNWarning,
+                stacklevel=2,
+            )
+        _lbol_eval = (
+            jnp.full_like(jnp.asarray(agn_log_lbol, dtype=wave.dtype), _AGN_LBOL_REF)
+            if _use_ref
+            else agn_log_lbol
+        )
+        if _use_ref:
+            # Multicolor-disc shape depends on L_bol (temperature), so evaluating
+            # the whole runner at the reference L_bol would give the WRONG disc
+            # shape. Hand the disc its TRUE L_bol for the temperature/geometry
+            # (``agn_log_lbol_shape``) while everything else — including the disc's
+            # output MAGNITUDE — stays on the reference so the runner's L_lambda
+            # arithmetic stays in float32 range. Shape-invariant blocks (torus
+            # template, power-law disc) ignore the kwarg. The disc's internals are
+            # float32-hardened (log-space) so the true-L_bol temperature computes
+            # without overflow. (#1206)
+            agn_kwargs = {**agn_kwargs, "agn_log_lbol_shape": agn_log_lbol}
         if self.config.model == "composable":
-            L_agn, L_2500_intrinsic, L_4400_intrinsic = agn_fn(
-                wave, agn_log_lbol=agn_log_lbol, return_l2500=True, **agn_kwargs
+            L_agn_unit, L_2500_unit, L_4400_unit = agn_fn(
+                wave, agn_log_lbol=_lbol_eval, return_l2500=True, **agn_kwargs
             )
         else:
-            L_agn = agn_fn(wave, agn_log_lbol=agn_log_lbol, **agn_kwargs)
-            L_2500_intrinsic = jnp.asarray(0.0)
-            L_4400_intrinsic = jnp.asarray(0.0)
+            L_agn_unit = agn_fn(wave, agn_log_lbol=_lbol_eval, **agn_kwargs)
+            L_2500_unit = jnp.asarray(0.0)
+            L_4400_unit = jnp.asarray(0.0)
+        if _use_ref:
+            _offset = agn_log_lbol - _AGN_LBOL_REF
+            L_agn = apply_log10_scale(L_agn_unit, _offset)
+            L_2500_intrinsic = apply_log10_scale(L_2500_unit, _offset)
+            L_4400_intrinsic = apply_log10_scale(L_4400_unit, _offset)
+        else:
+            L_agn = L_agn_unit
+            L_2500_intrinsic = L_2500_unit
+            L_4400_intrinsic = L_4400_unit
 
         # Filter-integrate L_agn through the cached filter
         # passbands and publish ``agn_phot_lnu_precomp`` so predict_via_precomp
         # can include the AGN contribution in the LUT sum.
         derived_overrides = dict(
             L_agn_bol=L_agn_bol,
+            log_L_agn_bol=(agn_log_lbol + _LOG10_L_SUN),
             sed_agn=L_agn,
             L_2500_intrinsic=L_2500_intrinsic,
             L_4400_intrinsic=L_4400_intrinsic,

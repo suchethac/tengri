@@ -867,11 +867,11 @@ their older siblings `list_agn_models()` / `describe_agn_model()`;
 
 ---
 
-## `FeaturePrecomp` — the emission-line precompute (2026-07)
+## `FeaturePrecomp` — the nebular precompute (2026-07)
 
 `approx=` gains a third member, alongside `WavePrecomp` (photometry) and
-`SpectrumPrecomp` (spectroscopy). `FeaturePrecomp` serves **emission-line
-fluxes** from a build-time lookup instead of re-running the forward on every
+`SpectrumPrecomp` (spectroscopy). `FeaturePrecomp` serves the **nebular
+calculation** from a build-time lookup instead of re-running the forward on every
 likelihood evaluation, and composes with the other two:
 
 ```python
@@ -889,6 +889,67 @@ catalog that is linear in the ionizing photon rate, so a grid over the free
 ionization axes replaces the forward; the **baked-in / wNE** backend has no
 catalog — its lines are inside the SSP templates — so it gets a per-line window
 LUT and the fluxes are *measured* off the reconstructed spectrum.
+
+**It is not a line-channel-only optimization, and the name misleads.** For
+**Cue**, the grid replaces the emulator call itself, so the saving lands on
+likelihood evaluations that touch the nebular block whether or not a line channel
+is being fit. One 10-parameter Cue model (free `neb_logU` / `neb_logZ_gas`,
+DECam *grz* + WISE, `Fixed` redshift), timing the **compiled MAP step** — the
+optimization loop with the JIT compile excluded, i.e. what a fit actually costs.
+Five arms, one cold process each, interleaved with the order rotated per rep,
+minimum of 3. The fourth arm is the first one repeated, so the ratio between the
+twins is the measurement's own noise floor:
+
+| arm | min compiled step |
+| --- | --- |
+| `approx=None`, with lines | 0.160 s |
+| `approx=None`, with lines *(A/A twin)* | 0.196 s |
+| `approx=None`, photometry only | 0.645 s |
+| `WavePrecomp()`, photometry only | 0.603 s |
+| `(WavePrecomp(), FeaturePrecomp())`, photometry only | **0.093 s** |
+
+```
+A/A floor                                     1.23x
+photometry-only vs with-lines (approx=None)   4.04x   clears
+FeaturePrecomp on photometry-only             6.98x   clears
+FeaturePrecomp on top of WavePrecomp          6.51x   clears
+WavePrecomp alone on photometry-only          1.07x   DOES NOT CLEAR
+```
+
+Two things to take from that grid, both counter-intuitive:
+
+1. **A photometry-only Cue fit is ~4x slower than the same fit with a line
+   channel attached**, and `FeaturePrecomp` is what recovers it (**7x**). Adding
+   data makes the fit faster, which is backwards; treat the photometry-only
+   number as a defect to be fixed, not a budget. It was tracked as issue #1596
+   and is **fixed**: the `"auto"` fit policy now attempts the feature LUT for a
+   photometry-only fit whose backend can tabulate, so the row a user lands on by
+   default is the 0.093 s one. #1683 extended the same top-up to a model built
+   `approx=WavePrecomp()`, which both fit resolvers had returned untouched — so
+   the third and fourth rows above are what the *build-time* knob buys a
+   **prediction** path, not what a fit resolves to today. (An earlier revision of this table quoted 11.7x and
+   16.1x. Those were **bare-gradient** ratios, measured without a control; across
+   a whole MAP step a fixed per-step optimizer cost dilutes them to the figures
+   above. The 4x is the one a user feels.)
+2. **With a line channel present the opt-ins do essentially nothing** — all three
+   rows agree to within run-to-run noise. Do not assume `approx=` is buying
+   speed; measure it. Notebook
+   [`10_fastspecfit_joint_fit`](../../notebooks/10_fastspecfit_joint_fit.py)
+   re-measures the three arms on every render for exactly this reason — with a
+   rotated arm order and an A/A control, because timing several arms in one
+   process otherwise measures which arm ran first. Before that harness landed,
+   that notebook published this same ratio as 18.6x, 12.6x, 1.0x and 3.2x on
+   unchanged code.
+
+**`WavePrecomp` alone does not resolve on a Cue model** — 1.07x, under the 1.23x
+A/A floor, so it should not be quoted as a number at all. (An earlier revision of
+this page called it "~1.1x either way". That figure came from an uncontrolled
+run; against its own noise floor there is nothing there to measure.) The reading
+still stands qualitatively: the emulator, not the filter integration, is what
+dominates a Cue model.
+
+For the **baked-in / wNE** backend the saving really is line-only, because there
+the lookup is a per-line window LUT rather than a replacement for a forward.
 
 This is an **opt-in approximation**. It never activates on its own, and an
 observation that merely contains lines does not switch it on.
