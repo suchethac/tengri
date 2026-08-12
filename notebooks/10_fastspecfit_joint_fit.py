@@ -69,6 +69,7 @@ import tengri
 from tengri import (
     FIXED,
     FREE,
+    Data,
     FeaturePrecomp,
     Fixed,
     ForwardModel,
@@ -83,6 +84,7 @@ from tengri import (
 )
 from tengri.observation import LineFluxData
 from tengri.utils.conversions import lnu_to_fnu
+from _setup import HMC_VALIDATED
 
 plot.setup_style()
 
@@ -141,8 +143,14 @@ print(f"Lines: {len(LINE_NAMES)} — {', '.join(LINE_NAMES)}")
 
 
 # %%
+# Build a LineList that declares the lines expected in the fit
+_line_catalog_full = LineList.default_optical()
+line_catalog = LineList.select(_line_catalog_full, names=LINE_NAMES)
+
+
 def build(line_data, approx):
-    obs = Observation(photometry=phot_obs, line_fluxes=line_data)
+    # Observation declares: photometry schema, line data, and line schema
+    obs = Observation(photometry=phot_obs, line_fluxes=line_data, lines=line_catalog)
     return SEDModel.build(
         ssp_data=ssp,
         observation=obs,
@@ -260,19 +268,21 @@ MAP_KW = dict(method="map", key=jax.random.PRNGKey(1), n_steps=200)
 
 
 def timed_map(model, label):
-    # The line likelihood is active because the Observation carries line_fluxes;
-    # the data passed here is photometry, and the observation says so, so there
-    # is no channel to declare.
+    # Joint fit: photometry + emission lines from observation.
     assert model.observation.line_fluxes is not None, "line likelihood not active"
+    # Data container: lines are in observation.line_fluxes already,
+    # so declare only photometry here.
+    data = Data(photometry=(flux_phot, n_phot))
+
     forward = ForwardModel.build(sed=model)
     t0 = time.perf_counter()
-    forward.fit(flux_phot, n_phot, **MAP_KW)  # pays the JIT compile
+    forward.fit(data, **MAP_KW)  # pays the JIT compile
     cold = time.perf_counter() - t0
     t0 = time.perf_counter()
     # A second fit re-traces the step, so its wall time is ~= the first (see #1350:
     # each fit currently clears the JAX caches, which is why the compile is not
     # reused). The number that isolates the physics is post.wall_time_s below.
-    post = forward.fit(flux_phot, n_phot, **MAP_KW)
+    post = forward.fit(data, **MAP_KW)
     warm = time.perf_counter() - t0
     loop = post.wall_time_s  # the compiled optimization loop, compile excluded
     print(f"  {label:22s} fit() wall {warm:5.2f}s   compiled step {loop:5.2f}s")
@@ -305,29 +315,53 @@ print(
 # compile needs ~N× the RAM (and a dense-mass fit can OOM a modest machine),
 # whereas sequential runs anywhere a one-chain fit runs, at ~N× the sampling
 # wall. One fit per process, per the OOM-orchestration rule.
+#
+# **What it reaches, and what it does not.** Doubling the warmup to 2000 moves
+# split-R-hat from 1.22 to **1.089** with zero divergences — the right direction,
+# and still short of the < 1.01 you would demand before quoting an interval in a
+# paper. The degeneracy is real, not a tuning failure: the truth lands inside the
+# 68% interval for 5 of 6 parameters, so the fit is informative, but read the
+# widths in that sector as approximate. More chains would sharpen the diagnostic:
+# measured at 100 warmup + 200 samples, peak RSS is 3.8 GB at one chain, 3.9 GB at
+# two and 5.0 GB at four, while compile time stays flat at ~27 s throughout — the
+# sampler is one compiled `lax.scan`, so neither chains nor samples rebuild it.
 
 # %%
-N_WARMUP, N_SAMPLES, N_CHAINS, N_LEAPFROG = 500, 300, 2, 100
+# Fixed-length HMC on the precomputed model. Every gradient here goes through the
+# `(WavePrecomp, FeaturePrecomp)` tables built above, so an evaluation is a lookup
+# rather than a full SSP integral — which is what makes a long chain affordable.
+#
+# The sampler stays fixed-length rather than NUTS on purpose: 20 leapfrog steps is
+# 20 gradients per iteration, where NUTS routinely builds trees of 100+ and took
+# several times longer here without converging. Spend the saving on *more
+# iterations of the cheap kernel* instead — but on warmup, not on chains. Four
+# chains at double the budget exhausted memory even under `chain_method=
+# "sequential"`, so this keeps the two chains that are known to fit and doubles
+# the warmup, which is what the adaptation actually needs.
+HMC_LONG = {**HMC_VALIDATED, "n_warmup": 2000}
+data = Data(photometry=(flux_phot, n_phot))
+
 t0 = time.perf_counter()
 posterior = ForwardModel.build(sed=model_fast).fit(
-    flux_phot,
-    n_phot,
-    method="mcmc_hmc",
-    key=jax.random.PRNGKey(7),
-    n_warmup=N_WARMUP,
-    n_samples=N_SAMPLES,
-    n_chains=N_CHAINS,
-    n_leapfrog_steps=N_LEAPFROG,
-    dense_mass_matrix=True,
-    target_accept_rate=0.85,
-    chain_method="sequential",  # peak memory = one chain (runs on cheap hardware)
+    data, key=jax.random.PRNGKey(7), n_chains=2, chain_method="sequential", **HMC_LONG
 )
+elapsed = time.perf_counter() - t0
 rmax = max(float(v) for v in posterior.rhat().values())
+n_divergent = posterior.diagnostics.get('n_divergent', 0)
+
+# R-hat cannot see a chain that never moved — it scores ~1.0 on one — so check the
+# draws directly, across every free parameter (#1734). Only the free ones: a Fixed
+# parameter is legitimately constant and appears in `samples` with a single value,
+# so scanning all of `samples` would report a frozen chain on every healthy fit.
+_free = model_fast.spec.free_params
+n_draw = min(np.asarray(posterior.samples[p]).size for p in _free)
+n_unique = min(np.unique(np.asarray(posterior.samples[p])).size for p in _free)
+
 print(
-    f"HMC ({N_CHAINS} chains x {N_WARMUP}w+{N_SAMPLES}s, L={N_LEAPFROG}, sequential): "
-    f"{time.perf_counter() - t0:5.0f}s   max R-hat {rmax:.3f}   "
-    f"divergences {posterior.diagnostics.get('n_divergent', 'n/a')}"
+    f"HMC (2 chains x {HMC_LONG['n_warmup']}w+{HMC_LONG['n_samples']}s): "
+    f"{elapsed:5.0f}s   max R-hat {rmax:.3f}   divergences {n_divergent}"
 )
+print(f"  Mixing: worst parameter has {n_unique}/{n_draw} unique draws")
 
 # %% [markdown]
 # On a machine with more RAM, run the chains concurrently instead of one at a
@@ -416,12 +450,16 @@ DL = cosmology.luminosity_distance(Z_GAL)
 WAVE_FULL = np.geomspace(2.0e3, 3.0e5, 800)  # observed frame [Å]  (0.2–30 µm)
 w_full_um = WAVE_FULL / 1e4
 
+# For SED evaluation, use WavePrecomp() alone (not FeaturePrecomp). FeaturePrecomp
+# attaches a per-Q_H nebular grid that disables exact rest_sed(); WavePrecomp()
+# alone is exact for rest_sed() while remaining LUT-fast for photometry.
+model_sed = build(line_data, approx=WavePrecomp())
 
 def _sed_fnu(p):
     lnu = np.interp(
         WAVE_FULL / (1.0 + Z_GAL),
-        np.asarray(model_fast.wavelengths),
-        np.asarray(model_fast.predict(p).rest_sed()),
+        np.asarray(model_sed.wavelengths),
+        np.asarray(model_sed.predict(p).rest_sed()),
     )
     return np.asarray(lnu_to_fnu(jnp.asarray(lnu), DL, Z_GAL))
 

@@ -179,6 +179,17 @@ def build(observation, n_grid=N_GRID):
     )
 
 
+# These fits run on the exact wave grid, and that is why this page is slow: a fit
+# is all forward pass, and the HMC below is (300 + 200) x 100 = 50,000 gradient
+# evaluations. Measured on config A, the exact grid costs 6.66 ms per call where
+# the `WavePrecomp` table costs 0.10 ms — a factor of 67, for a 3e-4 relative
+# change in flux, far inside the S/N 20 noise here. The table is cheap to build
+# (~1 s) because the redshift is Fixed, so no z-grid quadrature is paid.
+#
+# It is not wired up here only because the attempt has not yet been shown to work:
+# the tables build fine (under a second, ~0.9 GB), but the fits were SIGKILLed on a
+# host that was itself out of memory, so that result proves nothing either way.
+# Re-measure on an idle machine before adopting it; see the tracking issue.
 model = {k: build(v) for k, v in OBSERVATION.items()}
 spec = model["B"].spec
 fixed_values = spec.get_fixed_values()
@@ -493,13 +504,26 @@ plt.show()
 # interesting part. So we run a Hamiltonian Monte Carlo posterior on case **B** and
 # plot it with the library helper.
 #
-# Two honest caveats. The posterior is wide and strongly correlated (mass ↔ SFR,
-# dust ↔ recent SFR), so it needs a long trajectory: `n_leapfrog_steps=100`, where
-# the default of 10 under-explores and returns deceptively tight bands. And the
-# non-centered field rotates with $\tau$, so the curvature is position-dependent
-# and one global mass matrix cannot represent it — expect $\hat{R} \approx 1.1$ and
-# some divergences however long this runs. **Read the recovered values; treat the
-# widths as indicative.**
+# One caveat, and it is larger than this page used to admit. The posterior is
+# wide and strongly correlated (mass ↔ SFR, dust ↔ recent SFR), so it needs a long
+# trajectory: `n_leapfrog_steps=100`, where the default of 10 under-explores and
+# returns deceptively tight bands. And the non-centered field rotates with $\tau$,
+# so the curvature is position-dependent and one global mass matrix cannot
+# represent it.
+#
+# The cell below now prints the diagnostic, and it does not pass: **$\hat{R}
+# \approx 2.7$ with zero divergences** at this budget, on a $D=25$ posterior.
+# Zero divergences says the integrator is stable; $\hat{R} \approx 2.7$ says the
+# four chains settled in different places and never met. So the bands below are
+# **not credible intervals** — they are where four separate walkers happened to
+# sit. Read the recovered SFH *shape* against the truth, which is what this page
+# is for, and do not read the widths at all.
+#
+# Fixed-length HMC is the wrong tool for a $D=25$ correlated field: a single
+# global trajectory length cannot serve a geometry whose curvature changes with
+# position. tengri ships geoVI and MGVI precisely for this class of posterior;
+# routing this fit through one of them is the real fix, and is tracked as an
+# issue rather than papered over here.
 
 # %%
 # Cost is (n_warmup + n_samples) x n_leapfrog_steps gradient evaluations, so the
@@ -516,6 +540,15 @@ posterior = ForwardModel.build(sed=model["B"], observation=OBSERVATION["B"]).fit
 print(f"HMC in {time.perf_counter() - t0:.0f} s")
 
 # %%
+# Check convergence: are the draws actually distinct and properly mixed?
+diag = posterior.diagnostics
+n_div = diag.get("n_divergent", 0)
+max_rhat = float(np.nanmax(list(posterior.rhat().values())))
+print(f"HMC diagnostics: {n_div} divergences, max R-hat {max_rhat:.4f}")
+if n_div > 0 or max_rhat > 1.01:
+    print("  ⚠ WARNING: Posterior may not have converged properly. "
+          "For publication, increase n_warmup and n_leapfrog_steps.")
+
 ax = plot_sfh(model["B"], posterior, true_params=truth_full,
               method="HMC", xscale="log", label="posterior (case B)")
 ax.set_title("Case B posterior — 7 filters + 8 emission lines")

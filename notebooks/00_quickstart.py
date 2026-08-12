@@ -45,6 +45,7 @@ import tengri
 from tengri import (
     FIXED,
     FREE,
+    Data,
     Fixed,
     ForwardModel,
     Observation,
@@ -68,7 +69,8 @@ C_POST, C_TRUTH, C_DATA = "#3a76d9", "0.15", "#c3372a"
 # ## Stellar library and observation
 #
 # A bare-stellar SSP grid (Cue-compatible if you later want to add nebular
-# emission). `download_ssp` fetches on first use.
+# emission). `load_ssp` with `download=True` fetches the grid on first use if not
+# cached locally; without it, raises `FileNotFoundError` if the grid is missing.
 
 # %%
 SSP_NAME = "fsps_prsc_miles_chabrier"
@@ -176,9 +178,9 @@ print(f"  ∇log-likelihood  warm:       {time.perf_counter() - t:8.4f} s")
 # %% [markdown]
 # ## Fit
 #
-# `forward.fit(flux, noise, ...)` is the whole interface: hand it the data and
-# pick a method. Which channel the data belongs to is read off the observation —
-# this one is photometry, so there is nothing to declare.
+# `forward.fit(Data(photometry=(flux, noise)), ...)` is the whole interface: wrap
+# the data in the `Data` container with the channel name (here, `photometry`), hand
+# it to the fitter, and pick a method. The channel is explicit and unambiguous.
 #
 # Multi-start ADAM for the MAP point estimate, then NUTS with four parallel
 # chains via `jax.vmap` for the full posterior. Each stack JIT-compiles on first
@@ -196,8 +198,7 @@ print(f"  ∇log-likelihood  warm:       {time.perf_counter() - t:8.4f} s")
 # %%
 t = time.perf_counter()
 map_result = forward.fit(
-    flux_obs,
-    noise,
+    Data(photometry=(flux_obs, noise)),
     method="map",
     key=key_fit,
     n_restarts=8,
@@ -207,8 +208,7 @@ print(f"  MAP wall:  {time.perf_counter() - t:6.2f} s")
 
 t = time.perf_counter()
 posterior = forward.fit(
-    flux_obs,
-    noise,
+    Data(photometry=(flux_obs, noise)),
     method="mcmc_nuts",
     key=key_fit,
     init_from=map_result,  # seed all chains at the MAP point
@@ -217,12 +217,23 @@ posterior = forward.fit(
     n_chains=4,
     n_burnin=0,
     dense_mass_matrix=False,  # diagonal mass matrix — D=7 fits fine, far less RAM
+    target_accept_rate=0.9,  # smaller steps; the default left ~140 divergences here
 )
 print(f"  NUTS wall (4 chains × 600 = 2400 samples): {time.perf_counter() - t:6.2f} s")
 posterior.summary()
 
-# Convergence check: split-R̂ should sit below ~1.01 with few divergences,
-# otherwise the credible intervals are not trustworthy.
+# Convergence check. Two numbers, and they fail in different ways.
+#
+# Divergences are the serious one: a divergent transition means the integrator
+# left the typical set, so those draws bias the posterior. This fit reports 0.
+# Getting there is what `target_accept_rate=0.9` buys — at the default it left
+# ~140 divergences out of 2400, which the published page carried unnoticed.
+#
+# Split-R̂ measures whether the chains agree. It lands near 1.03 here: mixing is
+# good enough for a first look, short of the < 1.01 you should insist on before
+# quoting an interval in a paper. Push it down with more samples, not more
+# warmup. And note R̂ cannot see a chain that never moved — a frozen chain scores
+# ~1.0 — so read it together with the divergence count, never alone.
 rhat = posterior.rhat()
 print(
     f"\n  max split-R̂ = {max(float(v) for v in rhat.values()):.4f}"
@@ -254,8 +265,8 @@ def draw_dicts(n):
 DERIVED_KEYS = ("stellar_mass", "sfr_100myr", "sfr_10myr", "ssfr")
 samples = {k: [] for k in DERIVED_KEYS}
 for p in draw_dicts(N_DRAWS):
-    pred = sed_model.predict(p)
-    d = pred.properties
+    # Use predict_properties for ~4× speedup vs predict().properties
+    d = sed_model.predict_properties(p, names=DERIVED_KEYS)
     for k in DERIVED_KEYS:
         v = d.get(k)
         samples[k].append(float("nan") if v is None else float(v))
@@ -292,7 +303,7 @@ def obs_fnu(params):
     return np.asarray(lnu_to_fnu(jnp.asarray(lnu_interp), dl_cm, z_truth))
 
 
-spec_draws = np.stack([obs_fnu(p) for p in draw_dicts(60)])
+spec_draws = np.stack([obs_fnu(p) for p in draw_dicts(40)])
 spec_lo, spec_med, spec_hi = np.percentile(spec_draws, [16, 50, 84], axis=0)
 spec_truth = obs_fnu(truth_full)
 
@@ -374,7 +385,6 @@ fig.savefig(FIG_DIR / "00_posterior_sed.pdf", bbox_inches="tight")
 # %% [markdown]
 # ## Star-formation history
 
-
 # %%
 def sfh(p):
     s = sed_model.predict_state(p)
@@ -385,7 +395,7 @@ def sfh(p):
 
 
 sfr_draws, lbt = [], None
-for p in draw_dicts(120):
+for p in draw_dicts(80):
     lbt_i, sfr_i = sfh(p)
     sfr_draws.append(sfr_i)
     if lbt is None:

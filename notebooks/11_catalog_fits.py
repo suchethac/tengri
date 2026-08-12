@@ -138,13 +138,13 @@ def build_model():
         ssp_data=ssp,
         observation=obs,
         redshift=Uniform(*Z_PRIOR),  # <-- free redshift: a photo-z fit
-        sfh={"type": "dpl", "*": FIXED, "log_total_mass": Uniform(8.0, 12.0)},
+        sfh={"type": "dpl", "all_params": FIXED, "log_total_mass": Uniform(8.0, 12.0)},
         stellar={"met_logzsol": Fixed(0.0)},
         # Free diffuse dust optical depth: marginalize the dust-redshift degeneracy.
         dust={
             "type": "two_component",
             "law_bc": "calzetti",
-            "*": FIXED,
+            "all_params": FIXED,
             "tau_diff": Uniform(0.0, 2.0),
         },
         neb={"type": "ssp"},  # nebular emission is baked into the wNE SSP (fixed logU/fesc)
@@ -215,7 +215,7 @@ print(
 FIT_KW = dict(
     method="mcmc_hmc",
     n_warmup=100,
-    n_samples=120,
+    n_samples=100,
     n_burnin=20,
     n_leapfrog_steps=20,  # longer trajectories mix the dust-redshift degeneracy
     target_accept_rate=0.85,
@@ -318,11 +318,11 @@ print(
 # gradient evaluations dwarf it, so a single wall is a stable measure.
 
 # %%
-K_VALUES = [1, 4, N_GAL]
+K_VALUES = [1, N_GAL]
 
 # Same `fit_catalog` (and so the same FIT_KW) as the science fit above — the K=N
 # point *is* that fit, reused rather than re-run.
-sweep_wall = [fit_catalog(1)[0], fit_catalog(4)[0], fit_wall]
+sweep_wall = [fit_catalog(1)[0], fit_wall]
 sweep_per_gal = [w / N_GAL for w in sweep_wall]
 _serial = sweep_per_gal[0]
 
