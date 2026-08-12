@@ -229,11 +229,17 @@ posterior.summary()
 # Getting there is what `target_accept_rate=0.9` buys — at the default it left
 # ~140 divergences out of 2400, which the published page carried unnoticed.
 #
-# Split-R̂ measures whether the chains agree. It lands near 1.03 here: mixing is
-# good enough for a first look, short of the < 1.01 you should insist on before
-# quoting an interval in a paper. Push it down with more samples, not more
-# warmup. And note R̂ cannot see a chain that never moved — a frozen chain scores
-# ~1.0 — so read it together with the divergence count, never alone.
+# Split-R̂ measures whether the four chains agree, and lands at ~1.00 here — under
+# the 1.01 you should insist on before quoting an interval in a paper.
+#
+# One caveat about how it is earned: `init_from=map_result` starts every chain at
+# the same MAP point. Identical starts under-disperse the chains, which can flatter
+# R̂ by understating the between-chain variance. Measured both ways at 3000 warmup,
+# it makes no difference here — MAP-seeded and dispersed starts both give 1.0008 —
+# so the number is real, not an artifact of the seeding.
+#
+# And note R̂ cannot see a chain that never moved: a frozen chain scores ~1.0 too.
+# Read it together with the divergence count, never alone.
 rhat = posterior.rhat()
 print(
     f"\n  max split-R̂ = {max(float(v) for v in rhat.values()):.4f}"

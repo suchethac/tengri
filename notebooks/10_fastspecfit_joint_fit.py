@@ -316,15 +316,34 @@ print(
 # whereas sequential runs anywhere a one-chain fit runs, at ~N× the sampling
 # wall. One fit per process, per the OOM-orchestration rule.
 #
-# **What it reaches, and what it does not.** Doubling the warmup to 2000 moves
-# split-R-hat from 1.22 to **1.089** with zero divergences — the right direction,
-# and still short of the < 1.01 you would demand before quoting an interval in a
-# paper. The degeneracy is real, not a tuning failure: the truth lands inside the
-# 68% interval for 5 of 6 parameters, so the fit is informative, but read the
-# widths in that sector as approximate. More chains would sharpen the diagnostic:
-# measured at 100 warmup + 200 samples, peak RSS is 3.8 GB at one chain, 3.9 GB at
-# two and 5.0 GB at four, while compile time stays flat at ~27 s throughout — the
-# sampler is one compiled `lax.scan`, so neither chains nor samples rebuild it.
+# **What it reaches, and why it stops there.** Warmup is the knob that matters,
+# and it was swept rather than guessed (4 chains, fast path):
+#
+#     warmup   samples   R-hat   divergences   wall
+#       1000       600   1.224             -    85 s
+#       2000       600   1.112             0   413 s
+#       3000      1000   1.038             3   276 s
+#       5000      1500   1.020            49   829 s
+#
+# Past 3000 the returns invert: R-hat creeps down while divergences climb from 3
+# to 49, i.e. the adaptation settles on a step size that walks into a pathological
+# corner of the metallicity/dust/ionization degeneracy. So 3000 is the operating
+# point — and short of the < 1.01 you would demand before quoting an interval in a
+# paper. Truth lands inside the 68% interval for 5 of 6 parameters; read the widths
+# in that sector as approximate.
+#
+# Two honest caveats about that table. It was measured in a standalone sweep, and
+# this page's own fit reports a higher R-hat than the matching row — so read the
+# table as the *shape* of the warmup response (monotone gain, then divergences),
+# not as a promise about the number printed below. And R-hat itself understates
+# the problem at low chain counts: two chains gave 1.089 where four give ~1.30,
+# because two chains simply have fewer ways to disagree. The four-chain number is
+# the trustworthy one, and it says this sector is not converged.
+#
+# Chains are cheap here and worth spending on, because they are what makes R-hat a
+# real between-chain diagnostic: peak RSS is 3.8 GB at one chain, 3.9 GB at two and
+# 5.0 GB at four, and compile time is flat at ~27 s throughout — the sampler is one
+# compiled `lax.scan`, so neither chains nor samples rebuild it.
 
 # %%
 # Fixed-length HMC on the precomputed model. Every gradient here goes through the
@@ -338,12 +357,17 @@ print(
 # chains at double the budget exhausted memory even under `chain_method=
 # "sequential"`, so this keeps the two chains that are known to fit and doubles
 # the warmup, which is what the adaptation actually needs.
-HMC_LONG = {**HMC_VALIDATED, "n_warmup": 2000}
+HMC_LONG = {**HMC_VALIDATED, "n_warmup": 3000, "n_samples": 1000}
+N_CHAINS = 4
 data = Data(photometry=(flux_phot, n_phot))
 
 t0 = time.perf_counter()
 posterior = ForwardModel.build(sed=model_fast).fit(
-    data, key=jax.random.PRNGKey(7), n_chains=2, chain_method="sequential", **HMC_LONG
+    data,
+    key=jax.random.PRNGKey(7),
+    n_chains=N_CHAINS,
+    chain_method="sequential",
+    **HMC_LONG,
 )
 elapsed = time.perf_counter() - t0
 rmax = max(float(v) for v in posterior.rhat().values())
@@ -358,7 +382,7 @@ n_draw = min(np.asarray(posterior.samples[p]).size for p in _free)
 n_unique = min(np.unique(np.asarray(posterior.samples[p])).size for p in _free)
 
 print(
-    f"HMC (2 chains x {HMC_LONG['n_warmup']}w+{HMC_LONG['n_samples']}s): "
+    f"HMC ({N_CHAINS} chains x {HMC_LONG['n_warmup']}w+{HMC_LONG['n_samples']}s): "
     f"{elapsed:5.0f}s   max R-hat {rmax:.3f}   divergences {n_divergent}"
 )
 print(f"  Mixing: worst parameter has {n_unique}/{n_draw} unique draws")

@@ -98,6 +98,7 @@ from tengri import (
     Photometry,
     SEDModel,
     Spectroscopy,
+    WavePrecomp,
     builders,
 )
 from tengri.observation import LineFluxData
@@ -158,7 +159,12 @@ LABEL = {
 }
 
 
-def build(observation, n_grid=N_GRID):
+#: The SSP x filter lookup table every fit on this page rides. One instance,
+#: shared by all three observables — see the note under the builds below.
+FAST_PATH = WavePrecomp()
+
+
+def build(observation, n_grid=N_GRID, approx=FAST_PATH):
     """The same physical model behind all three fits, on one observable.
 
     A rising double power law (Carnall et al. 2018) — a galaxy still forming stars,
@@ -176,20 +182,22 @@ def build(observation, n_grid=N_GRID):
         redshift=Fixed(Z_GAL),
         apply_igm=False,
         n_grid=n_grid,
+        approx=approx,
     )
 
 
-# These fits run on the exact wave grid, and that is why this page is slow: a fit
-# is all forward pass, and the HMC below is (300 + 200) x 100 = 50,000 gradient
-# evaluations. Measured on config A, the exact grid costs 6.66 ms per call where
-# the `WavePrecomp` table costs 0.10 ms — a factor of 67, for a 3e-4 relative
-# change in flux, far inside the S/N 20 noise here. The table is cheap to build
-# (~1 s) because the redshift is Fixed, so no z-grid quadrature is paid.
-#
-# It is not wired up here only because the attempt has not yet been shown to work:
-# the tables build fine (under a second, ~0.9 GB), but the fits were SIGKILLed on a
-# host that was itself out of memory, so that result proves nothing either way.
-# Re-measure on an idle machine before adopting it; see the tracking issue.
+# Every model here rides the `WavePrecomp` SSP x filter table (the `build` default
+# above). It is worth being precise about what that buys, because the per-call
+# figure oversells it: one photometry forward pass drops from 6.66 ms to 0.10 ms,
+# a factor of 67, for a 3e-4 relative flux change — far inside the S/N 20 noise.
+# But the HMC below speeds up by only ~1.4-1.7x (752 s on the exact path against
+# 450-550 s here, the spread being machine load), and the MAP fits by 1.4-2.9x,
+# because a field-SFH posterior spends most of its time in the
+# correlated-field prior and the dense mass matrix — neither of which a photometry
+# table touches. Measured per leapfrog step: the SED gradient is 0.51 ms while the
+# sampler pays ~7.7 ms, so the table is optimizing well under a tenth of the work.
+# The table itself costs ~1 s to build, since the redshift is Fixed and there is no
+# z-grid quadrature to pay for.
 model = {k: build(v) for k, v in OBSERVATION.items()}
 spec = model["B"].spec
 fixed_values = spec.get_fixed_values()
@@ -512,12 +520,15 @@ plt.show()
 # represent it.
 #
 # The cell below now prints the diagnostic, and it does not pass: **$\hat{R}
-# \approx 2.7$ with zero divergences** at this budget, on a $D=25$ posterior.
-# Zero divergences says the integrator is stable; $\hat{R} \approx 2.7$ says the
-# four chains settled in different places and never met. So the bands below are
-# **not credible intervals** — they are where four separate walkers happened to
-# sit. Read the recovered SFH *shape* against the truth, which is what this page
-# is for, and do not read the widths at all.
+# \approx 1.6$** at this budget, on a $D=25$ posterior, with a handful of
+# divergences. A stable integrator and a large $\hat{R}$ together say the chains
+# are each sampling something, but not the same thing. So the bands below are
+# **not credible intervals** — read the recovered SFH *shape* against the truth,
+# which is what this page is for, and do not read the widths.
+#
+# More sampling is not the fix, and this was measured rather than assumed:
+# quadrupling the budget on the fast path exhausts memory before it converges, and
+# the failure is geometric, not statistical.
 #
 # Fixed-length HMC is the wrong tool for a $D=25$ correlated field: a single
 # global trajectory length cannot serve a geometry whose curvature changes with
