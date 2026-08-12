@@ -1744,7 +1744,7 @@ sweep, which is what allowed the confound above to be settled.)
 
 ---
 
-## 5. The funnel (reproduced; partial centering helps, a=0.5 best so far)
+## 5. The funnel (reproduced; centering near a=0.75 clears it, one seed)
 
 `s = L(σ,τ)·ξ` is **bilinear**, so the (σ, ξ) geometry is a funnel. Symptoms:
 static HMC R̂(σ) = 4.42 at 1000/1000 and still 1.61 at 4000/4000 while ξ's own
@@ -1884,28 +1884,47 @@ recorded configuration, ``map_options={"n_steps": 40000}``:
 ``a``   R-hat(sigma)       max R-hat(xi)
 ======  =================  ==============
 1.00    **2.572**          0.971
+0.75    **1.040**          0.996
 0.50    **1.590**          0.991
+0.25    not measured       —
 0.00    **2.945**          0.983
 ======  =================  ==============
 
 ``a = 1`` reproduces this section's signature — sigma badly unmixed while xi
-stays healthy. **Partial centering helps: a = 0.5 cuts the excess over 1.0 by
-62% (1.572 → 0.590). Full centering is WORSE than none (2.945 vs 2.572).**
+stays healthy. **The remedy works: a = 0.75 reaches R-hat(sigma) = 1.040, below
+the 1.1 convergence threshold, from 2.572 at a = 1.** Both endpoints are bad and
+the optimum is interior; ``a = 0.5`` at 1.590 is already well off it, which is
+why an earlier read of these arms called the result merely PARTIAL.
 
 The interior optimum is the expected shape, not an anomaly:
 ``drw_partial_gp_from_zeta`` cites Papaspiliopoulos, Roberts & Skold — neither
 endpoint is universally better, and when prior and likelihood are comparably
 informative an intermediate ``a`` beats both. A boolean centered/non-centered
-switch would have found only the endpoints and concluded centering hurts.
+switch would have found only 2.572 and 2.945 and concluded centering **hurts**.
 
-xi stays healthy across all arms (0.971 / 0.991 / 0.983), so no arm is degraded
+``a = 0.25`` was killed twice by memory pressure and is unmeasured; it would
+refine the shape between 0 and 0.5 but cannot change the headline, since 0.75
+already clears the threshold.
+
+xi stays healthy across all measured arms (0.971 / 0.996 / 0.991 / 0.983), so no
+arm is degraded
 for an unrelated reason and the movement is attributable to the (sigma, xi)
 geometry.
 
-**Status: PARTIAL, not cured.** 1.590 is still far above 1.1. Open next steps,
-in order: scan intermediate ``a`` (0.25, 0.75) for the optimum, repeat over
-seeds — this is one seed at N=8 — and re-test after any change to the MAP
-escalation, since the expansion point feeds the sampler.
+**Status: the funnel HAS a working remedy — ``field_centering`` near 0.75 —
+on one seed.** R-hat(sigma) goes 2.572 → 1.040, which clears the 1.1 threshold.
+
+What that does **not** yet license is a default. This is **one seed, N=8, one
+mock population**, and the optimal ``a`` is a property of the prior/likelihood
+balance, so it moves with SNR, band set and population. The four measured points
+differ by 0.5–1.9 in R-hat, far outside the ~0.05 scatter seen between repeated
+healthy arms, so the *ordering* is solid; the *location* of the minimum is not
+pinned to better than ~0.25 in ``a``.
+
+Open next steps, in order: repeat at ``a`` = 0.75 across seeds to confirm the
+minimum is not a single-draw artifact; fill ``a = 0.25``; then vary SNR to see
+how far the optimum moves before anyone considers a default. Re-test after any
+change to the MAP escalation, since the expansion point feeds the sampler.
 
 **Record the configuration AND the code path next to any number here.** The
 configuration was recorded; what the prose omitted was which driver produced it,
