@@ -406,6 +406,55 @@ def pexrav_reflection(
     return jnp.where(in_band, R * mu_factor * g_branching * g_kn * l_primary, 0.0)
 
 
+def _cutoff_powerlaw_band_norm(
+    gamma: float,
+    E_cut: float,
+    E_ref: float,
+    E_lo: float,
+    E_hi: float,
+    n_grid: int = 200,
+) -> jnp.ndarray:
+    r"""Band integral of a cutoff power law, in frequency, over ``[E_lo, E_hi]``.
+
+    Evaluates :math:`\int_{\nu(E_{lo})}^{\nu(E_{hi})} (E/E_{ref})^{1-\Gamma}
+    e^{-E/E_{cut}}\,d\nu` on a uniform ``n_grid``-point energy grid.
+
+    Single definition of the XRB / hot-gas normalization convention (#1119).
+    Three call sites previously carried this block inline — HMXB and LMXB over
+    2-10 keV, hot gas over 0.5-2 keV — differing only in band edges and
+    constants. Sharing it keeps the convention in one place; the arithmetic and
+    its order are unchanged, so results are bit-identical to the inline form.
+
+    Parameters
+    ----------
+    gamma : float
+        Photon index :math:`\Gamma`.
+    E_cut : float
+        Exponential cutoff energy [keV].
+    E_ref : float
+        Reference energy for the power-law shape [keV].
+    E_lo, E_hi : float
+        Band edges [keV].
+    n_grid : int, optional
+        Trapezoid grid points. Default 200.
+
+    Returns
+    -------
+    jnp.ndarray
+        Band integral, floored at ``1e-60`` so it is safe as a divisor.
+
+    Notes
+    -----
+    **JIT-compatible**: yes. The floor is the same ``jnp.maximum(..., 1e-60)``
+    the inline sites used, so a degenerate spectrum still yields a finite
+    divisor rather than a division by zero.
+    """
+    E_fine = jnp.linspace(E_lo, E_hi, n_grid)  # keV
+    nu_fine = E_fine * _KEV_TO_HZ
+    spec_fine = (E_fine / E_ref) ** (-gamma + 1) * jnp.exp(-E_fine / E_cut)
+    return jnp.maximum(jnp.trapezoid(spec_fine, nu_fine), 1e-60)
+
+
 def xray_xrb_terms(
     wavelength: jnp.ndarray,
     sfr: float,
@@ -479,8 +528,11 @@ def xray_xrb_terms(
                 40.28 - 62.12Z + 569.44Z^2 - 1833.80Z^3 + 1968.33Z^4
                 \quad [\mathrm{erg\,s^{-1}\,(M_\odot\,yr^{-1})^{-1}}]
 
-        At solar metallicity (Z=0.02), this yields ≈ 2.6×10^39 erg/s per
-        M_sun/yr SFR, consistent with Grimm et al. 2003.
+        At the ``metallicity_z=0.02`` default this yields 1.78×10^39 erg/s
+        per M_sun/yr SFR; at the Asplund (2009) solar Z=0.0142 it yields
+        3.22×10^39 (#1755). Both are pinned by
+        ``test_xray_lehmer_hmxb_docstring_values``, so this number cannot
+        drift from the equation above again.
 
     **LMXB luminosity scaling** (Lehmer et al. 2016, ApJ 825, 7, Eq. 15):
         LMXBs are old systems (age > 1 Gyr), so their population traces
@@ -559,14 +611,11 @@ def xray_xrb_terms(
     spec_hmxb = (E_keV / E_ref) ** (-gamma_hmxb + 1) * jnp.exp(-E_keV / E_cut)
     spec_lmxb = (E_keV / E_ref) ** (-gamma_lmxb + 1) * jnp.exp(-E_keV / E_cut)
 
-    # Compute band integral of each spectral shape over 2-10 keV on a fine grid.
-    # ∫L_nu dnu = L_ref  → L_nu = L_ref * spec / ∫_band spec dnu
-    E_fine = jnp.linspace(2.0, 10.0, 200)  # keV
-    nu_fine = E_fine * _KEV_TO_HZ
-    spec_hmxb_fine = (E_fine / E_ref) ** (-gamma_hmxb + 1) * jnp.exp(-E_fine / E_cut)
-    spec_lmxb_fine = (E_fine / E_ref) ** (-gamma_lmxb + 1) * jnp.exp(-E_fine / E_cut)
-    band_int_hmxb = jnp.maximum(jnp.trapezoid(spec_hmxb_fine, nu_fine), 1e-60)
-    band_int_lmxb = jnp.maximum(jnp.trapezoid(spec_lmxb_fine, nu_fine), 1e-60)
+    # Band integral of each spectral shape over 2-10 keV (see
+    # :func:`_cutoff_powerlaw_band_norm`, the single definition of this
+    # convention). ∫L_nu dnu = L_ref  → L_nu = L_ref * spec / ∫_band spec dnu
+    band_int_hmxb = _cutoff_powerlaw_band_norm(gamma_hmxb, E_cut, E_ref, 2.0, 10.0)
+    band_int_lmxb = _cutoff_powerlaw_band_norm(gamma_lmxb, E_cut, E_ref, 2.0, 10.0)
 
     # Float32 (#1206): the XRB normalizations ``10**40.28`` (HMXB) and
     # ``10**40.276`` (LMXB) already exceed the float32 maximum (3.4e38) before
@@ -667,8 +716,11 @@ def xray_xrb(
                 40.28 - 62.12Z + 569.44Z^2 - 1833.80Z^3 + 1968.33Z^4
                 \quad [\mathrm{erg\,s^{-1}\,(M_\odot\,yr^{-1})^{-1}}]
 
-        At solar metallicity (Z=0.02), this yields ≈ 2.6×10^39 erg/s per
-        M_sun/yr SFR, consistent with Grimm et al. 2003.
+        At the ``metallicity_z=0.02`` default this yields 1.78×10^39 erg/s
+        per M_sun/yr SFR; at the Asplund (2009) solar Z=0.0142 it yields
+        3.22×10^39 (#1755). Both are pinned by
+        ``test_xray_lehmer_hmxb_docstring_values``, so this number cannot
+        drift from the equation above again.
 
     **LMXB luminosity scaling** (Lehmer et al. 2016, ApJ 825, 7, Eq. 15):
         LMXBs are old systems (age > 1 Gyr), so their population traces
@@ -921,11 +973,10 @@ def xray_hotgas(
     E_ref = 1.0  # keV (characteristic hot-gas energy)
     spec = (E_keV / E_ref) ** (-gamma + 1) * jnp.exp(-E_keV / E_cut)
 
-    # Normalize by integrating spectral shape over 0.5-2 keV
-    E_fine = jnp.linspace(0.5, 2.0, 200)  # keV
-    nu_fine = E_fine * _KEV_TO_HZ
-    spec_fine = (E_fine / E_ref) ** (-gamma + 1) * jnp.exp(-E_fine / E_cut)
-    band_int = jnp.maximum(jnp.trapezoid(spec_fine, nu_fine), 1e-60)
+    # Normalize by integrating spectral shape over 0.5-2 keV (see
+    # :func:`_cutoff_powerlaw_band_norm`, the single definition of this
+    # convention).
+    band_int = _cutoff_powerlaw_band_norm(gamma, E_cut, E_ref, 0.5, 2.0)
 
     # Float32 (#1206): ``10**38.919 = 8.3e38`` already exceeds the float32
     # maximum (3.4e38) BEFORE ``sfr`` is applied, so ``L_hotgas_ref`` is ``inf``
