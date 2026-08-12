@@ -12,21 +12,31 @@ import warnings
 import jax
 import numpy as np
 
+from tengri.config.exceptions import GasStellarMetallicityWarning, warn_measured
 from tengri.inference.catalog_fitter import (
     CatalogPosterior,
     _CatalogFitterOriginal as CatalogFitter,
 )
 from tengri.inference.catalog_ingest import ingest_catalog
+from tengri.inference.history_ingest import ingest_histories
 
 __all__ = ["Catalog"]
 
+#: How far the present-day stellar metallicity may sit from a fixed gas-phase
+#: value before :func:`_warn_gas_left_at_default` speaks up [dex]. 0.3 dex is
+#: 2x in Z — comfortably inside the scatter of the observed mass-metallicity
+#: relation, so a deliberate offset of that size stays quiet, while the
+#: default-vs-enriched mismatch this guards (typically >1 dex) does not.
+_GAS_STELLAR_TOLERANCE_DEX = 0.3
 
-def _stellar_config(fwd):
-    """The StellarSEDComponent's config off a built ForwardModel, or None.
+
+def _stellar_component(fwd):
+    """The StellarSEDComponent off a built ForwardModel, or None.
 
     Used to tell a tabulated-SFH model from a parametric one before accepting
     histories, so :meth:`Catalog.from_histories` can name the fix instead of
-    letting the #996 runtime check fire deep in the forward pass.
+    letting the #996 runtime check fire deep in the forward pass — and to reach
+    the SSP metallicity grid the ingest checks a Z(t) history against (#1677).
     """
     from tengri.components.stellar.component import StellarSEDComponent
 
@@ -34,8 +44,111 @@ def _stellar_config(fwd):
         chain = fwd.populations[0].sed._build_component_chain()
     except (AttributeError, IndexError):
         return None
-    stellar = next((c for c in chain if isinstance(c, StellarSEDComponent)), None)
+    return next((c for c in chain if isinstance(c, StellarSEDComponent)), None)
+
+
+def _stellar_config(fwd):
+    """The StellarSEDComponent's config off a built ForwardModel, or None."""
+    stellar = _stellar_component(fwd)
     return None if stellar is None else stellar.config
+
+
+def _warn_gas_left_at_default(fwd, hist, params):
+    """Flag enriched stars sitting in gas that never enriched with them (#1677).
+
+    A tabulated stellar metallicity says the galaxy chemically evolved. The
+    gas-phase metallicity that drives nebular emission is a *separate*
+    parameter, and its declared default is a fixed 0.5 Zsun — the four backends
+    do carry an ``if neb_logZ_gas is None: neb_logZ_gas = log_z`` inheritance,
+    but the build grammar always supplies the default, so that branch never runs
+    and the gas never follows the stars. Measured: unset is bit-identical to
+    ``neb_logZ_gas=-0.3``.
+
+    Nothing is wrong with decoupling them — real galaxies do it, through inflow
+    of pristine gas — but it should be a decision, not an oversight, so this
+    warns only when the model left the value at its declaration *and* the caller
+    supplied neither ``met_gas=`` nor a ``neb_logZ_gas`` column.
+    """
+    from tengri.parameters.priors import Fixed
+
+    if params and "neb_logZ_gas" in params:
+        return
+    try:
+        dist = fwd.spec.get_distribution("neb_logZ_gas")
+    except (KeyError, AttributeError):
+        return
+    if not isinstance(dist, Fixed):
+        return  # declared free: the fit owns it, not us
+
+    gas = float(dist.value)
+    present_day = np.asarray(hist.met)[:, -1]
+    offset = float(np.max(np.abs(present_day - gas)))
+    if offset < _GAS_STELLAR_TOLERANCE_DEX:
+        return
+
+    warn_measured(
+        f"the stellar metallicity history reaches {present_day.min():.2f} to "
+        f"{present_day.max():.2f} log10(Z/Zsun) at the present day, but the "
+        f"gas-phase metallicity is fixed at its default {gas:.2f} — up to "
+        f"{offset:.2f} dex apart. They are separate parameters and the gas does "
+        f"not follow the stars, so nebular emission here is computed for gas "
+        f"that never enriched with the population that ionizes it. Pass "
+        f"met_gas= (the same units as met=) to tie them together, or set "
+        f"neb={{'logZ_gas': ...}} deliberately to keep them apart (#1677).",
+        GasStellarMetallicityWarning,
+        gas_logzsol=gas,
+        stellar_present_day_min=float(present_day.min()),
+        stellar_present_day_max=float(present_day.max()),
+        offset_dex=offset,
+        stacklevel=3,
+    )
+
+
+def _nebular_backend(fwd):
+    """The active nebular backend name, or None if the model has no nebular block.
+
+    ``"none"`` and ``"baked_in"`` both mean nothing consumes ``neb_logZ_gas``:
+    the first has no nebular component, the second has emission already inside
+    the SSP templates and returns zeros. Either way a gas-phase metallicity
+    would be accepted and discarded, so both read as absent here.
+    """
+    from tengri.components.nebular.component import NebularSEDComponent
+
+    try:
+        chain = fwd.populations[0].sed._build_component_chain()
+    except (AttributeError, IndexError):
+        return None
+    neb = next((c for c in chain if isinstance(c, NebularSEDComponent)), None)
+    if neb is None:
+        return None
+    backend = getattr(neb.config, "backend", None)
+    return None if backend in (None, "none", "baked_in") else backend
+
+
+def _has_build_time_met(cfg):
+    """Does the component already carry a Z(t) table from build time?
+
+    ``metallicity_model='table'`` has two sources — a table pinned onto the
+    config at build, or the runtime ``met_history`` array. Only the second is
+    ``from_histories``' business, so the missing-``met=`` check has to let the
+    first one through.
+    """
+    return (
+        getattr(cfg, "met_table_log_age_yr", None) is not None
+        and getattr(cfg, "met_table_log_z_abs", None) is not None
+    )
+
+
+def _ssp_lgmet(fwd):
+    """The model's SSP metallicity grid (absolute log10(Z)), or None.
+
+    ``None`` for a component built without SSP data — a synthetic or
+    placeholder construction path — in which case there is no grid to check a
+    metallicity history against and the check is skipped rather than guessed.
+    """
+    stellar = _stellar_component(fwd)
+    ssp = None if stellar is None else getattr(stellar, "ssp_data", None)
+    return None if ssp is None else getattr(ssp, "ssp_lgmet", None)
 
 
 class Catalog:
@@ -364,6 +477,9 @@ class Catalog:
         t_gyr,
         sfr,
         met=None,
+        met_gas=None,
+        met_unit="logzsol",
+        on_out_of_grid="raise",
         redshift=None,
         params=None,
         flux_unit="cgs_fnu",
@@ -389,10 +505,51 @@ class Catalog:
             Cosmic time [Gyr], strictly increasing. A 1-D grid is shared by
             every galaxy and broadcast.
         sfr : array_like, shape (N, n_t)
-            Star formation rate [Msun/yr] at those times. Must be non-negative.
-        met : array_like, shape (N, n_t), optional
-            Metallicity history, log10(Z/Zsun), at the same nodes. Requires the
-            model's ``metallicity_model='table'``.
+            Star formation rate [Msun/yr] at those times. Must be finite and
+            non-negative.
+        met : array_like, shape (n_t,) or (N, n_t), optional
+            **Stellar** metallicity history in ``met_unit`` at the same nodes —
+            the Z each generation of stars formed from, which selects the SSP
+            templates. A 1-D history is shared by every galaxy and broadcast,
+            the same way ``t_gyr`` is. Requires the model's
+            ``metallicity_model='table'``; conversely a model built that way
+            requires a history here, and says so at construction rather than
+            inside the first forward pass.
+        met_gas : array_like, shape (N,), (n_t,) or (N, n_t), optional
+            **Gas-phase** metallicity in ``met_unit`` — the Z of the ionized gas
+            that drives nebular emission. A separate physical quantity from
+            ``met`` and set independently of it: inflow of pristine gas genuinely
+            decouples the two. Given as a track, the last node is taken as the
+            observed epoch, because nebular emission comes from stars younger
+            than ~10 Myr and only the present-day value is observable.
+
+            Left unset, the model's own ``neb_logZ_gas`` applies — and its
+            declared default is a fixed 0.5 Zsun that does **not** follow the
+            stellar history, so a tabulated ``met=`` alongside it emits
+            :class:`~tengri.config.exceptions.GasStellarMetallicityWarning`
+            rather than quietly enriching the stars but not the gas (#1677).
+            Requires an active nebular backend; without one there is nothing to
+            consume it and it is refused.
+        met_unit : {"logzsol", "log_z_abs", "z_mass_fraction"}, default "logzsol"
+            The unit ``met`` arrives in. ``"logzsol"`` is log10(Z/Zsun),
+            tengri's user-facing convention; ``"log_z_abs"`` is absolute
+            log10(Z), the SSP grid's own; ``"z_mass_fraction"`` is the raw metal
+            mass fraction :math:`Z`, which is what a simulation snapshot stores.
+            Declaring it matters: ``Z = 2e-4`` is a perfectly legal ``logzsol``
+            value, so a mass fraction read as log10(Z/Zsun) is a silent factor
+            of ~70 in metallicity (#1677). Leaving it at the default on a
+            history that reads like a mass fraction emits
+            :class:`~tengri.config.exceptions.MetallicityUnitWarning` — the
+            SSP-grid check cannot catch that case, because those values are
+            in-grid.
+        on_out_of_grid : {"raise", "warn", "ignore"}, default "raise"
+            What to do when a metallicity node falls outside the SSP's grid,
+            where the lookup silently clips to the edge. ``"warn"`` emits
+            :class:`~tengri.config.exceptions.OutOfSSPGridWarning` carrying the
+            share of stellar mass affected; ``"ignore"`` restores the pre-#1677
+            silence. Simulations reach primordial metallicities at early times
+            routinely, so this fires on real data — clip the history, load a
+            wider SSP, or downgrade the policy deliberately.
         redshift : array_like, shape (N,), optional
             Per-galaxy redshift. Needs a ``catalog_z_range`` on the model for
             the catalog to stay one compile (#1316).
@@ -412,9 +569,37 @@ class Catalog:
         Raises
         ------
         ValueError
-            If the model does not declare a tabulated SFH (or a tabulated
-            metallicity when ``met`` is given), if ``t_gyr`` is not strictly
-            increasing, if any SFR is negative, or if the shapes disagree.
+            If the model does not declare a tabulated SFH; if ``met`` is given
+            without a tabulated metallicity, or a tabulated metallicity is
+            declared without ``met``; if ``t_gyr`` is not strictly increasing;
+            if any value is non-finite or any SFR negative; if the shapes
+            disagree; or if a metallicity node is off-grid under the default
+            ``on_out_of_grid='raise'``.
+
+        Warns
+        -----
+        OutOfSSPGridWarning
+            Under ``on_out_of_grid='warn'``, carrying the share of stellar mass
+            formed on clamped nodes.
+        MetallicityUnitWarning
+            When the history reads like a metal mass fraction taken for
+            log10(Z/Zsun).
+        GasStellarMetallicityWarning
+            When a tabulated stellar metallicity is supplied but the gas-phase
+            metallicity is left at its fixed declared default, so the stars
+            enrich and the gas does not.
+
+        See Also
+        --------
+        tengri.inference.history_ingest.ingest_histories
+            The validation itself, and the measured failure modes it closes.
+
+        Notes
+        -----
+        **JIT-compatible**: no — eager validation at construction, by design.
+        The forward model clips metallicity onto the SSP grid inside JIT, where
+        no Python exception can be raised, so ingest is the only place a bad
+        history can still be refused.
 
         Examples
         --------
@@ -422,6 +607,12 @@ class Catalog:
         ...     fwd, t_gyr=t, sfr=sfr, redshift=z, params={"dust_tau_diff": tau}
         ... )
         >>> flux = cat.predict()
+
+        Straight from a snapshot, where metallicity is a mass fraction:
+
+        >>> cat = Catalog.from_histories(
+        ...     fwd, t_gyr=t, sfr=sfr, met=Z_gas, met_unit="z_mass_fraction"
+        ... )
         """
         cfg = _stellar_config(fwd)
         if cfg is None or cfg.sfh_model != "table":
@@ -432,52 +623,54 @@ class Catalog:
                 f"Rebuild with SEDModel.build(..., sfh={{'type': 'table'}})."
             )
 
-        sfr = np.asarray(sfr)
-        if sfr.ndim != 2:
-            raise ValueError(f"sfr must be (N, n_t); got shape {sfr.shape}.")
-        n_galaxies, n_t = sfr.shape
-
-        t_gyr = np.asarray(t_gyr)
-        if t_gyr.ndim == 1:
-            t_gyr = np.broadcast_to(t_gyr, (n_galaxies, t_gyr.shape[0])).copy()
-        if t_gyr.ndim != 2:
-            raise ValueError(f"t_gyr must be (n_t,) or (N, n_t); got shape {t_gyr.shape}.")
-        if t_gyr.shape[1] != n_t:
+        if met is not None and cfg.metallicity_model != "table":
             raise ValueError(
-                f"t_gyr and sfr disagree on n_t: t_gyr has {t_gyr.shape[1]}, "
-                f"sfr has {n_t}. They index the same history nodes."
+                f"met= needs a model built with stellar={{'met_mode': 'table'}}; "
+                f"this model's metallicity_model is {cfg.metallicity_model!r}. "
+                f"Either rebuild with a tabulated metallicity or drop met=. "
+                f"('table' is the one metallicity mode that cannot be inferred "
+                f"from parameter names — it declares no fittable parameters — so "
+                f"it has to be named explicitly.)"
+            )
+        if met is None and cfg.metallicity_model == "table" and not _has_build_time_met(cfg):
+            raise ValueError(
+                "this model was built with stellar={'met_mode': 'table'}, so its "
+                "metallicity arrives at runtime the same way its SFH does — but "
+                "no met= history was given and the component carries no build-time "
+                "table either. Pass met= alongside sfr=, or rebuild without "
+                "met_mode='table' (the default 'delta' takes a single "
+                "met_logzsol). Left as it is, the model builds and the first "
+                "predict() fails inside the forward pass instead of here (#1677)."
             )
 
-        if not np.all(np.diff(t_gyr, axis=1) > 0.0):
+        backend = _nebular_backend(fwd)
+        if met_gas is not None and backend is None:
             raise ValueError(
-                "t_gyr must be strictly increasing along the time axis (cosmic "
-                "time [Gyr], not lookback). A non-monotonic grid interpolates to "
-                "garbage without raising downstream."
-            )
-        if np.any(sfr < 0.0):
-            raise ValueError(
-                "sfr has negative entries [Msun/yr]. A negative SFR subtracts "
-                "stellar mass in the age-weight integral, silently."
+                "met_gas= sets the gas-phase metallicity that drives nebular "
+                "emission, but this model has no active nebular backend, so "
+                "nothing would consume it. Build with neb={'type': 'cue'} (or "
+                "another backend from tengri.list_nebular_backends()), or drop "
+                "met_gas=. Note neb={'type': 'ssp'} bakes emission into the "
+                "templates and takes no gas-phase metallicity either."
             )
 
-        columns = {"sfh_t_gyr": t_gyr, "sfh_sfr": sfr}
+        hist = ingest_histories(
+            t_gyr=t_gyr,
+            sfr=sfr,
+            met=met,
+            met_gas=met_gas,
+            met_unit=met_unit,
+            on_out_of_grid=on_out_of_grid,
+            ssp_lgmet=_ssp_lgmet(fwd),
+        )
 
-        if met is not None:
-            if cfg.metallicity_model != "table":
-                raise ValueError(
-                    f"met= needs a model built with stellar={{'met_mode': 'table'}}; "
-                    f"this model's metallicity_model is {cfg.metallicity_model!r}. "
-                    f"Either rebuild with a tabulated metallicity or drop met=. "
-                    f"('table' is the one metallicity mode that cannot be inferred "
-                    f"from parameter names — it declares no fittable parameters — so "
-                    f"it has to be named explicitly.)"
-                )
-            met = np.asarray(met)
-            if met.shape != sfr.shape:
-                raise ValueError(
-                    f"met must match sfr's shape (N, n_t); got {met.shape} vs {sfr.shape}."
-                )
-            columns["met_history"] = met
+        columns = {"sfh_t_gyr": hist.t_gyr, "sfh_sfr": hist.sfr}
+        if hist.met is not None:
+            columns["met_history"] = hist.met
+        if hist.met_gas is not None:
+            columns["neb_logZ_gas"] = hist.met_gas
+        elif met is not None and backend is not None:
+            _warn_gas_left_at_default(fwd, hist, params)
 
         if redshift is not None:
             columns["redshift"] = np.asarray(redshift)
