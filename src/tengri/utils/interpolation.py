@@ -23,6 +23,7 @@ import math
 import jax
 import jax.numpy as jnp
 import numpy as np
+from jax import dtypes as jax_dtypes
 
 
 @jax.jit
@@ -118,9 +119,21 @@ def compute_grid_weights(
     array, shape (n,)
         Non-negative weights summing to 1.
     """
+    # Canonicalize to the dtype JAX is currently defaulting to. Template grids
+    # (SKIRTOR, dust libraries) are built and cached at import, so their axes stay
+    # float64 even inside ``jax.enable_x64(False)``; the ``jnp.argmin`` below then
+    # builds a float32 initial value against a float64 operand and the reduction
+    # raises. Under x64=True the canonical float IS float64, so this is a no-op and
+    # float64 results are bit-unchanged (#1206).
+    dt = jax_dtypes.canonicalize_dtype(jnp.result_type(jnp.asarray(x), jnp.asarray(grid)))
+    x = jnp.asarray(x, dtype=dt)
+    grid = jnp.asarray(grid, dtype=dt)
+
     n = grid.shape[0]
     if edges is None:
         edges = edges_for_grid(grid)
+    else:
+        edges = jnp.asarray(edges, dtype=dt)
     raw = tw_cuml_kern(x, edges[:-1], scatter) - tw_cuml_kern(x, edges[1:], scatter)
     total = jnp.sum(raw)
     # Fallback: place all weight on the nearest bin if kernel misses the grid

@@ -92,6 +92,7 @@ from tengri.components.stellar.sfh.metallicity_history import (
 from tengri.components.stellar.sps.dsps_wrapper import (
     LSUN_ERG_PER_S,
     SSPData,
+    canonical_dsps_kwargs,
     compute_log_z_evolving,
     compute_surviving_mass,
     effective_metallicity,
@@ -101,7 +102,7 @@ from tengri.components.stellar.sps.dsps_wrapper import (
     interpolate_mass_remaining,
 )
 from tengri.parameters.translate import LOG10_ZSUN
-from tengri.utils.scale import pow10
+from tengri.utils.scale import _not_computable, log10_magnitude, pow10
 
 # Default time bins for ``metallicity_model="bins"`` /
 # ``"bins_continuity"`` — log-spaced from 1 Myr to 13.7 Gyr,
@@ -603,6 +604,143 @@ def _youngest_bin_lookback_multiplier(ssp_lg_age_gyr):
     return jnp.where(is_youngest, boost, 1.0)
 
 
+@jax.custom_jvp
+def _mass_scale_lnu(per_msun_lsun, total_mass):
+    r"""``total_mass * per_msun_lsun * L_sun`` with a float32-safe reverse pass (#1206).
+
+    Scales a per-solar-mass SSP luminosity [Lsun/(Hz*Msun)] to the physical
+    quantity [erg/s/Hz] by the formed stellar mass and the solar-luminosity
+    constant. Used for the full-wave stellar SED and for every per-filter /
+    sub-band / spectrum photometry-LUT tensor that carries the same scaling.
+
+    Parameters
+    ----------
+    per_msun_lsun : array_like
+        Per-solar-mass weighted SSP luminosity. [Lsun/(Hz*Msun)]
+    total_mass : array_like, scalar
+        Formed stellar mass. [Msun]
+
+    Returns
+    -------
+    ndarray
+        ``total_mass * per_msun_lsun * L_sun`` [erg/s/Hz], same shape as input.
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe**: yes. The forward is the plain triple product, so the
+    value is bit-identical to writing it inline. The custom VJP exists only to
+    pin the reverse pass's multiply *order*, which autodiff otherwise leaves to
+    XLA:
+
+    * ``d/d(per_msun) = (g * total_mass) * L_sun`` -- ``g * total_mass`` first,
+      so the standalone Jacobian ``total_mass * L_sun`` ~3.8e43 (``inf`` in
+      float32) is never formed.
+    * ``d/d(total_mass) = sum(g * (per_msun * L_sun))`` -- ``per_msun * L_sun``
+      (~3.8e18) first, avoiding the ``g * per_msun`` (~1e-41) float32 underflow.
+
+    Under a plain product, XLA's fused reverse pass materializes ``total_mass *
+    L_sun`` as a standalone Jacobian and overflows float32 to ``inf``. Multiplied
+    by any incoming cotangent that is itself finite, the ``inf`` still poisons
+    the SSP-contraction ``dot_general`` (``inf``/``nan``) regardless of the
+    cotangent's magnitude. Folding L_sun into the einsum operand does not survive
+    either: when the SSP grid is threaded as an XLA ``Parameter`` (the inference
+    hot path) the algebraic simplifier pulls the constant back out. A
+    custom-rule boundary is the one thing XLA reassociation cannot cross.
+    Identical in float64 (the gradient differs only at the last bit from the
+    multiply reorder), so this is **one path for both precisions** — float64
+    does not need the pin but is unharmed by it, and a dtype-branched
+    implementation would mean the float64 tests stopped exercising what
+    float32 actually runs.
+
+    The rule is a ``custom_jvp``, not a ``custom_vjp``. Both pin the order, but
+    a ``custom_vjp`` is **opaque to forward mode** — ``jvp`` raises
+    ``TypeError: can't apply forward-mode autodiff (jvp) to a custom_vjp
+    function`` — and geoVI builds its metric with forward-mode autodiff, so the
+    ``custom_vjp`` spelling turned ``test_geovi_mode_stable_convergence`` red.
+    A ``custom_jvp`` serves forward mode directly and reverse mode by
+    transposition, and the transpose of the groupings below is exactly the
+    hand-written VJP this replaces.
+    """
+    return total_mass * per_msun_lsun * LSUN_ERG_PER_S
+
+
+@_mass_scale_lnu.defjvp
+def _mass_scale_lnu_jvp(primals, tangents):
+    """Grouped so neither mode forms ``total_mass * L_sun`` (~3.8e43, inf in float32).
+
+    Transposing these two terms gives ``d/d(per_msun) = (g*total_mass)*L_sun``
+    and ``d/d(total_mass) = sum(g*(per_msun*L_sun))`` — the safe reverse pass.
+    """
+    per_msun_lsun, total_mass = primals
+    d_per_msun, d_total_mass = tangents
+    primal_out = total_mass * per_msun_lsun * LSUN_ERG_PER_S
+    # ``optimization_barrier`` is what keeps the grouping: a ``custom_jvp``'s
+    # transpose is inlined into the backward jaxpr and XLA is then free to
+    # re-associate it back into ``total_mass * L_sun`` (3.8e43, inf in float32)
+    # — measured, nine float32 gradient tests went red without these barriers.
+    # Unlike ``custom_vjp``, a barrier blocks reassociation WITHOUT making the
+    # function opaque to forward mode, so geoVI can still differentiate it.
+    barrier = jax.lax.optimization_barrier
+    tangent_out = barrier(d_per_msun * total_mass) * LSUN_ERG_PER_S + d_total_mass * barrier(
+        per_msun_lsun * LSUN_ERG_PER_S
+    )
+    return primal_out, tangent_out
+
+
+@jax.custom_jvp
+def _flux_weighted_node(num, den):
+    r"""``num / den`` (a flux-weighted mean wavelength) with a float32-safe VJP (#1206).
+
+    The sub-band node wavelength is ``λ_k = Σ(w·λ·φ) / Σ(w·φ)`` — a ratio whose
+    value is a well-defined ~5000 Å regardless of how small the denominator
+    ``den = Σ(w·φ)`` is, but whose *autodiff* Jacobian ``d/d(den) = -num/den^2``
+    overflows float32 for a tiny ``den`` (a near-zero-weight sub-band). The
+    downstream cotangent is itself weighted by ``~den`` (a near-zero-weight node
+    barely affects the dust law), so the *true* gradient is finite — the ``den``
+    cancels — but XLA's fused reverse pass materializes ``num/den^2`` standalone
+    first and hits ``inf``. When the node is not consumed at all the cotangent
+    is exactly 0 and the result is ``0*inf = nan``.
+
+    Parameters
+    ----------
+    num, den : array_like
+        Numerator ``Σ(w·λ·φ)`` and denominator ``Σ(w·φ)`` of the flux-weighted
+        mean wavelength. ``den`` is pre-floored away from exact zero by the
+        caller.
+
+    Returns
+    -------
+    ndarray
+        ``num / den``, same shape.
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe**: yes. The custom VJP forms ``g/den`` *first*
+    (finite: the cotangent scales with ``den``, and is 0 when the node is
+    unused) and only then multiplies by ``num/den`` — the standalone ``den^2``
+    is never materialized. Identical in float64, and deliberately **one path
+    for both precisions**: see :func:`_mass_scale_lnu` for why this is a
+    ``custom_jvp`` rather than a ``custom_vjp`` (forward mode, which geoVI
+    needs, cannot cross a ``custom_vjp``).
+    """
+    return num / den
+
+
+@_flux_weighted_node.defjvp
+def _flux_weighted_node_jvp(primals, tangents):
+    """``d(num/den) = (d_num - (num/den)*d_den) / den`` — never forms ``den**2``.
+
+    The naive form ``d_num/den - num*d_den/den**2`` squares the denominator;
+    factoring the ``1/den`` out leaves one division by ``den`` and reuses the
+    primal quotient, which is a well-behaved ~5000 Angstrom. Transposed, this
+    gives ``g/den`` and ``-(g/den)*(num/den)`` — the safe reverse pass.
+    """
+    num, den = primals
+    d_num, d_den = tangents
+    quotient = num / den
+    return quotient, (d_num - quotient * d_den) / den
+
+
 def _age_weights_cic(age_yr, sfr, ssp_ages_yr, t_obs_gyr):
     r"""Interpolation-weighted (cloud-in-cell) SSP age weights (#964).
 
@@ -699,6 +837,55 @@ def _cic_parcels(age_yr, sfr, ssp_ages_yr, t_obs_gyr):
     return contrib, idx, f, total_mass, age
 
 
+def _lgmet_weights(log_z, lgmet_scatter, ssp_lgmet):
+    """DSPS lognormal-MDF metallicity weights, operands canonicalized to one dtype.
+
+    Parameters
+    ----------
+    log_z : array_like, scalar
+        Absolute ``log10(Z)`` of the parcel. [dex]
+    lgmet_scatter : array_like, scalar
+        Width of the lognormal MDF. [dex]
+    ssp_lgmet : array_like, shape (n_met,)
+        SSP metallicity axis, absolute ``log10(Z)``. [dex]
+
+    Returns
+    -------
+    ndarray, shape (n_met,)
+        Non-negative weights summing to 1.
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe**: yes.
+
+    ``ssp_lgmet`` is the cached host SSP grid, built once at load time, so it
+    stays float64 even inside ``jax.enable_x64(False)`` while the parameters
+    arrive as float32 tracers. DSPS then sizes its ``dt`` array from the float64
+    grid and scatters an f32-derived value into it
+    (``dt.at[1:-1].set(dtmids)`` in ``dsps.sed.metallicity_weights``), which JAX
+    reports today as::
+
+        FutureWarning: scatter inputs have incompatible types: cannot safely
+        cast value from dtype=float32 to dtype=float64 ...
+        In future JAX releases this will result in an error.
+
+    Canonicalizing all three operands first removes the mixed-dtype scatter.
+    Under ``x64=True`` the canonical float *is* float64, so this is a no-op
+    there and float64 results are bit-unchanged — the property that makes the
+    pattern safe to apply broadly. Same treatment as
+    :func:`tengri.utils.interpolation.compute_grid_weights` (#1206, #1448).
+
+    All three DSPS lognormal-MDF call sites in this module route through here so
+    the canonicalization cannot drift between them.
+    """
+    from dsps.sed.metallicity_weights import calc_lgmet_weights_from_lognormal_mdf
+
+    args = canonical_dsps_kwargs(log_z=log_z, lgmet_scatter=lgmet_scatter, ssp_lgmet=ssp_lgmet)
+    return calc_lgmet_weights_from_lognormal_mdf(
+        args["log_z"], args["lgmet_scatter"], args["ssp_lgmet"]
+    )
+
+
 def _joint_weights_cic_met_table(
     age_yr, sfr, ssp_ages_yr, t_obs_gyr, lgmet_on_ssp_ages, lgmet_scatter, ssp_lgmet
 ):
@@ -736,13 +923,11 @@ def _joint_weights_cic_met_table(
     **JIT/grad/vmap-safe**: static shapes; the met axis uses DSPS's own
     lognormal-MDF kernel vmapped over parcels.
     """
-    from dsps.sed.metallicity_weights import calc_lgmet_weights_from_lognormal_mdf
-
     contrib, idx, f, total_mass, age = _cic_parcels(age_yr, sfr, ssp_ages_yr, t_obs_gyr)
     lg_nodes = jnp.log10(jnp.maximum(ssp_ages_yr, 1e-30))
     lg_age = jnp.log10(jnp.maximum(age, 1e-30))
     lgmet_par = jnp.interp(lg_age, lg_nodes, lgmet_on_ssp_ages)
-    met_w = jax.vmap(lambda g: calc_lgmet_weights_from_lognormal_mdf(g, lgmet_scatter, ssp_lgmet))(
+    met_w = jax.vmap(lambda g: _lgmet_weights(g, lgmet_scatter, ssp_lgmet))(
         lgmet_par
     )  # (n_parcel, n_met)
     n_met = ssp_lgmet.shape[0]
@@ -1011,6 +1196,7 @@ __all__ = [
     "StellarSEDComponentState",
 ]
 
+
 #: Smallest sub-band weight whose node wavelength ``sub_num / sub_phi`` still has
 #: a representable **derivative** (#1397). The value is a ratio of two tiny
 #: numbers and stays finite far below this, but the quotient rule needs
@@ -1021,7 +1207,22 @@ __all__ = [
 #: is still nonzero. Sub-bands under this floor carry no measurable flux, so
 #: their node falls back to the band effective wavelength exactly as an
 #: identically-zero sub-band does.
-_SUBBAND_LIVE_FLOOR: float = 1e-150
+def _subband_live_floor() -> float:
+    """The ``1e-150`` liveness floor above, made representable (#1568).
+
+    ``1e-150`` is far below float32's smallest subnormal (1.4e-45), so in
+    float32 ``jnp.abs(sub_phi) > _subband_live_floor()`` degenerated to
+    ``> 0.0`` — exactly the ``sub_phi != 0.0`` test the comment above explains
+    is insufficient, and which #1397 replaced this floor *because* it does not
+    protect the backward pass.
+
+    Evaluated at trace time so it resolves against the working dtype; float64
+    keeps ``1e-150`` unchanged.
+    """
+    from tengri.utils.scale import representable_floor
+
+    return representable_floor(1e-150)
+
 
 # Lyman limit — wavelengths below this contribute to the ionizing
 # photon rate (matches :mod:`tengri.components.nebular.ionizing_spectrum`).
@@ -1067,7 +1268,9 @@ def _integrate_nion_log10(
     ionizing-only slice. Peak normalization and deferred 1/h keep all
     intermediates within float32 range.
     """
-    peak = jnp.max(jnp.abs(sed_lnu), initial=0.0)  # #1207 hardening pattern
+    # stop_gradient: pure factorization constant (#1436) — log10(peak) is added back
+    # below, so the peak cancels analytically.
+    peak = jax.lax.stop_gradient(jnp.max(jnp.abs(sed_lnu), initial=0.0))  # #1207
     peak = jnp.where(peak > 0, peak, jnp.ones_like(peak))
     ell = sed_lnu / peak  # O(1) normalized L_nu
     nu = C_AA / wave
@@ -1083,10 +1286,17 @@ def _integrate_nion_log10(
     rectangle_correct = integrand_below * jnp.abs(nu[idx_below] - nu_edge)
     nion_bulk = jnp.abs(jnp.trapezoid(integrand_masked, nu))
     norm = nion_bulk - triangle_overcount + rectangle_correct  # #537 correction BEFORE the log
-    pos = norm > 0
-    safe = jnp.where(pos, norm, 1.0)  # where-dummy: grad-safe log at zero flux
-    log10_norm = jnp.where(pos, jnp.log10(safe), -jnp.inf)
-    return log10_norm + jnp.log10(peak) - jnp.log10(H_PLANCK) + log10_scale
+    # log10_magnitude keeps "no ionizing flux" (-inf) apart from "the SED was
+    # corrupt" (+inf). The hand-rolled ``norm > 0`` here was False for NaN, so a
+    # non-finite ionizing SED gave log_nion = -inf, pow10 -> 0, and nebular
+    # emission silently switched off entirely — the #1001 fail-open class, in
+    # the quantity Tier B introduced to avoid it (#1527).
+    log10_norm = log10_magnitude(norm)
+    offsets = jnp.log10(peak) - jnp.log10(H_PLANCK) + log10_scale
+    # -inf + finite is -inf (true zero) and +inf + finite is +inf (corrupt), so
+    # both sentinels survive the offset addition unchanged; only a +inf peak
+    # could turn one into NaN, and that is itself corrupt.
+    return jnp.where(_not_computable(log10_norm), jnp.inf, log10_norm + offsets)
 
 
 def _integrate_nion(sed_lnu: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
@@ -1398,6 +1608,7 @@ class StellarSEDComponent:
             DerivedKey("sfr_10myr", "Msun/yr", "Time-weighted SFR over last 10 Myr"),
             DerivedKey("sfr_100myr", "Msun/yr", "Time-weighted SFR over last 100 Myr"),
             DerivedKey("L_age", "erg/s", "Bolometric L per SSP age bin"),
+            DerivedKey("log_L_age", "dex", "log10(L per SSP age bin / (erg/s)); float32-safe"),
             DerivedKey("lnu_age", "erg/s/Hz", "Per-age L_nu cube, shape (n_age, n_wave)"),
             DerivedKey(
                 "joint_weights",
@@ -1408,6 +1619,12 @@ class StellarSEDComponent:
                 "stellar_mass_scale",
                 "erg/s/Hz",
                 "total_mass x L_sun: scales SSP per-Msun luminosities to erg/s/Hz",
+            ),
+            DerivedKey(
+                "log_stellar_mass_scale",
+                "dex",
+                "log10(total_mass x L_sun): the float32-safe form of "
+                "stellar_mass_scale, which is ~1e43 and so overflows float32",
             ),
             DerivedKey("ssp_ages_yr", "yr", "SSP age axis"),
             DerivedKey("age_weights", "Msun", "CSP mass weights per SSP age bin"),
@@ -2177,13 +2394,7 @@ class StellarSEDComponent:
                 age_w_cic, total_mass = _age_weights_cic(
                     _fine_age_yr, _fine_sfr, ssp_ages_yr, t_obs_gyr
                 )
-                from dsps.sed.metallicity_weights import (
-                    calc_lgmet_weights_from_lognormal_mdf,
-                )
-
-                lgmet_w = calc_lgmet_weights_from_lognormal_mdf(
-                    log_z_abs_scalar, lgmet_scatter, ssp.ssp_lgmet
-                )
+                lgmet_w = _lgmet_weights(log_z_abs_scalar, lgmet_scatter, ssp.ssp_lgmet)
                 joint_weights = lgmet_w[:, None] * age_w_cic[None, :]
                 _used_cic = True
             else:
@@ -2200,14 +2411,16 @@ class StellarSEDComponent:
                     ssp_ages_yr, sfr_on_ssp, t_obs_gyr, add_young_knot=True
                 )
                 dsps_result = calc_rest_sed_sfh_table_lognormal_mdf(
-                    gal_t_table=gal_t_table,
-                    gal_sfr_table=gal_sfr_table,
-                    gal_lgmet=log_z_abs_scalar,
-                    gal_lgmet_scatter=lgmet_scatter,
-                    ssp_lgmet=ssp.ssp_lgmet,
-                    ssp_lg_age_gyr=ssp.ssp_lg_age_gyr,
-                    ssp_flux=ssp_flux_for_csp,
-                    t_obs=t_obs_gyr,
+                    **canonical_dsps_kwargs(
+                        gal_t_table=gal_t_table,
+                        gal_sfr_table=gal_sfr_table,
+                        gal_lgmet=log_z_abs_scalar,
+                        gal_lgmet_scatter=lgmet_scatter,
+                        ssp_lgmet=ssp.ssp_lgmet,
+                        ssp_lg_age_gyr=ssp.ssp_lg_age_gyr,
+                        ssp_flux=ssp_flux_for_csp,
+                        t_obs=t_obs_gyr,
+                    )
                 )
                 joint_weights = dsps_result.weights  # (n_met, n_age)
         else:  # ramp / chem_evol — per-age metallicity table
@@ -2241,14 +2454,16 @@ class StellarSEDComponent:
                 )
                 _lgmet_k = jnp.concatenate([lgmet_on_ssp_ages[::-1], lgmet_on_ssp_ages[:1]])
                 dsps_result = calc_rest_sed_sfh_table_met_table(
-                    gal_t_table=_t_k,
-                    gal_sfr_table=_sfr_k,
-                    gal_lgmet_table=_lgmet_k,
-                    gal_lgmet_scatter=lgmet_scatter,
-                    ssp_lgmet=ssp.ssp_lgmet,
-                    ssp_lg_age_gyr=ssp.ssp_lg_age_gyr,
-                    ssp_flux=ssp_flux_for_csp,
-                    t_obs=t_obs_gyr,
+                    **canonical_dsps_kwargs(
+                        gal_t_table=_t_k,
+                        gal_sfr_table=_sfr_k,
+                        gal_lgmet_table=_lgmet_k,
+                        gal_lgmet_scatter=lgmet_scatter,
+                        ssp_lgmet=ssp.ssp_lgmet,
+                        ssp_lg_age_gyr=ssp.ssp_lg_age_gyr,
+                        ssp_flux=ssp_flux_for_csp,
+                        t_obs=t_obs_gyr,
+                    )
                 )
 
                 # ``dsps_result.weights`` is the joint (n_met, n_age)
@@ -2275,8 +2490,19 @@ class StellarSEDComponent:
         # honest answer (DSPS's kernel instead floors SFR to SFR_MIN and
         # returns uniform-ish garbage weights for the same input).
         joint_weights = joint_weights / jnp.maximum(joint_weights.sum(), 1e-300)
-        # Per-age × per-Msun-formed weighted SSP flux (Lsun/Hz/Msun):
-        ssp_flux_at_age = jnp.einsum("ma,maw->aw", joint_weights, ssp_flux_for_csp)
+        # Per-age × per-Msun-formed weighted SSP flux in erg/s/Hz/Msun. L_sun is
+        # folded into the (params-independent) SSP operand INSIDE the einsum, not
+        # applied as a runtime factor in ``total_mass * X * L_sun`` below. The
+        # forward value is fine either way, but autodiff's local Jacobian for
+        # that product, ``d/dX = total_mass * L_sun`` ~ 3.8e43, overflows float32
+        # (3.4e38) as a standalone intermediate under XLA's *fused* reverse pass
+        # — even though the true gradient is in range (the unfused path is
+        # finite). With L_sun carried on the zero-gradient SSP constant, the only
+        # Jacobians autodiff forms are ``total_mass`` (~1e10) and the erg-scaled
+        # SSP (~3.8e18), both representable. Identical in float64 (#1206).
+        ssp_flux_at_age = jnp.einsum(
+            "ma,maw->aw", joint_weights, ssp_flux_for_csp * LSUN_ERG_PER_S
+        )
         # Per-age "mass" for downstream per-age operations (dust BC mask).
         # This is the marginalized age distribution × total_mass.
         age_weights = joint_weights.sum(axis=0) * total_mass  # (n_age,) Msun
@@ -2299,9 +2525,10 @@ class StellarSEDComponent:
         # exact SED, the photometry/spectrum LUTs, ``lnu_age``, ``L_age``,
         # ``age_weights``, and ``pred.stellar_mass`` all honor the one
         # contract mass. ``ssp_flux_at_age`` (line above) is the per-met-summed
-        # joint-weighted SSP flux per Msun formed; summing over age and scaling
-        # by ``total_mass`` is exactly ``Σ_age lnu_age``. (Reverses #394.)
-        lnu_age = total_mass * ssp_flux_at_age * LSUN_ERG_PER_S
+        # joint-weighted SSP flux per Msun formed, already in erg/s/Hz/Msun
+        # (L_sun folded in); scaling by ``total_mass`` is exactly ``Σ_age
+        # lnu_age``. (Reverses #394.)
+        lnu_age = total_mass * ssp_flux_at_age
         sed_intrinsic = lnu_age.sum(axis=0)
 
         # The bare erg/s scale ``total_mass x L_sun``. Written out on its own it
@@ -2351,7 +2578,34 @@ class StellarSEDComponent:
         # frequency Jacobian gives ∫ L_ν dν per age.
         wave = ssp.ssp_wave
         nu_jac = C_AA / (wave**2)
-        L_age = jnp.trapezoid(lnu_age * nu_jac[None, :], wave, axis=1)
+        # `log_L_age` must not materialize the ~1e46 erg/s product that overflows
+        # float32 (#1534) — and must not cost an extra pass over the cube to avoid it.
+        #
+        # `ssp_flux_at_age` is the per-Msun cube and `lnu_age = total_mass *
+        # ssp_flux_at_age`, so the offending scale is already factored out upstream.
+        # Integrating the per-Msun cube and re-applying `total_mass` in log space
+        # needs the *same single trapezoid* as before, plus a log over an (n_age,)
+        # vector. Being per-Msun, its headroom does not vary with galaxy mass:
+        # `ssp_flux_at_age * nu_jac` peaks ~1.7e35 against the 3.4e38 ceiling at any
+        # total_mass.
+        #
+        # Two earlier attempts were wrong and the inventory sweep caught both:
+        # `log10_magnitude(L_age)` is useless (L_age is already inf in float32, and
+        # log of inf is inf), and peak-factoring `lnu_age * nu_jac` after forming it
+        # is too late (the product is already inf, so its peak is inf). A third,
+        # peak-factoring `lnu_age` by its own per-row max, was correct but cost +19%
+        # of a full predict_state (287 -> 343 us) for a value most callers never read.
+        #
+        # log10(total_mass), not log10_mass_scale: L_sun is already folded into
+        # ssp_flux_at_age, and log10_mass_scale carries it a second time.
+        _per_msun_L = jnp.trapezoid(ssp_flux_at_age * nu_jac[None, :], wave, axis=1)
+        L_age = total_mass * _per_msun_L
+        _log_per_msun = log10_magnitude(_per_msun_L)
+        log_L_age = jnp.where(
+            _not_computable(_log_per_msun),
+            jnp.inf,
+            _log_per_msun + jnp.log10(total_mass.astype(jnp.result_type(float))),
+        )
 
         # ── 11. Ionizing photon production rate (λ < 911.76 Å) ──────────
         # photons/s = ∫_{ν > c/λ_HI} L_ν / (hν) dν, summed over all ages.
@@ -2438,6 +2692,9 @@ class StellarSEDComponent:
             sfr_10myr=sfr_10myr,
             sfr_100myr=sfr_100myr,
             L_age=L_age,
+            # log companion (#1534), peak-factored at the source above rather than
+            # taken from the overflowed linear value.
+            log_L_age=log_L_age,
             lnu_age=lnu_age,
             # Per-(met, age) DSPS weights and the total_mass x L_sun scaling,
             # published so DustSEDComponent can evaluate the energy-balance
@@ -2445,6 +2702,11 @@ class StellarSEDComponent:
             # of the full-wavelength stellar cube (WavePrecomp speed path).
             joint_weights=joint_weights,
             stellar_mass_scale=mass_scale_erg,
+            # The float32-safe form of the same scale. ``mass_scale_erg`` is
+            # ~1e43 for a 1e10 Msun galaxy and so is ``inf`` in pure float32
+            # for any galaxy above ~9e4 Msun — it is total_mass times a
+            # constant, with no SSP flux factor to keep it in range (#1206).
+            log_stellar_mass_scale=log10_mass_scale,
             # CSP mass weights (Msun per SSP age bin), summed
             # over the metallicity axis. Published so downstream
             # nebular backends (Cue, CloudyGrid) can call their
@@ -2468,31 +2730,27 @@ class StellarSEDComponent:
             # (n_met, n_age, n_filt) in Lsun/Hz/Msun; sum over metallicity and
             # age axes weighted by joint distribution × total mass.
             # Convert to erg/s/Hz to match sed_intrinsic units.
-            stellar_phot_lnu_precomp_rest = (
-                total_mass * jnp.einsum("ma,maf->f", joint_weights, ssp_phot) * LSUN_ERG_PER_S
+            stellar_phot_lnu_precomp_rest = _mass_scale_lnu(
+                jnp.einsum("ma,maf->f", joint_weights, ssp_phot), total_mass
             )
             derived_overrides["stellar_phot_lnu_precomp"] = stellar_phot_lnu_precomp_rest
             # Age-resolved per-filter LUT for two-component
             # dust attenuation. Marginalize over metallicity only; preserve
             # the age axis. Shape (n_age, n_filter). Sum over age == the
             # marginalized stellar_phot_lnu_precomp above.
-            stellar_phot_lnu_per_age = (
-                total_mass * jnp.einsum("ma,maf->af", joint_weights, ssp_phot) * LSUN_ERG_PER_S
+            stellar_phot_lnu_per_age = _mass_scale_lnu(
+                jnp.einsum("ma,maf->af", joint_weights, ssp_phot), total_mass
             )
             derived_overrides["stellar_phot_lnu_per_age_precomp"] = stellar_phot_lnu_per_age
             # Taylor moment Ψ — same einsum, units erg/s/Hz × Å.
             ssp_phot_moment = self._state.ssp_phot_lut.ssp_phot_moment
             if ssp_phot_moment is not None:
-                stellar_phot_moment_precomp = (
-                    total_mass
-                    * jnp.einsum("ma,maf->f", joint_weights, ssp_phot_moment)
-                    * LSUN_ERG_PER_S
+                stellar_phot_moment_precomp = _mass_scale_lnu(
+                    jnp.einsum("ma,maf->f", joint_weights, ssp_phot_moment), total_mass
                 )
                 derived_overrides["stellar_phot_moment_precomp"] = stellar_phot_moment_precomp
-                stellar_phot_moment_per_age = (
-                    total_mass
-                    * jnp.einsum("ma,maf->af", joint_weights, ssp_phot_moment)
-                    * LSUN_ERG_PER_S
+                stellar_phot_moment_per_age = _mass_scale_lnu(
+                    jnp.einsum("ma,maf->af", joint_weights, ssp_phot_moment), total_mass
                 )
                 derived_overrides["stellar_phot_moment_per_age_precomp"] = (
                     stellar_phot_moment_per_age
@@ -2505,17 +2763,17 @@ class StellarSEDComponent:
                 ssp_sub_waves = self._state.ssp_phot_lut.ssp_subband_waves_rest
                 sub_phi = jnp.einsum("ma,mafk->afk", joint_weights, ssp_sub_phot)
                 sub_num = jnp.einsum("ma,mafk->afk", joint_weights, ssp_sub_waves * ssp_sub_phot)
-                derived_overrides["stellar_phot_lnu_per_age_subband_precomp"] = (
-                    total_mass * sub_phi * LSUN_ERG_PER_S
+                derived_overrides["stellar_phot_lnu_per_age_subband_precomp"] = _mass_scale_lnu(
+                    sub_phi, total_mass
                 )
                 # Sub-bands with no usable weight contribute nothing, but their
                 # node still goes through the 1/λ dust law — keep it finite and
                 # positive. The floor (not ``!= 0.0``) is what keeps the node's
-                # DERIVATIVE finite; see ``_SUBBAND_LIVE_FLOOR`` (#1397).
-                live = jnp.abs(sub_phi) > _SUBBAND_LIVE_FLOOR
+                # DERIVATIVE finite; see ``_subband_live_floor`` (#1397).
+                live = jnp.abs(sub_phi) > _subband_live_floor()
                 derived_overrides["stellar_subband_waves_rest_precomp"] = jnp.where(
                     live,
-                    sub_num / jnp.where(live, sub_phi, 1.0),
+                    _flux_weighted_node(sub_num, jnp.where(live, sub_phi, 1.0)),
                     jnp.asarray(self._state.ssp_phot_lut.effective_wavelengths_rest)[:, None],
                 )
                 # The same tensor with the IGM folded in at the nodes (#1135).
@@ -2527,9 +2785,9 @@ class StellarSEDComponent:
                 ssp_sub_phot_igm = self._state.ssp_phot_lut.ssp_subband_phot_igm
                 if ssp_sub_phot_igm is not None:
                     derived_overrides["stellar_phot_lnu_per_age_subband_igm_precomp"] = (
-                        total_mass
-                        * jnp.einsum("ma,mafk->afk", joint_weights, ssp_sub_phot_igm)
-                        * LSUN_ERG_PER_S
+                        _mass_scale_lnu(
+                            jnp.einsum("ma,mafk->afk", joint_weights, ssp_sub_phot_igm), total_mass
+                        )
                     )
             # Publish filter pivot wavelengths so the dust LUT
             # (and future per-filter consumers like AGN and IGM) can use them.
@@ -2584,13 +2842,11 @@ class StellarSEDComponent:
             # ssp_phot_table: (n_z, n_met, n_age, n_filt); interp along axis 0.
             ssp_phot_at_z = _interp(ztable.ssp_phot_table)
             # Marginalized + age-resolved LUTs (parity with the fixed-z path).
-            stellar_phot_lnu_precomp_rest = (
-                total_mass * jnp.einsum("ma,maf->f", joint_weights, ssp_phot_at_z) * LSUN_ERG_PER_S
+            stellar_phot_lnu_precomp_rest = _mass_scale_lnu(
+                jnp.einsum("ma,maf->f", joint_weights, ssp_phot_at_z), total_mass
             )
-            stellar_phot_lnu_per_age = (
-                total_mass
-                * jnp.einsum("ma,maf->af", joint_weights, ssp_phot_at_z)
-                * LSUN_ERG_PER_S
+            stellar_phot_lnu_per_age = _mass_scale_lnu(
+                jnp.einsum("ma,maf->af", joint_weights, ssp_phot_at_z), total_mass
             )
             derived_overrides["stellar_phot_lnu_precomp"] = stellar_phot_lnu_precomp_rest
             derived_overrides["stellar_phot_lnu_per_age_precomp"] = stellar_phot_lnu_per_age
@@ -2598,15 +2854,11 @@ class StellarSEDComponent:
             # moment table the same way and publish marginalized + per-age.
             if ztable.ssp_phot_moment_table is not None:
                 ssp_moment_at_z = _interp(ztable.ssp_phot_moment_table)
-                stellar_phot_moment_precomp = (
-                    total_mass
-                    * jnp.einsum("ma,maf->f", joint_weights, ssp_moment_at_z)
-                    * LSUN_ERG_PER_S
+                stellar_phot_moment_precomp = _mass_scale_lnu(
+                    jnp.einsum("ma,maf->f", joint_weights, ssp_moment_at_z), total_mass
                 )
-                stellar_phot_moment_per_age = (
-                    total_mass
-                    * jnp.einsum("ma,maf->af", joint_weights, ssp_moment_at_z)
-                    * LSUN_ERG_PER_S
+                stellar_phot_moment_per_age = _mass_scale_lnu(
+                    jnp.einsum("ma,maf->af", joint_weights, ssp_moment_at_z), total_mass
                 )
                 derived_overrides["stellar_phot_moment_precomp"] = stellar_phot_moment_precomp
                 derived_overrides["stellar_phot_moment_per_age_precomp"] = (
@@ -2625,16 +2877,18 @@ class StellarSEDComponent:
                 sub_wave_at_z = _interp(ztable.subband_waves_rest_table)
                 sub_phi = jnp.einsum("ma,mafk->afk", joint_weights, sub_phot_at_z)
                 sub_num = jnp.einsum("ma,mafk->afk", joint_weights, sub_wave_at_z * sub_phot_at_z)
-                derived_overrides["stellar_phot_lnu_per_age_subband_precomp"] = (
-                    total_mass * sub_phi * LSUN_ERG_PER_S
+                derived_overrides["stellar_phot_lnu_per_age_subband_precomp"] = _mass_scale_lnu(
+                    sub_phi, total_mass
                 )
                 # Sub-bands with no usable weight cannot change the result, but
                 # their node still goes through the 1/λ dust law — keep it finite
                 # and positive. The floor (not ``!= 0.0``) is what keeps the
-                # node's DERIVATIVE finite; see ``_SUBBAND_LIVE_FLOOR`` (#1397).
-                live = jnp.abs(sub_phi) > _SUBBAND_LIVE_FLOOR
+                # node's DERIVATIVE finite; see ``_subband_live_floor`` (#1397).
+                live = jnp.abs(sub_phi) > _subband_live_floor()
                 derived_overrides["stellar_subband_waves_rest_precomp"] = jnp.where(
-                    live, sub_num / jnp.where(live, sub_phi, 1.0), eff_waves_at_z[:, None]
+                    live,
+                    _flux_weighted_node(sub_num, jnp.where(live, sub_phi, 1.0)),
+                    eff_waves_at_z[:, None],
                 )
                 # IGM folded in at the nodes (#1135) — tabulated against this same
                 # z grid at build time, so it rides the same triweight interpolation
@@ -2642,9 +2896,10 @@ class StellarSEDComponent:
                 if ztable.ssp_subband_phot_igm_table is not None:
                     sub_phot_igm_at_z = _interp(ztable.ssp_subband_phot_igm_table)
                     derived_overrides["stellar_phot_lnu_per_age_subband_igm_precomp"] = (
-                        total_mass
-                        * jnp.einsum("ma,mafk->afk", joint_weights, sub_phot_igm_at_z)
-                        * LSUN_ERG_PER_S
+                        _mass_scale_lnu(
+                            jnp.einsum("ma,mafk->afk", joint_weights, sub_phot_igm_at_z),
+                            total_mass,
+                        )
                     )
             if self._state.phot_fw_padded is not None:
                 derived_overrides["phot_filter_waves_padded"] = self._state.phot_fw_padded
@@ -2662,10 +2917,8 @@ class StellarSEDComponent:
         # rest band does not move with redshift, so there is nothing to interpolate.
         if self._state is not None and self._state.restband_lut is not None:
             rb = self._state.restband_lut
-            derived_overrides["stellar_restband_lnu_precomp"] = (
-                total_mass
-                * jnp.einsum("ma,maf->f", joint_weights, rb.ssp_restband_phot)
-                * LSUN_ERG_PER_S
+            derived_overrides["stellar_restband_lnu_precomp"] = _mass_scale_lnu(
+                jnp.einsum("ma,maf->f", joint_weights, rb.ssp_restband_phot), total_mass
             )
             derived_overrides["filter_restband_eff_waves"] = jnp.asarray(rb.restband_eff_waves)
             if rb.ssp_restband_subband_phot is not None:
@@ -2676,14 +2929,14 @@ class StellarSEDComponent:
                     rb.ssp_restband_subband_waves * rb.ssp_restband_subband_phot,
                 )
                 derived_overrides["stellar_restband_lnu_per_age_subband_precomp"] = (
-                    total_mass * rb_phi * LSUN_ERG_PER_S
+                    _mass_scale_lnu(rb_phi, total_mass)
                 )
                 # The node is a RATIO, so mass and L_sun cancel — take it from the
                 # unscaled sums. Sub-bands with no usable weight keep a finite,
                 # positive node: a zero would go to inf through the 1/λ dust law.
                 # The floor (not ``!= 0.0``) is what keeps the node's DERIVATIVE
-                # finite; see ``_SUBBAND_LIVE_FLOOR`` (#1397).
-                rb_live = jnp.abs(rb_phi) > _SUBBAND_LIVE_FLOOR
+                # finite; see ``_subband_live_floor`` (#1397).
+                rb_live = jnp.abs(rb_phi) > _subband_live_floor()
                 derived_overrides["stellar_restband_subband_waves_precomp"] = jnp.where(
                     rb_live,
                     rb_num / jnp.where(rb_live, rb_phi, 1.0),
@@ -2700,16 +2953,14 @@ class StellarSEDComponent:
         # ``filter_eff_waves`` drives the photometry LUT path.
         if self._state is not None and self._state.ssp_spec_lut is not None:
             ssp_on_pixels = self._state.ssp_spec_lut.ssp_on_pixels  # (n_met, n_age, n_pix)
-            stellar_spec_lnu = (
-                total_mass * jnp.einsum("ma,map->p", joint_weights, ssp_on_pixels) * LSUN_ERG_PER_S
+            stellar_spec_lnu = _mass_scale_lnu(
+                jnp.einsum("ma,map->p", joint_weights, ssp_on_pixels), total_mass
             )
             derived_overrides["stellar_spec_lnu_precomp"] = stellar_spec_lnu
             # Age-resolved per-pixel LUT for two-component (Charlot & Fall)
             # dust attenuation at the pixel grid (sum over age == marginalized).
-            stellar_spec_lnu_per_age = (
-                total_mass
-                * jnp.einsum("ma,map->ap", joint_weights, ssp_on_pixels)
-                * LSUN_ERG_PER_S
+            stellar_spec_lnu_per_age = _mass_scale_lnu(
+                jnp.einsum("ma,map->ap", joint_weights, ssp_on_pixels), total_mass
             )
             derived_overrides["stellar_spec_lnu_per_age_precomp"] = stellar_spec_lnu_per_age
             derived_overrides["spec_eff_waves"] = jnp.asarray(
@@ -2733,15 +2984,11 @@ class StellarSEDComponent:
                 flat
             )
             ssp_on_pixels_at_z = interp_flat.reshape(n_met_s, n_age_s, -1)
-            stellar_spec_lnu = (
-                total_mass
-                * jnp.einsum("ma,map->p", joint_weights, ssp_on_pixels_at_z)
-                * LSUN_ERG_PER_S
+            stellar_spec_lnu = _mass_scale_lnu(
+                jnp.einsum("ma,map->p", joint_weights, ssp_on_pixels_at_z), total_mass
             )
-            stellar_spec_lnu_per_age = (
-                total_mass
-                * jnp.einsum("ma,map->ap", joint_weights, ssp_on_pixels_at_z)
-                * LSUN_ERG_PER_S
+            stellar_spec_lnu_per_age = _mass_scale_lnu(
+                jnp.einsum("ma,map->ap", joint_weights, ssp_on_pixels_at_z), total_mass
             )
             derived_overrides["stellar_spec_lnu_precomp"] = stellar_spec_lnu
             derived_overrides["stellar_spec_lnu_per_age_precomp"] = stellar_spec_lnu_per_age
@@ -2939,14 +3186,23 @@ class StellarSEDComponent:
             gal_t, gal_sfr, _ = _build_dsps_sfh_table(
                 ssp_ages_yr, sfr_on_ssp, t_obs_gyr, add_young_knot=True
             )
+            _dsps_args = canonical_dsps_kwargs(
+                gal_t=gal_t,
+                gal_sfr=gal_sfr,
+                gal_lgmet=log_z_abs_scalar,
+                gal_lgmet_scatter=lgmet_scatter,
+                ssp_lgmet=ssp.ssp_lgmet,
+                ssp_lg_age_gyr=ssp.ssp_lg_age_gyr,
+                t_obs=t_obs_gyr,
+            )
             weights, _, _ = calc_ssp_weights_sfh_table_lognormal_mdf(
-                gal_t,
-                gal_sfr,
-                log_z_abs_scalar,
-                lgmet_scatter,
-                ssp.ssp_lgmet,
-                ssp.ssp_lg_age_gyr,
-                t_obs_gyr,
+                _dsps_args["gal_t"],
+                _dsps_args["gal_sfr"],
+                _dsps_args["gal_lgmet"],
+                _dsps_args["gal_lgmet_scatter"],
+                _dsps_args["ssp_lgmet"],
+                _dsps_args["ssp_lg_age_gyr"],
+                _dsps_args["t_obs"],
             )
             # #821 youngest-bin edge-clip correction — apply applies this for ALL
             # DSPS-histogram-kernel paths (field / per-age metallicity); without it
@@ -2963,8 +3219,6 @@ class StellarSEDComponent:
         # applies the youngest-bin lookback correction and returns the conserved
         # total_mass, so — unlike the DSPS histogram path — the caller must NOT
         # also multiply by ``_youngest_bin_lookback_multiplier`` here.
-        from dsps.sed.metallicity_weights import calc_lgmet_weights_from_lognormal_mdf
-
         # The SAME builder apply uses, so the two integrands are identical point
         # for point — the #982 contract, now enforced by construction.
         _fine_age_yr, _fine_sfr = _cic_integrand(
@@ -2989,9 +3243,7 @@ class StellarSEDComponent:
             )
 
         age_w_cic, total_mass = _age_weights_cic(_fine_age_yr, _fine_sfr, ssp_ages_yr, t_obs_gyr)
-        lgmet_w = calc_lgmet_weights_from_lognormal_mdf(
-            log_z_abs_scalar, lgmet_scatter, ssp.ssp_lgmet
-        )
+        lgmet_w = _lgmet_weights(log_z_abs_scalar, lgmet_scatter, ssp.ssp_lgmet)
         joint_weights = lgmet_w[:, None] * age_w_cic[None, :]
         joint_weights = joint_weights / jnp.maximum(joint_weights.sum(), 1e-300)
         return joint_weights, total_mass, ssp_ages_yr
@@ -3272,13 +3524,13 @@ def _mass_weighted_metallicity_fn(state, params):
 
 def _l_bol_fn(state, params):
     """Bolometric luminosity [Lsun]."""
-    from tengri.utils.physics_constants import C_AA, L_SUN
+    from tengri.utils.sed_quantities import compute_bolometric_luminosity
 
-    sed = state.sed_intrinsic
-    wave = state.wave
-    nu = C_AA / wave
-    l_bol_erg = jnp.abs(jnp.trapezoid(sed, nu))
-    return l_bol_erg / L_SUN
+    # Delegate to the canonical reduction rather than re-inlining it: that helper
+    # folds 1/L_sun into the integral so the ~1e43 erg/s value is never formed
+    # (float32-safe, #1206). ``abs`` preserves the original sign convention —
+    # wave ascends, so nu descends and the signed area is negative.
+    return jnp.abs(compute_bolometric_luminosity(state.sed_intrinsic, state.wave))
 
 
 def _l_tir_fn(state, params):

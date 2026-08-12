@@ -54,7 +54,12 @@ import jax.numpy as jnp
 from tengri.components.dust.attenuation import two_component_dust
 from tengri.utils.physics_constants import C_AA
 
-__all__ = ["EnergyBalanceLUT", "build_energy_balance_lut", "lut_l_absorbed_stellar"]
+__all__ = [
+    "EnergyBalanceLUT",
+    "build_energy_balance_lut",
+    "lut_l_absorbed_stellar",
+    "lut_l_absorbed_stellar_log10",
+]
 
 
 class EnergyBalanceLUT(NamedTuple):
@@ -216,6 +221,98 @@ def _interp_bracket(grid: jnp.ndarray, x: jnp.ndarray) -> tuple[jnp.ndarray, jnp
     return i0, weights
 
 
+def _lut_contract(
+    lut: EnergyBalanceLUT,
+    joint_weights: jnp.ndarray,
+    tau_bc: jnp.ndarray,
+    tau_diff: jnp.ndarray,
+) -> jnp.ndarray:
+    r"""Per-unit-mass signed absorbed luminosity, :math:`\sum_{m,a} w(B - G)`.
+
+    The mass scaling is deliberately *not* applied here: this contraction is
+    O(1) (the SSP integrals are per unit mass), whereas ``mass_scale`` is
+    ~1e43 and carries the whole dynamic-range problem. Keeping them separate
+    lets the log form fold the scale into an exponent instead of a product.
+    """
+    i0, w_bc = _interp_bracket(lut.tau_bc_grid, tau_bc)  # (), (2,)
+    j0, w_diff = _interp_bracket(lut.tau_diff_grid, tau_diff)  # (), (2,)
+
+    # Bilinear interpolation touches four nodes of ``G``, so slice those four
+    # out before contracting. Contracting the whole optical-depth grid instead
+    # — which is what a dense weight vector forces — costs n_met x n_age x
+    # n_bc x n_diff multiply-adds to use n_met x n_age x 4 of them: on a
+    # (15, 93, 24, 24) LUT that is 803,520 versus 5,580, a 144x overshoot, and
+    # it dominated the whole WavePrecomp forward pass.
+    n_met, n_age = lut.B.shape
+    g_sub = jax.lax.dynamic_slice(
+        lut.G,
+        (jnp.zeros((), jnp.int32), jnp.zeros((), jnp.int32), i0, j0),
+        (n_met, n_age, w_bc.shape[0], w_diff.shape[0]),
+    )
+    g_interp = jnp.einsum("maij,i,j->ma", g_sub, w_bc, w_diff)  # (n_met, n_age)
+    return jnp.sum(joint_weights * (lut.B - g_interp))
+
+
+def lut_l_absorbed_stellar_log10(
+    lut: EnergyBalanceLUT,
+    joint_weights: jnp.ndarray,
+    log10_mass_scale: jnp.ndarray,
+    tau_bc: jnp.ndarray,
+    tau_diff: jnp.ndarray,
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    r"""log10 magnitude and sign of the stellar absorbed luminosity.
+
+    The float32-safe form of :func:`lut_l_absorbed_stellar`: the ~1e43
+    ``mass_scale`` is carried as a log10 offset and added to the log of the
+    O(1) contraction, so the product is never materialized (float32 ceiling
+    3.4e38, #1206).
+
+    Parameters
+    ----------
+    lut : EnergyBalanceLUT
+        Precomputed ``B``/``G``.
+    joint_weights : ndarray, shape (n_met, n_age)
+        Runtime DSPS joint (metallicity, age) weights.
+    log10_mass_scale : ndarray, shape ()
+        ``log10(total_mass x L_sun)`` [dex].
+    tau_bc, tau_diff : ndarray, shape ()
+        Runtime optical depths.
+
+    Returns
+    -------
+    log_magnitude : ndarray, shape ()
+        :math:`\log_{10}|L_{\rm abs}^\star / (\mathrm{erg/s})|` [dex]. ``-inf``
+        when nothing is absorbed; ``+inf`` when the contraction is non-finite.
+    sign : ndarray, shape ()
+        Sign of the signed luminosity (follows the grid orientation), so the
+        caller can combine it with other terms via
+        :func:`tengri.utils.scale.log10_add`. ``NaN`` when the contraction is
+        non-finite.
+
+    Notes
+    -----
+    JIT/grad/vmap-safe; the where-dummy keeps the zero case NaN-free.
+
+    Carries the same corrupt/zero split as
+    :func:`tengri.forward.energy_balance.bolometric_absorbed_log10` (#1527),
+    and must: this is the **stellar** half of the LUT branch in
+    ``two_component.py``, the path taken whenever ``approx=WavePrecomp(...)``
+    is set. Leaving it fail-open while the exact form is strict would tighten
+    only the nebular term on the configuration most fits actually use.
+
+    ``positive = magnitude > 0`` is False for NaN, so before this the whole
+    stellar absorbed luminosity silently became ``-inf`` — i.e. exactly 0.0 —
+    on a corrupt contraction.
+    """
+    from tengri.utils.scale import _not_computable, log10_magnitude
+
+    contracted = _lut_contract(lut, joint_weights, tau_bc, tau_diff)
+    log_relative = log10_magnitude(contracted)
+    corrupt = _not_computable(log_relative)
+    log_mag = jnp.where(corrupt, jnp.inf, log_relative + log10_mass_scale)
+    return log_mag, jnp.where(corrupt, jnp.nan, jnp.sign(contracted))
+
+
 def lut_l_absorbed_stellar(
     lut: EnergyBalanceLUT,
     joint_weights: jnp.ndarray,
@@ -245,21 +342,10 @@ def lut_l_absorbed_stellar(
     -------
     float
         Signed stellar absorbed bolometric luminosity.
-    """
-    i0, w_bc = _interp_bracket(lut.tau_bc_grid, tau_bc)  # (), (2,)
-    j0, w_diff = _interp_bracket(lut.tau_diff_grid, tau_diff)  # (), (2,)
 
-    # Bilinear interpolation touches four nodes of ``G``, so slice those four
-    # out before contracting. Contracting the whole optical-depth grid instead
-    # — which is what a dense weight vector forces — costs n_met x n_age x
-    # n_bc x n_diff multiply-adds to use n_met x n_age x 4 of them: on a
-    # (15, 93, 24, 24) LUT that is 803,520 versus 5,580, a 144x overshoot, and
-    # it dominated the whole WavePrecomp forward pass.
-    n_met, n_age = lut.B.shape
-    g_sub = jax.lax.dynamic_slice(
-        lut.G,
-        (jnp.zeros((), jnp.int32), jnp.zeros((), jnp.int32), i0, j0),
-        (n_met, n_age, w_bc.shape[0], w_diff.shape[0]),
-    )
-    g_interp = jnp.einsum("maij,i,j->ma", g_sub, w_bc, w_diff)  # (n_met, n_age)
-    return mass_scale * jnp.sum(joint_weights * (lut.B - g_interp))
+    Notes
+    -----
+    ``mass_scale`` is ~1e43, so this product overflows float32. Use
+    :func:`lut_l_absorbed_stellar_log10` on a pure-float32 path (#1206).
+    """
+    return mass_scale * _lut_contract(lut, joint_weights, tau_bc, tau_diff)

@@ -32,6 +32,7 @@ from tengri.observation.eline_catalog import (
     DEFAULT_LINE_NAMES,  # noqa: F401 — re-exported for convenience
     DEFAULT_LINE_WAVELENGTHS,  # noqa: F401 — re-exported for convenience
 )
+from tengri.utils.scale import whiten
 
 # ── Public API ────────────────────────────────────────────────────
 
@@ -283,7 +284,7 @@ def marginalize_emission_lines(
     design_matrix: jnp.ndarray,
     prior_variance: jnp.ndarray | None = None,
 ) -> tuple:
-    """Analytically marginalize emission-line amplitudes.
+    r"""Analytically marginalize emission-line amplitudes.
 
     Computes the marginalized log-likelihood by integrating out the
     linear emission-line amplitude vector under a Gaussian prior.
@@ -314,15 +315,33 @@ def marginalize_emission_lines(
     **JIT-compatible**: yes — all operations via ``jnp`` primitives.
 
     **Gradient-safe**: yes — differentiable everywhere w.r.t. ``residual``,
-    ``noise``, and ``design_matrix``.
+    ``noise``, and ``design_matrix``, in float32 as well as float64.
+
+    **Numerical stability (#1206)**: the normal equations are assembled from
+    the *whitened* design matrix :math:`\tilde G = G/\sigma` rather than from
+    :math:`N^{-1} = 1/\sigma^2`,
+
+    .. math::
+
+        G^\mathsf{T} N^{-1} G = \tilde G^\mathsf{T} \tilde G,
+        \qquad
+        G^\mathsf{T} N^{-1} r = \tilde G^\mathsf{T} \tilde r,
+        \qquad
+        \chi^2_{\rm cont} = \tilde r^\mathsf{T} \tilde r
+
+    with :math:`\tilde r = r/\sigma`. At a real spectroscopic
+    :math:`\sigma \sim 3\times10^{-30}` the quantity :math:`1/\sigma^2` is
+    ~1e59, outside the float32 ceiling of 3.4e38, so the previous spelling
+    made every one of ``ln_L_marg``, ``a_hat`` and ``a_cov`` — and the
+    gradient — ``NaN``, contradicting the promise above. Identical in float64.
 
     """
     n_lines = design_matrix.shape[1]
-    n_inv = 1.0 / noise**2
 
-    g_weighted = design_matrix * n_inv[:, None]
-    gt_ninv_g = g_weighted.T @ design_matrix
-    gt_ninv_r = g_weighted.T @ residual
+    g_whitened = whiten(design_matrix, noise[:, None])
+    r_whitened = whiten(residual, noise)
+    gt_ninv_g = g_whitened.T @ g_whitened
+    gt_ninv_r = g_whitened.T @ r_whitened
 
     # Flat prior (~uninformative) when prior_variance is omitted.
     _pv = prior_variance if prior_variance is not None else jnp.full((n_lines,), 1e10)
@@ -335,7 +354,7 @@ def marginalize_emission_lines(
     # Posterior mean (optimal amplitudes)
     a_hat = a_cov @ gt_ninv_r
 
-    chi2_continuum = jnp.sum(residual**2 * n_inv)
+    chi2_continuum = jnp.sum(r_whitened**2)
     chi2_marg = chi2_continuum - a_hat @ gt_ninv_g @ a_hat
     prior_penalty = jnp.sum(a_hat**2 / prior_variance)
     _sign, logdet_sigma = jnp.linalg.slogdet(a_cov)

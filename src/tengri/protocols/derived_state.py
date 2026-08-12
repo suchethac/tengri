@@ -91,12 +91,20 @@ class DerivedState:
 
     # Stellar — age-resolved tensors and ionizing rate
     L_age: jnp.ndarray | None = None
+    #: float32-safe companion to ``L_age`` (#1534). ``L_age`` is ~1e42-1e46
+    #: erg/s and reads as ``inf`` in pure float32; ``-inf`` here means a bin
+    #: genuinely emits nothing, ``+inf`` that the input was corrupt (#1527).
+    log_L_age: jnp.ndarray | None = None
     lnu_age: jnp.ndarray | None = None
     # DSPS joint (metallicity, age) weights and the total_mass x L_sun scaling,
     # published so DustSEDComponent can evaluate L_ir from a precomputed
     # bolometric (tau_bc, tau_diff) LUT instead of the full stellar cube.
     joint_weights: jnp.ndarray | None = None
     stellar_mass_scale: jnp.ndarray | None = None
+    #: log10(total_mass x L_sun) [dex] — the float32-safe form of
+    #: ``stellar_mass_scale``, which is ~1e43 and so overflows float32 for
+    #: any galaxy above ~9e4 Msun (#1206).
+    log_stellar_mass_scale: jnp.ndarray | None = None
     ssp_ages_yr: jnp.ndarray | None = None
     age_weights: jnp.ndarray | None = None
     nion: jnp.ndarray | None = None
@@ -214,6 +222,9 @@ class DerivedState:
     # Dust attenuation / emission
     L_ir: jnp.ndarray | None = None
     L_absorbed: jnp.ndarray | None = None
+    #: log10(L_ir / (erg/s)) [dex] — the float32-safe form of ``L_ir``, which
+    #: is ~1e43 and therefore outside the float32 range entirely (#1206).
+    log_L_ir: jnp.ndarray | None = None
     dust_attenuation_factor: jnp.ndarray | None = None
     sed_dust_attenuated: jnp.ndarray | None = None
     sed_dust_ir: jnp.ndarray | None = None
@@ -277,6 +288,11 @@ class DerivedState:
 
     # AGN (incl. GRAHSP alternates)
     L_agn_bol: jnp.ndarray | None = None
+    # log10(L_agn_bol / (erg/s)) — float32-safe companion to ``L_agn_bol``
+    # (~1e46 erg/s overflows float32 max 3.4e38). Consumed by the radio jet
+    # term (#1206) via ``apply_log10_scale`` so the AGN-driven radio emission
+    # never materializes the out-of-range linear luminosity.
+    log_L_agn_bol: jnp.ndarray | None = None
     L_agn_torus: jnp.ndarray | None = None
     L_agn_absorbed: jnp.ndarray | None = None
     # Intrinsic (un-reddened) disc monochromatic L_nu at 2500 A [erg/s/Hz];
@@ -303,6 +319,9 @@ class DerivedState:
     sed_shock: jnp.ndarray | None = None
     line_waves: jnp.ndarray | None = None
     line_lums: jnp.ndarray | None = None
+    #: float32-safe companion to ``line_lums`` (#1534); ~1e41 erg/s is ``inf``
+    #: in pure float32. Same sentinel convention as ``log_L_age``.
+    log_line_lums: jnp.ndarray | None = None
     # Stellar Lyman-continuum survival fraction where(λ<912, neb_fesc, 1),
     # published by photoionized backends so two-component dust can honor the
     # fesc absorption on the per-age lnu_age path (#824).
@@ -331,6 +350,12 @@ class DerivedState:
     # predict_via_precomp under WavePrecomp (#624).
     radio_phot_lnu_precomp: jnp.ndarray | None = None
     xray_phot_lnu_precomp: jnp.ndarray | None = None
+    # Shock is an additive emitter like radio/xray, and SEDModelComponent
+    # publishes ``{name}_phot_lnu_precomp`` generically — but this field was
+    # never added, so any model with a shock component raised ComponentIOError
+    # ("_extras is non-empty") the moment the photometry LUT ran, i.e. on every
+    # inference call. Typed here so the shock LUT rides the same contract.
+    shock_phot_lnu_precomp: jnp.ndarray | None = None
 
     # Spectrum LUT (published only when approx=SpectrumPrecomp()
     # is set). Per-pixel rest-frame Lν contributions from each component

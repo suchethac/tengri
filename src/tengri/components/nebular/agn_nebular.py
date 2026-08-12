@@ -450,14 +450,22 @@ def agn_nlr_cue(
 
     # Cue predicts the line luminosity for the full Q_H; the NLR
     # intercepts only a fraction of those ionizing photons.
-    line_lum_erg = line_lum * covering_fraction
-
-    # ``predict_nebular_line_luminosities`` returns erg/s, but this function's
-    # contract — shared with the Feltre and Synthesizer backends behind
-    # :func:`agn_nlr_emission` — is L_sun (#1073). Every consumer multiplies by
-    # L_SUN on the way out, so returning erg/s here scaled the NLR lines by an
-    # extra L_SUN (~3.8e33).
-    return line_wav, line_lum_erg / _LSUN_ERG
+    #
+    # Units: this function's contract is [Lsun] **IAU 2015** — the unit its
+    # Feltre and Synthesizer siblings behind :func:`agn_nlr_emission` return,
+    # and the one every consumer multiplies back out by. Cue's catalog is
+    # [Lsun] in *Cue's own* convention (3.839e33, the value its network was
+    # trained against), so the two differ by 0.287% and the round trip through
+    # erg/s is what reconciles them.
+    #
+    # Before #1559 this read ``* L_SUN_CUE`` inside the backend and
+    # ``/ _LSUN_ERG`` here (#1073). Moving the first half to
+    # NebularSEDComponent left the second half looking spurious — deleting it
+    # silently biased every NLR line low by 0.287%, which the #1073 bound test
+    # (lines cannot outshine the accretion luminosity) is far too loose to see.
+    # Same grouping as before, so the value is unchanged.
+    line_lum_erg = line_lum * cue_backend.lsun_erg
+    return line_wav, line_lum_erg * covering_fraction / _LSUN_ERG
 
 
 # ── Synthesizer NLR backend ───────────────────────────────────────

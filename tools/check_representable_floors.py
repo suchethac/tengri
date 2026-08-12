@@ -40,7 +40,13 @@ _GUARD_CALLS = {"maximum", "clip", "where"}
 # ``resample_template()``, deleting the ``jnp.maximum(sed_src, 1e-300)`` that
 # had guarded the log of the source SED. The floor went away with the linear
 # path that needed it, so this is a genuine migration, not a re-pin.
-_PINNED = 45
+#
+# 45 -> 43: two sites this branch itself added for #1206 were inert in float32 —
+# the precision they were written for. ``adaf.py``'s ``maximum(integral, 1e-100)``
+# divisor and ``disc.py``'s ``log10(maximum(|hat_total|, 1e-100))`` both now call
+# ``representable_floor``. The guards are still there and still live, so this is
+# a migration, not a deletion.
+_PINNED = 43
 
 _SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 
