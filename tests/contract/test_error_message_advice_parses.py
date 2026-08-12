@@ -274,7 +274,7 @@ def _is_removal_advice(text: str, at: int) -> bool:
 #: Stems, not whole words: the #1677 message says "needs a model **built**
 #: with ...", and a ``"build"`` cue does not match ``"built"``. The neuter
 #: check below is what caught that — the narrowed guard silently stopped
-#: recognising the very message it was written for.
+#: recognizing the very message it was written for.
 _BUILD_CUES = ("buil", "sedmodel", "parse_groups", "recipe", "group")
 
 
@@ -405,7 +405,7 @@ def test_the_scope_rule_still_catches_the_bug_it_was_written_for() -> None:
 
     The first attempt at that rule used the cue ``"build"``, which does not
     match ``"built"`` — and the #1677 message reads "needs a model **built**
-    with ...". The narrowed guard silently stopped recognising the message it
+    with ...". The narrowed guard silently stopped recognizing the message it
     exists for. Both directions are pinned here.
     """
     built = "raise ValueError(\"met= needs a model built with met={'type': 'table'}\")"
@@ -414,7 +414,7 @@ def test_the_scope_rule_still_catches_the_bug_it_was_written_for() -> None:
         "Example: map_options={'n_steps': 40000}.\")"
     )
     assert _is_build_advice(built), (
-        "advice about building a model is no longer recognised as build advice; "
+        "advice about building a model is no longer recognized as build advice; "
         "the #1677 bug would pass unchecked."
     )
     assert not _is_build_advice(other_api), (
