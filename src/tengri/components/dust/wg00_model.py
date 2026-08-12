@@ -136,6 +136,7 @@ class WG00AttenuationSEDComponent(TemplateThreading):
         return (
             DerivedKey("L_ir", "erg/s", "Integrated dust-absorbed luminosity"),
             DerivedKey("L_absorbed", "erg/s", "Alias for L_ir (energy balance)"),
+            DerivedKey("log_L_ir", "dex", "log10(L_ir / (erg/s)); float32-safe form"),
             DerivedKey("dust_attenuation_factor", "", "exp(-A(lambda; tau_v)) on pipeline grid"),
             DerivedKey("sed_dust_attenuated", "erg/s/Hz", "Attenuated stellar SED"),
         )
@@ -244,16 +245,23 @@ class WG00AttenuationSEDComponent(TemplateThreading):
 
         # Energy balance: L_ir = ∫ (L_nu_intrinsic − L_nu_attenuated) dν,
         # LyC-masked (λ < 912 Å ionizes H, it does not heat dust — #922).
-        from tengri.forward.energy_balance import bolometric_absorbed
+        from tengri.forward.energy_balance import bolometric_absorbed_log10, warn_if_corrupt
         from tengri.utils.physics_constants import C_AA
+        from tengri.utils.scale import pow10
 
         nu = C_AA / state.wave
-        l_ir = jnp.abs(bolometric_absorbed(state.sed_intrinsic, attenuated, nu, wave=state.wave))
+        # Log-space integral: ~1e43 erg/s is outside float32 (#1206).
+        log_l_ir, _ = bolometric_absorbed_log10(
+            state.sed_intrinsic, attenuated, nu, wave=state.wave
+        )
+        warn_if_corrupt(log_l_ir, component="wg00")
+        l_ir = pow10(log_l_ir)
 
         derived_overrides = dict(
             dust_attenuation_factor=attenuation,
             L_ir=l_ir,
             L_absorbed=l_ir,
+            log_L_ir=log_l_ir,
             sed_dust_attenuated=attenuated,
         )
         return state.with_(

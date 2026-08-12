@@ -56,7 +56,22 @@ import sys
 #: ``utils/grid_interp`` gates the division *inputs* on the monotonicity
 #: condition instead, so no clamp is needed.
 #:
-#: 98 -> 100: the #1671 bias advisory (``_lut_forward_bias`` /
+#: 98 -> 97 on the float32 Tier B branch: three removed, two added, all in the
+#: #1206 work. Measured by diffing this tool's own ``--list`` against ``main``:
+#:
+#:   removed  ``agn/adaf.py``            ``max(integral, 1e-100)``
+#:   removed  ``agn/component.py``       ``max(L_agn_bol, 1e-30)``
+#:   removed  ``observation/calibration.py``  ``max(obs_err**2, 1e-30)``
+#:   added    ``agn/adaf.py``            two ``max(integral, <expr>)``
+#:
+#: The calibration one is the substantive one and is exactly this guard's thesis:
+#: the floor was expressed in *variance*, so it bound at every real spectroscopic
+#: sigma and pinned ``inv_var`` to 1e30 — the polynomial silently collapsed toward
+#: zero in **float64**, and its test passed because the assertion was an
+#: inequality the collapse pushed the right way (#1604). It is now floored in the
+#: sigma domain at the working dtype's smallest normal.
+#:
+#: 98 -> 100 on main: the #1671 bias advisory (``_lut_forward_bias`` /
 #: ``_warn_if_lut_bias_amplified`` in ``inference/fitter.py``). Both are the
 #: "zero is a legitimate answer" kind, inside an advisory that must never
 #: break a fit: a zero-flux channel's relative bias contributes 0 and drops
@@ -65,7 +80,12 @@ import sys
 #: silences. The NaN-propagating form would invert the failure direction:
 #: one degenerate channel would poison ``max(bias x SNR)`` into NaN and
 #: silence the warning for every healthy channel.
-EXPECTED_SITES = 100
+#:
+#: 97 + 100 - 98 = 99 at the ninth-round merge: the two counts moved off the
+#: same base of 98 in opposite directions and the merged tree carries BOTH
+#: sets of edits. The number below is the tool's own measured count on the
+#: merged tree, not that arithmetic — the arithmetic is only what predicted it.
+EXPECTED_SITES = 99
 
 SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 

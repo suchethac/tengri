@@ -35,6 +35,7 @@ References
 """
 
 import functools
+import math
 from collections.abc import Callable
 
 import h5py
@@ -47,6 +48,7 @@ from tengri.components.agn._nthcomp import (
 )
 from tengri.components.agn._params import (
     DEFAULT_AGN_COS_INC,
+    DEFAULT_AGN_LOG_LBOL,
     DEFAULT_AGN_LOG_MBH,
     DEFAULT_AGN_LUM_RATIO,
 )
@@ -54,6 +56,7 @@ from tengri.components.agn._phys import (
     C_LIGHT as _C_LIGHT,
     H_PLANCK as _H_PLANCK,
     K_BOLTZ as _K_BOLTZ,
+    bolometric_integral_nu as _bolometric_integral_nu,
     planck_lnu as _planck_lnu,
     ring_area as _ring_area,
     wavelength_to_nu as _wavelength_to_nu,
@@ -70,6 +73,38 @@ from tengri.utils.physics_constants import (
     SIGMA_SB as _SIGMA_SB,
     SIGMA_T as _SIGMA_T,
 )
+from tengri.utils.scale import pow10 as _pow10, representable_floor as _representable_floor
+
+# log10 of the cgs constants that make the Shakura-Sunyaev disc's bolometric /
+# Eddington / accretion-rate intermediates overflow float32 (#1206). At a
+# realistic AGN luminosity the LINEAR forms — L_bol ~1e44, L_Edd ~1e46, the
+# ``t_in**4`` numerator ~1e58 erg/s — all exceed float32 max (3.4e38), yet the
+# RESULTS (mdot ~1e24 g/s, t_in ~1e5 K, lambda_Edd ~1e-2) are representable.
+# The float32 branch of ``multicolor_disc`` forms every such quantity as a log10
+# sum and materializes it only at the representable result via ``pow10``.
+_LOG10_LSUN_ERG: float = math.log10(_LSUN_ERG)
+_LOG10_C_LIGHT: float = math.log10(_C_LIGHT)
+_LOG10_MSUN_G: float = math.log10(_MSUN_G)
+_LOG10_3G: float = math.log10(3.0 * _G_GRAV)
+_LOG10_8PI_SIGMA_SB: float = math.log10(8.0 * math.pi * _SIGMA_SB)
+# log10(L_Edd) at M_BH = 1 M_sun: L_Edd = 4*pi*G*M*m_p*c/sigma_T, linear in M_BH.
+_LOG10_L_EDD_1MSUN: float = math.log10(
+    4.0 * math.pi * _G_GRAV * _MSUN_G * _M_PROTON * _C_LIGHT / _SIGMA_T
+)
+# Constants for the Kubota & Done float32 path (#1206): the three-zone model
+# carries absolute cgs luminosities (l_edd ~1e46, l0 ~1e42, energy integrals
+# ~1e44) that overflow float32. The float32 branch works those in L_sun units
+# (÷ L_sun) via pre-divided constants so no ~1e44 intermediate ever forms.
+# L_Edd(1 M_sun) in L_sun; l_edd_lsun = _L_EDD_1MSUN_LSUN * 10**log_mbh.
+_L_EDD_1MSUN_LSUN: float = float(
+    4.0 * math.pi * _G_GRAV * _MSUN_G * _M_PROTON * _C_LIGHT / _SIGMA_T
+) / float(_LSUN_ERG)
+# 4*pi*sigma_SB / L_sun; l0_lsun = _4PI_SIGMA_SB_OVER_LSUN * r_isco_cm**2 * t_in**4.
+_4PI_SIGMA_SB_OVER_LSUN: float = float(4.0 * math.pi * _SIGMA_SB) / float(_LSUN_ERG)
+# 2*pi*sigma_SB / L_sun; per-annulus (sigma T^4 * 2*pi*r*dr) energy in L_sun.
+_2PI_SIGMA_SB_OVER_LSUN: float = float(2.0 * math.pi * _SIGMA_SB) / float(_LSUN_ERG)
+# L_sun / c^2; mdot [g/s] = _LSUN_OVER_C2 * 10**log_lbol / eta (avoids l_bol_erg).
+_LSUN_OVER_C2: float = float(_LSUN_ERG) / float(_C_LIGHT) ** 2
 
 # ── Model 1: Simple power-law disc + UV cutoff ────────────────────
 
@@ -256,6 +291,7 @@ def _r_hot_bisect(
     t_in: float,
     l_hot_target: float,
     n_iter: int = 40,
+    float32: bool = False,
 ) -> float:
     r"""Solve for R_hot from K&D 2018 Eq. 2 by bisection in log(x_hot).
 
@@ -267,8 +303,15 @@ def _r_hot_bisect(
 
     ``l_hot_target`` is clipped below :math:`L_{\max} = L_0/10`.
     """
-    # Maximum possible L_diss (entire disc, x→∞): h→0.1, so L_max = L0 * 0.1
-    l0 = 4.0 * jnp.pi * r_isco_cm**2 * _SIGMA_SB * t_in**4
+    # Maximum possible L_diss (entire disc, x→∞): h→0.1, so L_max = L0 * 0.1.
+    # Float32 (#1206): ``l0`` is ~1e42 erg/s (overflow); the bisection needs only
+    # the RATIO l_hot_target / l0, so compute both in L_sun units (``l_hot_target``
+    # arrives in L_sun on the float32 path). The pre-divided 4*pi*sigma/L_sun
+    # constant folds first so no ~1e42 intermediate forms.
+    if float32:
+        l0 = _4PI_SIGMA_SB_OVER_LSUN * r_isco_cm**2 * t_in**4
+    else:
+        l0 = 4.0 * jnp.pi * r_isco_cm**2 * _SIGMA_SB * t_in**4
     # Clip target to (0, L_max); if l_hot_target >= L_max, r_hot → ∞ (use upper bound)
     l_target = jnp.clip(l_hot_target, 1e-100, l0 * 0.099)
 
@@ -300,6 +343,7 @@ def _l_seed_geometric(
     r_out_cm: float,
     t_in: float,
     n_radii: int = 100,
+    float32: bool = False,
 ) -> float:
     """Geometric seed photon luminosity intercepted by the hot corona (K&D 2018 Eq. 3).
 
@@ -346,7 +390,13 @@ def _l_seed_geometric(
     r_ratio = r / r_isco_cm
     torque = jnp.maximum(1.0 - jnp.sqrt(1.0 / r_ratio), 1e-30) ** 0.25
     t_r = t_in * r_ratio ** (-0.75) * torque  # [K]
-    f_nt = _SIGMA_SB * t_r**4  # [erg s^-1 cm^-2]
+    # Float32 (#1206): the seed integral (integrand * dr) reaches ~1e43 erg/s and
+    # overflows; return L_seed in L_sun units by folding 1/L_sun into the surface
+    # flux. Downstream ratios (Beloborodov) are unit-invariant.
+    if float32:
+        f_nt = (_SIGMA_SB / _LSUN_ERG) * t_r**4  # [L_sun s^-1... i.e. erg/s/cm^2 / L_sun]
+    else:
+        f_nt = _SIGMA_SB * t_r**4  # [erg s^-1 cm^-2]
 
     # Geometric covering factor Θ(R)/π (K&D 2018 Eq. 4), H = R_hot
     # Clamp sin_th0 to avoid infinite gradients at arcsin boundaries (±1).
@@ -487,9 +537,21 @@ def _apply_euv_tail(wavelength, nu, l_nu_wien, euv_tail):
     # EUV budget is bounded regardless of slope. Integrate over frequency
     # (sort ascending; nu descends as wavelength ascends).
     sort_idx = jnp.argsort(nu)
-    disc_bol = jnp.abs(jnp.trapezoid(l_nu_wien[sort_idx], nu[sort_idx]))
     shape_bol = jnp.maximum(jnp.abs(jnp.trapezoid(shape[sort_idx], nu[sort_idx])), 1e-100)
-    tail = shape * (_EUV_TAIL_FRAC * disc_bol / shape_bol)
+    if l_nu_wien.dtype == jnp.float32:
+        # Float32 (#1206): the disc bolometric integral ``trapz(l_nu_wien, nu)`` ~
+        # 1e28 erg/s/Hz over ~1e15 Hz is ~1e43 erg/s — past float32 max (3.4e38).
+        # Peak-factor it (integrate the O(1) residual, carry the peak) and group
+        # the small factors (``frac · disc_bol/shape_bol`` ~ few·1e-4) before the
+        # ~1e28 peak so no out-of-range product materializes.
+        # stop_gradient: factorization constant, multiplied back below (#1436).
+        _peak = jax.lax.stop_gradient(jnp.max(jnp.abs(l_nu_wien)))
+        _peak = jnp.where(_peak > 0.0, _peak, 1.0)
+        _disc_bol_hat = jnp.abs(jnp.trapezoid(l_nu_wien[sort_idx] / _peak, nu[sort_idx]))
+        tail = shape * ((_EUV_TAIL_FRAC * _disc_bol_hat / shape_bol) * _peak)
+    else:
+        disc_bol = jnp.abs(jnp.trapezoid(l_nu_wien[sort_idx], nu[sort_idx]))
+        tail = shape * (_EUV_TAIL_FRAC * disc_bol / shape_bol)
     return jnp.maximum(l_nu_wien, tail)
 
 
@@ -503,6 +565,7 @@ def multicolor_disc(
     agn_cos_inc: float = DEFAULT_AGN_COS_INC,
     n_radii: int = 50,
     euv_tail: str | float | None = "powerlaw",
+    agn_log_lbol_shape: float | None = None,
     **_kwargs,
 ) -> jnp.ndarray:
     """Shakura-Sunyaev thin accretion disc with multi-color blackbody emission.
@@ -625,7 +688,6 @@ def multicolor_disc(
     # For a=0 (Schwarzschild): r_isco=6, eta=0.057
     # For a=0.998 (maximal spin): r_isco~1.24, eta~0.32
     eta = 1.0 - jnp.sqrt(1.0 - 2.0 / (3.0 * r_isco))
-    l_edd = _eddington_luminosity(agn_log_mbh)
     # E fix (#846): agn_log_lbol is THE luminosity knob; the Eddington ratio is
     # DERIVED from it (lambda_Edd = L_bol / L_Edd, matching RELAGN's
     # mdot = L_bol/L_edd, relagn.py:288,330), so the disc shape (T_in, r_out) is
@@ -633,21 +695,56 @@ def multicolor_disc(
     # from agn_log_ledd and then rescaled to agn_log_lbol — a decoupling that
     # left T_in / r_out corresponding to the wrong luminosity. agn_log_ledd is
     # now ignored here (a build-time warning fires if a user sets/frees it).
-    l_bol_erg = 10.0**agn_log_lbol * _LSUN_ERG
+    #
+    # Shape vs normalization luminosity (#1206). The disc SHAPE (T_in, r_out,
+    # lambda_Edd) is set by ``_log_lbol_shape``; the output MAGNITUDE by
+    # ``agn_log_lbol`` (the renorm target below). They coincide by default
+    # (``agn_log_lbol_shape=None``), which is the float64 path. Only float32
+    # separates them — the AGN component evaluates the SHAPE at the true L_bol
+    # but normalizes MAGNITUDE to a low reference so the runner's ~1e40 L_lambda
+    # arithmetic stays in float32 range; the true magnitude is re-applied
+    # downstream. See the float32 branch below.
+    _log_lbol_shape = agn_log_lbol if agn_log_lbol_shape is None else agn_log_lbol_shape
 
     # Outer disc radius: Laor & Netzer (1989) self-gravity (Toomre) radius.
     # Beyond r_sg the disc fragments rather than accretes; this is the
     # physically motivated outer boundary used by qsosed (Quera-Bofarull).
     # r_sg ~ 2150 * (alpha/0.1)^{2/9} * lambda_Edd^{4/9} * (M/1e8)^{-2/9} R_g.
-    l_edd_ratio = jnp.clip(l_bol_erg / l_edd, 1e-10, 1.0)  # derived: lambda_Edd
+    if wavelength.dtype == jnp.float32:
+        # Log-space so the ~1e44 L_bol, ~1e46 L_Edd and ~1e58 erg/s ``t_in**4``
+        # numerator never materialize (float32 max 3.4e38). The RESULTS —
+        # lambda_Edd ~1e-2, mdot ~1e24 g/s, t_in ~1e5 K — are all representable.
+        _log_l_bol_erg = _log_lbol_shape + _LOG10_LSUN_ERG
+        _log_l_edd = _LOG10_L_EDD_1MSUN + agn_log_mbh
+        l_edd_ratio = jnp.clip(_pow10(_log_l_bol_erg - _log_l_edd), 1e-10, 1.0)
+        _log_mdot = _log_l_bol_erg - jnp.log10(eta) - 2.0 * _LOG10_C_LIGHT
+        mdot = _pow10(_log_mdot)  # [g s^-1]
+        _log_t_in4 = (
+            _LOG10_3G
+            + agn_log_mbh
+            + _LOG10_MSUN_G
+            + _log_mdot
+            - _LOG10_8PI_SIGMA_SB
+            - 3.0 * jnp.log10(r_in)
+        )
+        t_in = _pow10(0.25 * _log_t_in4)  # [K]
+    else:
+        l_bol_erg = 10.0**_log_lbol_shape * _LSUN_ERG
+        l_edd = _eddington_luminosity(agn_log_mbh)
+        l_edd_ratio = jnp.clip(l_bol_erg / l_edd, 1e-10, 1.0)  # derived: lambda_Edd
+        mdot = l_bol_erg / (eta * _C_LIGHT**2)  # [g s^-1]
+        # Inner temperature: T_in = (3 * G * M * Mdot / (8*pi*sigma_SB * r_in^3))^(1/4)
+        t_in = (
+            3.0
+            * _G_GRAV
+            * 10.0**agn_log_mbh
+            * _MSUN_G
+            * mdot
+            / (8.0 * jnp.pi * _SIGMA_SB * r_in**3)
+        ) ** 0.25
+
     r_sg_rg = _self_gravity_radius(agn_log_mbh, l_edd_ratio)
     r_out = jnp.maximum(r_sg_rg, r_isco * 10.0) * r_g  # at least 10 r_isco
-    mdot = l_bol_erg / (eta * _C_LIGHT**2)  # [g s^-1]
-
-    # Inner temperature: T_in = (3 * G * M * Mdot / (8*pi*sigma_SB * r_in^3))^(1/4)
-    t_in = (
-        3.0 * _G_GRAV * 10.0**agn_log_mbh * _MSUN_G * mdot / (8.0 * jnp.pi * _SIGMA_SB * r_in**3)
-    ) ** 0.25
 
     # Radial grid (logarithmic spacing)
     log_r_min = jnp.log10(r_in)
@@ -681,15 +778,38 @@ def multicolor_disc(
     # a CIGALE-like rise below ~100 A; "wien" recovers the bare thin disc.
     l_nu_intrinsic = _apply_euv_tail(wavelength, nu, l_nu_intrinsic, euv_tail)
 
-    # Renormalize to requested L_bol * agn_lum_ratio
-    l_bol_requested = 10.0**agn_log_lbol * _LSUN_ERG * agn_lum_ratio
+    # Renormalize to requested L_bol * agn_lum_ratio (the MAGNITUDE is set by
+    # ``agn_log_lbol`` — the reference on the float32 path — NOT the shape
+    # luminosity above).
     # Sort by ascending frequency before integrating (nu descends when wave ascends).
     # Using jnp.abs() on a descending-x trapezoid is brittle — sort explicitly.
     _nu = _wavelength_to_nu(wavelength)
     _sort_idx = jnp.argsort(_nu)
-    l_nu_total = jnp.trapezoid(l_nu_intrinsic[_sort_idx], _nu[_sort_idx])
-    l_nu_total_safe = jnp.maximum(jnp.abs(l_nu_total), 1e-100)
-    scale = l_bol_requested / l_nu_total_safe
+    if wavelength.dtype == jnp.float32:
+        # Log-space renorm: ``l_bol_requested`` ~1e44 and the integral
+        # ``l_nu_total`` (l_nu_intrinsic ~1e28 over ~1e15 Hz → ~1e43) both
+        # overflow float32; only their ratio (``scale`` ~1e-33 when normalizing
+        # a true-shape disc to a 1e10 erg/s reference) is needed. Peak-factor the
+        # integrand so the trapezoid stays in range, and carry the peak in log10.
+        _log_l_bol_req = agn_log_lbol + _LOG10_LSUN_ERG + jnp.log10(agn_lum_ratio)
+        # stop_gradient: factorization constant, added back as log10(_peak) (#1436).
+        _peak = jax.lax.stop_gradient(jnp.max(jnp.abs(l_nu_intrinsic)))
+        _peak = jnp.where(_peak > 0.0, _peak, 1.0)
+        _hat_total = jnp.trapezoid(l_nu_intrinsic[_sort_idx] / _peak, _nu[_sort_idx])
+        # ``representable_floor``, not the bare ``1e-100`` (#1492): float32's
+        # smallest subnormal is 1.4e-45, so the literal IS 0.0 there and this
+        # branch — the float32 one — was the guard providing nothing. A zero
+        # integral would take log10 to -inf and the scale to inf. Returns
+        # ``1e-100`` unchanged under x64, so float64 is bit-identical.
+        _log_l_nu_total = jnp.log10(_peak) + jnp.log10(
+            jnp.maximum(jnp.abs(_hat_total), _representable_floor(1e-100))
+        )
+        scale = _pow10(_log_l_bol_req - _log_l_nu_total)
+    else:
+        l_bol_requested = 10.0**agn_log_lbol * _LSUN_ERG * agn_lum_ratio
+        l_nu_total = jnp.trapezoid(l_nu_intrinsic[_sort_idx], _nu[_sort_idx])
+        l_nu_total_safe = jnp.maximum(jnp.abs(l_nu_total), _representable_floor(1e-100))
+        scale = l_bol_requested / l_nu_total_safe
 
     return l_nu_intrinsic * scale
 
@@ -857,6 +977,7 @@ def _compute_bh_params(
     agn_log_mbh: float,
     agn_log_lbol: float,
     agn_a_spin: float,
+    float32: bool = False,
 ) -> tuple:
     """Compute black hole parameters: radius, ISCO, efficiency, and accretion rate.
 
@@ -908,8 +1029,16 @@ def _compute_bh_params(
     # (agn_log_lbol) instead of the now-derived Eddington ratio, so the zone
     # structure (T_in, radii) is self-consistent with L_bol. lambda_Edd is
     # recovered downstream as L_bol / L_Edd (see _compute_zone_radii).
-    l_bol_erg = 10.0**agn_log_lbol * _LSUN_ERG
-    mdot = l_bol_erg / (eta * _C_LIGHT**2)
+    if float32:
+        # Float32 (#1206): the ~1e44 erg/s l_bol_erg intermediate overflows;
+        # mdot ~1e24 g/s is representable. Fold L_sun/c^2 (a pre-divided
+        # constant ~4e12) so only ``10**log_lbol`` (~1e11) is materialized.
+        mdot = _LSUN_OVER_C2 * 10.0**agn_log_lbol / eta
+        # l_edd (~1e46 erg/s) stays out-of-range here; downstream float32
+        # branches recompute it in L_sun units from agn_log_mbh.
+    else:
+        l_bol_erg = 10.0**agn_log_lbol * _LSUN_ERG
+        mdot = l_bol_erg / (eta * _C_LIGHT**2)
 
     return r_g, r_isco_rg, r_isco_cm, eta, l_edd, mdot
 
@@ -924,6 +1053,7 @@ def _compute_zone_radii(
     agn_f_hard: float,
     agn_r_warm_ratio: float,
     l_edd: float,
+    float32: bool = False,
 ) -> tuple:
     """Compute self-consistent zone radii: R_hot, R_warm, and R_out.
 
@@ -981,15 +1111,23 @@ def _compute_zone_radii(
        Accretion Disks of Quasars," MNRAS, 238, 897 (1989).
     """
     f_hard_safe = jnp.clip(agn_f_hard, 1e-6, 0.5)
-    l_hot_target = f_hard_safe * l_edd
-    r_hot_cm = _r_hot_bisect(r_isco_cm, t_in, l_hot_target)
+    # Float32 (#1206): l_edd ~1e46 erg/s overflows, but the zone structure needs
+    # only the ratio l_hot_target/l0 (in the bisection) and lambda_Edd = L_bol /
+    # L_Edd. Work L_Edd in L_sun (linear in M_BH) so both stay representable.
+    if float32:
+        l_edd_lsun = _L_EDD_1MSUN_LSUN * 10.0**agn_log_mbh
+        l_hot_target = f_hard_safe * l_edd_lsun  # L_sun
+        r_hot_cm = _r_hot_bisect(r_isco_cm, t_in, l_hot_target, float32=True)
+        l_edd_ratio = jnp.clip(10.0**agn_log_lbol / l_edd_lsun, 1e-10, 1.0)
+    else:
+        l_hot_target = f_hard_safe * l_edd
+        r_hot_cm = _r_hot_bisect(r_isco_cm, t_in, l_hot_target)
+        # E fix (#846): lambda_Edd = L_bol / L_Edd, derived from the requested
+        # agn_log_lbol (not the now-derived agn_log_ledd).
+        l_edd_ratio = jnp.clip(10.0**agn_log_lbol * _LSUN_ERG / l_edd, 1e-10, 1.0)
 
     r_warm_ratio_safe = jnp.clip(agn_r_warm_ratio, 1.1, 10.0)
     r_warm_cm = r_hot_cm * r_warm_ratio_safe
-
-    # E fix (#846): lambda_Edd = L_bol / L_Edd, derived from the requested
-    # agn_log_lbol (not the now-derived agn_log_ledd).
-    l_edd_ratio = jnp.clip(10.0**agn_log_lbol * _LSUN_ERG / l_edd, 1e-10, 1.0)
     r_sg_rg = _self_gravity_radius(agn_log_mbh, l_edd_ratio)
     r_out_cm = jnp.maximum(r_sg_rg, r_isco_rg * 10.0) * r_g
 
@@ -1016,6 +1154,9 @@ def _compute_zone_luminosities(
     l_edd: float,
     l_bol_erg: float,
     agn_self_consistent_gamma: bool,
+    float32: bool = False,
+    agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
+    agn_log_lbol_shape: float = 0.0,
     nthcomp_table=None,
 ) -> tuple:
     """Compute self-consistent luminosities of the three AGN zones.
@@ -1125,22 +1266,38 @@ def _compute_zone_luminosities(
         """Compute Comptonized L_nu for one warm-zone annulus using nthcomp spectral shape."""
         b_nu_plain = _planck_lnu(nu, t_ring)
         p_plain = jnp.abs(jnp.trapezoid(b_nu_plain, nu))
-        l_total = p_plain * _ring_area(r_cm, dr_ring, agn_cos_inc)
         kTbb_keV = _K_BOLTZ_KEV * t_ring
         shape = _nthcomp_lnu_interp(
             nu, agn_gamma_warm, agn_kt_warm, kTbb_keV, _template=nthcomp_table
         )
+        if float32:
+            # Float32 (#1206): the ring bolometric ``p_plain * ring_area`` ~1e42
+            # erg/s overflows, though the ring L_nu (~1e27) is representable.
+            # Fold the tiny normalized ``shape`` in first so no ~1e42 forms.
+            # This is also why ``l_total`` is built below rather than above the
+            # branch as on main: forming it at all is the overflow.
+            return (shape * p_plain) * _ring_area(r_cm, dr_ring, agn_cos_inc)
+        l_total = p_plain * _ring_area(r_cm, dr_ring, agn_cos_inc)
         return shape * l_total
 
     l_nu_warm = jnp.sum(jax.vmap(_warm_ring)(r_warm_grid, t_warm, dr_warm), axis=0)
 
     # ── Zone 3: Hot corona (R_ISCO < r < R_hot) ───────────────────
     f_hard_safe = jnp.clip(agn_f_hard, 1e-6, 0.5)
-    l_hot_erg = jnp.minimum(f_hard_safe * l_edd, l_bol_erg * 0.5)
+    # Float32 (#1206): l_hot_erg ~5e43 and l_seed ~1e44 erg/s overflow. Work both
+    # in L_sun units (l_edd from M_BH, L_bol from the SHAPE luminosity — the
+    # corona fraction lambda_Edd must track the TRUE L_bol, not the reference the
+    # magnitude normalizes to). Beloborodov uses only their ratio, so units cancel.
+    if float32:
+        _l_edd_lsun = _L_EDD_1MSUN_LSUN * 10.0**agn_log_mbh
+        l_hot_erg = jnp.minimum(f_hard_safe * _l_edd_lsun, 10.0**agn_log_lbol_shape * 0.5)
+        l_seed_geom = _l_seed_geometric(r_isco_cm, r_hot_cm, r_out_cm, t_in, float32=True)
+    else:
+        l_hot_erg = jnp.minimum(f_hard_safe * l_edd, l_bol_erg * 0.5)
+        l_seed_geom = _l_seed_geometric(r_isco_cm, r_hot_cm, r_out_cm, t_in)
 
     kt_hot_erg = agn_kt_hot * _KEV_TO_ERG
 
-    l_seed_geom = _l_seed_geometric(r_isco_cm, r_hot_cm, r_out_cm, t_in)
     gamma_hard_sc = beloborodov_gamma_hot(l_hot_erg, l_seed_geom)
     gamma_hard_eff = jnp.where(agn_self_consistent_gamma, gamma_hard_sc, agn_gamma_hard)
 
@@ -1158,23 +1315,55 @@ def _compute_zone_luminosities(
     t_seed_hot = t_seed_nt * jnp.exp(y_warm)
     nu_seed_hot = _K_BOLTZ * t_seed_hot / _H_PLANCK
 
+    # The corona L_nu scales linearly with l_hot_erg. On the float32 path
+    # l_hot_erg is in L_sun, so the corona comes out in L_sun/Hz — convert back to
+    # erg/s/Hz by folding L_sun in (the ~1e28 product forms without the ~5e43
+    # intermediate).
     l_nu_hot = _hot_corona_lnu(nu, l_hot_erg, gamma_hard_eff, kt_hot_erg, nu_seed_hot)
+    if float32:
+        l_nu_hot = l_nu_hot * _LSUN_ERG
 
     # ── Combine and normalize ─────────────────────────────────────
     l_nu_total = l_nu_outer + l_nu_warm + l_nu_hot
 
-    l_bol_outer = jnp.sum(
-        _SIGMA_SB * t_outer**4 * 2.0 * jnp.pi * r_outer * dr_outer * jnp.maximum(agn_cos_inc, 0.01)
-    )
-    l_bol_warm = jnp.sum(
-        _SIGMA_SB
-        * t_warm**4
-        * 2.0
-        * jnp.pi
-        * r_warm_grid
-        * dr_warm
-        * jnp.maximum(agn_cos_inc, 0.01)
-    )
+    # Zone bolometric integrals (sigma T^4 * 2*pi*r*dr) reach ~1e44 erg/s and
+    # overflow float32; work them in L_sun (pre-divided 2*pi*sigma/L_sun folds
+    # first). l_hot_erg is already L_sun on this path, and ``l_bol_erg`` is passed
+    # in L_sun too (the reference normalization), so ``scale`` is a clean ratio.
+    if float32:
+        l_bol_outer = jnp.sum(
+            _2PI_SIGMA_SB_OVER_LSUN
+            * t_outer**4
+            * r_outer
+            * dr_outer
+            * jnp.maximum(agn_cos_inc, 0.01)
+        )
+        l_bol_warm = jnp.sum(
+            _2PI_SIGMA_SB_OVER_LSUN
+            * t_warm**4
+            * r_warm_grid
+            * dr_warm
+            * jnp.maximum(agn_cos_inc, 0.01)
+        )
+    else:
+        l_bol_outer = jnp.sum(
+            _SIGMA_SB
+            * t_outer**4
+            * 2.0
+            * jnp.pi
+            * r_outer
+            * dr_outer
+            * jnp.maximum(agn_cos_inc, 0.01)
+        )
+        l_bol_warm = jnp.sum(
+            _SIGMA_SB
+            * t_warm**4
+            * 2.0
+            * jnp.pi
+            * r_warm_grid
+            * dr_warm
+            * jnp.maximum(agn_cos_inc, 0.01)
+        )
     l_bol_unnorm = l_bol_outer + l_bol_warm + l_hot_erg
     scale = l_bol_erg / jnp.maximum(l_bol_unnorm, 1e-100)
 
@@ -1287,6 +1476,7 @@ def kubota_done_disc(
     agn_r_warm_ratio: float = 2.0,
     n_radii: int = 50,
     agn_self_consistent_gamma: bool = False,
+    agn_log_lbol_shape: float | None = None,
     _template=None,
     **_kwargs,
 ) -> jnp.ndarray:
@@ -1465,20 +1655,41 @@ def kubota_done_disc(
        https://doi.org/10.1086/311810
     """
     nu = _wavelength_to_nu(wavelength)
+    _f32 = wavelength.dtype == jnp.float32
+    # Shape luminosity (temperature, zone structure, corona fraction) vs the
+    # normalization luminosity (output magnitude). They coincide by default (the
+    # float64 path). On float32 the AGN component passes the TRUE L_bol for the
+    # SHAPE while normalizing MAGNITUDE to a low reference, so the runner's ~1e40
+    # L_lambda arithmetic stays in float32 range; the true scale is re-applied
+    # downstream (#1206).
+    _lbol_shape = agn_log_lbol if agn_log_lbol_shape is None else agn_log_lbol_shape
 
     r_g, r_isco_rg, r_isco_cm, _eta, l_edd, mdot = _compute_bh_params(
-        agn_log_mbh, agn_log_lbol, agn_a_spin
+        agn_log_mbh, _lbol_shape, agn_a_spin, float32=_f32
     )
 
     # Novikov-Thorne inner-disc temperature.
-    t_in = (
-        3.0
-        * _G_GRAV
-        * 10.0**agn_log_mbh
-        * _MSUN_G
-        * mdot
-        / (8.0 * jnp.pi * _SIGMA_SB * r_isco_cm**3)
-    ) ** 0.25
+    if _f32:
+        # Log-space: the ``3 G M mdot`` numerator ~1e58 erg/s overflows float32;
+        # t_in ~1e5 K is representable.
+        _log_t_in4 = (
+            _LOG10_3G
+            + agn_log_mbh
+            + _LOG10_MSUN_G
+            + jnp.log10(mdot)
+            - _LOG10_8PI_SIGMA_SB
+            - 3.0 * jnp.log10(r_isco_cm)
+        )
+        t_in = _pow10(0.25 * _log_t_in4)
+    else:
+        t_in = (
+            3.0
+            * _G_GRAV
+            * 10.0**agn_log_mbh
+            * _MSUN_G
+            * mdot
+            / (8.0 * jnp.pi * _SIGMA_SB * r_isco_cm**3)
+        ) ** 0.25
 
     r_hot_cm, r_warm_cm, r_out_cm = _compute_zone_radii(
         r_g,
@@ -1486,13 +1697,19 @@ def kubota_done_disc(
         r_isco_cm,
         t_in,
         agn_log_mbh,
-        agn_log_lbol,
+        _lbol_shape,
         agn_f_hard,
         agn_r_warm_ratio,
         l_edd,
+        float32=_f32,
     )
 
-    l_bol_requested = 10.0**agn_log_lbol * _LSUN_ERG * agn_lum_ratio
+    # Normalization magnitude from agn_log_lbol (the reference on the float32
+    # path); pass it in L_sun there so the zone helper's ``scale`` is a clean ratio.
+    if _f32:
+        l_bol_requested = 10.0**agn_log_lbol * agn_lum_ratio  # L_sun
+    else:
+        l_bol_requested = 10.0**agn_log_lbol * _LSUN_ERG * agn_lum_ratio
 
     l_nu_total, scale = _compute_zone_luminosities(
         nu,
@@ -1511,6 +1728,9 @@ def kubota_done_disc(
         l_edd,
         l_bol_requested,
         agn_self_consistent_gamma,
+        float32=_f32,
+        agn_log_mbh=agn_log_mbh,
+        agn_log_lbol_shape=_lbol_shape,
         nthcomp_table=_template,
     )
 
@@ -1707,6 +1927,11 @@ def load_relagn_default_grid() -> dict:
 def relagn_disc_from_grid(
     grid: dict,
     wavelength: jnp.ndarray,
+    # Kept on this branch (main's #1578 dropped it): the bolometric
+    # renormalization below is this branch's #1206 work and reads it. Read off
+    # the declaration rather than repeating the literal 11.0, which is #1578's
+    # own rule.
+    agn_log_lbol: float = DEFAULT_AGN_LOG_LBOL,
     agn_log_mbh: float = DEFAULT_AGN_LOG_MBH,
     agn_log_mdot: float = -1.0,
     agn_astar: float = 0.0,
@@ -1724,6 +1949,9 @@ def relagn_disc_from_grid(
         baking it into the graph as ``Constant`` ops (#1383).
     wavelength : ndarray, shape (n_wave,)
         Rest-frame wavelength. [Å]
+    agn_log_lbol : float
+        :math:`\log_{10}(L_{\rm bol}/L_\odot)` — the normalization the template
+        is scaled to. [dimensionless]
     agn_log_mbh : float
         :math:`\log_{10}(M_{\rm BH}/M_\odot)`. [dimensionless]
     agn_log_mdot : float
@@ -1743,7 +1971,19 @@ def relagn_disc_from_grid(
     **JIT-compatible**: yes.
     **Gradient-safe**: yes — triweight kernel, C²-continuous.
 
-    **Inclination**: grid stored at cos_inc = 0.5; scaled by 2·cos_inc.
+    **Normalization (behavior change, #1206).** The template *shape* comes from
+    (M_BH, Ṁ, a\*); its **normalization** is set by ``agn_log_lbol``, matching
+    every other disc in the composable menu (``multicolor``, ``kubota_done``,
+    ``slone_netzer``, …). Previously the grid's own absolute normalization was
+    used and ``agn_log_lbol`` had no effect — which both surprised users who set
+    it and made the disc unusable in float32, since the grid's absolute
+    ``λL_λ(5100 Å) ≈ 2.6e44`` erg/s exceeds the float32 maximum (3.4e38).
+
+    **Inclination**: grid stored at cos_inc = 0.5, scaled by 2·cos_inc. As with
+    ``multicolor_disc``, the bolometric renormalization then divides out any
+    wavelength-independent prefactor, so ``agn_cos_inc`` does not change this
+    disc's normalization; viewing anisotropy enters downstream through the
+    runner's inclination handling.
     """
     point = (agn_log_mbh, agn_log_mdot, agn_astar)
     lnu_template = _interp_nd_triweight(
@@ -1758,4 +1998,20 @@ def relagn_disc_from_grid(
         wavelength, jnp.asarray(grid["wave_grid"]), lnu_template, left=0.0, right=0.0
     )
     # Inclination scaling from reference cos_inc = 0.5
-    return lnu_interp * (2.0 * agn_cos_inc)
+    lnu_interp = lnu_interp * (2.0 * agn_cos_inc)
+
+    # Renormalize to the requested bolometric luminosity (#1206).
+    nu = _wavelength_to_nu(wavelength)
+    l_scale = 10.0**agn_log_lbol * _LSUN_ERG
+    if wavelength.dtype == jnp.float32:
+        # Float32: the template's own bolometric integral is ~1e45 erg/s and
+        # overflows, which would flush the disc to zero. Peak-factor and
+        # regroup — ``(l_scale / hat_int) * (lnu / peak)`` is algebraically
+        # identical to ``l_scale * lnu / (peak * hat_int)``.
+        # stop_gradient: factorization constant; peak * hat_int == bolint(lnu) (#1436).
+        peak = jax.lax.stop_gradient(jnp.max(jnp.abs(lnu_interp)))
+        peak = jnp.where(peak > 0.0, peak, 1.0)
+        hat_int = _bolometric_integral_nu(lnu_interp / peak, nu, floor=1e-30)
+        return (l_scale / hat_int) * (lnu_interp / peak)
+    integral_safe = _bolometric_integral_nu(lnu_interp, nu, floor=1e-100)
+    return l_scale * lnu_interp / integral_safe

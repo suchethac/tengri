@@ -322,11 +322,42 @@ backward pass numerically safe, and align with the documented
 | `predict_nebular_line_luminosities` | **[Lsun]** | all four |
 | `predict_nebular_continuum` | **[Lsun/Hz]** | all four |
 
+**The table above describes the *backend method*. The published derived key is a
+different contract**, and until #1559 nothing reconciled the two:
+
+| Key | Unit | Converted by |
+|---|---|---|
+| `state.derived["line_lums"]` | **[erg/s]** | `NebularSEDComponent`, one `* backend.lsun_erg` |
+| `state.derived["log_line_lums"]` | **[dex re erg/s]** | same seam, taken on the [Lsun] side |
+
+`SEDModel.predict_line_fluxes` consumes `line_lums` as erg/s and applies only
+`1 / (4 pi d_L^2)`. Before #1559 the `* L_sun` lived inside `CueBackend` and
+nowhere else, so Cue came out right and CloudyGrid / CB19 / MappingsPhoto
+published [Lsun] into the erg/s key — **every line flux from those three was a
+factor 3.839e33 too faint**, selected only by which backend the user named. No
+per-backend test could see it: line ratios, `fesc` monotonicity and
+upstream-tabulation parity are all invariant under a global scale.
+
+The conversion constant is the **backend's**, exposed as `backend.lsun_erg`, not
+a global. Cue's network was trained against `L_sun = 3.839e33`; the grid
+backends are tabulated against IAU 2015's `3.828e33`. Using one value for both
+puts a systematic 0.287% on whichever backend it does not belong to — too small
+for a units test to catch, and caught here only by measuring Cue's H-alpha
+before and after and noticing it had moved when it should have been unchanged.
+
+Guard: `tests/contract/test_line_lums_units.py`, which pins `L(Halpha) / Q_H`
+against Case B recombination (Osterbrock & Ferland 2006 Table 4.4,
+`1.37e-12 erg`). That ratio is backend-independent to well under a decade and a
+unit error moves it by 33.6, so the two cannot be confused.
+
 Prior to 2026-05-17 `CueBackend.predict_nebular_line_luminosities` mistakenly
 multiplied by `_LSUN_ERG` and `CueBackend.predict_nebular_continuum`'s docstring
 falsely claimed `[erg/s/Hz]`. Both fixed; see commit
 `fix(nebular): unify CueBackend on Lsun for line/continuum primitives` on the
-`fix/nebular-robustness-2026-05-16` branch (merged 2026-05-16).
+`fix/nebular-robustness-2026-05-16` branch (merged 2026-05-16). The line-side
+multiply was subsequently restored and this note went stale — #1073 was written
+against the restored erg/s behavior, and #1559 is what finally reconciled the
+two layers rather than compensating at a third.
 
 Side effect: removing the spurious `* _LSUN_ERG` brought the Cue NN backward
 pass into a float32-safe magnitude range, fixing a long-standing NaN-autodiff

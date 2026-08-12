@@ -437,6 +437,11 @@ class MappingsPhotoStellarBackend:
     name = "mappings_photo_stellar"
     has_free_params = True
 
+    #: erg/s per [Lsun] for this backend's line catalog (#1559). IAU 2015, the
+    #: convention the MAPPINGS tabulation is built on. See CueBackend for the
+    #: one backend that deviates.
+    lsun_erg: float = _LSUN_ERG
+
     def __init__(
         self,
         grid_path: str | Path = _DEFAULT_GRID_PATH,

@@ -1032,12 +1032,11 @@ class SEDProperties(_CachedBase):
 
 # ── Emission line properties (lazy) ───────────────────────────────
 
-# Floor used in BPT and other line-ratio diagnostics to avoid log10(0)
-# when a line is undetected at this S/N. Set well below any realistic
-# flux (typical detection limits ≈ 1e-18 erg/s/cm²) so the floor never
-# affects detected lines but yields a finite, sortable −∞-equivalent
-# value for missing lines.
-_LINE_RATIO_FLOOR = 1e-50
+# ``_LINE_RATIO_FLOOR = 1e-50`` stood here until #1568, described as the floor
+# "used in BPT and other line-ratio diagnostics to avoid log10(0)". It had no
+# readers — the BPT ratios live in ``NebularSEDComponent`` and use that module's
+# own floor. Removed rather than made representable: a dead constant that is
+# also 0.0 in float32 is the worst of both, since it reads as a live guard.
 
 
 class LineProperties(_CachedBase):
@@ -2514,7 +2513,6 @@ class Prediction:
         # The fast-nebular grid zeroes the Cue continuum, so ``sed_intrinsic``
         # would come back without the nebular continuum or the lines (#1665).
         # Same census as predict_spectrum / predict_spectral_indices.
-        self._model._refuse_on_fast_nebular("pred.rest_sed()")
         state = self._ensure_state()
         sed = state.sed_intrinsic
         if wave is None:
@@ -2610,7 +2608,6 @@ class Prediction:
         and redshifted it — an observed-frame result with a rest-frame
         argument. That asymmetry was a footgun; it is not reproduced here.
         """
-        self._model._refuse_on_fast_nebular("pred.obs_sed()")
         result = self._model._predict_obs_sed(self._params)
         if wave_obs is None:
             return result.sed

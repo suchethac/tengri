@@ -66,6 +66,7 @@ import jax
 import jax.numpy as jnp
 from jax.flatten_util import ravel_pytree
 
+from tengri.inference.likelihoods.gaussian import standardized_residual
 from tengri.utils.transforms import to_bounded, to_unbounded
 
 __all__ = ["FLAT_SAMPLERS", "FlatProblem", "build_flat_problem", "run_flat_sampler"]
@@ -344,7 +345,7 @@ def build_flat_problem(fitter, *, key, memory_mode="low", verbose=False, map_ste
         else:
             predictions = jax.lax.map(lambda ub: fwd(ub, None), p["gal"])
 
-        chi2 = jnp.sum(((all_data - predictions.reshape(-1)) / all_noise) ** 2)
+        chi2 = jnp.sum(standardized_residual(all_data, predictions.reshape(-1), all_noise) ** 2)
         return -0.5 * chi2
 
     _data_args = (all_data_arr, all_noise_arr)

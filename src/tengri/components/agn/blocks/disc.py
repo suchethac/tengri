@@ -108,6 +108,7 @@ def adaf_disc_block(
     agn_adaf_alpha: float = 0.3,
     agn_adaf_beta: float = 0.5,
     agn_adaf_delta: float = 0.1,
+    agn_log_lbol_shape: float | None = None,
     **_params,
 ) -> Array:
     r"""Advection-dominated accretion flow (ADAF) — faithful Mahadevan 1997.
@@ -163,6 +164,7 @@ def adaf_disc_block(
         agn_adaf_alpha=agn_adaf_alpha,
         agn_adaf_beta=agn_adaf_beta,
         agn_adaf_delta=agn_adaf_delta,
+        agn_log_lbol_shape=agn_log_lbol_shape,
     )
     return L_nu * _C_AA_PER_S / wave_aa**2
 
@@ -483,6 +485,7 @@ def kubota_done_disc_block(
     agn_gamma_hard: float = 1.8,
     agn_kt_hot: float = 100.0,
     agn_r_warm_ratio: float = 2.0,
+    agn_log_lbol_shape: float | None = None,
     templates=None,
     **_params,
 ) -> Array:
@@ -531,6 +534,7 @@ def kubota_done_disc_block(
         agn_gamma_hard=agn_gamma_hard,
         agn_kt_hot=agn_kt_hot,
         agn_r_warm_ratio=agn_r_warm_ratio,
+        agn_log_lbol_shape=agn_log_lbol_shape,
         _template=templates,
     )
     return L_nu * _C_AA_PER_S / wave_aa**2
@@ -552,6 +556,7 @@ def multicolor_disc_block(
     agn_a_spin: float = 0.0,
     agn_cos_inc: float = DEFAULT_AGN_COS_INC,
     euv_tail: str | float | None = "powerlaw",
+    agn_log_lbol_shape: float | None = None,
     **_params,
 ) -> Array:
     r"""Shakura-Sunyaev multi-color thin-disc block.
@@ -598,6 +603,7 @@ def multicolor_disc_block(
         agn_a_spin=agn_a_spin,
         agn_cos_inc=agn_cos_inc,
         euv_tail=euv_tail,
+        agn_log_lbol_shape=agn_log_lbol_shape,
     )
     return L_nu * _C_AA_PER_S / wave_aa**2
 
@@ -687,6 +693,7 @@ def relagn_disc_block(
     L_nu = relagn_disc_from_grid(
         grid,
         wave_aa,
+        agn_log_lbol=agn_log_lbol,
         agn_log_mbh=agn_log_mbh,
         agn_log_mdot=agn_log_mdot,
         agn_astar=agn_astar,

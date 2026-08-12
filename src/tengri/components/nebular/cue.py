@@ -120,7 +120,7 @@ from tengri.utils.physics_constants import (
     C_CGS as _C_CGS,
     L_SUN_CUE as _LSUN_ERG,  # 3.839e33 — Cue training convention, NOT IAU 2015
 )
-from tengri.utils.scale import LN10, pow10
+from tengri.utils.scale import LN10, pow10, representable_exponent
 
 _LOG_LSUN = jnp.log10(_LSUN_ERG)
 _LOG_4PI = jnp.log10(4.0 * jnp.pi)
@@ -785,7 +785,7 @@ def predict_all_lines(
     # +51-dex `gas_logq = logU` bug fixed in #477 produced near-physical
     # silently-wrong output rather than blatantly-saturated output.
     exponent = log_lum_sorted - gas_logq + gas_logqion - _LOG_LSUN
-    exponent_safe = jnp.clip(exponent, -50.0, 50.0)
+    exponent_safe = jnp.clip(exponent, -50.0, representable_exponent(50.0))
     luminosities = 10.0**exponent_safe
 
     return wav_sorted, luminosities
@@ -858,7 +858,7 @@ def predict_continuum(
     # from ±100 to ±50 dex in this revision — see predict_all_lines for the
     # full rationale (#477 follow-up).
     exponent = log_spec_sorted - gas_logq + gas_logqion - _LOG_LSUN
-    luminosity = 10.0 ** jnp.clip(exponent, -50.0, 50.0)
+    luminosity = 10.0 ** jnp.clip(exponent, -50.0, representable_exponent(50.0))
 
     # Zero out wavelengths below Lyman limit (Cue convention)
     luminosity = jnp.where(wav_sorted > 911.6, luminosity, 0.0)
@@ -988,6 +988,17 @@ class CueBackend:
        these parameters as free parameters or using external ionizing spectra.
 
     """
+
+    #: erg/s per [Lsun] for **this backend's** line catalog, read by
+    #: :class:`~tengri.components.nebular.component.NebularSEDComponent` at the
+    #: one seam that publishes ``line_lums`` in erg/s (#1559).
+    #:
+    #: Cue is the exception, deliberately: its network was trained against
+    #: ``L_sun = 3.839e33``, not IAU 2015's 3.828e33 (CLAUDE.md, "Physical
+    #: constants"). Converting its output with the IAU value biases every Cue
+    #: line by +0.287% — systematic, and far too small for a units test to see,
+    #: which is exactly the kind of error that survives.
+    lsun_erg: float = _LSUN_ERG
 
     def __init__(
         self,
@@ -1561,7 +1572,7 @@ class CueBackend:
         template_data: Any | None = None,
         **_kwargs,
     ) -> tuple[jnp.ndarray, jnp.ndarray]:
-        """Predict emission line luminosities.
+        """Predict emission line luminosities [Lsun].
 
         Supports two calling conventions:
 
@@ -1603,11 +1614,25 @@ class CueBackend:
         wavelengths : ndarray, shape (n_lines,)
             Emission line wavelengths (vacuum) [Angstrom].
         luminosities : ndarray, shape (n_lines,)
-            Emission line luminosities [erg/s].
+            Emission line luminosities **[Lsun]**, matching CloudyGrid, CB19 and
+            MappingsPhoto. :class:`~tengri.components.nebular.component.NebularSEDComponent`
+            applies the single ``* L_sun`` before publishing
+            ``state.derived["line_lums"]`` in erg/s.
 
         Notes
         -----
         **JIT-compatible**: yes — all operations use ``jnp`` primitives.
+
+        **Units (#1559)**: this returned [erg/s] until 2026-08, alone among the
+        four backends, while the component applied no conversion to any of them.
+        Cue therefore came out right and the other three came out a factor
+        ``L_sun = 3.839e33`` too faint. Both halves are fixed together: the
+        conversion is now the component's, once, for everyone.
+
+        **float32**: [Lsun] peaks around 1e22 here against a 3.4e38 ceiling, so
+        this return is representable. Only the erg/s form the component
+        publishes is not — which is why it also publishes ``log_line_lums``,
+        derived at that seam from this value.
 
         **High-level mode**: When ``ssp_weights``, ``ssp_log_ages_yr``,
         and ``log_z`` are provided, Q_H and ionizing spectrum parameters
@@ -1652,7 +1677,7 @@ class CueBackend:
             neb_fdust=neb_fdust,
             template_data=template_data,
         )
-        return wav, lum * _LSUN_ERG
+        return wav, lum
 
     def predict_nebular_continuum(
         self,
