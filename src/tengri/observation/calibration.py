@@ -242,8 +242,24 @@ def marginalize_calibration(
     # basis shape: (n_poly, n_wave), rows are T_1, T_2, ..., T_{n_poly}
     basis = jnp.concatenate([t1[jnp.newaxis], higher], axis=0)
 
-    # Inverse variance weights
-    inv_var = 1.0 / jnp.maximum(obs_err**2, 1e-30)
+    # Inverse variance weights.
+    #
+    # The guard is on sigma <= 0 (a masked pixel, which gets zero weight), NOT
+    # on the magnitude of the variance. It was `1.0 / maximum(obs_err**2,
+    # 1e-30)`, and that floor is an absolute number applied to a quantity whose
+    # scale is set by the caller's flux units. A spectrum in cgs F_nu runs at
+    # ~1e-17 erg/s/cm2/Hz with errors ~1e-18, so `obs_err**2` ~ 1e-36 sits three
+    # to fourteen orders of magnitude *below* the floor and every weight was
+    # clamped to the same 1e30 — for every realistic input. The likelihood term
+    # then could not outweigh the unit-scale coefficient prior, and the returned
+    # c_hat collapsed toward zero.
+    #
+    # It failed silently and unit-dependently: the identical problem at SNR=100
+    # recovered coefficients exactly at a flux scale of 1e-10 and returned ~1e-4
+    # instead of 0.05 at 1e-17, and every obs_err from 1e-22 to 1e-15 produced a
+    # bit-identical answer, because none of them reached the floor (#1744).
+    safe_err = jnp.where(obs_err > 0.0, obs_err, 1.0)
+    inv_var = jnp.where(obs_err > 0.0, 1.0 / jnp.square(safe_err), 0.0)
 
     # Design matrix: D_jk = sum_i [T_j(x_i) * m_i * T_k(x_i) * m_i / sigma_i^2]
     # = sum_i [T_j * T_k * m^2 / sigma^2]
@@ -287,9 +303,16 @@ def marginalize_calibration(
     log_det_sigma_post = -logdet_a  # ln|A^{-1}|
     log_det_lambda = n_poly * jnp.log(prior_sigma**2)
 
-    # Constant normalization: -N/2 * ln(2pi) - sum(ln sigma_i)
-    n_wave = wavelength.shape[0]
-    log_norm = -0.5 * n_wave * jnp.log(2.0 * jnp.pi) - jnp.sum(jnp.log(obs_err))
+    # Constant normalization: -N/2 * ln(2pi) - sum(ln sigma_i), over the
+    # *unmasked* pixels only. A masked pixel (sigma <= 0) carries zero weight in
+    # chi2 above, so it must not contribute a `ln 0` here either — it is not an
+    # observation. Counting it made the whole marginal likelihood non-finite,
+    # which is a poor way to say "one pixel is masked".
+    unmasked = obs_err > 0.0
+    n_eff = jnp.sum(unmasked)
+    log_norm = -0.5 * n_eff * jnp.log(2.0 * jnp.pi) - jnp.sum(
+        jnp.where(unmasked, jnp.log(jnp.where(unmasked, obs_err, 1.0)), 0.0)
+    )
 
     log_likelihood_marginal = log_norm - 0.5 * (
         chi2 + prior_penalty - log_det_sigma_post + log_det_lambda
