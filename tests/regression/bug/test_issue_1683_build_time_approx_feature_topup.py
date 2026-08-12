@@ -58,16 +58,29 @@ class _StubObs:
 class _StubModel:
     """The minimum both resolvers read, with the build-time spelling as a knob."""
 
-    def __init__(self, *, features_tabulate=True, build_time_wave=False, observation=None):
-        self.approx = _StubApprox(wave=build_time_wave)
-        self.approx_configs = (WavePrecomp(),) if build_time_wave else ()
+    def __init__(
+        self,
+        *,
+        features_tabulate=True,
+        build_time_wave=False,
+        build_time_feature=False,
+        observation=None,
+    ):
+        self.approx = _StubApprox(wave=build_time_wave, feature=build_time_feature)
+        configs = ()
+        if build_time_wave:
+            configs += (WavePrecomp(),)
+        if build_time_feature:
+            configs += (FeaturePrecomp(),)
+        self.approx_configs = configs
         self.features_tabulate = features_tabulate
         self.observation = observation if observation is not None else _StubObs()
         self.received_cfg = None
         self._build_time_wave = build_time_wave
+        self._build_time_feature = build_time_feature
 
     def _has_modern_approx(self):
-        return self._build_time_wave
+        return self._build_time_wave or self._build_time_feature
 
     def with_approx(self, cfg):
         cfgs = cfg if isinstance(cfg, tuple) else (cfg,)
@@ -78,6 +91,7 @@ class _StubModel:
         new = _StubModel(
             features_tabulate=self.features_tabulate,
             build_time_wave=self._build_time_wave,
+            build_time_feature=self._build_time_feature,
             observation=self.observation,
         )
         new.received_cfg = cfg
@@ -202,4 +216,69 @@ def test_a_backend_that_cannot_tabulate_keeps_its_wave_lut_and_stays_silent(surf
     assert not any("look-up table" in m or "21x" in m for m in messages), (
         f"the {surface} surface warned about a feature LUT on a photometry-only fit "
         f"whose backend simply has nothing to tabulate: {messages}"
+    )
+
+
+#: One row per ground on which the top-up may be granted or refused, all on a
+#: model that already carries a build-time ``approx=`` — the branch both
+#: surfaces share, and the one #1683 lived on.
+_ELIGIBILITY_MATRIX = {
+    "nothing_in_the_way": {},
+    "already_topped_up": {"build_time_feature": True},
+    "backend_cannot_tabulate": {"features_tabulate": False},
+    "line_ratios": {"channel": "line_ratios"},
+    "spectral_indices": {"channel": "spectral_indices"},
+    "line_ratios_and_cannot_tabulate": {"channel": "line_ratios", "features_tabulate": False},
+}
+
+
+def _eligibility_model(*, channel=None, **kwargs):
+    obs = _StubObs()
+    if channel is not None:
+        setattr(obs, channel, object())
+    return _StubModel(build_time_wave=True, observation=obs, **kwargs)
+
+
+def test_the_two_surfaces_cannot_disagree_about_feature_lut_eligibility():
+    """The rule #1683 broke, pinned as a rule rather than as its two instances.
+
+    #1683 was not "a missing top-up" so much as *two resolvers holding
+    separate copies of one policy* — the batch surface returned above the
+    top-up, the single-galaxy surface returned after granting it to line fits
+    only, and neither knew what the other did. #1691 was the same shape one
+    level down. Pinning only the two rows that were wrong would let the third
+    disagreement ship exactly as those two did, so this walks every ground on
+    which the top-up can be granted or refused and requires the surfaces to
+    reach the same verdict on each.
+
+    A fresh model per surface: the resolvers memoize their clones per model
+    object, so sharing one would let the first call answer for the second.
+
+    The spread assertion is the control. "Both surfaces agree" is also what a
+    pair of resolvers that never top anything up would report, so the matrix
+    has to be shown non-degenerate — some rows granting, some refusing —
+    before the agreement means anything.
+    """
+    verdicts = {
+        name: (
+            _counts(_single(_eligibility_model(**kw))),
+            _counts(_batch(_eligibility_model(**kw))),
+        )
+        for name, kw in _ELIGIBILITY_MATRIX.items()
+    }
+
+    disagreed = {n: v for n, v in verdicts.items() if v[0] != v[1]}
+    assert not disagreed, (
+        "the single-galaxy and batch resolvers reached different (wave, feature) "
+        f"verdicts on {sorted(disagreed)}: {disagreed}. Both read one policy "
+        "(_refuses_feature_precomp); a split here means one surface grew a rule the "
+        "other does not have, which is how #1683 and #1691 each shipped"
+    )
+
+    granted = {n for n, v in verdicts.items() if v[0][1] == 1}
+    refused = {n for n, v in verdicts.items() if v[0][1] == 0}
+    assert granted and refused, (
+        f"the eligibility matrix is degenerate — granted={sorted(granted)}, "
+        f"refused={sorted(refused)}. With every row falling the same way the "
+        "agreement above holds vacuously and pins nothing"
     )
