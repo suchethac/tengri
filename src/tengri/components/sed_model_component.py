@@ -562,8 +562,18 @@ class SEDModelComponent(TemplateThreading):
         if data is not None:
             self.data = data
 
-        # Emit warning if load() returned None but outputs are declared
-        if data is None and self.requires_template_data and len(self.outputs()) > 0:
+        # Emit warning if load() returned None but outputs are declared.
+        # Only warn on components that actually USE the load()/self.data mechanism
+        # (those that override load()) to avoid false positives on components with
+        # alternative data routes (e.g., module-level lazy loaders like dale2014).
+        # Components on other architectures legitimately never use load().
+        uses_load_mechanism = type(self).load is not SEDModelComponent.load
+        if (
+            data is None
+            and self.requires_template_data
+            and len(self.outputs()) > 0
+            and uses_load_mechanism
+        ):
             output_names = ", ".join(f"{key.name!r}" for key in self.outputs())
             warnings.warn(
                 f"Component {self.name!r} declares outputs [{output_names}] but "
