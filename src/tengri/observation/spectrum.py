@@ -739,7 +739,10 @@ def velocity_broaden(
     flux : array, shape (n_pix,)
         Input spectral flux.
     wave : array, shape (n_pix,)
-        Wavelength grid [Angstrom]. Must be uniformly spaced.
+        Wavelength grid [Angstrom]. Must be uniform in **log** wavelength for
+        an exact result — see Notes. A linearly spaced grid is accepted and
+        broadened using its mean :math:`\\Delta\\ln\\lambda`, which is accurate
+        to order the fractional bandwidth.
     sigma_km_s : float
         Velocity dispersion [km/s]. Typical range: 50–300 km/s.
 
@@ -751,13 +754,35 @@ def velocity_broaden(
     Notes
     -----
     JIT-compatible: yes. Gradient-safe: yes.
-    Assumes uniform log-wavelength spacing for FFT accuracy.
+
+    **Grid convention.** A velocity kernel is constant width in
+    :math:`\\ln\\lambda`, so the convolution is exact only where
+    :math:`\\Delta\\ln\\lambda` is constant — a log-uniform grid.
+
+    The Parameters block above used to read "Must be uniformly spaced" while
+    this Notes block said "uniform log-wavelength spacing". Those are different
+    grids, and a reader following the Parameters section — the one describing
+    the argument they are about to pass — got a silently wrong answer, because
+    the pixel scale was taken from ``wave[1] / wave[0]`` alone. On a linear grid
+    :math:`\\Delta\\ln\\lambda \\propto 1/\\lambda`, so that single pair fixes
+    the kernel by the *bluest* pixel while the feature being broadened sits
+    elsewhere: the recovered width came out low by exactly
+    ``wave[0] / lambda_feature`` — 10% over 4500-5500 A, and a factor of three
+    over 3000-10000 A. The error scaled with the wavelength *range*, so
+    refining the grid did not help (#1742).
+
+    Taking the scale across the whole grid is identical on a log-uniform grid
+    and degrades gracefully on a linear one. It cannot raise on a bad grid:
+    this function is ``jax.jit``-compiled and the spacing is a traced value.
 
     """
     sigma_v = sigma_km_s / _C_KM_S  # fractional velocity dispersion
 
-    # Pixel scale in log-wavelength
-    dlnwave = jnp.log(wave[1] / wave[0])  # assumes uniform spacing
+    # Mean pixel scale in log-wavelength. Exactly `log(wave[1] / wave[0])` when
+    # the grid is log-uniform, and the grid average — not the blue edge — when
+    # it is not.
+    n_pix = wave.shape[0]
+    dlnwave = jnp.log(wave[-1] / wave[0]) / (n_pix - 1)
 
     # Gaussian kernel width in pixels
     sigma_pix = sigma_v / dlnwave

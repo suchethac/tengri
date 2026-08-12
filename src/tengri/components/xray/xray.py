@@ -479,8 +479,17 @@ def xray_xrb_terms(
                 40.28 - 62.12Z + 569.44Z^2 - 1833.80Z^3 + 1968.33Z^4
                 \quad [\mathrm{erg\,s^{-1}\,(M_\odot\,yr^{-1})^{-1}}]
 
-        At solar metallicity (Z=0.02), this yields ≈ 2.6×10^39 erg/s per
-        M_sun/yr SFR, consistent with Grimm et al. 2003.
+        At the module default Z = 0.02 this yields **1.78×10^39** erg/s per
+        M_sun/yr (log = 39.251), and at the project's canonical solar
+        Z = 0.0142 (Asplund 2009) it yields 3.22×10^39 — the relation is steep
+        in Z, spanning 1.65×10^40 at Z = 0.001 down to 7.6×10^38 at Z = 0.03.
+
+        This block previously claimed ≈2.6×10^39 at Z = 0.02 "consistent with
+        Grimm et al. 2003". The polynomial does not give that — it is off by a
+        factor of 1.46 — and Lehmer+2016 genuinely differs from
+        Grimm+2003/Mineo+2012 (2.6×10^39 in this band) by ~30-45% rather than
+        agreeing with them. Two crossval tests were written from that sentence
+        rather than from the equation above it (#1755).
 
     **LMXB luminosity scaling** (Lehmer et al. 2016, ApJ 825, 7, Eq. 15):
         LMXBs are old systems (age > 1 Gyr), so their population traces
@@ -667,8 +676,17 @@ def xray_xrb(
                 40.28 - 62.12Z + 569.44Z^2 - 1833.80Z^3 + 1968.33Z^4
                 \quad [\mathrm{erg\,s^{-1}\,(M_\odot\,yr^{-1})^{-1}}]
 
-        At solar metallicity (Z=0.02), this yields ≈ 2.6×10^39 erg/s per
-        M_sun/yr SFR, consistent with Grimm et al. 2003.
+        At the module default Z = 0.02 this yields **1.78×10^39** erg/s per
+        M_sun/yr (log = 39.251), and at the project's canonical solar
+        Z = 0.0142 (Asplund 2009) it yields 3.22×10^39 — the relation is steep
+        in Z, spanning 1.65×10^40 at Z = 0.001 down to 7.6×10^38 at Z = 0.03.
+
+        This block previously claimed ≈2.6×10^39 at Z = 0.02 "consistent with
+        Grimm et al. 2003". The polynomial does not give that — it is off by a
+        factor of 1.46 — and Lehmer+2016 genuinely differs from
+        Grimm+2003/Mineo+2012 (2.6×10^39 in this band) by ~30-45% rather than
+        agreeing with them. Two crossval tests were written from that sentence
+        rather than from the equation above it (#1755).
 
     **LMXB luminosity scaling** (Lehmer et al. 2016, ApJ 825, 7, Eq. 15):
         LMXBs are old systems (age > 1 Gyr), so their population traces

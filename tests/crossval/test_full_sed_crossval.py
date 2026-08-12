@@ -41,7 +41,7 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
-#: ``np.trapz`` was removed in numpy 2.0 in favour of ``np.trapezoid``, but
+#: ``np.trapz`` was removed in numpy 2.0 in favor of ``np.trapezoid``, but
 #: pyproject allows ``numpy>=1.24``, where only ``trapz`` exists. Bind once
 #: rather than at the call site so this file runs across the supported range.
 _trapezoid = getattr(np, "trapezoid", None) or np.trapz
