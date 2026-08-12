@@ -24,6 +24,9 @@
 | `log_civ_1549` | dex | lines | nebular | log10 of civ 1549 line luminosity [dex re erg/s]; float32-safe form of `civ_1549` |
 | `log_halpha` | dex | lines | nebular | log10 of hα line luminosity [dex re erg/s]; float32-safe form of `halpha` |
 | `log_hbeta` | dex | lines | nebular | log10 of hβ line luminosity [dex re erg/s]; float32-safe form of `hbeta` |
+| `log_l_x_agn` | dex | xray | xray | log10 X-ray luminosity from AGN [dex re erg/s]; float32-safe form of `l_x_agn`. -inf when no AGN is present, where the linear form is 0.0 |
+| `log_l_x_total` | dex | xray | xray | log10 total X-ray luminosity (XRB + AGN) [dex re erg/s]; float32-safe form of `l_x_total` |
+| `log_l_x_xrb` | dex | xray | xray | log10 X-ray luminosity from X-ray binaries [dex re erg/s]; float32-safe form of `l_x_xrb` |
 | `log_lya` | dex | lines | nebular | log10 of lyman alpha line luminosity [dex re erg/s]; float32-safe form of `lya` |
 | `log_nii_6548` | dex | lines | nebular | log10 of nii 6548 line luminosity [dex re erg/s]; float32-safe form of `nii_6548` |
 | `log_nii_6584` | dex | lines | nebular | log10 of nii 6584 line luminosity [dex re erg/s]; float32-safe form of `nii_6584` |
