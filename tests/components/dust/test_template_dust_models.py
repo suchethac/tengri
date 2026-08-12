@@ -26,6 +26,7 @@ from tengri.components.dust.emission import (
     create_bosa_from_grid,
     create_themis_from_grid,
 )
+from tests._bounds import assert_non_negative
 from tests._jit_parity import assert_jit_matches_eager
 
 
@@ -177,7 +178,7 @@ class TestAstrodust:
         """Emission is non-negative everywhere."""
         fn = create_astrodust_from_grid(astrodust_grid)
         result = fn(wavelength, 1e10, dust_umin=1.0, dust_gamma_dl=0.05, dust_qpah=3.0)
-        assert jnp.all(result >= 0.0)
+        assert_non_negative(result, name="result")
 
     def test_gamma_zero_gives_single_u(self, astrodust_grid, wavelength):
         """With gamma=0, only the single-U component contributes."""
@@ -253,7 +254,7 @@ class TestBOSA:
         """Emission is non-negative everywhere."""
         fn = create_bosa_from_grid(bosa_grid)
         result = fn(wavelength, 1e10, dust_log_ssfr=-9.0)
-        assert jnp.all(result >= 0.0)
+        assert_non_negative(result, name="result")
 
     def test_higher_ssfr_warmer_sed(self, bosa_grid, wavelength):
         """Higher sSFR shifts the SED peak to shorter wavelengths (warmer)."""
@@ -331,7 +332,7 @@ class TestTHEMIS:
         """Emission is non-negative everywhere."""
         fn = create_themis_from_grid(themis_grid)
         result = fn(wavelength, 1e10, dust_umin=1.0, dust_gamma_dl=0.05, dust_qhac=0.17)
-        assert jnp.all(result >= 0.0)
+        assert_non_negative(result, name="result")
 
     def test_qhac_affects_pah_features(self, themis_grid, wavelength):
         """Different qhac values produce different SEDs (PAH feature strength)."""

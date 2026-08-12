@@ -14,6 +14,7 @@ from tengri.components.dust.drude_profiles import (
     decompose_pah,
     drude_profile,
 )
+from tests._bounds import assert_non_negative
 from tests._grad_parity import assert_grad_matches_fd
 
 # Reference wavelength grid: 2–20 μm at 0.01 μm spacing.
@@ -88,7 +89,7 @@ class TestDrudeProfile:
     def test_non_negative(self):
         wave = jnp.linspace(0.1, 30.0, 3000)
         out = drude_profile(wave, 7.6, 0.044)
-        assert jnp.all(out >= 0.0)
+        assert_non_negative(out, name="out")
 
 
 class TestPAHTemplate:
@@ -98,7 +99,7 @@ class TestPAHTemplate:
 
     def test_non_negative_everywhere(self):
         out = compute_pah_template(_WAVE_UM)
-        assert jnp.all(out >= 0.0)
+        assert_non_negative(out, name="out")
 
     def test_default_and_explicit_strengths_match(self):
         s = jnp.array([f.strength for f in SMITH2007_PAH_FEATURES])

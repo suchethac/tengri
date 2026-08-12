@@ -13,6 +13,8 @@ import chex
 import jax.numpy as jnp
 import pytest
 
+from tests._bounds import assert_non_negative
+
 pytestmark = pytest.mark.crossval
 
 WAVE = jnp.geomspace(100.0, 1e8, 2000)
@@ -237,4 +239,4 @@ class TestSKIRTORPhysics:
         wave = jnp.geomspace(1000.0, 1e6, 500)
         l_nu = skirtor_analytic(wave, agn_log_lbol=44.0)
         chex.assert_tree_all_finite(l_nu)
-        assert jnp.all(l_nu >= 0)
+        assert_non_negative(l_nu, name="l_nu")

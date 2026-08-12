@@ -23,6 +23,7 @@ import pytest
 
 import tengri.components.agn.blocks  # noqa: F401 — triggers registrations
 from tengri.components.agn.blocks._protocol import AGN_BLOCKS, resolve_agn_block
+from tests._bounds import assert_non_negative
 from tests._jit_parity import assert_jit_matches_eager
 
 # Module taxonomy: most cases verify the registry/adapter contract; the
@@ -57,7 +58,7 @@ def test_positivity(name: str) -> None:
     block = resolve_agn_block("disc", name)
     wave_aa = jnp.geomspace(100.0, 1.0e7, 300)
     L_lambda = block(wave_aa, 10.0)
-    assert jnp.all(L_lambda >= 0.0)
+    assert_non_negative(L_lambda, name="L_lambda")
     chex.assert_equal_shape([L_lambda, wave_aa])
 
 

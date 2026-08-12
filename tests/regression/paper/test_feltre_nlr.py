@@ -30,6 +30,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri._data_setup import find_data
+from tests._bounds import assert_non_negative
 from tests._jit_parity import assert_jit_matches_eager
 
 # parents[2] is tests/ from tests/regression/paper/, so this pointed at
@@ -140,7 +141,7 @@ def test_feltre_predict_returns_finite() -> None:
     )
     chex.assert_tree_all_finite(wave)
     chex.assert_tree_all_finite(lum)
-    assert jnp.all(lum >= 0), "Line luminosities must be non-negative"
+    assert_non_negative(lum, name="lum", msg="Line luminosities must be non-negative")
     chex.assert_equal_shape([wave, lum])
 
 

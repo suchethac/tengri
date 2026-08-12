@@ -11,6 +11,7 @@ import numpy as np
 from numpy.testing import assert_allclose
 
 from tengri.components.dust.attenuation import two_component_dust
+from tests._bounds import assert_non_negative
 from tests._jit_parity import assert_jit_matches_eager
 
 _CF_KWARGS = {"law_bc": "power_law", "law_diff": "power_law"}
@@ -51,7 +52,7 @@ class TestCharlotFall:
     def test_values_between_0_and_1(self, wavelength, age_grid):
         """Attenuation factor is in [0, 1]."""
         atten = two_component_dust(wavelength, age_grid, 1.0, 0.5, **_CF_KWARGS)
-        assert jnp.all(atten >= 0)
+        assert_non_negative(atten, name="atten")
         assert jnp.all(atten <= 1)
 
     def test_no_dust_gives_unity(self, wavelength, age_grid):

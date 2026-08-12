@@ -24,6 +24,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tests._bounds import assert_non_negative
+
 pytestmark = pytest.mark.crossval
 
 # Standard wavelength grid: 912A (Lyman limit) to 30000A (K-band)
@@ -72,7 +74,7 @@ class TestAllCurvesUniversalPhysics:
         name, fn = curve
         wave_test = jnp.geomspace(1000.0, 10000.0, 100)
         k = fn(wave_test)
-        assert jnp.all(k >= 0), f"{name}: k(λ) has negative values"
+        assert_non_negative(k, name="k", msg=f"{name}: k(λ) has negative values")
 
     def test_k_finite(self, curve):
         """k(λ) must be finite everywhere."""
@@ -459,7 +461,7 @@ class TestNarayananPhysics:
         k_nz = narayanan_z(wave_test, redshift=0.0)
         # Should be finite and positive
         chex.assert_tree_all_finite(k_nz)
-        assert jnp.all(k_nz >= 0)
+        assert_non_negative(k_nz, name="k_nz")
         # k(5500) should be ~1
         v_idx = int(jnp.argmin(jnp.abs(wave_test - 5500.0)))
         assert abs(float(k_nz[v_idx]) - 1.0) < 0.1
@@ -489,7 +491,7 @@ class TestConroy2010Physics:
 
         k = conroy2010(WAVE)
         chex.assert_tree_all_finite(k)
-        assert jnp.all(k >= 0)
+        assert_non_negative(k, name="k")
 
     def test_uv_bump_present(self):
         """Conroy2010 has MW-like 2175A bump at short wavelengths."""

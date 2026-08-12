@@ -18,6 +18,7 @@ from tengri.components.xray import (
     xray_anisotropy,
     xray_xrb,
 )
+from tests._bounds import assert_non_negative
 from tests._jit_parity import assert_jit_matches_eager
 
 
@@ -153,7 +154,7 @@ class TestXrayAgnCoronaFromDisc:
     def test_positive_luminosity(self):
         """Output should be non-negative everywhere."""
         result = xray_agn_corona_from_disc(WAVE_XRAY, l_2500_erg_hz=1e30)
-        assert jnp.all(result >= 0.0)
+        assert_non_negative(result, name="result")
 
     def test_zero_outside_xray(self):
         """L_nu should be zero at wavelengths > 124 A (outside X-ray)."""

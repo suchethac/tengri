@@ -11,6 +11,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tests._bounds import assert_non_negative
+
 pytestmark = pytest.mark.bounds
 
 
@@ -66,7 +68,9 @@ class TestUnifiedAgnCombinations:
         assert jnp.all(jnp.isfinite(l_nu)), (
             f"Non-finite SED for disc={disc_model}, torus={torus_model}"
         )
-        assert jnp.all(l_nu >= 0.0), f"Negative SED for disc={disc_model}, torus={torus_model}"
+        assert_non_negative(
+            l_nu, name="l_nu", msg=f"Negative SED for disc={disc_model}, torus={torus_model}"
+        )
         chex.assert_equal_shape([l_nu, wavelength])
 
     def test_unknown_disc_raises(self, wavelength):

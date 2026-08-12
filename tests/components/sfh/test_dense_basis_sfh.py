@@ -35,6 +35,7 @@ from tengri.components.stellar.sfh.dense_basis import (
     matern32_kernel,
 )
 from tengri.components.stellar.sfh.registry import resolve_sfh
+from tests._bounds import assert_non_negative
 from tests._jit_parity import assert_jit_matches_eager
 
 # Shared test fixtures
@@ -219,7 +220,7 @@ class TestDenseBasisSFH:
 
     def test_non_negative(self) -> None:
         sfr = dense_basis(AGE_YR, **DEFAULT_KW)
-        assert jnp.all(sfr >= 0)
+        assert_non_negative(sfr, name="sfr")
 
     def test_mass_conservation(self) -> None:
         """Integrated SFR should match 10^log_total_mass within 15%."""
@@ -372,7 +373,7 @@ class TestDenseBasisSFH:
             tx_frac_1=0.3,
             tx_frac_2=0.55,
         )
-        assert jnp.all(sfr >= 0)
+        assert_non_negative(sfr, name="sfr")
         chex.assert_equal_shape([sfr, AGE_YR])
 
 
@@ -418,7 +419,7 @@ class TestDenseBasisShapes:
         ]
         for t0, t1, t2 in shapes:
             sfr = _sfh_for_tx(t0, t1, t2)
-            assert jnp.all(sfr >= 0), f"Negative SFR for tx=({t0}, {t1}, {t2})"
+            assert_non_negative(sfr, name="sfr", msg=f"Negative SFR for tx=({t0}, {t1}, {t2})")
 
 
 # ── Registry integration tests ────────────────────────────────────
@@ -498,13 +499,13 @@ class TestDenseBasisEdgeCases:
         """Very early mass assembly (all tx near 0)."""
         sfr = _sfh_for_tx(0.05, 0.1, 0.15)
         chex.assert_tree_all_finite(sfr)
-        assert jnp.all(sfr >= 0)
+        assert_non_negative(sfr, name="sfr")
 
     def test_extreme_tx_near_one(self) -> None:
         """Very late mass assembly (all tx near 1)."""
         sfr = _sfh_for_tx(0.85, 0.9, 0.95)
         chex.assert_tree_all_finite(sfr)
-        assert jnp.all(sfr >= 0)
+        assert_non_negative(sfr, name="sfr")
 
     def test_low_mass_galaxy(self) -> None:
         """log_total_mass = 8 (dwarf galaxy)."""
@@ -544,7 +545,7 @@ class TestDenseBasisEdgeCases:
             tx_frac_2=0.8,
         )
         chex.assert_tree_all_finite(sfr)
-        assert jnp.all(sfr >= 0)
+        assert_non_negative(sfr, name="sfr")
 
 
 class TestJITNaNRegression:

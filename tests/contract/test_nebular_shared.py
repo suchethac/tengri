@@ -22,6 +22,7 @@ from tengri.components.nebular._constants import (
     _LOG10_ZSUN,
     _LOG_OH_OFFSET,
 )
+from tests._bounds import assert_non_negative
 from tests._jit_parity import assert_jit_matches_eager
 
 
@@ -80,7 +81,7 @@ class TestPlaceLineProfiles:
         from tengri.components.nebular._shared import place_line_profiles
 
         sed = place_line_profiles(single_line_wave, single_line_lum, obs_wave, line_sigma_aa=10.0)
-        assert jnp.all(sed >= 0.0)
+        assert_non_negative(sed, name="sed")
 
     def test_gaussian_peaks_near_line_center(self, obs_wave, single_line_wave, single_line_lum):
         """Gaussian profile peaks close to the specified line wavelength."""
@@ -111,7 +112,7 @@ class TestPlaceLineProfiles:
 
         sed = place_line_profiles(single_line_wave, single_line_lum, obs_wave, line_sigma_aa=-1.0)
         chex.assert_tree_all_finite(sed)
-        assert jnp.all(sed >= 0.0)
+        assert_non_negative(sed, name="sed")
 
     def test_multiple_lines(self, obs_wave):
         """Multiple lines with different luminosities are placed independently."""
@@ -237,7 +238,7 @@ class TestComputeAnalyticNebularContinuum:
 
         cont = compute_analytic_nebular_continuum(wave_optical, q_h=1e49, log_z_abs=-1.848)
         chex.assert_tree_all_finite(cont)
-        assert jnp.all(cont >= 0.0)
+        assert_non_negative(cont, name="cont")
 
     def test_output_shape(self, wave_optical):
         from tengri.components.nebular._shared import compute_analytic_nebular_continuum
@@ -270,7 +271,7 @@ class TestComputeAnalyticNebularContinuum:
         cont = compute_analytic_nebular_continuum(wave, q_h=1e49, log_z_abs=-1.848)
         # All finite and non-negative
         chex.assert_tree_all_finite(cont)
-        assert jnp.all(cont >= 0.0)
+        assert_non_negative(cont, name="cont")
 
     def test_temperature_changes_continuum_shape(self, wave_optical):
         """Different electron temperatures produce different SED shapes."""

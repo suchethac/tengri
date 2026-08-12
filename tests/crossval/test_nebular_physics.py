@@ -18,6 +18,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tests._bounds import assert_non_negative
+
 pytestmark = pytest.mark.crossval
 
 
@@ -78,7 +80,7 @@ class TestShockEmissionSEDPhysics:
         for v in [100.0, 300.0, 700.0, 1000.0]:
             l_nu = shock_emission_sed(wave, shock_velocity=v, l_shock_halpha=1e8)
             assert jnp.all(jnp.isfinite(l_nu)), f"Shock SED at v={v} has non-finite values"
-            assert jnp.all(l_nu >= 0), f"Shock SED at v={v} has negative values"
+            assert_non_negative(l_nu, name="l_nu", msg=f"Shock SED at v={v} has negative values")
 
 
 # ── 2. SHOCK LINE RATIOS — velocity-dependent physics ─────────────

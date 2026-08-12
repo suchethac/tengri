@@ -18,6 +18,7 @@ from tengri.components.dust.attenuation import (
     power_law,
     tea,
 )
+from tests._bounds import assert_non_negative
 
 
 def fd_grad(f, x: float, eps: float = 1e-4) -> float:
@@ -198,7 +199,7 @@ class TestConroy2010:
     def test_positive_values(self, wavelength):
         """Curve should be non-negative everywhere."""
         k = conroy2010(wavelength)
-        assert jnp.all(k >= 0)
+        assert_non_negative(k, name="k")
 
     def test_jit_compatible(self, wavelength):
         """conroy2010 is JIT-compilable."""

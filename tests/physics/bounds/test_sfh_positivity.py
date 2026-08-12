@@ -17,6 +17,7 @@ from tengri.components.stellar.sfh.nonparametric import (
     psb_continuity,
 )
 from tengri.utils.cosmology import age_at_z
+from tests._bounds import assert_non_negative
 from tests._grad_parity import assert_grad_matches_fd
 from tests._jit_parity import assert_jit_matches_eager
 
@@ -50,7 +51,7 @@ class TestContinuitySFHMassConservation:
         kwargs = {f"ratio_{i}": 0.0 for i in range(n_bins - 1)}
         sfr = continuity(AGE_YR, log_total_mass=10.0, bin_edges_gyr=custom_edges, **kwargs)
         chex.assert_equal_shape([sfr, AGE_YR])
-        assert jnp.all(sfr >= 0)
+        assert_non_negative(sfr, name="sfr")
 
 
 class TestDirichletSFHMassConservation:
@@ -277,7 +278,7 @@ class TestPSBContinuitySFH:
             ratio_young=0.0,
             ratio_old_0=0.0,
         )
-        assert jnp.all(sfr >= 0.0)
+        assert_non_negative(sfr, name="sfr")
 
     def test_finite(self, age_yr, default_edges):
         sfr = psb_continuity(

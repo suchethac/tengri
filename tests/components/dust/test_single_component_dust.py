@@ -9,6 +9,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tests._bounds import assert_non_negative
 from tests._jit_parity import assert_jit_matches_eager
 
 
@@ -44,7 +45,7 @@ class TestSingleComponentDust:
         from tengri.components.dust.attenuation import single_component_dust
 
         trans = single_component_dust(wavelengths, tau_v=2.0)
-        assert jnp.all(trans >= 0.0)
+        assert_non_negative(trans, name="trans")
         assert jnp.all(trans <= 1.0)
 
     def test_zero_tau_is_unity(self, wavelengths):
@@ -111,7 +112,7 @@ class TestSingleComponentDust:
         trans = single_component_dust(wavelengths, tau_v=1.0, law=law_name)
         chex.assert_equal_shape([trans, wavelengths])
         chex.assert_tree_all_finite(trans)
-        assert jnp.all(trans >= 0.0)
+        assert_non_negative(trans, name="trans")
         assert jnp.all(trans <= 1.0)
 
     def test_jit_compilable(self, wavelengths):
@@ -171,7 +172,7 @@ class TestSingleComponentDustFast:
         from tengri.components.dust.attenuation import single_component_dust_fast
 
         trans = single_component_dust_fast(wavelengths, n_ages=n_ages, tau_v=2.0)
-        assert jnp.all(trans >= 0.0)
+        assert_non_negative(trans, name="trans")
         assert jnp.all(trans <= 1.0)
 
     def test_zero_tau_is_unity(self, wavelengths, n_ages):

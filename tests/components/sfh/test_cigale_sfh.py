@@ -29,6 +29,7 @@ from tengri.components.stellar.sfh.mean_sfh import (
     periodic,
     sfh2exp,
 )
+from tests._bounds import assert_non_negative
 from tests._jit_parity import assert_jit_matches_eager
 
 
@@ -49,7 +50,7 @@ class TestDelayedBq:
         sfr = delayed_bq(
             t, log_total_mass=10.0, tau_main_yr=2e9, age_main_yr=5e9, age_bq_yr=500e6, r_sfr=0.1
         )
-        assert jnp.all(sfr >= 0)
+        assert_non_negative(sfr, name="sfr")
 
     def test_zero_beyond_age_main(self):
         """SFR is zero for t > age_main_yr."""
@@ -248,7 +249,7 @@ class TestPeriodic:
                 burst_type=burst_type,
                 age_yr=1000e6,
             )
-            assert jnp.all(sfr >= 0)
+            assert_non_negative(sfr, name="sfr")
 
     def test_zero_beyond_age(self):
         """SFR is zero for t > age_yr."""
@@ -365,7 +366,7 @@ class TestBuat08:
         t = jnp.logspace(7, 10, 200)
         for v in [80.0, 150.0, 220.0, 290.0, 360.0]:
             sfr = buat08(t, log_total_mass=10.0, velocity_km_s=v)
-            assert jnp.all(sfr >= 0)
+            assert_non_negative(sfr, name="sfr")
 
     def test_velocity_clipping(self):
         """Velocities outside [40, 360] are clipped."""
@@ -483,7 +484,7 @@ class TestSfh2Exp:
         )
 
     def test_nonnegative(self):
-        assert jnp.all(self._sfr() >= 0.0)
+        assert_non_negative(self._sfr(), name="output")
 
     def test_mass_conservation(self):
         """trapezoid(SFR, t) == 10**log_total_mass exactly."""

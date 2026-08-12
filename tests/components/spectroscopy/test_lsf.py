@@ -22,6 +22,7 @@ from tengri.observation.spectrum import (
     nirspec_g140m_resolution,
     nirspec_prism_resolution,
 )
+from tests._bounds import assert_non_negative
 from tests._grad_parity import assert_grad_matches_fd
 from tests._jit_parity import assert_jit_matches_eager
 
@@ -66,7 +67,7 @@ class TestInstrumentProfiles:
         wave_um = jnp.linspace(0.6, 5.3, 100)
         R = nirspec_prism_resolution(wave_um)
         # Should increase monotonically
-        assert jnp.all(jnp.diff(R) >= 0)
+        assert_non_negative(jnp.diff(R), name="output")
 
     def test_nirspec_prism_boundary_clipping(self):
         """PRISM resolution is clipped at boundaries (30 and 330)."""

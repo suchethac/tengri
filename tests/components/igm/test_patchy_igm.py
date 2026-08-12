@@ -7,6 +7,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tests._bounds import assert_non_negative
+
 pytestmark = pytest.mark.bounds
 
 
@@ -137,7 +139,7 @@ class TestPatchyIGM:
                     x_HI=x_hi,
                     R_bubble=1.0,
                 )
-                assert jnp.all(t >= 0.0), f"T < 0 at z={z}, x_HI={x_hi}"
+                assert_non_negative(t, name="t", msg=f"T < 0 at z={z}, x_HI={x_hi}")
                 assert jnp.all(t <= 1.0 + 1e-10), f"T > 1 at z={z}, x_HI={x_hi}"
 
     def test_finite_output(self, wave_obs_broad):

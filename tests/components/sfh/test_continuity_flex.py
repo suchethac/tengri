@@ -14,6 +14,7 @@ from tengri.components.stellar.sfh.nonparametric import (
     continuity_flex,
     continuity_flex_prior_logp,
 )
+from tests._bounds import assert_non_negative
 from tests._grad_parity import assert_grad_matches_fd
 
 pytestmark = pytest.mark.bounds
@@ -48,7 +49,7 @@ class TestContinuityFlexSFH:
             flex_1=1.5,
             ratio_old=-2.0,
         )
-        assert jnp.all(sfr >= 0.0)
+        assert_non_negative(sfr, name="sfr")
 
     def test_mass_conservation(self):
         """Integrated SFR * dt should equal 10^log_total_mass."""
@@ -85,7 +86,7 @@ class TestContinuityFlexSFH:
         t = self._age_grid()
         sfr = continuity_flex(t, log_total_mass=10.0, ratio_young=0.0, ratio_old=0.0)
         chex.assert_equal_shape([sfr, t])
-        assert jnp.all(sfr >= 0.0)
+        assert_non_negative(sfr, name="sfr")
 
     def test_custom_anchor_edges(self):
         """Custom bin_edges_gyr should be accepted and yield finite SFR."""

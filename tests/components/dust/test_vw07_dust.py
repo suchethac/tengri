@@ -24,6 +24,7 @@ from tengri.components.dust.attenuation import (
     vw07_bc,
     vw07_diff,
 )
+from tests._bounds import assert_non_negative
 from tests._jit_parity import assert_jit_matches_eager
 
 
@@ -98,7 +99,7 @@ class TestTwoComponentIntegration:
         )
         chex.assert_shape(trans, (6, 200))
         chex.assert_tree_all_finite(trans)
-        assert jnp.all(trans >= 0.0)
+        assert_non_negative(trans, name="trans")
         assert jnp.all(trans <= 1.0)
 
     def test_young_stars_more_attenuated(self):

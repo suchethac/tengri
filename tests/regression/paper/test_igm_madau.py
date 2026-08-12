@@ -26,6 +26,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components.igm import igm_transmission_madau
+from tests._bounds import assert_non_negative
 from tests._jit_parity import assert_jit_matches_eager
 
 
@@ -49,7 +50,7 @@ class TestMadau1995IGM:
         wave_obs = jnp.linspace(800.0, 20000.0, 500)
         for z in [0.0, 1.0, 2.0, 3.0, 5.0]:
             T = igm_transmission_madau(wave_obs, z=z)
-            assert jnp.all(T >= 0.0), f"T < 0 at z={z}"
+            assert_non_negative(T, name="T", msg=f"T < 0 at z={z}")
             assert jnp.all(T <= 1.0), f"T > 1 at z={z}"
 
     def test_no_absorption_z0(self):

@@ -13,6 +13,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tests._bounds import assert_non_negative
 from tests._dust_laws import every_dust_law, requires_dust_extinction
 
 pytestmark = pytest.mark.bounds
@@ -97,7 +98,7 @@ class TestDustLawCombinations:
         kwargs = {"dust_Rv": 3.1} if name in self._REQUIRES_RV else {}
         k = np.array(fn(self.WL, **kwargs))
         chex.assert_tree_all_finite(k)
-        assert np.all(k >= 0.0), f"{name}: negative k values"
+        assert_non_negative(k, name="k", msg=f"{name}: negative k values")
         assert 0.95 < k[3] < 1.05, f"{name}: k(5500Å) = {k[3]:.3f}"
         assert 1.5 < k[0] < 15.0, f"{name}: k(FUV) = {k[0]:.2f}"
         assert 0.2 < k[4] < 2.0, f"{name}: k(I) = {k[4]:.2f}"

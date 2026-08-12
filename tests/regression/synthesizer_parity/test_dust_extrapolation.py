@@ -25,6 +25,7 @@ pytestmark = pytest.mark.regression_paper
 from tengri.components.dust.attenuation import (
     DUST_LAWS,
 )
+from tests._bounds import assert_non_negative
 from tests._dust_laws import every_dust_law
 from tests._jit_parity import assert_jit_matches_eager
 
@@ -113,9 +114,11 @@ class TestDustAttenuationFiniteness:
         law_func = DUST_LAWS[law_name].callable
         k = law_func(wide_wavelength_grid, **{})
 
-        assert jnp.all(k >= 0.0), (
-            f"Law {law_name!r} produced negative k(λ): "
-            f"min={jnp.min(k):.6e}, count={jnp.sum(k < 0)}"
+        assert_non_negative(
+            k,
+            name="k",
+            msg=f"Law {law_name!r} produced negative k(λ): "
+            f"min={jnp.min(k):.6e}, count={jnp.sum(k < 0)}",
         )
 
     @pytest.mark.parametrize("law_name", EVERY_DUST_LAW)

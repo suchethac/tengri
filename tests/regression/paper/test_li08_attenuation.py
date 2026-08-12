@@ -22,6 +22,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components.dust.attenuation import DUST_LAWS, li08
+from tests._bounds import assert_non_negative
 from tests._jit_parity import assert_jit_matches_eager
 
 
@@ -96,7 +97,7 @@ class TestPhysicalProperties:
         """k(lambda) >= 0 everywhere."""
         wavs = jnp.linspace(500.0, 50000.0, 2000)
         k = li08(wavs)
-        assert jnp.all(k >= 0.0)
+        assert_non_negative(k, name="k")
 
     def test_uv_greater_than_optical(self):
         """UV attenuation should exceed optical."""

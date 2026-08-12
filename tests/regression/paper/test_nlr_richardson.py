@@ -9,6 +9,7 @@ import jax
 import jax.numpy as jnp
 
 from tengri.components.agn.nlr import compute_nlr_sed_richardson2014
+from tests._bounds import assert_non_negative
 from tests._jit_parity import assert_jit_matches_eager
 
 
@@ -25,7 +26,7 @@ class TestRichardsonNLR:
         """All output values are non-negative."""
         wave = jnp.linspace(3000, 10000, 200)
         sed = compute_nlr_sed_richardson2014(wave, l_disc_bol_erg=1e44)
-        assert jnp.all(sed >= 0.0)
+        assert_non_negative(sed, name="sed")
 
     def test_finite(self):
         """All output values are finite (no NaN or Inf)."""

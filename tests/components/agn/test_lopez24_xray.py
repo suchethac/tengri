@@ -22,6 +22,7 @@ from tengri.components.xray.xray import (
     xray_bolometric_correction_duras,
     xray_total_lopez24,
 )
+from tests._bounds import assert_non_negative
 from tests._grad_parity import assert_grad_matches_fd
 from tests._jit_parity import assert_jit_matches_eager
 
@@ -60,7 +61,7 @@ class TestLopez24Corona:
 
     def test_nonnegative(self, xray_wavelength):
         result = xray_agn_corona_lopez24(xray_wavelength, l_12um_erg_hz=1e30)
-        assert jnp.all(result >= 0.0)
+        assert_non_negative(result, name="result")
 
     def test_zero_outside_xray(self, xray_wavelength):
         result = xray_agn_corona_lopez24(xray_wavelength, l_12um_erg_hz=1e30)

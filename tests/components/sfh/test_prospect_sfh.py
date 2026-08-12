@@ -29,6 +29,7 @@ from tengri.components.stellar.sfh.mean_sfh import (
     spline,
 )
 from tengri.utils.grid_interp import _pchip_slopes
+from tests._bounds import assert_non_negative
 from tests._grad_parity import assert_grad_matches_fd
 
 _T = jnp.logspace(7, 10.14, 128)  # lookback times 10 Myr – 13.8 Gyr
@@ -56,7 +57,7 @@ class TestPchipSlopes:
         x = jnp.array([0.0, 1.0, 2.0, 3.0])
         y = jnp.array([0.0, 1.0, 3.0, 6.0])
         d = _pchip_slopes(x, y)
-        assert jnp.all(d >= 0.0)
+        assert_non_negative(d, name="d")
 
     def test_monotone_decreasing_slopes_nonpositive(self):
         """Slopes on a strictly decreasing sequence should all be non-positive.
@@ -97,7 +98,7 @@ class TestSplineSfh:
         """
         sfr_nodes = jnp.array([0.0, 3.0, 1.0, 0.0])
         sfr = spline(_T, sfr_nodes, _NODE_AGES_4)
-        assert jnp.all(sfr >= 0.0)
+        assert_non_negative(sfr, name="sfr")
 
     def test_interpolates_through_nodes(self):
         """SFH recovers node values at node lookback times (within tolerance).
@@ -160,7 +161,7 @@ class TestSnormBurstSfh:
     def test_nonnegative(self):
         """SFR is always >= 0."""
         sfr = snorm_burst(_T, **self._KWARGS)
-        assert jnp.all(sfr >= 0.0)
+        assert_non_negative(sfr, name="sfr")
 
     def test_burst_adds_to_young_ages(self):
         """Young-age SFR with burst >= same config with burst_sfr=0.
@@ -237,7 +238,7 @@ class TestSnormTruncBurstSfh:
     def test_nonnegative(self):
         """SFR is always >= 0."""
         sfr = snorm_trunc_burst(_T, **self._KWARGS)
-        assert jnp.all(sfr >= 0.0)
+        assert_non_negative(sfr, name="sfr")
 
     def test_burst_adds_to_young_ages(self):
         """Young-age SFR with burst >= same config with burst_sfr=0.

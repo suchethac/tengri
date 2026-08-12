@@ -26,6 +26,7 @@ from tengri.forward.emission_helpers import (
     attenuate_emission,
 )
 from tengri.forward.energy_balance import bolometric_absorbed
+from tests._bounds import assert_non_negative
 
 # ── Helpers: synthetic grids and mock dust laws ───────────────────
 
@@ -322,7 +323,7 @@ class TestIGMAbsorption:
 
         wave_obs = jnp.linspace(1000.0, 10000.0, 120)
         trans = igm_transmission(wave_obs, 3.0)
-        assert jnp.all(trans >= 0.0), "IGM transmission has negative values"
+        assert_non_negative(trans, name="trans", msg="IGM transmission has negative values")
         assert jnp.all(trans <= 1.0 + 1e-6), "IGM transmission exceeds 1.0"
 
     def test_igm_increases_opacity_with_redshift(self) -> None:

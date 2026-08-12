@@ -15,6 +15,8 @@ import jax
 import jax.numpy as jnp
 import pytest
 
+from tests._bounds import assert_non_negative
+
 pytestmark = pytest.mark.bounds
 
 # ── SSP gate ──────────────────────────────────────────────────────
@@ -68,7 +70,7 @@ class TestPlanckLnuExtracted:
         nu = jnp.linspace(1e12, 1e16, 100)  # UV to far-IR
         result = planck_lnu(nu, 5778.0)  # solar temperature
         chex.assert_tree_all_finite(result)
-        assert jnp.all(result >= 0.0)
+        assert_non_negative(result, name="result")
 
     def test_planck_zero_temperature_returns_finite(self):
         from tengri.components.agn._phys import planck_lnu

@@ -9,6 +9,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tests._bounds import assert_non_negative
+
 pytestmark = pytest.mark.bounds
 
 
@@ -89,7 +91,7 @@ class TestEdgeCases:
         from tengri.components.dust.emission import energy_balance_split
 
         sed = energy_balance_split(wavelengths, L_absorbed)
-        assert jnp.all(sed >= 0.0)
+        assert_non_negative(sed, name="sed")
 
     def test_warm_peaks_at_shorter_wavelength(self, wavelengths, L_absorbed):
         """Warm component peaks at shorter wavelength than cold (Wien's law).
@@ -167,7 +169,7 @@ class TestPlanckBnuBounds:
         wave_uv = jnp.array([10.0, 100.0, 1000.0])  # Angstrom
         bnu = planck_bnu(wave_uv, temperature=1e4)
         chex.assert_tree_all_finite(bnu)
-        assert jnp.all(bnu >= 0.0)
+        assert_non_negative(bnu, name="bnu")
 
 
 class TestModifiedBlackbodyBounds:
@@ -183,7 +185,7 @@ class TestModifiedBlackbodyBounds:
 
         sed = modified_blackbody(wave_fir, L_absorbed=1e10)
         chex.assert_tree_all_finite(sed)
-        assert jnp.all(sed >= 0.0)
+        assert_non_negative(sed, name="sed")
 
     def test_output_shape(self, wave_fir):
         from tengri.components.dust.emission import modified_blackbody
@@ -238,7 +240,7 @@ class TestCasey2012Bounds:
 
         sed = casey2012(wave_ir, L_absorbed=1e10)
         chex.assert_tree_all_finite(sed)
-        assert jnp.all(sed >= 0.0)
+        assert_non_negative(sed, name="sed")
 
     def test_output_shape(self, wave_ir):
         from tengri.components.dust.emission import casey2012
@@ -355,7 +357,7 @@ class TestCmbContrastFactorBounds:
         for z in (0.0, 2.0, 5.0, 10.0):
             wave = jnp.logspace(4, 8, 200)
             factor = cmb_contrast_factor(wave, T_eff=30.0, redshift=z)
-            assert jnp.all(factor >= 0.0), f"Negative contrast at z={z}"
+            assert_non_negative(factor, name="factor", msg=f"Negative contrast at z={z}")
             assert jnp.all(factor <= 1.0), f"Contrast > 1 at z={z}"
 
     def test_all_finite(self):

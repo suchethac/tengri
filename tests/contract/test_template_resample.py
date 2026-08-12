@@ -22,6 +22,7 @@ import numpy as np
 import pytest
 
 from tengri.utils.grid_interp import resample_template
+from tests._bounds import assert_non_negative
 from tests._jit_parity import assert_jit_matches_eager
 
 
@@ -99,7 +100,7 @@ def test_zeros_in_template_stay_finite():
         resample_template(jnp.asarray(wave_out), jnp.asarray(wave_in), jnp.asarray(flux_in))
     )
     assert np.all(np.isfinite(got)), "non-finite output where the template has zeros"
-    assert np.all(got >= 0.0), "negative flux produced from a non-negative template"
+    assert_non_negative(got, name="got", msg="negative flux produced from a non-negative template")
 
 
 @pytest.mark.bounds

@@ -16,6 +16,7 @@ from tengri.parameters.priors import (
     Uniform,
     resolve_shorthand,
 )
+from tests._jit_parity import assert_vmap_matches_loop
 
 
 class TestUniform:
@@ -34,6 +35,20 @@ class TestUniform:
         samples = jax.vmap(d.sample)(keys)
         assert jnp.all(samples >= 0.1)
         assert jnp.all(samples <= 5.0)
+
+    def test_vmap_sampling_matches_a_loop(self):
+        """A bound holds just as well for a batch that ignored its keys.
+
+        ``vmap`` that mapped the wrong axis, or a sampler that dropped its key
+        and returned one value broadcast 1000 times, still lands inside
+        [0.1, 5.0] — so ``test_sample_in_bounds`` above cannot see it. Checked
+        on a slice rather than the full batch: 8 looped calls cost nothing,
+        where looping all 1000 would make a millisecond test a slow one for no
+        extra signal.
+        """
+        d = Uniform(0.1, 5.0)
+        keys = jax.random.split(jax.random.PRNGKey(0), 1000)
+        assert_vmap_matches_loop(d.sample, keys[:8])
 
     def test_log_prob_flat_inside(self):
         d = Uniform(0.0, 1.0)

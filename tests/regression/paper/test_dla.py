@@ -22,6 +22,7 @@ from tengri.components.igm.dla import (
     dla_transmission,
     dla_transmission_obs,
 )
+from tests._bounds import assert_non_negative
 from tests._grad_parity import assert_grad_matches_fd
 
 pytestmark = pytest.mark.regression_paper
@@ -152,7 +153,7 @@ class TestDLATransmission:
     def test_transmission_bounded_0_to_1(self, wave_rest):
         """Transmission is always in [0, 1] (physical constraint)."""
         trans = dla_transmission(wave_rest, log_n_hi=21.0)
-        assert jnp.all(trans >= 0.0)
+        assert_non_negative(trans, name="trans")
         assert jnp.all(trans <= 1.0 + 1e-10)
 
     def test_absorption_widens_with_column_density(self, wave_rest):

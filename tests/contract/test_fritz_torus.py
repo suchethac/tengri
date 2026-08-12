@@ -19,6 +19,7 @@ import jax
 import jax.numpy as jnp
 import pytest
 
+from tests._bounds import assert_non_negative
 from tests._jit_parity import assert_jit_matches_eager
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -122,7 +123,7 @@ def test_fritz_analytic_basic(fritz_grid_path: Path, wavelength_aa: jnp.ndarray)
 
     assert L_nu.shape == wavelength_aa.shape
     assert jnp.all(jnp.isfinite(L_nu)), "Output contains NaN or Inf"
-    assert jnp.all(L_nu >= 0), "Output contains negative luminosities"
+    assert_non_negative(L_nu, name="L_nu", msg="Output contains negative luminosities")
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -399,7 +400,7 @@ def test_fritz_torus_block_callable(fritz_grid_path: Path, wavelength_aa: jnp.nd
 
     assert L_lambda.shape == wavelength_aa.shape
     assert jnp.all(jnp.isfinite(L_lambda))
-    assert jnp.all(L_lambda >= 0)
+    assert_non_negative(L_lambda, name="L_lambda")
 
 
 # ────────────────────────────────────────────────────────────────────────────

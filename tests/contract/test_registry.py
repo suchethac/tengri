@@ -23,6 +23,7 @@ from tengri.components.stellar.sfh.registry import (
 # Age of the universe today [yr], from the default cosmology — never a
 # literal. SFH formation anchor (age_gyr) for dpl/lnorm shape tests.
 from tengri.cosmology import age_at_z0 as _age_at_z0
+from tests._bounds import assert_non_negative
 from tests._jit_parity import assert_jit_matches_eager
 
 _AGE_UNIV_YR = float(_age_at_z0()) * 1e9
@@ -127,7 +128,7 @@ class TestResolveComposed:
             start=0.0,
             end=14e9,
         )
-        assert jnp.all(sfr >= 0)
+        assert_non_negative(sfr, name="sfr")
         # Both components integrate to 10**10 Msun each ⇒ composite ≈ 2e10.
         m_total = float(jnp.trapezoid(sfr, t))
         assert abs(m_total - 2e10) / 2e10 < 0.01
@@ -149,7 +150,7 @@ class TestResolveComposed:
             sfh_exp_tau_gyr=2e9,
             sfh_exp_start_gyr=0.0,
         )
-        assert jnp.all(sfr >= 0)
+        assert_non_negative(sfr, name="sfr")
         m_total = float(jnp.trapezoid(sfr, t))
         expected = 10**10.0 + 10**9.0  # tsnorm + exp, independent masses
         assert abs(m_total - expected) / expected < 0.01

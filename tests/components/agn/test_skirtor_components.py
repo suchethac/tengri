@@ -17,6 +17,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tests._bounds import assert_non_negative
 from tests._grad_parity import assert_grad_matches_fd
 
 
@@ -116,9 +117,9 @@ class TestSKIRTORComponentsV3:
         fn = create_skirtor_components_from_grid(v3_grid_path)
         wavelength = jnp.logspace(1, 7, 100)
         result = fn(wavelength, agn_log_lbol=44.0)
-        assert jnp.all(result.disk >= 0.0)
-        assert jnp.all(result.dust >= 0.0)
-        assert jnp.all(result.total >= 0.0)
+        assert_non_negative(result.disk, name="output")
+        assert_non_negative(result.dust, name="output")
+        assert_non_negative(result.total, name="output")
 
     def test_dust_dominates_over_disk(self, v3_grid_path):
         """In our synthetic grid, dust >> disk by construction."""

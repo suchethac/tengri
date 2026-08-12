@@ -36,6 +36,7 @@ from tengri.components.dust.attenuation import (
     reddy15,
     salim_sbl18,
 )
+from tests._bounds import assert_non_negative
 from tests._jit_parity import assert_jit_matches_eager
 
 # Full-range wavelengths (Angstrom)
@@ -71,7 +72,7 @@ class TestLeitherer02:
         """Output should always be positive."""
         wavs = jnp.linspace(900.0, 25000.0, 500)
         k = leitherer02(wavs)
-        assert jnp.all(k >= 0.0)
+        assert_non_negative(k, name="k")
 
     def test_monotonic_uv(self):
         """Should be monotonically decreasing from UV to NIR."""
@@ -163,7 +164,7 @@ class TestNoll09:
         wavs = jnp.linspace(900.0, 25000.0, 500)
         for ampl, delta in [(0.0, 0.0), (3.0, -0.3), (5.0, -0.5)]:
             k = noll09(wavs, dust_bump_strength=ampl, dust_delta=delta)
-            assert jnp.all(k >= 0.0)
+            assert_non_negative(k, name="k")
 
     def test_jit_compatible(self):
         """Should work inside jax.jit."""
@@ -390,7 +391,7 @@ class TestReddy15:
         """Output should be non-negative across the full validity range."""
         wavs = jnp.linspace(1500.0, 28500.0, 500)
         k = reddy15(wavs)
-        assert jnp.all(k >= 0.0), "reddy15 should be non-negative everywhere"
+        assert_non_negative(k, name="k", msg="reddy15 should be non-negative everywhere")
 
     def test_monotonic_behavior(self):
         """Reddy15 should generally decrease from UV to NIR (low to high wavelength).

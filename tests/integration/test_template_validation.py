@@ -17,6 +17,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tests._bounds import assert_non_negative
 from tests._jit_parity import assert_jit_matches_eager
 
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
@@ -78,8 +79,8 @@ class TestAstrodustLoading:
         assert astrodust_data["powerlaw"].shape == (nq, nu, nw)
 
     def test_spectra_non_negative(self, astrodust_data):
-        assert jnp.all(astrodust_data["single_u"] >= 0)
-        assert jnp.all(astrodust_data["powerlaw"] >= 0)
+        assert_non_negative(astrodust_data["single_u"], name="output")
+        assert_non_negative(astrodust_data["powerlaw"], name="output")
 
     def test_spectra_finite(self, astrodust_data):
         chex.assert_tree_all_finite(astrodust_data["single_u"])
@@ -99,7 +100,7 @@ class TestAstrodustEmission:
         sed = astrodust_fn(
             WAVE_AA, L_absorbed=1e10, dust_umin=2.0, dust_gamma_dl=0.02, dust_qpah=3.0
         )
-        assert jnp.all(sed >= 0)
+        assert_non_negative(sed, name="sed")
 
     def test_peak_in_fir(self, astrodust_fn):
         sed = astrodust_fn(
@@ -186,7 +187,7 @@ class TestBosaLoading:
         assert bosa_data["spectra"].shape == (nl, ns, nw)
 
     def test_spectra_non_negative(self, bosa_data):
-        assert jnp.all(bosa_data["spectra"] >= 0)
+        assert_non_negative(bosa_data["spectra"], name="output")
 
     def test_spectra_finite(self, bosa_data):
         chex.assert_tree_all_finite(bosa_data["spectra"])
@@ -201,7 +202,7 @@ class TestBosaEmission:
 
     def test_output_non_negative(self, bosa_fn):
         sed = bosa_fn(WAVE_AA, L_absorbed=1e10, dust_log_ssfr=-10.0)
-        assert jnp.all(sed >= 0)
+        assert_non_negative(sed, name="sed")
 
     def test_peak_in_fir(self, bosa_fn):
         sed = bosa_fn(WAVE_AA, L_absorbed=1e10, dust_log_ssfr=-10.0)
@@ -282,8 +283,8 @@ class TestThemisLoading:
         assert themis_data["powerlaw"].shape == (nq, nu, nw)
 
     def test_spectra_non_negative(self, themis_data):
-        assert jnp.all(themis_data["single_u"] >= 0)
-        assert jnp.all(themis_data["powerlaw"] >= 0)
+        assert_non_negative(themis_data["single_u"], name="output")
+        assert_non_negative(themis_data["powerlaw"], name="output")
 
     def test_spectra_finite(self, themis_data):
         chex.assert_tree_all_finite(themis_data["single_u"])
@@ -303,7 +304,7 @@ class TestThemisEmission:
         sed = themis_fn(
             WAVE_AA, L_absorbed=1e10, dust_umin=2.0, dust_gamma_dl=0.02, dust_qhac=0.17
         )
-        assert jnp.all(sed >= 0)
+        assert_non_negative(sed, name="sed")
 
     def test_peak_in_fir(self, themis_fn):
         sed = themis_fn(

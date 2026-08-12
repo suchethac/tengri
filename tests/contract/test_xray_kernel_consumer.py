@@ -14,6 +14,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tests._bounds import assert_non_negative
+
 pytestmark = pytest.mark.contract
 
 
@@ -71,7 +73,7 @@ def test_xray_lookups_jit_compatible(model_name, filter_set):
     assert phot.shape == (len(waves),), f"Expected shape ({len(waves)},), got {phot.shape}"
     chex.assert_tree_all_finite(np.asarray(phot))
     # X-ray photometry should be positive (L_nu > 0 when scaled > 0)
-    assert np.all(np.asarray(phot) >= 0.0), "Lookup produced negative photometry"
+    assert_non_negative(np.asarray(phot), name="output", msg="Lookup produced negative photometry")
 
 
 def test_xray_xrb_scale_invariance(filter_set):

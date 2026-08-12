@@ -17,6 +17,7 @@ import pytest
 
 from tengri.components.stellar.sfh.mean_sfh import AGEMAX_YR, psb_wild2020
 from tengri.components.stellar.sfh.registry import SFH_REGISTRY, resolve_sfh
+from tests._bounds import assert_non_negative
 from tests._grad_parity import assert_grad_matches_fd
 
 pytestmark = pytest.mark.bounds
@@ -49,7 +50,7 @@ class TestPSBShape:
     def test_non_negative(self, t_lookback, default_params):
         """SFR should be non-negative everywhere (bounds test)."""
         sfr = psb_wild2020(t_lookback, **default_params)
-        assert jnp.all(sfr >= 0.0)
+        assert_non_negative(sfr, name="sfr")
         chex.assert_tree_all_finite(sfr)
 
     def test_two_component_structure(self, t_lookback, default_params):

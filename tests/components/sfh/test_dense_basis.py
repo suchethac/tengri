@@ -30,6 +30,7 @@ from tengri.components.stellar.sfh.nonparametric import (
     make_agebins_from_zred,
 )
 from tengri.components.stellar.sfh.registry import SFH_REGISTRY, resolve_sfh
+from tests._bounds import assert_non_negative
 
 pytestmark = pytest.mark.bounds
 
@@ -77,7 +78,7 @@ class TestContinuitySFH:
         """SFR must always be non-negative."""
         kwargs = {f"ratio_{i}": -2.0 for i in range(6)}
         sfr = continuity(AGE_YR, log_total_mass=10.0, **kwargs)
-        assert jnp.all(sfr >= 0)
+        assert_non_negative(sfr, name="sfr")
 
     def test_jit_parity_vs_eager(self):
         """JIT output matches eager evaluation (JAX correctness)."""
@@ -133,7 +134,7 @@ class TestDirichletSFH:
         sfr = dirichlet(AGE_YR, log_total_mass=10.0, **kwargs)
 
         chex.assert_equal_shape([sfr, AGE_YR])
-        assert jnp.all(sfr >= 0)
+        assert_non_negative(sfr, name="sfr")
 
         # With equal mass fracs but unequal bin widths, SFR varies proportionally
         # to the bin width ratio (max/min ~256 for the default 7-bin grid).
@@ -164,7 +165,7 @@ class TestDirichletSFH:
         """SFR must always be non-negative."""
         kwargs = {f"z_frac_{i}": 0.01 for i in range(6)}
         sfr = dirichlet(AGE_YR, log_total_mass=10.0, **kwargs)
-        assert jnp.all(sfr >= 0)
+        assert_non_negative(sfr, name="sfr")
 
     def test_jit_parity_vs_eager(self):
         """JIT output matches eager evaluation (JAX correctness)."""

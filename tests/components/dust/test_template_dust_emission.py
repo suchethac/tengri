@@ -17,6 +17,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tests._bounds import assert_non_negative
 from tests._grad_parity import assert_grad_matches_fd
 from tests._jit_parity import assert_jit_matches_eager
 
@@ -189,7 +190,7 @@ class TestDL07Tabulated:
 
         dl07 = DUST_EMISSION_MODELS["draine_li2007"]
         sed = dl07(ir_wave, 1e10, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=2.5)
-        assert jnp.all(sed >= 0), "DL07 SED should be non-negative"
+        assert_non_negative(sed, name="sed", msg="DL07 SED should be non-negative")
 
     def test_finite_output(self, ir_wave):
         """SED should be finite for all reasonable parameters."""
@@ -314,7 +315,7 @@ class TestDale2014Tabulated:
         dale = DUST_EMISSION_MODELS["dale2014"]
         for alpha in [0.5, 1.0, 2.0, 3.0, 4.0]:
             sed = dale(ir_wave, 1e10, dust_alpha_dale=alpha)
-            assert jnp.all(sed >= 0), f"Dale2014 SED negative for alpha={alpha}"
+            assert_non_negative(sed, name="sed", msg=f"Dale2014 SED negative for alpha={alpha}")
 
     def test_jit_compatible(self, ir_wave):
         """Dale2014 should work under jax.jit."""

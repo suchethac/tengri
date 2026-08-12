@@ -18,6 +18,7 @@ from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.forward.sed_model import SEDModel
 from tengri.observation.filters import load_filter_set
 from tengri.parameters.parameters import Parameters
+from tests._bounds import assert_non_negative
 
 # ── Skip if SSP data not available ────────────────────────────────
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
@@ -92,7 +93,7 @@ class TestExtremeDust:
         )
         sed = model.predict_rest_sed(params).sed
         chex.assert_tree_all_finite(sed)
-        assert jnp.all(sed >= 0), "SED has negative values at extreme dust"
+        assert_non_negative(sed, name="sed", msg="SED has negative values at extreme dust")
 
     def test_extreme_dust_photometry_physical(self, ssp_data, filters):
         """Photometry should still be physical (positive, finite)."""
@@ -155,7 +156,7 @@ class TestExtremeRedshift:
         model, params = _make_model(ssp_data, filters, redshift=3.0)
         sed = model.predict_rest_sed(params).sed
         chex.assert_tree_all_finite(sed)
-        assert jnp.all(sed >= 0)
+        assert_non_negative(sed, name="sed")
 
     def test_higher_z_fainter(self, ssp_data, filters):
         """Higher redshift galaxy should be fainter (more distant)."""
@@ -200,7 +201,7 @@ class TestHighBurstiness:
 
         sed = model.predict_rest_sed(params).sed
         chex.assert_tree_all_finite(sed)
-        assert jnp.all(sed >= 0), "Negative SED values at psd_sigma=5"
+        assert_non_negative(sed, name="sed", msg="Negative SED values at psd_sigma=5")
 
     def test_moderate_burstiness_physical(self, ssp_data, filters):
         """psd_sigma=2.0 (moderately bursty): derived quantities physical."""
@@ -261,11 +262,11 @@ class TestMetallicityExtremes:
         model, params = _make_model(ssp_data, filters, met_logzsol=-1.5)
         sed = model.predict_rest_sed(params).sed
         chex.assert_tree_all_finite(sed)
-        assert jnp.all(sed >= 0)
+        assert_non_negative(sed, name="sed")
 
     def test_extreme_high_z_finite(self, ssp_data, filters):
         """Highest metallicity: SED finite and positive."""
         model, params = _make_model(ssp_data, filters, met_logzsol=0.2)
         sed = model.predict_rest_sed(params).sed
         chex.assert_tree_all_finite(sed)
-        assert jnp.all(sed >= 0)
+        assert_non_negative(sed, name="sed")

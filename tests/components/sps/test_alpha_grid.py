@@ -27,6 +27,7 @@ from tengri.components.stellar.sps.dsps_wrapper import (
     interpolate_met_alpha,
     interpolate_met_alpha_evolving,
 )
+from tests._bounds import assert_non_negative
 from tests._jit_parity import assert_jit_matches_eager
 
 pytestmark = pytest.mark.bounds
@@ -452,7 +453,9 @@ class TestComputeAlphaFeEvolving:
         result = compute_alpha_fe_evolving(lg_ages, 0.4, 0.0, 13.7)
 
         diffs = jnp.diff(result)
-        assert jnp.all(diffs >= 0), "Alpha should increase with age (lookback time)"
+        assert_non_negative(
+            diffs, name="diffs", msg="Alpha should increase with age (lookback time)"
+        )
 
     def test_equal_old_young_gives_constant(self):
         """If alpha_old == alpha_young, result should be constant.

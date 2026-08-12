@@ -16,6 +16,8 @@ import jax
 import numpy as np
 import pytest
 
+from tests._bounds import assert_non_negative
+
 pytestmark = pytest.mark.contract
 
 _DATA = Path(__file__).resolve().parents[4] / "data"
@@ -129,7 +131,9 @@ class TestShockDefaultOffRegression:
 
         # Verify output is finite and non-negative
         chex.assert_tree_all_finite(sed_no_shock)
-        assert np.all(sed_no_shock >= 0.0), "Baseline SED contains negative values"
+        assert_non_negative(
+            sed_no_shock, name="sed_no_shock", msg="Baseline SED contains negative values"
+        )
 
         # When shock=False, the baseline should be self-consistent
         assert sed_no_shock.shape[-1] == 5, f"Expected 5 filters, got {sed_no_shock.shape}"
@@ -149,7 +153,9 @@ class TestShockEnabledRuntimeSmoke:
         sed_shock = model_shock.predict_photometry(params)
 
         chex.assert_tree_all_finite(sed_shock)
-        assert np.all(sed_shock >= 0.0), "Shock-enabled SED contains negative values"
+        assert_non_negative(
+            sed_shock, name="sed_shock", msg="Shock-enabled SED contains negative values"
+        )
         assert sed_shock.shape[-1] == 5, f"Expected 5 filters, got {sed_shock.shape}"
 
         # Shock frac=0.1 should produce measurable emission

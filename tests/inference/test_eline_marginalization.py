@@ -24,6 +24,7 @@ from tengri.observation.eline_marginalization import (
     marginalize_emission_lines,
     predict_with_marginalized_lines,
 )
+from tests._bounds import assert_non_negative
 from tests._grad_parity import assert_grad_matches_fd
 
 pytestmark = pytest.mark.bounds
@@ -103,7 +104,7 @@ class TestDesignMatrix:
     def test_non_negative(self, wave_grid):
         """Design matrix should be non-negative (Gaussian profiles)."""
         G = build_eline_design_matrix(wave_grid, DEFAULT_LINE_WAVELENGTHS[:3], 1000.0, 0.0)
-        assert jnp.all(G >= 0)
+        assert_non_negative(G, name="G")
 
     def test_default_line_list(self, wave_grid):
         """Should work with the full default line list."""

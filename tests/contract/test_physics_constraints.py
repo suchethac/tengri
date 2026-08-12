@@ -20,6 +20,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tests._bounds import assert_non_negative
+
 pytestmark = pytest.mark.bounds
 
 
@@ -365,14 +367,14 @@ class TestDustPhysicalMonotonicity:
         from tengri.components.dust.attenuation import calzetti
 
         k = np.asarray(calzetti(optical_uv_wave))
-        assert np.all(k >= 0), "Calzetti k(lambda) has negative values"
+        assert_non_negative(k, name="k", msg="Calzetti k(lambda) has negative values")
 
     def test_smc_positive_everywhere(self, optical_uv_wave):
         """SMC k(lambda) >= 0 at all wavelengths."""
         from tengri.components.dust.attenuation import smc
 
         k = np.asarray(smc(optical_uv_wave))
-        assert np.all(k >= 0), "SMC k(lambda) has negative values"
+        assert_non_negative(k, name="k", msg="SMC k(lambda) has negative values")
 
     def test_calzetti_uv_steeper_than_nir(self):
         """k(UV) must be much larger than k(NIR) for Calzetti."""

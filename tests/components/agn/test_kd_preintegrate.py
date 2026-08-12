@@ -20,6 +20,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tests._bounds import assert_non_negative
+
 
 def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     """Central finite difference: (f(x+eps) - f(x-eps)) / (2*eps)."""
@@ -58,7 +60,7 @@ class TestPlanckFilterTable:
         fw, ft = _make_sdss_like_filters()
         table = _build_planck_filter_table(T_grid, fw, ft, redshift=0.1)
         chex.assert_shape(table, (50, 5))
-        assert np.all(table >= 0)
+        assert_non_negative(table, name="table")
 
     def test_planck_table_monotonic_in_T(self):
         """Hotter temperatures should give more flux in bluer filters."""
@@ -180,7 +182,7 @@ class TestNthcompFilterTable:
         table, _gamma, _kTe, _kTbb = _build_nthcomp_filter_table(fw, ft, redshift=0.1)
         assert table is not None
         assert table.shape == (20, 15, 50, 5)  # (gamma, kTe, kTbb, filters)
-        assert np.all(table >= 0)
+        assert_non_negative(table, name="table")
 
     def test_nthcomp_lookup_smooth(self):
         from tengri.components.agn._nthcomp import _TABLE_AVAILABLE

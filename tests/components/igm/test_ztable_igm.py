@@ -20,6 +20,7 @@ from tengri.components.stellar.sps.precompute import (
     interpolate_igm_ztable,
     precompute_photometry_ztable,
 )
+from tests._bounds import assert_non_negative
 from tests._grad_parity import assert_grad_matches_fd
 
 pytestmark = pytest.mark.bounds
@@ -67,7 +68,7 @@ class TestIGMPrecomputation:
         """IGM transmission is in [0, 1]."""
         fw, ft = filters
         zt = precompute_photometry_ztable(ssp_data, fw, ft, n_z=20, apply_igm=True)
-        assert jnp.all(zt.igm_trans_table >= 0.0)
+        assert_non_negative(zt.igm_trans_table, name="output")
         assert jnp.all(zt.igm_trans_table <= 1.0)
 
     def test_igm_matches_direct_computation(self, ssp_data, filters):
