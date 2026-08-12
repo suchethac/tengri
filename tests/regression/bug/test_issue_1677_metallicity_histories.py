@@ -308,6 +308,25 @@ def test_a_nan_metallicity_node_is_refused_end_to_end(fwd_table_met, histories):
 # the gas therefore never follows the stellar history.
 
 
+def test_a_history_catalog_says_plainly_that_it_cannot_fit(fwd_table_met, histories):
+    """The docstring claimed ``.fit()`` was "still meaningful" here. It raises.
+
+    A history-built catalog carries no observed fluxes to fit *to*, and the
+    data-table constructor has no channel to attach histories, so fitting at a
+    known simulation SFH is unreachable through this class. Pinned because the
+    claim was in the published API reference — ``docs/api/*.rst`` are autodoc
+    stubs — and that is the #1276 failure class this issue is an instance of.
+    """
+    import jax
+
+    from tengri import Catalog
+
+    t, sfr, met, params = histories
+    cat = Catalog.from_histories(fwd_table_met, t_gyr=t, sfr=sfr, met=met, params=params)
+    with pytest.raises(ValueError, match="No table provided at construction"):
+        cat.fit(key=jax.random.PRNGKey(0), method="map")
+
+
 def test_gas_metallicity_without_a_nebular_backend_is_refused(fwd_table_met, histories):
     """Nothing consumes it, so accepting it would be accepting a no-op."""
     from tengri import Catalog

@@ -563,8 +563,13 @@ class Catalog:
         Returns
         -------
         Catalog
-            Prediction-ready. ``.predict()`` needs no argument; ``.fit()`` is
-            still meaningful (fit dust or redshift at a known, fixed SFH).
+            Prediction-only: ``.predict()`` and ``.simulate()`` need no
+            argument, and ``.fit()`` raises. A catalog built from histories
+            carries no observed fluxes to fit *to*, and the data-table
+            constructor has no channel to attach histories, so "fit dust at a
+            known simulation SFH" is not reachable through this class today.
+            (This said ``.fit()`` was "still meaningful" until #1677 measured
+            it raising ``No table provided at construction``.)
 
         Raises
         ------
