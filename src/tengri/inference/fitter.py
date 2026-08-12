@@ -501,6 +501,57 @@ def _has_line_adjacent_channel(model) -> bool:
     )
 
 
+def _refuses_feature_precomp(model) -> bool:
+    """Whether the ``FeaturePrecomp`` top-up must not be applied to ``model``.
+
+    THE one statement of the grounds on which the top-up is refused. Three
+    call sites attempt it — :meth:`Fitter._add_feature_precomp`, the
+    photometry branch of :meth:`Fitter._resolve_fit_approx`, and the
+    photometry branch of :func:`_resolve_batch_fit_approx` — and a ground that
+    only some of them know about is a surface that silently disagrees with the
+    others. That is precisely the shape of #1683 (an early return one surface
+    had and the other did not) and of #1691 (a channel two readers resolved
+    differently); restating the condition per call site is how both were
+    written, and it had been restated three times by the time #1683 was fixed.
+
+    Refused on two grounds:
+
+    * the feature LUT is already configured, so there is nothing to add;
+    * the observation carries a line-adjacent channel (#1665) — the ratio and
+      index terms read the backend's discrete line catalog, which the
+      ``WavePrecomp`` + ``FeaturePrecomp`` pair does not publish. Correctness
+      outranks the ~21x speedup, so this ground is load-bearing; do not relax
+      it.
+
+    Deliberately NOT a ground: a model with no approx state at all. The batch
+    resolver reaches this with ``model.approx`` unset and must still build the
+    pair from scratch. ``_add_feature_precomp`` refuses that case separately,
+    because *it* only ever tops up a config that already exists.
+
+    Parameters
+    ----------
+    model : SEDModel or ForwardModel
+        The fit's model. Only read.
+
+    Returns
+    -------
+    bool
+        ``True`` when the top-up must be skipped. ``False`` says only that the
+        policy permits it — the attempt can still fail on a backend with
+        nothing to tabulate, and that failure is the caller's to handle.
+
+    Notes
+    -----
+    Not a JAX function; called once per fit at approx-resolution time.
+    ``feature_precomp`` is read through :func:`getattr` because these state
+    objects are not uniformly populated, matching the ``spectrum_precomp``
+    read in :func:`_resolve_batch_fit_approx`.
+    """
+    if getattr(getattr(model, "approx", None), "feature_precomp", False):
+        return True
+    return _has_line_adjacent_channel(model)
+
+
 #: Estimated relative posterior-gradient error above which the LUT bias warns.
 #: 0.05 is #1671's own headline: the measured 0.13 % photometry bias crosses
 #: it near SNR 30-40, i.e. exactly where the measurement showed the gradient
@@ -686,7 +737,6 @@ def _resolve_batch_fit_approx(model, approx, data_type):
         state = getattr(model, "approx", None)
         if data_type == "photometry":
             has_wave = state is not None and state.wave_precomp
-            has_feature = state is not None and getattr(state, "feature_precomp", False)
             cfg = WavePrecomp()
             # Attempt the feature top-up first: for a backend that can
             # tabulate its features (Cue's per-Q_H grid replaces the emulator
@@ -713,7 +763,11 @@ def _resolve_batch_fit_approx(model, approx, data_type):
             # and catalog fits evaluate the forward model the most. When the
             # wave LUT is already configured, only the feature LUT is appended;
             # re-appending WavePrecomp would duplicate it.
-            if not has_feature and not _has_line_adjacent_channel(model):
+            #
+            # The refusals are read from _refuses_feature_precomp, the same
+            # predicate the two single-galaxy call sites use, so this surface
+            # cannot grow (or lose) a ground the others do not have.
+            if not _refuses_feature_precomp(model):
                 existing = tuple(getattr(model, "approx_configs", ()))
                 extra = (FeaturePrecomp(),) if has_wave else (cfg, FeaturePrecomp())
                 with contextlib.suppress(Exception):
@@ -1390,13 +1444,10 @@ class Fitter:
         """
         from tengri.forward.sed_model import FeaturePrecomp
 
-        state = getattr(model, "approx", None)
-        if state is None or state.feature_precomp:
-            return model
-        # One seam for every caller of this top-up (#1665): a model whose
-        # observation also carries an index or ratio channel must stay off the
-        # feature LUT, whatever route asked for it.
-        if _has_line_adjacent_channel(model):
+        # Only ever a TOP-UP: with no build-time state there is no config to
+        # add to, which is why this ground is here and not in the shared
+        # predicate (the batch resolver builds the pair from scratch).
+        if getattr(model, "approx", None) is None or _refuses_feature_precomp(model):
             return model
         existing = tuple(getattr(model, "approx_configs", ()))
         try:
@@ -1465,7 +1516,12 @@ class Fitter:
                 # per-gradient FLOPs on a 10-parameter Cue model. Silent on
                 # failure: a backend with nothing to tabulate is the common
                 # case here, not an anomaly worth warning about.
-                if self.data_type == "photometry" and not _has_line_adjacent_channel(model):
+                #
+                # No line-adjacent check here: _add_feature_precomp consults
+                # _refuses_feature_precomp and returns the model untouched for
+                # exactly that case, so restating it would be a third copy of
+                # one policy — the shape that produced #1683 and #1691.
+                if self.data_type == "photometry":
                     return self._add_feature_precomp(model, warn_on_failure=False)
                 return model
             cfg = self._auto_approx_config(model)
