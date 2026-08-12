@@ -39,9 +39,39 @@ from pathlib import Path
 
 import pytest
 
-from tengri.parameters.groups import parse_groups
+from tengri.parameters.groups import _GROUP_STRUCTURAL_KEYS, parse_groups
 
 pytestmark = [pytest.mark.contract, pytest.mark.regression_bug]
+
+
+def _grammar_groups() -> set[str]:
+    """The top-level group names :func:`parse_groups` accepts.
+
+    Derived from ``_GROUP_STRUCTURAL_KEYS`` — the map the production path
+    validates user keys against, so a group cannot be *accepted by the
+    grammar* without an entry and cannot escape this set either. Sub-group
+    keys (``dust.emission``) are not top-level names, hence the dot filter.
+    """
+    return {key for key in _GROUP_STRUCTURAL_KEYS if "." not in key}
+
+
+#: Advice snippets whose ``name=`` is not a build group at all, so
+#: :func:`parse_groups` is simply the wrong grammar to judge them by. The scan
+#: below matches any ``name={...}`` literal, which assumes every such snippet is
+#: build-grammar advice — true until #1722 added a ``fit_interim`` message
+#: advising ``map_options={'n_steps': 40000}``. That advice is *correct*; it
+#: names a keyword argument, not a group, and feeding it to the build grammar
+#: produced "Unknown group key 'map_options'" and a red main.
+#:
+#: Each entry must carry a reason, and the test below fails if a name stops
+#: appearing in the source or ever becomes a real group — so an exemption
+#: cannot quietly outlive the thing it excuses.
+_NOT_GRAMMAR_ADVICE: dict[str, str] = {
+    "map_options": (
+        "a fit_interim()/fit() keyword argument carrying MAP backend options "
+        "(n_steps, learning_rate, n_restarts), not a build group — see #1720/#1722"
+    ),
+}
 
 
 def _dict_snippets(message: str) -> list[tuple[str, dict]]:
@@ -352,7 +382,11 @@ def test_every_literal_advice_snippet_in_src_is_accepted_by_the_grammar() -> Non
     suggestion is spelled out in the source.
     """
     failures = []
+    judged = 0
     for relpath, lineno, name, value in _literal_advice_in_source():
+        if name in _NOT_GRAMMAR_ADVICE:
+            continue
+        judged += 1
         try:
             parse_groups(**{name: value})
         except Exception as exc:
@@ -360,4 +394,43 @@ def test_every_literal_advice_snippet_in_src_is_accepted_by_the_grammar() -> Non
                 f"  {relpath}:{lineno} advises {name}={value!r}\n"
                 f"      but that raises {type(exc).__name__}: {exc}"
             )
+    assert judged >= 5, (
+        f"only {judged} snippets were judged — the exemption list has grown "
+        "until this arm checks almost nothing."
+    )
     assert not failures, "error-message advice the grammar refuses:\n" + "\n".join(failures)
+
+
+class TestTheNonGrammarExemptions:
+    """An exemption must rot loudly rather than outlive what it excuses."""
+
+    def test_every_exemption_carries_a_reason(self):
+        empty = sorted(name for name, why in _NOT_GRAMMAR_ADVICE.items() if not why.strip())
+        assert not empty, f"these exemptions state no reason: {empty}"
+
+    def test_no_exemption_names_a_real_group(self):
+        """The whole justification is "this is not a build group".
+
+        If one ever becomes a group, the exemption stops being a scoping fix
+        and starts hiding exactly the failure this file exists to catch.
+        """
+        promoted = sorted(set(_NOT_GRAMMAR_ADVICE) & _grammar_groups())
+        assert not promoted, (
+            f"{promoted} are now real build groups — delete the exemption and "
+            "let the grammar judge that advice."
+        )
+
+    def test_every_exemption_is_still_advised_somewhere(self):
+        """A stale exemption is a silent widening of the sweep."""
+        advised = {name for _, _, name, _ in _literal_advice_in_source()}
+        unused = sorted(set(_NOT_GRAMMAR_ADVICE) - advised)
+        assert not unused, (
+            f"{unused} no longer appear as advice in src/ — delete the entry "
+            "rather than leaving a standing exemption for nothing."
+        )
+
+    def test_the_group_set_is_derived_and_not_empty(self):
+        """Anti-vacuity: an empty group set would pass the promotion test."""
+        groups = _grammar_groups()
+        assert len(groups) >= 8, f"only {len(groups)} grammar groups found: {sorted(groups)}"
+        assert "dust" in groups and "sfh" in groups
