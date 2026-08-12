@@ -304,6 +304,30 @@ class PrecompBiasWarning(AdvisoryWarning):
     """
 
 
+class ComponentDataNotAvailableWarning(AdvisoryWarning):
+    """A component declared outputs but load() returned None and
+    requires_template_data=True.
+
+    The component's precompute() method was called and returned a state,
+    but load() returned None, meaning no cached template data was prepared.
+    The component advertises outputs that should carry the loaded data, so the
+    absence suggests either:
+
+    1. A required data file (template grid, precomputed table) is missing
+       from the file system.
+    2. The component's requires_template_data flag is misconfigured — it
+       should be False for closed-form analytic models that intentionally
+       load nothing.
+
+    Remedy: check that required data files are present, or update the
+    component's requires_template_data = False if the no-op is intentional
+    (see issue #1738).
+
+    Warns rather than raises: optional data file absences are often legitimate
+    and should not break a fit.
+    """
+
+
 class LaplaceNotAtModeWarning(UserWarning):
     """The Laplace expansion point is not a stationary point of the loss.
 

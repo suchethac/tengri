@@ -85,13 +85,16 @@ resolution finds the base class's method implementations rather than dicts.
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any, ClassVar
 
 import jax
 import jax.numpy as jnp
 
 from tengri.components.template_threading import TemplateThreading
+from tengri.config.exceptions import ComponentDataNotAvailableWarning
 from tengri.parameters.priors import Distribution
 from tengri.protocols.component import (
     BARE_NAME_ALLOWLIST,
@@ -104,10 +107,30 @@ from tengri.protocols.component import (
 
 __all__ = [
     "SEDModelComponent",
+    "SEDModelComponentState",
 ]
 
 # Module-level registry: name → class
 _REGISTRY: dict[str, type[SEDModelComponent]] = {}
+
+
+@dataclass(frozen=True)
+class SEDModelComponentState(SEDComponentState):
+    """Cached state from SEDModelComponent.precompute() with loaded data.
+
+    Carries the result of load() if it was not None, enabling downstream
+    consumers to distinguish "loaded but empty" from "load returned None".
+
+    Attributes
+    ----------
+    data : object or None
+        Cached static tensors from load(). May be template grid, precomputed
+        masks, or any other data prepared at build time. None until
+        precompute() runs successfully.
+    """
+
+    name: str = "component"
+    data: Any | None = None
 
 
 class SEDModelComponent(TemplateThreading):
@@ -268,6 +291,13 @@ class SEDModelComponent(TemplateThreading):
     _outputs_tuple: ClassVar[tuple[DerivedKey, ...]] = ()
     _optional_inputs_tuple: ClassVar[tuple[DerivedKey, ...]] = ()
     _citations_tuple: ClassVar[tuple[str, ...]] = ()
+
+    # Set to False for components whose load() returns None by design
+    # (closed-form analytic models that need no template data).
+    # This is distinct from "contributes": a component may emit outputs
+    # (radio, X-ray) but require no template grid because its model is
+    # closed-form. See issue #1738.
+    requires_template_data: ClassVar[bool] = True
 
     # Instance attributes (set by subclass, but with class defaults)
     name: str = "component"
@@ -510,18 +540,41 @@ class SEDModelComponent(TemplateThreading):
 
         Returns
         -------
-        SEDComponentState
-            Cached state for use in :meth:`apply`. Holds any result from
-            :meth:`load` in the ``data`` attribute if not None.
+        SEDModelComponentState
+            Cached state for use in :meth:`apply`. The returned state carries
+            the result of :meth:`load()` in its ``data`` attribute (or ``None``
+            if load returned None), enabling downstream detection of whether
+            template data was successfully loaded.
+
+        Warns
+        ------
+        ComponentDataNotAvailableWarning
+            When :meth:`load()` returns ``None`` and the component declares
+            non-empty ``outputs()`` and has ``requires_template_data=True``.
+            This warns of missing template data or misconfigured
+            ``requires_template_data`` flag (see issue #1738).
         """
         # Call user's optional load() hook
         data = self.load(wave_grid)
 
         # Stash on self for use in apply()
+        # TRANSITIONAL: scheduled for removal in #1738 when readers migrate.
         if data is not None:
             self.data = data
 
-        return SEDComponentState(name=self.name)
+        # Emit warning if load() returned None but outputs are declared
+        if data is None and self.requires_template_data and len(self.outputs()) > 0:
+            output_names = ", ".join(f"{key.name!r}" for key in self.outputs())
+            warnings.warn(
+                f"Component {self.name!r} declares outputs [{output_names}] but "
+                f"load() returned None. Required data file may be missing, or "
+                f"set requires_template_data=False if this is a closed-form analytic model. "
+                f"See issue #1738 for details.",
+                ComponentDataNotAvailableWarning,
+                stacklevel=2,
+            )
+
+        return SEDModelComponentState(name=self.name, data=data)
 
     def slice_params(self, params):
         """Strip :attr:`parameter_prefix` to the form :meth:`predict` expects.

@@ -124,6 +124,10 @@ class ShockNebular(SEDModelComponent):
     config: ShockNebularConfig = ShockNebularConfig()
     name: str = "shock"
     parameter_prefix: str = "shock_"
+    # Justified by design fallback: load() returns None when data/mappings_templates.h5
+    # is absent, but predict() falls back to hardcoded Allen+2008 subset (see load()
+    # docstring and shock.compute_shock_sed). Missing template data is not an error.
+    requires_template_data: ClassVar[bool] = False
 
     # Params are supplied by the ``shock_*`` bucket, not auto-declared here.
     inputs: ClassVar[dict[str, str]] = {}

@@ -123,6 +123,7 @@ class XRayAirdSEDComponent(SEDModelComponent):
 
     name: str = "xray_aird"
     parameter_prefix: str = "xray_"
+    requires_template_data: ClassVar[bool] = False
 
     # Free parameters
     gamma_hmxb = Uniform(

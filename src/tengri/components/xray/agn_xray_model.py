@@ -101,6 +101,7 @@ class AGNXRayCoronaSEDComponent(SEDModelComponent):
 
     name: str = "agn_xray_corona"
     parameter_prefix: str = "agn_xray_"
+    requires_template_data: ClassVar[bool] = False
 
     # Free parameters
     gamma = Uniform(
