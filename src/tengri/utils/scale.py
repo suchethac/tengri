@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import jax
 import jax.numpy as jnp
+import numpy
 
 LN10 = 2.302585092994046
 LOG10_4PI = float(jnp.log10(4.0 * jnp.pi))  # ~1.09921
@@ -66,6 +67,73 @@ def representable_floor(value: float) -> float:
     True
     """
     return max(float(value), float(jnp.finfo(jnp.result_type(float)).tiny))
+
+
+def representable_exponent(value: float) -> float:
+    r"""Lower a base-10 exponent bound to the largest ``10**x`` the dtype can hold.
+
+    The ceiling-side mirror of :func:`representable_floor`, and the same defect in
+    the opposite direction: a saturating bound written for float64 does not merely
+    stop protecting in float32, it **manufactures the** ``inf`` **it exists to
+    prevent**.
+
+    Parameters
+    ----------
+    value : float
+        The intended exponent ceiling, as written at the call site [dex].
+
+    Returns
+    -------
+    float
+        ``min(value, x_max)`` where ``x_max`` is the largest float for which
+        ``10**x`` is finite in the working dtype — a static Python float, safe as
+        a :func:`jax.numpy.clip` bound under JIT.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — resolved at trace time from
+    ``jnp.result_type(float)``, so it is a compile-time constant.
+
+    float32 tops out at 3.4028e38, i.e. :math:`10^{38.53}`. A clip to ±50 dex
+    therefore saturates to a value float32 cannot represent, so the guarded
+    expression returns ``inf`` for every input the guard fires on. Measured: both
+    Cue emission paths clipped to ±50 dex with the comment *"the clip is the only
+    defense against NaN/inf poisoning a JAX gradient"*, and in pure float32 that
+    clip was the sole reason the whole forward state went non-finite -- poisoning
+    the dust energy balance, ``L_absorbed``, ``L_ir`` and every gradient through
+    them (#1206).
+
+    The bound is stepped strictly below ``log10(max)`` rather than set equal to
+    it: ``10**log10(max)`` rounds *up* to ``inf`` in the last bits, so the exact
+    value is not itself usable.
+
+    **float64 is unchanged by construction.** Its ceiling is :math:`10^{308.25}`,
+    above every exponent bound the tree writes, so the ``min`` returns the
+    original literal and float64 results are bit-identical.
+
+    This caps a *magnitude*, so it deliberately says nothing about ``-inf``, which
+    remains the legitimate "this term is exactly zero" sentinel of
+    :func:`log10_magnitude`.
+
+    Examples
+    --------
+    >>> import jax
+    >>> from tengri.utils.scale import representable_exponent
+    >>> with jax.enable_x64(True):
+    ...     representable_exponent(50.0) == 50.0  # float64: untouched
+    True
+    """
+    # numpy, not jnp: this is called at trace time from inside jitted forwards, and
+    # ``float()`` of a jnp array there is a ConcretizationTypeError. ``finfo.max``
+    # alone is a numpy scalar (which is why representable_floor gets away with
+    # ``jnp``), but taking a log of it is a JAX operation and the result traces.
+    dtype = numpy.dtype(jnp.result_type(float))
+    # One ULP *of the working dtype* below log10(max): 10**log10(max) rounds up to
+    # inf in the last bits, so the exact value is not usable. Stepping in float64
+    # would not move it far enough to matter — float64's ULP at 38.5 is ~7e-15,
+    # float32's is ~4e-6.
+    ceiling = numpy.nextafter(numpy.log10(numpy.finfo(dtype).max).astype(dtype), dtype.type(0.0))
+    return min(float(value), float(ceiling))
 
 
 def whiten(x, sigma):

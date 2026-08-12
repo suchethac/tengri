@@ -120,7 +120,7 @@ from tengri.utils.physics_constants import (
     C_CGS as _C_CGS,
     L_SUN_CUE as _LSUN_ERG,  # 3.839e33 — Cue training convention, NOT IAU 2015
 )
-from tengri.utils.scale import LN10, pow10
+from tengri.utils.scale import LN10, pow10, representable_exponent
 
 _LOG_LSUN = jnp.log10(_LSUN_ERG)
 _LOG_4PI = jnp.log10(4.0 * jnp.pi)
@@ -785,7 +785,7 @@ def predict_all_lines(
     # +51-dex `gas_logq = logU` bug fixed in #477 produced near-physical
     # silently-wrong output rather than blatantly-saturated output.
     exponent = log_lum_sorted - gas_logq + gas_logqion - _LOG_LSUN
-    exponent_safe = jnp.clip(exponent, -50.0, 50.0)
+    exponent_safe = jnp.clip(exponent, -50.0, representable_exponent(50.0))
     luminosities = 10.0**exponent_safe
 
     return wav_sorted, luminosities
@@ -858,7 +858,7 @@ def predict_continuum(
     # from ±100 to ±50 dex in this revision — see predict_all_lines for the
     # full rationale (#477 follow-up).
     exponent = log_spec_sorted - gas_logq + gas_logqion - _LOG_LSUN
-    luminosity = 10.0 ** jnp.clip(exponent, -50.0, 50.0)
+    luminosity = 10.0 ** jnp.clip(exponent, -50.0, representable_exponent(50.0))
 
     # Zero out wavelengths below Lyman limit (Cue convention)
     luminosity = jnp.where(wav_sorted > 911.6, luminosity, 0.0)
