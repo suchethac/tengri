@@ -20,6 +20,14 @@ So the assertions here are on the number of **compiled programs** — read from
 the catalog's own memoized ``jit`` wrapper, which is the object whose cache the
 claim is about — plus a global compile counter as the guard against the jit
 being removed entirely.
+
+**The instrument has a saturation failure mode (#1663).** ``_cache_size()``
+reads from a process-wide C++ cache of fixed capacity, and once a process has
+created that many distinct jitted callables it reports 0 for everything — so
+these assertions failed in a full-suite run and only there. See
+:func:`_accessor_can_report`, which the autouse fixture below probes so a
+degraded accessor is repaired, and a still-degraded one is named rather than
+misread as "the catalog stopped jitting".
 """
 
 from __future__ import annotations
@@ -27,6 +35,7 @@ from __future__ import annotations
 import warnings
 
 import jax
+import jax.numpy as jnp
 import numpy as np
 import pytest
 
@@ -38,15 +47,60 @@ _Z_OBS = 0.05
 _T_GYR = np.concatenate([np.array([0.0]), np.linspace(1.0, 13.0, 39)])
 
 
+def _accessor_can_report():
+    """Can ``_cache_size()`` still report a compile at all, right now? (#1663)
+
+    JAX holds its compiled programs in a **process-wide** C++ cache
+    (``jax._src.pjit._cpp_pjit_cache_*``) with a fixed capacity — 8192 on jax
+    0.9.1. Once a process has created that many distinct jitted callables, a
+    newly created one gets no cache slot, and ``fn._cache_size()`` reads ``0``
+    **immediately after a successful call**.
+
+    Nothing is actually wrong when that happens: measured on jax 0.9.1, a fresh
+    jit past saturation still costs one compile on call 1 and *zero* on call 2,
+    exactly like the unsaturated control, and 20 warm calls take 0.000 s. The
+    executable is still served — only the accessor stops reporting it.
+
+    That is what made #1663 look like a cross-tree contamination bug: a full
+    suite creates well over 8192 jits in one xdist worker, an isolated run of
+    this file creates a handful, and so the assertions below read 0 only in the
+    large run. Bisecting for a contaminating *test* cannot converge, because the
+    cause is an accumulation threshold rather than any one test.
+
+    Probing the accessor functionally — rather than reading JAX's capacity
+    constant — keeps this correct across JAX upgrades and across whichever of
+    the two internal caches happens to saturate.
+    """
+    canary = jax.jit(lambda x: x + 1.0)
+    canary(jnp.zeros(()))
+    return canary._cache_size() > 0
+
+
+@pytest.fixture(autouse=True)
+def _room_in_the_pjit_cache():
+    """Guarantee the compile-count accessor can report before each test (#1663).
+
+    ``jax.clear_caches()`` empties the saturated C++ cache (measured: 8192 -> 0),
+    after which a fresh jit reports 1 again. It is only called when the probe
+    says the accessor is degraded, so the common case pays one tiny compile and
+    no other test on this worker loses its warm executables.
+    """
+    if not _accessor_can_report():
+        jax.clear_caches()
+
+
 def _cache_size(cached):
     """Number of compiled programs held by the catalog's batched callable.
 
-    ``_cache_size`` is JAX-internal, so this distinguishes the two ways it can
-    go missing — they need opposite fixes and must not share a message:
+    ``_cache_size`` is JAX-internal, so this distinguishes the ways it can go
+    missing — they need opposite fixes and must not share a message:
 
     * the callable is not jitted at all (someone dropped the ``jax.jit``), which
       is a **source** regression;
-    * it is jitted but JAX moved the accessor, which is a **test** repair.
+    * it is jitted but JAX moved the accessor, which is a **test** repair;
+    * it is jitted and the accessor exists, but JAX's process-wide compile cache
+      is saturated so it reports 0 regardless — a **measurement** failure that
+      says nothing about the catalog (#1663).
 
     Either way it fails rather than skips. The acceptance criterion here is a
     compile count, and a silently skipped count test is precisely the invisible
@@ -64,7 +118,17 @@ def _cache_size(cached):
             f"jax {jax.__version__} no longer exposes _cache_size() on a jitted "
             f"callable; re-point this helper at the current accessor."
         )
-    return cached._cache_size()
+    size = cached._cache_size()
+    if size == 0 and not _accessor_can_report():
+        raise AssertionError(
+            "JAX's process-wide pjit cache is saturated, so _cache_size() "
+            "reports 0 for every callable and this assertion cannot give a "
+            "verdict about the catalog (#1663). The _room_in_the_pjit_cache "
+            "fixture should have cleared it — check that it still runs, and see "
+            "_accessor_can_report() for the mechanism. This is NOT evidence "
+            "that Catalog._batched stopped jitting."
+        )
+    return size
 
 
 @pytest.fixture
@@ -86,6 +150,41 @@ def fwd_table(synthetic_ssp_wide, synthetic_tophat_obs):
             },
             neb={"type": "none"},
             redshift=Fixed(_Z_OBS),
+        )
+        return ForwardModel.build(sed=sed, observation=synthetic_tophat_obs)
+
+
+@pytest.fixture
+def fwd_table_other(synthetic_ssp_wide, synthetic_tophat_obs):
+    """A genuinely different model — same shapes, different dust and redshift.
+
+    The negative control for the shared compile cache. Same structure and the
+    same array shapes as ``fwd_table``, so a mis-keyed cache would hand this
+    model the other one's compiled program without any shape error to give it
+    away; only the numbers would be wrong.
+
+    Both a dust and a redshift difference, so the two models are separated by
+    orders of magnitude rather than by the 0.3% that the dust change alone
+    produces on this tabulated history — a discriminator that close leaves the
+    control resting on the tolerance rather than on the physics.
+    """
+    from tengri import FIXED, ForwardModel, SEDModel
+    from tengri.parameters.priors import Fixed, Uniform
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        sed = SEDModel.build(
+            ssp_data=synthetic_ssp_wide,
+            observation=synthetic_tophat_obs,
+            sfh={"type": "table"},
+            dust={
+                "type": "two_component",
+                "all_params": FIXED,
+                "tau_bc": 2.5,  # vs 0.5
+                "tau_diff": Uniform(0.0, 2.0),
+            },
+            neb={"type": "none"},
+            redshift=Fixed(10.0 * _Z_OBS),  # vs _Z_OBS — a ~100x flux change
         )
         return ForwardModel.build(sed=sed, observation=synthetic_tophat_obs)
 
@@ -232,3 +331,64 @@ def test_simulate_channels_get_separate_cache_entries(fwd_table):
     cat.simulate(lines=("Halpha", "OIII_5007"), chunk_size=4)
     line_tags = {t for t in cat._batched_cache if t.startswith("lines:")}
     assert len(line_tags) == 2, f"a different line set reused a cache entry: {line_tags}"
+
+
+def test_catalogs_over_one_model_share_one_compile(fwd_table):
+    """A second catalog over the same model must cost ZERO new compiles (#1663).
+
+    The memo used to live on the ``Catalog``, so every catalog was a fresh
+    ``jax.jit`` wrapper and every case recompiled — measured at six compiles
+    for six predictions over one model, an exact repeat included, even though
+    the shapes already matched. Scope is now per ForwardModel.
+
+    Counted with ``count_jit_compilation_cache_miss`` rather than
+    ``_cache_size()``: the claim is "this call compiled nothing new", which is
+    what a miss count states directly, and it is immune to the pjit-cache
+    saturation that makes ``_cache_size()`` unreadable in a long process.
+    """
+    from jax._src import test_util as jtu
+
+    cat_a = _catalog(fwd_table, 8)
+    cat_a.predict(chunk_size=4)
+
+    # A different case: different galaxy count, same chunk width -> same shape.
+    cat_b = _catalog(fwd_table, 5)
+    with jtu.count_jit_compilation_cache_miss() as counter:
+        cat_b.predict(chunk_size=4)
+
+    assert counter() == 0, (
+        f"a second catalog over the same model compiled {counter()} new "
+        f"program(s); the per-model memo in Catalog._batched is not shared"
+    )
+    assert cat_a._batched_cache is cat_b._batched_cache
+
+
+def test_a_different_model_never_reuses_another_models_program(fwd_table, fwd_table_other):
+    """Sharing must key on the model — the failure mode here is WRONG NUMBERS.
+
+    An extra compile is a performance cost; handing model B the program traced
+    for model A is a correctness failure that no shape check would catch, since
+    both models have identical shapes and differ only in dust opacity.
+    """
+    cat_a = _catalog(fwd_table, 8)
+    cat_b = _catalog(fwd_table_other, 8)
+
+    assert cat_a._batched_cache is not cat_b._batched_cache
+
+    phot_a = np.asarray(cat_a.predict(chunk_size=4))
+    phot_b = np.asarray(cat_b.predict(chunk_size=4))
+
+    assert phot_a.shape == phot_b.shape
+    # Relative, with no atol: these fluxes are ~1e-11, so np.allclose's default
+    # atol=1e-8 swamps them and reports "equal" for models that differ by 100x.
+    rel = np.abs(phot_a - phot_b) / np.abs(phot_b)
+    assert rel.max() > 0.1, (
+        f"two different models returned photometry agreeing to "
+        f"{rel.max():.2e} — the shared compile cache is keyed too loosely and "
+        f"served one model's program to the other"
+    )
+
+    # And B's batched answer must match its own single-galaxy forward pass.
+    columns, _n = cat_b._prediction_columns(None)
+    direct = np.asarray(fwd_table_other.predict_photometry({k: v[0] for k, v in columns.items()}))
+    np.testing.assert_allclose(phot_b[0], direct, rtol=1e-10)

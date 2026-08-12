@@ -167,7 +167,15 @@ CB19_PARAMS: tuple[ParamDeclaration, ...] = (
         "HbFrac=1 = fully radiation-bounded; escape fraction ≈ 1 − HbFrac",
         lambda lo, hi: lo >= 0 and hi <= 1,
         "must be in [0, 1]",
-        free_prior=Uniform(0.0, 1.0, "HbFrac matter-bounded fraction", default=1.0),
+        # Deliberately NO free_prior. Unlike the CB19 axes beside it, HbFrac is
+        # not an interpolation axis at runtime: ``load_cb19_grid`` snaps it to
+        # the nearest of the grid's two HbFrac values and collapses the axis at
+        # load time, and the collapsed grid is what every prediction reads. The
+        # snap target comes from the ``CB19Backend(hbfrac=...)`` constructor
+        # argument, which the build grammar does not forward, so the parameter
+        # has no runtime consumer at all -- sweeping it across [0, 1] moves the
+        # SED by exactly 0.0. A continuous prior over two reachable values would
+        # be wrong even if it were wired.
     ),
 )
 

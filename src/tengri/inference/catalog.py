@@ -8,6 +8,7 @@ ingestion and validation happen at construction (fail fast, before any compile).
 from __future__ import annotations
 
 import warnings
+import weakref
 
 import jax
 import numpy as np
@@ -28,6 +29,46 @@ __all__ = ["Catalog"]
 #: relation, so a deliberate offset of that size stays quiet, while the
 #: default-vs-enriched mismatch this guards (typically >1 dex) does not.
 _GAS_STELLAR_TOLERANCE_DEX = 0.3
+
+# Memoized jit(vmap(...)) namespaces, shared by every Catalog over one model.
+# WeakKeyDictionary so the compiled programs die with the model they belong to,
+# mirroring inference/_model_cache.py's per-model cache rather than inventing a
+# second idiom for the same job.
+_BATCHED_CACHES: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+
+
+def _batched_cache_for(fwd):
+    """The memoized-``jit`` namespace shared by every Catalog over *fwd*.
+
+    Scope is **per ForwardModel**, not per Catalog. Every ``Catalog`` built on
+    one model draws on one set of compiled programs, so predicting three
+    catalogs of different sizes costs one compile rather than three.
+
+    Measured before this existed, on six predictions over one model (sizes
+    5/8/13, chunk widths 3/4/8): **six wrappers, one variant each — six
+    compiles, including an exact repeat of a previous case**, because the memo
+    lived on the ``Catalog`` and every catalog is a new object. The shapes
+    already matched; only the wrapper identity differed.
+
+    Keying on the model by value is safe here, and was measured rather than
+    assumed: two ``ForwardModel``\\ s built from different SSP flux compare
+    unequal, hash differently, and stay separate in a ``WeakKeyDictionary``.
+    Equal models produce the same traced program, so sharing between them is
+    correct — and it is what lets two independently built but identical models
+    reuse one compile.
+
+    Falls back to a private namespace if a model is ever unhashable: that costs
+    one compile per Catalog, which is exactly the old behavior, so the failure
+    mode is slow rather than wrong.
+    """
+    try:
+        cache = _BATCHED_CACHES.get(fwd)
+    except TypeError:
+        return {}
+    if cache is None:
+        cache = {}
+        _BATCHED_CACHES[fwd] = cache
+    return cache
 
 
 def _stellar_component(fwd):
@@ -254,8 +295,9 @@ class Catalog:
         # Set by from_histories; makes predict() argument-optional (#1396).
         self._history_columns = None
         # Memoized jit(vmap(...)) per channel, so the XLA cache survives across
-        # calls instead of being rebuilt (and recompiled) each time.
-        self._batched_cache = {}
+        # calls instead of being rebuilt (and recompiled) each time. Shared with
+        # every other Catalog over this model — see _batched_cache_for.
+        self._batched_cache = _batched_cache_for(fwd)
 
         # Fail fast: ingest and validate at construction.
         if table is not None:
@@ -500,7 +542,7 @@ class Catalog:
         ----------
         fwd : ForwardModel
             Model built with ``sfh={'type': 'table'}`` (and
-            ``met={'type': 'table'}`` if ``met`` is given).
+            ``stellar={'met_mode': 'table'}`` if ``met`` is given).
         t_gyr : array_like, shape (n_t,) or (N, n_t)
             Cosmic time [Gyr], strictly increasing. A 1-D grid is shared by
             every galaxy and broadcast.
@@ -860,12 +902,18 @@ class Catalog:
         wrapped callable, so building a fresh ``jax.jit(...)`` per call would
         give every call a fresh cache and recompile the catalog every time.
 
-        Scope is **per Catalog**, deliberately. Two Catalog objects over the same
-        model each compile their own program — one compile, not the ~236 an
-        unjitted path costs, and the persistent on-disk JAX cache absorbs it on
-        a later run. Sharing across instances would mean a module-level cache
-        keyed on the ForwardModel, which is a frozen dataclass holding JAX
-        arrays: the lifetime and hashing hazards are not worth one compile.
+        Scope is **per ForwardModel** (:func:`_batched_cache_for`), so every
+        Catalog over one model shares its compiled programs.
+
+        This used to be per Catalog, on the reasoning that sharing "would mean a
+        module-level cache keyed on the ForwardModel, which is a frozen
+        dataclass holding JAX arrays: the lifetime and hashing hazards are not
+        worth one compile". Both halves of that were measured and neither held.
+        The hazards are absent — ForwardModel is hashable and weak-referenceable,
+        and unequal models stay separate in a WeakKeyDictionary — and the cost
+        was never "one compile": it is one **per Catalog object**, so a script
+        that predicts N catalogs off one model paid N compiles, an exact repeat
+        of a previous case included.
         """
         cached = self._batched_cache.get(tag)
         if cached is None:

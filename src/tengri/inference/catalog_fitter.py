@@ -23,6 +23,7 @@ import jax.numpy as jnp
 import numpy as np
 from jax.flatten_util import ravel_pytree
 
+from tengri._mapping import ReadOnlyPropertyMapping
 from tengri.inference._dimension_guard import warn_if_nuts_high_dim as _warn_if_nuts_high_dim
 from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physical
 
@@ -497,9 +498,9 @@ class CatalogPosterior:
                 f"{available or 'no keys'}."
             )
         if name not in self.properties:
-            raise KeyError(
-                f"Unknown property {name!r}. Available: {sorted(self.properties.keys())}."
-            )
+            from tengri.forward.properties import missing_property_message
+
+            raise KeyError(missing_property_message(name, available=self.properties))
         vals = self.properties[name]
         if isinstance(vals, list):  # ragged posteriors — per-galaxy medians
             return np.array(
@@ -627,7 +628,7 @@ class CatalogPosterior:
         )
 
 
-class CatalogProperties:
+class CatalogProperties(ReadOnlyPropertyMapping):
     """The property catalog lifted over the galaxy axis of a :class:`CatalogPosterior`.
 
     A ``CatalogPosterior`` is a *list of independent* ``Posterior`` objects, not
@@ -666,16 +667,6 @@ class CatalogProperties:
         posts = self._posteriors()
         return iter(posts[0].properties.keys() if posts else [])
 
-    def keys(self):
-        """Available property names — identical to the per-galaxy ones."""
-        return list(self)
-
-    def to_dict(self, names=None) -> dict:
-        """Export properties as a plain dict keyed by name."""
-        if names is None:
-            names = list(self)
-        return {name: self[name] for name in names}
-
     def ci(self, name: str, level: float = 0.68) -> np.ndarray:
         """Per-galaxy credible interval.
 
@@ -685,9 +676,6 @@ class CatalogProperties:
             ``(lo, median, hi)`` per galaxy.
         """
         return np.array([p.properties.ci(name, level=level) for p in self._posteriors()])
-
-    def __setattr__(self, name, value):
-        raise AttributeError("CatalogProperties is read-only")
 
     def __repr__(self):
         return (
@@ -870,6 +858,12 @@ class _CatalogFitterOriginal:
         self.approx = approx
         self.galaxies = list(galaxies)
         self.n_galaxies = len(self.galaxies)
+        # For the #1671 bias advisory in run(): the exact reference when
+        # resolution produced a LUT clone. Deferred to run() so construction
+        # stays cheap; priced once for the whole catalog (the probe caches on
+        # the clone — one exact forward, not one per galaxy).
+        self._pre_approx_model = model if self.model is not model else None
+        self._lut_bias_checked = False
         self.data_type = data_type
         self._dummy_fitter = None
         self._catalog_linear_engine = None
@@ -988,6 +982,33 @@ class _CatalogFitterOriginal:
         """
         from tengri.inference._backend_registry import refuse_if_broken
         from tengri.inference.fitter import resolve_method
+
+        # #1671 made operational: this catalog fit runs on a resolved
+        # precompute LUT, so price the LUT's forward bias against the whole
+        # catalog's SNR once and warn with the number when the amplified
+        # estimate is material. Once per catalog fitter instance.
+        if not self._lut_bias_checked and self._pre_approx_model is not None:
+            self._lut_bias_checked = True
+            from tengri.inference.fitter import _warn_if_lut_bias_amplified
+
+            try:
+                all_flux = np.concatenate(
+                    [np.asarray(g["flux_obs"]).reshape(-1) for g in self.galaxies]
+                )
+                all_noise = np.concatenate(
+                    [np.asarray(g["noise"]).reshape(-1) for g in self.galaxies]
+                )
+            except Exception:
+                all_flux = all_noise = None
+            if all_flux is not None:
+                _warn_if_lut_bias_amplified(
+                    self._pre_approx_model,
+                    self.model,
+                    all_flux,
+                    all_noise,
+                    self.data_type,
+                    surface="CatalogFitter",
+                )
 
         # Auto-select store mode based on catalog size if not specified
         if store is None:

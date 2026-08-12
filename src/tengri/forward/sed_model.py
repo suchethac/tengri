@@ -104,6 +104,45 @@ from tengri.utils.scale import LOG10_4PI, apply_log10_scale
 #: between the two and is refused a constant band response.
 _L_IR_PROBE = 1.0e44
 
+#: Properties whose value is read off the rest-frame SED, which the fast-nebular
+#: grid path deletes the nebular contribution from (#950 zeroes ``nebular_sed``;
+#: that deleted Cue forward IS the speedup). ``predict_properties`` refuses these
+#: when a per-Q_H grid is attached, and serves the other 30 normally.
+#:
+#: The census is established by **measurement**, not by reading which helpers
+#: touch ``sed``: a broadband integral can be insensitive to the missing nebular
+#: flux at printed precision, and guarding the read list would over-refuse. Each
+#: name below was measured to move under ``approx=(WavePrecomp(),
+#: FeaturePrecomp())`` against exact on an FSPS/MILES Cue model at z=0.05 --
+#: 13 of 43 properties, worst first:
+#:
+#:   l_tir 30.07%   irx_fuv 29.26%   irx 27.22%   l_dust_absorbed 18.67%
+#:   xi_ion 6.20%   fuv_flux 5.84%   rest_uv_color 2.78%   l_bol 2.19%
+#:   nuv_flux 2.05%   uv_slope_beta 2.01%   dn4000 1.00%   balmer_break 0.64%
+#:   m_uv 0.08%
+#:
+#: The energy-balance quantities are the worst hit, which is the tell: deleting
+#: the nebular continuum removes reprocessed luminosity the dust budget is
+#: balanced against, so l_tir/irx/l_dust_absorbed move by ~20-30% while the
+#: shape indices move by ~1-3%.
+_FAST_NEBULAR_UNSAFE_PROPERTIES = frozenset(
+    {
+        "balmer_break",
+        "dn4000",
+        "fuv_flux",
+        "irx",
+        "irx_fuv",
+        "l_bol",
+        "l_dust_absorbed",
+        "l_tir",
+        "m_uv",
+        "nuv_flux",
+        "rest_uv_color",
+        "uv_slope_beta",
+        "xi_ion",
+    }
+)
+
 
 def _chain_consumes(chain, key: str) -> bool:
     """Does any component in ``chain`` declare ``key`` as a (possibly optional) input?
@@ -222,6 +261,20 @@ class WavePrecomp:
     ``data_args`` as a runtime input, #1316). ``Catalog`` remains the
     taught surface for a table of galaxies with a redshift column: one
     ingest, one validation, one compiled program.
+
+    **Accuracy has an SNR ceiling, not just a percentage** (#1671). The
+    LUT's forward photometry bias (measured 0.13-0.26 % on a 4-band
+    reference model) is constant in SNR — so no forward check can see it —
+    but it enters the posterior gradient multiplied by SNR: ~5 % relative
+    gradient error at SNR 30, ~50 % at SNR 300 on the same model. It is a
+    bias, not noise: it moves the posterior mode, and better data makes it
+    worse. Fits price this automatically — at run time one exact-vs-LUT
+    forward estimates ``max(bias x SNR)`` and a
+    :class:`~tengri.config.exceptions.PrecompBiasWarning` fires with the
+    number when it is material. For final inference at high SNR, rerun with
+    ``approx=None`` (exact path) or compare the two posteriors. The
+    spectroscopy analog (:class:`SpectrumPrecomp`) was measured as a
+    ~1-sigma posterior shift on a 50-pixel, 5 %-noise fixture (#1688).
     """
 
     n_z: int = 250
@@ -3944,6 +3997,51 @@ class SEDModel:
             raise ValueError("No filters set. Pass filters or observation= to SEDModel().")
         return self.predict_observables_jit(params).phot_fnu
 
+    def _refuse_on_fast_nebular(self, caller):
+        """Refuse a rest-frame-SED consumer on a fast-nebular model (#950, #1665).
+
+        With a per-Q_H nebular grid attached the Cue continuum forward is
+        skipped (``nebular_sed = 0``), so anything *measured off the rest-frame
+        SED* is missing both the nebular continuum and the emission lines.
+        Photometry and line fluxes stay correct — they reconstruct from the
+        grid — which is precisely why the damage is invisible from the fit that
+        selected the fast path.
+
+        One helper called by every such consumer, because **the census is the
+        part that goes wrong**: #950 guarded ``predict_spectrum`` and stopped
+        there, so ``predict_spectral_indices`` kept measuring a gutted rest SED.
+        Under ``approx=(WavePrecomp(), FeaturePrecomp())`` that moved all 13
+        spectral indices off the exact path — worst ``HgA`` by **+1733%**, the
+        five Balmer indices by 29–1733% — with no exception and no warning
+        (#1665). Adding a rest-SED consumer means adding a call here.
+
+        Parameters
+        ----------
+        caller : str
+            Public method name, quoted back to the user in the error.
+
+        Raises
+        ------
+        ValueError
+            Whenever a per-Q_H nebular grid is attached to this model.
+
+        Notes
+        -----
+        **JIT-compatible**: yes — the check reads a static Python attribute set
+        at build time, so it resolves at trace time and emits no ops.
+        """
+        if getattr(self, "_nebular_grid_table", None) is None:
+            return
+        raise ValueError(
+            f"{caller} is not available on a fast-nebular model: a per-Q_H "
+            "nebular grid is attached (approx=(WavePrecomp(), FeaturePrecomp()), "
+            "or enable_fast_nebular), so the Cue continuum forward is skipped and "
+            "the rest-frame SED omits the nebular continuum and emission lines. "
+            "Use approx=WavePrecomp() alone — exact for this quantity and still "
+            "LUT-fast for photometry — or drop approx= entirely, for spectra, "
+            "spectral indices, line ratios, and .lines."
+        )
+
     def predict_spectrum(
         self,
         params,
@@ -4042,19 +4140,9 @@ class SEDModel:
         predict : Lazy access to all SED and SFH quantities.
         predict_photometry : Filter-integrated flux (simpler, faster).
         """
-        # Fast-nebular guard (#950): with a per-Q_H grid attached the Cue
-        # continuum forward is skipped (nebular_sed = 0), so the spectrum would
-        # be missing the nebular continuum + emission lines. Refuse loudly rather
-        # than silently return a nebular-less spectrum — the fast path is for
-        # photometry + line fluxes only.
-        if getattr(self, "_nebular_grid_table", None) is not None:
-            raise ValueError(
-                "predict_spectrum is not available on a fast-nebular model "
-                "(enable_fast_nebular attached a per-Q_H grid, so the Cue "
-                "continuum forward is skipped and the spectrum would omit the "
-                "nebular emission). Use the exact model (built without "
-                "enable_fast_nebular) for spectra, line ratios, and .lines."
-            )
+        # Fast-nebular guard (#950): the fast path is for photometry + line
+        # fluxes only. Shared with every other rest-SED consumer (#1665).
+        self._refuse_on_fast_nebular("predict_spectrum")
 
         # A caller-supplied ``wave_obs`` is evaluated directly on that grid,
         # independent of any configured spectroscopy channel or the cached
@@ -4646,6 +4734,12 @@ class SEDModel:
         **JIT-compatible**: no — delegates to the nebular backend via
         :meth:`predict_state`.
         """
+        # Diagnose the fast-nebular case FIRST (#1665). The grid path skips the
+        # discrete line-catalog publish, so a Cue model would otherwise fall
+        # through to the backend message below and be told to "use Cue" -- advice
+        # the user has already taken, naming a cause that is not theirs.
+        self._refuse_on_fast_nebular("predict_line_ratios")
+
         if state is None:
             state = self.predict_state(params)
         if "line_waves" not in state.derived or "line_lums" not in state.derived:
@@ -4719,6 +4813,11 @@ class SEDModel:
         """
         from tengri.forward.result import SEDResult
         from tengri.observation.spectral_indices import measure_index_jax
+
+        # Indices are measured off the rest-frame SED, which the fast-nebular
+        # grid path gutted (#1665). Same guard as predict_spectrum — this
+        # consumer was simply missing from that census.
+        self._refuse_on_fast_nebular("predict_spectral_indices")
 
         if fast:
             return self._feature_fast_indices(params, tuple(index_defs))
@@ -5326,8 +5425,29 @@ class SEDModel:
         # Validate all names are known
         unknown = set(names_to_compute) - set(self._property_catalog.keys())
         if unknown:
-            available = sorted(self._property_catalog.keys())
-            raise KeyError(f"Unknown properties: {sorted(unknown)}. Available: {available}")
+            from tengri.forward.properties import missing_property_message
+
+            raise KeyError(
+                missing_property_message(*sorted(unknown), available=self._property_catalog)
+            )
+
+        # A 'lines' property on a backend with no per-line catalog is NaN. Say
+        # so here too: pred.lines.* has warned since #361 but this surface --
+        # the documented jit/vmap one -- returned the same NaN in silence.
+        # Only when the caller asked by name; `names=None` means "everything
+        # the model has" and would warn on every default call.
+        if names is not None:
+            from tengri.forward.properties import warn_if_lines_are_unavailable
+
+            warn_if_lines_are_unavailable(self, names_to_compute)
+
+        # Rest-SED-derived properties cannot be served by the fast-nebular grid
+        # (#1665). Refuse only those: stellar_mass, sfr and the other 30 are
+        # perfectly correct on the fast path, and blanket-refusing them would
+        # break exactly the fits the fast path exists for.
+        unsafe = sorted(_FAST_NEBULAR_UNSAFE_PROPERTIES.intersection(names_to_compute))
+        if unsafe and getattr(self, "_nebular_grid_table", None) is not None:
+            self._refuse_on_fast_nebular(f"predict_properties(names={unsafe})")
 
         # Compute the state once
         state = self.predict_state(params)
@@ -5392,8 +5512,11 @@ class SEDModel:
             - ``sfr_10myr`` : float. SFR time-averaged over last 10 Myr [M☉/yr]
             - ``ssfr`` : float. Specific SFR (SFR/M_surv or SFR/M_formed) [yr⁻¹]
             - ``mass_weighted_age_gyr`` : float. Mass-weighted age [Gyr]
-            - ``mass_weighted_metallicity`` : float. Mass-weighted log₁₀(Z/Z☉) or
-              absolute log₁₀(Z) depending on metallicity mode
+            - ``mass_weighted_metallicity`` : float. Mass-weighted log₁₀(Z/Z☉)
+              [dex], the same convention ``met_logzsol`` is set in. The old
+              "or absolute log₁₀(Z) depending on metallicity mode" hedge was
+              wrong twice over: the value was absolute in *every* mode, and
+              the computation has no metallicity-mode branch to vary on (#1703)
 
         Notes
         -----
@@ -5514,12 +5637,19 @@ class SEDModel:
 
         # Mass-weighted age and metallicity
         mw_age = compute_mass_weighted_age(weights, self.ssp_ages_yr)
-        mw_z = compute_mass_weighted_metallicity(
-            weights,
-            self.ssp_ages_yr,
-            p.get("log_z_abs", 0.0),
-            log_z_initial=p.get("log_z_abs_initial"),
-            log_z_final=p.get("log_z_abs_final"),
+        # The helper works in the grid's absolute log10(Z) (its inputs are the
+        # ``log_z_abs*`` params); convert on the way out, as the property
+        # catalog does, so this deprecated surface reports the same number.
+        from tengri.utils.conversions import log_z_abs_to_logzsol
+
+        mw_z = log_z_abs_to_logzsol(
+            compute_mass_weighted_metallicity(
+                weights,
+                self.ssp_ages_yr,
+                p.get("log_z_abs", 0.0),
+                log_z_initial=p.get("log_z_abs_initial"),
+                log_z_final=p.get("log_z_abs_final"),
+            )
         )
 
         return SFHQuantities(
@@ -5944,6 +6074,9 @@ class SEDModel:
             DeprecationWarning,
             stacklevel=2,
         )
+        # Deprecated, but it reaches the rest SED by its own route rather than
+        # through predict_spectrum, so it needs the census guard too (#1665).
+        self._refuse_on_fast_nebular("predict_spectrum_components")
         return self._spectrum_via_state(params, wave_obs=wave_obs)
 
     def predict_emission_lines(self, params):
@@ -6587,33 +6720,59 @@ class SEDModel:
         if band_response is not None:
             result.setdefault("dust_ir", {})["emission_band_response"] = band_response
 
-        # ── Dust IR template libraries, keyed by component name ──
+        # ── Component template libraries, keyed [namespace][component name] ──
         #
-        # A template-backed emission backend that reads its grid inside
-        # ``predict`` freezes the whole library into the graph as ``Constant``
-        # ops — 66.6 MB for Draine & Li 2014, 39.4 for THEMIS, against a
-        # bare-stellar floor of 0.05 MB (#1649). Publishing the bundle here,
-        # loaded eagerly, lets ``EmissionComponent.apply`` hand it to
-        # ``predict`` as a traced argument instead.
+        # A template-backed component that reads its library inside ``predict``
+        # freezes the whole thing into the graph as ``Constant`` ops — 66.6 MB
+        # for Draine & Li 2014, 39.4 for THEMIS, 3.7 for the MAPPINGS V shock
+        # grid, against a bare-stellar floor of 0.05 MB (#1649, #1694).
+        # Publishing the bundle here, loaded eagerly, lets
+        # ``SEDModelComponent.apply`` hand it to ``predict`` as a traced
+        # argument instead.
         #
-        # Opt-in via ``accepts_threaded_templates`` because ``predict``
-        # signatures are per backend; the analytic ones have no library and
-        # must not receive the keyword.
-        from tengri.components.dust.emission._component_base import EmissionComponent
-
+        # Driven by the component's own ``accepts_threaded_templates`` flag
+        # rather than a list of classes, so a template-backed component added
+        # later threads the day it lands — it does not have to be named here.
+        # This walk used to be gated on ``isinstance(component, EmissionComponent)``,
+        # which is why the shock grid went on baking after the whole dust
+        # subsystem was fixed.
         for component in cached:
-            if not isinstance(component, EmissionComponent):
-                continue
             if not getattr(component, "accepts_threaded_templates", False):
                 continue
-            bundle = getattr(component, "data", None)
+            resolve = getattr(component, "templates_for_threading", None)
+            if resolve is None:
+                # Every component registered by this package inherits the seam
+                # (pinned by tests/contract/test_component_template_threading.py),
+                # so this only fires for a class registered from outside it. Say
+                # what to do rather than surfacing a bare AttributeError.
+                raise TypeError(
+                    f"Component {component.name!r} sets accepts_threaded_templates "
+                    f"but does not inherit TemplateThreading, so it has no "
+                    f"templates_for_threading(). Add "
+                    f"tengri.components.template_threading.TemplateThreading as a "
+                    f"base class."
+                )
+            bundle = resolve()
             if bundle is None:
-                try:
-                    bundle = component.load(None)
-                except Exception:
-                    bundle = None
-            if bundle is not None:
-                result.setdefault("dust_ir", {})[component.name] = bundle
+                continue
+            namespace = getattr(component, "template_namespace", "") or component.name
+            slot = result.setdefault(namespace, {})
+            if not isinstance(slot, dict):
+                # Some namespaces predate the name-keyed layout and hold a bare
+                # bundle (``result["nebular"]`` is the backend's grid itself,
+                # read by ``NebularSEDComponent`` as ``template_data["nebular"]``).
+                # Writing a name key into one would either raise deep inside a
+                # NamedTuple or silently corrupt a dict-like grid, and the damage
+                # would surface as wrong physics far from here.
+                raise ValueError(
+                    f"Component {component.name!r} declares "
+                    f"template_namespace={namespace!r}, but that namespace already "
+                    f"holds a bare {type(slot).__name__} bundle rather than a "
+                    f"name-keyed dict. Choose a distinct namespace (leaving "
+                    f"``template_namespace`` unset uses the component name, which "
+                    f"is unique by registry construction)."
+                )
+            slot[component.name] = bundle
 
         # The other additive emitters (X-ray, radio) are sums of rank-1 terms, so
         # they get a response *per term* rather than the single L_ir * R that dust's

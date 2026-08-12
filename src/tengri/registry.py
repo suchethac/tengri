@@ -21,6 +21,7 @@ in a notebook or REPL — no need to wrap them in `pprint`.
 
 from __future__ import annotations
 
+import functools
 import re
 from typing import Any
 
@@ -474,6 +475,86 @@ def _component_entry(name: str, *, kind: str) -> dict:
 
 
 # ──────────────────────────────────────────────────────────────────
+# Menu filtering
+# ──────────────────────────────────────────────────────────────────
+
+#: The word for "do not filter". Every menu accepts it, because it is what a
+#: reader types first and because ``status='all'`` used to return nothing at all
+#: — the worst possible answer to "show me everything".
+ALL = "all"
+
+
+@functools.cache
+def _menu_vocabulary(column: str) -> tuple[str, ...]:
+    """Every value any discovery menu publishes for ``column``.
+
+    Derived from the live menus rather than pinned, so it cannot rot the way a
+    hard-coded list would. Safe from recursion: the listers are called with no
+    filter, and :func:`_filter_menu` returns before reaching here when the
+    requested value is ``None``.
+    """
+    values: set[str] = set()
+    for lister in _menu_listers():
+        for row in lister():
+            if column in row:
+                values.add(row[column])
+    return tuple(sorted(values))
+
+
+def _filter_menu(rows: list[dict], column: str, value: str | None, *, listing: str) -> list[dict]:
+    """Narrow ``rows`` to one ``column`` value, refusing a value that is not one.
+
+    Every menu used to filter with a bare ``[r for r in rows if r[column] ==
+    value]``, which answers a typo and a genuine "nothing matches" with the same
+    empty list. ``list_sfh_models(status='producton')`` returned zero of
+    thirty-four rows and said nothing, and so did the natural
+    ``status='all'`` (#1679).
+
+    The distinction kept here is between a value that is not a ``column`` value
+    at all — a typo, which raises — and one that is real but absent from *this*
+    menu, which is a legitimate empty answer: there simply are no unvalidated
+    dust laws.
+    """
+    if value is None or str(value).lower() == ALL:
+        return rows
+    here = sorted({r[column] for r in rows if column in r})
+    # Union, not just the global set: a menu may surface rows that the default
+    # listing hides, and those values are legitimate. `list_inference_methods`
+    # passes `include_broken=(tier == "broken")`, so `tier='broken'` is a
+    # documented query whose rows exist only once it has been asked for — a
+    # vocabulary derived from default listings alone would reject it. That is
+    # the same too-narrow-census mistake this helper exists to fix.
+    vocabulary = sorted(set(_menu_vocabulary(column)) | set(here))
+    if value not in vocabulary:
+        raise ValueError(
+            f"{listing}({column}={value!r}) — {value!r} is not a {column} any menu "
+            f"uses. Valid values: {vocabulary}. This menu currently has: "
+            f"{here}. Pass {column}={ALL!r} (or omit it) to list everything."
+        )
+    return [r for r in rows if r.get(column) == value]
+
+
+def _resolve_category(value: str | None, accepted, *, listing: str) -> str | None:
+    """The category to filter on, or ``None`` for "do not filter".
+
+    The category axis is validated where the rows are *built*, not after, so it
+    cannot go through :func:`_filter_menu`. It gets the same contract anyway:
+    ``list_agn_blocks`` already refused an unknown category while
+    ``list_radio_blocks`` silently returned zero of seven rows — one sibling
+    right, one wrong, which is the giveaway that nothing enforced the rule.
+    """
+    if value is None or str(value).lower() == ALL:
+        return None
+    if value not in accepted:
+        raise ValueError(
+            f"{listing}(category={value!r}) — {value!r} is not a category this "
+            f"menu has. Accepted: {sorted(accepted)}. Pass category={ALL!r} "
+            f"(or omit it) to list everything."
+        )
+    return value
+
+
+# ──────────────────────────────────────────────────────────────────
 # Listing functions
 # ──────────────────────────────────────────────────────────────────
 
@@ -495,8 +576,7 @@ def list_agn_models(*, status: str | None = None) -> _RegistryTable:
     from tengri.components.agn.unified import AGN_MODELS
 
     out = [_entry_to_dict(n, e, kind="agn_model") for n, e in AGN_MODELS.items()]
-    if status:
-        out = [m for m in out if m["status"] == status]
+    out = _filter_menu(out, "status", status, listing="list_agn_models")
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
 
@@ -549,6 +629,10 @@ def list_agn_blocks(*, category: str | None = None, status: str | None = None) -
     # returned an empty table for the exact name it had just advertised
     # (#1451). Normalize before filtering rather than at each comparison.
     group_key_to_category = {v: k for k, v in category_to_group_key.items()}
+    # `'all'` means "do not filter" on every other menu axis (#1679); refusing
+    # it only here would be a second, smaller version of the same trap.
+    if category is not None and str(category).lower() == ALL:
+        category = None
     if category is not None:
         category = group_key_to_category.get(category, category)
         # ...and fail loudly on anything else. The filter used to fall through
@@ -582,8 +666,7 @@ def list_agn_blocks(*, category: str | None = None, status: str | None = None) -
             }
             out.append(entry_dict)
 
-    if status:
-        out = [m for m in out if m["status"] == status]
+    out = _filter_menu(out, "status", status, listing="list_agn_blocks")
     return _RegistryTable(sorted(out, key=lambda m: (m["category"], m["name"])))
 
 
@@ -644,8 +727,7 @@ def list_dust_models(*, status: str | None = None) -> _RegistryTable:
                 "use": _usage_hint(name, "dust_model"),
             }
         )
-    if status:
-        out = [m for m in out if m["status"] == status]
+    out = _filter_menu(out, "status", status, listing="list_dust_models")
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
 
@@ -661,8 +743,7 @@ def list_dust_laws(*, status: str | None = None) -> _RegistryTable:
     from tengri.components.dust.attenuation import DUST_LAWS
 
     out = [_entry_to_dict(n, e, kind="dust_attenuation") for n, e in DUST_LAWS.items()]
-    if status:
-        out = [m for m in out if m["status"] == status]
+    out = _filter_menu(out, "status", status, listing="list_dust_laws")
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
 
@@ -796,8 +877,7 @@ def list_dust_emission_models(*, status: str | None = None) -> _RegistryTable:
             "kind": "dust_emission",
         }
         out.append(entry)
-    if status:
-        out = [m for m in out if m["status"] == status]
+    out = _filter_menu(out, "status", status, listing="list_dust_emission_models")
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
 
@@ -843,8 +923,7 @@ def list_sfh_models(*, status: str | None = None) -> _RegistryTable:
         ctype = getattr(SFH_REGISTRY[m["name"]], "composition_type", "additive")
         if ctype in ("mixture", "modulator"):
             m["use"] = f"SEDModel.build(..., sfh={{'type': ['const', '{m['name']}']}})"
-    if status:
-        out = [m for m in out if m["status"] == status]
+    out = _filter_menu(out, "status", status, listing="list_sfh_models")
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
 
@@ -863,12 +942,13 @@ def list_nebular_backends(*, status: str | None = None) -> _RegistryTable:
     for m in out:
         # The generic CLOUDY backend needs a user-supplied grid file:
         # ``neb={'type': 'cloudy'}`` raises "The CLOUDY nebular backend needs a
-        # grid file." Advertise the required ``gridfile`` key so the hint builds.
-        # (``cb19`` ships its own grid and stands alone.)
+        # grid file." The key is ``grid``; this hint advertised ``gridfile``,
+        # so the line printed to fix one failure raised a different one —
+        # "Unknown key 'gridfile' in group 'neb'. Did you mean: grid?" — and
+        # nothing checked either. (``cb19`` ships its own grid and stands alone.)
         if m["name"] == "cloudy":
-            m["use"] = "SEDModel.build(..., neb={'type': 'cloudy', 'gridfile': 'grid.h5'})"
-    if status:
-        out = [m for m in out if m["status"] == status]
+            m["use"] = "SEDModel.build(..., neb={'type': 'cloudy', 'grid': 'grid.h5'})"
+    out = _filter_menu(out, "status", status, listing="list_nebular_backends")
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
 
@@ -900,8 +980,7 @@ def list_xray_models(*, status: str | None = None) -> _RegistryTable:
         else _component_entry(n, kind="xray_model")
         for n in _valid_xray_types()
     ]
-    if status:
-        out = [m for m in out if m["status"] == status]
+    out = _filter_menu(out, "status", status, listing="list_xray_models")
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
 
@@ -933,8 +1012,7 @@ def list_radio_models(*, status: str | None = None) -> _RegistryTable:
         else _component_entry(n, kind="radio_model")
         for n in _valid_radio_types()
     ]
-    if status:
-        out = [m for m in out if m["status"] == status]
+    out = _filter_menu(out, "status", status, listing="list_radio_models")
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
 
@@ -1008,6 +1086,7 @@ def list_radio_blocks(*, category: str | None = None, status: str | None = None)
 
     # Derived from the validator's own tuples, never from a hand-written list.
     names_by_category = {"sf": SF_RADIO_MODELS, "agn": AGN_RADIO_MODELS}
+    category = _resolve_category(category, names_by_category, listing="list_radio_blocks")
 
     out: list[dict] = []
     for cat, names in names_by_category.items():
@@ -1027,8 +1106,7 @@ def list_radio_blocks(*, category: str | None = None, status: str | None = None)
                 }
             )
 
-    if status:
-        out = [m for m in out if m["status"] == status]
+    out = _filter_menu(out, "status", status, listing="list_radio_blocks")
     return _RegistryTable(sorted(out, key=lambda m: (m["category"], m["name"])))
 
 
@@ -1083,8 +1161,7 @@ def list_shock_models(*, status: str | None = None) -> _RegistryTable:
                 "use": _usage_hint(name, "shock_model"),
             }
         )
-    if status:
-        out = [m for m in out if m["status"] == status]
+    out = _filter_menu(out, "status", status, listing="list_shock_models")
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
 
@@ -1155,8 +1232,7 @@ def list_metallicity_modes(*, status: str | None = None) -> _RegistryTable:
         if params:
             entry["params"] = list(params)
         out.append(entry)
-    if status:
-        out = [m for m in out if m["status"] == status]
+    out = _filter_menu(out, "status", status, listing="list_metallicity_modes")
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
 
@@ -1174,8 +1250,7 @@ def list_igm_models(*, status: str | None = None) -> _RegistryTable:
     from tengri.components.igm._models import IGM_MODELS
 
     out = [_entry_to_dict(n, e, kind="igm_model") for n, e in IGM_MODELS.items()]
-    if status:
-        out = [m for m in out if m["status"] == status]
+    out = _filter_menu(out, "status", status, listing="list_igm_models")
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
 
@@ -1244,8 +1319,7 @@ def list_age_kernels(*, status: str | None = None) -> _RegistryTable:
         }
         for name, st, doc in _AGE_KERNELS
     ]
-    if status:
-        out = [m for m in out if m["status"] == status]
+    out = _filter_menu(out, "status", status, listing="list_age_kernels")
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
 
@@ -1599,70 +1673,6 @@ def print_components_bibtex(obj=None) -> None:
     @article{Draine_2007, ...}
     ...
     """
-    # Map registry-entry names → bib-key in tengri.citations.registry.REGISTRY.
-    # Best-effort — the registry currently knows ~50 keys; new contributor
-    # models that lack a bibtex entry print a TODO comment instead.
-    _NAME_TO_BIBKEY: dict[str, str] = {
-        # SFH
-        "dpl": "bagpipes",
-        "continuity": "leja2019",
-        "dirichlet": "leja2019",
-        "dense_basis": "iyer2020",
-        # AGN
-        "skirtor": "skirtor",
-        "stalevski": "skirtor",
-        "kubota_done": "kubota_done2018",
-        "kubota_done_full": "kubota_done2018",
-        "multicolor_agn": "kubota_done2018",
-        "adaf": "mahadevan1997",
-        "qsogen": "temple2021_qsogen",
-        # AGN composable blocks — bibkeys verified against each block's
-        # registered ``citation=`` string (never guessed). Blocks whose paper
-        # has no bundled BibTeX (fritz, cat3d_wind, feltre, richards2006,
-        # boroson_green, …) fall through to the free-form citation note.
-        "grahsp": "buchner2024",
-        "grahsp_sbpl": "buchner2024",
-        "grahsp_biatten": "buchner2024",
-        "nenkova": "clumpy_nenkova2008",
-        "nenkova_agnfitter": "clumpy_nenkova2008",
-        "multicolor": "shakura_sunyaev1973",
-        "synthesizer": "synthesizer",
-        "synthesizer_spectra": "synthesizer",
-        "qsogen_smc": "temple2021_qsogen",
-        "qsogen_balmer": "temple2021_qsogen",
-        # Dust attenuation
-        "calzetti": "calzetti2000",
-        "cardelli": "cardelli1989",
-        "kriek_conroy": "kriek_conroy2013",
-        "noll09": "noll2009",
-        "salim": "salim2018",
-        "salim_sbl18": "salim2018",
-        "li08": "li2008_ext",
-        "smc": "gordon2003_smc",
-        "lmc": "gordon2003_smc",
-        "power_law": "charlot_fall2000",
-        # Dust emission
-        "dl07": "draine_li2007",
-        "draine_li2007": "draine_li2007",
-        "dl14": "draine2014",
-        "dale2014": "dale2014",
-        "casey2012": "casey2012",
-        "mbb": "casey2012",
-        # Nebular
-        "cue": "cue",
-        "cloudy_grid": "cloudy",
-        # Inference
-        "mcmc_nuts": "blackjax",
-        "vi": "nifty",
-        "vi_nonlinear_fast": "nifty",
-        "mcmc_raytrace": "raytrace_behroozi",
-        "pathfinder": "pathfinder",
-        "nss": "nss",
-        # Frameworks (always-on)
-        "tengri": "tengri",
-        "DSPS": "dsps",
-        "JAX": "jax",
-    }
 
     rows = cite_components(obj)
     _display("% ────────────────────────────────────────────────────────────────")
@@ -1675,15 +1685,22 @@ def print_components_bibtex(obj=None) -> None:
 
     try:
         from tengri.citations import cite as _cite_lookup
+        from tengri.citations.resolve import citation_keys_for
     except ImportError:
         _cite_lookup = None
+
+        def citation_keys_for(_name):
+            return []
 
     seen_keys: set[str] = set()
     for row in rows:
         name = row["name"]
         comp = row["component"]
-        bibkey = _NAME_TO_BIBKEY.get(name) or _NAME_TO_BIBKEY.get(name.lower())
-        if bibkey and bibkey not in seen_keys and _cite_lookup is not None:
+        emitted = False
+        for bibkey in citation_keys_for(name):
+            if bibkey in seen_keys or _cite_lookup is None:
+                emitted = emitted or bibkey in seen_keys
+                continue
             try:
                 citation = _cite_lookup(bibkey)
                 bib_method = getattr(citation, "to_bibtex", None)
@@ -1692,14 +1709,23 @@ def print_components_bibtex(obj=None) -> None:
                     _display(bib_method())
                     _display("")
                     seen_keys.add(bibkey)
-                    continue
+                    emitted = True
             except Exception:
-                pass
-        # Fallback: free-form citation note
+                continue
+        if emitted:
+            continue
+        # Fallback: free-form citation note. Say what is actually missing —
+        # a *mapping* from this component name to a key, not necessarily the
+        # entry. Four references (Charlot & Fall 2000, Bell 2003, Inoue+2014,
+        # Yang+2020) were in references.bib the whole time and still printed
+        # "no bib entry", so readers pasted the output and silently lost them.
         cit = row.get("citation", "")
         if cit:
             _display(f"% [{comp}] {name}: {cit}")
-            _display("%   (no bib entry in tengri.citations — please add manually)")
+            _display(
+                f"%   (no BibTeX key is mapped to {name!r} — add one to "
+                "tengri.citations.associations)"
+            )
             _display("")
 
 
@@ -1904,8 +1930,7 @@ def list_inference_methods(
         _inference_method_row(entry, target)
         for entry in all_backends(include_broken=tier == "broken")
     ]
-    if tier:
-        out = [m for m in out if m["tier"] == tier]
+    out = _filter_menu(out, "tier", tier, listing="list_inference_methods")
     return _RegistryTable(out)
 
 
@@ -1942,6 +1967,65 @@ def _menu_listers() -> tuple:
         list_shock_models,
         list_igm_models,
     )
+
+
+#: Menus that are not a physics group but are still menus a user can look a
+#: name up in. ``describe`` and ``search`` used to append these by hand at each
+#: call site — a second and third hand-written enumeration of "every menu".
+_EXTRA_MENU_LISTER_NAMES = ("list_components", "list_filters", "list_plots", "list_recipes")
+
+
+@functools.cache
+def _every_menu_lister() -> tuple:
+    """Every ``list_*`` menu a name can be looked up in, derived not listed.
+
+    Returns
+    -------
+    tuple of callable
+        Zero-argument listers, de-duplicated, physics groups first so that a
+        name living in several menus reports them in a stable order.
+
+    Notes
+    -----
+    :func:`_menu_listers` exists so ``describe``/``search``/``list_all`` cannot
+    fall out of sync when a physics group is added — its docstring says so, and
+    names that drift (#1120, #1446). It drifted again anyway, because the guard
+    against a hand-written list *is itself a hand-written list*:
+    ``list_instruments`` and ``list_known_ssps`` were never added, so
+    ``describe('GALEX')`` answered ``Unknown name 'GALEX'`` for a name
+    ``list_instruments()`` advertises — 30 of 490 advertised names.
+
+    So the set is discovered: every public ``tengri.list_*`` returning rows
+    with a ``name`` column is a menu. Adding a menu now costs nothing, and
+    forgetting to register it here is not possible. Measured when this replaced
+    the hand-written unions: **+2 menus, 0 lost, 460 -> 490 rows walked, and 0
+    new multi-menu names**, so no existing lookup changes its answer.
+
+    Cached because discovery *calls* each ``list_*`` to check its shape:
+    uncached that was 95 ms, **49% of a 193 ms** ``describe()``, paid again on
+    every lookup. The set of menus cannot change within a process, so it is
+    computed once. A test that monkeypatches a ``list_*`` into ``tengri`` must
+    call ``_every_menu_lister.cache_clear()``.
+    """
+    import tengri
+
+    seen: dict[str, callable] = {}
+    for fn in (*_menu_listers(), *(getattr(tengri, n, None) for n in _EXTRA_MENU_LISTER_NAMES)):
+        if fn is not None:
+            seen[fn.__name__] = fn
+    for attr in sorted(dir(tengri)):
+        if not attr.startswith("list_") or attr in seen:
+            continue
+        fn = getattr(tengri, attr, None)
+        if not callable(fn):
+            continue
+        try:
+            rows = fn()
+        except Exception:
+            continue
+        if isinstance(rows, list) and rows and isinstance(rows[0], dict) and "name" in rows[0]:
+            seen[attr] = fn
+    return tuple(seen.values())
 
 
 def _menu_name_aliases() -> dict[str, tuple[str, callable]]:
@@ -1991,12 +2075,7 @@ def describe(name: str) -> _DescribeRecord:
     if name in _CORE_CLASSES:
         return _DescribeRecord(_CORE_CLASSES[name])
 
-    matches = [
-        entry
-        for fn in (*_menu_listers(), list_components, list_filters, list_plots, list_recipes)
-        for entry in fn()
-        if entry["name"] == name
-    ]
+    matches = [entry for fn in _every_menu_lister() for entry in fn() if entry["name"] == name]
     if matches:
         record = dict(matches[0])
         # Some names are registered in more than one menu or AGN category —
@@ -2641,7 +2720,10 @@ def search(query: str) -> _RegistryTable:
     # band — i.e. everything except kind/use.
     _SKIP_FIELDS = {"kind", "use"}
     hits: list[dict] = []
-    for fn in (*_menu_listers(), list_components, list_filters, list_plots):
+    # The same derived set describe() walks. This call site listed four extra
+    # menus by hand and omitted list_recipes, so all ten recipes returned zero
+    # hits from search() while describe() resolved every one.
+    for fn in _every_menu_lister():
         for entry in fn():
             haystack = " ".join(
                 str(v) for k, v in entry.items() if k not in _SKIP_FIELDS and isinstance(v, str)

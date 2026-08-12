@@ -29,6 +29,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.components._collapsed_lookup import interp_collapsed
 from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
 from tengri.components.agn.skirtor_agnfitter import _load_skirtor_agnfitter_arrays
 from tengri.forward.precompute.templates import (
@@ -340,7 +341,7 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
     def skirtor_agnfitter_phot_collapsed(agn_log_lbol, *free_axis_values, agn_torus_frac):
         """SKIRTOR_mean_3p torus photometry with collapsed (fixed) axes via PCHIP."""
         l_scale = 10.0**agn_log_lbol * _LSUN_ERG * agn_torus_frac
-        phot = interp_nd_pchip(grid_phot, axes, tuple(free_axis_values))
+        phot = interp_collapsed(grid_phot, axes, free_axis_values, kernel="pchip")
         return l_scale * phot
 
     return skirtor_agnfitter_phot_collapsed

@@ -32,6 +32,7 @@ import jax.numpy as jnp
 
 from tengri.components.igm._params import PARAMS as _IGM_PARAMS
 from tengri.components.igm.igm import igm_absorption
+from tengri.components.template_threading import TemplateThreading
 from tengri.protocols.component import (
     DerivedKey,
     ForwardState,
@@ -113,7 +114,7 @@ class IGMSEDComponentState(SEDComponentState):
 
 
 @dataclass(frozen=True)
-class IGMSEDComponent:
+class IGMSEDComponent(TemplateThreading):
     r"""SEDComponent adapter around :func:`igm_transmission`.
 
     Parameters

@@ -285,6 +285,30 @@ class GasStellarMetallicityWarning(UserWarning):
     """
 
 
+class PrecompBiasWarning(AdvisoryWarning):
+    """The precompute LUT's forward bias, amplified by this fit's SNR, is material.
+
+    ``WavePrecomp`` / ``SpectrumPrecomp`` carry a small forward bias (measured
+    0.13-0.26 % on photometry) that is constant in SNR — so no forward-model
+    check can see it — but enters the posterior gradient as ``bias x SNR``:
+    ~5 % wrong at SNR 30, ~50 % at SNR 300, rotated as well as rescaled at the
+    high end (issue #1671). It is a bias, not noise: it does not average out
+    over MCMC draws, it moves the mode, and better data makes it worse. #1688
+    measured the spectroscopy sibling as a ~1-sigma posterior shift on a
+    50-pixel, 5 %-noise fixture. Since #1641 the LUT is the resolved default
+    for every fit, so this is the default gradient, not an opt-in trade.
+
+    This warning is the measurement made operational: at fit construction one
+    exact-vs-LUT forward call prices the bias on the actual model, and the
+    estimate ``max_i(bias_i x SNR_i)`` above threshold warns with the number.
+    Warns rather than raising: the LUT posterior is still useful, and the
+    speedup (measured 7-10x) is the reason it is the default. For final
+    inference at high SNR, rerun with ``approx=None`` (the exact path) or
+    compare the two posteriors. Filter this category if the trade is
+    deliberate.
+    """
+
+
 class LaplaceNotAtModeWarning(UserWarning):
     """The Laplace expansion point is not a stationary point of the loss.
 

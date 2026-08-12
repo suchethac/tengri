@@ -205,6 +205,13 @@ def test_the_quantities_methods_agree_with_the_catalog(model, params):
                 np.asarray(catalog[field], dtype=float),
                 np.asarray(value, dtype=float),
                 rtol=1e-10,
+                # `rtol` alone is infinite against an expected value of exactly
+                # zero, and several of these fields legitimately reach it — the
+                # default metallicity is solar, i.e. log10(Z/Zsun) = 0, where
+                # the two paths differ by one ULP (2.2e-16). 1e-12 sits far
+                # below any physically meaningful difference in dex, Gyr or
+                # 1/yr while still catching a real disagreement (#1703).
+                atol=1e-12,
                 err_msg=f"catalog[{field!r}] != the method it replaces",
             )
             checked += 1

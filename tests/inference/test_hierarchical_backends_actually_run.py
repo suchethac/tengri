@@ -51,6 +51,7 @@ from tengri import (
     Photometry,
     PopulationFitter,
     SEDModel,
+    Spectroscopy,
     Uniform,
 )
 from tengri.inference.hierarchical import DegenerateChainError
@@ -100,6 +101,77 @@ def population():
         {"flux_obs": flux * (1.0 + 0.02 * i), "noise": np.abs(flux) * 0.05} for i in range(2)
     ]
     return factory, galaxies
+
+
+@pytest.fixture(scope="module")
+def spectroscopic_population():
+    """Two galaxies observed spectroscopically — the ledger's missing fixture.
+
+    Population spectroscopy under ``SpectrumPrecomp`` was the one hierarchical
+    path the #1641 precompute default shipped stub-tested only: the resolution
+    policy had unit tests, but no fixture had ever driven a real spectroscopic
+    population fit through the seam. ``n_grid=8`` keeps the stochastic field
+    small (D=20) — what is under test is the spectroscopy channel and the LUT
+    resolution, not high-D sampling.
+    """
+    ssp = tengri.load_ssp()
+    wave_obs = np.linspace(4000.0, 9000.0, 50)
+    obs = Observation(spectroscopy=Spectroscopy(wave_obs=wave_obs))
+
+    def factory(psd_sigma, psd_tau_myr):
+        return SEDModel.build(
+            ssp_data=ssp,
+            observation=obs,
+            sfh={
+                "type": ["dpl", "field"],
+                "all_params": FIXED,
+                "log_total_mass": Uniform(9.0, 11.0),
+                "psd_sigma": Fixed(float(psd_sigma)),
+                "psd_tau_myr": Fixed(float(psd_tau_myr)),
+            },
+            dust={"type": "two_component", "law_bc": "calzetti", "all_params": FIXED},
+            neb={"type": "none"},
+            redshift=Fixed(0.05),
+            n_grid=8,
+        )
+
+    template = factory(1.0, 50.0)
+    truth = {k: (10.0 if "log_total_mass" in k else 0.0) for k in template.spec.free_params}
+    flux = np.asarray(template.predict_spectrum(truth))
+    galaxies = [
+        {"flux_obs": flux * (1.0 + 0.02 * i), "noise": np.abs(flux) * 0.05} for i in range(2)
+    ]
+    return factory, galaxies
+
+
+def test_population_spectroscopy_resolves_the_spectrum_lut_and_runs(spectroscopic_population):
+    """The spectroscopy arm of the batch precompute default, executed.
+
+    Two claims, both runtime: (1) ``approx="auto"`` on a spectroscopic
+    population fit resolves ``SpectrumPrecomp`` — asserted on the fit-time
+    factory's output, because a treatment arm must be proven live, not
+    assumed; (2) a real fit through the flat seam completes on that LUT
+    path with finite draws that move.
+    """
+    factory, galaxies = spectroscopic_population
+    fitter = PopulationFitter(factory, galaxies, data_type="spectroscopy")
+
+    resolved = fitter.model_factory(psd_sigma=1.0, psd_tau_myr=50.0)
+    state = getattr(resolved, "approx", None)
+    assert state is not None and getattr(state, "spectrum_precomp", False), (
+        "approx='auto' must resolve SpectrumPrecomp for a spectroscopic "
+        "population fit (#1641); without this the treatment arm is dead and "
+        "the fit silently runs the exact path"
+    )
+
+    posterior = fitter.run("mcmc_hmc", key=jax.random.PRNGKey(0), n_samples=100)
+
+    assert posterior.diagnostics["method"] == "mcmc_hmc"
+    for name, draws in posterior.shared_samples.items():
+        values = np.asarray(draws)
+        assert values.size == 100, f"{name}: expected 100 draws, got {values.size}"
+        assert np.all(np.isfinite(values)), f"{name} carries non-finite draws"
+        assert np.unique(values).size > 1, f"{name}: the chain never moved"
 
 
 @pytest.mark.parametrize("method", ["map"])

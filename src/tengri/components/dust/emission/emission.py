@@ -80,10 +80,9 @@ def _find_data_file(filename: str) -> str | None:
     the source tree outranked the directory the user had configured. The shared
     locator is a superset of that list and orders it correctly (#1431).
     """
-    from tengri._data_setup import find_data
+    from tengri._data_setup import find_data_str
 
-    found = find_data(filename)
-    return str(found) if found is not None else None
+    return find_data_str(filename)
 
 
 # ── Dust emission model catalog ──────────────────────────────────
@@ -527,12 +526,15 @@ def _make_lazy_loader(
 
 
 def _find_dl07_templates() -> str | None:
-    """Find DL07 template files, preferring v2 grid."""
-    for fn in ("dl07_templates_v2.h5", "dl07_templates.h5"):
-        path = _find_data_file(fn)
-        if path is not None:
-            return path
-    return None
+    """Find DL07 template files, preferring the v2 grid.
+
+    ``find_data_str`` is name-major -- the first *filename* that exists
+    anywhere wins -- which is exactly the preference this used to hand-roll
+    (#1431).
+    """
+    from tengri._data_setup import find_data_str
+
+    return find_data_str("dl07_templates_v2.h5", "dl07_templates.h5")
 
 
 def _dl07_lazy_wrapper(*args, **kwargs):

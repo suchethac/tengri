@@ -43,10 +43,19 @@ class TestNebularRegistry:
             assert row["status"] in {"production", "experimental", "demo", "deprecated"}
 
     def test_status_filter(self):
-        # All current entries are production; deprecated returns nothing.
+        # All current entries are production, so a real status that none of them
+        # carries returns nothing. This used to ask for `status="deprecated"`,
+        # which is not a status tengri assigns anywhere — since #1679 that is
+        # refused rather than answered with an empty list, because an empty list
+        # could not be told apart from a typo.
         production = tengri.list_nebular_backends(status="production")
         assert {"none", "ssp", "cue", "cloudy", "cb19"} <= {r["name"] for r in production}
-        assert tengri.list_nebular_backends(status="deprecated") == []
+        assert tengri.list_nebular_backends(status="unvalidated") == []
+
+    def test_status_filter_refuses_a_status_no_menu_uses(self):
+        """A typo must not read as "there are none" (#1679)."""
+        with pytest.raises(ValueError, match="is not a status any menu uses"):
+            tengri.list_nebular_backends(status="deprecated")
 
     def test_parse_groups_accepts_standalone_variants(self):
         # ``cloudy`` requires an external grid path (see

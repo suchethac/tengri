@@ -1744,18 +1744,46 @@ sweep, which is what allowed the confound above to be settled.)
 
 ---
 
-## 5. The funnel (not yet addressed)
+## 5. The funnel (reproduced; centering near a=0.75 clears it, one seed)
 
 `s = L(σ,τ)·ξ` is **bilinear**, so the (σ, ξ) geometry is a funnel. Symptoms:
 static HMC R̂(σ) = 4.42 at 1000/1000 and still 1.61 at 4000/4000 while ξ's own
 R̂ is 0.994–0.998; and seed-to-seed swings of σ from 0.597 to 1.000.
 
-Machinery exists but is **not usable yet**: `compute_field_gp(..., centering=a)`
-is wired (commit `dfec36027`), with `drw_partial_gp_from_zeta` and
-`drw_latent_log_prior` from #1355. To sample `a < 1` the loss needs its prior
-term corrected at `src/tengri/inference/loss_functions.py:478` — the prior on ζ
-becomes `N(0, σ_s^(2−2a) I)`, and the `−n(1−a)·log σ_s` normalizer is **not
-optional**.
+**The machinery is now usable — this section said otherwise, and that was stale
+(2026-08-11).** It read "not usable yet: … the loss needs its prior term
+corrected at `loss_functions.py:478`". That correction landed with #1566.
+`_prior_penalty` takes `centering`, calls `drw_latent_log_prior` when `a ≠ 1`,
+and **raises** when `psd_sigma_dex` is absent rather than silently scoring `a<1`
+as if `a=1`; `build_loss_fn` threads `spec.field_centering` into it. Select it
+with `sfh={'field_centering': a}`.
+
+The stale text mattered: it told the next reader the one remedy for this funnel
+was blocked, when it was not.
+
+**Verified as a reparameterization, not a different model.** `a = 1` and `a < 1`
+must describe the same `p(σ, s)`. Converting both latent densities to the field
+density and scanning σ over 0.2–1.5 dex:
+
+======  ==========================
+``a``   field-density residual std
+======  ==========================
+1.00    1.2e-15
+0.75    2.1e-15
+0.50    2.4e-15
+0.25    2.1e-15
+0.00    1.9e-15
+======  ==========================
+
+Flat to floating point, zero slope in σ, so the `−n(1−a)·log σ_s` normalizer is
+present and correct. Pinned by
+``tests/regression/bug/test_field_centering_is_a_reparameterization.py``.
+
+**A warning for anyone re-deriving this.** The *raw latent-space* difference
+between `a` and `a=1` is `n(1−a)·log σ_s` and is **supposed to be** — it is the
+Jacobian of `ζ = σ_s^(1−a) ξ`. Testing for a flat latent-space residual inverts
+the verdict: flat would mean the normalizer was *dropped*. Compare field
+densities, not latent ones.
 
 **NUTS has never been run here.** Every fit this session is `mcmc_hmc` with
 fixed `n_leapfrog_steps=100` — the sampler least equipped for varying curvature.
@@ -1763,6 +1791,145 @@ This also makes divergence counts uninformative (blackjax's static-HMC
 `divergence_threshold` is 1000, so "zero divergences" means nothing). Note
 `dense_mass_matrix=True` at D=26 risks the 20+ GB NUTS warmup documented in
 CLAUDE.md; use `dense_mass_matrix=False`.
+
+**A first attempt to measure this FAILED to reproduce the symptom, and the
+configuration is recorded so nobody repeats it (2026-08-12).** Three arms at
+``field_centering`` = 1.0 / 0.5 / 0.0, NUTS, ``dense_mass_matrix=False``,
+400 warmup / 400 samples / 4 chains, on a single-galaxy mock (5 SDSS bands,
+SNR 30, ``n_grid=16``, D ~ 20: four free parameters plus the field latents):
+
+======  =================  ==================
+``a``   R-hat(sigma)       max R-hat(xi)
+======  =================  ==================
+1.00    1.001              0.993
+0.50    0.997              0.992
+0.00    1.023              0.998
+======  =================  ==================
+
+All healthy, so **the arms say nothing about centering** — the pre-registered
+rule's first branch (``a=1`` must reproduce the symptom before a treatment can
+be credited) fired INCONCLUSIVE.
+
+The tempting reading — "NUTS cures the funnel" — is **refuted by its own
+control**: static HMC at ``n_leapfrog_steps=100`` on the *identical* data and
+model gives R-hat(sigma) = **1.003**. The symptom is absent from this
+configuration under *either* sampler, so nothing here is evidence about the
+sampler either.
+
+What that leaves: this section's R-hat(sigma) = 4.42 belongs to the **interim
+fits inside the population pilot** at D=26, not to a standalone single-galaxy
+fit at D ~ 20. Reproducing it needs that configuration. A probe that cannot
+exhibit the disease cannot test a cure, and a treatment arm looks equally clean
+either way — which is why the control matters more than the arms.
+
+**Second attempt, in the interim configuration — ALSO failed to reproduce it.**
+``fit_interim`` (its own static HMC at ``n_leapfrog_steps=100``) with sigma and
+tau free as per-galaxy nuisances, D matched at 11 free parameters plus the field
+latents (~27 against this section's 26), 2 galaxies, 400/400,
+``dense_mass_matrix=False``, bounds (0.01, 1.0) and (10, 500) Myr:
+
+======  =================  ==============
+``a``   max R-hat(sigma)   max R-hat(xi)
+======  =================  ==============
+1.00    1.043              0.986
+0.50    **1.412**          0.979
+0.00    1.066              0.979
+======  =================  ==============
+
+``a=1`` gives 1.043, not 4.42, so INCONCLUSIVE fired again.
+
+**Two failed reproductions make this a finding about the section, not the
+sampler: R-hat(sigma) = 4.42 is not a generic property of this model class, and
+the configuration that produced it is not recorded here well enough to rebuild.**
+Still unmatched, any of which could be the difference: this section's runs used
+``dense_mass_matrix=True`` (its own note then advises ``False``), 1000/1000 and
+4000/4000 rather than 400/400, an unstated population size, and §2 quotes truths
+of sigma = 0.75 / tau = 150 Myr where the sweep uses 0.6 / 350.
+
+**``dense_mass_matrix`` is now ELIMINATED as the difference.** Third attempt,
+changing that one variable against the table above and holding model, mock, key,
+400/400, N=2 and bounds fixed: ``dense_mass_matrix=True`` gives max
+R-hat(sigma) = **1.020**, marginally *healthier* than ``False``'s 1.043. It was
+the strongest candidate — the only setting on which this section contradicts
+itself — and it is not the cause.
+
+Population size was the next hypothesis, by §2's own order-statistic argument —
+R-hat is a **maximum** over galaxies, so a max over 8 is necessarily above a max
+over 2. **Measured on the stored bank and found real but far too small**:
+``psd_bank_nuts``'s 10 per-galaxy values run
+``[0.999 ... 1.002, 1.050]``, median 1.000, and the expected max climbs only
+1.000 → 1.050 from N=1 to N=8. The mechanism exists; it cannot manufacture 4.42.
+
+**THE ACTUAL CAUSE: the population path could not reach the regime.** The
+configuration is recorded after all — ``psd_bank_conv/bank_meta.json`` has
+truths 0.75 dex / 150 Myr at SNR 20/10, N=8, 1000/1000, 4 chains,
+``n_leapfrog_steps=100``. Run through ``fit_interim`` it does not give a
+different R-hat; it gives **no fit at all**, dying on all 8 MAP restarts. The
+bank never called ``fit_interim``: ``scripts/hierarchical_psd_fit_bank.py``
+drives ``Fitter`` directly and triples ``n_map_steps`` until the expansion point
+is a mode (hence ``psd_bank_map40k``), which is §4i-ter's remedy for #1537.
+``fit_interim`` exposed no MAP control at all, and failed advising
+``learning_rate`` / ``n_steps`` / ``n_restarts``, none of which it accepted
+(#1720, fixed by ``map_options``).
+
+So the four failed reproductions above all ran in regimes where the MAP
+converged easily — which are exactly the regimes with **no funnel**. The tool
+could not reach the hard case, so the hard case looked absent, and every failure
+was clean.
+
+**Symptom REPRODUCED, and the centering arms finally mean something.** Same
+recorded configuration, ``map_options={"n_steps": 40000}``:
+
+======  =================  ==============
+``a``   R-hat(sigma)       max R-hat(xi)
+======  =================  ==============
+1.00    **2.572**          0.971
+0.75    **1.040**          0.996
+0.50    **1.590**          0.991
+0.25    not measured       —
+0.00    **2.945**          0.983
+======  =================  ==============
+
+``a = 1`` reproduces this section's signature — sigma badly unmixed while xi
+stays healthy. **The remedy works: a = 0.75 reaches R-hat(sigma) = 1.040, below
+the 1.1 convergence threshold, from 2.572 at a = 1.** Both endpoints are bad and
+the optimum is interior; ``a = 0.5`` at 1.590 is already well off it, which is
+why an earlier read of these arms called the result merely PARTIAL.
+
+The interior optimum is the expected shape, not an anomaly:
+``drw_partial_gp_from_zeta`` cites Papaspiliopoulos, Roberts & Skold — neither
+endpoint is universally better, and when prior and likelihood are comparably
+informative an intermediate ``a`` beats both. A boolean centered/non-centered
+switch would have found only 2.572 and 2.945 and concluded centering **hurts**.
+
+``a = 0.25`` was killed twice by memory pressure and is unmeasured; it would
+refine the shape between 0 and 0.5 but cannot change the headline, since 0.75
+already clears the threshold.
+
+xi stays healthy across all measured arms (0.971 / 0.996 / 0.991 / 0.983), so no
+arm is degraded
+for an unrelated reason and the movement is attributable to the (sigma, xi)
+geometry.
+
+**Status: the funnel HAS a working remedy — ``field_centering`` near 0.75 —
+on one seed.** R-hat(sigma) goes 2.572 → 1.040, which clears the 1.1 threshold.
+
+What that does **not** yet license is a default. This is **one seed, N=8, one
+mock population**, and the optimal ``a`` is a property of the prior/likelihood
+balance, so it moves with SNR, band set and population. The four measured points
+differ by 0.5–1.9 in R-hat, far outside the ~0.05 scatter seen between repeated
+healthy arms, so the *ordering* is solid; the *location* of the minimum is not
+pinned to better than ~0.25 in ``a``.
+
+Open next steps, in order: repeat at ``a`` = 0.75 across seeds to confirm the
+minimum is not a single-draw artifact; fill ``a = 0.25``; then vary SNR to see
+how far the optimum moves before anyone considers a default. Re-test after any
+change to the MAP escalation, since the expansion point feeds the sampler.
+
+**Record the configuration AND the code path next to any number here.** The
+configuration was recorded; what the prose omitted was which driver produced it,
+and that was the load-bearing fact — same settings, different driver, and one of
+the two cannot start.
 
 ---
 

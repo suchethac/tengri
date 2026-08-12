@@ -50,6 +50,7 @@ from tengri.components.dust.attenuation import (
     resolve_bc_diff_law_params,
     two_component_dust,
 )
+from tengri.components.template_threading import TemplateThreading
 from tengri.parameters.priors import Fixed, Uniform
 from tengri.protocols.component import (
     DerivedKey,
@@ -212,7 +213,7 @@ class DustSEDComponentState(SEDComponentState):
 
 
 @dataclass(frozen=True)
-class DustSEDComponent:
+class DustSEDComponent(TemplateThreading):
     """SEDComponent adapter for two-component dust + energy-balanced IR.
 
     Notes

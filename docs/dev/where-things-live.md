@@ -78,7 +78,8 @@ Each component owns its own `_params.py` (see the list above and the
 | Filter curves and filter management | `observation/filters/` |
 | Noise models (Gaussian, Student-t, GP, calibration marginalization) | `observation/noise.py`, `observation/calibration.py` |
 | Emission-line marginalization | `observation/eline_marginalization.py` |
-| Instrument LSF (Gaussian) and the DESI/PFS banded resolution matrix | `observation/spectrum.py` (`apply_lsf`), `observation/banded.py` (`banded_matvec`, `resolution_bands_from_desi`) |
+| Instrument LSF (Gaussian) and the DESI/PFS banded resolution matrix | `observation/spectrum.py` (`apply_lsf`), `observation/banded.py` (`banded_matvec`, `resolution_bands_from_desi`, `block_diagonal_bands`) |
+| Loading a DESI coadd (per-camera b/r/z grids + their resolution matrices) | `io/desi.py` (`read_desi`, `read_desi_cameras`, `desi_spectroscopy`) |
 | The `Fitter` class and JIT-cached engines | `inference/fitter.py`, `inference/jit_engine.py` |
 | MCMC / VI / Pathfinder backends | `inference/backends/` |
 | Likelihood implementations | `inference/likelihoods/` |
