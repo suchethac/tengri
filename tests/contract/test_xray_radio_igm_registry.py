@@ -79,7 +79,17 @@ class TestXRayRegistry:
     def test_status_filter(self):
         production = tengri.list_xray_models(status="production")
         assert {"none", "simple"} <= {r["name"] for r in production}
-        assert tengri.list_xray_models(status="deprecated") == []
+        # A real status that no X-ray model carries is a well-formed question
+        # with an empty answer. This used to be spelled `status="deprecated"`,
+        # which is not a status tengri assigns anywhere — and since #1679 that
+        # is refused rather than answered with a silent empty list, because an
+        # empty list could not be told apart from a typo.
+        assert tengri.list_xray_models(status="unvalidated") == []
+
+    def test_status_filter_refuses_a_status_no_menu_uses(self):
+        """A typo must not read as "there are none" (#1679)."""
+        with pytest.raises(ValueError, match="is not a status any menu uses"):
+            tengri.list_xray_models(status="deprecated")
 
     def test_parse_groups_accepts_simple(self):
         params = parse_groups(xray={"type": "simple"}, redshift=Fixed(0.1))

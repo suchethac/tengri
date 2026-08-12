@@ -21,6 +21,7 @@ in a notebook or REPL — no need to wrap them in `pprint`.
 
 from __future__ import annotations
 
+import functools
 import re
 from typing import Any
 
@@ -471,6 +472,86 @@ def _component_entry(name: str, *, kind: str) -> dict:
 
 
 # ──────────────────────────────────────────────────────────────────
+# Menu filtering
+# ──────────────────────────────────────────────────────────────────
+
+#: The word for "do not filter". Every menu accepts it, because it is what a
+#: reader types first and because ``status='all'`` used to return nothing at all
+#: — the worst possible answer to "show me everything".
+ALL = "all"
+
+
+@functools.cache
+def _menu_vocabulary(column: str) -> tuple[str, ...]:
+    """Every value any discovery menu publishes for ``column``.
+
+    Derived from the live menus rather than pinned, so it cannot rot the way a
+    hard-coded list would. Safe from recursion: the listers are called with no
+    filter, and :func:`_filter_menu` returns before reaching here when the
+    requested value is ``None``.
+    """
+    values: set[str] = set()
+    for lister in _menu_listers():
+        for row in lister():
+            if column in row:
+                values.add(row[column])
+    return tuple(sorted(values))
+
+
+def _filter_menu(rows: list[dict], column: str, value: str | None, *, listing: str) -> list[dict]:
+    """Narrow ``rows`` to one ``column`` value, refusing a value that is not one.
+
+    Every menu used to filter with a bare ``[r for r in rows if r[column] ==
+    value]``, which answers a typo and a genuine "nothing matches" with the same
+    empty list. ``list_sfh_models(status='producton')`` returned zero of
+    thirty-four rows and said nothing, and so did the natural
+    ``status='all'`` (#1679).
+
+    The distinction kept here is between a value that is not a ``column`` value
+    at all — a typo, which raises — and one that is real but absent from *this*
+    menu, which is a legitimate empty answer: there simply are no unvalidated
+    dust laws.
+    """
+    if value is None or str(value).lower() == ALL:
+        return rows
+    here = sorted({r[column] for r in rows if column in r})
+    # Union, not just the global set: a menu may surface rows that the default
+    # listing hides, and those values are legitimate. `list_inference_methods`
+    # passes `include_broken=(tier == "broken")`, so `tier='broken'` is a
+    # documented query whose rows exist only once it has been asked for — a
+    # vocabulary derived from default listings alone would reject it. That is
+    # the same too-narrow-census mistake this helper exists to fix.
+    vocabulary = sorted(set(_menu_vocabulary(column)) | set(here))
+    if value not in vocabulary:
+        raise ValueError(
+            f"{listing}({column}={value!r}) — {value!r} is not a {column} any menu "
+            f"uses. Valid values: {vocabulary}. This menu currently has: "
+            f"{here}. Pass {column}={ALL!r} (or omit it) to list everything."
+        )
+    return [r for r in rows if r.get(column) == value]
+
+
+def _resolve_category(value: str | None, accepted, *, listing: str) -> str | None:
+    """The category to filter on, or ``None`` for "do not filter".
+
+    The category axis is validated where the rows are *built*, not after, so it
+    cannot go through :func:`_filter_menu`. It gets the same contract anyway:
+    ``list_agn_blocks`` already refused an unknown category while
+    ``list_radio_blocks`` silently returned zero of seven rows — one sibling
+    right, one wrong, which is the giveaway that nothing enforced the rule.
+    """
+    if value is None or str(value).lower() == ALL:
+        return None
+    if value not in accepted:
+        raise ValueError(
+            f"{listing}(category={value!r}) — {value!r} is not a category this "
+            f"menu has. Accepted: {sorted(accepted)}. Pass category={ALL!r} "
+            f"(or omit it) to list everything."
+        )
+    return value
+
+
+# ──────────────────────────────────────────────────────────────────
 # Listing functions
 # ──────────────────────────────────────────────────────────────────
 
@@ -492,8 +573,7 @@ def list_agn_models(*, status: str | None = None) -> _RegistryTable:
     from tengri.components.agn.unified import AGN_MODELS
 
     out = [_entry_to_dict(n, e, kind="agn_model") for n, e in AGN_MODELS.items()]
-    if status:
-        out = [m for m in out if m["status"] == status]
+    out = _filter_menu(out, "status", status, listing="list_agn_models")
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
 
@@ -546,6 +626,10 @@ def list_agn_blocks(*, category: str | None = None, status: str | None = None) -
     # returned an empty table for the exact name it had just advertised
     # (#1451). Normalize before filtering rather than at each comparison.
     group_key_to_category = {v: k for k, v in category_to_group_key.items()}
+    # `'all'` means "do not filter" on every other menu axis (#1679); refusing
+    # it only here would be a second, smaller version of the same trap.
+    if category is not None and str(category).lower() == ALL:
+        category = None
     if category is not None:
         category = group_key_to_category.get(category, category)
         # ...and fail loudly on anything else. The filter used to fall through
@@ -579,8 +663,7 @@ def list_agn_blocks(*, category: str | None = None, status: str | None = None) -
             }
             out.append(entry_dict)
 
-    if status:
-        out = [m for m in out if m["status"] == status]
+    out = _filter_menu(out, "status", status, listing="list_agn_blocks")
     return _RegistryTable(sorted(out, key=lambda m: (m["category"], m["name"])))
 
 
@@ -641,8 +724,7 @@ def list_dust_models(*, status: str | None = None) -> _RegistryTable:
                 "use": _usage_hint(name, "dust_model"),
             }
         )
-    if status:
-        out = [m for m in out if m["status"] == status]
+    out = _filter_menu(out, "status", status, listing="list_dust_models")
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
 
@@ -658,8 +740,7 @@ def list_dust_laws(*, status: str | None = None) -> _RegistryTable:
     from tengri.components.dust.attenuation import DUST_LAWS
 
     out = [_entry_to_dict(n, e, kind="dust_attenuation") for n, e in DUST_LAWS.items()]
-    if status:
-        out = [m for m in out if m["status"] == status]
+    out = _filter_menu(out, "status", status, listing="list_dust_laws")
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
 
@@ -793,8 +874,7 @@ def list_dust_emission_models(*, status: str | None = None) -> _RegistryTable:
             "kind": "dust_emission",
         }
         out.append(entry)
-    if status:
-        out = [m for m in out if m["status"] == status]
+    out = _filter_menu(out, "status", status, listing="list_dust_emission_models")
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
 
@@ -840,8 +920,7 @@ def list_sfh_models(*, status: str | None = None) -> _RegistryTable:
         ctype = getattr(SFH_REGISTRY[m["name"]], "composition_type", "additive")
         if ctype in ("mixture", "modulator"):
             m["use"] = f"SEDModel.build(..., sfh={{'type': ['const', '{m['name']}']}})"
-    if status:
-        out = [m for m in out if m["status"] == status]
+    out = _filter_menu(out, "status", status, listing="list_sfh_models")
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
 
@@ -864,8 +943,7 @@ def list_nebular_backends(*, status: str | None = None) -> _RegistryTable:
         # (``cb19`` ships its own grid and stands alone.)
         if m["name"] == "cloudy":
             m["use"] = "SEDModel.build(..., neb={'type': 'cloudy', 'gridfile': 'grid.h5'})"
-    if status:
-        out = [m for m in out if m["status"] == status]
+    out = _filter_menu(out, "status", status, listing="list_nebular_backends")
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
 
@@ -897,8 +975,7 @@ def list_xray_models(*, status: str | None = None) -> _RegistryTable:
         else _component_entry(n, kind="xray_model")
         for n in _valid_xray_types()
     ]
-    if status:
-        out = [m for m in out if m["status"] == status]
+    out = _filter_menu(out, "status", status, listing="list_xray_models")
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
 
@@ -930,8 +1007,7 @@ def list_radio_models(*, status: str | None = None) -> _RegistryTable:
         else _component_entry(n, kind="radio_model")
         for n in _valid_radio_types()
     ]
-    if status:
-        out = [m for m in out if m["status"] == status]
+    out = _filter_menu(out, "status", status, listing="list_radio_models")
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
 
@@ -1005,6 +1081,7 @@ def list_radio_blocks(*, category: str | None = None, status: str | None = None)
 
     # Derived from the validator's own tuples, never from a hand-written list.
     names_by_category = {"sf": SF_RADIO_MODELS, "agn": AGN_RADIO_MODELS}
+    category = _resolve_category(category, names_by_category, listing="list_radio_blocks")
 
     out: list[dict] = []
     for cat, names in names_by_category.items():
@@ -1024,8 +1101,7 @@ def list_radio_blocks(*, category: str | None = None, status: str | None = None)
                 }
             )
 
-    if status:
-        out = [m for m in out if m["status"] == status]
+    out = _filter_menu(out, "status", status, listing="list_radio_blocks")
     return _RegistryTable(sorted(out, key=lambda m: (m["category"], m["name"])))
 
 
@@ -1080,8 +1156,7 @@ def list_shock_models(*, status: str | None = None) -> _RegistryTable:
                 "use": _usage_hint(name, "shock_model"),
             }
         )
-    if status:
-        out = [m for m in out if m["status"] == status]
+    out = _filter_menu(out, "status", status, listing="list_shock_models")
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
 
@@ -1151,8 +1226,7 @@ def list_metallicity_modes(*, status: str | None = None) -> _RegistryTable:
         if params:
             entry["params"] = list(params)
         out.append(entry)
-    if status:
-        out = [m for m in out if m["status"] == status]
+    out = _filter_menu(out, "status", status, listing="list_metallicity_modes")
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
 
@@ -1170,8 +1244,7 @@ def list_igm_models(*, status: str | None = None) -> _RegistryTable:
     from tengri.components.igm._models import IGM_MODELS
 
     out = [_entry_to_dict(n, e, kind="igm_model") for n, e in IGM_MODELS.items()]
-    if status:
-        out = [m for m in out if m["status"] == status]
+    out = _filter_menu(out, "status", status, listing="list_igm_models")
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
 
@@ -1240,8 +1313,7 @@ def list_age_kernels(*, status: str | None = None) -> _RegistryTable:
         }
         for name, st, doc in _AGE_KERNELS
     ]
-    if status:
-        out = [m for m in out if m["status"] == status]
+    out = _filter_menu(out, "status", status, listing="list_age_kernels")
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
 
@@ -1900,8 +1972,7 @@ def list_inference_methods(
         _inference_method_row(entry, target)
         for entry in all_backends(include_broken=tier == "broken")
     ]
-    if tier:
-        out = [m for m in out if m["tier"] == tier]
+    out = _filter_menu(out, "tier", tier, listing="list_inference_methods")
     return _RegistryTable(out)
 
 
