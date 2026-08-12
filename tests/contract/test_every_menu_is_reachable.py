@@ -151,6 +151,52 @@ class TestTheCensus:
             "trusting these tests."
         )
 
+    def test_a_curated_menu_answers_a_name_an_export_only_menu_also_prints(self):
+        """Widening the population must not re-point an existing answer.
+
+        ``describe`` reports ``matches[0]``, so the census *order* decides which
+        menu answers a name several menus print. Scanning the union in one
+        sorted pass put ``list_available_ssps`` ahead of ``list_known_ssps`` —
+        alphabetical — and silently moved all 21 SSP names onto the
+        newly-discovered menu, so ``describe('fsps_mist_c3k_a_chabrier')``
+        started returning a filename-and-download-flag row instead of the
+        canonical one. Twenty-one changed answers, for a change whose entire
+        claim is that it adds names without altering any.
+
+        I measured "0 answers changed" before shipping and was wrong: the probe
+        appended the new menus at the end, which is not where discovery puts
+        them. Hence a test, over the real census, rather than another probe.
+        """
+        census = [fn for fn in _every_menu_lister()]
+        curated = {n for n in dir(tengri) if n.startswith("list_")}
+        rows = {fn.__name__: fn() for fn in census}
+
+        by_name: dict[str, list[str]] = {}
+        for menu, entries in rows.items():
+            for entry in entries:
+                if entry.get("name"):
+                    by_name.setdefault(str(entry["name"]), []).append(menu)
+
+        shared = {
+            name: menus
+            for name, menus in by_name.items()
+            if len(menus) > 1
+            and any(m in curated for m in menus)
+            and any(m not in curated for m in menus)
+        }
+        assert shared, (
+            "no name is printed by both a curated and an export-only menu, so "
+            "this test proves nothing — re-derive it before trusting it."
+        )
+
+        misrouted = {name: menus[0] for name, menus in shared.items() if menus[0] not in curated}
+        assert not misrouted, (
+            f"{len(misrouted)} names are answered by an export-only menu while a "
+            f"curated menu also prints them, e.g. {sorted(misrouted.items())[:3]}. "
+            "Curated menus must be discovered first, or widening the population "
+            "silently re-points existing lookups."
+        )
+
     def test_no_lister_is_walked_twice(self):
         """Two call sites unioned by hand; a duplicate makes describe() report
         a name as living in two menus when it lives in one."""

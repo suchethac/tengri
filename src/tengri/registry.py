@@ -2008,9 +2008,9 @@ def _every_menu_lister() -> tuple:
     stayed refused**, 358 of them parameters. Unioning ``__all__`` is the rule
     #1608 established when the same blind spot made ``check_api_coverage.py``
     report 0 missing while 6 were. Measured at that widening: **+4 menus, 0
-    lost, 490 -> 900 rows walked, 0 answers changed** (the only names that
-    gained a menu are the 21 SSPs that ``list_available_ssps`` and
-    ``list_known_ssps`` both print, and the incumbent still sorts first).
+    lost, 490 -> 935 rows walked, 463 -> 887 names (+424), and 0 answers
+    changed** — the last of which is true only because of the scan order
+    below, not for free.
 
     Cached because discovery *calls* each ``list_*`` to check its shape:
     uncached that was 95 ms, **49% of a 193 ms** ``describe()``, paid again on
@@ -2024,7 +2024,15 @@ def _every_menu_lister() -> tuple:
     for fn in (*_menu_listers(), *(getattr(tengri, n, None) for n in _EXTRA_MENU_LISTER_NAMES)):
         if fn is not None:
             seen[fn.__name__] = fn
-    for attr in sorted(set(tengri.__all__) | set(dir(tengri))):
+    # Curated names first, export-only names after. Order is not cosmetic:
+    # ``describe`` reports ``matches[0]``, so a menu discovered earlier wins a
+    # name that several menus print. Scanning the union in one sorted pass put
+    # ``list_available_ssps`` ahead of ``list_known_ssps`` and moved all 21 SSP
+    # names onto the newly-found menu — 21 answers changed, for a change whose
+    # whole claim is that it adds names without altering any.
+    curated = sorted(dir(tengri))
+    export_only = sorted(set(tengri.__all__) - set(dir(tengri)))
+    for attr in (*curated, *export_only):
         if not attr.startswith("list_") or attr in seen:
             continue
         fn = getattr(tengri, attr, None)
