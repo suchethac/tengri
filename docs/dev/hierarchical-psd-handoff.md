@@ -1744,7 +1744,7 @@ sweep, which is what allowed the confound above to be settled.)
 
 ---
 
-## 5. The funnel (remedy now usable; not yet measured)
+## 5. The funnel (reproduced; partial centering helps, a=0.5 best so far)
 
 `s = L(σ,τ)·ξ` is **bilinear**, so the (σ, ξ) geometry is a funnel. Symptoms:
 static HMC R̂(σ) = 4.42 at 1000/1000 and still 1.61 at 4000/4000 while ξ's own
@@ -1853,31 +1853,64 @@ R-hat(sigma) = **1.020**, marginally *healthier* than ``False``'s 1.043. It was
 the strongest candidate — the only setting on which this section contradicts
 itself — and it is not the cause.
 
-**The leading hypothesis is now POPULATION SIZE, by §2's own order-statistic
-argument.** §2 warns that min-ESS misleads because "a minimum over 1024 galaxies
-is necessarily below a minimum over 8". R-hat here is reported as a **maximum**
-over galaxies, so the same argument runs in reverse: a max over 8 is necessarily
-**above** a max over 2. This section's pilot ran N=8; all three attempts above
-ran N=2 or a single galaxy. If per-galaxy R-hat(sigma) has a heavy right tail —
-which is what a funnel biting *some* galaxies would produce — then 4.42 can be
-the worst of 8 while the worst of 2 sits near 1.0, with **no disagreement
-between the runs at all**.
+Population size was the next hypothesis, by §2's own order-statistic argument —
+R-hat is a **maximum** over galaxies, so a max over 8 is necessarily above a max
+over 2. **Measured on the stored bank and found real but far too small**:
+``psd_bank_nuts``'s 10 per-galaxy values run
+``[0.999 ... 1.002, 1.050]``, median 1.000, and the expected max climbs only
+1.000 → 1.050 from N=1 to N=8. The mechanism exists; it cannot manufacture 4.42.
 
-That is testable at 4x the compute of attempt 2 and should be tried before any
-further sampler-side guessing. It also predicts that the *median* per-galaxy
-R-hat in this section's own runs was near 1.0; if a stored bank still has the
-per-galaxy values, checking that is nearly free and settles it without a rerun.
+**THE ACTUAL CAUSE: the population path could not reach the regime.** The
+configuration is recorded after all — ``psd_bank_conv/bank_meta.json`` has
+truths 0.75 dex / 150 Myr at SNR 20/10, N=8, 1000/1000, 4 chains,
+``n_leapfrog_steps=100``. Run through ``fit_interim`` it does not give a
+different R-hat; it gives **no fit at all**, dying on all 8 MAP restarts. The
+bank never called ``fit_interim``: ``scripts/hierarchical_psd_fit_bank.py``
+drives ``Fitter`` directly and triples ``n_map_steps`` until the expansion point
+is a mode (hence ``psd_bank_map40k``), which is §4i-ter's remedy for #1537.
+``fit_interim`` exposed no MAP control at all, and failed advising
+``learning_rate`` / ``n_steps`` / ``n_restarts``, none of which it accepted
+(#1720, fixed by ``map_options``).
 
-**Whoever next touches this should record the run configuration alongside the
-number** — and prefer a per-galaxy distribution over a max. A headline
-diagnostic that cannot be rebuilt from the document costs ~30 minutes per guess,
-and each failure is ambiguous between "the symptom is fragile", "I mismatched a
-setting", and "I did not draw enough galaxies to see the tail".
+So the four failed reproductions above all ran in regimes where the MAP
+converged easily — which are exactly the regimes with **no funnel**. The tool
+could not reach the hard case, so the hard case looked absent, and every failure
+was clean.
 
-One datum worth keeping despite the INCONCLUSIVE: at ``a = 0.5`` mixing was
-**worse** (1.412) than at ``a = 1`` (1.043). Weak — N=2 and the symptom is
-absent — but it is evidence against assuming partial centering is free, and
-worth re-testing whenever the symptom can be reproduced.
+**Symptom REPRODUCED, and the centering arms finally mean something.** Same
+recorded configuration, ``map_options={"n_steps": 40000}``:
+
+======  =================  ==============
+``a``   R-hat(sigma)       max R-hat(xi)
+======  =================  ==============
+1.00    **2.572**          0.971
+0.50    **1.590**          0.991
+0.00    **2.945**          0.983
+======  =================  ==============
+
+``a = 1`` reproduces this section's signature — sigma badly unmixed while xi
+stays healthy. **Partial centering helps: a = 0.5 cuts the excess over 1.0 by
+62% (1.572 → 0.590). Full centering is WORSE than none (2.945 vs 2.572).**
+
+The interior optimum is the expected shape, not an anomaly:
+``drw_partial_gp_from_zeta`` cites Papaspiliopoulos, Roberts & Skold — neither
+endpoint is universally better, and when prior and likelihood are comparably
+informative an intermediate ``a`` beats both. A boolean centered/non-centered
+switch would have found only the endpoints and concluded centering hurts.
+
+xi stays healthy across all arms (0.971 / 0.991 / 0.983), so no arm is degraded
+for an unrelated reason and the movement is attributable to the (sigma, xi)
+geometry.
+
+**Status: PARTIAL, not cured.** 1.590 is still far above 1.1. Open next steps,
+in order: scan intermediate ``a`` (0.25, 0.75) for the optimum, repeat over
+seeds — this is one seed at N=8 — and re-test after any change to the MAP
+escalation, since the expansion point feeds the sampler.
+
+**Record the configuration AND the code path next to any number here.** The
+configuration was recorded; what the prose omitted was which driver produced it,
+and that was the load-bearing fact — same settings, different driver, and one of
+the two cannot start.
 
 ---
 
