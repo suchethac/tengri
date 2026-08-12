@@ -213,6 +213,36 @@ def test_cap_applies_when_filelock_is_available(monkeypatch, tmp_path):
     assert jax.config.jax_compilation_cache_max_size == jax_cache.DEFAULT_MAX_CACHE_BYTES
 
 
+# -------------------------------------------------- orphaned atime markers (#1661)
+
+
+def test_entry_suffixes_match_jax():
+    """Our mirrored copies must track ``jax._src.lru_cache``.
+
+    :func:`repair_orphaned_atimes` finds entries by suffix. A rename upstream
+    would not raise -- it would silently match nothing, leaving the cache broken
+    in exactly the way the repair exists to prevent. Fail loudly here instead.
+    """
+    lru = pytest.importorskip("jax._src.lru_cache")
+    assert jax_cache._CACHE_SUFFIX == lru._CACHE_SUFFIX
+    assert jax_cache._ATIME_SUFFIX == lru._ATIME_SUFFIX
+
+
+def test_atime_encoding_matches_jax(tmp_path):
+    """The marker JAX reads back must be the integer we meant to write.
+
+    JAX decodes with ``int.from_bytes(..., "little")``; encoding width or order
+    drift would be read as a wildly wrong timestamp rather than an error, and
+    eviction would silently pick the wrong victims.
+    """
+    (tmp_path / "k-cache").write_bytes(b"payload")
+    jax_cache.repair_orphaned_atimes(tmp_path)
+
+    raw = (tmp_path / "k-atime").read_bytes()
+    assert len(raw) == 8
+    assert int.from_bytes(raw, "little") == (tmp_path / "k-cache").stat().st_mtime_ns
+
+
 def test_filelock_is_a_declared_dependency():
     """The default cap is inert unless filelock ships with tengri."""
     import re
