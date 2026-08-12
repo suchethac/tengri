@@ -2389,18 +2389,26 @@ _XRAY_VARIANT_PARAMS: frozenset[str] = _XRAY_DEFAULT_MODEL_PARAMS | frozenset().
 )
 #: Declared and freeable, but read by no model the grammar can currently build.
 #:
-#: ``xray_det_hmxb`` / ``xray_det_lmxb`` are consumed only by
-#: ``XRayAirdSEDComponent``. ``xray={'type': 'xray_aird'}`` validates (the type
-#: menu derives from ``_REGISTRY``) but ``component_factory`` builds the generic
-#: ``"xray"`` registry entry for every X-ray type, so the Aird component is
-#: never constructed and both offsets are inert in every build: ``xray_aird``
-#: and ``agn_xray_corona`` are bit-identical to ``yang20`` (#1684).
+#: ``xray_det_hmxb`` / ``xray_det_lmxb`` are the Lehmer+2016 XRB luminosity
+#: offsets. They are inert under *every* X-ray type -- swept across their
+#: declared support they move ``rest_sed()`` by exactly 0.0, beside sibling
+#: ``xray_*`` params on the same build that move it by 9.5e-3 and 98.55 --
+#: because ``XRaySEDComponent._terms()`` never passes them (#1706).
+#:
+#: This is **not** an ``xray_aird`` problem. ``xray_total_terms``, which the
+#: live component already calls on its default branch, accepts both offsets and
+#: applies them exactly (``10.0**offset`` on a scalar amplitude; measured ratio
+#: 3.162278 for an offset of 0.5, against a predicted ``10**0.5``). Only the
+#: call site is missing. An earlier revision of this comment attributed the
+#: inertness to ``XRayAirdSEDComponent`` being unreachable (#1684); that is the
+#: wrong cause, and wiring that component would fix neither offset.
 #:
 #: They are narrowed away here rather than left free, because a wildcard must
-#: not hand the sampler a dimension nothing reads. **When #1684 wires the Aird
-#: component, move these into an ``xray_aird`` entry of
-#: :data:`_XRAY_PARAMS_BY_MODEL` instead of deleting them** -- they are
-#: variant-specific, not dead.
+#: not hand the sampler a dimension nothing reads. **When #1706 threads them
+#: through, delete them from this set entirely** -- every model reads them, so
+#: there is no variant to scope them to. Fixing them also requires splitting the
+#: precompute XRB grid, which bakes HMXB and LMXB into one summed template; see
+#: #1706 for why the exact path alone is not enough.
 _XRAY_UNREACHABLE_PARAMS: frozenset[str] = frozenset({"xray_det_hmxb", "xray_det_lmxb"})
 
 #: Union of every param owned by each radio sub-group, used by the partition

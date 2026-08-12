@@ -1744,18 +1744,46 @@ sweep, which is what allowed the confound above to be settled.)
 
 ---
 
-## 5. The funnel (not yet addressed)
+## 5. The funnel (remedy now usable; not yet measured)
 
 `s = L(σ,τ)·ξ` is **bilinear**, so the (σ, ξ) geometry is a funnel. Symptoms:
 static HMC R̂(σ) = 4.42 at 1000/1000 and still 1.61 at 4000/4000 while ξ's own
 R̂ is 0.994–0.998; and seed-to-seed swings of σ from 0.597 to 1.000.
 
-Machinery exists but is **not usable yet**: `compute_field_gp(..., centering=a)`
-is wired (commit `dfec36027`), with `drw_partial_gp_from_zeta` and
-`drw_latent_log_prior` from #1355. To sample `a < 1` the loss needs its prior
-term corrected at `src/tengri/inference/loss_functions.py:478` — the prior on ζ
-becomes `N(0, σ_s^(2−2a) I)`, and the `−n(1−a)·log σ_s` normalizer is **not
-optional**.
+**The machinery is now usable — this section said otherwise, and that was stale
+(2026-08-11).** It read "not usable yet: … the loss needs its prior term
+corrected at `loss_functions.py:478`". That correction landed with #1566.
+`_prior_penalty` takes `centering`, calls `drw_latent_log_prior` when `a ≠ 1`,
+and **raises** when `psd_sigma_dex` is absent rather than silently scoring `a<1`
+as if `a=1`; `build_loss_fn` threads `spec.field_centering` into it. Select it
+with `sfh={'field_centering': a}`.
+
+The stale text mattered: it told the next reader the one remedy for this funnel
+was blocked, when it was not.
+
+**Verified as a reparameterization, not a different model.** `a = 1` and `a < 1`
+must describe the same `p(σ, s)`. Converting both latent densities to the field
+density and scanning σ over 0.2–1.5 dex:
+
+======  ==========================
+``a``   field-density residual std
+======  ==========================
+1.00    1.2e-15
+0.75    2.1e-15
+0.50    2.4e-15
+0.25    2.1e-15
+0.00    1.9e-15
+======  ==========================
+
+Flat to floating point, zero slope in σ, so the `−n(1−a)·log σ_s` normalizer is
+present and correct. Pinned by
+``tests/regression/bug/test_field_centering_is_a_reparameterization.py``.
+
+**A warning for anyone re-deriving this.** The *raw latent-space* difference
+between `a` and `a=1` is `n(1−a)·log σ_s` and is **supposed to be** — it is the
+Jacobian of `ζ = σ_s^(1−a) ξ`. Testing for a flat latent-space residual inverts
+the verdict: flat would mean the normalizer was *dropped*. Compare field
+densities, not latent ones.
 
 **NUTS has never been run here.** Every fit this session is `mcmc_hmc` with
 fixed `n_leapfrog_steps=100` — the sampler least equipped for varying curvature.
@@ -1763,6 +1791,71 @@ This also makes divergence counts uninformative (blackjax's static-HMC
 `divergence_threshold` is 1000, so "zero divergences" means nothing). Note
 `dense_mass_matrix=True` at D=26 risks the 20+ GB NUTS warmup documented in
 CLAUDE.md; use `dense_mass_matrix=False`.
+
+**A first attempt to measure this FAILED to reproduce the symptom, and the
+configuration is recorded so nobody repeats it (2026-08-12).** Three arms at
+``field_centering`` = 1.0 / 0.5 / 0.0, NUTS, ``dense_mass_matrix=False``,
+400 warmup / 400 samples / 4 chains, on a single-galaxy mock (5 SDSS bands,
+SNR 30, ``n_grid=16``, D ~ 20: four free parameters plus the field latents):
+
+======  =================  ==================
+``a``   R-hat(sigma)       max R-hat(xi)
+======  =================  ==================
+1.00    1.001              0.993
+0.50    0.997              0.992
+0.00    1.023              0.998
+======  =================  ==================
+
+All healthy, so **the arms say nothing about centering** — the pre-registered
+rule's first branch (``a=1`` must reproduce the symptom before a treatment can
+be credited) fired INCONCLUSIVE.
+
+The tempting reading — "NUTS cures the funnel" — is **refuted by its own
+control**: static HMC at ``n_leapfrog_steps=100`` on the *identical* data and
+model gives R-hat(sigma) = **1.003**. The symptom is absent from this
+configuration under *either* sampler, so nothing here is evidence about the
+sampler either.
+
+What that leaves: this section's R-hat(sigma) = 4.42 belongs to the **interim
+fits inside the population pilot** at D=26, not to a standalone single-galaxy
+fit at D ~ 20. Reproducing it needs that configuration. A probe that cannot
+exhibit the disease cannot test a cure, and a treatment arm looks equally clean
+either way — which is why the control matters more than the arms.
+
+**Second attempt, in the interim configuration — ALSO failed to reproduce it.**
+``fit_interim`` (its own static HMC at ``n_leapfrog_steps=100``) with sigma and
+tau free as per-galaxy nuisances, D matched at 11 free parameters plus the field
+latents (~27 against this section's 26), 2 galaxies, 400/400,
+``dense_mass_matrix=False``, bounds (0.01, 1.0) and (10, 500) Myr:
+
+======  =================  ==============
+``a``   max R-hat(sigma)   max R-hat(xi)
+======  =================  ==============
+1.00    1.043              0.986
+0.50    **1.412**          0.979
+0.00    1.066              0.979
+======  =================  ==============
+
+``a=1`` gives 1.043, not 4.42, so INCONCLUSIVE fired again.
+
+**Two failed reproductions make this a finding about the section, not the
+sampler: R-hat(sigma) = 4.42 is not a generic property of this model class, and
+the configuration that produced it is not recorded here well enough to rebuild.**
+Still unmatched, any of which could be the difference: this section's runs used
+``dense_mass_matrix=True`` (its own note then advises ``False``), 1000/1000 and
+4000/4000 rather than 400/400, an unstated population size, and §2 quotes truths
+of sigma = 0.75 / tau = 150 Myr where the sweep uses 0.6 / 350.
+
+**Whoever next touches this should record the run configuration alongside the
+number.** A headline diagnostic that cannot be rebuilt from the document costs
+~30 minutes per guess, and each failure is ambiguous between "the symptom is
+fragile" and "I mismatched a setting" — which is exactly the ambiguity the two
+attempts above are stuck in.
+
+One datum worth keeping despite the INCONCLUSIVE: at ``a = 0.5`` mixing was
+**worse** (1.412) than at ``a = 1`` (1.043). Weak — N=2 and the symptom is
+absent — but it is evidence against assuming partial centering is free, and
+worth re-testing whenever the symptom can be reproduced.
 
 ---
 

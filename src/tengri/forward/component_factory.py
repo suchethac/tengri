@@ -661,6 +661,7 @@ def state_to_sfh_quantities(state: Any):
     # can form stars before the Big Bang at the model's redshift), and the two
     # answers differed by ~4.6% under this one name until #1131. Shared with the
     # property catalog and Prediction.sfh so they cannot drift apart again.
+    from tengri.utils.conversions import log_z_abs_to_logzsol
     from tengri.utils.sed_quantities import compute_mass_weighted_age
 
     mw_age_gyr = compute_mass_weighted_age(
@@ -671,7 +672,13 @@ def state_to_sfh_quantities(state: Any):
     bin_widths = jnp.gradient(sfh_lbt)
     bin_mass = jnp.maximum(sfr_history * bin_widths, 0.0)
     bin_mass_total = jnp.maximum(jnp.sum(bin_mass), _TINY)
-    mw_z = jnp.sum(log_z_history * bin_mass) / bin_mass_total
+    # ``log_metallicity_history`` is absolute log10(Z) — the SSP grid's
+    # convention — and every user-facing metallicity is log10(Z/Zsun), so the
+    # weighted mean is converted before it leaves. This publish point and
+    # ``_mass_weighted_metallicity_fn`` are separate implementations of the
+    # same average, pinned bit-equal by test_property_catalog, so they have to
+    # convert together.
+    mw_z = log_z_abs_to_logzsol(jnp.sum(log_z_history * bin_mass) / bin_mass_total)
 
     sfr_100myr = jnp.asarray(derived["sfr_100myr"])
     sfr_10myr = jnp.asarray(derived["sfr_10myr"])
@@ -782,6 +789,8 @@ def state_to_sed_quantities(state: Any):
     # DustSEDComponent overwrites ``sed_intrinsic``. If no per-age
     # cube is present (chain has no stellar component), fall back to
     # NaN.
+    from tengri.utils.conversions import log_z_abs_to_logzsol as _log_z_abs_to_logzsol
+
     nan_scalar = jnp.asarray(jnp.nan)
     if "lnu_age" in derived:
         sed_stellar_intrinsic = jnp.sum(jnp.asarray(derived["lnu_age"]), axis=0)
@@ -809,7 +818,9 @@ def state_to_sed_quantities(state: Any):
                 jnp.asarray(derived["sfh_grid_lbt_yr"]),
                 jnp.asarray(derived["log_metallicity_history"]),
             )
-            lw_z = jnp.sum(lz_per_ssp * L_age) / L_total
+            # Absolute log10(Z) on the grid → log10(Z/Zsun) on the way out;
+            # mirrors ``_luminosity_weighted_metallicity_fn``.
+            lw_z = _log_z_abs_to_logzsol(jnp.sum(lz_per_ssp * L_age) / L_total)
         else:
             lw_z = nan_scalar
     else:
