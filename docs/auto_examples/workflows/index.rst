@@ -152,6 +152,23 @@ resampling, high-z LBG fits, method comparison, and post-starburst recovery.
     </div>
 
 
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="A hydro simulation or semi-analytic model hands you two tables per galaxy — SFR(t) and the metallicity of the gas it formed from, Z(t). Catalog takes both as records and returns photometry for the whole population in one compile.">
+
+.. only:: html
+
+  .. image:: /auto_examples/workflows/images/thumb/sphx_glr_plot_workflow_simulation_seds_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/workflows/plot_workflow_simulation_seds`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Predicting SEDs for a simulated population: what collapsing Z(t) costs</div>
+    </div>
+
+
 .. thumbnail-parent-div-close
 
 .. raw:: html
@@ -170,4 +187,5 @@ resampling, high-z LBG fits, method comparison, and post-starburst recovery.
    /auto_examples/workflows/plot_workflow_photoz_degeneracy
    /auto_examples/workflows/plot_workflow_post_starburst
    /auto_examples/workflows/plot_workflow_quenching_diagnostics
+   /auto_examples/workflows/plot_workflow_simulation_seds
 

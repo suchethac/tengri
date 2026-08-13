@@ -105,9 +105,16 @@ from tengri.utils.scale import LOG10_4PI, apply_log10_scale
 _L_IR_PROBE = 1.0e44
 
 #: Properties whose value is read off the rest-frame SED, which the fast-nebular
-#: grid path deletes the nebular contribution from (#950 zeroes ``nebular_sed``;
-#: that deleted Cue forward IS the speedup). ``predict_properties`` refuses these
-#: when a per-Q_H grid is attached, and serves the other 30 normally.
+#: grid path used to delete the nebular contribution from (#950 zeroes
+#: ``nebular_sed``; that deleted Cue forward IS the speedup).
+#:
+#: This is a **census, not a refusal list**. ``predict_properties`` refused these
+#: on a fast-nebular model until #1673 made ``predict_state`` materialize the
+#: nebular component, after which they are served from a complete forward state
+#: and match the exact path. The set is retained as the list of properties that
+#: depend on the nebular continuum, which is exactly the set worth regression-
+#: testing for equality --
+#: ``test_sed_derived_properties_are_exact_on_the_fast_path`` iterates it.
 #:
 #: The census is established by **measurement**, not by reading which helpers
 #: touch ``sed``: a broadband integral can be insensitive to the missing nebular
@@ -142,6 +149,50 @@ _FAST_NEBULAR_UNSAFE_PROPERTIES = frozenset(
         "xi_ion",
     }
 )
+
+
+def _nebular_continuum_consumers(chain):
+    """Components that read ``sed_nebular``, excluding the nebular component itself.
+
+    **The single expression that decides whether the fast nebular grid may serve
+    photometry.** Serving photometry from the per-Q_H grid requires zeroing
+    ``sed_nebular``, so it is available only when nothing downstream reads the
+    continuum. A non-empty result sets ``must_materialize_sed`` and disarms the
+    shortcut.
+
+    Extracted so that the code which *acts* on it
+    (:meth:`SEDModel.enable_fast_nebular`) and the code which *advises about it*
+    (:func:`~tengri.inference.fitter.fast_nebular_can_engage`, and the warnings that
+    quote a speedup) cannot disagree. They did: after #1281 made materialization the
+    default, ``DustSEDComponent`` disarmed the shortcut on every dusty model while
+    three warnings and ``CLAUDE.md`` still advertised a ~21x line speedup that was
+    measured at **1.00x — bit-identical compiled FLOPs** (#1748).
+
+    Parameters
+    ----------
+    chain : sequence
+        The assembled component chain.
+
+    Returns
+    -------
+    list
+        The consuming components. Empty means the grid may serve photometry.
+
+    Notes
+    -----
+    The census sees the ADR-0009 component contract and only that. A reader that
+    takes ``sed_nebular`` off ``state.derived`` without declaring an input is
+    invisible to it — which is why ``predict_state`` materializes by default
+    instead of relying on this list being complete (#1673).
+    """
+    from tengri.components.nebular.component import NebularSEDComponent
+    from tengri.forward.orchestrator import components_consuming
+
+    return [
+        c
+        for c in components_consuming(chain, "sed_nebular")
+        if not isinstance(c, NebularSEDComponent)
+    ]
 
 
 def _chain_consumes(chain, key: str) -> bool:
@@ -541,12 +592,44 @@ class SpectrumPrecomp:
 
 @dataclasses.dataclass(frozen=True)
 class FeaturePrecomp:
-    r"""Configuration for the emission-line precompute (the *feature* LUT path).
+    r"""Configuration for the nebular precompute (the *feature* LUT path).
 
-    Pass this to :class:`SEDModel` via ``approx=`` to serve emission-line fluxes
-    from a build-time lookup instead of the per-evaluation forward. It is the
-    line-channel sibling of :class:`WavePrecomp` (photometry) and
-    :class:`SpectrumPrecomp` (spectroscopy), and composes with either.
+    Pass this to :class:`SEDModel` via ``approx=`` to serve the nebular
+    calculation from a build-time lookup instead of the per-evaluation forward.
+    It composes with :class:`WavePrecomp` (photometry) and
+    :class:`SpectrumPrecomp` (spectroscopy).
+
+    .. warning::
+
+       **The name misleads: this is not a line-channel-only optimization.** For
+       the Cue backend the grid replaces the *emulator call itself*, so a fit
+       with **no line channel at all** benefits — often the most, because a
+       photometry-only Cue fit otherwise re-runs Cue on every likelihood
+       evaluation. Measured on a 10-parameter Cue model with free ``neb_logU``
+       / ``neb_logZ_gas``, against an A/A control whose noise floor was 1.23x:
+       a photometry-only fit's compiled MAP step goes 0.645 s to 0.093 s
+       (**7x**) on adding this. With a line channel present the same model
+       already sits near 0.16 s and neither opt-in resolves at all.
+       :class:`WavePrecomp` alone does not resolve either (1.07x, under the
+       floor). Measure before assuming either way, and quote a ratio only
+       against its own noise floor; see ``docs/dev/api_migration_v0.x.md`` for
+       the full grid.
+
+       That a photometry-only fit was *slower* than the same fit with an extra
+       data channel was a defect, not a property of the method — #1596, fixed:
+       the ``"auto"`` fit policy now attempts this LUT for any photometry-only
+       fit whose backend can tabulate, and #1683 extended that to a model built
+       with ``approx=WavePrecomp()``, which both fit resolvers had returned
+       untouched.
+
+       Passing it explicitly still matters for **prediction**. No fit policy
+       reaches ``model.predict_photometry`` / :meth:`SEDModel.predict`, which
+       run whatever the build-time ``approx=`` says — so a build-time opt-in is
+       what a forward-model benchmark or a mock-generation loop is choosing.
+       The converse is the trap: ``Fitter(approx="auto")`` (the default)
+       re-resolves the build-time knob, so *fit* arms that differ only in
+       ``SEDModel.build(approx=...)`` can be one configuration wearing three
+       labels.
 
     The line wavelengths default to those of ``Observation.line_fluxes`` — the
     model already knows which lines it is being fitted against — so the common
@@ -712,6 +795,54 @@ def _warn_grid_warm_failed(label: str, exc: Exception) -> None:
         RuntimeWarning,
         stacklevel=3,
     )
+
+
+#: Free parameters that reach the SED only through a kernel whose derivative
+#: rule does not differentiate them, so every gradient backend sees exactly
+#: zero. Maps parameter name -> the reason, for the warning below.
+#:
+#: ``agn_kt_warm`` (`kd18_disc_model.py`, ``Uniform(0.1, 0.5)``) reaches the SED
+#: solely via ``_nthcomp_lnu_interp`` (`disc.py:1263`), whose ``custom_jvp``
+#: supplies a ``gamma`` tangent only — the ``kTe`` tangent is discarded, as a
+#: deliberate cost trade-off (a second kernel evaluation per JVP). Measured: the
+#: rule returns exactly ``0.0`` where a central difference gives
+#: ``d ln f / d ln kTe`` ~ -0.24, so the sensitivity is real and order-unity.
+_DEAD_GRADIENT_PARAMS: dict[str, str] = {
+    "agn_kt_warm": (
+        "it reaches the SED only through the nthcomp interpolation kernel, whose "
+        "derivative rule supplies a gamma tangent but no kTe tangent"
+    ),
+}
+
+
+def _warn_dead_gradient_params(spec) -> None:
+    """Warn when a freed parameter has an identically-zero gradient.
+
+    Reads the **final** free-parameter list rather than any one group's, because
+    a group-scoped version of this check would miss exactly the case that
+    matters — see #1482, where a guard scoped to its own group never fired.
+
+    Not an error: pinning the parameter is a legitimate configuration and the
+    forward model is correct either way. The failure is silent, not wrong — the
+    sampler leaves the parameter at its initial value and the posterior returns
+    the prior, which reads as a fitted result. Making it loud is the whole fix.
+    """
+    freed = [name for name in _DEAD_GRADIENT_PARAMS if name in set(spec.free_params)]
+    if not freed:
+        return
+
+    from tengri.config.exceptions import DeadGradientParameterWarning
+
+    for name in freed:
+        warnings.warn(
+            f"{name!r} is a free parameter but its gradient is identically zero: "
+            f"{_DEAD_GRADIENT_PARAMS[name]}. Every gradient-based backend (MAP, "
+            "NUTS, VI) will leave it at its initial value, and the posterior will "
+            "report the prior back as though it had been fitted. Pin it with "
+            f"Fixed(...), or sample it with a gradient-free method. See #1206.",
+            DeadGradientParameterWarning,
+            stacklevel=2,
+        )
 
 
 def _warn_agn_dust_double_count(spec) -> None:
@@ -898,26 +1029,45 @@ class SEDModel:
         issue). Default True; leave it unless you know you need the legacy
         container. Set False to skip building it.
     forward_dtype : str or jnp.dtype, optional
-        Dtype for forward model computation. Default ``"float64"`` preserves
-        full precision. ``"float32"`` halves memory and gives ~1.5× speedup
-        with <0.1% accuracy loss for photometry.
+        Dtype for forward model computation. Default ``"float64"``.
 
-        Affects both fused (photometry + precomputation) and exact paths:
+        .. deprecated:: 2026-07
 
-        - **Fused path**: captured arrays (SSP grid, dust weights, effective
-          wavelengths) cast to ``forward_dtype`` at kernel build.
-        - **Exact path** (spectroscopy, non-precomputed AGN): three largest intermediates
-          — metallicity-interpolated SSP ``(n_age, n_wave)``, dust attenuation
-          ``(n_age, n_wave)``, dust age weights ``(n_age,)`` — computed in
-          ``forward_dtype``, halving the 4.5 MB memory traffic that dominates
-          exact-path dust cost.
+           **Retired (#1433).** Passing anything but ``"float64"`` emits a
+           ``DeprecationWarning`` — a warning, not an exception; the call
+           proceeds — and does nothing else. ``"float32"`` cast
+           nothing and changed nothing — measured bit-for-bit identical
+           photometry to ``"float64"`` on both the exact and the ``WavePrecomp``
+           path. It no longer enters :meth:`compile_signature` either, so it no
+           longer costs the second compile of an identical kernel that it used to.
 
-        Mixed-precision support: Multiplicative flux/distance seams (photometry,
-        spectrum, line flux projections) apply cosmological factors as range-safe
-        log offsets (see :mod:`tengri.utils.scale`), allowing float32 arrays without
-        out-of-range intermediates. Full pure-float32 output additionally requires
-        Tier B reduction reformulations (ionizing photon integral, energy-balance
-        cascades, AGN SKIRTOR table resolution) and is not yet supported.
+           Retired rather than repaired because there is no second float32 mode
+           worth maintaining: pure float32 is what the range protections in
+           ``components/`` gate on, it is what #1206 delivers, and the knob sat
+           dead for two months without a single report. Wiring it instead would
+           mean reviving a distinct mixed-precision path with its own gate
+           semantics and re-earning a speed claim that was never re-measured.
+
+           The casts it names were real until ``1e57d973d`` (2026-05-20) deleted
+           ``forward/_kernels/``; the kwarg, this docstring, the state field and
+           the signature entry survived that refactor, and the six casts did not.
+           This description previously promised "halves memory and gives ~1.5x
+           speedup with <0.1% accuracy loss" — none of which has held since.
+
+           For float32 today use **pure** float32: enter a
+           ``jax.enable_x64(False)`` context. That is a different mechanism (it
+           changes JAX's default dtype rather than casting captured arrays), it is
+           the mode the float32 range protections in ``components/`` gate on, and
+           it is the one #1206 is making work end to end.
+
+           The argument is still accepted so that existing callers keep working —
+           nothing they compute was ever different — and it will be removed once
+           the warning has been in a release.
+
+        Independently of this knob, the multiplicative flux/distance seams
+        (photometry, spectrum, line flux projections) apply cosmological factors as
+        range-safe log offsets (see :mod:`tengri.utils.scale`), so float32 arrays do
+        not materialize out-of-range intermediates there.
     approx : dict or bool, optional
         Control which approximations enter the component chain. Default True enables
         all approximations (fastest). False disables all (forces exact path
@@ -1186,6 +1336,23 @@ class SEDModel:
         self.spec = spec
         self.ssp_data = ssp_data
         self._forward_dtype = jnp.dtype(forward_dtype)
+        if self._forward_dtype != jnp.dtype("float64"):
+            # Retired, not merely undocumented (#1433). The knob has cast nothing
+            # since ``1e57d973d`` deleted ``forward/_kernels/`` (2026-05-20), so
+            # accepting it silently hands the caller float64 arithmetic under a
+            # float32 name. Warn rather than raise: it is inert, so no result
+            # changes either way, and a hard error would break callers for whom
+            # nothing was ever different.
+            warnings.warn(
+                f"forward_dtype={str(self._forward_dtype)!r} is ignored and has been "
+                "since 2026-05-20 (#1433): it casts nothing, returns bit-identical "
+                "results to float64, and only costs an extra compile because it "
+                "still enters the model's cache key. For float32, run inside a "
+                "`with jax.enable_x64(False):` context — that is the mechanism the "
+                "float32 range protections in components/ are written against.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         self._wave_chunk_size = wave_chunk_size
 
         # ── Observables NamedTuple (synthesized per model) ───────
@@ -2586,6 +2753,28 @@ class SEDModel:
         else:
             self._rest_wavelength = ssp_data.ssp_wave
 
+        # Canonicalize to the session's working float dtype (#1206, #1439).
+        # ``make_union_grid`` already builds at the working precision, but the
+        # ``else`` branch hands back the SSP loader's float64 array verbatim —
+        # so under ``jax.enable_x64(False)`` the grid's dtype depended on
+        # whether some component happened to contribute a wing. That is not
+        # cosmetic: thirteen precision gates in ``components/`` (AGN disc x6,
+        # X-ray x2, radio, shock, ...) ask ``wave.dtype == jnp.float32`` to
+        # decide whether to take their float32-safe log-domain path, and a
+        # float64 grid makes every one of them fail *open* at once — the
+        # float64 branch runs while the arithmetic is float32. Measured: a
+        # composable AGN with no torus (nothing contributes a wing, so the
+        # grid stays float64) evaluated the multicolor disc at the true
+        # ``10**11 * L_sun`` = 3.8e44, past float32's 3.4e38, and returned
+        # ``sed_agn`` NaN at every one of 5994 points. Adding a SKIRTOR torus
+        # forced a union grid and the same model was clean — the bug was
+        # reachable only through the component list, which is why no float32
+        # test had caught it.
+        #
+        # Under x64 this is a no-op (``result_type(float)`` is float64 and the
+        # grid already is), so float64 behavior is unchanged by construction.
+        self._rest_wavelength = jnp.asarray(self._rest_wavelength, dtype=jnp.result_type(float))
+
         # Identity entries for shock_* and xray_* now come from registry
         # auto-derive in _build_param_map (Step B).
         self._uses_shock = getattr(spec, "shock", False)
@@ -3482,6 +3671,15 @@ class SEDModel:
         module-level _SHARED_ENGINE_CACHE. Changes to SEDModel initialization
         that affect JIT graph shape MUST be added to this method to avoid
         silent miscompilation.
+
+        "Structure" includes **precision**. The structural-kernel cache in
+        :meth:`_get_or_build_predict_observables_jit` returns a closure that
+        captured ``self``, so a signature collision hands one model's compiled
+        kernel — and its wavelength grid — to another. A float64/float32 collision
+        used to reach the components as a float64 ``wave`` under
+        ``jax.enable_x64(False)``, which switched off every dtype-keyed float32
+        path downstream and produced NaN gradients with nothing raised (#1392).
+        See ``build_precision`` below.
         """
         # SSP grid shapes (n_met, n_age, n_wave)
         ssp_flux_shape = tuple(self.ssp_data.ssp_flux.shape)
@@ -3717,8 +3915,27 @@ class SEDModel:
         # cache five ways and recompiled the whole model to compute the same
         # numbers. Measured: 5 distinct signatures, 0 differing outputs.
 
-        # Forward dtype
-        forward_dtype = str(self._forward_dtype)
+        # ``forward_dtype`` is deliberately NOT part of this key (#1433). It is
+        # retired and casts nothing, so two models differing only in it compute
+        # bit-identical results — keying on it bought a second compile of an
+        # identical kernel and nothing else. Anyone who wires it must put it back
+        # here in the same change, or the two precisions will share a kernel.
+
+        # Effective build precision (#1392). ``forward_dtype`` stays
+        # "float64" in a **pure** float32 run (which is entered with
+        # ``jax.enable_x64(False)``, not with that knob), so on its own it cannot
+        # separate a float64 model from a float32 one — and since it casts nothing
+        # (#1433) it could not do so at any setting.
+        # It must: ``_get_or_build_predict_observables_jit`` caches a closure that
+        # captured ``self``, keyed on this signature, so without a precision entry
+        # a float32 model is handed the float64 model's kernel — carrying that
+        # model's float64 wave grid. Every float32 gate downstream keys on a dtype
+        # and so switches itself off, silently, producing NaN gradients rather than
+        # an error (observed in the AGN block: #1392).
+        build_precision = (
+            str(self._rest_wavelength.dtype),
+            bool(jax.config.jax_enable_x64),
+        )
 
         # Metallicity interpolation mode
         met_interp = str(self._met_interp)
@@ -3906,7 +4123,7 @@ class SEDModel:
             calibration_order,
             spec_resample_conserving,
             spec_resolution_matrix,
-            forward_dtype,
+            build_precision,
             met_interp,
             z_interp,
             radio_include_freefree,
@@ -3997,50 +4214,30 @@ class SEDModel:
             raise ValueError("No filters set. Pass filters or observation= to SEDModel().")
         return self.predict_observables_jit(params).phot_fnu
 
-    def _refuse_on_fast_nebular(self, caller):
-        """Refuse a rest-frame-SED consumer on a fast-nebular model (#950, #1665).
-
-        With a per-Q_H nebular grid attached the Cue continuum forward is
-        skipped (``nebular_sed = 0``), so anything *measured off the rest-frame
-        SED* is missing both the nebular continuum and the emission lines.
-        Photometry and line fluxes stay correct — they reconstruct from the
-        grid — which is precisely why the damage is invisible from the fit that
-        selected the fast path.
-
-        One helper called by every such consumer, because **the census is the
-        part that goes wrong**: #950 guarded ``predict_spectrum`` and stopped
-        there, so ``predict_spectral_indices`` kept measuring a gutted rest SED.
-        Under ``approx=(WavePrecomp(), FeaturePrecomp())`` that moved all 13
-        spectral indices off the exact path — worst ``HgA`` by **+1733%**, the
-        five Balmer indices by 29–1733% — with no exception and no warning
-        (#1665). Adding a rest-SED consumer means adding a call here.
-
-        Parameters
-        ----------
-        caller : str
-            Public method name, quoted back to the user in the error.
-
-        Raises
-        ------
-        ValueError
-            Whenever a per-Q_H nebular grid is attached to this model.
-
-        Notes
-        -----
-        **JIT-compatible**: yes — the check reads a static Python attribute set
-        at build time, so it resolves at trace time and emits no ops.
-        """
-        if getattr(self, "_nebular_grid_table", None) is None:
-            return
-        raise ValueError(
-            f"{caller} is not available on a fast-nebular model: a per-Q_H "
-            "nebular grid is attached (approx=(WavePrecomp(), FeaturePrecomp()), "
-            "or enable_fast_nebular), so the Cue continuum forward is skipped and "
-            "the rest-frame SED omits the nebular continuum and emission lines. "
-            "Use approx=WavePrecomp() alone — exact for this quantity and still "
-            "LUT-fast for photometry — or drop approx= entirely, for spectra, "
-            "spectral indices, line ratios, and .lines."
-        )
+    # There is deliberately no ``_refuse_on_fast_nebular`` here any more.
+    #
+    # #950 and #1665 both fixed the same defect by *refusing* every rest-frame-SED
+    # consumer whenever a per-Q_H nebular grid was attached, because the fast path
+    # zeroed ``sed_nebular`` and those consumers measured a gutted SED (worst: all
+    # 13 spectral indices off the exact path, ``HgA`` by +1733%).
+    #
+    # #1673 removed the cause instead of the symptom: ``predict_state`` now
+    # materializes the nebular component by default (``materialized_chain``), so the
+    # forward state a rich consumer reads is complete. Measured on a
+    # dust-free Cue model at ``approx=(WavePrecomp(), FeaturePrecomp())``, fast
+    # versus exact: ``sed_intrinsic`` and ``sed_nebular`` **rel 0.0 — bit-exact**,
+    # and so are ``pred.rest_sed()``, ``pred.obs_sed()``, ``predict_spectrum`` and
+    # ``pred.lines``. Only ``predict_photometry`` still reads the grid (the LUT's
+    # own ~9e-04 bias), which is the whole point — the hot path keeps its speed and
+    # the rich path is correct.
+    #
+    # So a refusal here would reject a computation that is now bit-exact, and its
+    # advice ("use approx=WavePrecomp() alone") would push users off the config
+    # every fit surface resolves to by default since #1683. Two mechanisms for one
+    # defect also drift apart; this is the one that returns an answer.
+    #
+    # If you are about to re-add a refusal: measure the consumer against an
+    # ``approx=None`` model first. If it is bit-exact, the cause is already fixed.
 
     def predict_spectrum(
         self,
@@ -4142,7 +4339,6 @@ class SEDModel:
         """
         # Fast-nebular guard (#950): the fast path is for photometry + line
         # fluxes only. Shared with every other rest-SED consumer (#1665).
-        self._refuse_on_fast_nebular("predict_spectrum")
 
         # A caller-supplied ``wave_obs`` is evaluated directly on that grid,
         # independent of any configured spectroscopy channel or the cached
@@ -4673,8 +4869,23 @@ class SEDModel:
         # compile_signature() now differs (nebular_grid_sig), so the next
         # predict_* builds a fresh kernel over this chain — no stale reuse.
         chain = self._build_component_chain()
+        # Whether the grid may also serve the photometry channel. It may only
+        # when nothing downstream reads the continuum, because serving
+        # photometry from the grid requires zeroing ``sed_nebular`` — and the
+        # dust energy balance reads it to size the absorbed budget. Asked of
+        # the chain rather than assumed, so registering a new consumer is a
+        # one-line ``inputs()`` declaration and nothing here goes stale.
+        #
+        # The census sees the component contract, and only that. A reader that
+        # takes ``sed_nebular`` off ``state.derived`` without declaring an
+        # input is invisible to it — ``state_to_sed_components`` does exactly
+        # that, so ``sed_components()`` on a dust-free Cue model still reports
+        # a zero nebular continuum (#1673).
+        sed_consumers = _nebular_continuum_consumers(chain)
         self._cached_component_chain = [
-            dataclasses.replace(c, grid_table=table) if isinstance(c, NebularSEDComponent) else c
+            dataclasses.replace(c, grid_table=table, must_materialize_sed=bool(sed_consumers))
+            if isinstance(c, NebularSEDComponent)
+            else c
             for c in chain
         ]
         return self
@@ -4738,7 +4949,6 @@ class SEDModel:
         # discrete line-catalog publish, so a Cue model would otherwise fall
         # through to the backend message below and be told to "use Cue" -- advice
         # the user has already taken, naming a cause that is not theirs.
-        self._refuse_on_fast_nebular("predict_line_ratios")
 
         if state is None:
             state = self.predict_state(params)
@@ -4817,7 +5027,6 @@ class SEDModel:
         # Indices are measured off the rest-frame SED, which the fast-nebular
         # grid path gutted (#1665). Same guard as predict_spectrum — this
         # consumer was simply missing from that census.
-        self._refuse_on_fast_nebular("predict_spectral_indices")
 
         if fast:
             return self._feature_fast_indices(params, tuple(index_defs))
@@ -5441,13 +5650,18 @@ class SEDModel:
 
             warn_if_lines_are_unavailable(self, names_to_compute)
 
-        # Rest-SED-derived properties cannot be served by the fast-nebular grid
-        # (#1665). Refuse only those: stellar_mass, sfr and the other 30 are
-        # perfectly correct on the fast path, and blanket-refusing them would
-        # break exactly the fits the fast path exists for.
-        unsafe = sorted(_FAST_NEBULAR_UNSAFE_PROPERTIES.intersection(names_to_compute))
-        if unsafe and getattr(self, "_nebular_grid_table", None) is not None:
-            self._refuse_on_fast_nebular(f"predict_properties(names={unsafe})")
+        # main carries a ``_refuse_on_fast_nebular`` guard on this line (#1665).
+        # It is deliberately NOT taken here, for the reason recorded in full at
+        # ``predict_photometry``: #1673 fixed the cause rather than the symptom,
+        # so ``predict_state`` materializes the nebular component and every
+        # property below is bit-exact on the fast path (measured rel 0.0). The
+        # method it calls no longer exists on this branch, and
+        # ``_FAST_NEBULAR_UNSAFE_PROPERTIES`` survives as the census of
+        # nebular-dependent properties worth CHECKING, not a refusal list --
+        # see ``test_sed_derived_properties_are_exact_on_the_fast_path``, which
+        # calls this surface on the fast path and asserts equality with the
+        # exact model. Reinstating the refusal would make that test raise
+        # instead of compare.
 
         # Compute the state once
         state = self.predict_state(params)
@@ -5801,9 +6015,8 @@ class SEDModel:
         # ``csp_integration='trapz'``, the only field that drifts
         # noticeably (~12%) is ``luminosity_weighted_age_gyr`` — the
         # orchestrator integrates the actual ``lnu_age`` cube whose
-        # sum-over-age IS ``sed_intrinsic``, while legacy's
-        # ``compute_per_bin_luminosity(weights, ssp_flux_at_z)``
-        # reconstruction has a hidden DSPS-joint-weight discrepancy
+        # sum-over-age IS ``sed_intrinsic``, while legacy's per-bin
+        # luminosity reconstruction has a hidden DSPS-joint-weight discrepancy
         # under trapz. The orchestrator value is the physically correct
         # one (energy-conserving by construction).
         from tengri.forward import state_to_sed_quantities
@@ -6076,7 +6289,6 @@ class SEDModel:
         )
         # Deprecated, but it reaches the rest SED by its own route rather than
         # through predict_spectrum, so it needs the census guard too (#1665).
-        self._refuse_on_fast_nebular("predict_spectrum_components")
         return self._spectrum_via_state(params, wave_obs=wave_obs)
 
     def predict_emission_lines(self, params):
@@ -6250,7 +6462,42 @@ class SEDModel:
         """
         return self.predict_state(params)
 
-    def predict_state(self, params, fixed_values=None, ssp_data=None, template_data=None):
+    def _full_state_chain(self):
+        """The component chain with every publication shortcut disabled.
+
+        Derived from the observables chain by
+        :func:`~tengri.forward.orchestrator.materialized_chain`, and memoized
+        against that chain's *identity* so any rebuild (``enable_fast_nebular``
+        swaps the whole list) invalidates it automatically rather than leaving
+        a stale copy behind.
+
+        Returns
+        -------
+        list of SEDComponent
+            The chain :meth:`predict_state` runs unless the caller declares it
+            reads only the projected observables.
+        """
+        from tengri.forward.orchestrator import materialized_chain
+
+        chain = getattr(self, "_cached_component_chain", None)
+        if chain is None:
+            chain = self._cached_component_chain = self._build_component_chain()
+        cached = getattr(self, "_cached_full_state_chain", None)
+        if cached is not None and cached[0] is chain:
+            return cached[1]
+        full = list(materialized_chain(chain))
+        self._cached_full_state_chain = (chain, full)
+        return full
+
+    def predict_state(
+        self,
+        params,
+        fixed_values=None,
+        ssp_data=None,
+        template_data=None,
+        *,
+        observables_only=False,
+    ):
         """Forward pass via the SEDComponent orchestrator.
 
         Builds a component chain from this model's structural settings
@@ -6287,6 +6534,19 @@ class SEDModel:
             components as JIT runtime inputs instead of closure capture.
             Defaults to ``None``, which causes components to use their
             internal template data.
+        observables_only : bool, keyword-only, optional
+            Declare that the caller reads only the *projected observables* —
+            photometry and spectra off the LUT — and never the SED arrays or
+            ``derived`` publications. Components may then take publication
+            shortcuts: the per-Q_H nebular grid zeroes ``sed_nebular`` because
+            skipping the Cue forward is the whole saving (#1596).
+
+            Default ``False``, so the returned state is complete. Only
+            :meth:`predict_observables_jit` sets it, and that is the point:
+            correctness is what you get by default and the optimization is the
+            thing that has to be asked for. Setting it while reading the SED
+            costs the entire nebular continuum — measured at 97 % of the peak
+            on a dust-free Cue model, in float64 and silently (#1673).
 
         Returns
         -------
@@ -6338,7 +6598,12 @@ class SEDModel:
         if cached is None:
             cached = self._build_component_chain()
             self._cached_component_chain = cached
-        chain = cached
+        # The observables kernel reads only what the LUT projects, so it may
+        # run the chain with its publication shortcuts intact. Every other
+        # caller gets a complete state: this method's contract is the full
+        # ForwardState, and a component that silently withholds one of its
+        # published keys breaks it (#1673).
+        chain = cached if observables_only else self._full_state_chain()
         # Initialize the chain on the panchromatic-extended grid when
         # radio/xray is configured. RadioSEDComponent / XRaySEDComponent
         # populate ``state.derived["sed_radio"]`` / ``["sed_xray"]``
@@ -6549,11 +6814,15 @@ class SEDModel:
             self._cached_component_chain = self._build_component_chain()
 
         def _impl(params, fixed_values, ssp_data, template_data):
+            # The one caller that may take the publication shortcuts: this
+            # kernel returns projected observables and never exposes the state,
+            # so a zeroed sed_nebular is invisible to it by construction.
             state = self.predict_state(
                 params,
                 fixed_values=fixed_values,
                 ssp_data=ssp_data,
                 template_data=template_data,
+                observables_only=True,
             )
             full = {**fixed_values, **params}
             # Part B: spectrum LUT (and, for a joint model, photometry LUT)
@@ -7664,7 +7933,7 @@ class SEDModel:
         ssp_data,
         *,
         sfh=None,
-        stellar=None,
+        met=None,
         dust=None,
         neb=None,
         shock=None,
@@ -7722,7 +7991,9 @@ class SEDModel:
             Observation object; forwarded to ``__init__``.
         **model_kwargs
             Additional keywords forwarded to :meth:`__init__` (e.g.
-            ``precompute``, ``forward_dtype``, ``approx``).
+            ``precompute``, ``approx``). ``forward_dtype`` is deliberately absent —
+            it is retired and inert, so keying on it only forced a redundant
+            compile (#1433).
 
         Returns
         -------
@@ -7758,7 +8029,7 @@ class SEDModel:
             k: v
             for k, v in dict(
                 sfh=sfh,
-                stellar=stellar,
+                met=met,
                 dust=dust,
                 neb=neb,
                 shock=shock,
@@ -7795,6 +8066,7 @@ class SEDModel:
 
         spec = parse_groups(**groups)
         _warn_agn_dust_double_count(spec)
+        _warn_dead_gradient_params(spec)
         return cls(
             spec,
             ssp_data,

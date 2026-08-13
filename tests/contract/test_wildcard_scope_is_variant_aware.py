@@ -301,13 +301,13 @@ def _simple_group_cases():
         },
     )
     yield Case(
-        "stellar",
-        "stellar",
+        "met",
+        "met",
         "met_",
         {
             "neb": {"type": "none"},
             "dust": {"type": "two_component", "*": FIXED},
-            "stellar": {"*": FREE},
+            "met": {"*": FREE},
         },
     )
     yield Case(

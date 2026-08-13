@@ -35,14 +35,25 @@
 # not a window-integrated `measure_line_fluxes` (the latter would carry the
 # stellar absorption and mis-deblend [N II], biasing the Balmer decrement).
 #
-# **Why it is fast.** Photometry rides the `WavePrecomp` SSP × filter lookup
-# table; the emission lines ride the `FeaturePrecomp` per-Q_H grid. Each turns a
-# likelihood evaluation that would otherwise integrate the full SSP × wavelength
-# forward into a table look-up. We measure the wall time of every fit below and
-# compare the fast path to the exact forward. On a single galaxy the win is a
-# steady few-fold (the fixed per-fit overhead dilutes it); the fast path's real
-# payoff is at catalog scale, where the look-up is shared work across galaxies
-# and the exact wave-grid forward would be prohibitive — see
+# **What the two build-time opt-ins do.** They do *not* split one per data
+# channel. `WavePrecomp` is the photometry lookup — the SSP × filter table that
+# replaces a full SSP × wavelength integration with a table look-up.
+# `FeaturePrecomp` is the **nebular** lookup: a per-Q_H grid that keeps the Cue
+# emulator off the per-gradient path. The lines do ride it, but what it caches is
+# the *gas* calculation, which is why the name misleads.
+#
+# **And on this fit neither one buys you much** — we measure that below rather
+# than claim otherwise. An observation carrying a line channel already keeps the
+# nebular work off the per-gradient path, so the exact forward is *already* fast
+# here and the opt-ins have little left to remove. Where `FeaturePrecomp` earns
+# its keep is the case that looks like it should not need it: the **same model
+# fit to photometry alone**, where every likelihood evaluation re-runs Cue and
+# the grid is worth ~7x against a 1.23x noise floor. "I am not fitting lines" is the
+# opposite of a reason to skip it — the `FeaturePrecomp` docstring carries that
+# measurement, as does `docs/dev/api_migration_v0.x.md`.
+#
+# The catalog-scale argument is separate and survives either way: the look-up is
+# shared work across galaxies, so it is amortized once and reused — see
 # [notebook 11](11_catalog_fits.py) for `fit_batch` at catalog scale.
 
 # %%
@@ -70,6 +81,7 @@ from tengri import (
     FIXED,
     FREE,
     FeaturePrecomp,
+    Fitter,
     Fixed,
     ForwardModel,
     LineList,
@@ -134,10 +146,14 @@ print(f"Lines: {len(LINE_NAMES)} — {', '.join(LINE_NAMES)}")
 # are free — a real catalog spans the metallicity–ionization plane, so a
 # fixed-condition baked-in grid cannot follow it.
 #
-# We build the model twice with the *same* physics and free parameters, changing
-# only `approx=`: the **exact** wave-grid path, and the **fast**
-# `(WavePrecomp, FeaturePrecomp)` path (photometry LUT + per-Q_H line grid). The
+# We build the model three times with the *same* physics and free parameters,
+# changing only `approx=`: the **exact** wave-grid path, **`WavePrecomp` alone**
+# (photometry LUT, Cue still evaluated every step), and the **fast**
+# `(WavePrecomp, FeaturePrecomp)` path that adds the per-Q_H nebular grid. The
 # line wavelengths for the feature grid default to those in the observation.
+# Three arms, one knob each, so whatever the timing below shows can be
+# *attributed* — a two-arm exact-vs-fast comparison moves both knobs at once and
+# can only ever measure the bundle, never which half earned it.
 
 
 # %%
@@ -150,7 +166,7 @@ def build(line_data, approx):
         # Free the SFH (normalization + shape), stellar metallicity, the dust
         # screen, and the gas conditions — the parameters a catalog fit solves for.
         sfh={"type": "dpl", "all_params": FREE},
-        stellar={"met_logzsol": Uniform(-1.5, 0.3)},
+        met={"logzsol": Uniform(-1.5, 0.3)},
         dust={
             "type": "two_component",
             "law_bc": "calzetti",
@@ -233,16 +249,16 @@ print(
 )
 
 # %% [markdown]
-# ## Measure the fit time: exact vs fast
+# ## Measure the fit time: exact vs WavePrecomp vs fast
 #
 # A MAP fit (200 Adam steps) on the joint photometry + line likelihood, timed on
-# both paths. One `fitter.run()` bundles two very different costs, and it is
+# all three paths. One `fitter.run()` bundles two very different costs, and it is
 # worth pulling them apart:
 #
-# - **`run()` wall** — the end-to-end cost of one call. It is dominated by a
-#   one-off **JIT compile** of the optimizer step (~1–2 s here). That compile
-#   recurs on each independent `run()`, so a second call is *not* much cheaper —
-#   the persistent cache spares the XLA backend compile, not the Python-level
+# - **`run()` wall** — the end-to-end cost of one call. A good part of it is a
+#   one-off **JIT compile** of the optimizer step, and that compile recurs on
+#   each independent `run()`, so a second call is *not* much cheaper — the
+#   persistent cache spares the XLA backend compile, not the Python-level
 #   re-trace. This is the honest cost of an *interactive, single-galaxy* fit.
 # - **compiled step** (`post.wall_time_s`) — the optimization loop *after* the
 #   compile. This is the marginal compute, and the number that matters at
@@ -250,44 +266,170 @@ print(
 #   **once**, and each further galaxy costs only this (dropping further still
 #   under `vmap`). The often-quoted sub-100 ms/galaxy figure is *this* amortized
 #   compute — not the single-shot wall below.
+#
+# Read the **compiled step** column across the three rows: that is the honest
+# per-galaxy compute, and the only column in which an `approx=` choice can show
+# up at all.
+#
+# ### Timing three things in one process is harder than it looks
+#
+# The obvious way to write this cell — build three models, time each once, in
+# order — is wrong, and wrong in a way that *looks* like a result. Whichever arm
+# runs first pays every first-touch cost in the process (page faults, lazy
+# imports, the SSP grid landing in cache), so it is slowest **because it is
+# first**. Earlier renders of this very notebook reported the "speedup" as
+# 18.6x, 12.6x, 1.0x and 3.2x on unchanged code, purely from what else the
+# machine happened to be doing.
+#
+# Two defenses, both cheap:
+#
+# - **Interleave, rotate, and take the minimum.** Each arm is measured `N_REPS`
+#   times round-robin, and the order rotates by one each pass so no arm is
+#   structurally first. (Interleaving alone would not fix it: with a fixed order
+#   the first-touch penalty lands on the same arm every rep and survives the
+#   minimum.) The minimum is the least-contended sample — closest to the compute
+#   we are actually trying to compare.
+# - **Run an A/A control.** One arm is `model_exact` *again*, under a different
+#   label. It should be identical to the first exact arm, so whatever ratio it
+#   reports is the measurement's own noise floor.
+# - **Check the arms are actually different.** `fit()` resolves `approx="auto"`,
+#   and that policy *re-resolves* the build-time `approx=` — topping it up rather
+#   than taking it as given. So the cell prints the **resolved fit-time config
+#   per arm before timing anything**. An arm can be mislabelled as easily as it
+#   can be mistimed, and a table attributing a ratio to a knob that does not
+#   differ between arms can only ever report noise. Build-time `approx=` is what
+#   a **prediction** path uses (`predict_photometry`, `predict`); a **fit**
+#   re-picks it.
+#
+# **The verdict rule, fixed before the numbers are in:** an `approx=` choice
+# counts as a real speedup only if its *excess over 1.0* is at least **twice**
+# the control's excess. If the control says 1.10x, a 1.15x "win" does not count —
+# 0.15 is not twice 0.10. Comparing the ratios directly (`1.15 > 1.10`) is too
+# weak, because both are noisy estimates and a hair's-breadth pass prints the
+# self-contradicting verdict "1.1x clears the 1.1x noise floor".
+#
+# The printed **rep spread** (slowest/fastest rep for that arm) is the diagnostic:
+# the three rotated arms each take the process's very first fit once and so carry
+# a large spread, while the A/A arm — which the rotation never places first —
+# stays near 1.0x. That gap *is* the first-touch cost, made visible instead of
+# quietly folded into a headline ratio. Taking the minimum is what discards it.
 
 # %%
 model_exact = build(line_data, approx=None)
+model_wave = build(line_data, approx=WavePrecomp())
 model_fast = build(line_data, approx=(WavePrecomp(), FeaturePrecomp()))
 print(f"Free parameters ({model_fast.spec.n_free}): {', '.join(model_fast.spec.free_params)}")
 
 MAP_KW = dict(method="map", key=jax.random.PRNGKey(1), n_steps=200)
+N_REPS = 3
 
-
-def timed_map(model, label):
+# The fourth entry is model_exact a second time: the A/A control. It gets its own
+# ForwardModel so it is built exactly like the arms it calibrates.
+ARMS = [
+    ("exact (approx=None)", model_exact),
+    ("WavePrecomp only", model_wave),
+    ("fast (Wave+Feature)", model_fast),
+    ("exact again (A/A)", model_exact),
+]
+for _label, _m in ARMS:
     # The line likelihood is active because the Observation carries line_fluxes;
     # the data passed here is photometry, and the observation says so, so there
     # is no channel to declare.
-    assert model.observation.line_fluxes is not None, "line likelihood not active"
-    forward = ForwardModel.build(sed=model)
-    t0 = time.perf_counter()
-    forward.fit(flux_phot, n_phot, **MAP_KW)  # pays the JIT compile
-    cold = time.perf_counter() - t0
-    t0 = time.perf_counter()
-    # A second fit re-traces the step, so its wall time is ~= the first (see #1350:
-    # each fit currently clears the JAX caches, which is why the compile is not
-    # reused). The number that isolates the physics is post.wall_time_s below.
-    post = forward.fit(flux_phot, n_phot, **MAP_KW)
-    warm = time.perf_counter() - t0
-    loop = post.wall_time_s  # the compiled optimization loop, compile excluded
-    print(f"  {label:22s} fit() wall {warm:5.2f}s   compiled step {loop:5.2f}s")
-    return post, cold, warm, loop
+    assert _m.observation.line_fluxes is not None, "line likelihood not active"
+built = [(label, ForwardModel.build(sed=model)) for label, model in ARMS]
 
+# Round-robin AND rotated. Interleaving alone is not enough: whichever arm runs
+# first in a pass pays the first-touch costs, and if the order never changes that
+# penalty lands on the same arm every rep and survives the min. Rotating by one
+# each pass moves every arm through a different slot, so no arm is structurally
+# first.
+# Before timing anything: what does the FIT actually run? `Fitter(approx="auto")`
+# — the default, and what `fit()` uses — RE-RESOLVES the build-time `approx=`. So
+# three models built three ways need not be three configurations at fit time.
+# Print it rather than assume it. This is the same class of error as timing
+# process position, one level down: an arm can be mislabelled as well as mistimed.
+print("resolved fit-time precompute (what approx= actually buys a FIT):")
+for _label, _fwd in built:
+    _st = Fitter(_fwd, flux_phot, n_phot).model.approx
+    _tags = [
+        _n
+        for _n, _on in (
+            ("WavePrecomp", _st.wave_precomp),
+            ("SpectrumPrecomp", _st.spectrum_precomp),
+            ("FeaturePrecomp", _st.feature_precomp),
+        )
+        if _on
+    ]
+    print(f"  {_label:<22} -> {', '.join(_tags) or 'exact (no LUT)'}")
 
-print("MAP fit (photometry + 10 lines):")
-post_exact, cold_e, warm_e, loop_e = timed_map(model_exact, "exact (approx=None)")
-post_fast, cold_f, warm_f, loop_f = timed_map(model_fast, "fast (Wave+Feature)")
+loops: dict[str, list[float]] = {label: [] for label, _ in built}
+walls: dict[str, list[float]] = {label: [] for label, _ in built}
+posts: dict[str, object] = {}
+print(f"MAP fit (photometry + 10 lines), {N_REPS} rotated reps, min reported:")
+for rep in range(N_REPS):
+    cut = rep % len(built)
+    for label, fwd in built[cut:] + built[:cut]:
+        t0 = time.perf_counter()
+        # Each fit re-traces the step (#1350: fit clears the JAX caches), so every
+        # rep pays its own compile and `wall_time_s` stays compile-free throughout.
+        post = fwd.fit(flux_phot, n_phot, **MAP_KW)
+        walls[label].append(time.perf_counter() - t0)
+        loops[label].append(post.wall_time_s)
+        posts[label] = post
+
+loop = {label: min(v) for label, v in loops.items()}
+wall = {label: min(v) for label, v in walls.items()}
+for label, _ in built:
+    spread = max(loops[label]) / min(loops[label])
+    print(
+        f"  {label:22s} fit() wall {wall[label]:5.2f}s   "
+        f"compiled step {loop[label]:5.2f}s   (rep spread {spread:4.1f}x)"
+    )
+
+L_E, L_W, L_F, L_AA = (label for label, _ in built)
+post_exact, post_wave, post_fast = posts[L_E], posts[L_W], posts[L_F]
+loop_e, loop_w, loop_f, loop_aa = loop[L_E], loop[L_W], loop[L_F], loop[L_AA]
+warm_e, warm_w, warm_f = wall[L_E], wall[L_W], wall[L_F]
+
+# The control is the same model twice, so any departure from 1.0x is measurement
+# noise. Orient it as >= 1 so it compares directly against the arm ratios.
+r_aa = max(loop_e, loop_aa) / min(loop_e, loop_aa)
+r_fast = loop_e / loop_f
+
+# A bare `r_fast > r_aa` is too weak: both are noisy estimates, so an effect can
+# "clear" the floor by a hair and print the self-contradicting verdict
+# "1.1x clears the 1.1x noise floor". Compare *excesses over unity* instead and
+# demand a factor of two, so an effect must be twice the control's own departure
+# from 1.0 before it counts. Two decimals throughout — at one, a real gap and a
+# noise gap render identically.
+RESOLVE_MARGIN = 2.0
+resolved = (r_fast - 1.0) > RESOLVE_MARGIN * (r_aa - 1.0)
+print(f"\n  A/A control (same model, twice): {r_aa:5.2f}x  <- the noise floor")
 print(
-    f"\n  compiled-step speedup: {loop_e / loop_f:.1f}x   (fast {loop_f * 1e3:.0f} ms vs exact {loop_e * 1e3:.0f} ms of compute)"
+    f"  compiled-step ratio exact -> fast: {r_fast:5.2f}x   "
+    f"(fast {loop_f * 1e3:.0f} ms vs exact {loop_e * 1e3:.0f} ms)"
 )
-print(
-    f"  fit() wall is ~{warm_f:.1f}s on either path — that is per-call JIT compile, not the fit."
-)
+print("  attributed, one knob at a time:")
+print(f"    WavePrecomp        {loop_e:6.3f}s -> {loop_w:6.3f}s   {loop_e / loop_w:6.2f}x")
+print(f"    + FeaturePrecomp   {loop_w:6.3f}s -> {loop_f:6.3f}s   {loop_w / loop_f:6.2f}x")
+if not resolved:
+    print(
+        f"  -> NOT resolved: excess over 1.0 is {r_fast - 1.0:.2f} against a control"
+        f" excess of {r_aa - 1.0:.2f};"
+    )
+    print(f"     the rule needs {RESOLVE_MARGIN:.0f}x that, so on this fit the two opt-ins buy")
+    print("     nothing measurable -- and the resolution table above says why it is")
+    print("     STRUCTURAL, not statistical: fit() resolves approx='auto', which tops up")
+    print("     the build-time choice, so all three arms run the SAME configuration.")
+    print("     These arms differ in what they PREDICT with, not in what they FIT with.")
+    print("     Fit to photometry ALONE and FeaturePrecomp is worth ~7x against a 1.23x")
+    print("     floor -- that gap was #1596 (fixed), and #1683 for the build-time form.")
+else:
+    print(
+        f"  -> resolved: excess {r_fast - 1.0:.2f} is more than {RESOLVE_MARGIN:.0f}x"
+        f" the control excess {r_aa - 1.0:.2f}."
+    )
+print(f"  fit() wall is ~{warm_f:.1f}s on any path — that is per-call JIT compile, not the fit.")
 
 # %% [markdown]
 # ## Posterior on the fast path
@@ -575,22 +717,35 @@ plt.show()
 # ## Measured times, together
 #
 # Two columns, because they answer different questions. **`fit() wall`** is the
-# single-galaxy interactive cost — dominated by the per-call JIT compile, which
-# is why exact and fast are closer here than the compute alone would suggest.
+# single-galaxy interactive cost, which carries the per-call JIT compile.
 # **`compiled step`** is the optimization once compiled: the marginal per-galaxy
-# compute a catalog pays after amortizing the compile (via `fit_batch`), and
-# where the look-up table earns its keep.
+# compute a catalog pays after amortizing the compile (via `fit_batch`), and the
+# only place an `approx=` choice can show up. Three rows, so the middle one
+# separates the two opt-ins instead of bundling them.
+#
+# Every ratio below is quoted against the A/A control, because a ratio without
+# its noise floor is not a measurement — see the note under the timing cell.
 
 # %%
 print(f"{'fit':<34}{'fit() wall':>13}{'compiled step':>15}")
 print("-" * 62)
 print(f"{'MAP, exact wave grid':<34}{warm_e:>10.2f} s{loop_e:>12.2f} s")
+print(f"{'MAP, WavePrecomp only':<34}{warm_w:>10.2f} s{loop_w:>12.2f} s")
 print(f"{'MAP, WavePrecomp+FeaturePrecomp':<34}{warm_f:>10.2f} s{loop_f:>12.2f} s")
+print(f"{'A/A control (exact, again)':<34}{'':>10}  {loop_aa:>12.2f} s")
+print(f"\nNoise floor (A/A, same model twice): {r_aa:.2f}x. Compiled-step ratio:")
+print(f"{loop_e / loop_f:.2f}x overall — {loop_e / loop_w:.2f}x from WavePrecomp, a further")
 print(
-    f"\nCompiled-step speedup: {loop_e / loop_f:.1f}x. The fit() wall (~{warm_f:.0f}s) is per-call JIT"
+    f"{loop_w / loop_f:.2f}x from FeaturePrecomp. "
+    + (
+        "None of these resolve against the control."
+        if not resolved
+        else "The overall ratio resolves against the control."
+    )
 )
+print(f"The fit() wall (~{warm_f:.1f}s) is per-call JIT")
 print("compile, not the fit — a catalog amortizes it once with fit_batch and pays only the")
-print("compiled step per galaxy. The FeaturePrecomp line grid is likewise a one-time build")
+print("compiled step per galaxy. The FeaturePrecomp nebular grid is likewise a one-time build")
 print(
     f"({model_fast.spec.n_free}-parameter model), reused across every fit that shares the model."
 )
@@ -608,15 +763,30 @@ print(
 #   absorption and mis-deblends [N II]) and should not be compared to a catalog.
 # - The **`(WavePrecomp, FeaturePrecomp)`** fast path turns each likelihood
 #   evaluation into a table look-up, reproducing the exact forward to sub-percent
-#   on the strong lines. Single-galaxy that is a steady few-fold speedup (measured
-#   above); the dramatic win is at catalog scale, batched over galaxies
-#   (`fit_batch`), where the exact wave-grid forward would be prohibitive.
-# - **The truth lands inside the 68% interval for five of the six reported
-#   parameters** (one just outside — exactly what a well-calibrated 68% credible
-#   interval should do), with stellar mass and SFR the tightest. Metallicity /
-#   dust / gas conditions are the broad, degenerate sector — the posterior
-#   *width* is the honest statement of that. More information (a full spectrum —
-#   notebook 06 — an auroral line, or the UV slope) narrows it, not a faster fit.
+#   on the strong lines. Its win at catalog scale is real and separate: batched
+#   over galaxies with `fit_batch`, the look-up is built once and shared.
+# - **On this particular fit it buys little or nothing — read the verdict line
+#   printed above, not this sentence.** Do not assume an `approx=` choice is
+#   helping, and do not trust a bare ratio: the cell quotes an A/A control (the
+#   same model timed twice) so a "speedup" that fails to clear the machine's own
+#   noise can be recognized as one. An observation carrying a line channel
+#   already keeps the nebular work off the per-gradient path, so the exact
+#   forward starts out fast and the lookups have little left to remove.
+# - The two opt-ins are **not one per data channel**. `FeaturePrecomp` caches the
+#   *nebular* calculation, not the line channel: with `neb_logU` and
+#   `neb_logZ_gas` free, a likelihood evaluation without it can re-run the Cue
+#   emulator. That is why the case it rescues is the counter-intuitive one — the
+#   same model fit to **photometry alone**, where it is worth roughly an order of
+#   magnitude. "I am not fitting lines" is not a reason to leave it off. That the
+#   photometry-only case is the *slower* one is a defect, tracked as issue #1596.
+# - **The truth lands inside the 68% interval for the reported parameters** —
+#   the coverage line printed above is the measurement, and on six parameters at
+#   68% nominal coverage both five and six are what a calibrated interval should
+#   give, so do not read a single miss as a failure (or a clean sweep as proof).
+#   Stellar mass and SFR are the tightest. Metallicity / dust / gas conditions
+#   are the broad, degenerate sector — the posterior *width* is the honest
+#   statement of that. More information (a full spectrum — notebook 06 — an
+#   auroral line, or the UV slope) narrows it, not a faster fit.
 # - Two residual systematics matter when fitting a *real* catalog: the nebular
 #   model floor (Cue reproduces FSPS's Cloudy to ~10%, ~30% for [S II]), and the
 #   fiber aperture (line fluxes are aperture-limited; photometry is total — apply

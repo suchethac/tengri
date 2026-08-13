@@ -1,8 +1,21 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Tests for mixed-precision forward model (float32 with float64 output).
+"""Mixed-precision arithmetic on a standalone prototype kernel.
 
-Validates that using forward_dtype="float32" gives results within
-acceptable accuracy of float64, with measurable memory and speed benefits.
+**What this file does NOT cover.** It never constructs a :class:`SEDModel` and never
+passes ``forward_dtype``. Every test below builds its own ``_make_kernel(..., dtype)``
+from synthetic SSP fixtures and exercises *that*. Its findings are about float32
+einsum/interpolation arithmetic in the abstract; they say nothing about the shipped
+forward model.
+
+That distinction was not academic. This docstring used to read "Validates that using
+forward_dtype='float32' gives results within acceptable accuracy of float64, with
+measurable memory and speed benefits", and on the strength of it nobody noticed that
+``forward_dtype`` had stopped casting anything in ``1e57d973d`` (2026-05-20). The
+knob is inert and its results are bit-identical to float64 (#1433).
+
+The kwarg itself is covered by
+``tests/regression/precision/test_forward_dtype_knob.py``. Pure float32 — the
+mechanism that does work — is covered across ``tests/regression/precision/``.
 """
 
 import pytest
@@ -384,19 +397,73 @@ class TestMixedPrecisionSpeedup:
         # float32 should be at least as fast (allow 30% margin)
         assert t_f32 < t_f64 * 1.3, f"f32 not faster: {t_f32 * 1e6:.1f}μs vs {t_f64 * 1e6:.1f}μs"
 
-    def test_f32_closure_arrays_are_f32(
+    def test_f32_kernel_actually_computes_in_f32(
         self,
         ssp_phot,
         ssp_lgmet,
         eff_waves_rest,
         dust_age_weights,
         ssp_ages_yr,
+        sfr_on_ssp,
     ):
-        """Closure arrays should be stored in float32 when dtype=float32."""
-        # Verify the dtype conversion actually happens
-        dt = jnp.float32
-        assert ssp_phot.astype(dt).dtype == jnp.float32
-        assert ssp_lgmet.astype(dt).dtype == jnp.float32
-        assert eff_waves_rest.astype(dt).dtype == jnp.float32
-        assert dust_age_weights.astype(dt).dtype == jnp.float32
-        assert ssp_ages_yr.astype(dt).dtype == jnp.float32
+        """A ``dtype="float32"`` kernel must hold float32 arrays where float64 held them.
+
+        Compares the two builds' jaxprs array by array. Passing ``dtype`` has to move
+        arrays out of float64; if it is ignored, the two jaxprs are identical and both
+        assertions below fail.
+
+        The previous version of this test asserted ``ssp_phot.astype(jnp.float32)
+        .dtype == jnp.float32``, five times, under the docstring "Verify the dtype
+        conversion actually happens". That asserts ``.astype`` works. It holds for
+        every possible kernel — including one that ignores ``dtype`` entirely, which
+        is exactly what shipped in the real forward model: ``forward_dtype`` stopped
+        casting at ``1e57d973d`` and no test noticed for two months (#1433).
+        """
+
+        def array_dtypes(dtype):
+            """Every array aval in the kernel's jaxpr, descending into jit sub-jaxprs."""
+            kernel = _make_kernel(
+                ssp_phot,
+                ssp_lgmet,
+                eff_waves_rest,
+                dust_age_weights,
+                1e-30,
+                ssp_ages_yr,
+                dtype,
+            )
+            found: list = []
+
+            def walk(jaxpr):
+                for var in list(jaxpr.constvars) + list(jaxpr.invars):
+                    aval = getattr(var, "aval", None)
+                    if aval is not None and getattr(aval, "ndim", 0) > 0:
+                        found.append(aval.dtype)
+                for eqn in jaxpr.eqns:
+                    for out in eqn.outvars:
+                        aval = getattr(out, "aval", None)
+                        if aval is not None and getattr(aval, "ndim", 0) > 0:
+                            found.append(aval.dtype)
+                    # @jax.jit wraps the body in a single equation; the dtypes of
+                    # interest are all inside it.
+                    for param in eqn.params.values():
+                        inner = getattr(param, "jaxpr", None)
+                        if inner is not None:
+                            walk(getattr(inner, "jaxpr", inner))
+
+            walk(jax.make_jaxpr(kernel)(sfr_on_ssp, -1.0, 0.5, 0.3, -0.7).jaxpr)
+            assert found, "kernel exposed no array avals, so this test proves nothing"
+            return found
+
+        f32_build = array_dtypes("float32")
+        f64_build = array_dtypes("float64")
+
+        n_f32 = sum(dt == jnp.float32 for dt in f32_build)
+        assert n_f32 > 0, (
+            "the dtype='float32' kernel holds no float32 array at all — `dtype` reached nothing"
+        )
+        # The kernel takes a float64 SFR vector and casts its result back to float64,
+        # so a couple of float64 arrays are expected at the boundary. What must not
+        # survive is the bulk: the SSP grid and the dust matrix.
+        assert sum(dt == jnp.float64 for dt in f32_build) < sum(
+            dt == jnp.float64 for dt in f64_build
+        ), "the float32 and float64 builds hold the same float64 arrays — `dtype` is inert"

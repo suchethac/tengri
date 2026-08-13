@@ -42,9 +42,12 @@ References
 
 import jax
 import jax.numpy as jnp
+import numpy as np
+from jax.scipy.special import logsumexp
 
 from tengri.utils.magnitudes import fnu_to_ab_mag, lnu_to_absolute_ab_mag
 from tengri.utils.physics_constants import C_AA, L_SUN, PC_CM
+from tengri.utils.scale import LN10, log10_magnitude, pow10
 
 # Re-export for convenience
 __all__ = [
@@ -186,6 +189,53 @@ def compute_mass_weighted_metallicity(
 
 # ── SED-based quantities ──────────────────────────────────────────
 
+#: log10 of the solar luminosity [dex re erg/s]. Folded into the bolometric
+#: reductions so the erg/s value is never materialized (see _trapz_to_lsun).
+LOG10_L_SUN: float = float(np.log10(L_SUN))
+
+
+def _trapz_to_lsun(integrand: jnp.ndarray, nu: jnp.ndarray) -> jnp.ndarray:
+    r"""``-∫ integrand dν`` expressed in :math:`L_\odot`, range-safe in float32.
+
+    .. math::
+
+        L = \frac{-\int L_\nu\,d\nu}{L_\odot}
+
+    where :math:`L_\nu` is the integrand [erg/s/Hz] and :math:`\nu` the frequency
+    grid [Hz]. Computing that literally forms the erg/s value first (~1e43 for a
+    1e10 Msun galaxy), which exceeds the float32 ceiling of 3.4e38 and returns
+    ``inf`` — even though the :math:`L_\odot` answer (~1e9) is perfectly
+    representable. Factoring the integrand by its peak and folding
+    :math:`1/L_\odot` into the same exponent keeps every intermediate in range
+    (issue #1206).
+
+    Parameters
+    ----------
+    integrand : array_like, shape (n_wave,)
+        Rest-frame :math:`L_\nu` [erg/s/Hz]; may be signed.
+    nu : array_like, shape (n_wave,)
+        Frequency grid [Hz], descending when wavelength ascends.
+
+    Returns
+    -------
+    ndarray, shape ()
+        The integral in :math:`L_\odot`. Exactly ``0.0`` for an all-zero
+        integrand.
+
+    Notes
+    -----
+    **JIT/grad/vmap-compatible**: yes. Equal to the naive form to ~1e-14 relative
+    in float64; finite in float32 whenever the :math:`L_\odot` result is.
+    """
+    # stop_gradient: pure factorization constant (#1436). The peak divides the
+    # integrand and multiplies back through pow10(log10(peak)), so its derivative
+    # contributions cancel analytically. Left free they are two autodiff paths that
+    # cancel in float64 but not float32, leaving an uncancelled term.
+    peak = jax.lax.stop_gradient(jnp.max(jnp.abs(integrand), initial=0.0))
+    peak = jnp.where(peak > 0, peak, jnp.ones_like(peak))
+    norm = -jnp.trapezoid(integrand / peak, nu)
+    return norm * pow10(jnp.log10(peak) - LOG10_L_SUN)
+
 
 def compute_bolometric_luminosity(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
     """Bolometric luminosity from the full SED.
@@ -210,9 +260,7 @@ def compute_bolometric_luminosity(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.nd
     float
         Bolometric luminosity in Lsun.
     """
-    nu = C_AA / wave
-    l_bol_erg = -jnp.trapezoid(sed, nu)
-    return l_bol_erg / L_SUN
+    return _trapz_to_lsun(sed, C_AA / wave)
 
 
 def compute_l_tir(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
@@ -232,11 +280,9 @@ def compute_l_tir(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
     float
         L_TIR in Lsun. Zero if no flux in the 8–1000 μm range.
     """
-    nu = C_AA / wave
     mask = (wave >= 8.0e4) & (wave <= 1.0e7)  # 8-1000 μm in Angstrom
     sed_ir = jnp.where(mask, sed, 0.0)
-    l_ir_erg = -jnp.trapezoid(sed_ir, nu)
-    return jnp.maximum(l_ir_erg, 0.0) / L_SUN
+    return jnp.maximum(_trapz_to_lsun(sed_ir, C_AA / wave), 0.0)
 
 
 def compute_l_dust_absorbed(
@@ -268,9 +314,8 @@ def compute_l_dust_absorbed(
     float
         Dust-absorbed luminosity in Lsun.
     """
-    nu = C_AA / wave
-    l_abs_erg = -jnp.trapezoid(sed_intrinsic - sed_attenuated, nu)
-    return jnp.maximum(l_abs_erg, 0.0) / L_SUN
+    absorbed = sed_intrinsic - sed_attenuated
+    return jnp.maximum(_trapz_to_lsun(absorbed, C_AA / wave), 0.0)
 
 
 def _mean_flux_in_band(sed, wave, lam_lo, lam_hi):
@@ -547,30 +592,95 @@ def compute_rest_uv_color(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
 # ── Luminosity-weighted quantities (need per-bin SED info) ────────
 
 
-def compute_per_bin_luminosity(
-    weights: jnp.ndarray, ssp_flux_at_z: jnp.ndarray, wave: jnp.ndarray
-) -> jnp.ndarray:
-    """Bolometric luminosity contributed by each SSP age bin.
+#: Dynamic range demanded of the per-bin sum before a luminosity-weighted mean
+#: is considered meaningful. A pure ratio, so it carries no units and survives
+#: any rescaling of the bins.
+_WEIGHT_SUM_REL_FLOOR = 1e-12
+
+
+def _emits_enough_to_weight_by(l_per_bin: jnp.ndarray, l_total: jnp.ndarray) -> jnp.ndarray:
+    """Is there enough light for ``sum(l * x) / sum(l)`` to mean anything?
+
+    Scale-free by construction: compares the sum against the largest single
+    bin, so it tests the *shape* of the distribution rather than its
+    magnitude.
+
+    This replaces a bare ``l_total > 1e-20``. That constant was chosen when
+    :func:`_per_bin_luminosity_relative` returned erg/s; the helper now divides
+    by the peak of ``ssp_flux_at_z`` and drops ``L_sun``, rescaling its output
+    by ~3.8e18, so the threshold stopped being anchored to anything the moment
+    the units moved under it. It kept passing because the live regime sits ~44
+    decades clear of it either way — the constant did not change, its meaning
+    did.
 
     Parameters
     ----------
-    weights : array, shape (n_age,)
-        CSP mass weights (Msun per bin).
-    ssp_flux_at_z : array, shape (n_age, n_wave)
-        Metallicity-interpolated SSP flux (Lsun/Hz/Msun).
-    wave : array, shape (n_wave,)
-        Wavelength in Angstrom.
+    l_per_bin : array_like, shape (n_age,)
+        Per-age-bin luminosity in any common units.
+    l_total : array_like, scalar
+        ``sum(l_per_bin)``, passed in because both callers already have it.
 
     Returns
     -------
-    array, shape (n_age,)
-        L_bol per age bin in erg/s.
+    ndarray, shape (), bool
+        True when a weighted mean is meaningful.
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe**: yes. Boolean output, so it carries no gradient; the
+    callers pair it with a where-dummy denominator to keep theirs finite.
+    """
+    scale = jnp.max(jnp.abs(l_per_bin), initial=0.0)
+    return l_total > _WEIGHT_SUM_REL_FLOOR * scale
+
+
+def _per_bin_luminosity_relative(
+    weights: jnp.ndarray, ssp_flux_at_z: jnp.ndarray, wave: jnp.ndarray
+) -> jnp.ndarray:
+    """Per-age-bin bolometric luminosity up to one common positive factor.
+
+    The erg/s spelling this replaces multiplied by ``L_sun`` *inside* the
+    vmapped body, forming ~1e41 per bin — above the float32 ceiling. Every
+    consumer forms a luminosity-weighted *average* (``sum(l * x) / sum(l)``),
+    where any common positive factor cancels exactly, so that value is never
+    needed. Dropping the ``L_sun`` conversion and the overall peak is therefore
+    behavior-preserving for the ratios and removes the overflow (issue #1206).
+
+    Parameters
+    ----------
+    weights : array_like, shape (n_age,)
+        CSP mass weights [Msun per bin].
+    ssp_flux_at_z : array_like, shape (n_age, n_wave)
+        Metallicity-interpolated SSP flux [Lsun/Hz/Msun].
+    wave : array_like, shape (n_wave,)
+        Wavelength grid [Angstrom].
+
+    Returns
+    -------
+    ndarray, shape (n_age,)
+        Per-bin luminosity in arbitrary (shared) units — ratios only.
+
+    Notes
+    -----
+    **JIT/grad/vmap-compatible**: yes.
     """
     nu = C_AA / wave
+    # stop_gradient: factorization constant (#1436). Unlike the other peak-factored
+    # reductions this one never multiplies the peak back — but both consumers
+    # (luminosity-weighted age and metallicity, the only two, and this helper is
+    # private) divide by ``sum(l_per_bin)``, so ``(sum L_i a_i / p) / (sum L_j / p)``
+    # is exactly p-independent and the peak's derivative is analytically zero.
+    # That is what the "ratios only" contract above buys.
+    #
+    # The one regime where p would survive is the degenerate branch in those callers
+    # (see ``_emits_enough_to_weight_by``). It cannot arise for a real galaxy — the
+    # sum runs many decades above the largest bin's rounding — and that branch returns
+    # NaN, which has no meaningful derivative either way.
+    peak = jax.lax.stop_gradient(jnp.max(jnp.abs(ssp_flux_at_z), initial=0.0))
+    peak = jnp.where(peak > 0, peak, jnp.ones_like(peak))
 
     def _lbol_one_bin(w_i, flux_i):
-        """Compute bolometric luminosity for a single SSP age bin."""
-        return -jnp.trapezoid(w_i * flux_i * L_SUN, nu)
+        return -jnp.trapezoid(w_i * (flux_i / peak), nu)
 
     return jax.vmap(_lbol_one_bin)(weights, ssp_flux_at_z)
 
@@ -603,12 +713,13 @@ def compute_luminosity_weighted_age(
     float
         Luminosity-weighted age in Gyr.
     """
-    l_per_bin = compute_per_bin_luminosity(weights, ssp_flux_at_z, wave)
+    l_per_bin = _per_bin_luminosity_relative(weights, ssp_flux_at_z, wave)
     l_total = jnp.sum(l_per_bin)
+    live = _emits_enough_to_weight_by(l_per_bin, l_total)
     # NaN, not 0.0, when the population emits nothing to weight by (#1404).
     return jnp.where(
-        l_total > 1e-20,
-        jnp.sum(l_per_bin * ssp_ages_yr) / jnp.maximum(l_total, 1e-30) / 1e9,
+        live,
+        jnp.sum(l_per_bin * ssp_ages_yr) / jnp.where(live, l_total, 1.0) / 1e9,
         jnp.nan,
     )
 
@@ -647,7 +758,7 @@ def compute_luminosity_weighted_metallicity(
     if log_z_initial is None or log_z_final is None:
         return log_z
 
-    l_per_bin = compute_per_bin_luminosity(weights, ssp_flux_at_z, wave)
+    l_per_bin = _per_bin_luminosity_relative(weights, ssp_flux_at_z, wave)
     l_total = jnp.sum(l_per_bin)
 
     t_max = jnp.max(ssp_ages_yr)
@@ -655,9 +766,10 @@ def compute_luminosity_weighted_metallicity(
     log_z_per_bin = log_z_final + (log_z_initial - log_z_final) * t_frac
     z_linear = 10.0**log_z_per_bin
 
+    live = _emits_enough_to_weight_by(l_per_bin, l_total)
     # NaN, not 0.0, when the population emits nothing to weight by (#1404).
     mean_z = jnp.where(
-        l_total > 1e-20, jnp.sum(l_per_bin * z_linear) / jnp.maximum(l_total, 1e-30), jnp.nan
+        live, jnp.sum(l_per_bin * z_linear) / jnp.where(live, l_total, 1.0), jnp.nan
     )
     return jnp.log10(jnp.maximum(mean_z, 1e-30))
 
@@ -678,7 +790,10 @@ def extract_line_luminosity(
     line_waves : array, shape (n_lines,)
         Rest-frame line wavelengths from nebular model.
     line_lums : array, shape (n_lines,)
-        Line luminosities in Lsun.
+        Line luminosities. **Unit-preserving**: this function indexes and sums,
+        so the output carries whatever unit the input did. Its caller
+        :func:`~tengri.forward.component_factory.state_to_emission_lines`
+        passes ``state.derived["line_lums"]``, which is [erg/s].
     target_waves : tuple of float
         Target wavelength(s) in Angstrom. For doublets, pass both
         components (e.g., ``(3727.12, 3730.12)`` for [OII]).
@@ -686,8 +801,16 @@ def extract_line_luminosity(
     Returns
     -------
     float
-        Total line luminosity in Lsun. Returns NaN if ``line_waves``
-        is empty (no nebular model).
+        Total line luminosity, in the same unit as ``line_lums``. Returns NaN
+        if ``line_waves`` is empty (no nebular model).
+
+    Notes
+    -----
+    This said "Lsun" on both sides until #1559, at which point the only caller
+    had been passing erg/s for some time. Nothing computed the wrong answer —
+    the function never converts — but the docstring was evidence for the belief
+    that the published catalog was in Lsun, which is how three backends came to
+    publish it that way.
     """
     if line_waves.shape[0] == 0:
         return jnp.array(jnp.nan)
@@ -702,6 +825,65 @@ def extract_line_luminosity(
         total = total + _lookup_one(tw)
 
     return total
+
+
+def extract_log_line_luminosity(
+    line_waves: jnp.ndarray, log_line_lums: jnp.ndarray, target_waves: tuple[float, ...]
+) -> jnp.ndarray:
+    r"""``log10`` of :func:`extract_line_luminosity`, without forming the linear value.
+
+    The float32-safe companion. Line luminosities are ~1e40-1e42 erg/s, past
+    float32's 3.4e38 ceiling, so the linear extraction is ``inf`` there and a
+    ``log10`` taken afterwards inherits it — a log companion computed *after* the
+    overflow is a no-op (#1534). This reads the upstream ``log_line_lums`` instead
+    and never leaves the log domain.
+
+    Parameters
+    ----------
+    line_waves : array, shape (n_lines,)
+        Rest-frame line wavelengths [Angstrom].
+    log_line_lums : array, shape (n_lines,)
+        ``log10`` line luminosities [dex re erg/s]. **Unit-preserving in the same
+        sense as the linear form**: the output is ``log10`` of whatever unit the
+        input is the ``log10`` of.
+    target_waves : tuple of float
+        Target wavelength(s) [Angstrom]. For doublets, pass both components.
+
+    Returns
+    -------
+    ndarray, scalar
+        ``log10`` of the summed luminosity [dex]. NaN if ``line_waves`` is empty,
+        matching the linear form.
+
+    Notes
+    -----
+    **JIT-compatible**: yes. **Gradient-safe**: yes — ``logsumexp`` is smooth, and a
+    component that is exactly zero enters as ``-inf`` and drops out of the sum
+    without producing NaN.
+
+    .. math::
+
+        \log_{10} \sum_k L_k = \frac{1}{\ln 10}\,
+            \mathrm{logsumexp}_k\!\left(\ln 10 \cdot \log_{10} L_k\right)
+
+    **The sum is the whole difficulty.** Doublets ([OII] 3727+3730, and the
+    ``key_lines`` entries that pair components) sum their matched entries, and a
+    sum is not a log-domain operation — taking the max, or adding the logs, would
+    both be wrong. ``logsumexp`` is exact for it and is the same primitive
+    ``_derive_cue_params_from_ssp`` uses for ``total_logqion``.
+
+    For a single-wavelength target the sum has one term and this reduces to the
+    stored value exactly, so the common case costs nothing in accuracy.
+    """
+    if line_waves.shape[0] == 0:
+        return jnp.array(jnp.nan)
+
+    def _lookup_one(target):
+        idx = jnp.argmin(jnp.abs(line_waves - target))
+        return log_line_lums[idx]
+
+    stacked = jnp.stack([_lookup_one(tw) for tw in target_waves])
+    return logsumexp(LN10 * stacked) / LN10
 
 
 # ── Radio quantities (empirical scaling relations) ────────────────
@@ -885,6 +1067,111 @@ def compute_l_x_xrb(sfr: jnp.ndarray, stellar_mass: jnp.ndarray) -> jnp.ndarray:
     l_hmxb = 2.6e39 * sfr
     l_lmxb = 9.05e28 * stellar_mass
     return l_hmxb + l_lmxb
+
+
+#: ``log10`` of the Lehmer+ XRB coefficients, as Python floats. Kept pre-logged
+#: because ``2.6e39`` is past float32's ceiling: any expression that materializes it
+#: in the working dtype — including ``jnp.log10(2.6e39)`` — is ``inf`` before the log
+#: is applied. Computed in numpy (float64) at import, read as a scalar thereafter.
+_LOG10_HMXB_COEFF: float = float(np.log10(2.6e39))
+_LOG10_LMXB_COEFF: float = float(np.log10(9.05e28))
+
+
+def compute_log_l_x_xrb(sfr: jnp.ndarray, log_stellar_mass: jnp.ndarray) -> jnp.ndarray:
+    r"""``log10`` of :func:`compute_l_x_xrb`, without forming the linear value.
+
+    The float32-safe companion. The HMXB coefficient alone is
+    :math:`2.6\times10^{39}`, past float32's 3.4e38 ceiling, so *the first term
+    overflows before it is even multiplied by the SFR* — the linear form cannot be
+    evaluated in float32 at any star formation rate, including zero.
+
+    Parameters
+    ----------
+    sfr : array_like
+        Star formation rate [Msun/yr].
+    log_stellar_mass : array_like
+        ``log10`` stellar mass [dex re Msun]. Taken in log because that is how the
+        stellar component publishes it (``log_mstar``); the linear form is ~1e10
+        and representable, but round-tripping through it is pointless.
+
+    Returns
+    -------
+    ndarray
+        ``log10(L_X,XRB / (erg/s))`` [dex].
+
+    Notes
+    -----
+    **JIT-compatible**: yes. **Gradient-safe**: yes — an exactly-zero SFR enters as
+    ``-inf`` and drops out of the sum without producing NaN.
+
+    .. math::
+
+        \log_{10} L_{X,\rm XRB} = \log_{10}\!\left(
+            10^{\,39.415 + \log_{10}\rm SFR} + 10^{\,28.957 + \log_{10}M_\star}\right)
+
+    evaluated as a base-10 ``logsumexp``. The two terms are the HMXB (SFR-tracking)
+    and LMXB (mass-tracking) populations of Lehmer et al. (2010, 2016); they differ
+    by ~10 decades, so the sum is dominated by one or the other and a naive
+    ``max`` would be close but not equal — ``logsumexp`` is exact.
+
+    References
+    ----------
+    .. [1] Lehmer, B. D. et al. "The 2 Ms Chandra Deep Field-North Survey and the
+       740 ks Extended Chandra Deep Field-South Survey: Improved Point-Source
+       Catalogs." 2010, ApJ, 724, 559. :doi:`10.1088/0004-637X/724/1/559`
+    """
+    log_sfr = log10_magnitude(jnp.asarray(sfr))
+    # The COEFFICIENTS are pre-logged as Python floats. Writing `jnp.log10(2.6e39)`
+    # instead puts 2.6e39 into a float32 array first, where it is already `inf` —
+    # the log is taken of infinity and the whole companion returns `inf` on inputs
+    # that are perfectly representable. Caught by this module's own float32 test.
+    log_hmxb = _LOG10_HMXB_COEFF + log_sfr
+    log_lmxb = _LOG10_LMXB_COEFF + jnp.asarray(log_stellar_mass)
+    stacked = jnp.stack(jnp.broadcast_arrays(log_hmxb, log_lmxb))
+    return logsumexp(LN10 * stacked, axis=0) / LN10
+
+
+def compute_log_l_x_agn(log_l_bol_agn_erg: jnp.ndarray) -> jnp.ndarray:
+    r"""``log10`` of :func:`compute_l_x_agn`, without forming the linear value.
+
+    Parameters
+    ----------
+    log_l_bol_agn_erg : array_like
+        ``log10`` AGN bolometric luminosity [dex re erg/s].
+
+    Returns
+    -------
+    ndarray
+        ``log10(L_X,AGN / (erg/s))`` [dex].
+
+    Notes
+    -----
+    **JIT-compatible**: yes.
+
+    The bolometric correction is *already* a function of the log luminosity —
+    ``k_bol = a[1 + (log10(L_bol/Lsun)/b)^c]`` — so the linear form takes a log,
+    applies the correction, and then divides in linear space. This one stays in
+    log throughout:
+
+    .. math::
+
+        \log_{10} L_{X,\rm AGN} = \log_{10} L_{\rm bol} - \log_{10} k_{\rm bol}
+
+    Identical arithmetic on the correction itself, so it tracks
+    :func:`compute_l_x_agn` to round-off in float64 and is finite in float32 where
+    the linear form is ``inf``.
+
+    References
+    ----------
+    .. [1] Duras, F. et al. "Universal bolometric corrections for active galactic
+       nuclei over seven luminosity decades." 2020, A&A, 636, A73.
+       :doi:`10.1051/0004-6361/201936817`
+    """
+    log_l_bol = jnp.asarray(log_l_bol_agn_erg)
+    log_l_sol = log_l_bol - LOG10_L_SUN
+    a, b, c = 15.33, 11.48, 16.20
+    k_bol = a * (1.0 + (log_l_sol / b) ** c)
+    return log_l_bol - jnp.log10(jnp.maximum(k_bol, 1.0))
 
 
 def compute_l_x_agn(l_bol_agn_erg: jnp.ndarray) -> jnp.ndarray:

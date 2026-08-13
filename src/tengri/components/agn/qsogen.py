@@ -93,6 +93,7 @@ References
 
 """
 
+import math
 from pathlib import Path
 
 import jax
@@ -109,6 +110,7 @@ from tengri.utils.physics_constants import (
     C_CGS as _C_LIGHT,
     L_SUN as _LSUN_ERG,
 )
+from tengri.utils.scale import representable_exponent
 
 # Normalization wavelength
 _LAMBDA_NORM = 5500.0  # Angstrom
@@ -354,12 +356,16 @@ def _hot_dust_blackbody(
     #   bb(T, wav) = wav^{-3} / (exp(hc/kT*wav) - 1)
     hc_over_k = 1.43877735e8  # h*c/k_B in Kelvin*Angstrom
     x = hc_over_k / (tbb * jnp.maximum(wavelength, 1.0))
-    bb_fnu = wavelength ** (-3.0) / (jnp.exp(jnp.clip(x, 0.0, 500.0)) - 1.0)
+    bb_fnu = wavelength ** (-3.0) / (
+        jnp.exp(jnp.clip(x, 0.0, representable_exponent(500.0, base=math.e))) - 1.0
+    )
 
     # Normalize: bbnorm is the ratio f_bb(2μm) / f_cont(2μm) (Temple+2021).
     # Evaluate the BB and continuum at the 2μm anchor to get the relative scale.
     x_anchor = hc_over_k / (tbb * _LAMBDA_BB_ANCHOR)
-    bb_anchor = _LAMBDA_BB_ANCHOR ** (-3.0) / (jnp.exp(jnp.clip(x_anchor, 0.0, 500.0)) - 1.0)
+    bb_anchor = _LAMBDA_BB_ANCHOR ** (-3.0) / (
+        jnp.exp(jnp.clip(x_anchor, 0.0, representable_exponent(500.0, base=math.e))) - 1.0
+    )
     cont_at_anchor = jnp.interp(
         jnp.array([_LAMBDA_BB_ANCHOR]), wavelength, continuum_flam, left=0.0, right=0.0
     )[0]
@@ -409,7 +415,7 @@ def _balmer_continuum(
     # bb(T, wav) = wav^{-3} / (exp(hc/kT*wav) - 1)
     hc_over_k = 1.43877735e8  # h*c/k_B in Kelvin * Angstrom
     x = hc_over_k / (tbc * jnp.maximum(wavelength, 1.0))
-    x_clip = jnp.clip(x, 0.0, 500.0)
+    x_clip = jnp.clip(x, 0.0, representable_exponent(500.0, base=math.e))
     b_nu_wav = wavelength ** (-3.0) / (jnp.exp(x_clip) - 1.0)
 
     # Optical depth: sigma_bf(nu) ~ nu^{-3} (Osterbrock & Ferland, AGN^2 Eq. 2.4), so
@@ -430,7 +436,9 @@ def _balmer_continuum(
 
     # BC value at wnorm for normalization
     x_norm = hc_over_k / (tbc * wnorm)
-    b_norm = wnorm ** (-3.0) / (jnp.exp(jnp.clip(x_norm, 0.0, 500.0)) - 1.0)
+    b_norm = wnorm ** (-3.0) / (
+        jnp.exp(jnp.clip(x_norm, 0.0, representable_exponent(500.0, base=math.e))) - 1.0
+    )
     tau_norm = taube * (wnorm / wavbe) ** 3
     bc_at_3000 = b_norm * (1.0 - jnp.exp(-jnp.clip(tau_norm, 0.0, 50.0)))
     bc_at_3000 = jnp.maximum(bc_at_3000, 1e-60)

@@ -42,6 +42,7 @@ import jax.numpy as jnp
 from jax.flatten_util import ravel_pytree
 
 from tengri.components.stellar.sfh.gp_sfh import compute_sqrt_power_drw
+from tengri.inference.likelihoods.gaussian import standardized_residual
 from tengri.utils.grid import make_log_age_grid
 
 
@@ -389,7 +390,7 @@ def build_standardized_loss(
             xi = unravel_fn(xi_flat)
             predicted = smodel.predict(xi, data_type=data_type, wave_obs=wave_obs)
 
-            chi2 = jnp.sum(((data - predicted) / noise) ** 2)
+            chi2 = jnp.sum(standardized_residual(data, predicted, noise) ** 2)
             prior = jnp.sum(xi_flat**2)
 
             return 0.5 * chi2 + 0.5 * prior
@@ -473,10 +474,12 @@ def build_hierarchical_loss(
                 params_i = smodel.xi_to_params(xi_i)
                 f_cal = params_i.get("noise_frac_cal", 0.0)
                 sigma_eff = compute_effective_noise(all_noise[i], predicted, f_cal)
-                total_lh += jnp.sum(((all_data[i] - predicted) / sigma_eff) ** 2)
+                total_lh += jnp.sum(standardized_residual(all_data[i], predicted, sigma_eff) ** 2)
                 total_lh += 2.0 * jnp.sum(jnp.log(sigma_eff))
             else:
-                total_lh += jnp.sum(((all_data[i] - predicted) / all_noise[i]) ** 2)
+                total_lh += jnp.sum(
+                    standardized_residual(all_data[i], predicted, all_noise[i]) ** 2
+                )
 
         prior = jnp.sum(xi_flat**2)
         return 0.5 * total_lh + 0.5 * prior

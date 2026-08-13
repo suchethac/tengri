@@ -100,8 +100,16 @@ def test_an_explicit_config_is_used_verbatim():
 
 
 def test_a_model_already_carrying_the_lut_is_not_rewrapped():
-    """Build-time ``approx=WavePrecomp()`` must not be cloned again."""
-    fitter = _fitter(lambda **kw: _StubModel(wave_precomp=True))
+    """Build-time ``approx=WavePrecomp()`` must not be cloned again for nothing.
+
+    ``features_tabulate=False`` is load-bearing, and is what scopes this test:
+    since #1683 the resolver *does* clone a model carrying the wave LUT when it
+    can append ``FeaturePrecomp``. What must not happen is a clone that buys
+    nothing — a backend with no fast path is left exactly as it was built. The
+    tabulating case is pinned in
+    ``test_issue_1683_build_time_approx_feature_topup.py``.
+    """
+    fitter = _fitter(lambda **kw: _StubModel(wave_precomp=True, features_tabulate=False))
     model = fitter.model_factory(psd_sigma=1.0, psd_tau_myr=50.0)
     assert not model.via_with_approx
 
@@ -145,7 +153,8 @@ def test_catalog_approx_none_keeps_the_exact_path():
 
 
 def test_catalog_model_already_carrying_the_lut_is_not_rewrapped():
-    fitter = _catalog_fitter(_StubModel(wave_precomp=True))
+    """The catalog mirror of the same scope: no clone that buys nothing (#1683)."""
+    fitter = _catalog_fitter(_StubModel(wave_precomp=True, features_tabulate=False))
     assert not fitter.model.via_with_approx
 
 

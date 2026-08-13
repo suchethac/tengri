@@ -8,6 +8,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Removed
 
+- The `stellar` build group (#1720). Metallicity is now configured through
+  `met`, parallel to `sfh`: `stellar={'met_mode': 'table'}` becomes
+  `met={'type': 'table'}`, and `stellar={'met_logzsol': …}` becomes
+  `met={'logzsol': …}`. **Breaking, with no alias** — a build-group key is
+  parsed rather than imported, so accepting both spellings would mean carrying
+  two grammars through `parse_groups`, `to_groups()`, the provenance tags and
+  every wildcard sweep, which is the duplication the change removes. `stellar=`
+  raises carrying the translation, because `difflib` will not suggest `met` for
+  `stellar` — they share no prefix. Two anomalies stacked in the old form:
+  every other group selects its variant with `type` while `stellar` alone used
+  `met_mode`, and the group was named for the component rather than for what it
+  configured — so `met={'type': 'table'}`, the spelling both conventions imply,
+  was the one form the grammar rejected. `tengri.list_metallicity_modes()` is
+  the live menu; the before/after table is in
+  `docs/dev/api_migration_v0.x.md`.
 - Toy AGN registered models `"simple"` (`simple_agn`) and `"standard"`
   (`standard_agn`). Both were modified-blackbody-based demo models flagged
   with once-per-process warnings; the science path remains the

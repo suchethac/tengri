@@ -1239,7 +1239,12 @@ class TestKennicutt1998:
             gas_logz=0.0,
             gas_logqion=52.8,
         )
-        ha_lum = self._find_ha(wave, lum)
+        from tengri.utils.physics_constants import L_SUN_CUE
+
+        # The backend returns [Lsun] (#1559); Kennicutt's calibration is erg/s.
+        # ``L_SUN_CUE``, not IAU — this is Cue's own catalog, and the two
+        # conventions differ by 0.287%.
+        ha_lum = self._find_ha(wave, lum) * L_SUN_CUE
         assert ha_lum > 0, "L(Hα) must be positive"
         np.testing.assert_allclose(
             ha_lum,

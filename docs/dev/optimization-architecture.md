@@ -305,12 +305,19 @@ SEDModel.build(..., approx=WavePrecomp(n_z=100, z_min=0.001, z_max=3.0))
 Interpolated to current z at inference time (<0.01% error at 100 points,
 triweight kernel).
 
-### Mixed precision
+### Mixed precision — withdrawn, the knob is retired (#1433)
 
 ```python
-model = Model(spec, ssp, forward_dtype="float32")
+model = SEDModel.build(..., forward_dtype="float32")   # does nothing
 ```
-Halves memory, ~1.5x speedup, <0.01% error vs float64.
+
+This section claimed "halves memory, ~1.5x speedup, <0.01% error vs float64".
+`forward_dtype` casts nothing — its casts were deleted with `forward/_kernels/`
+in `1e57d973d`, and results are bit-identical to float64 on both the exact and
+the `WavePrecomp` path. It does still enter `compile_signature`, so setting it
+buys a second compile of an identical kernel.
+
+For float32, use pure float32: run inside `jax.enable_x64(False)`.
 
 ### Persistent XLA cache
 

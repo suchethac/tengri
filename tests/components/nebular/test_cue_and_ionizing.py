@@ -282,18 +282,24 @@ class TestCueBackend:
             "Different logU should give different total line luminosity"
         )
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "Cue neural network produces NaN autodiff gradients w.r.t. gas_logu. "
-            "The Cue NN architecture includes operations that break JAX's gradient "
-            "tape (likely a custom activation or internal array indexing that produces "
-            "NaN in the backward pass). FD gives a finite value (~6e36). "
-            "Fix requires auditing the Cue NN implementation for non-differentiable ops."
-        ),
-    )
     def test_gradient_through_cue(self, backend):
-        """Cue predictions should be differentiable w.r.t. gas params."""
+        """Cue predictions should be differentiable w.r.t. gas params.
+
+        This was ``xfail(strict=True)`` — "the Cue NN architecture includes
+        operations that break JAX's gradient tape ... FD gives a finite value
+        (~6e36)". That diagnosis was wrong, and the ``6e36`` was the clue: it is
+        an **erg/s-magnitude** number. Nothing in the network is
+        non-differentiable; the backward pass was simply running at a magnitude
+        where it lost precision, because the backend multiplied its [Lsun]
+        output by ``L_sun`` before returning.
+
+        #1559 moved that conversion to ``NebularSEDComponent``, so this method
+        again returns [Lsun] (~1e3 here) and the gradient matches finite
+        differences. The identical thing happened when the multiply was first
+        removed in 2026-05-17 and the xfail was deleted then too — it came back
+        when the multiply did. If it returns a third time, look at the units
+        before auditing the network.
+        """
 
         def loss(logu):
             _, lum = backend.predict_nebular_line_luminosities(
@@ -472,8 +478,13 @@ class TestKennicutt1998Halpha:
             gas_logz=0.0,
             gas_logqion=52.8,
         )
+        from tengri.utils.physics_constants import L_SUN_CUE
+
         ha_idx = int(jnp.argmin(jnp.abs(wave - 6562.8)))
-        ha_lum = float(lum[ha_idx])
+        # The backend returns [Lsun] (#1559); Kennicutt's calibration is in
+        # erg/s, so the conversion belongs here. ``L_SUN_CUE``, not the IAU
+        # value: this is Cue's own catalog, and the two differ by 0.287%.
+        ha_lum = float(lum[ha_idx]) * L_SUN_CUE
 
         assert ha_lum > 0, "Hα luminosity must be positive"
         assert 6.3e40 < ha_lum < 3.78e41, (

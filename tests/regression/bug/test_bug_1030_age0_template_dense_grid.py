@@ -66,7 +66,7 @@ def _old_snorm_model(ssp):
             "log_total_mass": Fixed(10.0),
             "*": FIXED,
         },
-        stellar={"met_logzsol": Fixed(0.0), "*": FIXED},
+        met={"logzsol": Fixed(0.0), "*": FIXED},
         dust={
             "type": "two_component",
             "tau_bc": Fixed(0.0),

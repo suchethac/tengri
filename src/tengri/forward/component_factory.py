@@ -124,8 +124,12 @@ def _resolve_registry_component(
     Raises
     ------
     ValueError
-        If ``type_str`` (after aliasing) is not found in ``_REGISTRY``.
-        The error message lists available names for that domain.
+        If ``type_str`` (after aliasing) is not found in ``_REGISTRY``. The
+        error message lists every registered name, **not** only those valid for
+        ``domain`` — so a mistyped ``dust_emission`` type is answered with
+        ``igm``, ``radio`` and ``xray`` among the suggestions. Narrowing it
+        needs a domain-to-base-class map covering all seven domains; tracked
+        separately rather than guessed at here.
 
     Notes
     -----
@@ -729,9 +733,10 @@ def state_to_sed_quantities(state: Any):
     legacy NamedTuple convention).
     """
     from tengri.forward.prediction import SEDQuantities
-    from tengri.utils.physics_constants import C_AA, L_SUN
+    from tengri.utils.physics_constants import L_SUN
     from tengri.utils.sed_quantities import (
         compute_balmer_break,
+        compute_bolometric_luminosity,
         compute_dn4000,
         compute_fuv_flux,
         compute_irx,
@@ -745,13 +750,13 @@ def state_to_sed_quantities(state: Any):
 
     sed = state.sed_intrinsic
     wave = state.wave
-    nu = C_AA / wave
 
-    # Bolometric luminosity in Lsun. Wave is ascending, so nu is
-    # descending; ``trapezoid(L_nu, nu)`` returns a negative signed
-    # area. ``abs(...)`` recovers the positive luminosity.
-    l_bol_erg = jnp.abs(jnp.trapezoid(sed, nu))
-    l_bol = l_bol_erg / L_SUN
+    # Bolometric luminosity in Lsun. Wave is ascending, so nu is descending and
+    # the signed area is negative; ``abs(...)`` recovers the positive luminosity.
+    # Delegating to the canonical reduction keeps this bit-identical to the
+    # ``l_bol`` property and folds 1/L_sun into the integral, so the ~1e43 erg/s
+    # value is never formed (float32-safe, #1206).
+    l_bol = jnp.abs(compute_bolometric_luminosity(sed, wave))
 
     # Dust-absorbed luminosity from the orchestrator's energy-balance
     # bookkeeping — exact match for legacy ``compute_l_dust_absorbed``.
@@ -1049,7 +1054,16 @@ def state_to_emission_lines(state: Any):
     -------
     EmissionLines
         Headline scalars (``halpha``, ``hbeta``, ``oiii_5007``, ...) plus
-        the full ``all_waves`` / ``all_lums`` arrays — all in Lsun.
+        the full ``all_waves`` / ``all_lums`` arrays — all in **[erg/s]**,
+        passed through unconverted from ``state.derived["line_lums"]``, whose
+        ``DerivedKey`` declares that unit and which
+        :meth:`~tengri.forward.sed_model.SEDModel.predict_line_fluxes` consumes
+        as such.
+
+        This said "Lsun" until #1559. It was wrong then too — the bridge has
+        never converted anything — and it was the documentation three backends
+        were written against, which is how they came to publish [Lsun] into an
+        [erg/s] key and emit line fluxes a factor 3.839e33 too faint.
 
     Notes
     -----

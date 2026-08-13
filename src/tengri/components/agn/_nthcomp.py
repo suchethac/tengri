@@ -248,7 +248,7 @@ def _nthcomp_lnu_interp_impl(
     return jnp.maximum(lnu, 0.0)
 
 
-@jax.custom_vjp
+@jax.custom_jvp
 def _nthcomp_interp(
     table: NthcompTable,
     nu: jnp.ndarray,
@@ -292,10 +292,13 @@ def _nthcomp_interp(
     varying features (Wien seed-BB tail), then exponentiated. Extrapolation
     beyond grid bounds is clamped to preserve monotonicity at boundaries.
 
-    **Custom VJP**: A finite-difference approximation is used for the gamma
-    gradient to work around JAX autodiff limitations with composed operations
-    involving ``jnp.interp`` and large output scalars. See _nthcomp_lnu_interp_bwd
-    (lines 234–286) for implementation details.
+    **Custom JVP**: A finite-difference approximation supplies the ``gamma``
+    derivative, because differentiating the composed ``jnp.interp`` chain
+    directly returns NaN. ``nu``, ``kTe_keV`` and ``kTbb_keV`` are held fixed
+    during fitting and carry exactly zero derivative. See
+    :func:`_nthcomp_interp_jvp` for the rule, and for why it is a ``custom_jvp``
+    rather than the ``custom_vjp`` this used to be (#1206): a ``custom_vjp`` is
+    opaque to forward mode, which takes out geoVI.
 
     References
     ----------
@@ -310,90 +313,85 @@ def _nthcomp_interp(
     return _nthcomp_lnu_interp_impl(nu, gamma, kTe_keV, kTbb_keV, table)
 
 
-def _nthcomp_lnu_interp_fwd(
-    table: NthcompTable,
-    nu: jnp.ndarray,
-    gamma: jnp.ndarray,
-    kTe_keV: jnp.ndarray,
-    kTbb_keV: jnp.ndarray,
-) -> tuple[jnp.ndarray, tuple]:
-    """Forward pass for custom VJP of nthcomp_lnu_interp.
+@_nthcomp_interp.defjvp
+def _nthcomp_interp_jvp(primals: tuple, tangents: tuple) -> tuple:
+    """Forward-mode rule: a finite-difference derivative in ``gamma`` only.
 
-    Computes the function value and saves residuals for backward differentiation.
+    Parameters
+    ----------
+    primals : tuple
+        ``(table, nu, gamma, kTe_keV, kTbb_keV)`` -- see :func:`_nthcomp_interp`.
+    tangents : tuple
+        Tangents of those same five operands. Only the ``gamma`` tangent
+        contributes; the others are discarded, matching the reverse rule this
+        replaces. ``table`` is a library, never a fit parameter, so its tangent
+        is structurally zero -- the forward-mode counterpart of the zero
+        cotangent the reverse rule used to return for it.
+
+    Returns
+    -------
+    tuple
+        ``(primal_out, tangent_out)``, both ``ndarray, shape (n_nu,)``
+        [dimensionless -- a normalized spectral shape].
+
+    Notes
+    -----
+    **JIT-compatible**: yes.
+
+    **A ``custom_jvp``, not a ``custom_vjp`` (#1206).** A ``custom_vjp`` is
+    *opaque to forward mode* -- ``jax.jvp`` raises ``TypeError: can't apply
+    forward-mode autodiff (jvp) to a custom_vjp function`` -- which takes out
+    geoVI, whose metric is built with forward mode, for every AGN model reaching
+    this kernel. A ``custom_jvp`` serves forward mode directly and reverse mode
+    by transposition; the transpose of ``fd_grad * d_gamma`` is
+    ``sum(g * fd_grad)``, exactly the reverse pass it replaces.
+
+    The overflow-safe rescaling the reverse rule performed on ``g_out`` is not
+    needed here: forward mode never forms the cotangent product, so there is no
+    ``sum(g_out * fd_grad)`` to overflow.
     """
-    # Compute the actual output via the implementation function
-    result = _nthcomp_lnu_interp_impl(nu, gamma, kTe_keV, kTbb_keV, table)
+    table, nu, gamma, kTe_keV, kTbb_keV = primals
+    _, _, d_gamma, _, _ = tangents
 
-    # Save residuals for the backward pass. The table rides along because the
-    # backward pass re-evaluates the interpolation at gamma + eps.
-    residuals = (table, nu, gamma, kTe_keV, kTbb_keV)
-    return result, residuals
+    primal_out = _nthcomp_lnu_interp_impl(nu, gamma, kTe_keV, kTbb_keV, table)
 
+    # Adaptive one-sided step: relative for large gamma, absolute near zero.
+    #
+    # 1e-3, not the 1e-6 carried by the ``custom_vjp`` spelling. The impl is a
+    # composed ``jnp.interp`` chain, so the finite difference is a subtraction of two
+    # nearly equal ~1e-16 values: at 1e-6 the surviving digits are cancellation
+    # remainder, not slope. Measured against a converged central difference at three
+    # off-node gammas (2.37/2.53/2.64 -- 2.5 is a grid node where the derivative is
+    # genuinely undefined and any FD comparison is meaningless)::
+    #
+    #     h        2.37      2.53      2.64
+    #     1e-7     -100%     -100%     -100%     <- differences to exactly 0.0
+    #     ~2.5e-6   -21%      +47%      +5.9%    <- the old step
+    #     1e-4      +0.6%     +0.0%     -1.3%
+    #     1e-3      -0.1%     +0.0%     -0.2%    <- plateau
+    #     1e-2      +0.6%     +0.3%     +0.3%
+    #
+    # The old step was not uniformly biased -- it was wrong by -10% to +54% depending
+    # on where in the grid gamma sat, which is why a single-step check never caught
+    # it. The plateau is two decades wide; 1e-3 sits in its middle.
+    eps = jnp.maximum(1e-3 * jnp.abs(gamma), 1e-3)
+    shifted = _nthcomp_lnu_interp_impl(nu, gamma + eps, kTe_keV, kTbb_keV, table)
+    fd_grad = (shifted - primal_out) / eps
 
-def _nthcomp_lnu_interp_bwd(residuals: tuple, g_out: jnp.ndarray) -> tuple:
-    """Backward pass for custom VJP of nthcomp_lnu_interp.
-
-    Uses finite-difference approximation for gamma gradient to avoid the
-    jnp.interp gradient NaN issue (JAX autodiff limitation with interpolation
-    and extrapolation in composed operations).
-
-    To handle overflow when g_out contains very large values, we:
-    1. Compute the finite-difference gradient of the raw output
-    2. Apply the cotangent vector with care to avoid overflow
-
-    Other parameters (nu, kTe_keV, kTbb_keV) are not differentiated since they
-    are held fixed during typical inference workflows (gamma is the primary
-    Comptonization parameter tuned during fitting).
-    """
-    table, nu, gamma, kTe_keV, kTbb_keV = residuals
-
-    # Finite-difference approximation for gamma (the problematic parameter)
-    # Use adaptive epsilon based on gamma value
-    eps = jnp.maximum(1e-6 * jnp.abs(gamma), 1e-6)
-    gamma_plus = gamma + eps
-    result_plus = _nthcomp_lnu_interp_impl(nu, gamma_plus, kTe_keV, kTbb_keV, table)
-    result = _nthcomp_lnu_interp_impl(nu, gamma, kTe_keV, kTbb_keV, table)
-
-    # Finite-difference gradient w.r.t. gamma (element-wise)
-    # This gives the derivative of each output element w.r.t. gamma
-    fd_grad_per_element = (result_plus - result) / eps
-
-    # Chain rule: compute sum of g_out * fd_grad_per_element
-    # To avoid overflow: divide by max absolute gradient before accumulating,
-    # then rescale using the safe gradient pattern.
-    max_grad = jnp.max(jnp.abs(fd_grad_per_element))
-    # Safe gradient pattern: pre-mask divisor to avoid NaN from unselected branch
-    max_grad_safe = jnp.where(max_grad > 0, max_grad, 1.0)
-
-    # Normalize to unit scale to avoid overflow in multiplication
-    # Use pre-masked max_grad_safe to ensure gradient flows safely
-    fd_grad_normalized = fd_grad_per_element / max_grad_safe
-    g_out_normalized = g_out / max_grad_safe
-
-    # Compute normalized product and sum
-    g_gamma_normalized = jnp.sum(g_out_normalized * fd_grad_normalized)
-
-    # Restore the scale using the safe value
-    g_gamma = g_gamma_normalized * max_grad_safe * max_grad_safe
-
-    # Ensure result is finite
-    g_gamma = jnp.where(jnp.isfinite(g_gamma), g_gamma, 0.0)
-
-    # Return zero gradients for other parameters (held fixed in fitting)
-    g_nu = jnp.zeros_like(nu)
-    g_kTe = jnp.zeros_like(kTe_keV)
-    g_kTbb = jnp.zeros_like(kTbb_keV)
-
-    # The template library is data, never a fit parameter, so its cotangent is
-    # structurally zero. It must still be returned: custom_vjp requires one
-    # cotangent per primal. Nothing consumes it, so XLA drops the zeros.
-    g_table = jax.tree.map(jnp.zeros_like, table)
-
-    return (g_table, g_nu, g_gamma, g_kTe, g_kTbb)
-
-
-# Register the VJP rule
-_nthcomp_interp.defvjp(_nthcomp_lnu_interp_fwd, _nthcomp_lnu_interp_bwd)
+    # The tangent dtype must MATCH the primal's, exactly -- a ``custom_jvp``
+    # contract that ``custom_vjp`` did not impose, so it is the one way this
+    # conversion can regress. ``nu`` sets the primal dtype while ``gamma`` sets
+    # the tangent's: a float32 SED grid with a float64 ``gamma`` promotes the
+    # product to float64 and JAX rejects the rule outright::
+    #
+    #     TypeError: Custom JVP rule must produce primal and tangent outputs
+    #     with corresponding shapes and dtypes. Expected float32[5994]
+    #     (tangent type of float32[5994]) but got float64[5994].
+    #
+    # That is a hard error at trace time, not a wrong number, and it took out
+    # the B1_agn_disc_torus scenario -- a mixed-dtype path that no unit test
+    # reaches, only the slow integration tier.
+    return primal_out, jnp.asarray(fd_grad * d_gamma, dtype=primal_out.dtype)
 
 
 def nthcomp_lnu_interp(

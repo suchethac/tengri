@@ -152,13 +152,34 @@ def test_signature_differs_fast_vs_exact():
     assert m_exact.compile_signature() != m_fast.compile_signature()
 
 
-def test_predict_spectrum_guarded_on_fast_model():
-    """A fast model omits the nebular continuum, so predict_spectrum must refuse."""
-    m = _build(_CUE)
-    m.enable_fast_nebular(_LW, n_grid=8)
-    p = dict(m.spec.sample(jax.random.PRNGKey(0)))
-    with pytest.raises(ValueError, match="fast-nebular"):
-        m.predict_spectrum(p, wave_obs=np.linspace(4000.0, 7000.0, 50))
+def test_predict_spectrum_on_a_fast_model_matches_the_exact_model():
+    """A fast model must still return the exact spectrum, not refuse (#950 -> #1673).
+
+    ``predict_spectrum`` refused here from #950, because the fast path zeroed
+    ``nebular_sed`` and the spectrum came back missing the nebular continuum and
+    lines. #1673 fixed the cause instead: ``predict_state`` materializes the
+    nebular component, so a rich consumer reads a complete forward state while
+    ``predict_photometry`` keeps reconstructing from the grid.
+
+    Asserting equality rather than a raise is the stronger statement -- a refusal
+    passes whether or not the values are right, and would turn red the moment the
+    values became available, which is exactly what happened here. Measured
+    bit-exact (rel 0.0) against ``approx=None`` when the fix landed.
+    """
+    wave = np.linspace(4000.0, 7000.0, 50)
+    p = dict(_build(_CUE).spec.sample(jax.random.PRNGKey(0)))
+
+    exact = np.asarray(_build(_CUE).predict_spectrum(p, wave_obs=wave), dtype=np.float64)
+    m_fast = _build(_CUE)
+    m_fast.enable_fast_nebular(_LW, n_grid=8)
+    got = np.asarray(m_fast.predict_spectrum(p, wave_obs=wave), dtype=np.float64)
+
+    assert np.isfinite(got).all(), "fast-model spectrum is not finite"
+    rel = np.max(np.abs(got - exact) / np.maximum(np.abs(exact), np.abs(exact).max() * 1e-30))
+    assert rel < 1e-10, (
+        f"fast-model spectrum moved {rel:.3e} from the exact path -- the nebular "
+        "continuum is not reaching predict_spectrum (#950/#1673)."
+    )
 
 
 def test_gas_and_stellar_metallicity_are_separate_axes():

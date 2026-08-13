@@ -102,7 +102,13 @@ def _validate_map_options(map_options):
     if not hasattr(map_options, "keys"):
         raise TypeError(
             f"map_options must be a dict of MAP backend options, got "
-            f"{type(map_options).__name__}. Example: map_options={{'n_steps': 40000}}."
+            # Spelled with dict(...) rather than a brace literal on purpose. A
+            # `name={...}` snippet in an error message is build-grammar advice
+            # by convention here, and tests/contract/test_error_message_advice_
+            # parses.py feeds every such snippet back through parse_groups.
+            # `map_options` is a fit_interim keyword, not a build group, so the
+            # brace form both fails that guard and misleads the reader.
+            f"{type(map_options).__name__}. Example: map_options=dict(n_steps=40000)."
         )
     valid = _map_option_names()
     unknown = sorted(set(map_options) - valid)

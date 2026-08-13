@@ -268,6 +268,35 @@ def _is_removal_advice(text: str, at: int) -> bool:
     return any(cue in text[max(0, at - _CUE_WINDOW) : at].lower() for cue in _REMOVAL_CUES)
 
 
+#: Words that mark a message as talking about *building a model*. Only those
+#: snippets are build-grammar advice; ``kwarg={...}`` in a message about some
+#: other API is that API's own argument shape.
+#: Stems, not whole words: the #1677 message says "needs a model **built**
+#: with ...", and a ``"build"`` cue does not match ``"built"``. The neuter
+#: check below is what caught that — the narrowed guard silently stopped
+#: recognizing the very message it was written for.
+_BUILD_CUES = ("buil", "sedmodel", "parse_groups", "recipe", "group")
+
+
+def _is_build_advice(text: str) -> bool:
+    """Is this message telling the reader how to build a model?
+
+    ``_NOT_GRAMMAR_KEYS`` used to answer this by listing key names that are not
+    groups — a hand-written list, so it went stale the moment a new API grew a
+    dict-shaped kwarg. #1722 added ``map_options must be a dict of MAP backend
+    options ... Example: map_options={'n_steps': 40000}`` to ``fit_interim``,
+    and this guard reported it as build advice the grammar refuses, turning
+    main red. ``map_options`` is a ``fit_interim`` argument; the message never
+    mentions building anything.
+
+    Keying on the message's own subject is derived rather than listed. The
+    alternative — accept only snippets whose key is already a valid group —
+    cannot work: it would skip exactly the case this guard exists for, advice
+    naming a group that does *not* exist (``met={'type': 'table'}``, #1677).
+    """
+    return any(cue in text.lower() for cue in _BUILD_CUES)
+
+
 def _literal_advice_in_source() -> list[tuple[str, int, str, dict]]:
     """Every fully-literal ``group={...}`` snippet inside a ``raise`` in src/."""
     out: list[tuple[str, int, str, dict]] = []
@@ -281,6 +310,8 @@ def _literal_advice_in_source() -> list[tuple[str, int, str, dict]]:
                 continue
             # f-strings render literal braces doubled; collapse before matching.
             text = ast.unparse(node).replace("{{", "{").replace("}}", "}")
+            if not _is_build_advice(text):
+                continue
             for name, value in _dict_snippets(text):
                 if name in _NOT_GRAMMAR_KEYS or not name.islower():
                     continue
@@ -333,12 +364,12 @@ def test_the_exemption_does_not_swallow_the_bug_it_sits_next_to() -> None:
     the arm green and blind — the failure mode this whole file exists to catch.
     """
     message = (
-        "met= needs a model built with stellar={'met_mode': 'table'}; either "
+        "met= needs a model built with met={'type': 'table'}; either "
         "rebuild with a tabulated metallicity or drop met=."
     )
     names = [name for name, _ in _dict_snippets(message)]
-    assert "stellar" in names
-    at = message.index("stellar={")
+    assert "met" in names
+    at = message.index("met={")
     assert not _is_removal_advice(message, at), (
         "the trailing 'drop met=.' must not exempt the recommendation that precedes it"
     )
@@ -353,6 +384,19 @@ def test_every_literal_advice_snippet_in_src_is_accepted_by_the_grammar() -> Non
     """
     failures = []
     for relpath, lineno, name, value in _literal_advice_in_source():
+        if _has_ellipsis(value):
+            # ``met={'type': ...}`` names the group and the key but leaves the
+            # value for the reader — prose, not a runnable line, the same
+            # category as an f-string interpolation. Executing it would fail on
+            # the placeholder rather than on anything the writer got wrong.
+            #
+            # NOT skipped, though: the whole point of this arm is that #1677 was
+            # a wrong *group name*, and a placeholder value hides nothing about
+            # the name. It is still checked, so the arm would still have caught
+            # `met={'type': ...}` back when `met` did not exist — the neuter
+            # check that matters here.
+            failures.extend(_bad_group_name(relpath, lineno, name, value))
+            continue
         try:
             parse_groups(**{name: value})
         except Exception as exc:
@@ -361,3 +405,62 @@ def test_every_literal_advice_snippet_in_src_is_accepted_by_the_grammar() -> Non
                 f"      but that raises {type(exc).__name__}: {exc}"
             )
     assert not failures, "error-message advice the grammar refuses:\n" + "\n".join(failures)
+
+
+def _has_ellipsis(value) -> bool:
+    """Does this snippet leave a value for the reader to fill in?"""
+    if value is Ellipsis:
+        return True
+    if isinstance(value, dict):
+        return any(_has_ellipsis(v) for v in value.values())
+    if isinstance(value, (list, tuple)):
+        return any(_has_ellipsis(v) for v in value)
+    return False
+
+
+def _bad_group_name(relpath, lineno, name, value) -> list[str]:
+    """Check the group name — the part a placeholder value leaves intact.
+
+    Only the name. Keys are deliberately *not* checked: ``met={'logzsol': ...}``
+    is legitimate advice naming a per-parameter override, and those are not
+    structural keys, so judging keys here would flag correct advice. The name is
+    what #1677 got wrong, and the name is what this still catches.
+    """
+    from tengri.parameters.groups import _GROUP_STRUCTURAL_KEYS
+
+    valid_groups = {k for k in _GROUP_STRUCTURAL_KEYS if "." not in k}
+    if name in valid_groups:
+        return []
+    return [
+        f"  {relpath}:{lineno} advises {name}={value!r}\n"
+        f"      but '{name}' is not a grammar group. Valid: {sorted(valid_groups)}"
+    ]
+
+
+def test_the_scope_rule_still_catches_the_bug_it_was_written_for() -> None:
+    """Narrowing the guard must not narrow what it catches.
+
+    ``_NOT_GRAMMAR_KEYS`` answered "is this build advice?" with a hand-written
+    list of key names, so #1722's ``map_options={'n_steps': 40000}`` — a
+    ``fit_interim`` argument, not a group — was reported as build advice the
+    grammar refuses, and main went red. The rule now keys on the message's own
+    subject.
+
+    The first attempt at that rule used the cue ``"build"``, which does not
+    match ``"built"`` — and the #1677 message reads "needs a model **built**
+    with ...". The narrowed guard silently stopped recognizing the message it
+    exists for. Both directions are pinned here.
+    """
+    built = "raise ValueError(\"met= needs a model built with met={'type': 'table'}\")"
+    other_api = (
+        'raise TypeError("map_options must be a dict of MAP backend options. '
+        "Example: map_options={'n_steps': 40000}.\")"
+    )
+    assert _is_build_advice(built), (
+        "advice about building a model is no longer recognized as build advice; "
+        "the #1677 bug would pass unchecked."
+    )
+    assert not _is_build_advice(other_api), (
+        "another API's dict-shaped kwarg is being validated against the build "
+        "grammar; that is what turned main red after #1722."
+    )

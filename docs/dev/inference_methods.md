@@ -143,11 +143,19 @@ the full Jacobian:
 
 ```python
 def metric_vec(xi, v):
-    """M(xi) @ v = J^T N^{-1} J v + v."""
+    """M(xi) @ v = (J/sigma)^T (J/sigma) v + v."""
     _, Jv = jax.jvp(signal_response, (xi,), (v,))       # forward: J @ v
     _, vjp_fn = jax.vjp(signal_response, xi)
-    return vjp_fn(noise_inv * Jv)[0] + v                 # reverse: J^T @ (N^{-1} J v) + v
+    return vjp_fn(whiten(whiten(Jv, noise), noise))[0] + v   # reverse: J^T @ (N^{-1} J v) + v
 ```
+
+Note the spelling: **whitened twice, never `noise_inv * Jv`**. Algebraically the
+same, but `N^{-1} = 1/sigma^2` is ~1e59 at a real flux uncertainty — outside
+float32 entirely — so the direct form returned `inf`, or `NaN` wherever `Jv` was
+exactly zero, and geoVI drew NaN posterior samples while reporting a perfectly
+healthy energy (#1588). `whiten` lives in `tengri.utils.scale` and carries an
+`optimization_barrier`, without which XLA re-associates the two divisions back
+into the overflowing product under `jit`.
 
 This implicit matrix-vector product is the foundation of all VI methods.
 

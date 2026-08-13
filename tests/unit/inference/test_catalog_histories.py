@@ -365,14 +365,24 @@ def test_from_histories_rejects_mismatched_n_galaxies(fwd_table_sfh):
 def test_from_histories_rejects_met_without_a_table_metallicity(fwd_table_sfh):
     """met= needs metallicity_model='table'; this fixture is delta, so refuse.
 
-    The message used to recommend ``met={'type': 'table'}``, and this test
-    pinned that string — so it locked in advice the grammar refuses, since
-    there is no ``met`` group (#1677). It now pins the form that works.
+    This assertion has been round the loop twice, which is worth recording
+    because the second trip looked exactly like the first. #1677 raised advice
+    naming ``met={'type': 'table'}``; #1678 repointed it at
+    ``stellar={'met_mode': 'table'}`` because no ``met`` group existed and the
+    advice therefore raised; #1720 added the ``met`` group, making the original
+    form the working one again.
+
+    So a string pinned here is only as true as the grammar underneath it, and
+    the test cannot tell the difference. That is why the property with teeth
+    lives next door in
+    :func:`test_the_met_advice_is_a_form_the_grammar_accepts`, which feeds the
+    advice to ``parse_groups`` instead of comparing it — the one check that
+    fails when the grammar moves rather than following it.
     """
     from tengri import Catalog
 
     t, sfr = _flat_histories([1.0])
-    with pytest.raises(ValueError, match=r"stellar=\{'met_mode': 'table'\}"):
+    with pytest.raises(ValueError, match=r"met=\{'type': 'table'\}"):
         Catalog.from_histories(fwd_table_sfh, t_gyr=t, sfr=sfr, met=np.zeros_like(sfr))
 
 
@@ -390,9 +400,9 @@ def test_the_met_advice_is_a_form_the_grammar_accepts(fwd_table_sfh):
     with pytest.raises(ValueError) as excinfo:
         Catalog.from_histories(fwd_table_sfh, t_gyr=t, sfr=sfr, met=np.zeros_like(sfr))
 
-    spec = parse_groups(stellar={"met_mode": "table"})
+    spec = parse_groups(met={"type": "table"})
     assert spec.met_mode == "table"
-    assert "stellar={'met_mode': 'table'}" in str(excinfo.value)
+    assert "met={'type': 'table'}" in str(excinfo.value)
 
 
 def test_predict_without_columns_needs_from_histories(fwd_table_sfh):

@@ -269,16 +269,18 @@ class TestNthcompGradientDiagnosis:
             err_msg="nthcomp_lnu_interp: FD check ∂(∑shape)/∂gamma",
         )
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "Known: full nthcomp_lnu_interp gradient is zero due to jnp.interp/exp overflow "
-            "chain; scalar multiplication cannot recover lost gradient."
-        ),
-    )
     def test_nthcomp_multiplied_by_scalar_gradient(self):
         """Test gradient: (nthcomp_shape * scalar) w.r.t. gamma.
-        This is the actual failing case from _warm_ring.
+
+        This is the actual failing case from _warm_ring, and it **passes** since
+        the custom_jvp conversion (#1206). It was a strict xfail before, reasoned
+        as "scalar multiplication cannot recover lost gradient" — but the loss was
+        not in the ``jnp.interp``/``exp`` chain at all. The old reverse rule
+        divided the incoming cotangent by ``max|fd_grad|`` ~1e-17, so the ``1e46``
+        scalar here became ~1e63, overflowed, and a trailing
+        ``where(isfinite, ..., 0.0)`` returned zero. The cotangent is exactly what
+        the rescaling could not survive, which is why *this* case failed while the
+        unscaled one above passed.
         """
         nu_test = jnp.array([1e14, 2e14, 5e14])
         gamma = jnp.array(1.5)

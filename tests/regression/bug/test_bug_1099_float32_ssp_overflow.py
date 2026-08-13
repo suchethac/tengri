@@ -86,7 +86,7 @@ def f32_bc03(tmp_path_factory):
 def _build(ssp, **neb):
     return SEDModel.build(
         ssp_data=ssp,
-        stellar={"logzsol": Fixed(0.0), "*": FIXED},
+        met={"logzsol": Fixed(0.0), "*": FIXED},
         sfh={
             "type": "const",
             "start_gyr": Fixed(0.01),

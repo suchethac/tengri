@@ -46,6 +46,7 @@ from tengri.utils.physics_constants import (
     L_SUN as _LSUN_ERG,
     M_ELECTRON as _M_ELECTRON,
 )
+from tengri.utils.scale import representable_floor as _representable_floor
 
 # Fiducial self-similar constants (Mahadevan 1997, Narayan & Yi 1995b).
 _C1: float = 0.5
@@ -553,7 +554,12 @@ def _adaf_lbrems0(t_e: jnp.ndarray, m: float, mdot: float, alpha: float) -> jnp.
 
 
 def _adaf_mdot_from_lbol(
-    l_bol_erg: jnp.ndarray, m: float, alpha: float, beta: float, delta: float
+    l_bol_erg: jnp.ndarray,
+    m: float,
+    alpha: float,
+    beta: float,
+    delta: float,
+    float32: bool = False,
 ) -> jnp.ndarray:
     r"""Derive the accretion rate ``mdot`` from the canonical bolometric luminosity.
 
@@ -591,7 +597,14 @@ def _adaf_mdot_from_lbol(
     **JIT/grad-safe**: yes — fixed 3-step fixed point.
     """
     mdot_crit = 0.28 * alpha**2
-    coeff = 4.8e37 * beta * alpha**-2.0 * m
+    # Float32 (#1206): ``coeff`` ~3e46 and ``l_bol_erg`` ~1e44 erg/s both overflow,
+    # but only their ratio (~mdot**2 ~1e-3) is needed. Work in L_sun: ``l_bol_erg``
+    # arrives as ``10**log_lbol`` (L_sun) and ``coeff`` divides by L_sun via a
+    # pre-divided constant, so the sqrt argument stays representable.
+    if float32:
+        coeff = (4.8e37 / _LSUN_ERG) * beta * alpha**-2.0 * m
+    else:
+        coeff = 4.8e37 * beta * alpha**-2.0 * m
     g = 7.0  # high-mdot equilibrium value as initial guess
     mdot = jnp.sqrt(l_bol_erg / (coeff * g))
     for _ in range(3):
@@ -612,6 +625,7 @@ def adaf_spectrum(
     agn_adaf_alpha: float = 0.3,
     agn_adaf_beta: float = 0.5,
     agn_adaf_delta: float = 0.1,
+    agn_log_lbol_shape: float | None = None,
     **_kwargs,
 ) -> jnp.ndarray:
     r"""Faithful analytic ADAF spectrum (Mahadevan 1997).
@@ -671,11 +685,21 @@ def adaf_spectrum(
     .. [1] R. Mahadevan, ApJ, 477, 585 (1997). arXiv:astro-ph/9609107.
     """
     nu = _wavelength_to_nu(wavelength)
+    _f32 = wavelength.dtype == jnp.float32
+    # Shape luminosity (mdot -> whole spectrum) vs normalization magnitude. They
+    # coincide by default (float64). On float32 the AGN component passes the true
+    # L_bol for the SHAPE while normalizing MAGNITUDE to a low reference, so the
+    # runner's ~1e40 L_lambda arithmetic stays in range (#1206).
+    _lbol_shape = agn_log_lbol if agn_log_lbol_shape is None else agn_log_lbol_shape
     m = 10.0**agn_log_mbh
-    l_bol_erg = 10.0**agn_log_lbol * _LSUN_ERG
     alpha, beta, delta = agn_adaf_alpha, agn_adaf_beta, agn_adaf_delta
 
-    mdot = _adaf_mdot_from_lbol(l_bol_erg, m, alpha, beta, delta)
+    # mdot from the SHAPE luminosity (float32: pass it in L_sun so the ~1e44 erg/s
+    # l_bol_erg never forms).
+    if _f32:
+        mdot = _adaf_mdot_from_lbol(10.0**_lbol_shape, m, alpha, beta, delta, float32=True)
+    else:
+        mdot = _adaf_mdot_from_lbol(10.0**_lbol_shape * _LSUN_ERG, m, alpha, beta, delta)
     t_e = _adaf_electron_temperature(m, mdot, alpha, beta, delta)
     x_m = _adaf_x_m(t_e, m, mdot, alpha, beta)
     alpha_c = _adaf_alpha_c(_adaf_tau_es(mdot, alpha), t_e)
@@ -698,7 +722,29 @@ def adaf_spectrum(
     brems = l_brems0 * jnp.exp(-jnp.clip(_H_PLANCK * nu / (_K_BOLTZ * t_e), 0.0, 500.0))
 
     total = sc + brems
-    # Renormalize to the canonical L_bol (nu descending -> reverse for trapezoid).
-    integral = jnp.trapezoid(total[::-1], nu[::-1])
-    l_nu = l_bol_erg * agn_lum_ratio * total / jnp.maximum(integral, 1e-100)
+    # Renormalize to the canonical L_bol (magnitude from agn_log_lbol — the
+    # reference on the float32 path). nu descending -> reverse for trapezoid.
+    if _f32:
+        # ``l_bol_erg`` ~1e44 and the ~1e43 erg/s spectral integral overflow;
+        # work the normalization in L_sun (total/L_sun keeps the integral in
+        # range) and order 10**log_lbol / integral before the ~1e28 shape.
+        integral = jnp.trapezoid((total / _LSUN_ERG)[::-1], nu[::-1])
+        # ``representable_floor``, not the bare ``1e-100`` (#1492): float32's
+        # smallest subnormal is 1.4e-45, so the literal IS 0.0 there — in this,
+        # the float32 branch, the divide-by-zero guard guarded nothing. Returns
+        # ``1e-100`` unchanged under x64, so float64 is bit-identical.
+        l_nu = (
+            (10.0**agn_log_lbol / jnp.maximum(integral, _representable_floor(1e-100)))
+            * agn_lum_ratio
+            * total
+        )
+    else:
+        integral = jnp.trapezoid(total[::-1], nu[::-1])
+        l_nu = (
+            10.0**agn_log_lbol
+            * _LSUN_ERG
+            * agn_lum_ratio
+            * total
+            / jnp.maximum(integral, _representable_floor(1e-100))
+        )
     return l_nu
