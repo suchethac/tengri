@@ -154,6 +154,36 @@ class TestMenuCompleteness:
 # ── Build and Emission Test ──────────────────────────────────────────
 
 
+def _template_data_unavailable(name: str) -> bool:
+    """Report whether a component's required template grid is absent here.
+
+    Some components are backed by a large published grid that is not committed
+    (``draine2021_pah`` needs a 104 MB PAHspec HDF5). Absent it, the component
+    is behaving *correctly* when it warns and contributes nothing -- that is the
+    designed response, not the silent no-op this census exists to catch. Without
+    this probe the census reads "production component does not emit" on a
+    machine that simply has no grid, which is the wrong accusation.
+
+    Returns False whenever the answer cannot be determined, so an unrelated
+    breakage is never mistaken for a missing file and silently skipped.
+    """
+    import jax.numpy as _jnp
+
+    from tengri.components.sed_model_component import _REGISTRY as _COMPONENT_REGISTRY
+
+    for key in (name, f"{name}_ir"):
+        cls = _COMPONENT_REGISTRY.get(key)
+        if cls is None:
+            continue
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                return cls().load(_jnp.logspace(3, 7, 64)) is None
+        except Exception:
+            return False
+    return False
+
+
 def _gather_testable_entries() -> list[tuple[str, str, dict]]:
     """Gather all non-exempt production entries for testing."""
     params = []
@@ -205,11 +235,17 @@ class TestRegistryComponentsEmit:
                 params = model.spec.sample(jax.random.PRNGKey(0))
                 state = model.predict_state(params)
 
-                # Check if sed_dust_ir was published and is nonzero
-                if not hasattr(state.derived, "sed_dust_ir"):
+                # Check if sed_dust_ir was published and is nonzero.
+                # NOT ``hasattr``: sed_dust_ir is a typed field on DerivedState,
+                # so the attribute always exists and defaults to None. The
+                # hasattr form was therefore always True, and the jnp.asarray
+                # below turned "published nothing" into an opaque
+                # "None is not a valid value for jnp.array" (#1738).
+                sed_ir_raw = getattr(state.derived, "sed_dust_ir", None)
+                if sed_ir_raw is None:
                     return False, "sed_dust_ir not published in derived state"
 
-                sed_ir = jnp.asarray(state.derived.sed_dust_ir)
+                sed_ir = jnp.asarray(sed_ir_raw)
                 if jnp.sum(jnp.abs(sed_ir)) <= 0.0:
                     return False, "sed_dust_ir published but all zeros (no emission)"
 
@@ -342,6 +378,13 @@ class TestRegistryComponentsEmit:
         success, msg = self._build_and_check_emit(
             name, kind, synthetic_ssp_wide, synthetic_tophat_obs
         )
+
+        if not success and _template_data_unavailable(name):
+            pytest.skip(
+                f"{kind}:{name}: required template grid is not present on this "
+                f"machine, so contributing nothing is the correct behavior "
+                f"(the component warns). Reported: {msg}"
+            )
 
         assert success, (
             f"{kind}:{name} failed: {msg}. "
