@@ -882,6 +882,123 @@ def _memoized_predict_jit(model, name: str):
     return fn
 
 
+def _reject_non_finite_data(data, noise, presence) -> None:
+    """Refuse a NaN or Inf in the data a fit is about to be run on.
+
+    A non-finite datum makes the Gaussian likelihood non-finite, so the
+    objective is undefined everywhere and the optimizer wanders off its
+    initial value. It still returns a number. Measured on a five-band MAP fit
+    with one NaN flux::
+
+        clean       log_M = 9.999993   n_steps = 350   final_loss = 2.49e-06
+        one NaN     log_M = 9.942578   n_steps = 100   final_loss = nan
+
+    ``final_loss`` is ``nan`` and ``log_total_mass`` comes back looking like a
+    measurement — no warning, no error, 0.057 dex (14% in mass) from the truth
+    and not equal to the answer you get by genuinely dropping that band
+    (9.999996), so it is not masking either.
+
+    The catalog path has had the right semantics all along
+    (``catalog_ingest``): a non-finite flux means *absent*, selected by
+    ``missing='mask'``, and a non-finite error beside a finite flux is always
+    an error because "an unknown uncertainty is not an absent band". The
+    single-object path shared none of it, so the same array meant "this band is
+    missing" through ``CatalogFitter`` and "silently corrupt the fit" through
+    ``Fitter`` (#1777).
+
+    Absent bands are expressible here too — ``Fitter(..., presence=...)`` — so
+    this refuses rather than guessing, and names that argument. A band already
+    marked absent is exempt: its flux value is never read.
+
+    Parameters
+    ----------
+    data : array_like
+        Observed data vector.
+    noise : array_like
+        Per-datum uncertainties.
+    presence : array_like or None
+        Per-datum presence weights; entries that are zero mark absent data,
+        whose values are not read and so need not be finite.
+
+    Raises
+    ------
+    ValueError
+        If any datum that will actually be used is non-finite.
+    """
+    import numpy as _np
+
+    d = _np.asarray(data, dtype=float)
+    n = _np.asarray(noise, dtype=float)
+    used = _np.ones(d.shape, dtype=bool)
+    if presence is not None:
+        p = _np.asarray(presence, dtype=float)
+        if p.shape == d.shape:
+            used = p != 0.0
+
+    def _report(bad, what, detail):
+        idx = _np.where(bad)[0].tolist() if bad.ndim == 1 else _np.argwhere(bad).tolist()
+        raise ValueError(
+            f"{what} at index/indices {idx[:20]}{' ...' if len(idx) > 20 else ''}. "
+            f"{detail} The objective is undefined there, so the fit would return "
+            f"its starting value as if it were a result. To mark a band absent, "
+            f"pass presence= with 0 there; reading a catalog? CatalogFitter's "
+            f"missing='mask' does this for you."
+        )
+
+    if (bad := ~_np.isfinite(d) & used).any():
+        _report(bad, "Non-finite data", "The Gaussian likelihood becomes non-finite.")
+    if (bad := ~_np.isfinite(n) & used).any():
+        _report(
+            bad,
+            "Non-finite noise",
+            "An unknown uncertainty is not an absent band — mark the band absent "
+            "instead if that is what it means.",
+        )
+    # Zero measured identically to a NaN: final_loss nan, the optimizer stops
+    # early and the starting value is returned. Negative is not a sigma under
+    # any reading; chi2 squares it, so it currently gives the *right* answer
+    # and would hide a sign error upstream indefinitely.
+    if (bad := (n <= 0.0) & used & _np.isfinite(n)).any():
+        _report(
+            bad,
+            "Non-positive noise",
+            "A Gaussian sigma must be > 0; zero weights a datum infinitely.",
+        )
+
+
+def _neutralize_absent(data, noise, presence):
+    """Replace non-finite values at absent positions with finite placeholders.
+
+    Presence weighting multiplies a datum's contribution by zero, which removes
+    it from the sum — unless the value is non-finite, because ``0 * nan`` is
+    ``nan``. So a band correctly marked absent still poisons the objective
+    unless its value is neutralized first. Mirrors ``catalog_ingest``'s
+    ``np.nan_to_num`` step, whose comment says the placeholder "doesn't
+    matter, presence=False".
+
+    Parameters
+    ----------
+    data, noise : jnp.ndarray
+        Observed data and uncertainties.
+    presence : array_like
+        Per-datum presence weights; zero marks absent.
+
+    Returns
+    -------
+    tuple of jnp.ndarray
+        ``(data, noise)`` with non-finite entries at absent positions replaced
+        by 0.0 and 1.0 respectively. Present entries are untouched — the guard
+        has already refused any non-finite value among them.
+    """
+    p = jnp.asarray(presence)
+    if p.shape != data.shape:
+        return data, noise
+    absent = p == 0.0
+    data = jnp.where(absent & ~jnp.isfinite(data), 0.0, data)
+    noise = jnp.where(absent & ~jnp.isfinite(noise), 1.0, noise)
+    return data, noise
+
+
 class Fitter:
     """Inference engine for differentiable SED fitting with flexible method dispatch.
 
@@ -1109,6 +1226,15 @@ class Fitter:
         self.model = model
         self.data = jnp.asarray(data)
         self.noise = jnp.asarray(noise)
+        _reject_non_finite_data(self.data, self.noise, presence)
+        # An absent datum's value is never *used*, but IEEE still propagates
+        # it: 0 * NaN is NaN, so a masked NaN poisons the likelihood exactly
+        # as an unmasked one does, and the guard above would be telling users
+        # to do something that does not work. ``catalog_ingest`` neutralizes
+        # the same way ("Set NaN flux to finite placeholder (doesn't matter,
+        # presence=False)").
+        if presence is not None:
+            self.data, self.noise = _neutralize_absent(self.data, self.noise, presence)
         if data_mask is not None:
             data_mask = jnp.asarray(data_mask)
             # A boolean mask here is a semantics trap: the censored
