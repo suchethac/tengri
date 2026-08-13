@@ -871,8 +871,14 @@ save_fig("synthesizer_09b_disc_transmitted.png")
 #
 # **Caveat:** The Synthesizer-side NLR spectrum depends on the Python hash
 # seed — `UnifiedAGN.get_spectra` assembles its emission-model tree in
-# dict/set order, and the [O III]/Hβ peak ratio lands at 20.9
-# (`PYTHONHASHSEED=0`) or 15.6 (other seeds) while tengri stays at 12.8.
+# dict/set order, so the [O III]/Hβ peak ratio moves while tengri's does not:
+#
+# | [O III]/Hβ peak | side |
+# |---|---|
+# | 20.9 | Synthesizer, `PYTHONHASHSEED=0` |
+# | 15.6 | Synthesizer, other seeds |
+# | 12.8 | tengri, seed-independent |
+#
 # Renders pin `PYTHONHASHSEED=0` (see `reproduction/CONTRACT.md`); both
 # orderings are [O III]-dominant, so the conclusion does not depend on the
 # seed.
