@@ -118,32 +118,25 @@ print(f"{phot.n_filters} bands   free parameters: {fwd.spec.free_params}")
 # %% [markdown]
 # ## 2. The histories
 #
-# Substitute your snapshot reader here. This stand-in produces the same thing:
-# a time grid, `SFR(t)`, and `Z(t)` as a **metal mass fraction**.
-#
-# **The one unit trap.** `met_unit=` is required reading, not a formality.
-# tengri's internal convention is log10(Z/Zsun); a snapshot stores raw *Z*.
-# `Z = 2e-4` is a legal value in *both*, so a mass fraction silently read as
-# log10(Z/Zsun) is a factor of ~70 error that no range check can catch. Declare
-# it: `"z_mass_fraction"`, `"logzsol"`, or `"log_z_abs"`.
+# Replace `simulation_snapshot` with your reader. Only three things matter:
+# the shapes, the units, and `met_unit=` — declare it, because `Z = 2e-4` is a
+# legal value both as a mass fraction and as log10(Z/Zsun), and reading one as
+# the other is a silent factor of ~70.
 
 # %%
 N_T = 96
 
 
 def simulation_snapshot(n_galaxies, seed=11):
-    """Stand-in for a snapshot reader: t [Gyr], SFR [Msun/yr], Z (mass fraction)."""
+    """Stand-in for your snapshot reader: t [Gyr], SFR [Msun/yr], Z (mass fraction).
+
+    A spread of masses, formation times and decay timescales, with metallicity
+    rising as gas turns into stars. The shape of this mock is not the point.
+    """
     rng = np.random.default_rng(seed)
     log_mass = rng.uniform(8.5, 11.5, n_galaxies)
-    quenched = rng.random(n_galaxies) < 1.0 / (1.0 + np.exp(-(log_mass - 10.4) / 0.35))
-    t_form = np.where(
-        quenched, rng.uniform(0.3, 1.5, n_galaxies), rng.uniform(1.0, 4.0, n_galaxies)
-    )
-    tau = np.where(
-        quenched,
-        10 ** rng.uniform(-0.30, 0.15, n_galaxies),
-        10 ** rng.uniform(0.45, 0.95, n_galaxies),
-    )
+    t_form = rng.uniform(0.3, 4.0, n_galaxies)
+    tau = 10 ** rng.uniform(-0.3, 0.95, n_galaxies)
 
     t_gyr = np.linspace(0.05, T_OBS, N_T)
     since = np.clip(t_gyr[None, :] - t_form[:, None], 0.0, None)
@@ -151,43 +144,34 @@ def simulation_snapshot(n_galaxies, seed=11):
     dt_yr = np.gradient(t_gyr) * 1e9
     sfr *= (10**log_mass / (sfr * dt_yr[None, :]).sum(axis=1))[:, None]
 
-    # Closed-box enrichment: Z rises as the gas is converted into stars.
-    mass_formed = np.cumsum(sfr * dt_yr[None, :], axis=1)
-    efficiency = np.interp(log_mass, [8.5, 11.5], [0.15, 0.75])
-    met = 0.02 * np.log(1.0 / (1.0 - mass_formed / (10**log_mass / efficiency)[:, None]))
-    return dict(t_gyr=t_gyr, sfr=sfr, met=met, log_mass=log_mass, quenched=quenched)
+    formed_fraction = np.cumsum(sfr * dt_yr[None, :], axis=1) / (10**log_mass)[:, None]
+    met = 0.02 * np.log(1.0 / (1.0 - 0.7 * formed_fraction))
+    return dict(t_gyr=t_gyr, sfr=sfr, met=met, log_mass=log_mass)
 
 
 snap = simulation_snapshot(500)
 
-# The SSP grid has a lowest metallicity node; simulations go below it at early
-# times. Off-grid values are CLIPPED inside JIT where nothing can raise, so
-# ingest refuses them by default rather than returning a plausible wrong SED.
-# Clip deliberately (here, at the grid's own edge) or pass on_out_of_grid='warn'.
+# Simulations go below the SSP grid's lowest metallicity node at early times.
+# Off-grid values are CLIPPED inside JIT where nothing can raise, so ingest
+# refuses them by default. Clip deliberately, or pass on_out_of_grid='warn'.
 Z_FLOOR = 10 ** np.asarray(ssp.ssp_lgmet).min()
 met = np.maximum(snap["met"], Z_FLOOR)
-print(
-    f"SFR {snap['sfr'].shape}   Z {met.shape}   floor Z={Z_FLOOR:.1e} "
-    f"raised {(snap['met'] < Z_FLOOR).mean():.0%} of nodes"
-)
+print(f"SFR {snap['sfr'].shape}   Z {met.shape}   floored {(snap['met'] < Z_FLOOR).mean():.0%}")
 
 # %% [markdown]
 # ## 3. Predict photometry and lines
 #
 # `Catalog.from_histories` validates eagerly (before any compile), then
-# `simulate` runs the whole population as one vectorized program.
+# `simulate` runs the whole population as one vectorized program. Photometry,
+# emission lines and derived properties all come out of the same pass.
 #
-# **Where lines come from matters.** With baked-in nebular there are two
-# channels and only one of them works:
+# One trap: with baked-in nebular, line fluxes come from `lines=(...)`.
+# Asking for them as `properties=("halpha",…)` returns **NaN** — that channel
+# needs a live photoionization backend (section 5a).
 #
-# | you want | ask for | with `neb={'type':'ssp'}` |
-# |---|---|---|
-# | *measured* line flux, continuum-subtracted like an observation | `lines=(...)` | works, fast |
-# | *intrinsic* line luminosity from a photoionization model | `properties=("halpha",…)` | returns **NaN** |
-#
-# The intrinsic route needs a live backend (`neb={'type':'cue'}` or
-# `{'type':'cloudy'}`), which also lets you set the gas-phase metallicity
-# separately via `met_gas=`. Section 5 measures what that costs.
+# (The wNE grid bakes its nebular emission at **solar gas-phase metallicity**
+# and a fixed ionization parameter. That is an assumption you are making; if
+# you need gas-phase Z per galaxy, you need a live backend and the cost in 5a.)
 
 # %%
 LINES = ("Halpha", "Hbeta", "OIII_5007", "NII_6584", "SII_6717")
@@ -227,8 +211,6 @@ print(
 
 # %%
 fig, axes = plt.subplots(1, 3, figsize=(13, 3.6))
-q = snap["quenched"]
-sf = ~q
 
 axes[0].plot(snap["t_gyr"], snap["sfr"][np.argsort(snap["log_mass"])[::25]].T, lw=1)
 axes[0].set(
@@ -248,17 +230,14 @@ axes[1].set(
     title=r"input: Z(t)   [dotted = Z$_\odot$]",
 )
 
-axes[2].scatter(
-    props["sfr_100myr"][sf],
-    lines["Halpha"][sf],
+sc = axes[2].scatter(
+    props["sfr_100myr"],
+    lines["Halpha"],
     s=8,
-    alpha=0.6,
+    alpha=0.7,
     lw=0,
-    c="#2b7bba",
-    label="star forming",
-)
-axes[2].scatter(
-    props["sfr_100myr"][q], lines["Halpha"][q], s=8, alpha=0.6, lw=0, c="#c0392b", label="quenched"
+    c=snap["log_mass"],
+    cmap="viridis",
 )
 axes[2].set(
     xscale="log",
@@ -267,7 +246,7 @@ axes[2].set(
     ylabel=r"H$\alpha$ flux [erg/s/cm$^2$]",
     title=r"output: H$\alpha$ tracks SFR",
 )
-axes[2].legend(frameon=False, fontsize=8, loc="upper left")
+fig.colorbar(sc, ax=axes[2], label=r"log M$_\star$")
 fig.tight_layout()
 fig.savefig(FIG_DIR / "12_in_out.png", dpi=140)
 plt.show()
@@ -386,8 +365,8 @@ bench_met = np.maximum(bench_snap["met"], Z_FLOOR)
 def throughput(model, n=256, chunk=128, reps=3, gas=False):
     """Warm ms/galaxy for a whole catalog through `model`.
 
-    ``gas=True`` also supplies the gas-phase metallicity, which a live nebular
-    backend accepts (and warns about if omitted) and a baked-in one refuses.
+    ``gas=True`` feeds the gas-phase metallicity a live backend expects; a
+    baked-in one refuses it, since its nebular grid already fixed that.
     """
     c = Catalog.from_histories(
         model,
@@ -432,12 +411,11 @@ print(
 print(f"\n  baked-in is {t_cloudy / t_baked:.0f}x faster.")
 
 # %% [markdown]
-# That is the choice to make first, and it is a physics choice, not a tuning
-# knob. Baked-in fixes the ionization parameter and escape fraction at
-# grid-build time and gives you no `met_gas=`; a live backend lets the
-# gas-phase metallicity be a separate per-galaxy input and gives you intrinsic
-# line luminosities. If you only need broadband colors and measured line
-# fluxes, baked-in is the right answer *and* the fast one.
+# Make this choice first, and note it is a physics choice, not a tuning knob.
+# Baked-in fixes the gas-phase metallicity and ionization parameter when the
+# grid was built; a live backend makes them per-galaxy inputs and adds
+# intrinsic line luminosities. If measured line fluxes and broadband colors
+# are what you need, baked-in is both the right answer and the fast one.
 #
 # ### 5b. `WavePrecomp`
 #
