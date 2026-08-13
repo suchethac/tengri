@@ -200,7 +200,7 @@ The notebook spine in [`notebooks/`](https://github.com/suchethac/tengri/tree/ma
 | 08 | `08_emission_lines.py`         | BPT diagnostics, line ratios, Hα-based SFR                  |
 | 10 | `10_fastspecfit_joint_fit.py`  | joint DESI photometry + emission-line fluxes, timed        |
 | 11 | `11_catalog_fits.py`           | a catalog fit in parallel: LSST+Euclid photo-z, timed      |
-| 12 | `12_simulation_populations.py` | tabulated SFH + Z(t) from a simulation → SDSS/Rubin, timed |
+| 12 | `12_simulation_populations.py` | simulation SFH + Z(t) → photometry and lines, ~8k galaxies/s |
 
 For single-figure recipes, see the [examples gallery](https://suchethacooray.com/tengri/auto_examples/index.html).
 
