@@ -30,6 +30,25 @@ balance. The two attenuation *models* are genuinely different; they must not be
 mapped onto each other via a split. This is the same trap ``validate_matched_
 physics.py`` documents on the CIGALE side (issue #747), reached independently.
 
+FINDING -- and the dust IR needs a SECOND convention matched
+------------------------------------------------------------
+Getting the screen right fixes the stellar continuum but leaves the dust IR
+~10% low, because the two codes draw the energy-balance budget differently:
+FSPS re-emits all absorbed luminosity including LyC, while tengri's canonical
+balance excludes ``lambda < 912`` A -- those photons re-emerge as nebular, the
+CIGALE convention. 01_prospector.py §6 documents this and puts it at ~11% of
+absorbed energy at this fiducial (#961, #922).
+
+Measured here, both screens correct, MIR / FIR median ratio:
+
+    eb_include_lyc = False    0.900x / 0.894x
+    eb_include_lyc = True     0.999x / 0.999x
+
+So the deficit is a convention, not a defect, and the opt-in closes it to
+floating point. Worth stating plainly because the first version of this script
+reported the 10% as an unexplained discrepancy: a matched-input validator is
+only as good as the conventions it remembers to match.
+
 Nebular is OFF on both sides: FSPS uses Byler+2017 Cloudy grids and tengri uses
 the Cue emulator, which are different models by design (01_prospector.py §8
 quantifies the Halpha ratio). AGN is off; Prospector has no X-ray or radio.
@@ -94,7 +113,7 @@ def fsps_stellar_dust():
     )
 
 
-def tengri_stellar_dust(ssp, tau_bc):
+def tengri_stellar_dust(ssp, tau_bc, *, include_lyc=False):
     """tengri stellar+dust SED at the matched parameters.
 
     Parameters
@@ -104,12 +123,34 @@ def tengri_stellar_dust(ssp, tau_bc):
     tau_bc : float
         Birth-cloud optical depth. ``0.0`` is the FSPS-equivalent mapping;
         a non-zero value reproduces the over-attenuation described above.
+    include_lyc : bool, optional
+        Put LyC photons into the energy-balance budget. tengri's canonical
+        balance excludes ``lambda < 912`` A (those photons re-emerge as
+        nebular, the CIGALE convention); FSPS re-emits everything. Matching
+        FSPS therefore needs this on -- see the FINDING above.
 
     Returns
     -------
     tuple of ndarray
         ``(wave_aa, L_nu)`` with shapes ``(n_wave,)``; L_nu in [erg/s/Hz].
     """
+    dust = {
+        "type": "two_component",
+        "law_bc": "calzetti",
+        "law_diff": "calzetti",
+        "tau_bc": Fixed(tau_bc),
+        "tau_diff": Fixed(TAU_DIFF),
+        "*": FIXED,
+        "emission": {
+            "type": "draine_li2007",
+            "qpah": Fixed(Q_PAH),
+            "umin": Fixed(U_MIN),
+            "gamma_dl": Fixed(GAMMA),
+            "*": FIXED,
+        },
+    }
+    if include_lyc:
+        dust["eb_include_lyc"] = True
     m = SEDModel.build(
         ssp_data=ssp,
         met={"logzsol": Fixed(MET_LOGZSOL), "*": FIXED},
@@ -120,21 +161,7 @@ def tengri_stellar_dust(ssp, tau_bc):
             "log_total_mass": Fixed(0.0),
             "*": FIXED,
         },
-        dust={
-            "type": "two_component",
-            "law_bc": "calzetti",
-            "law_diff": "calzetti",
-            "tau_bc": Fixed(tau_bc),
-            "tau_diff": Fixed(TAU_DIFF),
-            "*": FIXED,
-            "emission": {
-                "type": "draine_li2007",
-                "qpah": Fixed(Q_PAH),
-                "umin": Fixed(U_MIN),
-                "gamma_dl": Fixed(GAMMA),
-                "*": FIXED,
-            },
-        },
+        dust=dust,
         redshift=Fixed(0.0),
     )
     s = m.predict_state({})
@@ -186,10 +213,15 @@ def main():
     w_t, L_t = tengri_stellar_dust(ssp, tau_bc=TAU_DIFF)
     report(w_f, U.regrid(w_t, L_t, w_f), L_f, "tau_bc + tau_diff split (NOT FSPS-equivalent)")
 
-    # The FSPS-equivalent mapping: one diffuse screen.
+    # Right screen, but tengri's canonical energy balance: the dust IR runs
+    # ~10% low because LyC is excluded from the budget.
     w_t, L_t = tengri_stellar_dust(ssp, tau_bc=0.0)
+    report(w_f, U.regrid(w_t, L_t, w_f), L_f, "tau_bc = 0, LyC excluded (tengri default)")
+
+    # Both conventions matched: single screen AND LyC in the budget.
+    w_t, L_t = tengri_stellar_dust(ssp, tau_bc=0.0, include_lyc=True)
     L_t_on_f = U.regrid(w_t, L_t, w_f)
-    report(w_f, L_t_on_f, L_f, "tau_bc = 0, single diffuse screen (FSPS-equivalent)")
+    report(w_f, L_t_on_f, L_f, "tau_bc = 0 + eb_include_lyc (fully FSPS-equivalent)")
 
     fig, (ax, axr) = plt.subplots(
         2, 1, figsize=(12, 7), sharex=True, gridspec_kw={"height_ratios": [3, 1]}

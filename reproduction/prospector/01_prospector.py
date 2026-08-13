@@ -914,15 +914,16 @@ save_fig("prospector_05_dust_applied.png")
 # dust-mass fraction, but PDR dust emits `R ≈ 14×` more per unit mass (DL07
 # Eq. 33); with that weight the warm component lands where FSPS places it.
 #
-# Two conventions differ. FSPS ships DL07 with the 3.3 µm PAH feature halved
-# (stated in `dust/dustem` headers); tengri carries the original, and the grids
-# agree to within 1.2% everywhere else (#963). Bands on rest-frame 3–3.6 µm
-# (WISE W1 at low z) inherit that choice. And FIR amplitude differs by construction (#961):
-# FSPS re-emits all absorbed luminosity (measured `L_IR/L_abs = 0.9996`),
-# including LyC; tengri's canonical balance excludes λ < 912 Å (those photons
-# re-emerge as nebular, the CIGALE convention #922). At this fiducial, LyC
-# carries ~11% of absorbed energy, so tengri's far-IR sits ~11% below Prospector.
-# Both ratios are printed; opt-in `dust={'eb_include_lyc': True}` closes the gap.
+# Two conventions differ, and both are choices rather than defects:
+#
+# | convention | FSPS | tengri | consequence |
+# |---|---|---|---|
+# | 3.3 µm PAH feature | halved (stated in `dust/dustem` headers) | the original | grids agree to 1.2% everywhere else (#963); bands on rest-frame 3–3.6 µm (WISE W1 at low z) inherit the choice |
+# | energy-balance budget | re-emits all absorbed luminosity, LyC included (measured `L_IR/L_abs = 0.9996`) | excludes λ < 912 Å — those photons re-emerge as nebular, the CIGALE convention (#922) | LyC carries ~11% of absorbed energy here, so tengri's far-IR sits ~11% low (#961) |
+#
+# Both ratios are printed. Opt-in `dust={'eb_include_lyc': True}` closes the
+# second gap: `validate_matched_physics.py` measures the far-IR going from
+# 0.894× to 0.999× with that one flag, at otherwise identical inputs.
 
 # %%
 w_p_ir, L_p_ir = P.csp_lnu(
