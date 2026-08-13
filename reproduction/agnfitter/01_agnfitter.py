@@ -2037,14 +2037,20 @@ print(
 # 1.5–5 µm near-IR excess from the polar wind (§9c, §9c‴), and spans the full
 # radio-to-X-ray range (capstone) as one buildable, fittable model (capstone′).
 #
-# Residuals are understood and quantified per panel: R06 carriage convention
-# (0.0002 dex median, §9a); Prevot 1.102× E(B−V) rescaling where AGNFITTER-RX
-# uses raw UV fit (§4); KD18 warm-Compton proxy + physical self-gravity outer
-# radius carrying more near-IR than AGNFITTER-RX's truncated template (§9a); THB21 native
-# vs pre-binned spectral resolution (§9a); Corona +1% Thomson scattering floor
-# (§10b); Host XRBs as separate tengri component (§10b); Radio jets extend into
-# sub-mm/IR with SPL parity 1e-4 (§11); SF radio q_IR bookkeeping (§11b).
+# Every residual is understood and quantified at the panel that shows it:
 #
+# | residual | size | § |
+# |---|---|---|
+# | R06 carriage convention | 0.0002 dex median | §9a |
+# | Prevot E(B−V) rescaling, where AGNFITTER-RX uses the raw UV fit | 1.102× | §4 |
+# | KD18 warm-Compton proxy + physical self-gravity outer radius, carrying more near-IR than AGNFITTER-RX's truncated template | shape only | §9a |
+# | THB21 native vs pre-binned spectral resolution | see the Hα ladder | §9a |
+# | Corona Thomson-scattering floor | +1% | §10b |
+# | Host XRBs carried as a separate tengri component | — | §10b |
+# | Radio jets extending into the sub-mm/IR | SPL parity 1e-4 | §11 |
+# | SF radio q_IR bookkeeping | — | §11b |
+
+# %% [markdown]
 # ## References
 #
 # Every model compared above, with the section that uses it. The machine-
