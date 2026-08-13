@@ -36,17 +36,22 @@
 # is the part worth reading twice.
 #
 # For scale: on the laptop CPU this was written on, the configuration in
-# section 1 runs **~8,000 galaxies per second** — 4096 histories through 11
-# bands in about half a second, on a CPU, with no GPU involved. Section 5
-# measures each lever that gets you there separately, because they do **not**
+# section 1 runs **thousands of galaxies per second** — 4096 histories through
+# 11 bands in well under a second, with no GPU involved. Sections 4 and 5
+# measure each lever that gets you there, separately, because they do **not**
 # simply multiply: whichever term currently dominates is the only one worth
-# optimizing next.
+# optimizing next. Every number below is printed by the cell above it, on
+# whatever machine you run this on; treat the ones in the prose as the shape of
+# the answer, not the answer.
 
 # %%
 from _setup import FIG_DIR, quiet
 
 quiet()
 
+import gc
+import resource
+import sys
 import time
 
 import matplotlib.pyplot as plt
@@ -285,27 +290,28 @@ K = 256
 # %%
 
 
-def bench(fn, arg, n, reps=5):
-    jax.block_until_ready(fn(arg))  # warm: compile happens here
+def bench(fn, arg, n, reps=7):
+    """First-call seconds, and best warm ms/galaxy over `reps`."""
+    t0 = time.perf_counter()
+    jax.block_until_ready(fn(arg))  # compile happens here
+    first = time.perf_counter() - t0
     ts = []
     for _ in range(reps):
         t0 = time.perf_counter()
         jax.block_until_ready(fn(arg))
         ts.append(time.perf_counter() - t0)
-    return min(ts) / n
+    return first, min(ts) / n
 
 
 # (a) one galaxy at a time
-f_one = jax.jit(fwd.predict_photometry)
-t_one = bench(f_one, one, 1, reps=20)
+first_one, t_one = bench(jax.jit(fwd.predict_photometry), one, 1, reps=30)
 
 # (b) vmap alone -- vectorized, but NOT compiled as one program
-f_vmap = jax.vmap(fwd.predict_photometry)
-t_vmap = bench(f_vmap, batch, K, reps=3)
+first_vmap, t_vmap = bench(jax.vmap(fwd.predict_photometry), batch, K)
 
 # (c) jit(vmap(...)) -- this is the one you want
 f_jitvmap = jax.jit(jax.vmap(fwd.predict_photometry))
-t_jitvmap = bench(f_jitvmap, batch, K, reps=5)
+first_jitvmap, t_jitvmap = bench(f_jitvmap, batch, K)
 
 # (d) Catalog: (c) plus chunking, padding, and a cross-call compile cache
 cat_k = Catalog.from_histories(
@@ -316,25 +322,30 @@ t0 = time.perf_counter()
 cat_k.predict(chunk_size=K)
 t_cat = (time.perf_counter() - t0) / K
 
-print(f"{'':34s}{'ms/galaxy':>11s}{'galaxies/s':>13s}")
-for label, t in (
-    ("(a) jit, one galaxy", t_one),
-    ("(b) vmap without jit", t_vmap),
-    ("(c) jit(vmap(...))", t_jitvmap),
-    ("(d) Catalog.predict", t_cat),
+print(f"{'':34s}{'first call':>12s}{'ms/galaxy':>11s}{'galaxies/s':>13s}")
+for label, first, t in (
+    ("(a) jit, one galaxy", first_one, t_one),
+    ("(b) vmap without jit", first_vmap, t_vmap),
+    ("(c) jit(vmap(...))", first_jitvmap, t_jitvmap),
+    ("(d) Catalog.predict", float("nan"), t_cat),
 ):
-    print(f"  {label:32s}{1e3 * t:10.3f}{1 / t:13.0f}")
-print(f"\n  (a) -> (c)  vectorizing wins {t_one / t_jitvmap:.1f}x")
-print(f"  (b) -> (c)  jit-ing the vmap wins {t_vmap / t_jitvmap:.1f}x")
+    fc = "  -" if first != first else f"{first:9.2f} s"
+    print(f"  {label:32s}{fc:>12s}{1e3 * t:10.3f}{1 / t:13.0f}")
+print(f"\n  (a) -> (c)  vectorizing wins {t_one / t_jitvmap:.1f}x on throughput")
+print(f"  (b) -> (c)  jit-ing the vmap costs {first_vmap / first_jitvmap:.1f}x less on the")
+print("              first call, and never costs you throughput")
 
 # %% [markdown]
 # Two things to take from that table.
 #
-# **`vmap` without `jit` is leaving money on the table.** Bare `vmap` dispatches
-# op by op, so each primitive is compiled and launched separately. The steady
-# state is only somewhat slower, but the *first* call is several times worse
-# because it compiles many small programs instead of one big one. Always
-# `jit(vmap(f))`, never bare `vmap(f)`.
+# **Vectorizing is the win; `jit` is what makes it cheap to start.** Going from
+# one galaxy at a time to a batch is worth a solid factor on throughput. Bare
+# `vmap` gets most of that too — it is genuinely vectorized — but it dispatches
+# op by op, compiling and launching each primitive separately, so its **first
+# call** is several times more expensive than one fused program. Warm throughput
+# for (b) and (c) can land within noise of each other on a busy machine; the
+# first-call column is the part that reproduces. Use `jit(vmap(f))`: it is never
+# slower and it starts much faster.
 #
 # **Every distinct batch width is its own compile.** JAX keys its cache on
 # shape, so a ragged trailing chunk — 128, 128, 47 — compiles the program
@@ -350,6 +361,79 @@ print("\n   -> two widths, two compiles. Catalog.predict pads for you; if you")
 print("      roll your own, pad the last chunk and discard the extra rows.")
 
 # %% [markdown]
+# ### How wide can the vmap go?
+#
+# Throughput stops improving long before memory does, so the ceiling is set by
+# **memory**, and it is worth measuring rather than guessing. Every galaxy in a
+# batch carries its own intermediates through the SSP machinery, so the working
+# set is linear in the batch width once the fixed overhead is amortized. Measure
+# the slope and the ceiling follows:
+#
+# $$ \text{max width} \;\approx\; \frac{\text{RAM you can spare}}{\text{MB per galaxy}} $$
+#
+# `ru_maxrss` is a **high-water mark**, so this sweep has to run before anything
+# heavier does, and increasing width order is what makes the deltas meaningful.
+# (It is also in bytes on macOS and kilobytes on Linux — a portability trap
+# worth knowing if you copy this helper.)
+
+# %%
+_RSS_SCALE = 1.0 if sys.platform == "darwin" else 1024.0  # bytes on macOS, kB on Linux
+
+
+def peak_rss_gb():
+    """Peak resident set size so far, in GB. Monotonic: a high-water mark."""
+    return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss * _RSS_SCALE / 1024**3
+
+
+MAX_WIDTH = 1024  # deliberately modest: this notebook must not OOM its reader
+wide = simulation_snapshot(MAX_WIDTH, seed=23)
+wide_cols = {
+    "sfh_t_gyr": np.tile(wide["t_gyr"], (MAX_WIDTH, 1)),
+    "sfh_sfr": wide["sfr"],
+    "met_history": np.log10(np.maximum(wide["met"], Z_FLOOR)) + 1.848,
+}
+
+print(f"baseline peak RSS {peak_rss_gb():.2f} GB")
+print(f"{'width':>7s}{'peak GB':>10s}{'marginal MB/galaxy':>21s}{'ms/galaxy':>11s}")
+
+marginals, prev_w, prev_rss = [], 0, peak_rss_gb()
+for width in (64, 256, MAX_WIDTH):
+    sub = {k: v[:width] for k, v in wide_cols.items()}
+    jax.block_until_ready(f_jitvmap(sub))
+    t0 = time.perf_counter()
+    jax.block_until_ready(f_jitvmap(sub))
+    dt = time.perf_counter() - t0
+    now = peak_rss_gb()
+    marginal = 1024 * (now - prev_rss) / (width - prev_w)
+    if marginal > 0:
+        marginals.append(marginal)
+    print(f"{width:7d}{now:10.2f}{marginal:21.2f}{1e3 * dt / width:11.3f}")
+    prev_w, prev_rss = width, now
+
+# Peak RSS is a high-water mark, so a width that fits inside memory the process
+# has already claimed reports no growth at all. The slope has to come from the
+# widths that actually push the mark up; the largest is the usable estimate.
+mb_per_galaxy = marginals[-1] if marginals else float("nan")
+print(f"\n  -> {mb_per_galaxy:.2f} MB/galaxy on this configuration")
+print("     (a 0.00 row means that width fit under memory already claimed)")
+for budget in (2, 8, 32):
+    print(
+        f"     {budget:2d} GB of headroom  ->  batch up to ~{int(1024 * budget / mb_per_galaxy):,}"
+    )
+
+# %% [markdown]
+# On this configuration a galaxy costs well under a megabyte, so a few GB holds
+# **tens of thousands** of them in a single `vmap` — for most catalogs you never
+# need to chunk at all. That is not a property of `vmap`; it is a property of
+# the *fast configuration*. Section 5 shows the same measurement on the heavy
+# one, where a galaxy costs about ten times more and the ceiling drops with it.
+#
+# **What running out looks like.** Nothing useful. The OS `SIGKILL`s the process,
+# so you get no Python traceback, no `MemoryError`, no stack — just a dead
+# kernel, or a shell reporting exit code `-9` (or 137). If a run dies silently,
+# that is almost always this, and the fix is a smaller batch, not a bug hunt.
+
+# %% [markdown]
 # ## 5. The optimization ladder
 #
 # Measured on this machine, on the backend printed at the top. Re-run rather
@@ -362,7 +446,7 @@ bench_snap = simulation_snapshot(256, seed=5)
 bench_met = np.maximum(bench_snap["met"], Z_FLOOR)
 
 
-def throughput(model, n=256, chunk=128, reps=3, gas=False):
+def throughput(model, n=256, chunk=128, reps=5, gas=False):
     """Warm ms/galaxy for a whole catalog through `model`.
 
     ``gas=True`` feeds the gas-phase metallicity a live backend expects; a
@@ -402,13 +486,32 @@ def build_cloudy():
     return ForwardModel.build(sed=sed)
 
 
-t_baked = throughput(fwd)
-t_cloudy = throughput(build_cloudy(), gas=True)
-print(f"  neb='ssp'    (baked into the SSP) {1e3 * t_baked:7.3f} ms/gal {1 / t_baked:9.0f} gal/s")
+BENCH_N = 128  # keep the heavy configurations small enough to be safe
+
+t_baked = throughput(fwd, n=BENCH_N)
+
+# RSS is a high-water mark, and Cloudy will exceed everything measured so far,
+# so the growth from here is attributable to it. Build it, measure it, and drop
+# it again -- two heavy models resident at once is what pushes a laptop over.
+before_cloudy = peak_rss_gb()
+cloudy_model = build_cloudy()
+t_cloudy = throughput(cloudy_model, n=BENCH_N, gas=True)
+cloudy_mb_per_galaxy = 1024 * (peak_rss_gb() - before_cloudy) / BENCH_N
+del cloudy_model
+gc.collect()
+
+print(
+    f"  neb='ssp'    (baked into the SSP) {1e3 * t_baked:7.3f} ms/gal {1 / t_baked:9.0f} gal/s"
+    f"   {mb_per_galaxy:6.2f} MB/gal"
+)
 print(
     f"  neb='cloudy' (live photoionization){1e3 * t_cloudy:6.3f} ms/gal {1 / t_cloudy:9.0f} gal/s"
+    f"   {cloudy_mb_per_galaxy:6.2f} MB/gal"
 )
-print(f"\n  baked-in is {t_cloudy / t_baked:.0f}x faster.")
+print(
+    f"\n  baked-in is {t_cloudy / t_baked:.0f}x faster and "
+    f"{cloudy_mb_per_galaxy / mb_per_galaxy:.0f}x lighter."
+)
 
 # %% [markdown]
 # Make this choice first, and note it is a physics choice, not a tuning knob.
@@ -417,6 +520,13 @@ print(f"\n  baked-in is {t_cloudy / t_baked:.0f}x faster.")
 # intrinsic line luminosities. If measured line fluxes and broadband colors
 # are what you need, baked-in is both the right answer and the fast one.
 #
+# The memory column is the part people get caught by. The same choice that
+# costs you an order of magnitude in speed costs you roughly an order of
+# magnitude in *footprint*, which moves the batch ceiling by the same factor:
+# a batch width that is comfortable on the baked-in path is an OOM kill on the
+# live one. Measured here at width 2048, the live path wanted about 19 GB and
+# was `SIGKILL`ed on a machine with 17 GB free — no traceback, exit -9.
+#
 # ### 5b. `WavePrecomp`
 #
 # The exact path integrates the SSP x filter product on the full wavelength
@@ -424,7 +534,10 @@ print(f"\n  baked-in is {t_cloudy / t_baked:.0f}x faster.")
 # interpolates. It costs a slower build and repays it on every evaluation.
 
 # %%
-t_exact = throughput(build_model(approx=None))
+exact_model = build_model(approx=None)
+t_exact = throughput(exact_model, n=BENCH_N)
+del exact_model
+gc.collect()
 print(f"  approx=None          (exact grid) {1e3 * t_exact:7.3f} ms/gal {1 / t_exact:9.0f} gal/s")
 print(
     f"  approx=WavePrecomp() (SSP x filter LUT) {1e3 * t_baked:6.3f} ms/gal "
@@ -459,10 +572,13 @@ for n in (256, 1024, 4096):
         met=np.maximum(s["met"], Z_FLOOR),
         met_unit="z_mass_fraction",
     )
-    c.predict(chunk_size=128)
-    t0 = time.perf_counter()
-    c.predict(chunk_size=128)
-    dt = time.perf_counter() - t0
+    c.predict(chunk_size=128)  # compile
+    runs = []
+    for _ in range(3):  # best-of-3: a shared machine adds noise, never speed
+        t0 = time.perf_counter()
+        c.predict(chunk_size=128)
+        runs.append(time.perf_counter() - t0)
+    dt = min(runs)
     print(f"{n:8d}{dt:8.2f}s{1e3 * dt / n:11.3f}{n / dt:13.0f}")
 
 # %% [markdown]
