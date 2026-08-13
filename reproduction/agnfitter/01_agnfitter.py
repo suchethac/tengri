@@ -2057,7 +2057,8 @@ print(
 # readable BibTeX for all of these lives next to this notebook in
 # `references.bib` — the key per entry is given in brackets. The brief
 # descriptions below map each citation to its role in this reproduction.
-#
+
+# %% [markdown]
 # **Accretion disks (§9a)**
 # - Richards, G. T., et al. 2006, ApJS 166, 470 — R06 mean Type-1 quasar composite SED
 #   [`richards2006sed`].
@@ -2067,7 +2068,8 @@ print(
 #   [`kubota2018physical`].
 # - Temple, M. J., Hewett, P. C. & Banerji, M. 2021, MNRAS 508, 737 — THB21 semi-empirical
 #   with emission-line forest; qsogen [`temple2021modelling`].
-#
+
+# %% [markdown]
 # **Tori (§9c)**
 # - Silva, L., et al. 2004, MNRAS 355, 973 — S04 clumpy dust clouds at various
 #   inclinations [`Silva2004`].
@@ -2079,31 +2081,36 @@ print(
 #   equatorial + polar-wind dust [`honig2017dusty`].
 # - Yang, G., et al. 2020, MNRAS 491, 740 — X-CIGALE SKIRTOR + polar dust,
 #   the parameterization tengri's `skirtor` follows [`yang2020xcigale`].
-#
+
+# %% [markdown]
 # **Cold dust (§6)**
 # - Schreiber, C., et al. 2018, A&A 609, A30 — S17 [`schreiber2018dust`].
 # - Dale, D. A. & Helou, G. 2002, ApJ 576, 159 [`dale2002infrared`]; Chary, R. &
 #   Elbaz, D. 2001, ApJ 556, 562 [`chary2001interpreting`] — DH02_CE01.
 # - Dale, D. A., et al. 2014, ApJ 784, 83 — tengri `dale2014` [`dale2014two`].
-#
+
+# %% [markdown]
 # **X-ray (§10)**
 # - Just, D. W., et al. 2007, ApJ 665, 1004 [`just2007x`]; Lusso, E. &
 #   Risaliti, G. 2016, ApJ 819, 154 [`lusso2016tight`]; 2017, A&A 602, A79
 #   [`lusso2017quasars`] — α_ox–L₂₅₀₀.
 # - Mineo, S., et al. 2014, MNRAS 437, 1698 — host XRB / SFR [`mineo2014x`].
-#
+
+# %% [markdown]
 # **Radio (§11)**
 # - Azadi, M., et al. 2020 (arXiv:2011.03130) — radio AGN and star-formation
 #   separation [`azadi2020disentangling`].
 # - Bell, E. F. 2003, ApJ 586, 794 — IR–radio correlation q_IR = 2.64
 #   [`bell2003estimating`].
-#
+
+# %% [markdown]
 # **Stellar populations & attenuation (§1–§5)**
 # - Bruzual, G. & Charlot, S. 2003, MNRAS 344, 1000 [`bruzual2003stellar`];
 #   Chabrier, G. 2003, PASP 115, 763 [`chabrier2003galactic`].
 # - Calzetti, D., et al. 2000, ApJ 533, 682 [`calzetti2000dust`]; Prevot, M. L.,
 #   et al. 1984, A&A 132, 389 — SMC reddening [`prevot1984typical`].
-#
+
+# %% [markdown]
 # **Codes & inference**
 # - Martínez-Ramírez, L. N., et al. 2024, A&A 688, A46 — AGNFITTER-RX
 #   [`martinez2024agnfitter`].
