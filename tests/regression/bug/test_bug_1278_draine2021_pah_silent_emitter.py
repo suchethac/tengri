@@ -27,6 +27,32 @@ import pytest
 pytestmark = pytest.mark.regression_bug
 
 
+def _draine2021_available() -> bool:
+    """Whether the published PAHspec grid is present on this machine.
+
+    The 104 MB grid is not committed, so CI has no copy. Absent it the component
+    warns and contributes nothing, which is the *designed* response and not the
+    silent no-op #1278 is about — asserting emission there tests the data, not
+    the fix. Mirrors the helper in tests/regression/test_dust_goldens_852.py.
+    """
+    from tengri.components.sed_model_component import _REGISTRY
+
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            return _REGISTRY["draine2021_pah_ir"]().load(jnp.logspace(3, 7, 64)) is not None
+    except Exception:
+        return False
+
+
+#: Applied only to the assertions that need the grid. The two control tests
+#: (dale2014, pah_drude) and the publish-contract test do not.
+requires_pahspec = pytest.mark.skipif(
+    not _draine2021_available(), reason="draine2021 PAHspec template grid not available"
+)
+
+
+@requires_pahspec
 def test_draine2021_pah_publishes_its_declared_output(synthetic_ssp_wide, synthetic_tophat_obs):
     """On a default build (no approx=), the derived dict contains L_ir_emission.
 
@@ -55,12 +81,24 @@ def test_draine2021_pah_publishes_its_declared_output(synthetic_ssp_wide, synthe
 
     # The Draine2021PAH component declares outputs={'L_ir_emission': ...},
     # so it MUST publish that key when it successfully runs. This is the contract.
-    assert hasattr(state.derived, "L_ir_emission"), (
+    #
+    # NOT hasattr: the fix for #1278 promoted L_ir_emission to a typed field on
+    # DerivedState, so the attribute exists on every prediction and defaults to
+    # None. A hasattr assertion here passes whether or not the component
+    # published anything -- it would have gone green against the very bug it
+    # exists to pin. Assert the value.
+    published = getattr(state.derived, "L_ir_emission", None)
+    assert published is not None, (
         "Draine2021PAH declared L_ir_emission in outputs but it is not published "
         "in derived state. Expected state.derived.L_ir_emission (#1278)."
     )
+    assert float(jnp.sum(jnp.abs(jnp.asarray(published)))) > 0.0, (
+        "Draine2021PAH published L_ir_emission but it is zero — the component "
+        "absorbed energy and re-radiated none of it (#1278)."
+    )
 
 
+@requires_pahspec
 def test_draine2021_pah_contributes_infrared_emission(synthetic_ssp_wide, synthetic_tophat_obs):
     """On a default build, sed_dust_ir is published and nonzero.
 
