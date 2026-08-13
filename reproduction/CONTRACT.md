@@ -49,8 +49,52 @@ Each notebook closes with a full-SED head-to-head: tengri configured to
 emulate the external code end to end, overlaid on that code's own
 panchromatic output, with a fractional-residual panel and an optical
 normalization ratio quoted with its 16–84% spread. The last two
-sections are `## Summary` and `## References`; cite the reference
-code's paper exactly (title, journal, arXiv/DOI), not from memory.
+sections are `## Summary` and `## References`, and they are **separate
+cells** — agnfitter carried them fused into one 629-word cell, which is
+how a bibliography ends up counted as prose. Cite the reference code's
+paper exactly (title, journal, arXiv/DOI), not from memory. A citation
+you have not checked is not a citation: cigale shipped
+`arXiv:2405.xxxxx` and two different years for the same Cue paper.
+
+## 6a. The devices
+
+Six comparisons written over a year converged on six different habits,
+each of which one notebook does better than the rest. They are the house
+style; use them all, rather than each notebook keeping its own.
+
+**Tables carry numbers; prose carries reasoning** (agnfitter). A
+quantitative comparison written as a paragraph is the hardest thing to
+read in this series. Any ladder of values that explains a discrepancy, and
+any parameter mapping between the two codes, is a table. §9a's Hα/2500 Å
+ladder was four numbers inside a nested `(1)…(2)` clause; as four rows it
+needs no unpicking. Same for §4's two reddening conventions, and CIGALE
+§8's matched H II region.
+
+**Equations use `:math:` or `$…$`** (cigale). Not ASCII transliteration.
+Define every symbol with its units on first use.
+
+**Every non-obvious claim names its issue** (prospector, ten of them).
+`#NNNN` beside a residual is what lets a reader find out whether it is a
+known bug, a convention mismatch, or settled physics. A residual with no
+explanation and no ticket is an open question, not a result (§2).
+
+**Known limitations are `**Caveat:**` blocks** (synthesizer). Set them off
+so they are scannable, rather than buried mid-paragraph. Synthesizer §9c's
+hash-seed dependence is the model: state the effect, the numbers on both
+sides, and why the conclusion survives it.
+
+**Menus are enumerated live** (prospect_r, cigale's module map). Write
+`tengri.list_agn_models()` and let the notebook print what the installed
+version exposes; never hand-maintain a list of model names in prose, which
+drifts silently the moment a registry gains an entry.
+
+**The Summary is section by section** (bagpipes). One entry per `§`, in
+notebook order, each saying what matched and what did not. It is the page
+a reader checks before trusting anything else.
+
+**Keep a markdown cell under ~200 words.** Where a cell runs long, split
+it so each piece sits beside the figure it explains. Above roughly 300
+words a cell stops being read and starts being skimmed.
 
 ## 6. Voice
 
