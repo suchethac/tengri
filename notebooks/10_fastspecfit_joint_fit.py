@@ -166,7 +166,7 @@ def build(line_data, approx):
         # Free the SFH (normalization + shape), stellar metallicity, the dust
         # screen, and the gas conditions — the parameters a catalog fit solves for.
         sfh={"type": "dpl", "all_params": FREE},
-        stellar={"met_logzsol": Uniform(-1.5, 0.3)},
+        met={"logzsol": Uniform(-1.5, 0.3)},
         dust={
             "type": "two_component",
             "law_bc": "calzetti",

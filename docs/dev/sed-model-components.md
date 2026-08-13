@@ -184,12 +184,26 @@ appear in the posterior summary. The astronomer using your model can
 override per-fit:
 
 ```python
-model = SEDModel.build(dust={
-    'type':   'modified_blackbody',
-    'T':      Fixed(35.0),               # pin one
-    'beta':   Uniform(1.5, 2.5),         # narrow another
-})
+model = SEDModel.build(
+    ssp_data=ssp, observation=obs,
+    dust={
+        'type': 'two_component', 'law_bc': 'calzetti', 'all_params': FIXED,
+        'emission': {
+            'type':    'modified_blackbody',
+            'T':       Fixed(35.0),          # pin one
+            'beta_ir': Uniform(1.5, 2.5),    # narrow another
+        },
+    },
+)
 ```
+
+Two spellings here are load-bearing, and this example had both wrong.
+`modified_blackbody` is a **dust-emission** model, not a dust *type* —
+`dust={'type': 'modified_blackbody'}` raises `Unknown dust type`, because the
+only dust types are `single_component`, `two_component` and `wg00`. And the
+emission parameter is `beta_ir`, not `beta`. Emission parameters belong inside
+`dust={'emission': {...}}`; written at the dust level they used to be accepted
+and silently discarded, and are now refused with a message naming the nesting.
 
 The class-level defaults never mutate — they're the prior baseline.
 

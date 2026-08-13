@@ -151,6 +151,50 @@ _FAST_NEBULAR_UNSAFE_PROPERTIES = frozenset(
 )
 
 
+def _nebular_continuum_consumers(chain):
+    """Components that read ``sed_nebular``, excluding the nebular component itself.
+
+    **The single expression that decides whether the fast nebular grid may serve
+    photometry.** Serving photometry from the per-Q_H grid requires zeroing
+    ``sed_nebular``, so it is available only when nothing downstream reads the
+    continuum. A non-empty result sets ``must_materialize_sed`` and disarms the
+    shortcut.
+
+    Extracted so that the code which *acts* on it
+    (:meth:`SEDModel.enable_fast_nebular`) and the code which *advises about it*
+    (:func:`~tengri.inference.fitter.fast_nebular_can_engage`, and the warnings that
+    quote a speedup) cannot disagree. They did: after #1281 made materialization the
+    default, ``DustSEDComponent`` disarmed the shortcut on every dusty model while
+    three warnings and ``CLAUDE.md`` still advertised a ~21x line speedup that was
+    measured at **1.00x — bit-identical compiled FLOPs** (#1748).
+
+    Parameters
+    ----------
+    chain : sequence
+        The assembled component chain.
+
+    Returns
+    -------
+    list
+        The consuming components. Empty means the grid may serve photometry.
+
+    Notes
+    -----
+    The census sees the ADR-0009 component contract and only that. A reader that
+    takes ``sed_nebular`` off ``state.derived`` without declaring an input is
+    invisible to it — which is why ``predict_state`` materializes by default
+    instead of relying on this list being complete (#1673).
+    """
+    from tengri.components.nebular.component import NebularSEDComponent
+    from tengri.forward.orchestrator import components_consuming
+
+    return [
+        c
+        for c in components_consuming(chain, "sed_nebular")
+        if not isinstance(c, NebularSEDComponent)
+    ]
+
+
 def _chain_consumes(chain, key: str) -> bool:
     """Does any component in ``chain`` declare ``key`` as a (possibly optional) input?
 
@@ -4807,7 +4851,6 @@ class SEDModel:
 
         from tengri.components.nebular.component import NebularSEDComponent
         from tengri.components.nebular.nebular_grid_precompute import precompute_nebular_grid
-        from tengri.forward.orchestrator import components_consuming
 
         if self._nebular_backend is None or not hasattr(
             self._nebular_backend, "predict_nebular_line_luminosities"
@@ -4838,11 +4881,7 @@ class SEDModel:
         # input is invisible to it — ``state_to_sed_components`` does exactly
         # that, so ``sed_components()`` on a dust-free Cue model still reports
         # a zero nebular continuum (#1673).
-        sed_consumers = [
-            c
-            for c in components_consuming(chain, "sed_nebular")
-            if not isinstance(c, NebularSEDComponent)
-        ]
+        sed_consumers = _nebular_continuum_consumers(chain)
         self._cached_component_chain = [
             dataclasses.replace(c, grid_table=table, must_materialize_sed=bool(sed_consumers))
             if isinstance(c, NebularSEDComponent)
@@ -7897,7 +7936,7 @@ class SEDModel:
         ssp_data,
         *,
         sfh=None,
-        stellar=None,
+        met=None,
         dust=None,
         neb=None,
         shock=None,
@@ -7993,7 +8032,7 @@ class SEDModel:
             k: v
             for k, v in dict(
                 sfh=sfh,
-                stellar=stellar,
+                met=met,
                 dust=dust,
                 neb=neb,
                 shock=shock,

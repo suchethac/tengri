@@ -74,7 +74,7 @@ def _model(scatter_dist):
             "log_total_mass": Fixed(10.0),
             "*": FIXED,
         },
-        stellar={"met_logzsol": Fixed(0.0), "met_logzsol_scatter": scatter_dist, "*": FIXED},
+        met={"logzsol": Fixed(0.0), "logzsol_scatter": scatter_dist, "*": FIXED},
         dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
         redshift=Fixed(0.1),
     )
@@ -123,7 +123,7 @@ def test_fixed_default_is_byte_identical_to_historical():
             "log_total_mass": Fixed(10.0),
             "*": FIXED,
         },
-        stellar={"met_logzsol": Fixed(0.0), "*": FIXED},
+        met={"logzsol": Fixed(0.0), "*": FIXED},
         dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
         redshift=Fixed(0.1),
     )

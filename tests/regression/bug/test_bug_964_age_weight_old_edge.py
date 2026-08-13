@@ -49,7 +49,7 @@ def _reference_weights(sfr_fn, lg_age_gyr, n=1_000_000):
 def _age_marginal(ssp, sfh):
     m = SEDModel.build(
         ssp_data=ssp,
-        stellar={"logzsol": Fixed(0.0), "*": FIXED},
+        met={"logzsol": Fixed(0.0), "*": FIXED},
         sfh=sfh,
         dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
         redshift=Fixed(0.0),

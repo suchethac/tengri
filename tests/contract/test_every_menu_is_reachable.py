@@ -20,8 +20,23 @@ The set is now discovered — every public ``tengri.list_*`` returning rows with
 a ``name`` column. Measured at the swap: +2 menus, 0 lost, 460 → 490 rows
 walked, **0 new multi-menu names**, so no existing lookup changed its answer.
 
+**Deriving the set was necessary and not sufficient**, because a derivation is
+only as wide as the population it scans. Discovery scanned ``dir(tengri)``,
+which is curated down to ~30 obvious entry points on purpose, so it inherited
+the curation — and the helper in this file scanned ``dir(tengri)`` too, so the
+guard and the code shared one blind spot and agreed with each other. Four
+name-keyed menus live in ``__all__`` and not in the curated list, and stayed
+invisible to both: ``list_parameters`` (358 names), ``list_properties`` (50),
+``list_filter_conventions`` (2) and ``list_available_ssps``. That is **410
+further advertised names** ``describe()`` refused while calling itself
+universal, and three menus ``search()`` returned zero hits from.
+
+The third aggregator was never wired up at all: ``list_all`` walked a
+hand-written dict of nine literals and showed **9 of 25** menus.
+
 These tests scan the same way rather than pinning a count, so a menu added
-tomorrow is covered without editing this file — which is the whole point.
+tomorrow is covered without editing this file — which is the whole point. The
+population they scan is the union of *both* export lists, per #1608.
 """
 
 from __future__ import annotations
@@ -36,10 +51,29 @@ from tengri.registry import _every_menu_lister, _menu_listers
 pytestmark = [pytest.mark.contract, pytest.mark.regression_bug]
 
 
-def _advertised() -> dict[str, str]:
-    """{name: menu} for every row any public ``list_*`` menu prints."""
-    out: dict[str, str] = {}
-    for attr in sorted(n for n in dir(tengri) if n.startswith("list_")):
+def _public_menu_names() -> set[str]:
+    """Every public ``list_*`` name, across **both** of tengri's export lists.
+
+    This is the population, and getting it wrong is the whole bug twice over.
+    ``dir(tengri)`` is not the public surface: it is a deliberately curated
+    ~30-name tab-completion list ("not the 175-item kitchen sink of every
+    public symbol", ``src/tengri/__init__.py``). ``__all__`` is the export
+    list. Neither contains the other, so any name-based audit of this repo
+    must union them — the rule #1608 established after the same blind spot
+    made ``check_api_coverage.py`` report 0 missing when 6 were.
+
+    Sweeping ``dir()`` alone hides four name-keyed menus that are in
+    ``__all__`` and not curated: ``list_parameters``, ``list_properties``,
+    ``list_filter_conventions``, ``list_available_ssps``.
+    """
+    surface = set(tengri.__all__) | set(dir(tengri))
+    return {n for n in surface if n.startswith("list_")}
+
+
+def _menu_rows() -> dict[str, list[dict]]:
+    """{menu: rows} for every public ``list_*`` that prints a name column."""
+    out: dict[str, list[dict]] = {}
+    for attr in sorted(_public_menu_names()):
         fn = getattr(tengri, attr, None)
         if not callable(fn):
             continue
@@ -47,10 +81,18 @@ def _advertised() -> dict[str, str]:
             rows = fn()
         except Exception:
             continue
-        if isinstance(rows, list) and rows and isinstance(rows[0], dict):
-            for row in rows:
-                if row.get("name"):
-                    out.setdefault(str(row["name"]), attr)
+        if isinstance(rows, list) and rows and isinstance(rows[0], dict) and "name" in rows[0]:
+            out[attr] = rows
+    return out
+
+
+def _advertised() -> dict[str, str]:
+    """{name: menu} for every row any public ``list_*`` menu prints."""
+    out: dict[str, str] = {}
+    for attr, rows in _menu_rows().items():
+        for row in rows:
+            if row.get("name"):
+                out.setdefault(str(row["name"]), attr)
     return out
 
 
@@ -76,6 +118,83 @@ class TestTheCensus:
             "the derived set adds nothing over the hand-written tuple; either "
             "every menu is now listed by hand (then delete the derivation) or "
             "the discovery predicate stopped matching."
+        )
+
+    def test_the_population_swept_is_the_export_surface(self):
+        """Deriving the set fixed *how* menus are found; this fixes *where*.
+
+        Discovery scanned ``dir(tengri)``, which is curated down to ~30 entry
+        points on purpose. So the derivation inherited the curation and four
+        name-keyed menus in ``__all__`` stayed invisible — 410 more advertised
+        names refused, ``list_parameters`` alone accounting for 358.
+        """
+        derived = {fn.__name__ for fn in _every_menu_lister()}
+        missing = sorted(set(_menu_rows()) - derived)
+        assert not missing, (
+            f"these public name-keyed menus are not in the census: {missing}. "
+            "The sweep is reading one export list; tengri has two."
+        )
+
+    def test_the_two_export_lists_really_do_differ(self):
+        """Anti-vacuity for the test above.
+
+        If ``dir()`` and ``__all__`` ever agreed, that test would pass without
+        exercising the union and would stop guarding anything. It would then
+        be the *census* that had quietly narrowed, which is this file's whole
+        subject, so say so out loud rather than going green.
+        """
+        curated = {n for n in dir(tengri) if n.startswith("list_")}
+        exported = {n for n in tengri.__all__ if n.startswith("list_")}
+        assert exported - curated, (
+            "every exported list_* is now curated into dir(); the union above "
+            "no longer proves anything. Re-derive the population before "
+            "trusting these tests."
+        )
+
+    def test_a_curated_menu_answers_a_name_an_export_only_menu_also_prints(self):
+        """Widening the population must not re-point an existing answer.
+
+        ``describe`` reports ``matches[0]``, so the census *order* decides which
+        menu answers a name several menus print. Scanning the union in one
+        sorted pass put ``list_available_ssps`` ahead of ``list_known_ssps`` —
+        alphabetical — and silently moved all 21 SSP names onto the
+        newly-discovered menu, so ``describe('fsps_mist_c3k_a_chabrier')``
+        started returning a filename-and-download-flag row instead of the
+        canonical one. Twenty-one changed answers, for a change whose entire
+        claim is that it adds names without altering any.
+
+        I measured "0 answers changed" before shipping and was wrong: the probe
+        appended the new menus at the end, which is not where discovery puts
+        them. Hence a test, over the real census, rather than another probe.
+        """
+        census = [fn for fn in _every_menu_lister()]
+        curated = {n for n in dir(tengri) if n.startswith("list_")}
+        rows = {fn.__name__: fn() for fn in census}
+
+        by_name: dict[str, list[str]] = {}
+        for menu, entries in rows.items():
+            for entry in entries:
+                if entry.get("name"):
+                    by_name.setdefault(str(entry["name"]), []).append(menu)
+
+        shared = {
+            name: menus
+            for name, menus in by_name.items()
+            if len(menus) > 1
+            and any(m in curated for m in menus)
+            and any(m not in curated for m in menus)
+        }
+        assert shared, (
+            "no name is printed by both a curated and an export-only menu, so "
+            "this test proves nothing — re-derive it before trusting it."
+        )
+
+        misrouted = {name: menus[0] for name, menus in shared.items() if menus[0] not in curated}
+        assert not misrouted, (
+            f"{len(misrouted)} names are answered by an export-only menu while a "
+            f"curated menu also prints them, e.g. {sorted(misrouted.items())[:3]}. "
+            "Curated menus must be discovered first, or widening the population "
+            "silently re-points existing lookups."
         )
 
     def test_no_lister_is_walked_twice(self):
@@ -141,6 +260,53 @@ class TestSearchCoversEveryMenu:
         assert any(str(r.get("name")) == name for r in hits if isinstance(r, dict)), (
             f"search({name!r}) does not find it"
         )
+
+
+class TestListAllCoversEveryMenu:
+    """The third aggregator, and the one that never walked the tuple at all.
+
+    ``_menu_listers``'s docstring names ``list_all`` as one of the three that
+    "all walk this one tuple". It walks a hand-written dict of nine literals,
+    so it showed 9 of 25 menus while ``src/tengri/__init__.py`` tells readers
+    ``list_all()`` "enumerates every registry live".
+    """
+
+    def test_every_menu_has_a_key(self):
+        keys = set(tengri.list_all())
+        missing = sorted(
+            fn.__name__
+            for fn in _every_menu_lister()
+            if fn.__name__.removeprefix("list_") not in keys
+        )
+        assert not missing, (
+            f"list_all() omits {len(missing)} menus the census walks: {missing}. "
+            "It documents itself as enumerating every registry live."
+        )
+
+    def test_every_key_is_a_table(self):
+        """A dict of tables is the documented return type; keep it one type."""
+        wrong = {
+            key: type(value).__name__
+            for key, value in tengri.list_all().items()
+            if not isinstance(value, list)
+        }
+        assert not wrong, f"these list_all() values are not tables: {wrong}"
+
+    def test_the_keys_that_were_always_there_did_not_move(self):
+        """Widening must not rename what nine years of notebooks already read."""
+        keys = set(tengri.list_all())
+        original = {
+            "components",
+            "inference_methods",
+            "agn_models",
+            "dust_laws",
+            "dust_emission_models",
+            "sfh_models",
+            "nebular_backends",
+            "filters",
+            "plots",
+        }
+        assert original <= keys, f"list_all() dropped established keys: {sorted(original - keys)}"
 
 
 def _resolves(name: str) -> bool:

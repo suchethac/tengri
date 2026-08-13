@@ -99,7 +99,7 @@ def _model(ssp_data, observation):
         ssp_data=ssp_data,
         observation=observation,
         sfh={"type": ["dpl", "field"], "*": FREE},
-        stellar={"met_logzsol": Fixed(-0.3)},
+        met={"logzsol": Fixed(-0.3)},
         dust=builders.dust.two_component(defaults=FREE, law_bc="calzetti"),
         neb=builders.neb.ssp(),
         redshift=Fixed(0.1),
