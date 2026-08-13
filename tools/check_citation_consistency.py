@@ -109,7 +109,6 @@ KNOWN_TITLE_DRIFT = frozenset(
         ("a&a", "132", "389"),
         ("a&a", "470", "221"),
         ("a&a", "622", "A103"),
-        ("aj", "122", "549"),
         ("apj", "528", "799"),
         ("apj", "533", "682"),
         ("apj", "539", "718"),
@@ -190,6 +189,17 @@ def _normalize_journal(journal: str) -> str:
 
 
 def _iter_files():
+    """Yield ``(path, repo-relative path)`` in a fixed order on every platform.
+
+    :func:`_canonical` folds a title onto an already-seen variant of the same
+    paper, so which spelling becomes the group key depends on encounter order —
+    and ``Path.rglob`` yields in filesystem order, which differs between macOS
+    and Linux. That made the guard's own answer platform-dependent: it passed
+    locally with 31 pinned entries and failed in CI claiming ``AJ 122, 549`` no
+    longer drifts. Sorting makes the fold deterministic, so a baseline recorded
+    on one machine means the same thing on another.
+    """
+    found = []
     for subdir, patterns in SCAN:
         base = ROOT / subdir
         if not base.is_dir():
@@ -199,7 +209,9 @@ def _iter_files():
                 rel = path.relative_to(ROOT).as_posix()
                 if any(rel.startswith(d) for d in EXCLUDE_DIRS):
                     continue
-                yield path, rel
+                found.append((rel, path))
+    for rel, path in sorted(found):
+        yield path, rel
 
 
 def _is_year(token: str) -> bool:
