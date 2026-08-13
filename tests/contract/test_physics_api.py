@@ -115,16 +115,23 @@ class TestAgnNlrEmissionReturnType:
     def test_agn_nlr_emission_return_annotation(self):
         """agn_nlr_emission() must NOT have a union return type."""
         import inspect
+        import types
+        import typing
 
         from tengri.components.nebular.agn_nebular import agn_nlr_emission
 
-        hints = {}
-        try:
-            import typing
-
-            hints = typing.get_type_hints(agn_nlr_emission)
-        except Exception:
-            pass
+        # The union check the docstring promises. It was written as
+        # `hints = {}; try: hints = get_type_hints(...) except: pass` and then
+        # `hints` was never read, so the only thing asserted was the parameter
+        # check below and a genuinely-union return would have passed.
+        hints = typing.get_type_hints(agn_nlr_emission)
+        ret = hints.get("return")
+        assert ret is not None, "agn_nlr_emission has no return annotation to check"
+        assert typing.get_origin(ret) not in (typing.Union, types.UnionType), (
+            f"agn_nlr_emission() returns a union: {ret}. Callers cannot tell which "
+            f"arm they got without a runtime check, which is what removing the "
+            f"union was meant to fix."
+        )
 
         sig = inspect.signature(agn_nlr_emission)
         # Check: 'wavelength' should no longer be a parameter
