@@ -235,7 +235,9 @@ These read the registries directly, so a model registered via `@register_agn_mod
 
 ## What's modular
 
-Stellar populations come from DSPS SSPs (BC03, BPASS, FSPS, ProGeny).
+Stellar populations are integrated over SSP grids in the DSPS format
+(BC03, BPASS, FSPS, ProGeny) by tengri's own differentiable CIC kernel;
+DSPS's histogram kernel is selectable for cross-code parity.
 The SFH layer covers parametric families (15+, registry-driven),
 non-parametric reconstructions (Leja+ continuity, Dirichlet), and
 stochastic fields (IFT correlated fields with PSD-governed

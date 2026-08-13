@@ -76,8 +76,8 @@ class DH02CE01IRSEDComponent(EmissionComponent):
     .. [2] Chary, R. & Elbaz, D., 2001, "Interpreting the Cosmic Infrared
        Background: Constraints on the Evolution of the Dust-enshrouded Star
        Formation Rate", ApJ, 556, 562. https://doi.org/10.1086/321609
-    .. [3] Martínez-Ramírez, L. N., et al., 2024, "AGNfitter-rX: Modeling the
-       radio-to-X-ray SED of AGN", A&A, 688, A46.
+    .. [3] Martínez-Ramírez, L. N., et al., 2024, "AGNfitter-rx: Modeling the
+       radio-to-X-ray spectral energy distributions of AGNs", A&A, 688, A46.
        https://doi.org/10.1051/0004-6361/202449329
     """
 

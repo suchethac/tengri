@@ -36,8 +36,8 @@ SED (the torus normalizes to the disc luminosity).
 
 References
 ----------
-.. [1] S. F. Hönig & M. Kishimoto, "The dusty heart of nearby active galaxies.
-   II. From clumpy torus models to a unified model," ApJL 838, L20 (2017).
+.. [1] S. F. Hönig & M. Kishimoto, "Dusty winds in active galactic nuclei: reconciling
+   observations with models," ApJL 838, L20 (2017).
    arXiv:1702.08691.
 .. [2] L. N. Martínez-Ramírez et al., "AGNfitter-rx: Modeling the radio-to-X-ray
    spectral energy distributions of AGNs," A&A 688, A46 (2024).
@@ -142,6 +142,11 @@ References
         weight="bold",
     )
     plt.savefig("plot_cat3d_wind_sweep.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 7.425 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_cat3d_wind_sweep.py:
