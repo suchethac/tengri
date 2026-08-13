@@ -56,7 +56,7 @@ def _menus():
     for name in sorted(n for n in dir(tengri) if n.startswith("list_")):
         try:
             rows = list(getattr(tengri, name)())
-        except Exception:  # noqa: BLE001
+        except Exception:
             continue
         if rows and isinstance(rows[0], dict) and "name" in rows[0]:
             out[name] = rows

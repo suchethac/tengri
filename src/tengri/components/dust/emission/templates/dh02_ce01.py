@@ -88,6 +88,29 @@ class DH02CE01IRSEDComponent(EmissionComponent):
         "chary_elbaz2001",
     )
 
+    accepts_threaded_templates: ClassVar[bool] = True
+
+    def load(self, wave: jnp.ndarray | None = None):
+        """Load the grid so it can be threaded as an argument, not baked.
+
+        Returns
+        -------
+        dict or None
+            Template arrays from :func:`load_dh02_ce01_lnu_grid`, or ``None``
+            when the HDF5 file is absent — the backend then falls back to its
+            module-level load.
+
+        Notes
+        -----
+        **JIT-compatible**: no, deliberately — runs at build time.
+        """
+        del wave
+        from tengri.components.dust.emission.emission import _find_data_file
+        from tengri.components.dust.emission_templates import load_dh02_ce01_lnu_grid
+
+        path = _find_data_file("dh02_ce01_grid.h5")
+        return None if path is None else load_dh02_ce01_lnu_grid(path)
+
     def predict(
         self,
         p: dict[str, jnp.ndarray],
@@ -95,6 +118,7 @@ class DH02CE01IRSEDComponent(EmissionComponent):
         wave: jnp.ndarray,
         *,
         L_ir: float,
+        templates=None,
     ) -> tuple[jnp.ndarray, dict[str, jnp.ndarray]]:
         """Compute DH02_CE01 cold-dust emission.
 
@@ -110,6 +134,10 @@ class DH02CE01IRSEDComponent(EmissionComponent):
             Rest-frame wavelength grid [Angstrom].
         L_ir : float
             Dust-absorbed luminosity to re-radiate [erg/s].
+        templates : dict, optional
+            Grid threaded in as a traced argument. When ``None`` the
+            module-level lazy loader is used, which captures the library as a
+            compile-time constant (1.32 MB, #1649).
 
         Returns
         -------
@@ -122,7 +150,14 @@ class DH02CE01IRSEDComponent(EmissionComponent):
         **JIT-compatible**: yes.
         """
         del p
-        from tengri.components.dust.emission.emission import DUST_EMISSION_MODELS
+        if templates is not None:
+            # Closure built over the THREADED arrays: capturing a tracer is
+            # fine, capturing a concrete array is what bakes (#1649).
+            from tengri.components.dust.emission_templates import create_dh02_ce01_from_grid
 
-        sed = DUST_EMISSION_MODELS["dh02_ce01"](wave, L_ir)
+            sed = create_dh02_ce01_from_grid(templates)(wave, L_ir)
+        else:
+            from tengri.components.dust.emission.emission import DUST_EMISSION_MODELS
+
+            sed = DUST_EMISSION_MODELS["dh02_ce01"](wave, L_ir)
         return sed_in + sed, {"sed_dust_ir": sed}
