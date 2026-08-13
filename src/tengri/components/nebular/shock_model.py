@@ -365,8 +365,6 @@ class ShockNebular(SEDModelComponent):
             # orchestration is already correct, so do not duplicate it.
             return super().apply(state, params, ssp_data=ssp_data, template_data=template_data)
 
-        from tengri.observation.photometry import lnu_filter_integral_batch
-
         p = self.slice_params(params)
         sed_in = (
             state.sed_intrinsic if state.sed_intrinsic is not None else jnp.zeros_like(state.wave)
@@ -394,6 +392,12 @@ class ShockNebular(SEDModelComponent):
                     "filters in the rest frame and silently mis-weight the "
                     "shock lines."
                 )
+            # Not routed through ``_band_projection``: shock has no band response
+            # and no effective-wavelength fallback, so it has no cascade to share
+            # -- only this branch. Going through the helper would mean passing two
+            # placeholder arguments to reach the call below.
+            from tengri.observation.photometry import lnu_filter_integral_batch
+
             z = jnp.asarray(p["redshift"])
             shock_sed = published["sed_shock"]
             published = {

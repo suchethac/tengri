@@ -242,10 +242,16 @@ class XRaySEDComponent(TemplateThreading):
         # Precompute LUT families (#624): X-ray is additive and unattenuated.
         # Spectroscopy: a pixel is a point-sample, so evaluating at the pixel
         # wavelength is exact.
+        from tengri.components._band_projection import project_additive_onto_photometry
+
         filter_eff = state.derived.get("filter_eff_waves")
         if filter_eff is not None:
             band = _term_band_response(template_data, "xray")
             fw_pad = state.derived.get("phot_filter_waves_padded")
+            ft_pad = state.derived.get("phot_filter_trans_padded")
+
+            # Compute precomputed photometry if band response is available.
+            precomputed = None
             if band is not None:
                 # Exact fast path. X-ray is a sum of rank-1 terms — HMXB, LMXB, hot
                 # gas, corona — each a scalar amplitude times a spectral shape fixed
@@ -256,22 +262,30 @@ class XRaySEDComponent(TemplateThreading):
                 # total would not be. See SEDModel._additive_term_band_response.
                 ref = self.emission_terms(params, band["lam_ref"], **inputs)
                 amps = jnp.stack([t[i] for i, t in enumerate(ref.values())]) / band["S_ref"]
-                derived_overrides["xray_phot_lnu_precomp"] = amps @ band["R"]
-            elif fw_pad is not None:
-                # Exact dense path: integrate the X-ray SED through the true filter
-                # transmission on every call (same integral as the exact path).
-                from tengri.observation.photometry import lnu_filter_integral_batch
+                precomputed = amps @ band["R"]
 
-                ft_pad = state.derived.get("phot_filter_trans_padded")
-                derived_overrides["xray_phot_lnu_precomp"] = lnu_filter_integral_batch(
-                    L_xray,
-                    wave,
-                    fw_pad,
-                    ft_pad,
-                    jnp.asarray(require_redshift(params, "components.xray.component.apply")),
-                )
-            else:
-                derived_overrides["xray_phot_lnu_precomp"] = _emit(filter_eff)
+            # Resolved only for the dense branch, which is the only one that reads
+            # it. ``require_redshift`` RAISES on a params dict without 'redshift',
+            # so hoisting it above this condition would make a band-response model
+            # fail where it used to work.
+            z_xray = (
+                jnp.asarray(require_redshift(params, "components.xray.component.apply"))
+                if precomputed is None and fw_pad is not None
+                else None
+            )
+
+            # Project onto observed-frame photometric filters.
+            derived_overrides["xray_phot_lnu_precomp"] = project_additive_onto_photometry(
+                precomputed,
+                L_xray,
+                wave,
+                filter_eff,
+                fw_pad,
+                ft_pad,
+                z_xray,
+                fallback_fn=_emit,
+            )
+
             # The REST band (#1148): ``phot_rest_fnu`` projects at z=0, so its
             # filter samples the pivot itself, not pivot/(1+z). Same emission,
             # different wavelengths — reusing the observed-band value here is
