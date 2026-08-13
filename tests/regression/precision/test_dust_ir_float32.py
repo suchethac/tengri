@@ -42,6 +42,10 @@ TEMPLATE_MODELS = (
     "schreiber2018",
     "astrodust",
     "pah_drude",
+    # Registered for #1738: it had a grammar entry, a menu entry and
+    # status='production' but no component, so it was unselectable and this
+    # inventory never saw it. Measured here like the rest.
+    "dh02_ce01",
     # Analytic Planck closures, float32-clean since the nu**3 intermediate was
     # removed from planck_bnu (#1206).
     "mbb",
