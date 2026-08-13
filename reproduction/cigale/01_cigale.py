@@ -121,7 +121,7 @@ TAU_BC_FIDUCIAL = 0.0  # CIGALE modified_starburst = single continuum screen
 # of registry-default convention.
 LOG10_ZSUN = -1.848
 MET_LOGZSOL = float(np.log10(0.02) - LOG10_ZSUN)  # ≈ +0.149
-STELLAR_FIDUCIAL = {"logzsol": Fixed(MET_LOGZSOL), "*": FIXED}
+MET_FIDUCIAL = {"logzsol": Fixed(MET_LOGZSOL), "*": FIXED}
 
 # Notebook-vs-script compatible: ``__file__`` is undefined when this
 # is run via nbclient (the kernel's resources path is set to the
@@ -340,7 +340,7 @@ t_c, sfr_c = C.sfh_curve(
 tau_gyr, age_gyr = 1.0, 5.0
 _m_sfh = SEDModel.build(
     ssp_data=ssp,
-    stellar=STELLAR_FIDUCIAL,
+    met=MET_FIDUCIAL,
     sfh={
         "type": "delayed",
         "tau_gyr": Fixed(tau_gyr),
@@ -426,7 +426,7 @@ t_c2, sfr_c2 = C.sfh_curve(
 _age_gyr_2exp = 10.0
 _m_2exp = SEDModel.build(
     ssp_data=ssp,
-    stellar=STELLAR_FIDUCIAL,
+    met=MET_FIDUCIAL,
     sfh={
         "type": "sfh2exp",
         "tau_main_gyr": Fixed(4.0),
@@ -500,7 +500,7 @@ w_c, L_c = C.to_lnu(sed_c)
 
 m_stellar = SEDModel.build(
     ssp_data=ssp,
-    stellar=STELLAR_FIDUCIAL,
+    met=MET_FIDUCIAL,
     sfh={
         "type": "delayed",
         "tau_gyr": Fixed(1.0),
@@ -568,7 +568,7 @@ _law_pairs = [
     ("dustatt_modified_starburst", dict(E_BV_lines=0.3), "noll09", "Calzetti + Leitherer UV"),
     ("dustatt_modified_CF00", dict(Av_ISM=1.2), "power_law", "Charlot & Fall power law"),
 ]
-_tengri_laws = list_laws(headline=False)  # {name: fn(wave_aa) -> k at tau_V=1}
+_tengri_laws = list_laws(headline=False).to_dict("fn")  # {name: fn(wave_aa) -> k at tau_V=1}
 wave_law = np.logspace(np.log10(1000.0), np.log10(30000.0), 2000)
 
 
@@ -659,7 +659,7 @@ w_c_d, L_c_d = C.to_lnu(sed_c_dust)
 
 m_nd = SEDModel.build(
     ssp_data=ssp,
-    stellar=STELLAR_FIDUCIAL,
+    met=MET_FIDUCIAL,
     sfh={
         "type": "delayed",
         "tau_gyr": Fixed(1.0),
@@ -674,7 +674,7 @@ s_nd = m_nd.predict_state({})
 
 m_d = SEDModel.build(
     ssp_data=ssp,
-    stellar=STELLAR_FIDUCIAL,
+    met=MET_FIDUCIAL,
     sfh={
         "type": "delayed",
         "tau_gyr": Fixed(1.0),
@@ -763,7 +763,7 @@ w_c_ir, L_c_ir = C.to_lnu(sed_c_ir)
 
 m_ir = SEDModel.build(
     ssp_data=ssp,
-    stellar=STELLAR_FIDUCIAL,
+    met=MET_FIDUCIAL,
     sfh={
         "type": "delayed",
         "tau_gyr": Fixed(1.0),
@@ -908,7 +908,7 @@ def _knob_model(emission_type, **emkw):
     """
     return SEDModel.build(
         ssp_data=ssp,
-        stellar=STELLAR_FIDUCIAL,
+        met=MET_FIDUCIAL,
         sfh={
             "type": "delayed",
             "tau_gyr": Fixed(1.0),
@@ -1134,7 +1134,7 @@ _neb_sfh_kw = {
 
 m_no_neb = SEDModel.build(
     ssp_data=ssp,
-    stellar=STELLAR_FIDUCIAL,
+    met=MET_FIDUCIAL,
     sfh=_neb_sfh_kw,
     dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
     redshift=Fixed(0.0),
@@ -1143,7 +1143,7 @@ s_no_neb = m_no_neb.predict_state({})
 
 m_neb = SEDModel.build(
     ssp_data=ssp,
-    stellar=STELLAR_FIDUCIAL,
+    met=MET_FIDUCIAL,
     sfh=_neb_sfh_kw,
     neb={
         "type": "cue",
@@ -1212,7 +1212,7 @@ _ssp_neb_dense = load_ssp_data(
 )
 _m_neb_dense = SEDModel.build(
     ssp_data=_ssp_neb_dense,
-    stellar={"logzsol": Fixed(0.0), "*": FIXED},
+    met={"logzsol": Fixed(0.0), "*": FIXED},
     sfh=_neb_sfh_kw,
     neb={
         "type": "cue",
@@ -1304,7 +1304,7 @@ w_base, L_base = C.to_lnu(sed_c_base)
 
 m_agn_base = SEDModel.build(
     ssp_data=ssp,
-    stellar=STELLAR_FIDUCIAL,
+    met=MET_FIDUCIAL,
     sfh={
         "type": "delayed",
         "tau_gyr": Fixed(1.0),
@@ -1362,7 +1362,7 @@ w_skirt, L_skirt = C.to_lnu(sed_skirtor)
 
 m_agn = SEDModel.build(
     ssp_data=ssp,
-    stellar=STELLAR_FIDUCIAL,
+    met=MET_FIDUCIAL,
     sfh={
         "type": "delayed",
         "tau_gyr": Fixed(1.0),
@@ -1567,7 +1567,7 @@ w_sk0, L_sk0 = C.to_lnu(sed_skirtor0)
 
 m_agn_sk = SEDModel.build(
     ssp_data=ssp,
-    stellar=STELLAR_FIDUCIAL,
+    met=MET_FIDUCIAL,
     sfh={
         "type": "delayed",
         "tau_gyr": Fixed(1.0),
@@ -1723,7 +1723,7 @@ def _cigale_l2500(sed):
 def _tengri_xray(log_lbol, cos_inc):
     return SEDModel.build(
         ssp_data=ssp,
-        stellar=STELLAR_FIDUCIAL,
+        met=MET_FIDUCIAL,
         sfh={
             "type": "delayed",
             "tau_gyr": Fixed(1.0),
@@ -1943,7 +1943,7 @@ w_r, L_r = U.wnm_to_erg_per_hz_per_aa(
 
 m_r = SEDModel.build(
     ssp_data=ssp,
-    stellar=STELLAR_FIDUCIAL,
+    met=MET_FIDUCIAL,
     sfh={
         "type": "delayed",
         "tau_gyr": Fixed(1.0),
@@ -2191,7 +2191,7 @@ w_ext, L_ext = np.asarray(_w_full), np.asarray(_L_full)
 
 m_full = SEDModel.build(
     ssp_data=ssp,
-    stellar=STELLAR_FIDUCIAL,
+    met=MET_FIDUCIAL,
     sfh={
         "type": "delayed",
         "tau_gyr": Fixed(1.0),
