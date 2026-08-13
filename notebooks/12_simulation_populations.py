@@ -694,7 +694,7 @@ print(f"first predict, compiling {t_compile:7.2f} s   (once per shape)")
 print(f"predict, warm            {t_run:7.3f} s   -> {1e3 * t_run / 64:.2f} ms/galaxy")
 
 # %% [markdown]
-# ### One compile, not N
+# ### Where the loop actually loses
 #
 # The alternative to a catalog is the obvious loop: one galaxy, one prediction,
 # repeat. It is correct, and it is a trap — but *not* for the reason people
@@ -745,9 +745,11 @@ print(f"(b) -> (c): {t_solo / t_batch:6.1f}x   vectorize the arithmetic")
 # vectorization matters most on a GPU, where the same program has hundreds of
 # lanes to fill; the validation cost is pure overhead everywhere.
 #
-# (`from_histories` is heavier than it needs to be — it rebuilds the model's
-# component chain several times to ask a few static questions about it. That is
-# tracked upstream; the operational advice above holds regardless.)
+# (`from_histories` is heavier than it needs to be: it rebuilds the model's
+# component chain three times to ask three *static* configuration questions —
+# is the SFH tabulated, is there a nebular backend, what is the SSP metallicity
+# grid. That is tengri issue #1769. The operational advice above holds either
+# way, and gets cheaper if the issue is fixed.)
 
 # %% [markdown]
 # ### What `WavePrecomp` buys
@@ -800,8 +802,11 @@ for chunk in (16, 32, 64, 128):
 # %% [markdown]
 # ### Scaling
 #
-# The point of the fixed-cost design: past the compile, throughput is flat in
-# *N*. Doubling the catalog doubles the wall clock and nothing else.
+# The point of the fixed-cost design: past the compile, per-galaxy cost is
+# roughly **flat** in *N* — doubling the catalog roughly doubles the wall clock
+# and does nothing else. Expect some scatter between rows below: these are
+# single timings on a shared machine, so a ~20% spread is measurement noise
+# rather than a scaling term. What would matter is a *monotonic* climb with *N*.
 
 # %%
 print(f"{'N':>7s} {'wall':>9s} {'ms/galaxy':>11s} {'galaxies/s':>12s}")
