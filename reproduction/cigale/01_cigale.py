@@ -20,9 +20,8 @@
 # panchromatic SED fitting. This notebook places its physics modules —
 # `sfhdelayed`, `bc03`, `nebular`, `dustatt_modified_starburst`,
 # `dale2014`, `skirtor2016`, `xray`, `radio`, `redshifting` — next to
-# their tengri equivalents on the same axes, in the same units, at the
-# same parameters. Same parameters in, same SED out: any disagreement is
-# physics, not data or fitting.
+# their tengri equivalents at matched parameters. Same parameters in, same
+# SED out: any disagreement is physics, not data or fitting.
 #
 # Both codes consume the same BC03 templates. CIGALE's bundled
 # Chabrier-IMF grid (Bruzual & Charlot 2003) is repackaged into the DSPS
@@ -34,12 +33,9 @@
 # Dale et al. (2014) IR re-emission with α = 2. Each section sweeps one
 # physics block around this fiducial.
 #
-# **What to expect.** The stellar templates, SFH, attenuation curves, AGN,
-# dust IR, X-ray, IGM, and radio synchrotron all match CIGALE to floating
-# point or a fraction of a percent. One block differs by design: the nebular
-# emitter uses Cue (a neural emulator trained on Cloudy 17, Li et al. 2025)
-# rather than CIGALE's Cloudy 13.x grids. Every discrepancy is called out
-# where it appears.
+# **What to expect.** One block differs by design: the nebular emitter uses
+# Cue (a neural emulator trained on Cloudy 17, Li et al. 2025) rather than
+# CIGALE's Cloudy 13.x grids.
 
 # %% [markdown]
 # ## Setup
@@ -172,9 +168,9 @@ print(
 # %% [markdown]
 # ## Module map
 #
-# Each row shows the CIGALE module on the left, the tengri registry on
-# the right. The tengri side is enumerated live via `tengri.list_*()` so
-# the table reflects what the installed version actually exposes.
+# CIGALE module against tengri registry. The tengri side is enumerated live
+# via `tengri.list_*()`, so the table reflects what the installed version
+# actually exposes.
 
 
 # %%
@@ -229,9 +225,9 @@ for block, (cig, tng) in registries.items():
 #
 # BC03 Chabrier (Bruzual & Charlot 2003) at Z = 0.02 from 1 Myr to 10 Gyr.
 # CIGALE's `bc03/Z=0.02_imf=chab.pickle` (solid) read directly,
-# against the same templates in tengri's HDF5 (dashed). The lower panel shows
-# the relative residual |tengri − CIGALE| / CIGALE, ~1e-7 from float32
-# round-trip through HDF5 repackaging.
+# against the same templates in tengri's HDF5 (dashed), over the relative
+# residual |tengri − CIGALE| / CIGALE — ~1e-7 from float32 round-trip through
+# HDF5 repackaging.
 
 # %%
 import pickle as _pickle
@@ -313,7 +309,7 @@ save_fig("cigale_01_ssp_bc03.png")
 # tengri's `sfh.delayed` is the same τ-delayed shape CIGALE uses in
 # `sfhdelayed`: SFR(t) ∝ t · exp(−t/τ), peak at t = τ. Both integrate to 1 M☉
 # formed by `age` — CIGALE via `normalise=True`, tengri via `log_total_mass = 0.0`.
-# The right panel shows `state.derived["sfr_history"]` on a 256-point log-spaced
+# tengri's side reads `state.derived["sfr_history"]` on a 256-point log-spaced
 # lookback grid; the `∫SFR dt = 1.0000 M☉` check verifies the integral matches
 # the constraint.
 
