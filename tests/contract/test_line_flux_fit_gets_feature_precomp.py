@@ -26,6 +26,16 @@ behavioral change.
 Auto-activation is scoped to the ``"auto"`` policy on purpose. ``approx=None``
 means exact and stays exact; an explicit config means what it says. Both warn
 instead, so the cost is discoverable rather than silent.
+
+**The dust gate (#1748/#1760).** All of the above holds only for a model the LUT
+can actually serve. Serving the line channel from the per-Q_H grid requires
+zeroing ``sed_nebular``, and ``DustSEDComponent`` declares it as an input — so any
+model with dust disarms the fast path, ``FeaturePrecomp`` is bit-identical there
+(1.00x, not 21x, off compiled-HLO gradient FLOPs), and neither the config nor the
+warning is applied. This file was originally written against a **dusty** fixture,
+so #1760 turned all five of those assertions red on main; the fixture is now
+dust-free and :func:`test_a_dusty_model_gets_no_lut_and_no_advice` carries the
+other half, so the two contracts are split rather than one replacing the other.
 """
 
 from __future__ import annotations
@@ -59,19 +69,31 @@ _LINES = ("Halpha", "Hbeta", "OIII_5007")
 _WAVES = jnp.array([6564.61, 4862.71, 5008.24])
 
 
-def _model(ssp, obs, approx):
+_DUSTY = {
+    "type": "two_component",
+    "law_bc": "calzetti",
+    "all_params": FIXED,
+    "tau_diff": Uniform(0.0, 2.0),
+}
+
+
+def _model(ssp, obs, approx, *, dust=True):
+    """Build the fixture model. ``dust=False`` is what lets the LUT engage at all.
+
+    ``DustSEDComponent`` declares ``sed_nebular`` as an input, so a dusty model
+    forbids zeroing the continuum and ``FeaturePrecomp`` is measured bit-identical
+    there — 1.00x, not 21x (#1748/#1760). Every test below that expects the LUT
+    therefore has to ask for a model that can accept one; ``dust={'type': 'none'}``
+    is required, because merely omitting ``dust=`` still builds a
+    ``DustSEDComponent`` and yields a control that is not a control.
+    """
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         return SEDModel.build(
             ssp_data=ssp,
             observation=obs,
             sfh={"type": "dpl", "all_params": FREE},
-            dust={
-                "type": "two_component",
-                "law_bc": "calzetti",
-                "all_params": FIXED,
-                "tau_diff": Uniform(0.0, 2.0),
-            },
+            dust=_DUSTY if dust else {"type": "none"},
             neb={"type": "none"},
             redshift=Fixed(0.1),
             approx=approx,
@@ -80,8 +102,12 @@ def _model(ssp, obs, approx):
 
 @pytest.fixture
 def joint_setup(synthetic_ssp_wide, synthetic_tophat_obs):
-    """A photometry + line-flux observation, plus mock data at truth."""
-    base = _model(synthetic_ssp_wide, synthetic_tophat_obs, WavePrecomp())
+    """A photometry + line-flux observation, plus mock data at truth.
+
+    Dust-free, so ``FeaturePrecomp`` can actually engage — see :func:`_model`.
+    The dusty counterpart lives in :func:`joint_setup_dusty`.
+    """
+    base = _model(synthetic_ssp_wide, synthetic_tophat_obs, WavePrecomp(), dust=False)
     truth = base.spec.sample(jax.random.PRNGKey(0))
     phot = np.asarray(base.predict_photometry(truth))
     lf = np.asarray(base.measure_line_fluxes(truth, fast=False))[:3]
@@ -106,7 +132,7 @@ def _fit(ssp, obs, phot, **kw):
     very warnings two of these tests exist to observe, and they failed with
     "DID NOT WARN" against a warning that was in fact raised.
     """
-    model = _model(ssp, obs, kw.pop("build_approx", None))
+    model = _model(ssp, obs, kw.pop("build_approx", None), dust=kw.pop("dust", False))
     return Fitter(
         model,
         data=phot,
@@ -267,3 +293,42 @@ def test_a_photometry_only_fit_is_untouched(synthetic_ssp_wide, synthetic_tophat
         )
     assert not fitter.model.approx.feature_precomp
     assert fitter.model.approx.wave_precomp, "photometry should still get WavePrecomp"
+
+
+def test_a_dusty_model_gets_no_lut_and_no_advice(joint_setup):
+    """The other half of the contract: a model that *cannot* engage gets neither.
+
+    ``DustSEDComponent`` reads ``sed_nebular`` to size the absorbed budget, so the
+    grid may not serve photometry and ``FeaturePrecomp`` is bit-identical on a dusty
+    model — 1.00x, not 21x (#1748/#1760). Attaching it would be a no-op, and warning
+    about it would quote a speedup the caller cannot obtain, which reads as a defect
+    in their own model.
+
+    Pinned here because every other test in this file was silently converted to
+    ``dust=False`` to keep asserting the #1477 contract. Without this one, that
+    conversion would have moved the goalposts rather than split them: the file would
+    no longer cover the configuration most users actually fit.
+    """
+    from tengri.inference.fitter import fast_nebular_can_engage
+
+    ssp, obs, phot = joint_setup
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        fitter = _fit(ssp, obs, phot, dust=True)
+
+    assert not fast_nebular_can_engage(fitter.model), (
+        "setup: a two_component-dust model must not be able to engage the fast "
+        "nebular path — if this passes, the dust gate has moved and the tests "
+        "above no longer need dust=False"
+    )
+    assert not fitter.model.approx.feature_precomp, (
+        "a dusty model was given FeaturePrecomp, which is measured bit-identical "
+        "there — an inert config on the graph (#1748)"
+    )
+    assert fitter.model.approx.wave_precomp, "the real speedup, WavePrecomp, must still apply"
+
+    offenders = [w for w in caught if "FeaturePrecomp" in str(w.message)]
+    assert not offenders, (
+        f"advised FeaturePrecomp on a model that cannot engage it: {offenders[0].message}"
+    )
