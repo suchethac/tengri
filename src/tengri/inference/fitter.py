@@ -469,6 +469,48 @@ def _memoized_approx_clone(model, cfg):
     return clone
 
 
+def _component_chains(model) -> tuple:
+    """Every component chain ``model`` owns, or ``()`` if none can be inspected.
+
+    ``_build_component_chain`` lives on :class:`SEDModel` and nowhere else, so a
+    bare ``getattr`` on the object the fitter is holding finds it only when that
+    object *is* an ``SEDModel``. It usually is not: inference is canonically
+    through :class:`ForwardModel` (#211), which holds ``populations[i].sed`` —
+    the shape ``inference/catalog.py`` already reaches through by hand.
+
+    That is what made :func:`fast_nebular_can_engage` answer ``True`` for every
+    ``ForwardModel``, dusty or not, so #1760's guard was a no-op on the canonical
+    path and a dusty fit still got the inert config #1748 removed (#1790).
+    Verified before and after on a dusty two_component model: the bare
+    ``SEDModel`` answered ``False``, the ``ForwardModel`` wrapping that same SED
+    answered ``True``.
+
+    Every population is consulted and :func:`fast_nebular_can_engage` requires
+    all of them to be clear, rather than reading ``populations[0]`` — picking one
+    arbitrarily is the failing-open shape ``ForwardModel._single_inner_sed``
+    already refuses for the same reason (#1271).
+    """
+    chain = getattr(model, "_cached_component_chain", None)
+    if chain is not None:
+        return (chain,)
+
+    builder = getattr(model, "_build_component_chain", None)
+    if builder is not None:
+        return (builder(),)
+
+    populations = getattr(model, "populations", None) or ()
+    chains: list = []
+    for pop in populations:
+        sed = getattr(pop, "sed", None)
+        if sed is None:
+            return ()
+        inner = _component_chains(sed)
+        if not inner:
+            return ()
+        chains.extend(inner)
+    return tuple(chains)
+
+
 def fast_nebular_can_engage(model) -> bool:
     """Can ``FeaturePrecomp`` actually do anything for this model?
 
@@ -515,13 +557,28 @@ def fast_nebular_can_engage(model) -> bool:
     """
     from tengri.forward.sed_model import _nebular_continuum_consumers
 
-    chain = getattr(model, "_cached_component_chain", None)
-    if chain is None:
-        builder = getattr(model, "_build_component_chain", None)
-        if builder is None:
-            return True
-        chain = builder()
-    return not _nebular_continuum_consumers(chain)
+    chains = _component_chains(model)
+    if not chains:
+        # Deliberately permissive, and deliberately NOT changed with #1790.
+        #
+        # On the asymmetry alone this should fail closed: a wrong ``False`` only
+        # forfeits a speedup, while a wrong ``True`` attaches a config #1748
+        # measured as bit-identical in compiled FLOPs *and* changes
+        # ``compile_signature()``, so the fit buys a second compiled kernel for
+        # nothing. That was tried. Measured blast radius: 5 failures across
+        # test_batch_inference_defaults_to_precomp, test_issue_1596_photometry_
+        # feature_default and test_issue_1683_build_time_approx_feature_topup —
+        # every one a ``_StubModel`` exposing neither a chain nor populations,
+        # i.e. objects that are not models rather than models we cannot read.
+        #
+        # Once ``_component_chains`` unwraps the wrapper, every real surface
+        # (SEDModel, ForwardModel, the batch and catalog paths) resolves to a
+        # chain, so flipping this default has no demonstrated effect on any
+        # production path — only on doubles. Rewriting five tests to enable a
+        # hardening with no measured benefit is a separate change; #1790 records
+        # it as a follow-up with that blast radius attached.
+        return True
+    return not any(_nebular_continuum_consumers(chain) for chain in chains)
 
 
 def _has_line_adjacent_channel(model) -> bool:
