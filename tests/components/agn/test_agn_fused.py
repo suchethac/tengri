@@ -152,14 +152,54 @@ class TestAGNFusedPhotometry:
         # f evaluable at params +/- h along the probe direction, and nudging a
         # full parameter dict along a random tangent walks bounded parameters
         # out of their physical domain, so the probe returns NaN and can judge
-        # nothing. Per-parameter probes inside the valid range would be the way
-        # to strengthen this — see tests/_grad_parity.py.
+        # nothing. Per-parameter probes inside the valid range are done in
+        # test_agn_log_lbol_gradient_matches_finite_difference below.
         grads = jax.grad(loss_fn)(params)
         for name, grad_val in grads.items():
             if grad_val is not None:
                 assert jnp.all(jnp.isfinite(grad_val)), (
                     f"Non-finite gradient for {name}: {grad_val}"
                 )
+        # 96 of the 110 components are exactly zero at this sample point (the
+        # spec declares the full AGN superset, most of which the active blocks
+        # do not consume). That is expected — but a wholesale detachment would
+        # look identical under a finiteness check alone, so require signal.
+        flat = jnp.concatenate([jnp.ravel(g) for g in grads.values() if g is not None])
+        assert jnp.any(flat != 0.0), "every gradient is zero — the model is detached"
+
+    @pytest.mark.parametrize("log_lbol", [12.0, 13.0, 14.0, 15.0])
+    def test_agn_log_lbol_gradient_matches_finite_difference(
+        self, parametric_agn_spec, synthetic_ssp, simple_filters, log_lbol
+    ):
+        """The AGN luminosity gradient is correct where the AGN is present.
+
+        Probing one bounded parameter inside its own range avoids the
+        random-tangent problem noted above, so this is a real correctness
+        check rather than a finiteness one.
+
+        The sampled ``agn_log_lbol`` is about 8.5, where this AGN changes the
+        photometry by a ratio of exactly 1.0 — it contributes nothing to these
+        bands, so every ``agn_*`` gradient is 0 and any assertion about them is
+        vacuous.  The AGN only becomes numerically present above ~12, which is
+        why these points sit there.
+        """
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            model = SEDModel(parametric_agn_spec, synthetic_ssp, filters=simple_filters)
+        params = parametric_agn_spec.sample(jax.random.PRNGKey(42))
+
+        def loss_at(lbol):
+            p = dict(params)
+            p["agn_log_lbol"] = jnp.asarray(lbol)
+            return jnp.sum(model.predict_photometry(p))
+
+        analytic = float(jax.grad(loss_at)(log_lbol))
+        h = 1e-4
+        fd = (float(loss_at(log_lbol + h)) - float(loss_at(log_lbol - h))) / (2.0 * h)
+        assert analytic != 0.0, "AGN luminosity has no gradient where the AGN is luminous"
+        assert analytic == pytest.approx(fd, rel=2e-2), (
+            f"log_lbol={log_lbol}: jax.grad {analytic:.6e} vs central difference {fd:.6e}"
+        )
 
     def test_agn_lbol_affects_photometry(self, parametric_agn_spec, synthetic_ssp, simple_filters):
         """Raising agn_log_lbol must brighten every band.
