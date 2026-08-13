@@ -88,7 +88,7 @@ print(
 # tengri's `met_logzsol = log10(Z/Z_⊙) = 0` is the bit-aligned counterpart.
 LOG10_ZSUN = -1.848
 MET_LOGZSOL = 0.0
-STELLAR_FIDUCIAL = {"logzsol": Fixed(MET_LOGZSOL), "*": FIXED}
+MET_FIDUCIAL = {"logzsol": Fixed(MET_LOGZSOL), "*": FIXED}
 
 # Notebook-vs-script compatible: ``__file__`` is undefined when this is
 # run via nbclient (the kernel's resources path is set to the
@@ -241,7 +241,7 @@ sfr_b_keep = sfr_b[_keep]
 
 _m_sfh = SEDModel.build(
     ssp_data=ssp,
-    stellar=STELLAR_FIDUCIAL,
+    met=MET_FIDUCIAL,
     sfh={
         "type": "delayed",
         "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
@@ -335,7 +335,7 @@ AGE_OF_UNIVERSE_GYR = float(_mg_b_dpl.sfh.age_of_universe) / 1e9
 
 m_dpl = SEDModel.build(
     ssp_data=ssp,
-    stellar=STELLAR_FIDUCIAL,
+    met=MET_FIDUCIAL,
     sfh={
         "type": "dpl",
         "alpha": Fixed(DPL_ALPHA),
@@ -426,7 +426,7 @@ sfr_b_ln = np.asarray(_mg_b_ln.sfh.sfh, dtype=np.float64)
 
 m_ln = SEDModel.build(
     ssp_data=ssp,
-    stellar=STELLAR_FIDUCIAL,
+    met=MET_FIDUCIAL,
     sfh={
         "type": "lnorm",
         "peak_gyr": Fixed(LN_TMAX_GYR),
@@ -524,7 +524,7 @@ for row, (label, ratios) in enumerate(_cases):
     # tengri side
     m_c = SEDModel.build(
         ssp_data=ssp,
-        stellar=STELLAR_FIDUCIAL,
+        met=MET_FIDUCIAL,
         sfh={
             "type": "continuity",
             "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
@@ -577,7 +577,7 @@ w_b, L_b = B.stellar_only_lnu(
 
 m_stellar = SEDModel.build(
     ssp_data=ssp,
-    stellar=STELLAR_FIDUCIAL,
+    met=MET_FIDUCIAL,
     sfh={
         "type": "delayed",
         "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
@@ -686,7 +686,7 @@ for color, z, logz in zip(_colors, _Z_VALUES, _logzsol_values):
     ax_b.plot(w_b_z, L_b_z, color=color, linewidth=1.7, label=f"Z = {z:g} Z⊙")
     m_z = SEDModel.build(
         ssp_data=ssp,
-        stellar={"logzsol": Fixed(logz), "*": FIXED},
+        met={"logzsol": Fixed(logz), "*": FIXED},
         sfh={
             "type": "delayed",
             "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
@@ -724,7 +724,7 @@ _law_pairs = [
     ({"type": "CF00", "Av": 1.0, "eta": 2.0, "n": -0.7}, "noll09", "Charlot & Fall 2000"),
     ({"type": "Salim", "Av": 1.0, "delta": 0.0, "B": 0.0}, "salim", "Salim+2018 (δ=0)"),
 ]
-_tengri_laws = list_laws(headline=False)  # {name: fn(wave_aa) -> k at tau_V=1}
+_tengri_laws = list_laws(headline=False).to_dict("fn")  # {name: fn(wave_aa) -> k at tau_V=1}
 wave_law = np.logspace(np.log10(1000.0), np.log10(50000.0), 2000)
 
 
@@ -798,7 +798,7 @@ w_b_d, L_b_d = B.attenuated_lnu(
 
 m_nd = SEDModel.build(
     ssp_data=ssp,
-    stellar=STELLAR_FIDUCIAL,
+    met=MET_FIDUCIAL,
     sfh={
         "type": "delayed",
         "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
@@ -813,7 +813,7 @@ s_nd = m_nd.predict_state({})
 
 m_d = SEDModel.build(
     ssp_data=ssp,
-    stellar=STELLAR_FIDUCIAL,
+    met=MET_FIDUCIAL,
     sfh={
         "type": "delayed",
         "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
@@ -899,7 +899,7 @@ w_b_ir, L_b_ir = B.to_lnu(mg_b)
 
 m_ir = SEDModel.build(
     ssp_data=ssp,
-    stellar=STELLAR_FIDUCIAL,
+    met=MET_FIDUCIAL,
     sfh={
         "type": "delayed",
         "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
@@ -1023,7 +1023,7 @@ L_b_neb_alone = np.clip(L_b_neb_on - L_b_stellar_only, 0.0, None)
 
 m_neb_on = SEDModel.build(
     ssp_data=ssp,
-    stellar=STELLAR_FIDUCIAL,
+    met=MET_FIDUCIAL,
     sfh={
         "type": "const",
         "start_gyr": Fixed(NEB_AGE),
@@ -1039,7 +1039,7 @@ s_neb_on = m_neb_on.predict_state({})
 
 m_neb_off = SEDModel.build(
     ssp_data=ssp,
-    stellar=STELLAR_FIDUCIAL,
+    met=MET_FIDUCIAL,
     sfh={
         "type": "const",
         "start_gyr": Fixed(NEB_AGE),
@@ -1250,7 +1250,7 @@ w_b_full, L_b_full = B.to_lnu(mg_b_full)
 
 m_full = SEDModel.build(
     ssp_data=ssp,
-    stellar=STELLAR_FIDUCIAL,
+    met=MET_FIDUCIAL,
     sfh={
         "type": "delayed",
         "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
@@ -1521,7 +1521,7 @@ w_b_nonneb, L_b_nonneb = B.to_lnu(mg_b_nonneb)
 
 m_full_nonneb = SEDModel.build(
     ssp_data=ssp,
-    stellar=STELLAR_FIDUCIAL,
+    met=MET_FIDUCIAL,
     sfh={
         "type": "delayed",
         "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
