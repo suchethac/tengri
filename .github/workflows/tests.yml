@@ -315,7 +315,11 @@ jobs:
 
   smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # 5 -> 8: the all-tier `--collect-only` step added below imports every test
+    # module in the repo (14303 tests, ~10 s warm locally). The job last passed at
+    # 3m30s, so 5 minutes left little headroom, and a guard that trips the job's
+    # own timeout under load reports as a failure of the thing it guards.
+    timeout-minutes: 8
     if: ${{ github.event_name != 'pull_request' || github.event.action != 'labeled' }}
     steps:
       - uses: actions/checkout@v7
