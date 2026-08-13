@@ -94,7 +94,7 @@ import difflib
 import inspect
 import warnings
 from collections.abc import Callable
-from functools import lru_cache
+from functools import cache, lru_cache
 from typing import NamedTuple
 
 from tengri.config.exceptions import (
@@ -519,6 +519,30 @@ _VALID_AGN_FEII_TYPES = _agn_block_types("feii")
 
 #: Valid AGN attenuation block types (derived from ``AGN_BLOCKS['attenuation']``).
 _VALID_AGN_ATTEN_TYPES = _agn_block_types("attenuation")
+
+#: Top-level groups whose ``type`` the round-trip must be able to emit even when
+#: the group declares no parameters of its own. Exported (rather than inlined in
+#: :func:`parameters_to_groups`) so the contract test's census is *derived* from
+#: the emitter instead of retyped beside it.
+_TOP_LEVEL_TYPED_GROUPS: frozenset[str] = frozenset(
+    {"sfh", "dust", "neb", "shock", "igm", "radio", "xray", "agn"}
+)
+
+#: AGN sub-block name -> the ``Parameters`` attribute holding its selected type.
+#:
+#: Read in BOTH directions: ``_translate_agn_composable`` writes these attributes
+#: from ``agn={'torus': {'type': ...}}``, and ``_extract_group_type`` reads them
+#: back on the round-trip. One table, so the parser and the emitter cannot
+#: disagree about where a sub-block's choice is stored — they did, and the
+#: emitter simply returned ``None`` for the whole family (#1777).
+_AGN_BLOCK_TO_KWARG: dict[str, str] = {
+    "disc": "agn_disc_block",
+    "torus": "agn_torus_block",
+    "nlr": "agn_nlr_block",
+    "blr": "agn_blr_block",
+    "feii": "agn_feii_block",
+    "atten": "agn_attenuation_block",
+}
 
 #: Partition table: agn_* param name -> group path (for sub-block routing).
 #: Maps full agn_* param names to their owning group (agn, agn.disc, agn.torus, etc.)
@@ -3249,15 +3273,9 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
         "atten": _VALID_AGN_ATTEN_TYPES,
     }
 
-    # Map sub-block names to their result kwargs
-    block_to_kwarg = {
-        "disc": "agn_disc_block",
-        "torus": "agn_torus_block",
-        "nlr": "agn_nlr_block",
-        "blr": "agn_blr_block",
-        "feii": "agn_feii_block",
-        "atten": "agn_attenuation_block",
-    }
+    # Map sub-block names to their result kwargs (module-level: the round-trip
+    # emitter reads the same table, so the two directions cannot drift).
+    block_to_kwarg = _AGN_BLOCK_TO_KWARG
 
     # Process each sub-block
     for block_name, valid_types in block_specs.items():
@@ -3304,6 +3322,7 @@ def _partition_by_group(
     dust_emission_active: bool,
     *,
     met_group: str = "sfh",
+    agn_flat: bool = False,
 ) -> dict[str, str]:
     """Partition parameter names by their owning group.
 
@@ -3316,6 +3335,16 @@ def _partition_by_group(
         All declared parameter names from the structural Parameters.
     dust_emission_active : bool
         If True, dust_emission params belong to "dust.emission"; else ignored.
+    met_group : str, optional
+        Group that ``met_*`` parameters belong to.
+    agn_flat : bool, optional
+        Route every ``agn_*`` parameter to a flat ``"agn"`` group instead of
+        its ``agn.<block>`` sub-block. Set by the round-trip emitter when a
+        *monolithic* AGN model is selected: ``_translate_agn`` raises on a
+        non-composable ``agn['type']`` that appears alongside sub-block keys,
+        so a nested emission would be a dict the grammar refuses to read back.
+        Flat per-parameter keys are accepted there, and the short names are
+        unaffected (both forms strip only the ``agn_`` prefix).
 
     Returns
     -------
@@ -3328,6 +3357,9 @@ def _partition_by_group(
         if name == "redshift" or name == "apply_igm":
             partition[name] = "_toplevel"
         elif name.startswith("agn_"):
+            if agn_flat:
+                partition[name] = "agn"
+                continue
             # Use partition table for fine-grained routing
             partition[name] = _AGN_PARTITION.get(name, "agn")
             # Catch-all for grahsp_* -> disc
@@ -3675,6 +3707,21 @@ def parameters_to_groups(spec: Parameters) -> dict:
     ``tests/contract/test_structural_settings_roundtrip.py`` asserts the two
     tables cannot drift apart again.
 
+    The ``type`` key itself is *not* in that table — it is emitted by
+    :func:`_extract_group_type` — and that exemption hid the same class of
+    loss for a second round (#1777). Two causes, both now pinned by
+    ``tests/contract/test_structural_types_survive_the_roundtrip.py``:
+
+    * the AGN family had one arm returning ``None`` for every ``agn*`` group,
+      so the top-level model and all six sub-block selectors were dropped;
+      28 of 79 structural selections rebuilt as different physics (up to 98%
+      in photometry) and the two AGN recipes lost 14 and 17 free parameters;
+    * a group whose non-default type declares no parameters of its own never
+      reaches the per-group walk, and the fallback that catches those tested a
+      hand-written list naming only ``dust`` and ``igm`` — so
+      ``neb={'type': 'ssp'}`` rebuilt with nebular emission off. The rule is
+      now "differs from :func:`_default_group_type`", read off a bare spec.
+
     Only *non-default* values are emitted, so an untouched group stays
     absent from the output rather than growing noise.
 
@@ -3698,10 +3745,17 @@ def parameters_to_groups(spec: Parameters) -> dict:
     # The block emitted is ``met`` (#1720), which is the only spelling now:
     # ``met={'type': ...}``, the parallel of ``sfh={'type': ...}``.
     use_met_block = getattr(spec, "met_mode", "delta") != "delta"
+    # A monolithic AGN model and the six sub-block selectors are mutually
+    # exclusive surfaces — ``_translate_agn`` raises when a non-composable
+    # ``agn['type']`` appears next to sub-block keys. So the moment the type is
+    # emitted (it was not, before #1777), the nested form has to go.
+    agn_model = getattr(spec, "agn_model", None)
+    agn_flat = agn_model is not None and agn_model != "composable"
     partition = _partition_by_group(
         spec.all_params,
         spec.dust_emission is not None,
         met_group="met" if use_met_block else "sfh",
+        agn_flat=agn_flat,
     )
     provenance = getattr(spec, "_group_provenance", {})
 
@@ -3757,20 +3811,15 @@ def parameters_to_groups(spec: Parameters) -> dict:
             group_output[short_name] = distribution
 
     # Also add groups that have no params but have a configured type (e.g., neb='none')
-    _all_possible_groups = {"sfh", "dust", "neb", "shock", "igm", "radio", "xray", "agn"}
-    for group_name in sorted(_all_possible_groups):
+    for group_name in sorted(_TOP_LEVEL_TYPED_GROUPS):
         if group_name not in result:
             type_value = _extract_group_type(group_name, spec)
+            # Normalize a list type to the tuple the cached default holds, so
+            # a composed SFH is not reported as differing from itself.
+            comparable = tuple(type_value) if isinstance(type_value, list) else type_value
             if type_value is not None and (
-                type_value == "none"
-                or (group_name == "dust" and type_value != "two_component")
-                # An active non-default IGM selection has no params of its
-                # own, so without this it vanished from the round-trip and
-                # a ``madau`` spec silently rebuilt as the default model.
-                or (group_name == "igm" and type_value not in ("inoue", "inoue14"))
+                type_value == "none" or comparable != _default_group_type(group_name)
             ):
-                # Only add if it's a non-default type or a special case
-                # For now, only add 'none' types and other explicit settings
                 result[group_name] = {"type": type_value}
 
     # Groups carrying structural settings but owning no declared parameters
@@ -3804,8 +3853,49 @@ def parameters_to_groups(spec: Parameters) -> dict:
     return result
 
 
+@cache
+def _default_group_type(group_name: str) -> str | tuple | None:
+    """The type a group falls back to when the round-trip omits it.
+
+    Read off a bare ``Parameters()`` through :func:`_extract_group_type`, so it
+    is the *same* code path that reports a spec's type — including that
+    function's boundary translations (``nebular_mode='off'`` -> ``"none"``, the
+    ``shock`` boolean -> ``"mappings"``). Any hand-written copy of these
+    defaults is a second source of truth that drifts.
+
+    That is not hypothetical. The emitter used to decide "is this worth
+    emitting?" from a literal table naming only ``dust`` and ``igm``, so a
+    group whose non-default type happened to declare **no parameters of its
+    own** never reached the round-trip at all: ``neb={'type': 'ssp'}`` rebuilt
+    with nebular emission switched **off** (#1777).
+
+    Parameters
+    ----------
+    group_name : str
+        Group name, e.g. ``"neb"`` or ``"agn.torus"``.
+
+    Returns
+    -------
+    str or tuple or None
+        The default type. Lists are returned as tuples so the result stays
+        hashable for the cache.
+    """
+    value = _extract_group_type(group_name, Parameters())
+    return tuple(value) if isinstance(value, list) else value
+
+
 def _extract_group_type(group_name: str, spec: Parameters) -> str | list[str] | None:
     """Extract the type value for a group from spec settings.
+
+    Notes
+    -----
+    ``None`` means "this group has no type axis, or none is selected", and the
+    round-trip omits the key. That makes an *unimplemented* arm indistinguishable
+    from a genuinely absent axis, which is how the AGN family went unemitted:
+    a single ``elif group_name.startswith("agn"): return None`` covered the
+    top-level model and all six sub-blocks, annotated "more complex composition
+    handled in tests" — no test held it (#1777). Return ``None`` only when the
+    axis really is absent.
 
     Parameters
     ----------
@@ -3857,10 +3947,21 @@ def _extract_group_type(group_name: str, spec: Parameters) -> str | list[str] | 
         return spec.radio_agn_model if getattr(spec, "radio", False) else None
     elif group_name == "xray":
         return spec.xray_model if hasattr(spec, "xray_model") else None
-    elif group_name.startswith("agn"):
-        # AGN sub-blocks extract from agn_model setting
-        # This is a simplification; more complex composition handled in tests
-        return None
+    elif group_name == "agn":
+        # ``None`` means no AGN component at all, and the group is then absent
+        # from the round-trip entirely. Otherwise this is either the literal
+        # ``"composable"`` or a monolithic model name, and both are grammar
+        # types that ``_translate_agn`` accepts back verbatim.
+        return getattr(spec, "agn_model", None)
+    elif group_name.startswith("agn."):
+        block = group_name.split(".", 1)[1]
+        attr = _AGN_BLOCK_TO_KWARG.get(block)
+        if attr is None:
+            return None
+        value = getattr(spec, attr, None)
+        # ``"none"`` is every sub-block's default, so omitting it keeps an
+        # untouched block absent from the output rather than growing noise.
+        return None if value in (None, "none") else value
     return None
 
 
