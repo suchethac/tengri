@@ -238,16 +238,20 @@ class TestNLRLinePhysics:
         assert abs(ratio - 2.98) < 0.1, f"[OIII] 5007/4959 should be ~2.98, got {ratio:.3f}"
 
     def test_nii_6583_6548_ratio_in_template(self):
-        """[NII] 6583/6548 = ~2.96 (atomic physics).
+        """[NII] 6583/6548 reproduces a42's measured 2.70, not the atomic 2.94.
 
-        Both lines leave the same upper level, so the ratio is a constant
-        independent of density, temperature, ionization parameter and
-        abundance — one of the few numbers in a nebular spectrum with no
-        physical freedom. The template carries 2.73 (#1752).
+        In a photoionization model both lines leave the same upper level and the
+        ratio has no physical freedom. Richardson+2014 Table 3 is a *measurement*
+        off stacked SDSS composites, where 6548 is weak and sits on the H-alpha
+        wing; a42 tabulates 2.70. tengri carries the table verbatim, so that is
+        what the emitted spectrum shows. Demanding the atomic value here is what
+        caused the template to be edited in #1752; it has been reverted.
         """
         wave, sed = self._sed()
         ratio = self._line_flux(wave, sed, 6585.27) / self._line_flux(wave, sed, 6549.86)
-        assert abs(ratio - 2.96) < 0.2, f"[NII] 6583/6548 should be ~2.96, got {ratio:.3f}"
+        assert abs(ratio - 2.13 / 0.79) < 0.2, (
+            f"[NII] 6583/6548 should reproduce the a42 table (~2.70), got {ratio:.3f}"
+        )
 
     def test_nlr_oiii_strongest(self):
         """[OIII] 5007 should be the strongest NLR line."""

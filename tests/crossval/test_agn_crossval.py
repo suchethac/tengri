@@ -244,19 +244,27 @@ class TestNLRLineRatios:
         )
 
     def test_nii_ratio(self):
-        """[NII] 6583/6548 ~ 2.94 (Storey & Zeippen 2000).
+        """[NII] 6583/6548 reproduces a42's *measured* 2.70, not the atomic 2.94.
 
-        Both lines leave the same upper level, so the ratio is fixed by the
-        transition probabilities and cannot vary with density, temperature,
-        ionization parameter or abundance. The template carries 2.73 (#1752).
+        Both lines leave the same upper level, so in a photoionization model the
+        ratio is fixed by the transition probabilities alone. Richardson+2014
+        Table 3 is not a model — it is dereddened strengths measured off stacked
+        SDSS composites, in which 6548 is a weak line on the H-alpha wing and
+        comes out ~9% strong. tengri carries the table verbatim (parity with
+        Prospector), so the emitted spectrum inherits 2.70.
+
+        Asserting the atomic value here was the error behind #1752: it read a
+        measurement systematic as a code defect and the template was edited to
+        satisfy it. The atomic constraint is enforced where it applies — on the
+        MAPPINGS shock component and the Cloudy-grid NLR backends.
         """
         from ._nlr_measure import NII_6548, NII_6583, doublet_ratio
 
         np.testing.assert_allclose(
             doublet_ratio(NII_6583, NII_6548),
-            2.96,
+            2.13 / 0.79,
             rtol=0.05,
-            err_msg="[NII] 6583/6548 ratio deviates from atomic physics prediction",
+            err_msg="[NII] 6583/6548 no longer reproduces the Richardson+2014 a42 table",
         )
 
     def test_nlr_emission_nonzero(self):

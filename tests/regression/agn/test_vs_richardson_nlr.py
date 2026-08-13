@@ -36,7 +36,7 @@ def test_richardson_nlr_line_ratios():
 
     References
     ----------
-    Richardson et al. 2014, ApJ, 786, 87. Table 3, column 'a42'.
+    Richardson et al. 2014, MNRAS, 437, 2376. Table 3, column 'a42'.
     """
     # Test parameters
     l_disc_bol_erg = 1e45  # 1e12 L_sun
