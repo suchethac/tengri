@@ -19,7 +19,7 @@ Output: ``data/schreiber2016_templates.h5``.
 
 Usage
 -----
-    PYTHONPATH=. /Users/suchethacooray/Projects/tengri/.venv/bin/python \
+    PYTHONPATH=. .venv/bin/python \
         scripts/regenerate_schreiber2016_from_cigale.py
 """
 
@@ -38,7 +38,7 @@ def main() -> int:
     except ImportError:
         print(
             "Error: pcigale is not importable. Run with tengri's main venv "
-            "(``/Users/suchethacooray/Projects/tengri/.venv/bin/python``).",
+            "(``.venv/bin/python``).",
             file=sys.stderr,
         )
         return 1

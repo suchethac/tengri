@@ -25,7 +25,7 @@ OUT="${2:-psd_bank}"
 shift 2 2>/dev/null || shift $# 2>/dev/null || true
 
 WORKTREE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PY="${PY:-/Users/suchethacooray/Projects/tengri/.venv/bin/python}"
+PY="${PY:-python}"
 MAX_RESTARTS="${MAX_RESTARTS:-200}"
 BACKOFF_SEC="${BACKOFF_SEC:-20}"
 

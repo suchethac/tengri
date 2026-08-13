@@ -453,7 +453,7 @@
     "status": "failed",
     "error_type": "TypeError",
     "error_msg": "run_nuts() got an unexpected keyword argument 'dense_mass'",
-    "traceback": "Traceback (most recent call last):\n  File \"/Users/suchethacooray/.claude-squad/worktrees/cs/issues-solve_18b208c3de4b4130/scripts/validate_backends_231.py\", line 185, in run_one\n    post = entry.runner(fitter, key=key, **kw)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nTypeError: run_nuts() got an unexpected keyword argument 'dense_mass'\n",
+    "traceback": "Traceback (most recent call last):\n  File \"/tengri/issues-solve_18b208c3de4b4130/scripts/validate_backends_231.py\", line 185, in run_one\n    post = entry.runner(fitter, key=key, **kw)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nTypeError: run_nuts() got an unexpected keyword argument 'dense_mass'\n",
     "variant": "dpl"
   },
   {
@@ -735,7 +735,7 @@
     "status": "failed",
     "error_type": "TypeError",
     "error_msg": "run_raytrace() got an unexpected keyword argument 'n_samples'",
-    "traceback": "Traceback (most recent call last):\n  File \"/Users/suchethacooray/.claude-squad/worktrees/cs/issues-solve_18b208c3de4b4130/scripts/validate_backends_231.py\", line 185, in run_one\n    post = entry.runner(fitter, key=key, **kw)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nTypeError: run_raytrace() got an unexpected keyword argument 'n_samples'\n",
+    "traceback": "Traceback (most recent call last):\n  File \"/tengri/issues-solve_18b208c3de4b4130/scripts/validate_backends_231.py\", line 185, in run_one\n    post = entry.runner(fitter, key=key, **kw)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nTypeError: run_raytrace() got an unexpected keyword argument 'n_samples'\n",
     "variant": "dpl"
   },
   {
@@ -749,7 +749,7 @@
     "status": "failed",
     "error_type": "AttributeError",
     "error_msg": "'Fitter' object has no attribute 'fitter'",
-    "traceback": "Traceback (most recent call last):\n  File \"/Users/suchethacooray/.claude-squad/worktrees/cs/issues-solve_18b208c3de4b4130/scripts/validate_backends_231.py\", line 185, in run_one\n    post = entry.runner(fitter, key=key, **kw)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/suchethacooray/Projects/tengri/src/tengri/inference/_registration.py\", line 67, in _mcmc_auto_pick\n    return _ctx_run_nuts(context, key=key, init_from=init_from, **kw)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/suchethacooray/Projects/tengri/src/tengri/inference/backends/mcmc/nuts.py\", line 140, in run_nuts\n    fitter = context.fitter\n             ^^^^^^^^^^^^^^\nAttributeError: 'Fitter' object has no attribute 'fitter'\n",
+    "traceback": "Traceback (most recent call last):\n  File \"/tengri/issues-solve_18b208c3de4b4130/scripts/validate_backends_231.py\", line 185, in run_one\n    post = entry.runner(fitter, key=key, **kw)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/tengri/src/tengri/inference/_registration.py\", line 67, in _mcmc_auto_pick\n    return _ctx_run_nuts(context, key=key, init_from=init_from, **kw)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/tengri/src/tengri/inference/backends/mcmc/nuts.py\", line 140, in run_nuts\n    fitter = context.fitter\n             ^^^^^^^^^^^^^^\nAttributeError: 'Fitter' object has no attribute 'fitter'\n",
     "variant": "dpl"
   },
   {
@@ -1616,7 +1616,7 @@
     "status": "failed",
     "error_type": "TypeError",
     "error_msg": "run_raytrace() got an unexpected keyword argument 'n_samples'",
-    "traceback": "Traceback (most recent call last):\n  File \"/Users/suchethacooray/.claude-squad/worktrees/cs/issues-solve_18b208c3de4b4130/scripts/validate_backends_231.py\", line 185, in run_one\n    post = entry.runner(fitter, key=key, **kw)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nTypeError: run_raytrace() got an unexpected keyword argument 'n_samples'\n",
+    "traceback": "Traceback (most recent call last):\n  File \"/tengri/issues-solve_18b208c3de4b4130/scripts/validate_backends_231.py\", line 185, in run_one\n    post = entry.runner(fitter, key=key, **kw)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nTypeError: run_raytrace() got an unexpected keyword argument 'n_samples'\n",
     "variant": "dense_basis"
   },
   {

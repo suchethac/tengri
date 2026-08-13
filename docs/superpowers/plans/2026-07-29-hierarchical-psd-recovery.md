@@ -30,7 +30,7 @@ physics-first marker taxonomy, ruff.
 - **American English in all identifiers and prose** (`normalize`, `center`,
   `marginalized`). CI guard: `python tools/check_british_spelling.py`.
 - **The virtualenv lives in the MAIN checkout, not the worktree**:
-  `/Users/suchethacooray/Projects/tengri/.venv/bin/{python,pytest,ruff}`. Run
+  `/tengri/.venv/bin/{python,pytest,ruff}`. Run
   every command with the worktree as the current directory — verified that
   `tengri.__file__` then resolves to the worktree's `src/`, so tests exercise
   the code under review and not the main checkout. A bare `pytest` or a

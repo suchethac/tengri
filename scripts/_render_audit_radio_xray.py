@@ -10,7 +10,7 @@ tengri/CIGALE ratio. Mirrors the numerical results printed by
 
 Run::
 
-    PYTHONPATH=src:. /Users/suchethacooray/Projects/tengri/.venv/bin/python \\
+    PYTHONPATH=src:. .venv/bin/python \\
         scripts/_render_audit_radio_xray.py
 """
 

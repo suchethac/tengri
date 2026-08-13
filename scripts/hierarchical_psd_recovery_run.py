@@ -8,7 +8,7 @@ Configuration: z = 0.1, DPL + stochastic field SFH with n_grid=16 (D=25),
 Sampler: mcmc_hmc, n_leapfrog_steps=100, dense_mass_matrix=True
 
 Run with:
-  export PYTHONPATH=/Users/suchethacooray/Projects/tengri/.claude/worktrees/hierarchical-psd-spec/src
+  export PYTHONPATH=src
   JAX_PLATFORMS=cpu python recovery_run.py
 """
 

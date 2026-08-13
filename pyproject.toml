@@ -218,6 +218,9 @@ markers = [
     "regression_bug: frozen output for a previously-fixed bug (cite ADR/commit)",
     "gradient: jax.grad sanity + finite-difference checks",
     "contract: public-API surface, deprecation alias, registry round-trip",
+    "unit: fast isolated test, no data files or grids",
+    "integration: exercises multiple components end-to-end",
+    "physics: validates output against a physical equation or limit",
 ]
 
 [tool.jupytext]
