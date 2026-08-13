@@ -66,26 +66,42 @@ def _of(caught, category):
 # ── the two guards fire ───────────────────────────────────────────
 
 
-def test_non_delta_metallicity_reports_the_dead_gradient(ssp_data_fsps):
-    """``met_alpha_fe`` under a ramp metallicity is never read (#1764)."""
+#: Non-delta metallicity modes reachable from the public ``Parameters``
+#: grammar by naming their own parameters. The remaining branches
+#: (``psb_two_step``, ``bins``, ``bins_continuity``, ``table``,
+#: ``massmap_lin``, ``massmap_box``) ignore ``met_alpha_fe`` on the same
+#: grounds — it is read at two sites in ``component.py`` and both are inside
+#: the ``"delta"`` branch — but need more setup to construct.
+_NON_DELTA_MODES = {
+    "ramp": dict(met_logzsol_0=Fixed(-1.0), met_logzsol_final=Fixed(-0.2)),
+    "two_step": dict(
+        met_logzsol_old=Fixed(-1.0),
+        met_logzsol_young=Fixed(-0.2),
+        met_step_age_gyr=Fixed(5.0),
+    ),
+}
+
+
+@pytest.mark.parametrize("mode", sorted(_NON_DELTA_MODES))
+def test_non_delta_metallicity_reports_the_dead_gradient(ssp_data_fsps, mode):
+    """``met_alpha_fe`` under a non-delta metallicity mode is never read (#1764)."""
     assert not has_alpha_grid(ssp_data_fsps), "fixture must be a 3D grid for this test"
 
     _, caught = _build(
         ssp_data_fsps,
-        met_logzsol_0=Fixed(-1.0),
-        met_logzsol_final=Fixed(-0.2),
+        **_NON_DELTA_MODES[mode],
         met_alpha_fe=Uniform(-0.2, 0.6),
     )
 
     dead = _of(caught, DeadGradientParameterWarning)
     assert dead, (
-        "a free met_alpha_fe under a non-delta metallicity mode produced no "
+        f"a free met_alpha_fe under metallicity mode {mode!r} produced no "
         f"warning; got {[w.category.__name__ for w in caught]}"
     )
     text = str(dead[0].message)
     assert "met_alpha_fe" in text
     # The message must name the mode it is complaining about, not just the symptom.
-    assert "ramp" in text, f"warning did not name the metallicity mode: {text}"
+    assert mode in text, f"warning did not name the metallicity mode: {text}"
     assert measurements_of(dead[0].message).get("gradient") == 0.0
 
 
@@ -139,15 +155,15 @@ def test_silent_when_only_alpha_fe_is_free(ssp_data_fsps):
 # ── the measurements the guards encode ────────────────────────────
 
 
-def test_non_delta_gradient_is_exactly_zero(ssp_data_fsps):
-    """The #1764 claim itself: sweeping alpha under a ramp moves nothing."""
+@pytest.mark.parametrize("mode", sorted(_NON_DELTA_MODES))
+def test_non_delta_gradient_is_exactly_zero(ssp_data_fsps, mode):
+    """The #1764 claim itself: sweeping alpha under these modes moves nothing."""
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         model = SEDModel(
             Parameters(
                 **BASE,
-                met_logzsol_0=Fixed(-1.0),
-                met_logzsol_final=Fixed(-0.2),
+                **_NON_DELTA_MODES[mode],
                 met_alpha_fe=Uniform(-0.2, 0.6),
             ),
             ssp_data_fsps,
@@ -156,7 +172,9 @@ def test_non_delta_gradient_is_exactly_zero(ssp_data_fsps):
 
     sed_lo = np.asarray(model.predict({"met_alpha_fe": 0.0}).rest_sed())
     sed_hi = np.asarray(model.predict({"met_alpha_fe": 0.6}).rest_sed())
-    assert np.array_equal(sed_lo, sed_hi), "ramp metallicity unexpectedly reads met_alpha_fe"
+    assert np.array_equal(sed_lo, sed_hi), (
+        f"metallicity mode {mode!r} unexpectedly reads met_alpha_fe"
+    )
 
     grad = float(jax.grad(lambda a: jnp.sum(model.predict({"met_alpha_fe": a}).rest_sed()))(0.3))
     assert grad == 0.0, f"expected an identically dead gradient, got {grad!r}"
