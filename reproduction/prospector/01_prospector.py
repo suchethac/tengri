@@ -26,17 +26,16 @@
 # (Byler 2017), AGN torus (Nenkova 2008), and IGM absorption (Madau 1995) —
 # against their tengri equivalents at matched parameter values.
 #
-# The left panel of each figure is FSPS evaluated live through `python-fsps`,
-# the engine Prospector uses; the right panel is tengri. Both read the same
-# SSP templates: tengri loads FSPS MIST + MILES Chabrier from the public
-# catalog, so a §1 residual below floating-point precision is interpolation
+# Every reference panel is FSPS evaluated live through `python-fsps`, the
+# engine Prospector uses. Both codes read the same SSP templates: tengri
+# loads FSPS MIST + MILES Chabrier from the public catalog, so a §1 residual
+# below floating-point precision is interpolation
 # alone. The fiducial galaxy is a τ-delayed SFH (τ = 1 Gyr, age 5 Gyr) at
 # solar metallicity with Calzetti dust (A_V = 1) and DL07 IR re-emission at
 # (q_PAH, U_min, γ) = (2.5, 1.0, 0.05), and each section sweeps one physics
 # block around it.
 #
-# The closed-form blocks and the shared SSP grid reproduce FSPS to floating
-# point or a fraction of a percent. The nebular block is the deliberate
+# The nebular block is the deliberate
 # exception: FSPS uses Byler+2017 Cloudy grids while tengri uses Cue (Li et
 # al. 2025), a neural emulator trained on a different Cloudy version, and §8
 # quantifies the Hα ratio difference. Prospector has no X-ray or radio
@@ -156,10 +155,9 @@ print(
 # %% [markdown]
 # ## §1 Single stellar populations
 #
-# FSPS MIST + MILES at solar metallicity, from 1 Myr to 10 Gyr. Single SSPs
-# overlaid: FSPS (solid) vs tengri's repackaged HDF5 (black dashed). The lower
-# panel shows the relative residual `|tengri − FSPS| / FSPS`. Both read identical
-# numerics; the residual floor is the float32 round-trip — gray line marks 1e-6.
+# FSPS MIST + MILES at solar metallicity, from 1 Myr to 10 Gyr — FSPS against
+# tengri's repackaged HDF5, over the relative residual `|tengri − FSPS| /
+# FSPS`. The residual floor is the float32 round-trip — gray line marks 1e-6.
 
 # %%
 _target_ages_yr = [1e6, 1e7, 1e8, 1e9, 1e10]
@@ -228,7 +226,7 @@ print(f"§1 SSP 1 Gyr optical residual: median {np.median(_res):.2e}, max {_res.
 # at `t = τ`. tengri's `sfh.delayed` implements the same closed form. Both
 # normalize to the same formed mass: FSPS via `mass`, tengri via `log_total_mass`.
 #
-# The right panel evaluates `state.derived["sfr_history"]` from a built
+# tengri's side evaluates `state.derived["sfr_history"]` from a built
 # `SEDModel` on the log-spaced lookback grid the SFH-convolution code uses. The
 # printed `∫SFR dt` confirms the area integrates to 1 M⊙ (tengri `log_total_mass = 0`).
 
