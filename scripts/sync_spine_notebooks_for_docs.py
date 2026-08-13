@@ -49,6 +49,7 @@ SPINE_SLUGS = [
     "08_emission_lines",
     "10_fastspecfit_joint_fit",
     "11_catalog_fits",
+    "12_simulation_populations",
     "09_parameter_sweeps",
 ]
 
@@ -65,6 +66,7 @@ SPINE_TITLES: dict[str, str] = {
     "08_emission_lines": "Emission Lines",
     "10_fastspecfit_joint_fit": "Joint Fit: Photometry + Lines",
     "11_catalog_fits": "Catalog Fits in Parallel",
+    "12_simulation_populations": "Forward-Modeling Simulation Populations",
     "09_parameter_sweeps": "Parameter Sweeps",
 }
 

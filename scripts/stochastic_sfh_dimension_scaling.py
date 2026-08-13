@@ -111,7 +111,7 @@ def make_builder(ssp_data, phot, noise_model, line_template, n_grid):
             ssp_data=ssp_data,
             observation=Observation(photometry=phot, line_fluxes=line_fluxes, noise=noise_model),
             sfh={"type": ["dpl", "field"], "*": FREE},
-            stellar={"met_logzsol": Fixed(MET_FIXED)},
+            met={"logzsol": Fixed(MET_FIXED)},
             dust=builders.dust.two_component(defaults=FREE, law_bc="calzetti"),
             neb=builders.neb.ssp(),
             redshift=Fixed(Z_SPEC),

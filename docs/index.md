@@ -181,6 +181,7 @@ and [NOTICE](https://github.com/suchethac/tengri/blob/main/NOTICE).
    spine/07_joint_photo_spec
    spine/10_fastspecfit_joint_fit
    spine/11_catalog_fits
+   spine/12_simulation_populations
 
 .. toctree::
    :caption: Examples

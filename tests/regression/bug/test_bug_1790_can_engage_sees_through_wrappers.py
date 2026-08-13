@@ -5,15 +5,16 @@ The predicate reads ``_build_component_chain``, which is defined on
 :class:`SEDModel` and nowhere else. A bare ``getattr`` therefore finds it only
 when the object *is* an ``SEDModel`` — and inference is canonically through
 :class:`ForwardModel` (#211), which holds ``populations[i].sed`` instead. The
-miss fell through to a permissive ``return True``, so:
+miss fell through to a permissive ``return True``, so every ``ForwardModel``
+was told the fast nebular grid could engage, dusty or not.
 
-* every ``ForwardModel`` fit was told the fast nebular grid could engage,
-* including dusty ones, where ``DustSEDComponent`` reads ``sed_nebular`` and
-  #1748 measured ``FeaturePrecomp`` as **bit-identical in compiled FLOPs**,
-* which is exactly the inert config #1760 was written to stop attaching.
-
-So #1760's guard was a no-op on the canonical inference path. It held only for
-the deprecated ``Fitter(sed_model, ...)`` spelling, which is what its tests used.
+**Scope.** Since #1770 this predicate answers the **photometry** question and
+only that: serving photometry from the per-Q_H grid requires zeroing
+``sed_nebular``, and ``DustSEDComponent`` reads it, so a dusty model cannot
+(#1748, measured bit-identical). Whether a *line-flux* fit gets the LUT is a
+separate question — dust does not disarm that half, and #1770 measured 4.77x on
+a dusty line fit. These tests therefore assert only the photometry gate;
+``test_bug_1770_line_lut_survives_dust.py`` owns the other one.
 
 **The fix is the unwrap, and only the unwrap.** ``_component_chains`` now walks
 ``populations[i].sed``, and requires *every* population to be clear rather than

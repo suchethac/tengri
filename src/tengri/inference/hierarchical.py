@@ -177,7 +177,9 @@ class PopulationPosterior:
         if self._model is None:
             raise RuntimeError(
                 "No model reference on this PopulationPosterior — cannot compute "
-                "properties. (It is populated automatically by PopulationFitter.run().)"
+                "properties. PopulationFitter.run() attaches one; it is a runtime "
+                "object and is not persisted, so a posterior read back from disk "
+                "has none and must be reloaded with the model passed in."
             )
 
         posts = [
