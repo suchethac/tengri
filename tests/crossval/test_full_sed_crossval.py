@@ -1060,16 +1060,18 @@ def _build_tengri_tau_sed(
 ) -> tuple[np.ndarray, np.ndarray]:
     """Build tengri SED for the declining-tau (FSPS sfh=1) model.
 
-    Composed as a tabulated SFH rather than selected by name. There is no
-    ``'tau'`` SFH type: ``declining_exponential`` was **deliberately**
-    unregistered because confusing it with CIGALE's ``sfhdelayed`` — which is
-    tau-*delayed* and rises from zero — produced a silent wavelength-dependent
-    residual in an early audit (#406). The registry note directs anyone needing
-    the FSPS-``sfh=1`` shape to compose it manually, which is what the ``table``
-    path below does.
+    Composed as a tabulated SFH rather than selected by name. There is still no
+    ``'tau'`` SFH type — #406 removed that key because users read it as CIGALE's
+    ``sfhdelayed``, which is tau-*delayed* and rises from zero, and the mix-up
+    produced a silent wavelength-dependent residual. These tests had been
+    passing ``sfh_type="tau"`` and failing with ``KeyError`` ever since (#1728).
 
-    These tests had been passing ``sfh_type="tau"`` and failing with
-    ``KeyError: "Unknown SFH model 'tau'"`` ever since (#1728, #1750).
+    The model itself is selectable again as ``'declining_exp'`` (#1750): the
+    name was the problem, not the physics. This helper deliberately keeps the
+    ``table`` composition anyway, because a crossval that builds the reference
+    shape by hand is an independent check of the registered model rather than a
+    restatement of it. ``test_bug_1750_declining_tau_is_selectable.py`` pins the
+    named path; this one pins the physics against FSPS / Bagpipes.
 
     Returns (wave_Å, L_nu per Msun formed in erg/s/Hz).
     """
