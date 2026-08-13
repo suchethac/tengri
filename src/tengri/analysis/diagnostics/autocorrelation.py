@@ -40,6 +40,56 @@ __all__ = [
 ]
 
 
+def _never_moved(values: np.ndarray) -> bool:
+    """True when every draw is identical — the parameter never moved (#1734).
+
+    The staticness test these diagnostics need is exact and scale-free: *did any
+    two draws differ?* Three call sites used to ask ``np.var(a) < 1e-30``
+    instead, which is an **absolute** tolerance on a quantity carrying the
+    square of the parameter's units. ``np.var`` of N identical floats is not
+    exactly zero — it is rounding noise of order ``(value * eps)**2`` — so the
+    threshold's sensitivity drifted with the parameter's magnitude.
+
+    Measured on 600 identical draws, the same completely frozen chain:
+
+    ==========  =======================  ===========================
+    value       ``np.var``               vs ``1e-30``
+    ==========  =======================  ===========================
+    0.693       4.930e-32                below — correctly skipped
+    4.130       0.000e+00                below — correctly skipped
+    10.634      **3.155e-30**            **above — survived**
+    ==========  =======================  ===========================
+
+    The survivor reached :func:`rhat` as a live parameter, split R-hat scored it
+    ~1.0 (within- and between-chain variance are both zero on constant data),
+    and the non-empty result then bypassed the frozen-chain guard in
+    ``Posterior.rhat`` — which raises only when *every* parameter is dropped.
+    A dead fit reported ``max R-hat 0.998``. Whether the guard fired depended on
+    how large the numbers happened to be.
+
+    ``np.ptp`` states the intent directly and cannot drift with scale. It is
+    also strictly more permissive in the right direction: a parameter that moved
+    by a genuinely tiny amount is kept rather than silently dropped as static.
+
+    Parameters
+    ----------
+    values : ndarray
+        Draws for one parameter, shape ``(n_draw,)`` or ``(n_chain, n_draw)``.
+
+    Returns
+    -------
+    bool
+        ``True`` when the array is empty or every element is identical.
+
+    Notes
+    -----
+    **JIT-compatible**: no — a NumPy diagnostic, called outside traced code.
+    """
+    if values.size == 0:
+        return True
+    return float(np.ptp(values)) == 0.0
+
+
 def autocorrelation_at_lag(
     x: np.ndarray,
     lag: int,
@@ -213,8 +263,9 @@ def effective_sample_size(
         arr = np.asarray(arr)
         if arr.ndim != 1:
             continue
-        # Skip static parameters (zero variance)
-        if np.var(arr) < 1e-30:
+        # Skip static parameters — exactly, not by an absolute variance floor
+        # whose sensitivity tracks the parameter's magnitude (#1734).
+        if _never_moved(arr):
             continue
         result[name] = autocorrelation_time_combined(arr)
     return result
@@ -402,7 +453,10 @@ def rhat(
         a = np.asarray(arr)
         if a.ndim not in (1, 2):
             continue
-        if np.var(a) < 1e-30:
+        # The site that mattered: a frozen parameter surviving this filter lands
+        # in ``result``, and a non-empty result is what ``Posterior.rhat``'s
+        # frozen-chain guard treats as proof the chain moved (#1734, #1438).
+        if _never_moved(a):
             continue
         result[name] = split_rhat(a)
     return result
@@ -503,7 +557,7 @@ def rank_normalized_rhat(chain: np.ndarray) -> float:
             return float("nan")
     else:
         raise ValueError(f"rank_normalized_rhat expects 1-D or 2-D array, got ndim={arr.ndim}")
-    if not np.isfinite(np.var(chains)) or np.var(chains) < 1e-30:
+    if not np.isfinite(np.var(chains)) or _never_moved(chains):
         return float("nan")
 
     # Standard rank-normalization across the pooled sample.
