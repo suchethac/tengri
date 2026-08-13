@@ -889,12 +889,18 @@ save_fig("prospect_r_08_nebular.png")
 # shortward of ~1 µm track ProSpect: the disc reads ~0.9× ProSpect at 2000 Å.
 # This uses the **`skirtor_stalevski`** model — the published Stalevski (2016)
 # radiative-transfer SED, no analytic-disc substitution, reading the
-# full-coverage SKIRTOR grid on the full
-# `ta,p,q,oa,R,i` axes (fixing v3's two shortcuts: R fixed at 20; total
-# reconstructed as disk+dust). Three SKIRTOR models are swappable
-# (`tengri.list_agn_models()`): `skirtor_stalevski` (raw, ~0.9×), composable
-# `disc.skirtor`+`torus.skirtor` (CIGALE's analytic disc + `norm=1/∫dust`),
-# and deprecated monolithic `agn={'type':'skirtor'}` (power-law disc, ~0.28×).
+# full-coverage SKIRTOR grid on the full `ta,p,q,oa,R,i` axes (fixing v3's two
+# shortcuts: R fixed at 20; total reconstructed as disk+dust).
+#
+# Three SKIRTOR models are swappable — `tengri.list_agn_models()` is the live
+# menu:
+#
+# | model | disc treatment | vs ProSpect |
+# |---|---|---|
+# | `skirtor_stalevski` | published Stalevski radiative-transfer SED, raw | ~0.9× |
+# | `disc.skirtor` + `torus.skirtor` | CIGALE's analytic disc + `norm=1/∫dust` | composable |
+# | `agn={'type':'skirtor'}` (deprecated) | power-law disc | ~0.28× |
+#
 # The residual to 1.0× is a parameter-convention mismatch (ProSpect's
 # `ct`/`rm` vs SKIRTOR's `oa`/`R`) — not the disc/total treatment.
 
