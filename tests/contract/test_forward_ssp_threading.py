@@ -138,7 +138,7 @@ def test_jit_safe_surfaces_accept_threaded_data(
     through ``_DELEGATED_TO_INNER_SED`` rather than restating each signature, so
     ``predict_properties`` really is ``(*args, **kwargs)`` — it genuinely accepts
     the keyword and forwards it. Demanding a named parameter there would be a test
-    demanding a wrapper the delegation table exists to avoid. The behavioural tests
+    demanding a wrapper the delegation table exists to avoid. The behavioral tests
     below are what actually prove the keyword arrives and does something.
     """
     model = _models(synthetic_ssp_wide, synthetic_tophat_obs, with_spectrum=True)[surface]
@@ -154,7 +154,7 @@ def test_jit_safe_surfaces_accept_threaded_data(
 
 
 # --------------------------------------------------------------------------
-# 2. The behavioural contract — threading it actually keeps it out of the graph.
+# 2. The behavioral contract — threading it actually keeps it out of the graph.
 # --------------------------------------------------------------------------
 
 
