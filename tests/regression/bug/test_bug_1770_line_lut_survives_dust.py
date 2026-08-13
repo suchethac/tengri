@@ -47,6 +47,7 @@ from tengri import (
     WavePrecomp,
 )
 from tengri.components.stellar.sps.dsps_wrapper import SSPData
+from tengri.inference.fitter import _resolve_batch_fit_approx
 from tengri.observation.line_flux_data import LineFluxData
 from tengri.observation.photometry import FilterCurve
 
@@ -216,3 +217,51 @@ def test_explicit_feature_precomp_is_still_honored(wide_ssp, phot_obs):
     model = _model(wide_ssp, obs, (WavePrecomp(), FeaturePrecomp()), dust=True)
 
     assert _fitter(model, phot).model.approx.feature_precomp
+
+
+@pytest.mark.parametrize("dust", [True, False], ids=["dusty", "dust-free"])
+@pytest.mark.parametrize("lines", [True, False], ids=["lines", "no-lines"])
+def test_the_batch_resolver_agrees_with_the_single_galaxy_one(wide_ssp, phot_obs, dust, lines):
+    """The two surfaces must reach the same verdict on the same model.
+
+    ``CatalogFitter`` and ``PopulationFitter`` resolve their precompute through
+    :func:`_resolve_batch_fit_approx`, not through ``Fitter._resolve_fit_approx``.
+    The first fix for #1770 corrected the single-galaxy resolver and left the batch
+    one gated on ``fast_nebular_can_engage`` with no line-channel check at all, so
+    the two disagreed on exactly one cell:
+
+    ========  =======  =====================  ======================
+    dust      lines    batch attached?        single-galaxy attached?
+    ========  =======  =====================  ======================
+    **yes**   **yes**  **no**                 **yes**
+    yes       no       no                     no
+    no        yes      yes                    yes
+    no        no       no                     no
+    ========  =======  =====================  ======================
+
+    One diverging cell out of four is the catalog channel matrix's signature
+    failure (#1460/#1480/#1599): the surfaces agree everywhere the fixtures
+    happened to look. Asserted as the full matrix rather than the one broken cell,
+    so a future gate cannot fix this row by breaking another.
+
+    Batch surfaces are the ones that matter most here — they evaluate the forward
+    model per galaxy, per likelihood call.
+    """
+    obs, phot = _line_flux_setup(wide_ssp, phot_obs, dust=dust)
+    model = _model(wide_ssp, obs if lines else phot_obs, None, dust=dust)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        batch = _resolve_batch_fit_approx(model, "auto", "photometry")
+    single = _fitter(model, phot).model
+
+    def _attached(m):
+        state = getattr(m, "approx", None)
+        return bool(state is not None and getattr(state, "feature_precomp", False))
+
+    assert _attached(batch) == _attached(single), (
+        f"batch and single-galaxy resolvers disagree on dust={dust}, lines={lines}: "
+        f"batch attached={_attached(batch)}, single attached={_attached(single)}. "
+        "A catalog fit must not silently run a different precompute from the "
+        "identical single-galaxy fit (#1770)."
+    )
