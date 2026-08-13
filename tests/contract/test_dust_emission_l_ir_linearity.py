@@ -136,3 +136,57 @@ def test_affine_models_really_are_affine(synthetic_ssp_wide, model_name):
     )
     # The exact affine prediction, which also pins that L_agn_ir is applied.
     np.testing.assert_allclose(ratio, 1.5, rtol=1e-9)
+
+
+#: Names ``emission_builders.available()`` advertises that the forward pass
+#: rejects. ``SEDModel.build`` accepts them; ``predict_state`` is where they
+#: raise. The builders menu is what a user reads to choose a model, so a name
+#: on it that cannot be evaluated is a broken promise, not an environment quirk.
+UNEVALUABLE = {"dh02_ce01"}
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "emission_builders.available() advertises 'dh02_ce01', but "
+        "evaluating it raises ValueError: dust_emission component 'dh02_ce01' "
+        "(resolved from grammar type 'dh02_ce01') not found in registry. Note "
+        "the failure is at evaluation, not construction — SEDModel.build "
+        "accepts the name and only predict_state rejects it, so the menu and "
+        "the builder agree while the forward pass does not. Every other "
+        "advertised name works, several through deprecated aliases "
+        "(dl07_tabulated -> draine_li2007). Either register the component or "
+        "drop it from the menu; this xfail turns red when that happens."
+    ),
+)
+def test_every_advertised_emission_model_can_be_evaluated(synthetic_ssp_wide):
+    """The builders menu must not name a model the forward pass rejects.
+
+    The linearity sweep above is parametrized off the same menu and skips
+    whatever raises, so a menu entry that does not resolve costs a silent hole
+    in the sweep rather than a failure. This asserts the two registries agree.
+
+    Evaluation, not construction: ``SEDModel.build`` accepts every advertised
+    name, so a build-only check passes and proves nothing.
+    """
+    broken = {}
+    for name in sorted(emission_builders.available()):
+        try:
+            _model(synthetic_ssp_wide, name, 1.0).predict_state({})
+        except (ValueError, KeyError) as exc:
+            broken[name] = f"{type(exc).__name__}: {exc}"
+    assert not broken, f"advertised but not evaluable: {sorted(broken)}"
+
+
+def test_the_unevaluable_list_still_describes_reality():
+    """A stale exemption is a claim nobody rechecks.
+
+    Pins that the one known-bad name is still advertised by the menu. If it
+    were simply dropped from the menu, the xfail above would start passing for
+    a different reason than the component being registered, and this says which.
+    """
+    advertised = set(emission_builders.available())
+    assert advertised >= UNEVALUABLE, (
+        f"{sorted(UNEVALUABLE - advertised)} left the builders menu — "
+        f"the exemption above no longer applies"
+    )
