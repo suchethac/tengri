@@ -100,7 +100,7 @@ def cigale_stellar_dust():
 def tengri_stellar_dust(ssp, tau_bc):
     m = SEDModel.build(
         ssp_data=ssp,
-        stellar={"logzsol": Fixed(MET_LOGZSOL), "*": FIXED},
+        met={"logzsol": Fixed(MET_LOGZSOL), "*": FIXED},
         sfh={
             "type": "delayed",
             "tau_gyr": Fixed(TAU_GYR),

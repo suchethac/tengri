@@ -96,7 +96,7 @@ print(
 # Solar on both sides is logzsol = 0.
 LOG10_ZSUN = -1.848
 MET_LOGZSOL = 0.0
-STELLAR_FIDUCIAL = {"logzsol": Fixed(MET_LOGZSOL), "*": FIXED}
+MET_FIDUCIAL = {"logzsol": Fixed(MET_LOGZSOL), "*": FIXED}
 
 # Fiducial galaxy shared across the SED panels.
 LOG_MASS_FIDUCIAL = 10.0
@@ -239,7 +239,7 @@ _mass_p = float(np.trapezoid(sfr_p[np.argsort(t_p)], t_p[np.argsort(t_p)]))
 
 _m_sfh = SEDModel.build(
     ssp_data=ssp,
-    stellar=STELLAR_FIDUCIAL,
+    met=MET_FIDUCIAL,
     sfh={
         "type": "delayed",
         "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
@@ -326,7 +326,7 @@ def _tengri_nonparam(sfh_dict, params=None):
     """Build a dust-free tengri model from an SFH dict and return its state."""
     model = SEDModel.build(
         ssp_data=ssp,
-        stellar=STELLAR_FIDUCIAL,
+        met=MET_FIDUCIAL,
         sfh=sfh_dict,
         dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
         redshift=Fixed(0.0),
@@ -647,7 +647,7 @@ _sfh_field = {
 }
 _m_field = SEDModel.build(
     ssp_data=ssp,
-    stellar=STELLAR_FIDUCIAL,
+    met=MET_FIDUCIAL,
     sfh=_sfh_field,
     dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
     redshift=Fixed(0.0),
@@ -700,7 +700,7 @@ L_p = L_p * MASS_SCALE  # FSPS is per 1 M⊙ formed → scale to the 10^10 M⊙ 
 
 m_stellar = SEDModel.build(
     ssp_data=ssp,
-    stellar=STELLAR_FIDUCIAL,
+    met=MET_FIDUCIAL,
     sfh={
         "type": "delayed",
         "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
@@ -780,7 +780,7 @@ _law_pairs = [
     ("powerlaw", "power_law", "Charlot & Fall 2000 (power law)"),
     ("conroy", "kriek_conroy", "Kriek & Conroy 2013"),
 ]
-_tengri_laws = list_laws(headline=False)  # {name: fn(wave_aa) -> k at tau_V=1}
+_tengri_laws = list_laws(headline=False).to_dict("fn")  # {name: fn(wave_aa) -> k at tau_V=1}
 wave_law = np.logspace(np.log10(1000.0), np.log10(30000.0), 2000)
 
 
@@ -862,7 +862,7 @@ L_p_d = L_p_d * MASS_SCALE
 s_nd = s_stellar  # intrinsic reuse from §3 (already at 10^10 M⊙)
 m_d = SEDModel.build(
     ssp_data=ssp,
-    stellar=STELLAR_FIDUCIAL,
+    met=MET_FIDUCIAL,
     sfh={
         "type": "delayed",
         "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
@@ -941,7 +941,7 @@ L_p_ir = L_p_ir * MASS_SCALE
 
 m_ir = SEDModel.build(
     ssp_data=ssp,
-    stellar=STELLAR_FIDUCIAL,
+    met=MET_FIDUCIAL,
     sfh={
         "type": "delayed",
         "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
@@ -1018,7 +1018,7 @@ _fir_ratio = float(np.median(_t_on_p_ir[_fir_win] / L_p_ir[_fir_win]))
 
 m_ir_fsps = SEDModel.build(
     ssp_data=ssp,
-    stellar=STELLAR_FIDUCIAL,
+    met=MET_FIDUCIAL,
     sfh={
         "type": "delayed",
         "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
@@ -1082,7 +1082,7 @@ L_p_full = L_p_full * MASS_SCALE
 
 m_full = SEDModel.build(
     ssp_data=ssp,
-    stellar=STELLAR_FIDUCIAL,
+    met=MET_FIDUCIAL,
     sfh={
         "type": "delayed",
         "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
@@ -1147,7 +1147,7 @@ L_p_neb = np.clip(L_p_neb, 0.0, None)
 
 m_neb = SEDModel.build(
     ssp_data=ssp,
-    stellar=STELLAR_FIDUCIAL,
+    met=MET_FIDUCIAL,
     sfh={
         "type": "const",
         "start_gyr": Fixed(NEB_AGE),
@@ -1236,7 +1236,7 @@ print(f"§9 FSPS torus L_bol = {_L_agn_bol_erg:.3e} erg/s = 10^{_agn_log_lbol:.2
 
 m_agn = SEDModel.build(
     ssp_data=ssp,
-    stellar=STELLAR_FIDUCIAL,
+    met=MET_FIDUCIAL,
     sfh={
         "type": "delayed",
         "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
