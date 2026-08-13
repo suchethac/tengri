@@ -5,11 +5,11 @@ Build-time component resolution happens in two stages. An unconditional pass
 resolves every component so that ``load()`` runs even when no approximation is
 requested -- the fix for #1278, where dust components were absent from the old
 per-kind dispatch and so never resolved at all. The ``wave_precomp`` /
-``spectrum_precomp`` specialisations then layer richer state on top.
+``spectrum_precomp`` specializations then layer richer state on top.
 
 For the stellar component the unconditional pass calls ``precompute()`` without
 filters, and stellar documents that path as returning an *empty state marker*
-(``components/stellar/component.py``). The specialisation later returns the
+(``components/stellar/component.py``). The specialization later returns the
 populated LUT state. So the two stages write to the same ``_state`` field with
 values of very different worth, and correctness rests on the populated one
 winning.

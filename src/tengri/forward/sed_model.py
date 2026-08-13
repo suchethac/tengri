@@ -7719,7 +7719,7 @@ class SEDModel:
 
             # Replace component with precomputed state if it has _state field.
             # CRITICAL: never clobber an existing populated state with an empty marker.
-            # The specialisation blocks (wave_precomp, spectrum_precomp) run AFTER this
+            # The specialization blocks (wave_precomp, spectrum_precomp) run AFTER this
             # pass and populate _state further. If this pass overwrites with an empty
             # marker, silent wrong-physics results ensue. Check if old state has content.
             if hasattr(comp, "_state"):
