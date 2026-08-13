@@ -837,7 +837,8 @@ plt.show()
 # over-absorbs by **~9 %** and inflates the whole IR by the same factor.
 # `_knob_model` therefore uses the single screen (`tau_bc = 0`), at which
 # the absorbed fraction matches CIGALE to **0.2 %**.
-#
+
+# %% [markdown]
 # **Left — Dale 2014 AGN fraction (`dale2014.fracAGN`).** With the screen
 # corrected, the stellar-heated curve matches CIGALE to **~1.5 %**. That
 # residual is the BC03->DSPS conversion, not the dust or the attenuation:
