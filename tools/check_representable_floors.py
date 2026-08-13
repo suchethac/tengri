@@ -46,7 +46,14 @@ _GUARD_CALLS = {"maximum", "clip", "where"}
 # divisor and ``disc.py``'s ``log10(maximum(|hat_total|, 1e-100))`` both now call
 # ``representable_floor``. The guards are still there and still live, so this is
 # a migration, not a deletion.
-_PINNED = 43
+# 43 -> 41: #1119 collapsed three inline copies of the X-ray cutoff-power-law
+# band normalization (HMXB, LMXB, hot gas) into ``_cutoff_powerlaw_band_norm``.
+# Each copy carried its own ``jnp.maximum(..., 1e-60)`` divisor floor; the
+# shared helper carries one. The floor is unchanged and still live — this is a
+# deduplication, not a migration or a deletion, so the remaining site is still
+# counted and still wants ``representable_floor`` eventually. Two fewer places
+# for that fix to be applied inconsistently.
+_PINNED = 41
 
 _SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 
