@@ -1368,6 +1368,51 @@ _PLOT_HELPERS: tuple[tuple[str, str], ...] = (
 )
 
 
+def _plot_call_hint(name: str) -> str:
+    """A ``use:`` hint for one plot helper, naming the arguments it requires.
+
+    Parameters
+    ----------
+    name : str
+        Attribute name in :mod:`tengri.plot`.
+
+    Returns
+    -------
+    str
+        ``tengri.plot.plot_sfh(model, posterior)`` — the required parameters,
+        read off the signature. Falls back to the bare name when the helper
+        cannot be resolved or introspected.
+
+    Notes
+    -----
+    Every row used to read ``tengri.plot.<name>(...)``, which is the ``name``
+    column plus an ellipsis. Of the twenty menus that carry a ``use:`` column,
+    this was the only one whose hint contained no arguments at all — the others
+    give something runnable (``Photometry.from_names(["sdss_u"])``,
+    ``fitter.run("laplace")``, ``SEDModel.build(..., dust={'type': ...})``).
+
+    Derived rather than written down, so a helper that gains or loses a
+    required argument cannot leave a stale hint behind.
+    """
+    import inspect
+
+    try:
+        from tengri import plot as _plot
+
+        fn = getattr(_plot, name)
+        params = inspect.signature(fn).parameters.values()
+    except Exception:  # pragma: no cover - defensive; a helper always resolves
+        return f"tengri.plot.{name}(...)"
+
+    required = [
+        p.name
+        for p in params
+        if p.default is inspect.Parameter.empty
+        and p.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+    ]
+    return f"tengri.plot.{name}({', '.join(required)})"
+
+
 def list_plots() -> _RegistryTable:
     """List the plotting helpers in ``tengri.plot``.
 
@@ -1382,7 +1427,7 @@ def list_plots() -> _RegistryTable:
                 "kind": "plot",
                 "status": "production",
                 "short_doc": doc,
-                "use": f"tengri.plot.{name}(...)",
+                "use": _plot_call_hint(name),
             }
             for name, doc in _PLOT_HELPERS
         ]
