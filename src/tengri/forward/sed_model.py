@@ -57,6 +57,8 @@ from __future__ import annotations
 
 import contextlib
 import dataclasses
+import functools
+import inspect
 import types
 import warnings
 from collections.abc import Mapping
@@ -976,6 +978,19 @@ def _fold_igm_into_subbands(igm_comp, stellar_state):
 #: working; non-default values warn and are slated for removal in v1.0.
 _VALID_CSP_INTEGRATION = ("trapz", "log_trapz", "log_interp", "dsps_native", "dsps_met_table")
 _DEFAULT_CSP_INTEGRATION = "trapz"
+
+
+@functools.cache
+def _init_keywords(cls: type) -> frozenset[str]:
+    """The keywords ``cls.__init__`` accepts — everything else is grammar input.
+
+    Derived rather than hand-listed, on the #1720 principle: a second copy of a
+    census agrees with the first by convention and nothing else. ``build`` uses
+    this to decide what may be forwarded to the constructor, so a hand-maintained
+    copy drifting from the real signature is exactly the failure it prevents.
+    """
+    params = inspect.signature(cls.__init__).parameters
+    return frozenset(params) - {"self", "spec", "ssp_data"}
 
 
 class SEDModel:
@@ -8043,16 +8058,26 @@ class SEDModel:
             ).items()
             if v is not None
         }
-        from tengri.parameters.groups import _TOP_LEVEL_SETTINGS, parse_groups
+        from tengri.parameters.groups import parse_groups
 
-        # Top-level parameter settings (e.g. ``n_grid``) belong to
-        # ``parse_groups`` / ``Parameters``, not ``__init__``. Pull any that
-        # arrived via ``**model_kwargs`` over to the group dict so that, e.g.,
-        # ``SEDModel.build(..., n_grid=128)`` works instead of raising a
-        # confusing ``__init__() got an unexpected keyword argument`` error.
-        for _key in _TOP_LEVEL_SETTINGS:
-            if _key in model_kwargs:
-                groups[_key] = model_kwargs.pop(_key)
+        # Anything in ``**model_kwargs`` that ``__init__`` does not declare is
+        # grammar input, and ``parse_groups`` is the only thing that can judge
+        # it. Forwarding it to the constructor instead loses two error channels
+        # that already exist and are correct: the removed-group translations
+        # (``stellar=`` names its ``met=`` replacement) and difflib's suggestion
+        # on a misspelled group (``dsut=`` -> "Did you mean: dust?"). Both
+        # degrade to a bare ``__init__() got an unexpected keyword argument``,
+        # which names no replacement and no suggestion.
+        #
+        # PR #518 diagnosed exactly this and fixed it for the four keys in
+        # ``_TOP_LEVEL_SETTINGS`` (``n_grid`` and friends), which this rule
+        # subsumes — they are not ``__init__`` parameters, so they route here.
+        # Every other keyword kept the old behavior, which is how ``stellar=``
+        # came to die this way in five reproduction notebooks after #1720
+        # removed it (#1776-#1781).
+        _init_kw = _init_keywords(cls)
+        for _key in [k for k in model_kwargs if k not in _init_kw]:
+            groups[_key] = model_kwargs.pop(_key)
 
         # Auto-propagate the emission-line velocity mode from a Spectroscopy
         # observation so the line-velocity params (eline_sigma_kms,
