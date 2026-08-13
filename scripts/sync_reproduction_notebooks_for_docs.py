@@ -160,7 +160,10 @@ def sync_slug(slug: str) -> int:
         return 1
 
     shutil.copyfile(ipynb_path, docs_path)
-    print(f"  {slug}: {n_cells} cells refreshed, {n_figs} figures preserved -> {docs_path.relative_to(ROOT)}")
+    print(
+        f"  {slug}: {n_cells} cells refreshed, {n_figs} figures preserved "
+        f"-> {docs_path.relative_to(ROOT)}"
+    )
     return 0
 
 
