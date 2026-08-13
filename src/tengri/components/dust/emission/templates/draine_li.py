@@ -170,7 +170,7 @@ class DraineLi2014IRSEDComponent(EmissionComponent):
     qpah = Fixed(2.5)
     alpha_dl14 = Fixed(2.0)
 
-    _citations_tuple: ClassVar[tuple[str, ...]] = ("draine_li2014",)
+    _citations_tuple: ClassVar[tuple[str, ...]] = ("draine2014",)
 
     accepts_threaded_templates: ClassVar[bool] = True
 

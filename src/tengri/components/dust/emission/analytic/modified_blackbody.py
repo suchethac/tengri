@@ -61,7 +61,7 @@ class ModifiedBlackbodyIRSEDComponent(EmissionComponent):
 
     _citations_tuple: ClassVar[tuple[str, ...]] = (
         "draine2011",
-        "da_cunha2013",
+        "dacunha2013",
     )
 
     def predict(

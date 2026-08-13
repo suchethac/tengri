@@ -68,7 +68,7 @@ class Casey2012IRSEDComponent(EmissionComponent):
 
     _citations_tuple: ClassVar[tuple[str, ...]] = (
         "casey2012",
-        "da_cunha2013",
+        "dacunha2013",
     )
 
     # Static knob: zero the mid-IR power-law component if True
