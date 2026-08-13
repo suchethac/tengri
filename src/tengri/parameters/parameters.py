@@ -1339,7 +1339,15 @@ class Parameters:
 
         **Roundtrip guarantee**: The output dict, when passed to
         ``parse_groups(**output)``, produces a Parameters with identical
-        free/fixed partitions and distributions.
+        free/fixed partitions and distributions, *and* identical structural
+        settings — including every group's ``type``.
+
+        The wording here used to stop at "distributions", and that narrowness
+        is why two rounds of structural loss went unnoticed: the guarantee was
+        true as written while ``sfh['age_kernel']`` (#964) and then the whole
+        AGN block and ``neb={'type': 'ssp'}`` (#1777) were silently reverting
+        to their defaults. Keep this sentence and
+        ``parameters_to_groups``'s copy of it in step.
 
         Examples
         --------

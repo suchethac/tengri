@@ -42,6 +42,13 @@ TEMPLATE_MODELS = (
     "schreiber2018",
     "astrodust",
     "pah_drude",
+    # Registered as a component in #1777 — before that it resolved only on the
+    # legacy loader path, so the completeness guard below could not see it and
+    # this file's claim silently excluded it. Measured here, not assumed:
+    # float64 peak 3.1452e+30 (float32-representable), sed_dust_ir fully finite
+    # in pure float32, peak-relative float32-vs-float64 error 2.09e-04 —
+    # the same order as dale2014's 9.03e-05 and far inside the 2e-2 bound.
+    "dh02_ce01",
     # Analytic Planck closures, float32-clean since the nu**3 intermediate was
     # removed from planck_bnu (#1206).
     "mbb",

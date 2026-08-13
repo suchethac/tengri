@@ -100,6 +100,17 @@ jobs:
       # f-string are on different lines, so a line-based scan of this same tree
       # reports zero hits. Stdlib-only, same as the guards around it.
       - run: python tools/check_warning_payloads.py
+      # Removing a public spelling means rewriting every call site, and that
+      # sweep's census is whatever the author happened to grep. #1720 removed
+      # `stellar=` and reported "six notebooks" migrated -- six under
+      # `notebooks/`, none under `reproduction/`, which has six of its own.
+      # Five died on the removed spelling and stayed dead, because the only
+      # PR-gated checks over `reproduction/` hash the committed PNGs, which keep
+      # matching while the source that produced them no longer runs
+      # (#1776-#1781). AST, not grep: the changelog and the migration guide name
+      # every removed spelling on purpose, and a checker that fails on its own
+      # documentation gets silenced. Stdlib-only, same as the guards around it.
+      - run: python tools/check_removed_apis.py
       # Every test tree must be reachable from some job's path list. The matrix
       # below is explicit, so a directory it stops naming goes dark silently —
       # which is what happened to `tests/unit`. Stdlib-only by design: this job
