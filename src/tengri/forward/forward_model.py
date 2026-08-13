@@ -850,17 +850,18 @@ class ForwardModel:
         per_pop_states: dict[str, ForwardState] = {}
         per_pop_derived: dict[str, dict[str, Any]] = {}
         per_pop_params: dict[str, dict[str, Any]] = {}
-        # The JIT-threading channel reaches ``run`` only for a plain SEDModel.
-        # A PopulationSEDModel is deliberately excluded, for the same reason
-        # ``_supports_jit_threading`` excludes it from the loss path: the threaded
-        # forward mis-broadcasts the galaxy axis against the SFH grid there
-        # (see tests/contract/test_loss_ssp_threading.py). Passing nothing keeps
-        # the call shape byte-for-byte what it was for every other submodel.
+        # The JIT-threading channel reaches ``run`` only on the topologies the
+        # threaded forward is actually written for. ``_supports_jit_threading``
+        # is that predicate already — single, non-spatial, non-PopulationSEDModel
+        # — so ask it rather than restating the condition here. Restating it is
+        # how the loss path acquired the bug its docstring records: hierarchical
+        # forwards were excluded only by a swallowed AttributeError, and threading
+        # silently turned on for a topology that mis-broadcasts the galaxy axis
+        # against the SFH grid (see tests/contract/test_loss_ssp_threading.py).
+        # Passing nothing keeps the call shape byte-for-byte what it was.
         threaded = {}
-        if (ssp_data is not None or template_data is not None) and not is_multipop:
-            only_sed = self.populations[0].sed
-            if not hasattr(only_sed, "sed"):  # plain SEDModel, not PopulationSEDModel
-                threaded = {"ssp_data": ssp_data, "template_data": template_data}
+        if (ssp_data is not None or template_data is not None) and self._supports_jit_threading():
+            threaded = {"ssp_data": ssp_data, "template_data": template_data}
 
         for pop in self.populations:
             full_params = self._params_for_population(params, pop)

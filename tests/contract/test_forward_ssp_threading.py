@@ -43,6 +43,7 @@ Runs on the synthetic wide SSP (no ``data/ssp_*.h5`` needed, #613).
 
 from __future__ import annotations
 
+import dataclasses
 import inspect
 
 import jax
@@ -244,3 +245,94 @@ def test_threading_does_not_change_properties(synthetic_ssp_wide, synthetic_toph
             atol=0.0,
             err_msg=f"[{surface}] threading changed derived quantity {k!r}",
         )
+
+
+# --------------------------------------------------------------------------
+# 4. The topology gate is the shared predicate, not a second copy of it.
+# --------------------------------------------------------------------------
+
+
+def _phot_const(model, ssp, key):
+    """Largest const baked into a user-jitted, *threaded* photometry call."""
+    params = model.spec.sample(jax.random.PRNGKey(key))
+
+    def threaded(grid, p):
+        return model.predict_photometry(p, ssp_data=grid)
+
+    return _largest_baked_const_at_any_depth(threaded, ssp, params)
+
+
+def test_forward_threading_defers_to_supports_jit_threading(
+    synthetic_ssp_wide, synthetic_tophat_obs, monkeypatch
+):
+    """``ForwardModel`` must gate threading on ``_supports_jit_threading()``.
+
+    The threaded forward is valid only for a single, non-spatial,
+    non-``PopulationSEDModel`` population, and that condition already exists as
+    :meth:`ForwardModel._supports_jit_threading`. Re-deriving it at the call
+    site is what this pins against: the first cut of this fix restated the
+    condition inline and dropped the ``spatial is not None`` clause, so a
+    spatial population would have been threaded even though the canonical
+    predicate refuses it — and the loss path's own docstring records that exact
+    bug arriving the exact same way, from a condition stated in two places.
+
+    Forcing the predicate false must make the model decline to thread: the grid
+    goes back to being closure-captured rather than routed through ``run``.
+
+    **Each leg builds its own model, and the patch is installed before the
+    build.** The forward memoizes its traced graph, so a model that has already
+    been traced serves the cached jaxpr and never re-executes the Python body —
+    patching afterwards is invisible, and the measurement silently reports the
+    pre-patch behavior. An earlier draft of this test did exactly that and read
+    "still threaded" off its own warm cache.
+
+    ``ForwardModel`` is a frozen dataclass, so the patch goes on the class;
+    instance assignment raises ``FrozenInstanceError``.
+    """
+    ssp = synthetic_ssp_wide
+    ssp_size = int(np.asarray(ssp.ssp_flux).size)
+
+    monkeypatch.setattr(ForwardModel, "_supports_jit_threading", lambda self: False)
+    refused = _models(ssp, synthetic_tophat_obs)["forward_model"]
+    biggest = _phot_const(refused, ssp, key=3)
+
+    monkeypatch.undo()
+    allowed = _models(ssp, synthetic_tophat_obs)["forward_model"]
+    assert allowed._supports_jit_threading(), "fixture should be a threadable topology"
+    control = _phot_const(allowed, ssp, key=3)
+
+    assert control < ssp_size, (
+        f"control leg failed: threading did not work on an unpatched model "
+        f"(const {control} >= grid size {ssp_size}), so the forced-false leg "
+        f"cannot show that the gate is what disabled it"
+    )
+    assert biggest >= ssp_size, (
+        "with _supports_jit_threading() forced false the SSP grid must NOT be "
+        f"threaded into run(), but the largest baked const was {biggest} < grid size "
+        f"{ssp_size}, so the gate consulted something other than the shared predicate. "
+        "Call _supports_jit_threading(); do not restate its condition."
+    )
+
+
+def test_threading_gate_rejects_spatial_populations(synthetic_ssp_wide, synthetic_tophat_obs):
+    """The clause the inline copy dropped, pinned directly on the predicate.
+
+    ``_supports_jit_threading`` excludes a population carrying a spatial
+    submodel. The sibling loss-path suite pins the hierarchical clause and the
+    positive case but not this one, and the forward gate now depends on it, so
+    state it rather than leaving it as the untested half of the condition.
+
+    Both ``ForwardModel`` and ``Population`` are frozen dataclasses, so this
+    builds the spatial variant with :func:`dataclasses.replace` instead of
+    mutating — the spatial submodel is never run, only inspected by the gate.
+    """
+    model = _models(synthetic_ssp_wide, synthetic_tophat_obs)["forward_model"]
+    assert model._supports_jit_threading(), "fixture should be threadable to start"
+
+    spatial_pop = dataclasses.replace(model.populations[0], spatial=object())
+    with_spatial = dataclasses.replace(model, populations=(spatial_pop,))
+
+    assert not with_spatial._supports_jit_threading(), (
+        "a spatial population must not be threaded — the threaded forward "
+        "mis-broadcasts the galaxy axis against the SFH grid"
+    )
