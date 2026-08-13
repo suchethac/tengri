@@ -542,6 +542,29 @@ def fast_nebular_can_engage(model) -> bool:
     return not _nebular_continuum_consumers(chain)
 
 
+def _observation_serves_line_channel(model) -> bool:
+    """Whether the model's own Observation carries a measured line-flux channel.
+
+    The model-visible half of :meth:`Fitter._fits_line_fluxes`, for the batch
+    surfaces, which resolve their precompute policy without a ``Fitter`` and so
+    cannot ask it. A fit that overrides the channel with ``line_flux_data=`` is a
+    single-galaxy spelling and goes through the ``Fitter`` path, which resolves it
+    properly; this is deliberately the *narrower* question.
+
+    Parameters
+    ----------
+    model : SEDModel
+        The fit's model.
+
+    Returns
+    -------
+    bool
+        ``True`` when ``model.observation`` declares ``line_fluxes``.
+    """
+    obs = getattr(model, "observation", None)
+    return obs is not None and getattr(obs, "line_fluxes", None) is not None
+
+
 def _has_line_adjacent_channel(model) -> bool:
     """Whether the observation carries a channel that reads line internals.
 
@@ -804,10 +827,19 @@ def _resolve_batch_fit_approx(model, approx, data_type):
             # per resolved clone, so skipping it here is the larger of the two wins.
             # The "dominant lever" numbers above were measured on the pre-gate tree
             # and hold only for a model with no ``sed_nebular`` consumer.
+            #
+            # ...unless a LINE channel is present, which is the other thing the LUT
+            # serves and which dust does not disarm. #1775 drew that distinction on
+            # the single-galaxy resolver and left this one gated, so the two
+            # surfaces disagreed on exactly one cell of the channel matrix — a
+            # dusty catalog fit that carries line fluxes kept refusing the LUT that
+            # the same model got as a single-galaxy fit. ``data_type`` names the
+            # primary data array here, not the channel set, so "photometry" does
+            # not mean "no lines" (#1770).
             if (
                 not has_feature
                 and not _has_line_adjacent_channel(model)
-                and fast_nebular_can_engage(model)
+                and (_observation_serves_line_channel(model) or fast_nebular_can_engage(model))
             ):
                 existing = tuple(getattr(model, "approx_configs", ()))
                 extra = (FeaturePrecomp(),) if has_wave else (cfg, FeaturePrecomp())

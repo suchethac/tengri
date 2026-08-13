@@ -584,6 +584,118 @@
   role          = {Two-parameter IR/submm/radio SED template family},
 }
 
+%% Three papers that components already declared and that no entry backed.
+%% Nothing surfaced it: the declarations were dead (see
+%% SEDModelComponent.__init_subclass__), so the keys were never looked up.
+%% Metadata below comes from the component docstrings already committed here.
+
+@article{Boquien_Salim_2021,
+  author        = {{Boquien}, M. and {Salim}, S.},
+  title         = "{A new approach to estimate dust temperatures, masses, and emissivities from far-infrared SEDs}",
+  journal       = {\aap},
+  year          = 2021,
+  volume        = {653},
+  pages         = {A149},
+  doi           = {10.1051/0004-6361/202140810},
+  registry_key  = {boquien_salim2021},
+  category      = {dust_emission},
+  short         = {Boquien \& Salim (2021)},
+  role          = {BOSA dust SED templates parameterized by (L_TIR, sSFR)},
+}
+
+@article{Schreiber_2018,
+  author        = {{Schreiber}, C. and {Pannella}, M. and {Elbaz}, D.},
+  title         = "{The ALMA Spectroscopic Survey in the Hubble Ultra Deep Field: The molecular gas content of galaxies and tension with IllustrisTNG and the Santa Cruz Simulations}",
+  journal       = {\aap},
+  year          = 2018,
+  volume        = {609},
+  pages         = {A30},
+  doi           = {10.1051/0004-6361/201731506},
+  registry_key  = {schreiber2018},
+  category      = {dust_emission},
+  short         = {Schreiber et al. (2018)},
+  role          = {Tabulated cold-dust library with real PAH features},
+}
+
+@article{Kokorev_2021,
+  author        = {{Kokorev}, V.~I. and {Magdis}, G.~E. and {Davidzon}, I.},
+  title         = "{STARDUST: Spectral Template Analysis and Reconstruction of the Dust Emission}",
+  journal       = {\apj},
+  year          = 2021,
+  volume        = {921},
+  pages         = {40},
+  registry_key  = {kokorev2021},
+  category      = {dust_emission},
+  short         = {Kokorev et al. (2021)},
+  role          = {Warm+cold two-temperature energy-balance dust split},
+}
+
+@book{Draine_2011,
+  author        = {{Draine}, B.~T.},
+  title         = "{Physics of the Interstellar and Intergalactic Medium}",
+  publisher     = {Princeton University Press},
+  year          = 2011,
+  url           = {https://ui.adsabs.harvard.edu/abs/2011piim.book.....D},
+  registry_key  = {draine2011},
+  category      = {dust_emission},
+  short         = {Draine (2011)},
+  role          = {Thermal continuum emission from dust grains (Ch. 22)},
+}
+
+%% The two papers behind the DH02_CE01 cold-dust library. Their DOIs, titles,
+%% journals, volumes and pages are taken from the citations already committed
+%% in this repository (`create_dh02_ce01_from_grid` and
+%% `tests/crossval/test_dh02_ce01_vs_agnfitter.py`), not written from memory.
+%% `eprint` is omitted rather than guessed: an invented arXiv ID is worse than
+%% an absent one.
+
+@article{Dale_Helou_2002,
+  author        = {{Dale}, Daniel A. and {Helou}, George},
+  title         = "{The Infrared Spectral Energy Distribution of Normal Star-forming Galaxies: Calibration at Far-Infrared and Submillimeter Wavelengths}",
+  journal       = {\apj},
+  year          = 2002,
+  volume        = {576},
+  pages         = {159},
+  doi           = {10.1086/341632},
+  registry_key  = {dale_helou2002},
+  category      = {dust_emission},
+  short         = {Dale \& Helou (2002)},
+  role          = {Infrared SED template family indexed by IR luminosity},
+}
+
+%% `eprint` omitted deliberately: the two docstrings in
+%% `components/dust/draine2021_pah.py` cite DIFFERENT arXiv IDs for this paper
+%% (2011.07046 in the module docstring, 2106.07415 at line ~247). The DOI is
+%% unambiguous and appears once, so it is the field recorded here. Resolving
+%% which eprint is correct needs the paper, not this file.
+@article{Draine_2021_PAH,
+  author        = {{Draine}, B.~T. and {Li}, Aigen and {Hensley}, Brandon S. and {Hunt}, Leslie K. and {Sandstrom}, Karin and {Smith}, J.-D.~T.},
+  title         = "{Excitation of Polycyclic Aromatic Hydrocarbon Emission: Dependence on Size Distribution, Ionization, and Starlight Spectrum and Intensity}",
+  journal       = {\apj},
+  year          = 2021,
+  volume        = {917},
+  pages         = {3},
+  doi           = {10.3847/1538-4357/abff51},
+  registry_key  = {draine2021_pah},
+  category      = {dust_emission},
+  short         = {Draine et al. (2021)},
+  role          = {PAHspec emission grid over size distribution, ionization and starlight},
+}
+
+@article{Chary_Elbaz_2001,
+  author        = {{Chary}, Ranga and {Elbaz}, David},
+  title         = "{Interpreting the Cosmic Infrared Background: Constraints on the Evolution of the Dust-enshrouded Star Formation Rate}",
+  journal       = {\apj},
+  year          = 2001,
+  volume        = {556},
+  pages         = {562},
+  doi           = {10.1086/321609},
+  registry_key  = {chary_elbaz2001},
+  category      = {dust_emission},
+  short         = {Chary \& Elbaz (2001)},
+  role          = {Luminosity-dependent IR SED templates},
+}
+
 %% =====================================================================
 %%  Nebular — CLOUDY photoionization
 %% =====================================================================

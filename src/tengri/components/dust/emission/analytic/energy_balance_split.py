@@ -71,6 +71,10 @@ class EnergyBalanceSplitIRSEDComponent(EmissionComponent):
 
     name: str = "energy_balance_split"
 
+    #: The menu row has credited Kokorev+2021 all along
+    #: (``_DUST_EMISSION_METADATA``); the component itself credited nobody.
+    citations = ("kokorev2021",)
+
     #: Affine, so it opts out of the generic ``apply``-level ``L_ir`` factoring
     #: (which re-applies a single scale after evaluating at unit luminosity —
     #: valid only for a proportional model). Instead this component assembles its

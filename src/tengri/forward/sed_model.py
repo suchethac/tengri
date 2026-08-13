@@ -57,6 +57,8 @@ from __future__ import annotations
 
 import contextlib
 import dataclasses
+import functools
+import inspect
 import types
 import warnings
 from collections.abc import Mapping
@@ -68,7 +70,12 @@ import numpy as np
 
 from tengri.components.stellar.sfh.registry import compute_field_gp, resolve_sfh
 from tengri.components.stellar.sps.dsps_wrapper import csp_age_dt
-from tengri.config.exceptions import ParameterMapError, warn_measured
+from tengri.config.exceptions import (
+    DeadGradientParameterWarning,
+    DegenerateParameterPairWarning,
+    ParameterMapError,
+    warn_measured,
+)
 from tengri.cosmology import age_at_z, luminosity_distance
 from tengri.forward.approx_policy import BAND_PROJECTION_KEYS, ApproxPolicy
 from tengri.forward.sed_model_types import (
@@ -978,6 +985,19 @@ _VALID_CSP_INTEGRATION = ("trapz", "log_trapz", "log_interp", "dsps_native", "ds
 _DEFAULT_CSP_INTEGRATION = "trapz"
 
 
+@functools.cache
+def _init_keywords(cls: type) -> frozenset[str]:
+    """The keywords ``cls.__init__`` accepts — everything else is grammar input.
+
+    Derived rather than hand-listed, on the #1720 principle: a second copy of a
+    census agrees with the first by convention and nothing else. ``build`` uses
+    this to decide what may be forwarded to the constructor, so a hand-maintained
+    copy drifting from the real signature is exactly the failure it prevents.
+    """
+    params = inspect.signature(cls.__init__).parameters
+    return frozenset(params) - {"self", "spec", "ssp_data"}
+
+
 class SEDModel:
     """Differentiable SED forward model with modular physics and clean API.
 
@@ -1521,6 +1541,7 @@ class SEDModel:
         # ── Metallicity ───────────────────────────────────────────
         param_map_deltas.append(self._init_metallicity(spec))
         self._validate_metallicity_bounds(spec, ssp_data)
+        self._validate_alpha_fe_identifiability(spec, ssp_data)
 
         # ── Dust (attenuation + emission) ─────────────────────────
         param_map_deltas.append(self._init_dust(spec))
@@ -2382,6 +2403,85 @@ class SEDModel:
                         grid_hi_zsol=grid_hi_zsol,
                         stacklevel=3,
                     )
+
+    def _validate_alpha_fe_identifiability(self, spec, ssp_data):
+        """Warn if a free ``met_alpha_fe`` cannot be identified by this model.
+
+        ``[alpha/Fe]`` is a real, independently-interpolated axis only when the
+        SSP grid carries one (:func:`has_alpha_grid`, the 4D path of #226).
+        Without it, ``met_alpha_fe`` reaches the SED solely through
+        :func:`effective_metallicity`, and only from the ``"delta"`` metallicity
+        branch. That leaves two distinct failures, both silent today:
+
+        * **Any non-delta metallicity model** never reads ``met_alpha_fe`` at
+          all. Measured on a 3D grid, sweeping 0.0 -> 0.6 under ``"ramp"`` and
+          ``"two_step"``: ``numpy.array_equal`` returns ``True`` and
+          ``d(sum SED)/d(alpha)`` is exactly ``0.0`` (issue #1764). The
+          parameter is still accepted as free, so the reported posterior is the
+          prior.
+        * **Delta metallicity** folds it in as a pure additive shift,
+          ``log_z_eff = met_logzsol + 0.75 * met_alpha_fe``, so freeing it
+          alongside ``met_logzsol`` gives an exactly flat ridge (issue #1095).
+
+        This check needs three facts that live in three objects — the grid
+        (``ssp_data``), the metallicity mode (``self._met_mode``), and which
+        parameters are free (``spec``) — which is why it belongs here and not on
+        the parameter declaration: :class:`Parameters` cannot see ``ssp_data``,
+        so a guard placed there would fire falsely on every 4D grid.
+
+        Warns rather than raises, matching :meth:`_validate_metallicity_bounds`:
+        the forward model is correct in every case, and both configurations are
+        legitimate if the user wants them.
+        """
+        if ssp_data is None:
+            return  # synthetic / placeholder construction path
+
+        distributions = getattr(spec, "_distributions", {})
+        alpha_dist = distributions.get("met_alpha_fe")
+        if alpha_dist is None or alpha_dist.is_fixed:
+            return
+
+        from tengri.components.stellar.sps.dsps_wrapper import (
+            _ALPHA_TO_Z_COEFF,
+            has_alpha_grid,
+        )
+
+        if has_alpha_grid(ssp_data):
+            return  # 4D grid: [alpha/Fe] interpolates a real axis (#226)
+
+        met_mode = str(self._met_mode)
+        if met_mode != "delta":
+            warn_measured(
+                f"met_alpha_fe is free, but metallicity mode {met_mode!r} never "
+                f"reads it. On an SSP grid with no [alpha/Fe] axis the "
+                f"enhancement is applied only in the 'delta' branch, so "
+                f"d(SED)/d(met_alpha_fe) is exactly 0.0: no gradient-based "
+                f"sampler can move it and the reported posterior is the prior "
+                f"(issue #1764). Use met_mode='delta', pin met_alpha_fe with "
+                f"Fixed(...), or load an SSP grid carrying an [alpha/Fe] axis.",
+                DeadGradientParameterWarning,
+                gradient=0.0,
+                stacklevel=3,
+            )
+            return
+
+        logzsol_dist = distributions.get("met_logzsol")
+        if logzsol_dist is not None and not logzsol_dist.is_fixed:
+            warn_measured(
+                f"met_alpha_fe and met_logzsol are both free, but this SSP grid "
+                f"has no [alpha/Fe] axis, so [alpha/Fe] enters only as an "
+                f"additive shift of the effective metallicity: log_z_eff = "
+                f"met_logzsol + {_ALPHA_TO_Z_COEFF} * met_alpha_fe. The pair is "
+                f"exactly degenerate — the likelihood is flat along "
+                f"met_logzsol + {_ALPHA_TO_Z_COEFF} * met_alpha_fe = const, and "
+                f"a Laplace fit assigns that direction the variance its "
+                f"eigenvalue floor implies rather than a measured one (issues "
+                f"#1095, #1515). Free one or the other, or load an SSP grid "
+                f"carrying an [alpha/Fe] axis.",
+                DegenerateParameterPairWarning,
+                coefficient=_ALPHA_TO_Z_COEFF,
+                stacklevel=3,
+            )
 
     def _init_dust(self, spec):
         """Configure dust attenuation laws, nebular dust, and dust emission.
@@ -8136,16 +8236,26 @@ class SEDModel:
             ).items()
             if v is not None
         }
-        from tengri.parameters.groups import _TOP_LEVEL_SETTINGS, parse_groups
+        from tengri.parameters.groups import parse_groups
 
-        # Top-level parameter settings (e.g. ``n_grid``) belong to
-        # ``parse_groups`` / ``Parameters``, not ``__init__``. Pull any that
-        # arrived via ``**model_kwargs`` over to the group dict so that, e.g.,
-        # ``SEDModel.build(..., n_grid=128)`` works instead of raising a
-        # confusing ``__init__() got an unexpected keyword argument`` error.
-        for _key in _TOP_LEVEL_SETTINGS:
-            if _key in model_kwargs:
-                groups[_key] = model_kwargs.pop(_key)
+        # Anything in ``**model_kwargs`` that ``__init__`` does not declare is
+        # grammar input, and ``parse_groups`` is the only thing that can judge
+        # it. Forwarding it to the constructor instead loses two error channels
+        # that already exist and are correct: the removed-group translations
+        # (``stellar=`` names its ``met=`` replacement) and difflib's suggestion
+        # on a misspelled group (``dsut=`` -> "Did you mean: dust?"). Both
+        # degrade to a bare ``__init__() got an unexpected keyword argument``,
+        # which names no replacement and no suggestion.
+        #
+        # PR #518 diagnosed exactly this and fixed it for the four keys in
+        # ``_TOP_LEVEL_SETTINGS`` (``n_grid`` and friends), which this rule
+        # subsumes — they are not ``__init__`` parameters, so they route here.
+        # Every other keyword kept the old behavior, which is how ``stellar=``
+        # came to die this way in five reproduction notebooks after #1720
+        # removed it (#1776-#1781).
+        _init_kw = _init_keywords(cls)
+        for _key in [k for k in model_kwargs if k not in _init_kw]:
+            groups[_key] = model_kwargs.pop(_key)
 
         # Auto-propagate the emission-line velocity mode from a Spectroscopy
         # observation so the line-velocity params (eline_sigma_kms,
