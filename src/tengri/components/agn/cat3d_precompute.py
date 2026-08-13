@@ -9,10 +9,9 @@ Auto-collapses any axis whose corresponding parameter is
 
 References
 ----------
-.. [1] S. F. Hönig & M. Kishimoto, "The dusty heart of nearby active
-   galaxies. II. From clumpy torus models to a unified model," ApJL 838,
-   L20 (2017). arXiv:1702.08691.
-   (CITATION-AUDIT NOTE: not found in ~/writing-workspace; verify against source)
+.. [1] S. F. Hönig & M. Kishimoto, "Dusty winds in active galactic nuclei: reconciling
+   observations with models," ApJL 838,
+   L20 (2017). arXiv:1702.08691. https://doi.org/10.3847/2041-8213/aa6838
 .. [2] L. N. Martínez-Ramírez, G. Calistro Rivera, E. Lusso, et al.,
    "AGNfitter-rx: Modeling the radio-to-X-ray spectral energy
    distributions of AGNs," A&A 688, A46 (2024). arXiv:2405.12111.
@@ -87,8 +86,8 @@ def precompute_cat3d_photometry(
 
     References
     ----------
-    .. [1] S. F. Hönig & M. Kishimoto, "The dusty heart of nearby active
-       galaxies. II. From clumpy torus models to a unified model," ApJL 838,
+    .. [1] S. F. Hönig & M. Kishimoto, "Dusty winds in active galactic nuclei: reconciling
+       observations with models," ApJL 838,
        L20 (2017). arXiv:1702.08691.
 
     Notes
@@ -194,8 +193,8 @@ def build_cat3d_photometry_lookup(precomp: dict):
 
     References
     ----------
-    .. [1] S. F. Hönig & M. Kishimoto, "The dusty heart of nearby active
-       galaxies. II. From clumpy torus models to a unified model," ApJL 838,
+    .. [1] S. F. Hönig & M. Kishimoto, "Dusty winds in active galactic nuclei: reconciling
+       observations with models," ApJL 838,
        L20 (2017). arXiv:1702.08691.
 
     Notes
@@ -271,8 +270,8 @@ def precompute(
 
     References
     ----------
-    .. [1] S. F. Hönig & M. Kishimoto, "The dusty heart of nearby active
-       galaxies. II. From clumpy torus models to a unified model," ApJL 838,
+    .. [1] S. F. Hönig & M. Kishimoto, "Dusty winds in active galactic nuclei: reconciling
+       observations with models," ApJL 838,
        L20 (2017). arXiv:1702.08691.
 
     Notes
@@ -332,8 +331,8 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
 
     References
     ----------
-    .. [1] S. F. Hönig & M. Kishimoto, "The dusty heart of nearby active
-       galaxies. II. From clumpy torus models to a unified model," ApJL 838,
+    .. [1] S. F. Hönig & M. Kishimoto, "Dusty winds in active galactic nuclei: reconciling
+       observations with models," ApJL 838,
        L20 (2017). arXiv:1702.08691.
 
     Notes

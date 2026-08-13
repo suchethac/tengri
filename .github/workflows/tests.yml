@@ -100,6 +100,16 @@ jobs:
       # codes; it does not port or copy their source. The wording drifted back
       # twice after being swept by hand, so it is pinned here. Stdlib-only.
       - run: python tools/check_reimplementation_language.py
+      # `check_doc_examples` resolves symbols and `check_claude_md_paths` resolves
+      # paths; a CITATION is prose, so nothing checked it. The NLR line template
+      # was cited three times, three different ways, one of them a title invented
+      # against a bibcode that belongs to a dwarf-spheroidal kinematics paper —
+      # so the template could not be checked against its source, and when a
+      # doublet ratio in it disagreed with atomic physics the published data got
+      # "corrected" to satisfy a test (#1752). This cannot verify a bibcode is
+      # right (that needs the network) but it enforces that the repo does not
+      # disagree with itself, which is what actually happened. Stdlib-only.
+      - run: python tools/check_citation_consistency.py
       # A warning that renders a computed number and discards it forces every
       # consumer to regex-parse prose for a value the format spec already
       # rounded: `{frac:.0%}` made "69%" mean anything in 0.685-0.695, and the
@@ -349,6 +359,18 @@ jobs:
       # conversion constant (4.78e-13 / L_sun) that appears in no source literal
       # and in no guard call. Finding it requires importing and evaluating.
       - run: python tools/check_float32_representable_constants.py
+      # Every test module in EVERY tier must still import. `check_test_paths_covered`
+      # proves a tree is named by some job; it cannot see whether the files in it
+      # collect. Those are independent failures, and the second one is invisible
+      # in the tiers the gate deselects: `-m 'not crossval and not slow'` never
+      # imports them, so a crossval class that died of an ImportError sat green
+      # for months and took the [N II] doublet check down with it (#1728/#1752).
+      # `-m ''` clears the deselection, so this walks crossval, slow and benchmark
+      # too. Collect-only, so it costs ~10 s and runs no test body. It also pins
+      # `--strict-markers`: an unregistered mark is a collection error here rather
+      # than a warning nobody reads — `-m unit` matched 0 tests while 157 files
+      # declared it.
+      - run: pytest --collect-only -q -m "" tests/ > /dev/null
       - run: pytest tests/components/sps/test_alpha_fe.py tests/components/stellar/test_stellar_skeleton.py -q --no-header
       # The `benchmark` tier: four tests that assert a wall-clock RATIO (fast path
       # vs exact path, cached vs cold). They are real regression guards — they catch

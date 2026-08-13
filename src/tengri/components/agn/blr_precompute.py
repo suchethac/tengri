@@ -24,9 +24,9 @@ References
 .. [3] Tsuzuki et al. 2006, "Fe II Emission in 14 Low-Redshift Quasars.
        I. Observations," ApJ, 650, 57. (UV Fe II decomposition)
        Verified against ~/writing-workspace/projects/tengri/99-references.bib:Tsuzuki_2006.
-.. [4] Vestergaard & Wilkes 2001, "AGN Black Hole Mass Estimates Based on Unified
-       Models and Ten-Micron Silicate Strengths," ApJS, 134, 1. (UV Fe II)
-       (CITATION-AUDIT NOTE: not found in ~/writing-workspace)
+.. [4] Vestergaard & Wilkes 2001, "An Empirical Ultraviolet Template for Iron
+       Emission in Quasars as Derived from I Zwicky 1," ApJS, 134, 1. (UV Fe II)
+       https://doi.org/10.1086/320357
 .. [5] Kovacevic et al. 2010, "Optical iron emission lines in quasars and AGN,"
        ApJS, 189, 15.
 

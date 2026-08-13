@@ -205,7 +205,14 @@ testpaths = ["tests"]
 # ~30-60 us scale, which scheduler noise swamps once `-n auto` puts a dozen
 # workers on the same cores. The guard is still worth having, so CI runs it
 # serially: `pytest -m benchmark -n 0`.
-addopts = "--tb=short -m 'not crossval and not slow and not benchmark' -n auto --dist=loadfile"
+# `--strict-markers` turns an unregistered mark into a collection error instead
+# of a warning. Without it a typo'd or simply-never-registered mark is inert:
+# the file reads as categorized, `-m <name>` selects nothing, and no run fails.
+# That was not hypothetical — `unit` (157 uses), `integration` (10) and
+# `physics` (1) were all unregistered, so `-m unit` had always matched zero
+# tests while 157 files declared it. Registered below; the flag keeps the class
+# from recurring.
+addopts = "--tb=short --strict-markers -m 'not crossval and not slow and not benchmark' -n auto --dist=loadfile"
 markers = [
     "slow: heavy end-to-end tests (inference/integration trees); excluded from the default run",
     "network: test genuinely exercises a network path; exempt from the conftest network guard (#1546)",
@@ -218,6 +225,9 @@ markers = [
     "regression_bug: frozen output for a previously-fixed bug (cite ADR/commit)",
     "gradient: jax.grad sanity + finite-difference checks",
     "contract: public-API surface, deprecation alias, registry round-trip",
+    "unit: fast, isolated check of one function or class; no SSP data required",
+    "integration: exercises several subsystems together (tests/integration tree)",
+    "physics: cross-cut tag for a test whose subject is physical correctness",
 ]
 
 [tool.jupytext]
