@@ -1046,7 +1046,8 @@ plt.show()
 # tengri uses **Cue** (Li et al. 2024), a neural emulator of the same
 # physics that exposes logU, gas metallicity and IMF as continuous
 # parameters. Cue requires the bare-stellar SSP this notebook loaded.
-#
+
+# %% [markdown]
 # **Fiducial choice — young population.** Sections §3–§7 use a 5 Gyr
 # quiescent τ=1 Gyr galaxy (Boquien+2019 reference), which has almost no
 # ionizing budget. Nebular emission lives in stars ≲ 100 Myr old, so §8
@@ -1067,7 +1068,8 @@ plt.show()
 #
 # The Q_H reaching Cue is the integral of the SSP-convolved ionizing spectrum
 # below 911.76 Å, published by the stellar component on every forward pass.
-#
+
+# %% [markdown]
 # **Remaining residual.** The gap lives downstream of the gas knobs. Cue
 # was trained on Cloudy 17 (Li et al. 2025) while CIGALE bundles Cloudy
 # 13.x grids, and Cue's bare-stellar path differs from CIGALE's wNE-SSP
@@ -1077,7 +1079,8 @@ plt.show()
 # (continuum-subtracted, width-independent), not a single-bin peak ratio,
 # which would measure line width and grid resolution (CIGALE broadens to
 # `lines_width = 300 km/s`) rather than physics.
-#
+
+# %% [markdown]
 # **Grid coverage.** Cue's native grid runs ~915 Å – 10⁸ Å (optical/UV
 # forest); CIGALE's CLOUDY grid extends to far-IR fine-structure lines
 # ([O III] 88 µm, [C II] 158 µm, [S III] 18.7 µm, [Ne III] 15.6 µm out to
@@ -1252,7 +1255,8 @@ for _c, _name in [(6563.0, "Hα"), (5007.0, "[O III]"), (4861.0, "Hβ")]:
 # oa = 40°, p = q = 1). Each panel shows the stellar + dust baseline
 # (dashed), the full SED with AGN (solid), and the AGN-only component
 # (dotted).
-#
+
+# %% [markdown]
 # **`disc.schartmann2005` matches CIGALE's `skirtor2016 disk_type=1`**
 # default: the Schartmann (2005) piecewise power law with the 1200 Å
 # bend that CIGALE substitutes for the FITS-bundled disc. tengri also
@@ -1275,7 +1279,8 @@ for _c, _name in [(6563.0, "Hα"), (5007.0, "[O III]"), (4861.0, "Hβ")]:
 # viewing pushes the dust peak out to ~30 µm. The Casey-2012 polar-dust
 # graybody, on by default (`agn_polar_ebv = 0.03`; set `Fixed(0.0)` to
 # disable), lifts the ~100 µm tail by a factor of a few.
-#
+
+# %% [markdown]
 # **Energy-balance normalization.** CIGALE ties disc, torus, and polar
 # dust to a single `agn_power` reference through the fixed SKIRTOR
 # template ratios. tengri's default `norm='cigale_joint'` does the same:
@@ -1897,7 +1902,8 @@ save_fig("cigale_10b_xray_inclination.png")
 # whole band by a constant, and this does not.
 #
 # Separate the ratio into the only two things it can be made of.
-#
+
+# %% [markdown]
 # **The non-thermal terms agree, and their offset is pure convention.** Both
 # codes emit a synchrotron power law of the same index, so tengri's synchrotron
 # over CIGALE's can only be a constant — and it is: **1.005, flat across all
@@ -1914,7 +1920,8 @@ save_fig("cigale_10b_xray_inclination.png")
 # Their product, ×1.005, is the measured flat offset. Nothing is fitted here:
 # the prediction comes from the two conventions, the measurement from the two
 # SEDs, and they meet.
-#
+
+# %% [markdown]
 # **Everything above that line is thermal.** tengri's `condon92` carries a
 # Murphy+2011 free-free term; CIGALE's `radio` module has none (#863). Free-free
 # is flat (α ≈ 0.1) where synchrotron is steep (α = 0.8), so its share climbs
