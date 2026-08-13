@@ -245,7 +245,7 @@ t_p_dt, sfr_p_dt = P.sfh_curve(sfh="dtau", mSFR=10.0, mpeak=10.0, mtau=3.0)
 LOG_MASS_SNORM = float(np.log10(PRO_MASS))
 m_sfh = SEDModel.build(
     ssp_data=ssp,
-    stellar={"logzsol": Fixed(MET_LOGZSOL), "*": FIXED},
+    met={"logzsol": Fixed(MET_LOGZSOL), "*": FIXED},
     sfh={
         "type": "snorm",
         "peak_lbt_gyr": Fixed(SNORM_FIDUCIAL["mpeak"]),
@@ -315,8 +315,8 @@ _, Z_box, _ = P.metallicity_history(
 # tengri massmap_lin — the same cumulative-mass mapping, matched endpoints.
 m_zmm = SEDModel.build(
     ssp_data=ssp,
-    stellar={
-        "met_mode": "massmap_lin",
+    met={
+        "type": "massmap_lin",
         "met_logzsol_start": Fixed(logzsol_for_Z(Z_START)),
         "met_logzsol_final": Fixed(logzsol_for_Z(Z_FINAL)),
         "*": FIXED,
@@ -350,8 +350,8 @@ _cmf_t[_o] = _cmf_sorted
 # the ProSpect ``yield`` parameter exposed as ``met_yield``.
 m_zmb = SEDModel.build(
     ssp_data=ssp,
-    stellar={
-        "met_mode": "massmap_box",
+    met={
+        "type": "massmap_box",
         "met_logzsol_start": Fixed(logzsol_for_Z(Z_START)),
         "met_logzsol_final": Fixed(logzsol_for_Z(Z_FINAL)),
         "met_yield": Fixed(0.03),
@@ -433,7 +433,7 @@ L_p3 = L_p3 * PRO_SCALE
 
 m_stellar = SEDModel.build(
     ssp_data=ssp,
-    stellar={"logzsol": Fixed(MET_LOGZSOL), "*": FIXED},
+    met={"logzsol": Fixed(MET_LOGZSOL), "*": FIXED},
     sfh={
         "type": "snorm",
         "peak_lbt_gyr": Fixed(SNORM_FIDUCIAL["mpeak"]),
@@ -493,7 +493,7 @@ print(
 # %%
 from tengri.dust import list_laws
 
-_tengri_laws = list_laws(headline=False)
+_tengri_laws = list_laws(headline=False).to_dict("fn")
 wave_law = np.logspace(np.log10(1000.0), np.log10(30000.0), 2000)
 
 
@@ -582,7 +582,7 @@ DUST_FIDUCIAL = {
 }
 m_d = SEDModel.build(
     ssp_data=ssp,
-    stellar={"logzsol": Fixed(MET_LOGZSOL), "*": FIXED},
+    met={"logzsol": Fixed(MET_LOGZSOL), "*": FIXED},
     sfh={
         "type": "snorm",
         "peak_lbt_gyr": Fixed(SNORM_FIDUCIAL["mpeak"]),
@@ -643,7 +643,7 @@ L_p6 = L_p6 * PRO_SCALE
 
 m_ir = SEDModel.build(
     ssp_data=ssp,
-    stellar={"logzsol": Fixed(MET_LOGZSOL), "*": FIXED},
+    met={"logzsol": Fixed(MET_LOGZSOL), "*": FIXED},
     sfh={
         "type": "snorm",
         "peak_lbt_gyr": Fixed(SNORM_FIDUCIAL["mpeak"]),
@@ -792,7 +792,7 @@ ssp_neb = load_ssp_data(
 )
 m_neb = SEDModel.build(
     ssp_data=ssp_neb,
-    stellar={"logzsol": Fixed(0.0), "*": FIXED},
+    met={"logzsol": Fixed(0.0), "*": FIXED},
     # Confine star formation to the last 10 Myr — a young, ionizing population.
     sfh={
         "type": "const",
@@ -914,7 +914,7 @@ print(
 # the AGN down by ``frac_agn`` as a host-fraction knob).
 m_agn = SEDModel.build(
     ssp_data=ssp,
-    stellar={"logzsol": Fixed(MET_LOGZSOL), "*": FIXED},
+    met={"logzsol": Fixed(MET_LOGZSOL), "*": FIXED},
     sfh={
         "type": "snorm",
         "peak_lbt_gyr": Fixed(SNORM_FIDUCIAL["mpeak"]),
@@ -1019,7 +1019,7 @@ L_p11 = L_p11 * PRO_SCALE
 
 m_radio = SEDModel.build(
     ssp_data=ssp,
-    stellar={"logzsol": Fixed(MET_LOGZSOL), "*": FIXED},
+    met={"logzsol": Fixed(MET_LOGZSOL), "*": FIXED},
     sfh={
         "type": "snorm",
         "peak_lbt_gyr": Fixed(SNORM_FIDUCIAL["mpeak"]),
