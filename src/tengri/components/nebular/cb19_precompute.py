@@ -46,10 +46,10 @@ from tengri.components.nebular.cloudy_cb19 import (
     _DEFAULT_PATH,
     load_cb19_grid,
 )
+from tengri.forward.precompute.templates import collapse_fixed_axes
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
     interp_nd_triweight,
-    slice_fixed_axes,
 )
 from tengri.utils.interpolation import edges_for_grid
 
@@ -192,16 +192,11 @@ def precompute(
     )
 
     # Auto-collapse: identify Fixed axes
-    fixed: dict[int, float] = {}
-    if parameters is not None:
-        fixed_values = parameters.get_fixed_values()
-        for i, pname in enumerate(AXIS_PARAMS):
-            if pname in fixed_values:
-                fixed[i] = float(fixed_values[pname])
+    collapsed, remaining_axes, fixed = collapse_fixed_axes(
+        preint, AXIS_PARAMS, parameters, origin="cb19_precompute"
+    )
 
     if fixed:
-        collapsed = slice_fixed_axes(preint, fixed)
-        remaining_axes = tuple(ax for i, ax in enumerate(preint.axes) if i not in fixed)
         return {
             "line_weight_matrix": jnp.asarray(line_weight_matrix),
             "line_wavelengths": jnp.asarray(grid.line_wavelengths),

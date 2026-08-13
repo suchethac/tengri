@@ -58,12 +58,10 @@ from tengri.components.xray.xray import (
 )
 from tengri.forward.precompute.templates import (
     build_template_photometry_lookup,
+    collapse_fixed_axes,
     precompute_template_photometry,
 )
-from tengri.utils.grid_interp import (
-    PreintegratedGrid,
-    slice_fixed_axes,
-)
+from tengri.utils.grid_interp import PreintegratedGrid
 
 AXIS_PARAMS_XRB = ("xray_gamma_hmxb", "xray_gamma_lmxb")
 AXIS_PARAMS_CORONA = ("xray_gamma", "xray_delta_alpha_ox")
@@ -275,21 +273,12 @@ def precompute(
         "_preint": preint,
     }
 
-    axis_params = AXIS_PARAMS[model]
-    if parameters is None or not axis_params:
-        return result
-
-    fixed_values = parameters.get_fixed_values()
-    fixed: dict[int, float] = {}
-    for i, pname in enumerate(axis_params):
-        if pname in fixed_values:
-            fixed[i] = float(fixed_values[pname])
-
+    collapsed, remaining, fixed = collapse_fixed_axes(
+        preint, AXIS_PARAMS[model], parameters, origin=f"xray_precompute[{model}]"
+    )
     if not fixed:
         return result
 
-    collapsed = slice_fixed_axes(preint, fixed)
-    remaining = tuple(ax for i, ax in enumerate(result["axes"]) if i not in fixed)
     return {
         "grid_phot": collapsed.phot,
         "axes": remaining,

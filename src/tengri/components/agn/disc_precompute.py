@@ -53,12 +53,10 @@ from tengri.components.agn.disc import (
 from tengri.components.agn.disc_cigale import piecewise_powerlaw_disk as _piecewise_pl
 from tengri.forward.precompute.templates import (
     build_template_photometry_lookup,
+    collapse_fixed_axes,
     precompute_template_photometry,
 )
-from tengri.utils.grid_interp import (
-    PreintegratedGrid,
-    slice_fixed_axes,
-)
+from tengri.utils.grid_interp import PreintegratedGrid
 from tengri.utils.interpolation import edges_for_grid
 
 # ── Axis definitions per model ──────────────────────────────────
@@ -394,21 +392,13 @@ def precompute(
         raise ValueError(f"Unknown disc model: {model}")
 
     # Auto-collapse any Fixed axes
-    if parameters is None or not axis_params:
-        return result
-
     preint: PreintegratedGrid = result["_preint"]
-    fixed_values = parameters.get_fixed_values()
-    fixed: dict[int, float] = {}
-    for i, pname in enumerate(axis_params):
-        if pname in fixed_values:
-            fixed[i] = float(fixed_values[pname])
-
+    collapsed, remaining_axes, fixed = collapse_fixed_axes(
+        preint, axis_params, parameters, origin=f"disc_precompute[{model}]"
+    )
     if not fixed:
         return result
 
-    collapsed = slice_fixed_axes(preint, fixed)
-    remaining_axes = tuple(ax for i, ax in enumerate(result["axes"]) if i not in fixed)
     return {
         "grid_phot": collapsed.phot,
         "axes": remaining_axes,

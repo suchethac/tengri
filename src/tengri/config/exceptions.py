@@ -389,6 +389,37 @@ class ComponentDataNotAvailableWarning(AdvisoryWarning):
     """
 
 
+class DeadPrecomputeAxisWarning(AdvisoryWarning):
+    """A precompute module's ``AXIS_PARAMS`` names no parameter that can exist.
+
+    Every ``*_precompute.py`` module declares ``AXIS_PARAMS``: the parameter
+    name governing each grid axis, in axis order. ``collapse_fixed_axes`` matches
+    those names against ``Parameters.get_fixed_values()`` and collapses the axes
+    whose parameter is ``Fixed``, which is what the modules' docstrings advertise
+    ("auto-collapses Fixed axes", "to avoid memory explosion ... this function
+    auto-detects and collapses them").
+
+    The two sides are plain strings that nothing forces to agree. When a
+    component's declared parameter names and its precompute module's
+    ``AXIS_PARAMS`` drift apart, ``pname in fixed_values`` is simply always
+    ``False``: no axis is ever collapsed, no error is raised, and the promised
+    grid reduction silently never happens. ``cat3d_precompute`` declares
+    ``cat3d_cos_inc`` while ``Cat3DTorus`` declares ``parameter_prefix = "agn_"``
+    and ``cos_inc``, so the live name is ``agn_cos_inc`` (issue #1738).
+
+    This fires only when *no* declared axis name is a valid parameter for the
+    model being built — a name set that cannot resolve under any assignment,
+    which is a declaration defect rather than a configuration. A model that
+    simply leaves every axis parameter free resolves its names fine and is
+    silent.
+
+    Warns rather than raising: an uncollapsed grid is larger and slower to
+    interpolate but still numerically correct, so this degrades performance
+    rather than results. Remedy: align ``AXIS_PARAMS`` with the names the
+    component actually declares (``spec.valid_param_names``).
+    """
+
+
 class LaplaceVarianceCeilingWarning(UserWarning):
     """Eigenvalue clipping assigned a variance ceiling to unconstrained directions.
 
