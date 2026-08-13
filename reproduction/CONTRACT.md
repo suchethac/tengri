@@ -94,7 +94,15 @@ a reader checks before trusting anything else.
 
 **Keep a markdown cell under ~200 words.** Where a cell runs long, split
 it so each piece sits beside the figure it explains. Above roughly 300
-words a cell stops being read and starts being skimmed.
+words a cell stops being read and starts being skimmed. A bold lead-in
+after a blank line is usually the author's own sub-topic boundary and the
+natural place to cut.
+
+Two exceptions, both read linearly rather than scanned against a figure:
+`## Summary` and `## References`. A section-by-section summary of a
+thirteen-section notebook is long because it is complete, and splitting it
+would break the one page a reader checks first. Length is not the test —
+whether the cell is read beside a figure is.
 
 ## 6. Voice
 
