@@ -889,6 +889,40 @@ def _warn_agn_dust_double_count(spec) -> None:
     )
 
 
+def _state_has_content(state) -> bool:
+    """Report whether a component state carries anything beyond its name.
+
+    Parameters
+    ----------
+    state : SEDComponentState or None
+        Any component state, of any subclass.
+
+    Returns
+    -------
+    bool
+        True when at least one field other than ``name`` is not ``None``.
+
+    Notes
+    -----
+    Read off the dataclass fields rather than a hand-written list of attribute
+    names. The list this replaced named five (``data``, ``ssp_phot_lut``,
+    ``ssp_spec_lut``, ``filter_waves``, ``k_lambda``) and so judged an
+    :class:`~tengri.components.igm.component.IGMSEDComponentState` carrying only
+    ``band_table`` to be empty -- a state class the list predated. Every such
+    list goes stale the moment a component adds a field, and the failure is
+    silent: the populated state is discarded and the model still returns
+    plausible numbers (#1738).
+    """
+    if state is None:
+        return False
+    try:
+        fields = dataclasses.fields(state)
+    except TypeError:
+        # Not a dataclass; fall back to "it exists, so it counts".
+        return True
+    return any(getattr(state, f.name, None) is not None for f in fields if f.name != "name")
+
+
 def _fold_igm_into_subbands(igm_comp, stellar_state):
     r"""Fold the IGM transmission into the stellar sub-band quadrature weights.
 
@@ -7664,18 +7698,15 @@ class SEDModel:
                         filters=filters,
                         redshift_spec=redshift_spec,
                     )
-                    if state is not None:
-                        state = replace(
-                            state,
-                            spec_zgrid=igm_state.spec_zgrid
-                            if hasattr(igm_state, "spec_zgrid")
-                            else None,
-                            spec_table=igm_state.spec_table
-                            if hasattr(igm_state, "spec_table")
-                            else None,
-                        )
-                    else:
-                        state = igm_state
+                    # The band factors ARE the precompute product for IGM: its own
+                    # precompute() is a documented no-op, so ``state`` here is an
+                    # empty marker. An earlier version of this pass kept that
+                    # marker and copied only the two spec_* fields across, which
+                    # dropped band_zgrid/band_table -- so predict_via_precomp
+                    # re-evaluated the full Inoue+2014 curve on every call and the
+                    # #1135 fold stopped being free (12.7 MFLOPs, caught by
+                    # test_the_fold_is_free_at_runtime). The richer state wins.
+                    state = igm_state
                     # Fold IGM transmission into stellar subbands
                     if isinstance(chain[0], StellarSEDComponent):
                         chain[0] = replace(
@@ -7726,24 +7757,8 @@ class SEDModel:
                 old_state = comp._state
                 # State is "empty" if it's just a bare marker with no data.
                 # A populated state has at least one content field.
-                old_has_content = old_state is not None and any(
-                    (
-                        getattr(old_state, "data", None) is not None,
-                        getattr(old_state, "ssp_phot_lut", None) is not None,
-                        getattr(old_state, "ssp_spec_lut", None) is not None,
-                        getattr(old_state, "filter_waves", None) is not None,
-                        getattr(old_state, "k_lambda", None) is not None,
-                    )
-                )
-                new_has_content = state is not None and any(
-                    (
-                        getattr(state, "data", None) is not None,
-                        getattr(state, "ssp_phot_lut", None) is not None,
-                        getattr(state, "ssp_spec_lut", None) is not None,
-                        getattr(state, "filter_waves", None) is not None,
-                        getattr(state, "k_lambda", None) is not None,
-                    )
-                )
+                old_has_content = _state_has_content(old_state)
+                new_has_content = _state_has_content(state)
                 # Only replace if: (1) new state has content, or (2) old state was empty
                 if new_has_content or not old_has_content:
                     chain[idx] = replace(comp, _state=state)
