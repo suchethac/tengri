@@ -280,6 +280,39 @@ class GridSupportWarning(AdvisoryWarning):
     """
 
 
+class DegenerateParameterPairWarning(AdvisoryWarning):
+    """Two freed parameters that enter the model only through one combination.
+
+    Distinct from :class:`DeadGradientParameterWarning`: neither parameter is
+    dead — each moves the SED on its own. They are simply not *jointly*
+    identifiable, because the forward model reads only a single function of the
+    two. The likelihood is exactly flat along that combination, so the posterior
+    has a ridge rather than a mode.
+
+    The measured instance is ``met_alpha_fe`` with ``met_logzsol`` on an SSP
+    grid carrying no [alpha/Fe] axis (issue #1095): [alpha/Fe] is folded into an
+    effective metallicity as ``log_z_eff = met_logzsol + 0.75 * met_alpha_fe``,
+    and an alpha-enhanced spectrum is *the same array* as a scaled-solar one at
+    0.75 dex higher metallicity — ``numpy.array_equal`` returns ``True``.
+
+    A flat direction is not merely a weak constraint. The Hessian is singular
+    there, so :func:`~tengri.inference.backends.laplace.run_laplace` clips the
+    eigenvalue to ``min_eigenvalue`` and — because ``cov = H^-1`` — *assigns*
+    that direction variance ``1 / min_eigenvalue`` (issue #1515). The reported
+    error bar is an artifact of the floor.
+
+    Warns rather than raises: the forward model is correct, a degenerate pair is
+    a legitimate thing to sample if you want the ridge, and loading an
+    alpha-enhanced grid makes the same pair genuinely identifiable.
+
+    See Also
+    --------
+    tengri.components.stellar.sps.dsps_wrapper.has_alpha_grid
+        The 4D test that decides whether [alpha/Fe] is a real axis (#226) or a
+        reparameterization of metallicity.
+    """
+
+
 class OutOfSSPGridWarning(UserWarning):
     """An ingested metallicity history reaches past the SSP's metallicity grid.
 
