@@ -11,8 +11,8 @@ support CAT3D through the unified AGN registry.
 
 References
 ----------
-.. [1] S. F. Hönig & M. Kishimoto, "The dusty heart of nearby active
-   galaxies. II. From clumpy torus models to a unified model," ApJL 838,
+.. [1] S. F. Hönig & M. Kishimoto, "Dusty winds in active galactic nuclei: reconciling
+   observations with models," ApJL 838,
    L20 (2017). arXiv:1702.08691.
 .. [2] L. N. Martínez-Ramírez, G. Calistro Rivera, E. Lusso, et al.,
    "AGNfitter-rx: Modeling the radio-to-X-ray spectral energy

@@ -346,10 +346,10 @@ class TestBLRPhysics:
 
     def test_halpha_strongest_optical_line(self):
         """Hα (6563A) should be the strongest BLR line in optical."""
-        from tengri.components.agn.blr import blr_emission
+        from tengri.components.agn.blr import compute_blr_sed
 
         wave_opt = jnp.linspace(4000.0, 8000.0, 5000)
-        l_nu = blr_emission(wave_opt, l_disc_bol_erg=self._L_DISC)
+        l_nu = compute_blr_sed(wave_opt, l_disc_bol_erg=self._L_DISC)
         peak_wave = float(wave_opt[jnp.argmax(l_nu)])
         # Should peak near Hα 6563A
         assert abs(peak_wave - 6563.0) < 50.0, (
@@ -358,10 +358,10 @@ class TestBLRPhysics:
 
     def test_lya_strongest_uv_line(self):
         """Lyα (1216A) should be the strongest BLR line in UV."""
-        from tengri.components.agn.blr import blr_emission
+        from tengri.components.agn.blr import compute_blr_sed
 
         wave_uv = jnp.linspace(1000.0, 2000.0, 5000)
-        l_nu = blr_emission(wave_uv, l_disc_bol_erg=self._L_DISC)
+        l_nu = compute_blr_sed(wave_uv, l_disc_bol_erg=self._L_DISC)
         peak_wave = float(wave_uv[jnp.argmax(l_nu)])
         assert abs(peak_wave - 1216.0) < 50.0, (
             f"UV BLR peak should be near Lyα 1216A, got {peak_wave:.0f} A"
@@ -369,21 +369,21 @@ class TestBLRPhysics:
 
     def test_blr_scales_with_luminosity(self):
         """BLR luminosity should increase with AGN luminosity."""
-        from tengri.components.agn.blr import blr_emission
+        from tengri.components.agn.blr import compute_blr_sed
 
-        l_faint = blr_emission(WAVE, l_disc_bol_erg=1e43)
-        l_bright = blr_emission(WAVE, l_disc_bol_erg=1e45)
+        l_faint = compute_blr_sed(WAVE, l_disc_bol_erg=1e43)
+        l_bright = compute_blr_sed(WAVE, l_disc_bol_erg=1e45)
         ratio = float(jnp.sum(l_bright)) / float(jnp.sum(l_faint))
         # 2 dex in L_bol → ~100x in BLR (within factor of ~2)
         assert 10.0 < ratio < 1000.0, f"BLR should scale with Lbol, got ratio {ratio}"
 
     def test_broader_fwhm_spreads_lines(self):
         """Broader FWHM → wider lines → lower peak flux per Hz."""
-        from tengri.components.agn.blr import blr_emission
+        from tengri.components.agn.blr import compute_blr_sed
 
         wave_ha = jnp.linspace(6400.0, 6700.0, 3000)
-        l_narrow = blr_emission(wave_ha, l_disc_bol_erg=self._L_DISC, fwhm_kms=2000.0)
-        l_broad = blr_emission(wave_ha, l_disc_bol_erg=self._L_DISC, fwhm_kms=10000.0)
+        l_narrow = compute_blr_sed(wave_ha, l_disc_bol_erg=self._L_DISC, fwhm_kms=2000.0)
+        l_broad = compute_blr_sed(wave_ha, l_disc_bol_erg=self._L_DISC, fwhm_kms=10000.0)
 
         # Broader → lower peak
         peak_narrow = float(jnp.max(l_narrow))
@@ -401,32 +401,34 @@ class TestNLRPhysics:
 
     def test_oiii_strongest_nlr_line(self):
         """[OIII] 5007A is the strongest NLR line."""
-        from tengri.components.agn.nlr import nlr_emission
+        from tengri.components.agn.nlr import compute_nlr_sed
 
         wave_opt = jnp.linspace(3500.0, 7000.0, 5000)
-        l_nu = nlr_emission(wave_opt, l_disc_bol_erg=self._L_DISC)
+        l_nu = compute_nlr_sed(wave_opt, l_disc_bol_erg=self._L_DISC)
         peak_wave = float(wave_opt[jnp.argmax(l_nu)])
         assert abs(peak_wave - 5007.0) < 30.0, (
             f"NLR peak should be near [OIII] 5007A, got {peak_wave:.0f} A"
         )
 
     def test_oiii_doublet_ratio(self):
-        """[OIII] 5007/4959 ≈ 2.98 (atomic physics, Storey & Zeippen 2000)."""
-        from tengri.components.agn.nlr import _NLR_LINE_STRENGTHS, _NLR_LINE_WAVELENGTHS
+        """[OIII] 5007/4959 ≈ 2.98 (atomic physics, Storey & Zeippen 2000).
 
-        idx_5007 = int(jnp.argmin(jnp.abs(_NLR_LINE_WAVELENGTHS - 5007.0)))
-        idx_4959 = int(jnp.argmin(jnp.abs(_NLR_LINE_WAVELENGTHS - 4959.0)))
-        ratio = float(_NLR_LINE_STRENGTHS[idx_5007] / _NLR_LINE_STRENGTHS[idx_4959])
-        assert abs(ratio - 2.98) < 0.2, f"[OIII] 5007/4959 should be ~2.98, got {ratio}"
+        Measured from the emitted spectrum. This read ``_NLR_LINE_STRENGTHS`` /
+        ``_NLR_LINE_WAVELENGTHS``, private arrays removed in a refactor (#1728).
+        """
+        from ._nlr_measure import OIII_4959, OIII_5007, doublet_ratio
+
+        ratio = doublet_ratio(OIII_5007, OIII_4959)
+        assert abs(ratio - 2.98) < 0.2, f"[OIII] 5007/4959 should be ~2.98, got {ratio:.3f}"
 
     def test_nlr_narrower_than_blr(self):
         """NLR lines (~500 km/s) must be narrower than BLR (~5000 km/s)."""
-        from tengri.components.agn.blr import blr_emission
-        from tengri.components.agn.nlr import nlr_emission
+        from tengri.components.agn.blr import compute_blr_sed
+        from tengri.components.agn.nlr import compute_nlr_sed
 
         wave_ha = jnp.linspace(6400.0, 6700.0, 3000)
-        l_blr = blr_emission(wave_ha, l_disc_bol_erg=self._L_DISC)
-        l_nlr = nlr_emission(wave_ha, l_disc_bol_erg=self._L_DISC)
+        l_blr = compute_blr_sed(wave_ha, l_disc_bol_erg=self._L_DISC)
+        l_nlr = compute_nlr_sed(wave_ha, l_disc_bol_erg=self._L_DISC)
 
         blr_fwhm = float(jnp.sum(l_blr > 0.5 * jnp.max(l_blr)) * (wave_ha[1] - wave_ha[0]))
         nlr_fwhm = float(jnp.sum(l_nlr > 0.5 * jnp.max(l_nlr)) * (wave_ha[1] - wave_ha[0]))

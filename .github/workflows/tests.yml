@@ -88,10 +88,28 @@ jobs:
       # check_doc_examples.py resolves symbols and never looked at paths.
       # Stdlib-only, same as the guards around it.
       - run: python tools/check_claude_md_paths.py
+      # The verification protocol is where README sends anyone asking what is
+      # safe to use for science, and its Test File column IS the evidence. It
+      # cited eight crossval tests; all eight were absent, every row read
+      # PENDING, and 56 real crossval files sat beside it under other names —
+      # so the ledger understated the project until someone re-typed the
+      # filenames (#1725). Resolves paths only: it cannot tell you a cited test
+      # runs, which is why the protocol carries a NOT RUN status. Stdlib-only.
+      - run: python tools/check_verification_protocol_paths.py
       # tengri implements published models and validates against the reference
       # codes; it does not port or copy their source. The wording drifted back
       # twice after being swept by hand, so it is pinned here. Stdlib-only.
       - run: python tools/check_reimplementation_language.py
+      # `check_doc_examples` resolves symbols and `check_claude_md_paths` resolves
+      # paths; a CITATION is prose, so nothing checked it. The NLR line template
+      # was cited three times, three different ways, one of them a title invented
+      # against a bibcode that belongs to a dwarf-spheroidal kinematics paper —
+      # so the template could not be checked against its source, and when a
+      # doublet ratio in it disagreed with atomic physics the published data got
+      # "corrected" to satisfy a test (#1752). This cannot verify a bibcode is
+      # right (that needs the network) but it enforces that the repo does not
+      # disagree with itself, which is what actually happened. Stdlib-only.
+      - run: python tools/check_citation_consistency.py
       # A warning that renders a computed number and discards it forces every
       # consumer to regex-parse prose for a value the format spec already
       # rounded: `{frac:.0%}` made "69%" mean anything in 0.685-0.695, and the
@@ -100,6 +118,17 @@ jobs:
       # f-string are on different lines, so a line-based scan of this same tree
       # reports zero hits. Stdlib-only, same as the guards around it.
       - run: python tools/check_warning_payloads.py
+      # Removing a public spelling means rewriting every call site, and that
+      # sweep's census is whatever the author happened to grep. #1720 removed
+      # `stellar=` and reported "six notebooks" migrated -- six under
+      # `notebooks/`, none under `reproduction/`, which has six of its own.
+      # Five died on the removed spelling and stayed dead, because the only
+      # PR-gated checks over `reproduction/` hash the committed PNGs, which keep
+      # matching while the source that produced them no longer runs
+      # (#1776-#1781). AST, not grep: the changelog and the migration guide name
+      # every removed spelling on purpose, and a checker that fails on its own
+      # documentation gets silenced. Stdlib-only, same as the guards around it.
+      - run: python tools/check_removed_apis.py
       # Every test tree must be reachable from some job's path list. The matrix
       # below is explicit, so a directory it stops naming goes dark silently —
       # which is what happened to `tests/unit`. Stdlib-only by design: this job
@@ -297,7 +326,11 @@ jobs:
 
   smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # 5 -> 8: the all-tier `--collect-only` step added below imports every test
+    # module in the repo (14303 tests, ~10 s warm locally). The job last passed at
+    # 3m30s, so 5 minutes left little headroom, and a guard that trips the job's
+    # own timeout under load reports as a failure of the thing it guards.
+    timeout-minutes: 8
     if: ${{ github.event_name != 'pull_request' || github.event.action != 'labeled' }}
     steps:
       - uses: actions/checkout@v7
@@ -341,6 +374,18 @@ jobs:
       # conversion constant (4.78e-13 / L_sun) that appears in no source literal
       # and in no guard call. Finding it requires importing and evaluating.
       - run: python tools/check_float32_representable_constants.py
+      # Every test module in EVERY tier must still import. `check_test_paths_covered`
+      # proves a tree is named by some job; it cannot see whether the files in it
+      # collect. Those are independent failures, and the second one is invisible
+      # in the tiers the gate deselects: `-m 'not crossval and not slow'` never
+      # imports them, so a crossval class that died of an ImportError sat green
+      # for months and took the [N II] doublet check down with it (#1728/#1752).
+      # `-m ''` clears the deselection, so this walks crossval, slow and benchmark
+      # too. Collect-only, so it costs ~10 s and runs no test body. It also pins
+      # `--strict-markers`: an unregistered mark is a collection error here rather
+      # than a warning nobody reads — `-m unit` matched 0 tests while 157 files
+      # declared it.
+      - run: pytest --collect-only -q -m "" tests/ > /dev/null
       - run: pytest tests/components/sps/test_alpha_fe.py tests/components/stellar/test_stellar_skeleton.py -q --no-header
       # The `benchmark` tier: four tests that assert a wall-clock RATIO (fast path
       # vs exact path, cached vs cold). They are real regression guards — they catch
@@ -972,3 +1017,48 @@ jobs:
         with:
           path: ~/.cache/tengri_jax_cache
           key: ${{ steps.jax_cache.outputs.cache-primary-key }}
+
+  # Cross-validation against FSPS / CIGALE / bagpipes / AGNfitter / Synthesizer.
+  #
+  # This tree was in NO job at all — every suite above passes
+  # `--ignore=tests/crossval` or `-m 'not crossval'` — and it rotted accordingly:
+  # measured on 2026-08-13 at 217 failures and 19 errors out of ~1,210, almost
+  # all of it tests that had stopped importing their own subjects after
+  # renames. Nothing was ever red, because nothing ever ran (#1728).
+  #
+  # It cost ~80-140 s serially to find all of that. The expense was never the
+  # reason it went ungated; it simply was not wired up.
+  #
+  # NOT a PR gate yet, deliberately. ~45 failures remain — genuine numerical
+  # comparisons that need physics judgment, plus reference data CI does not
+  # carry — and a required check that is red on arrival teaches people to
+  # ignore it, which is the failure mode this job exists to end. Nightly makes
+  # the state *visible*, which was the missing ingredient. Promote to a PR gate
+  # once the tier is green; #1728 tracks that.
+  #
+  # Serial (`-n 0`): xdist workers each hold a JAX process with SSP grids and
+  # were observed dying on a 16 GB runner, and a crashed worker reports as an
+  # infrastructure error rather than a test failure — which is precisely the
+  # kind of ambiguity this tier is meant to remove.
+  crossval:
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'schedule'
+      || github.event_name == 'workflow_dispatch'
+      || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'run-crossval'))
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: pip install -e ".[dev]"
+      # Reference grids are not in the repo; the affected modules skip
+      # themselves when absent, so a missing file is reported as a skip rather
+      # than an error. Check the skip count, not just the exit status.
+      - name: Run cross-validation tier
+        run: pytest tests/crossval -q --no-header -m crossval -n 0 -rf
+        env:
+          JAX_PLATFORMS: cpu

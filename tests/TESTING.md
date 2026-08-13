@@ -106,6 +106,7 @@ def test_calzetti2000_attenuation_eq3():
     Tolerance: 1% (analytical formula, no fit residual).
     """
     from tengri.dust import calzetti_k
+
     # k(0.55 µm) = 4.05 by construction (Eq. 4 normalization)
     assert abs(calzetti_k(5500.0) - 4.05) < 0.05
 ```
@@ -121,8 +122,10 @@ pytestmark = pytest.mark.gradient
 
 def test_grad_sed_wrt_logmstar_is_positive(model, params):
     """∂L_ν / ∂log M* > 0 — more mass means more light."""
+
     def loss(logmstar):
         return model.predict(params.update(logmstar=logmstar)).sum()
+
     g = jax.grad(loss)(10.0)
     assert jnp.isfinite(g)
     assert g > 0

@@ -87,7 +87,7 @@ class Schreiber2016AnalyticIRSEDComponent(EmissionComponent):
     _citations_tuple: ClassVar[tuple[str, ...]] = (
         "schreiber2016",
         "smith2007",
-        "da_cunha2013",
+        "dacunha2013",
     )
 
     def predict(

@@ -2,7 +2,7 @@
 
 ## Project overview
 
-Differentiable SED fitting code in JAX. Models galaxy star formation histories as IFT correlated fields with PSD-governed burstiness priors. Uses DSPS for differentiable stellar population synthesis.
+Differentiable SED fitting code in JAX. Models galaxy star formation histories as IFT correlated fields with PSD-governed burstiness priors. Builds on DSPS for the cosmology, metallicity weights, surviving-mass fractions and the SSP grid format; the composite-stellar-population integral on the default path is tengri's own CIC kernel (`sfh={'age_kernel': 'cic'}`), with DSPS's histogram kernel available as `'dsps'` for cross-code parity (#1727).
 
 **Name:** `tengri`.
 **Paper draft:** *(private paper draft)*

@@ -77,11 +77,17 @@ class TestSSPAbsoluteNormalization:
         from tengri.parameters.parameters import Parameters
         from tengri.parameters.priors import Fixed
 
+        # `sfh_const_log_total_mass` is a total mass, not a rate: SFR = 1
+        # Msun/yr over 1 Gyr is 1e9 Msun, i.e. 9.0. It was set to 0.0 under a
+        # "# 1 Msun/yr" comment — one solar mass of stars — and the result then
+        # divided by 1e9, leaving the per-Msun luminosity 1e9 too small
+        # (2.15e10 against a [1e17, 1e20] band) (#1728).
+        log_total_mass = 9.0
         spec = Parameters(
             mean_sfh_type="const",
-            sfh_const_log_total_mass=Fixed(0.0),  # 1 Msun/yr
-            sfh_const_start_gyr=Fixed(1.0),  # recent (lookback=0)
-            sfh_const_end_gyr=Fixed(0.0),  # started 1 Gyr ago
+            sfh_const_log_total_mass=Fixed(log_total_mass),
+            sfh_const_start_gyr=Fixed(1.0),  # started 1 Gyr ago
+            sfh_const_end_gyr=Fixed(0.0),  # ongoing (lookback 0)
             met_logzsol=Fixed(0.0),
             dust_tau_bc=Fixed(0.0),
             dust_tau_diff=Fixed(0.0),
@@ -94,7 +100,7 @@ class TestSSPAbsoluteNormalization:
 
         # V-band (5500 Å) luminosity per unit mass
         l_v = _band_avg(wave, sed, 5500.0, 200.0)
-        m_formed = 1e9  # 1 Msun/yr × 1 Gyr (lookback 0-1 Gyr)
+        m_formed = 10.0**log_total_mass  # 1e9 Msun
         l_v_per_msun = l_v / m_formed
 
         # FSPS reference: L_nu(V) ~ 1-5 × 10^18 erg/s/Hz/Msun for 1 Gyr const SFH
@@ -308,8 +314,11 @@ class TestSFRLuminosityCalibrations:
         from tengri.parameters.priors import Fixed
 
         spec = Parameters(
+            # A total mass, not a rate: SFR = 1 Msun/yr over 3 Gyr is 3e9 Msun.
+            # This was 0.0 — one solar mass — so the derived UV-SFR came back as
+            # 0.00 against an expected 1.0 (#1728).
+            sfh_const_log_total_mass=Fixed(float(np.log10(1.0 * 3.0e9))),
             mean_sfh_type="const",
-            sfh_const_log_total_mass=Fixed(0.0),  # SFR = 1 Msun/yr
             sfh_const_start_gyr=Fixed(3.0),
             sfh_const_end_gyr=Fixed(0.0),  # 3 Gyr of SF
             met_logzsol=Fixed(-0.3),
@@ -356,7 +365,11 @@ class TestAbsoluteMagnitudes:
         filters = load_filter_set(["sdss_r"])
         spec = Parameters(
             mean_sfh_type="const",
-            sfh_const_log_total_mass=Fixed(0.3),  # SFR ~ 2 Msun/yr
+            # A total mass, not a rate: SFR ~ 2 Msun/yr over 13 Gyr is 2.6e10
+            # Msun, which is a Milky-Way-like stellar mass. It was 0.3 — two
+            # solar masses — and the galaxy duly came out at M_r = +4.6, the
+            # absolute magnitude of the Sun, against an expected -21 (#1728).
+            sfh_const_log_total_mass=Fixed(float(np.log10(2.0 * 13.0e9))),
             sfh_const_start_gyr=Fixed(13.0),
             sfh_const_end_gyr=Fixed(0.0),  # 13 Gyr of continuous SF
             met_logzsol=Fixed(0.0),
@@ -456,7 +469,17 @@ class TestRedshiftEffects:
     """Redshift must produce correct dimming and k-corrections."""
 
     def test_higher_z_fainter(self, ssp):
-        """Same galaxy at higher z must have lower observed flux."""
+        """Same galaxy at higher z must have lower observed flux.
+
+        The star-formation window has to exist at every redshift tested. This
+        used to hold ``start_gyr=13.7, end_gyr=10.7`` — a lookback window fixed
+        in Gyr — while moving the galaxy to z = 0.5 and 1.0, where the universe
+        is 8.6 and 5.9 Gyr old. Star formation 13.7 Gyr before observation is
+        then before the Big Bang, and the model correctly formed no stars: the
+        flux was **exactly zero** at z >= 0.3, which is the right answer to an
+        unphysical question (#1728). A recent 1 Gyr window exists at all three
+        redshifts, so the comparison measures cosmological dimming as intended.
+        """
         from tengri.forward.sed_model import SEDModel
         from tengri.observation.filters import load_filter_set
         from tengri.parameters.parameters import Parameters
@@ -467,9 +490,9 @@ class TestRedshiftEffects:
         def _flux(z):
             spec = Parameters(
                 mean_sfh_type="const",
-                sfh_const_log_total_mass=Fixed(0.0),
-                sfh_const_start_gyr=Fixed(13.7),
-                sfh_const_end_gyr=Fixed(10.7),
+                sfh_const_log_total_mass=Fixed(10.0),
+                sfh_const_start_gyr=Fixed(1.0),
+                sfh_const_end_gyr=Fixed(0.0),
                 met_logzsol=Fixed(0.0),
                 dust_tau_bc=Fixed(0.0),
                 dust_tau_diff=Fixed(0.0),

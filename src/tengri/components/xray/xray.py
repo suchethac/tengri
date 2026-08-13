@@ -951,8 +951,8 @@ def xray_hotgas(
 
     References
     ----------
-    .. [1] G. Yang et al., "Fitting AGN/galaxy X-ray-to-radio SEDs with
-       CIGALE and improvement of the code," MNRAS, 491, 740 (2020).
+    .. [1] G. Yang et al., "X-CIGALE: fitting AGN/galaxy SEDs from X-ray
+       to infrared," MNRAS, 491, 740 (2020).
        https://doi.org/10.1093/mnras/stz3001
     .. [2] G. Yang et al., "Fitting AGN/galaxy X-ray-to-radio SEDs with
        CIGALE and improvement of the code," ApJ, 927, 192 (2022).
@@ -1257,8 +1257,8 @@ def xray_agn_corona(
        dependence of narrow emission-line regions in nearby active galactic
        nuclei," ApJ, 665, 1004 (2007).
        https://doi.org/10.1086/519990
-    .. [2] G. Yang et al., "Fitting AGN/galaxy X-ray-to-radio SEDs with
-       CIGALE and improvement of the code," MNRAS, 491, 740 (2020).
+    .. [2] G. Yang et al., "X-CIGALE: fitting AGN/galaxy SEDs from X-ray
+       to infrared," MNRAS, 491, 740 (2020).
        https://doi.org/10.1093/mnras/stz3001
     .. [3] G. Yang et al., "Fitting AGN/galaxy X-ray-to-radio SEDs with
        CIGALE and improvement of the code," ApJ, 927, 192 (2022).

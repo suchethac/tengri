@@ -32,7 +32,7 @@ class TestUnifiedNLRBLRPhysics:
         """Basic sanity: unified model produces finite positive SED."""
         from tengri.components.agn.unified import unified_nlr_blr
 
-        l_nu = unified_nlr_blr(WAVE_OPT, agn_log_lbol=44.0)
+        l_nu = unified_nlr_blr(WAVE_OPT, agn_log_lbol=10.42)
         chex.assert_tree_all_finite(l_nu)
         assert float(jnp.sum(l_nu)) > 0
 
@@ -45,7 +45,7 @@ class TestUnifiedNLRBLRPhysics:
         from tengri.components.agn.unified import unified_nlr_blr
 
         wave = jnp.linspace(6400.0, 6700.0, 1000)
-        l_type1 = unified_nlr_blr(wave, agn_log_lbol=44.0, agn_cos_inc=0.9)
+        l_type1 = unified_nlr_blr(wave, agn_log_lbol=10.42, agn_cos_inc=0.9)
         # Should have emission line feature (non-zero flux variation)
         flux_range = float(jnp.max(l_type1) - jnp.min(l_type1))
         assert flux_range > 0, "Type 1 should show BLR emission lines"
@@ -59,9 +59,9 @@ class TestUnifiedNLRBLRPhysics:
 
         wave = jnp.linspace(6400.0, 6700.0, 1000)
         # Type 2: edge-on with small torus opening
-        l_type2 = unified_nlr_blr(wave, agn_log_lbol=44.0, agn_cos_inc=0.1, agn_theta_torus=45.0)
+        l_type2 = unified_nlr_blr(wave, agn_log_lbol=10.42, agn_cos_inc=0.1, agn_theta_torus=45.0)
         # Type 1 for comparison
-        l_type1 = unified_nlr_blr(wave, agn_log_lbol=44.0, agn_cos_inc=0.9, agn_theta_torus=45.0)
+        l_type1 = unified_nlr_blr(wave, agn_log_lbol=10.42, agn_cos_inc=0.9, agn_theta_torus=45.0)
         # Type 2 BLR emission should be weaker (obscured)
         type1_peak = float(jnp.max(l_type1))
         type2_peak = float(jnp.max(l_type2))
@@ -76,8 +76,8 @@ class TestUnifiedNLRBLRPhysics:
         from tengri.components.agn.unified import unified_nlr_blr
 
         wave = jnp.linspace(4950.0, 5050.0, 500)
-        l_type1 = unified_nlr_blr(wave, agn_log_lbol=44.0, agn_cos_inc=0.9)
-        l_type2 = unified_nlr_blr(wave, agn_log_lbol=44.0, agn_cos_inc=0.1)
+        l_type1 = unified_nlr_blr(wave, agn_log_lbol=10.42, agn_cos_inc=0.9)
+        l_type2 = unified_nlr_blr(wave, agn_log_lbol=10.42, agn_cos_inc=0.1)
 
         # Both should have [OIII] emission (NLR is isotropic)
         has_oiii_t1 = float(jnp.max(l_type1) - jnp.min(l_type1)) > 0
@@ -89,8 +89,8 @@ class TestUnifiedNLRBLRPhysics:
         """Higher agn_log_lbol → brighter SED."""
         from tengri.components.agn.unified import unified_nlr_blr
 
-        l_faint = unified_nlr_blr(WAVE_OPT, agn_log_lbol=43.0)
-        l_bright = unified_nlr_blr(WAVE_OPT, agn_log_lbol=45.0)
+        l_faint = unified_nlr_blr(WAVE_OPT, agn_log_lbol=9.42)
+        l_bright = unified_nlr_blr(WAVE_OPT, agn_log_lbol=11.42)
         ratio = float(jnp.sum(l_bright)) / float(jnp.sum(l_faint))
         assert ratio > 10.0, f"100x L_bol should give >10x flux, got {ratio:.1f}x"
 
@@ -99,9 +99,9 @@ class TestUnifiedNLRBLRPhysics:
         from tengri.components.agn.unified import unified_nlr_blr
 
         l_no_dust = unified_nlr_blr(
-            WAVE_OPT, agn_log_lbol=44.0, agn_cos_inc=0.9, agn_polar_ebv=0.0
+            WAVE_OPT, agn_log_lbol=10.42, agn_cos_inc=0.9, agn_polar_ebv=0.0
         )
-        l_dust = unified_nlr_blr(WAVE_OPT, agn_log_lbol=44.0, agn_cos_inc=0.9, agn_polar_ebv=0.3)
+        l_dust = unified_nlr_blr(WAVE_OPT, agn_log_lbol=10.42, agn_cos_inc=0.9, agn_polar_ebv=0.3)
         # UV should be more suppressed than optical with polar dust
         uv_mask = (WAVE_OPT > 1400) & (WAVE_OPT < 1600)
         opt_mask = (WAVE_OPT > 5000) & (WAVE_OPT < 6000)
@@ -119,9 +119,9 @@ class TestQSOgenPhysics:
 
     def test_default_produces_quasar_sed(self):
         """Default parameters reproduce a typical Type 1 quasar SED."""
-        from tengri.components.agn.qsogen import qsogen_sed
+        from tengri.components.agn.qsogen import compute_qsogen_sed
 
-        l_nu = qsogen_sed(WAVE_OPT)
+        l_nu = compute_qsogen_sed(WAVE_OPT)
         chex.assert_tree_all_finite(l_nu)
         assert float(jnp.sum(l_nu)) > 0
 
@@ -131,10 +131,10 @@ class TestQSOgenPhysics:
         Temple+2021 Eq. 1: L_ν ∝ ν^{plslp1} for λ > plbrk.
         More negative plslp1 → redder UV.
         """
-        from tengri.components.agn.qsogen import qsogen_sed
+        from tengri.components.agn.qsogen import compute_qsogen_sed
 
-        l_blue = qsogen_sed(WAVE_OPT, agn_plslp1=0.0)
-        l_red = qsogen_sed(WAVE_OPT, agn_plslp1=-1.0)
+        l_blue = compute_qsogen_sed(WAVE_OPT, agn_plslp1=0.0)
+        l_red = compute_qsogen_sed(WAVE_OPT, agn_plslp1=-1.0)
 
         uv_mask = (WAVE_OPT > 1400) & (WAVE_OPT < 1600)
         opt_mask = (WAVE_OPT > 5000) & (WAVE_OPT < 6000)
@@ -148,11 +148,11 @@ class TestQSOgenPhysics:
 
         Higher bbnorm → stronger NIR bump.
         """
-        from tengri.components.agn.qsogen import qsogen_sed
+        from tengri.components.agn.qsogen import compute_qsogen_sed
 
         wave_nir = jnp.geomspace(5000.0, 50000.0, 500)
-        l_no_dust = qsogen_sed(wave_nir, agn_bbnorm=0.0)
-        l_dust = qsogen_sed(wave_nir, agn_bbnorm=5.0)
+        l_no_dust = compute_qsogen_sed(wave_nir, agn_bbnorm=0.0)
+        l_dust = compute_qsogen_sed(wave_nir, agn_bbnorm=5.0)
 
         nir_mask = (wave_nir > 10000) & (wave_nir < 30000)
         opt_mask = (wave_nir > 5000) & (wave_nir < 7000)
@@ -164,10 +164,10 @@ class TestQSOgenPhysics:
 
     def test_ebv_reddens_sed(self):
         """SMC reddening (agn_ebv > 0) should suppress UV flux."""
-        from tengri.components.agn.qsogen import qsogen_sed
+        from tengri.components.agn.qsogen import compute_qsogen_sed
 
-        l_clean = qsogen_sed(WAVE_OPT, agn_ebv=0.0)
-        l_red = qsogen_sed(WAVE_OPT, agn_ebv=0.3)
+        l_clean = compute_qsogen_sed(WAVE_OPT, agn_ebv=0.0)
+        l_red = compute_qsogen_sed(WAVE_OPT, agn_ebv=0.3)
 
         uv_mask = (WAVE_OPT > 1400) & (WAVE_OPT < 1600)
         # UV should be suppressed
@@ -177,10 +177,10 @@ class TestQSOgenPhysics:
 
     def test_emission_lines_add_flux(self):
         """Temple+2021: emission lines add flux above continuum."""
-        from tengri.components.agn.qsogen import qsogen_sed
+        from tengri.components.agn.qsogen import compute_qsogen_sed
 
-        l_no_lines = qsogen_sed(WAVE_OPT, agn_emline_scale=0.0)
-        l_lines = qsogen_sed(WAVE_OPT, agn_emline_scale=1.0)
+        l_no_lines = compute_qsogen_sed(WAVE_OPT, agn_emline_scale=0.0)
+        l_lines = compute_qsogen_sed(WAVE_OPT, agn_emline_scale=1.0)
 
         # Total flux with lines should be higher
         assert float(jnp.sum(l_lines)) >= float(jnp.sum(l_no_lines) * 0.99), (
@@ -192,11 +192,11 @@ class TestQSOgenPhysics:
 
         bcnorm controls Balmer pseudo-continuum strength.
         """
-        from tengri.components.agn.qsogen import qsogen_sed
+        from tengri.components.agn.qsogen import compute_qsogen_sed
 
         wave = jnp.linspace(3000.0, 4000.0, 500)
-        l_no_bc = qsogen_sed(wave, agn_bcnorm=0.0)
-        l_bc = qsogen_sed(wave, agn_bcnorm=1.0)
+        l_no_bc = compute_qsogen_sed(wave, agn_bcnorm=0.0)
+        l_bc = compute_qsogen_sed(wave, agn_bcnorm=1.0)
 
         # Balmer continuum should add flux below 3646A
         bc_mask = wave < 3646.0
@@ -216,7 +216,7 @@ class TestSKIRTORPhysics:
         from tengri.components.agn.skirtor import skirtor_analytic
 
         wave = jnp.geomspace(1000.0, 1e6, 2000)
-        l_nu = skirtor_analytic(wave, agn_log_lbol=44.0)
+        l_nu = skirtor_analytic(wave, agn_log_lbol=10.42)
         if float(jnp.sum(l_nu)) > 0:
             peak_wave = float(wave[jnp.argmax(l_nu)])
             # MIR: 5-100 μm = 50000-1000000 A
@@ -227,8 +227,8 @@ class TestSKIRTORPhysics:
         from tengri.components.agn.skirtor import skirtor_analytic
 
         wave = jnp.geomspace(10000.0, 1e6, 500)
-        l_low = skirtor_analytic(wave, agn_log_lbol=43.0)
-        l_high = skirtor_analytic(wave, agn_log_lbol=44.0)
+        l_low = skirtor_analytic(wave, agn_log_lbol=9.42)
+        l_high = skirtor_analytic(wave, agn_log_lbol=10.42)
         if float(jnp.sum(l_low)) > 0:
             ratio = float(jnp.sum(l_high)) / float(jnp.sum(l_low))
             assert 5.0 < ratio < 20.0, f"10x L_bol gave {ratio:.1f}x torus flux"
@@ -238,6 +238,6 @@ class TestSKIRTORPhysics:
         from tengri.components.agn.skirtor import skirtor_analytic
 
         wave = jnp.geomspace(1000.0, 1e6, 500)
-        l_nu = skirtor_analytic(wave, agn_log_lbol=44.0)
+        l_nu = skirtor_analytic(wave, agn_log_lbol=10.42)
         chex.assert_tree_all_finite(l_nu)
         assert jnp.all(l_nu >= 0)

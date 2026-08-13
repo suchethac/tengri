@@ -469,6 +469,54 @@ def _memoized_approx_clone(model, cfg):
     return clone
 
 
+def _component_chains(model) -> tuple:
+    """Every component chain ``model`` owns, or ``()`` if none can be inspected.
+
+    ``_build_component_chain`` lives on :class:`SEDModel` and nowhere else, so a
+    bare ``getattr`` on the object the fitter is holding finds it only when that
+    object *is* an ``SEDModel``. It usually is not: inference is canonically
+    through :class:`ForwardModel` (#211), which holds ``populations[i].sed`` —
+    the shape ``inference/catalog.py`` already reaches through by hand.
+
+    That made :func:`fast_nebular_can_engage` answer ``True`` for every
+    ``ForwardModel``, dusty or not — so the **photometry** gate it exists to
+    enforce (#1748: a dusty model may not zero ``sed_nebular``, so the per-Q_H
+    grid cannot serve photometry) never applied on the canonical path. Verified
+    before and after on a dusty two_component model: the bare ``SEDModel``
+    answered ``False``, the ``ForwardModel`` wrapping that same SED ``True``
+    (#1790).
+
+    This is the photometry question only. Whether a *line-flux* fit gets the LUT
+    is a different question with a different answer — dust does not disarm that
+    half, and #1770 measured 4.77x on a dusty line fit — so a caller deciding the
+    line channel must not consult the predicate this feeds.
+
+    Every population is consulted and :func:`fast_nebular_can_engage` requires
+    all of them to be clear, rather than reading ``populations[0]`` — picking one
+    arbitrarily is the failing-open shape ``ForwardModel._single_inner_sed``
+    already refuses for the same reason (#1271).
+    """
+    chain = getattr(model, "_cached_component_chain", None)
+    if chain is not None:
+        return (chain,)
+
+    builder = getattr(model, "_build_component_chain", None)
+    if builder is not None:
+        return (builder(),)
+
+    populations = getattr(model, "populations", None) or ()
+    chains: list = []
+    for pop in populations:
+        sed = getattr(pop, "sed", None)
+        if sed is None:
+            return ()
+        inner = _component_chains(sed)
+        if not inner:
+            return ()
+        chains.extend(inner)
+    return tuple(chains)
+
+
 def fast_nebular_can_engage(model) -> bool:
     """Can the fast nebular grid serve **photometry** for this model?
 
@@ -533,13 +581,51 @@ def fast_nebular_can_engage(model) -> bool:
     """
     from tengri.forward.sed_model import _nebular_continuum_consumers
 
-    chain = getattr(model, "_cached_component_chain", None)
-    if chain is None:
-        builder = getattr(model, "_build_component_chain", None)
-        if builder is None:
-            return True
-        chain = builder()
-    return not _nebular_continuum_consumers(chain)
+    chains = _component_chains(model)
+    if not chains:
+        # Deliberately permissive, and deliberately NOT changed with #1790.
+        #
+        # On the asymmetry alone this should fail closed: a wrong ``False`` only
+        # forfeits a speedup, while a wrong ``True`` attaches a config #1748
+        # measured as bit-identical in compiled FLOPs *and* changes
+        # ``compile_signature()``, so the fit buys a second compiled kernel for
+        # nothing. That was tried. Measured blast radius: 5 failures across
+        # test_batch_inference_defaults_to_precomp, test_issue_1596_photometry_
+        # feature_default and test_issue_1683_build_time_approx_feature_topup —
+        # every one a ``_StubModel`` exposing neither a chain nor populations,
+        # i.e. objects that are not models rather than models we cannot read.
+        #
+        # Once ``_component_chains`` unwraps the wrapper, every real surface
+        # (SEDModel, ForwardModel, the batch and catalog paths) resolves to a
+        # chain, so flipping this default has no demonstrated effect on any
+        # production path — only on doubles. Rewriting five tests to enable a
+        # hardening with no measured benefit is a separate change; #1790 records
+        # it as a follow-up with that blast radius attached.
+        return True
+    return not any(_nebular_continuum_consumers(chain) for chain in chains)
+
+
+def _observation_serves_line_channel(model) -> bool:
+    """Whether the model's own Observation carries a measured line-flux channel.
+
+    The model-visible half of :meth:`Fitter._fits_line_fluxes`, for the batch
+    surfaces, which resolve their precompute policy without a ``Fitter`` and so
+    cannot ask it. A fit that overrides the channel with ``line_flux_data=`` is a
+    single-galaxy spelling and goes through the ``Fitter`` path, which resolves it
+    properly; this is deliberately the *narrower* question.
+
+    Parameters
+    ----------
+    model : SEDModel
+        The fit's model.
+
+    Returns
+    -------
+    bool
+        ``True`` when ``model.observation`` declares ``line_fluxes``.
+    """
+    obs = getattr(model, "observation", None)
+    return obs is not None and getattr(obs, "line_fluxes", None) is not None
 
 
 def _has_line_adjacent_channel(model) -> bool:
@@ -804,10 +890,19 @@ def _resolve_batch_fit_approx(model, approx, data_type):
             # per resolved clone, so skipping it here is the larger of the two wins.
             # The "dominant lever" numbers above were measured on the pre-gate tree
             # and hold only for a model with no ``sed_nebular`` consumer.
+            #
+            # ...unless a LINE channel is present, which is the other thing the LUT
+            # serves and which dust does not disarm. #1775 drew that distinction on
+            # the single-galaxy resolver and left this one gated, so the two
+            # surfaces disagreed on exactly one cell of the channel matrix — a
+            # dusty catalog fit that carries line fluxes kept refusing the LUT that
+            # the same model got as a single-galaxy fit. ``data_type`` names the
+            # primary data array here, not the channel set, so "photometry" does
+            # not mean "no lines" (#1770).
             if (
                 not has_feature
                 and not _has_line_adjacent_channel(model)
-                and fast_nebular_can_engage(model)
+                and (_observation_serves_line_channel(model) or fast_nebular_can_engage(model))
             ):
                 existing = tuple(getattr(model, "approx_configs", ()))
                 extra = (FeaturePrecomp(),) if has_wave else (cfg, FeaturePrecomp())
