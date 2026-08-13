@@ -1052,14 +1052,20 @@ plt.show()
 # swaps to a **τ=300 Myr, age=100 Myr** delayed SFH where Hα and the
 # metal-line forest are physically strong. Only the SFH changes.
 #
-# Each panel shows the stellar baseline (dashed), stellar + nebular
-# (solid), and the nebular component alone (dotted). The two emitters
-# see the same H II region: `logU = −2.0`, `Z_gas = Z_⊙` (Cue's
-# `neb_logZ_gas` is pinned to `log10(0.02/Z_⊙) ≈ +0.149`), `f_esc = 0`,
-# `n_H = 100 cm⁻³` (`gas_logn = 2.0`), solar N/O and C/O
-# (`gas_logno = gas_logco = 0`). The Q_H reaching Cue is the integral of
-# the SSP-convolved ionizing spectrum below 911.76 Å, published by the
-# stellar component on every forward pass.
+# Each panel shows the stellar baseline (dashed), stellar + nebular (solid),
+# and the nebular component alone (dotted). Both emitters see the same H II
+# region:
+#
+# | quantity | value | tengri knob |
+# |---|---|---|
+# | ionization parameter | `logU = −2.0` | `neb_logU` |
+# | gas metallicity | `Z_gas = Z_⊙` | `neb_logZ_gas` pinned to `log10(0.02/Z_⊙) ≈ +0.149` |
+# | escape fraction | `f_esc = 0` | `neb_fesc` |
+# | hydrogen density | `n_H = 100 cm⁻³` | `gas_logn = 2.0` |
+# | N/O, C/O | solar | `gas_logno = gas_logco = 0` |
+#
+# The Q_H reaching Cue is the integral of the SSP-convolved ionizing spectrum
+# below 911.76 Å, published by the stellar component on every forward pass.
 #
 # **Remaining residual.** The gap lives downstream of the gas knobs. Cue
 # was trained on Cloudy 17 (Li et al. 2025) while CIGALE bundles Cloudy
