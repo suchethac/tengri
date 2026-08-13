@@ -83,6 +83,13 @@ try:
         "xray_delta_alpha_ox": jnp.asarray(-1.4),
         # log10 N_H [cm^-2] photoelectric absorption (#768); 20 = unobscured.
         "xray_log_nh": jnp.asarray(20.0),
+        # Lehmer+2016 XRB luminosity offsets [dex], read since #1706. 0.0 is the
+        # declared default: the term scales by 10**offset, so this is no offset.
+        # Every xray_* parameter is indexed directly by the component, so this
+        # hand-rolled dict -- the point of the low-level orchestrator API -- must
+        # supply each one; a missing key is a KeyError, not a silent default.
+        "xray_det_hmxb": jnp.asarray(0.0),
+        "xray_det_lmxb": jnp.asarray(0.0),
         "redshift": jnp.asarray(0.0),
     }
 
