@@ -398,6 +398,41 @@ class PrecompBiasWarning(AdvisoryWarning):
     """
 
 
+class LaplaceVarianceCeilingWarning(UserWarning):
+    """Eigenvalue clipping assigned a variance ceiling to unconstrained directions.
+
+    ``regularize=True`` floors the Hessian spectrum at ``min_eigenvalue`` to
+    force positive-definiteness, then takes ``cov = H^-1``. Because the
+    covariance is the *inverse*, the floor does not damp the clipped
+    directions — it **assigns** each of them variance ``1 / min_eigenvalue``.
+    At the ``1e-6`` default that is a variance of ``1e6``, i.e. a standard
+    deviation of 1000 in the unconstrained parameterization (issue #1515).
+
+    So the directions the data determine *least* well come back with the
+    *widest* draws, and the number is an artifact of the floor rather than a
+    measurement. The fit still returns a full sample set with finite marginals
+    and nothing fails.
+
+    A clipped direction is usually one of three things, and the remedy differs:
+
+    - **an exact degeneracy** — two parameters that enter the model only in
+      one combination, so the likelihood is flat along a ridge (``met_alpha_fe``
+      and ``met_logzsol`` are exactly this, see
+      :class:`DegenerateParameterPairWarning` and issue #1095). Fix the model,
+      not the floor: hold one of the pair fixed.
+    - **a genuinely unconstrained parameter** — the data carry no information
+      about it. The prior, not ``1 / min_eigenvalue``, is the honest answer;
+      consider fixing it or reporting it as prior-dominated.
+    - **numerical noise** in a finite-difference Hessian near a flat direction,
+      in which case a tighter ``eps`` or an analytic Hessian is the fix.
+
+    Reported as the count of clipped directions, the implied standard
+    deviation, and the smallest unclipped eigenvalue, so the severity is
+    visible rather than inferred. Filter this category when the ceiling is
+    deliberate.
+    """
+
+
 class LaplaceNotAtModeWarning(UserWarning):
     """The Laplace expansion point is not a stationary point of the loss.
 
