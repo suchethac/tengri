@@ -381,7 +381,9 @@ class ForwardModel:
         """Structural signature of the inner SED (used for JIT cache keys)."""
         return self._inner_sed_for_delegation().compile_signature()
 
-    def predict_spectrum(self, params, wave_obs=None, wave_chunk_size=None):
+    def predict_spectrum(
+        self, params, wave_obs=None, wave_chunk_size=None, *, ssp_data=None, template_data=None
+    ):
         """Channel-specific prediction: ``spec_fnu`` extracted from :meth:`predict_observables`.
 
         Symmetric with :meth:`predict_photometry`. Routing the default
@@ -397,9 +399,12 @@ class ForwardModel:
         An explicit ``wave_obs``/``wave_chunk_size`` (interactive plotting on a
         custom grid) still delegates to the inner SED, which evaluates the SED
         on the requested grid (suchethac/tengri#707).
+
+        ``ssp_data``/``template_data`` are the JIT-threading channel — see
+        :meth:`SEDModel.predict_photometry` (#1753).
         """
         if wave_obs is None and wave_chunk_size is None:
-            pred = self.predict_observables(params)
+            pred = self.predict_observables(params, ssp_data=ssp_data, template_data=template_data)
             for key in ("spec_fnu", "spec_obs"):
                 if key in pred:
                     return pred[key]
@@ -408,7 +413,11 @@ class ForwardModel:
                 f"(saw keys: {list(pred)})"
             )
         return self._inner_sed_for_delegation().predict_spectrum(
-            params, wave_obs=wave_obs, wave_chunk_size=wave_chunk_size
+            params,
+            wave_obs=wave_obs,
+            wave_chunk_size=wave_chunk_size,
+            ssp_data=ssp_data,
+            template_data=template_data,
         )
 
     def predict_photometry_components(self, params):
@@ -498,7 +507,7 @@ class ForwardModel:
         """Delegate to :meth:`SEDModel.xi_to_params` on the inner SED."""
         return self._inner_sed_for_delegation().xi_to_params(xi)
 
-    def predict_photometry(self, params):
+    def predict_photometry(self, params, *, ssp_data=None, template_data=None):
         """Channel-specific prediction: ``phot_fnu`` extracted from :meth:`predict_observables`.
 
         Single-galaxy fits return shape ``(n_filters,)``; hierarchical
@@ -506,8 +515,18 @@ class ForwardModel:
         The Fitter's legacy loss_fn calls this directly; providing it
         on ForwardModel ensures the batched output flows through rather
         than reaching for the inner scalar SED.
+
+        Parameters
+        ----------
+        params : Mapping
+            Free-parameter dict.
+        ssp_data, template_data : Any | None, keyword-only, optional
+            The JIT-threading channel — see
+            :meth:`SEDModel.predict_photometry`. Pass these only when wrapping
+            this method in your own JAX transform; ``None`` (default) uses the
+            model's own arrays, which is correct for every ordinary call.
         """
-        pred = self.predict_observables(params)
+        pred = self.predict_observables(params, ssp_data=ssp_data, template_data=template_data)
         for key in ("phot_fnu", "fnu_obs"):
             if key in pred:
                 return pred[key]
@@ -756,6 +775,9 @@ class ForwardModel:
     def predict_observables(
         self,
         params: Mapping[str, jnp.ndarray],
+        *,
+        ssp_data=None,
+        template_data=None,
     ) -> Mapping[str, jnp.ndarray]:
         """Predicted observables for the given parameters.
 
@@ -816,7 +838,11 @@ class ForwardModel:
                 and hasattr(only, "predict_observables_jit")
                 and bool(getattr(only, "_approx", {}).get("wave_precomp"))
             ):
-                return dict(only.predict_observables_jit(params)._asdict())
+                return dict(
+                    only.predict_observables_jit(
+                        params, ssp_data=ssp_data, template_data=template_data
+                    )._asdict()
+                )
 
         is_multipop = len(self.populations) > 1
 
@@ -824,11 +850,23 @@ class ForwardModel:
         per_pop_states: dict[str, ForwardState] = {}
         per_pop_derived: dict[str, dict[str, Any]] = {}
         per_pop_params: dict[str, dict[str, Any]] = {}
+        # The JIT-threading channel reaches ``run`` only for a plain SEDModel.
+        # A PopulationSEDModel is deliberately excluded, for the same reason
+        # ``_supports_jit_threading`` excludes it from the loss path: the threaded
+        # forward mis-broadcasts the galaxy axis against the SFH grid there
+        # (see tests/contract/test_loss_ssp_threading.py). Passing nothing keeps
+        # the call shape byte-for-byte what it was for every other submodel.
+        threaded = {}
+        if (ssp_data is not None or template_data is not None) and not is_multipop:
+            only_sed = self.populations[0].sed
+            if not hasattr(only_sed, "sed"):  # plain SEDModel, not PopulationSEDModel
+                threaded = {"ssp_data": ssp_data, "template_data": template_data}
+
         for pop in self.populations:
             full_params = self._params_for_population(params, pop)
             per_pop_params[pop.name] = full_params
             init_state = ForwardState(wave=jnp.zeros(1))
-            state = pop.sed.run(init_state, full_params)
+            state = pop.sed.run(init_state, full_params, **threaded)
             if pop.spatial is not None:
                 state = pop.spatial.run(state, full_params)
             per_pop_states[pop.name] = state

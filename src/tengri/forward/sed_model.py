@@ -4137,7 +4137,7 @@ class SEDModel:
             nebular_grid_sig,
         )
 
-    def predict_photometry(self, params):
+    def predict_photometry(self, params, *, ssp_data=None, template_data=None):
         """Compute observed photometric flux densities through all filters.
 
         Convolves the SED (redshifted and IGM-absorbed) through filter
@@ -4156,6 +4156,15 @@ class SEDModel:
             Parameter values using public parameter names (e.g.,
             ``sfh_tsnorm_log_total_mass``, ``met_logzsol``, ``redshift``).
             See :class:`Parameters` for canonical names.
+        ssp_data : SSPData | None, keyword-only, optional
+            SSP grid to thread in as a traced argument. ``None`` (default) uses
+            ``self.ssp_data``, which is correct for every ordinary call. Pass it
+            explicitly **only when you wrap this method in your own JAX
+            transform** — see the JIT note below.
+        template_data : Any | None, keyword-only, optional
+            Template arrays (nebular grids, dust IR LUTs, AGN libraries) to thread
+            in. ``None`` (default) uses :meth:`_template_data_for_jit`. Same
+            rationale as ``ssp_data``.
 
         Returns
         -------
@@ -4174,6 +4183,27 @@ class SEDModel:
         -----
         **JIT-compatible**: yes. Safe inside :func:`jax.grad` for
         parameter gradients.
+
+        **Threading across a JIT boundary you own (#1753).** This method is
+        already self-JIT'd and structurally cached, and it threads the SSP grid
+        as an argument — so tengri's own compiled programs never bake it. That
+        guarantee does **not** survive being wrapped in a caller's transform::
+
+            predict = jax.jit(model.predict_photometry)  # grid is BAKED
+
+        The inner jit inlines into the outer trace and ``self.ssp_data``, read as
+        a concrete array, becomes a ``Constant`` of your computation. On a real
+        SSP that is 66.89 MB inlined, and the persistent-cache entry grows from
+        0.23 MB to 58.82 MB — a factor of 256, the mechanism behind the 141 GB
+        cache in #1507. Pass the grid in to keep it an invar instead::
+
+            predict = jax.jit(lambda ssp, p: model.predict_photometry(p, ssp_data=ssp))
+            flux = predict(model.ssp_data, params)
+
+        Only the exact wave-grid path pays: under ``approx=WavePrecomp()`` the
+        cube is dead code and XLA eliminates it before codegen. And if you are
+        not composing this into a larger jitted program, do not wrap it at all —
+        the plain call is already compiled and cached.
 
         **Approximation accuracy**: Driven by the build-time ``approx=``
         policy. :class:`WavePrecomp` swaps in the SSP×filter LUT, which is
@@ -4212,7 +4242,9 @@ class SEDModel:
         """
         if self.filter_waves is None:
             raise ValueError("No filters set. Pass filters or observation= to SEDModel().")
-        return self.predict_observables_jit(params).phot_fnu
+        return self.predict_observables_jit(
+            params, ssp_data=ssp_data, template_data=template_data
+        ).phot_fnu
 
     # There is deliberately no ``_refuse_on_fast_nebular`` here any more.
     #
@@ -4244,6 +4276,9 @@ class SEDModel:
         params,
         wave_obs=None,
         wave_chunk_size=None,
+        *,
+        ssp_data=None,
+        template_data=None,
     ):
         """Compute observed spectrum at given wavelengths with LSF convolution.
 
@@ -4273,6 +4308,13 @@ class SEDModel:
             size for XLA compilation. Default None (no chunking, exact behavior).
             For spectroscopy with R~500 at N≥64 galaxies, typical value is 32–64
             to avoid XLA compilation wall-clock.
+        ssp_data, template_data : Any | None, keyword-only, optional
+            The JIT-threading channel — see :meth:`predict_photometry` for what it
+            is for and what baking costs (#1753). Honored on the configured-
+            spectroscopy route (the inference hot path, taken when ``wave_obs`` is
+            ``None`` and the model has a spectroscopy channel). An explicit
+            ``wave_obs`` grid routes through ``_predict_obs_sed`` instead, which
+            does not yet carry the channel — that route still closure-captures.
 
         Returns
         -------
@@ -4361,7 +4403,9 @@ class SEDModel:
             and getattr(self.observation.spectroscopy, "wave_obs", None) is not None
         ):
             del wave_obs, wave_chunk_size
-            return self.predict_observables_jit(params).spec_fnu
+            return self.predict_observables_jit(
+                params, ssp_data=ssp_data, template_data=template_data
+            ).spec_fnu
 
         # No spectroscopy channel but a manually attached grid (``model._wave_obs``)
         # — evaluate directly so photometry-only models with an ad-hoc grid work
@@ -5543,7 +5587,7 @@ class SEDModel:
             self._property_catalog = assemble_available_properties(active_names)
         return self._property_catalog
 
-    def predict_properties(self, params, names=None):
+    def predict_properties(self, params, names=None, *, ssp_data=None, template_data=None):
         """Compute derived properties from the forward state.
 
         Properties are computed from the same orchestrator :class:`ForwardState`
@@ -5560,6 +5604,13 @@ class SEDModel:
             Property names to compute. If None, computes all available
             properties. Each name must be in :attr:`available_properties`,
             else :exc:`KeyError` is raised.
+        ssp_data, template_data : Any | None, keyword-only, optional
+            The JIT-threading channel, forwarded to :meth:`predict_state`. Pass
+            these only when wrapping this method in your own ``jax.jit`` /
+            ``vmap`` / ``grad``, where closure-captured grids would otherwise
+            bake into your compiled program as constants — see
+            :meth:`predict_photometry` for the measured cost (#1753). ``None``
+            (default) uses the model's own arrays.
 
         Returns
         -------
@@ -5664,7 +5715,7 @@ class SEDModel:
         # instead of compare.
 
         # Compute the state once
-        state = self.predict_state(params)
+        state = self.predict_state(params, ssp_data=ssp_data, template_data=template_data)
 
         # Evaluate each property
         result = {}
@@ -6432,7 +6483,7 @@ class SEDModel:
             decls.append(ParamDeclaration(name=pname, prior=prior, description="", units=""))
         return decls
 
-    def run(self, state, params):
+    def run(self, state, params, *, ssp_data=None, template_data=None):
         """Run the SED forward chain. Pure JAX.
 
         SED is the head of the per-population orchestration; in the
@@ -6459,8 +6510,13 @@ class SEDModel:
         upstream state is reserved for a future ``ResolvedSEDModel`` mode
         that needs SED to read spatial keys; today the contract is
         "incoming state ignored, output state freshly built."
+
+        ``ssp_data``/``template_data`` are the JIT-threading channel, forwarded
+        to :meth:`predict_state`; both keyword-only and both defaulting to
+        ``None``, so the ``SubModel`` call shape ``run(state, params)`` is
+        unchanged for every existing caller (#1753).
         """
-        return self.predict_state(params)
+        return self.predict_state(params, ssp_data=ssp_data, template_data=template_data)
 
     def _full_state_chain(self):
         """The component chain with every publication shortcut disabled.
@@ -6639,7 +6695,7 @@ class SEDModel:
             chain, state0, full_params, ssp_data=ssp_data, template_data=template_data
         )
 
-    def predict_observables(self, params):
+    def predict_observables(self, params, *, ssp_data=None, template_data=None):
         """Project the orchestrator state into every configured observable.
 
         Single bit-exact entry point: runs the SEDComponent chain and
@@ -6699,10 +6755,12 @@ class SEDModel:
         cache = _default_owner.get_structural_kernel(self.compile_signature())
         impl = cache["predict_observables_impl"]
         return impl(
-            params, self.spec.get_fixed_values(), self.ssp_data, self._template_data_for_jit()
+            params,
+            self.spec.get_fixed_values(),
+            *self._resolve_threaded_data(ssp_data, template_data),
         )
 
-    def predict_observables_jit(self, params):
+    def predict_observables_jit(self, params, *, ssp_data=None, template_data=None):
         """Self-JIT'd, structurally-cached version of :meth:`predict_observables`.
 
         Bit-exact with :meth:`predict_observables` (same orchestrator
@@ -6758,7 +6816,9 @@ class SEDModel:
         # a bare KeyError deep inside a component.
         check_missing_free_params(params, self.spec, self._param_map)
         return self._get_or_build_predict_observables_jit()(
-            params, self.spec.get_fixed_values(), self.ssp_data, self._template_data_for_jit()
+            params,
+            self.spec.get_fixed_values(),
+            *self._resolve_threaded_data(ssp_data, template_data),
         )
 
     def _get_or_build_predict_observables_jit(self):
@@ -6865,6 +6925,39 @@ class SEDModel:
         # a second implementation to keep in sync. Same code → bit-identical.
         cache["predict_observables_impl"] = _impl
         return jit_fn
+
+    def _resolve_threaded_data(self, ssp_data, template_data):
+        """Resolve the JIT-threading channel: caller's arrays, else this model's own.
+
+        The one place the override policy lives, so every public surface that
+        accepts ``ssp_data=``/``template_data=`` resolves them identically.
+
+        Threading matters only across a JIT boundary the *caller* owns. Inside
+        :meth:`predict_observables_jit` the grids already ride in as arguments to a
+        structurally-cached ``jax.jit``, so tengri's own programs never bake them.
+        But a caller who writes ``jax.jit(model.predict_photometry)`` inlines that
+        inner jit into their trace, and ``self.ssp_data`` — read here as a concrete
+        array — becomes a ``Constant`` of *their* computation. Passing the grid in
+        makes it an invar of their trace instead. Measured on a real SSP: the
+        persistent-cache entry goes 0.23 MB → 58.82 MB when it bakes (#1753, #1507).
+
+        Parameters
+        ----------
+        ssp_data : Any | None
+            Caller-supplied SSP grid, or ``None`` to use ``self.ssp_data``.
+        template_data : Any | None
+            Caller-supplied template arrays, or ``None`` to use
+            :meth:`_template_data_for_jit`.
+
+        Returns
+        -------
+        tuple
+            ``(ssp_data, template_data)`` ready to hand to the impl closure.
+        """
+        return (
+            self.ssp_data if ssp_data is None else ssp_data,
+            self._template_data_for_jit() if template_data is None else template_data,
+        )
 
     def _template_data_for_jit(self):
         """Collect template grids/weights for JIT threading (nebular + dust IR + AGN).

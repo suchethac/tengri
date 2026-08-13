@@ -128,19 +128,28 @@ _JIT_SAFE_SURFACES = ["predict_photometry", "predict_properties", "predict_spect
 def test_jit_safe_surfaces_accept_threaded_data(
     synthetic_ssp_wide, synthetic_tophat_obs, surface, method
 ):
-    """Every documented JIT/vmap-safe surface exposes ``ssp_data``/``template_data``.
+    """Every documented JIT/vmap-safe surface accepts ``ssp_data``/``template_data``.
 
     Asserted on the signature rather than through a trace: a missing keyword is
     unambiguous, and it is the whole defect — ``predict_state`` has had this channel
     all along while the surfaces users are told to JIT never got it.
+
+    A ``**kwargs`` passthrough counts. ``ForwardModel`` routes several methods
+    through ``_DELEGATED_TO_INNER_SED`` rather than restating each signature, so
+    ``predict_properties`` really is ``(*args, **kwargs)`` — it genuinely accepts
+    the keyword and forwards it. Demanding a named parameter there would be a test
+    demanding a wrapper the delegation table exists to avoid. The behavioural tests
+    below are what actually prove the keyword arrives and does something.
     """
     model = _models(synthetic_ssp_wide, synthetic_tophat_obs, with_spectrum=True)[surface]
     sig = inspect.signature(getattr(model, method))
+    accepts_any_kw = any(p.kind is inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values())
     for kw in ("ssp_data", "template_data"):
-        assert kw in sig.parameters, (
-            f"[{surface}.{method}] has no '{kw}' parameter, so a caller who wraps it in "
-            f"their own jax.jit/vmap/grad cannot avoid baking the SSP grid as a constant. "
-            f"predict_state accepts it; these surfaces must too. Signature: {sig}"
+        assert kw in sig.parameters or accepts_any_kw, (
+            f"[{surface}.{method}] has no '{kw}' parameter and no **kwargs passthrough, so "
+            f"a caller who wraps it in their own jax.jit/vmap/grad cannot avoid baking the "
+            f"SSP grid as a constant. predict_state accepts it; these surfaces must too. "
+            f"Signature: {sig}"
         )
 
 
