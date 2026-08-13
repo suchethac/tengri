@@ -355,17 +355,17 @@ def test_massmap_box_builds_via_group_dict_grammar(synthetic_ssp):
     keyword and could not be a builder group key — renamed to ``met_yield``;
     (2) inference raised "ambiguous" (massmap_box's keys are a superset of
     massmap_lin's) even when ``met_mode`` was set explicitly. Either one made
-    ``SEDModel.build(stellar={'met_mode': 'massmap_box', ...})`` crash.
+    ``SEDModel.build(met={'type': 'massmap_box', ...})`` crash.
     """
     from tengri import FIXED, Fixed, SEDModel
 
     model = SEDModel.build(
         ssp_data=synthetic_ssp,
-        stellar={
-            "met_mode": "massmap_box",
-            "met_logzsol_start": Fixed(-2.15),
-            "met_logzsol_final": Fixed(0.15),
-            "met_yield": Fixed(0.03),
+        met={
+            "type": "massmap_box",
+            "logzsol_start": Fixed(-2.15),
+            "logzsol_final": Fixed(0.15),
+            "yield": Fixed(0.03),
             "*": FIXED,
         },
         sfh={"type": "const", "log_total_mass": Fixed(10.0), "*": FIXED},

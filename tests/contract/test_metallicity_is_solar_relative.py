@@ -60,7 +60,7 @@ def delta_model(ssp_data_fsps):
         sfh={"type": "dpl", "all_params": FIXED},
         dust={"type": "two_component", "law_bc": "calzetti", "all_params": FIXED},
         neb={"type": "none"},
-        stellar={"met_mode": "delta"},
+        met={"type": "delta"},
         redshift=Fixed(0.1),
     )
 

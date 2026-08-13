@@ -83,7 +83,7 @@ CASES = [
         "stellar.met_mode",
         dict(
             sfh={"type": "dpl", "all_params": FIXED},
-            stellar={"met_mode": "chem_evol", "all_params": FIXED},
+            met={"type": "chem_evol", "all_params": FIXED},
         ),
         "met_mode",
         "chem_evol",
@@ -221,7 +221,7 @@ def test_patchy_igm_reparses_instead_of_raising():
 def test_default_spec_grows_no_spurious_groups():
     """Emitting only non-defaults keeps the round-trip dict quiet.
 
-    An always-emit rule would force ``foreground={...}`` and ``stellar={...}``
+    An always-emit rule would force ``foreground={...}`` and ``met={...}``
     onto every spec, which breaks call sites that diff to_groups() output.
     """
     groups = parse_groups(sfh={"type": "dpl", "all_params": FIXED}).to_groups()

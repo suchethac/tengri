@@ -31,7 +31,7 @@ def _mass_weighted_age_gyr(derived) -> float:
 def test_lmxb_uses_mass_weighted_age(synthetic_ssp_wide) -> None:
     model = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
-        stellar={"*": FIXED},
+        met={"*": FIXED},
         sfh={
             "type": "delayed",
             "tau_gyr": Fixed(1.0),

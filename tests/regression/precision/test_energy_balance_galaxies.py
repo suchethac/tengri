@@ -49,7 +49,7 @@ def _build(ssp, sfh, tau_bc, tau_diff, *, z=0.0, log_mass=10.0, logzsol=0.0, emi
         dust["emission"] = {"type": "dale2014", "*": FIXED}
     return SEDModel.build(
         ssp_data=ssp,
-        stellar={"logzsol": Fixed(logzsol), "*": FIXED},
+        met={"logzsol": Fixed(logzsol), "*": FIXED},
         sfh=sfh,
         dust=dust,
         redshift=Fixed(z),

@@ -47,7 +47,7 @@ def _model(ssp, obs, csp):
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "dpl", "all_params": FREE},
-        stellar={"met_logzsol": Fixed(-0.3)},
+        met={"logzsol": Fixed(-0.3)},
         redshift=Fixed(0.1),
         apply_igm=False,
         csp_integration=csp,

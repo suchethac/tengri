@@ -338,7 +338,10 @@ def _usage_hint(name: str, kind: str) -> str:
     if kind == "shock_model":
         return f"SEDModel.build(..., shock={{'type': '{name}'}})"
     if kind == "metallicity_mode":
-        return f"SEDModel.build(..., stellar={{'met_mode': '{name}'}})"
+        # ``met={'type': ...}``, the parallel of ``sfh={'type': ...}`` (#1720),
+        # which replaced ``stellar={'met_mode': ...}``. One spelling, and it is
+        # the one the rest of the grammar uses.
+        return f"SEDModel.build(..., met={{'type': '{name}'}})"
     if kind == "igm_model":
         return f"SEDModel.build(..., igm={{'type': '{name}'}})"
     if kind == "component":
@@ -356,7 +359,7 @@ def _usage_hint(name: str, kind: str) -> str:
 # was another of that formula's phantoms; it is real now, but it names the
 # structural axis only — the formula still guesses wrong for every other group.)
 _COMPONENT_MENUS: dict[str, str] = {
-    "stellar": "list_sfh_models() / list_metallicity_modes()",
+    "met": "list_metallicity_modes()",
     "dust": "list_dust_models() / list_dust_laws() / list_dust_emission_models()",
     "agn": "list_agn_models() / list_agn_blocks()",
     "nebular": "list_nebular_backends()",
@@ -1162,9 +1165,10 @@ def list_shock_models(*, status: str | None = None) -> _RegistryTable:
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
 
-# Metallicity modes — the ``stellar={'met_mode': ...}`` axis. Names are NOT
+# Metallicity modes — the ``met={'type': ...}`` axis (#1720, replacing the
+# ``stellar={'met_mode': ...}`` spelling of #311). Names are NOT
 # listed here: :func:`list_metallicity_modes` derives them from ``MET_REGISTRY``
-# itself, the same dict ``_translate_stellar`` validates against, so a mode
+# itself, the same dict ``_translate_met`` validates against, so a mode
 # added to the physics cannot be missing from the menu. This table carries only
 # the prose, lifted from each mode's section header in ``met_registry.py``.
 _METALLICITY_MODE_METADATA: dict[str, dict[str, str]] = {
@@ -1182,7 +1186,7 @@ _METALLICITY_MODE_METADATA: dict[str, dict[str, str]] = {
 
 
 def list_metallicity_modes(*, status: str | None = None) -> _RegistryTable:
-    """List the metallicity modes — the ``stellar={'met_mode': ...}`` choice.
+    """List the metallicity modes — the ``met={'type': ...}`` choice.
 
     The metallicity axis is structural in the same sense as the SFH or dust
     axis: it decides whether a fit carries one metallicity, an evolving one, or
@@ -1364,6 +1368,51 @@ _PLOT_HELPERS: tuple[tuple[str, str], ...] = (
 )
 
 
+def _plot_call_hint(name: str) -> str:
+    """A ``use:`` hint for one plot helper, naming the arguments it requires.
+
+    Parameters
+    ----------
+    name : str
+        Attribute name in :mod:`tengri.plot`.
+
+    Returns
+    -------
+    str
+        ``tengri.plot.plot_sfh(model, posterior)`` — the required parameters,
+        read off the signature. Falls back to the bare name when the helper
+        cannot be resolved or introspected.
+
+    Notes
+    -----
+    Every row used to read ``tengri.plot.<name>(...)``, which is the ``name``
+    column plus an ellipsis. Of the twenty menus that carry a ``use:`` column,
+    this was the only one whose hint contained no arguments at all — the others
+    give something runnable (``Photometry.from_names(["sdss_u"])``,
+    ``fitter.run("laplace")``, ``SEDModel.build(..., dust={'type': ...})``).
+
+    Derived rather than written down, so a helper that gains or loses a
+    required argument cannot leave a stale hint behind.
+    """
+    import inspect
+
+    try:
+        from tengri import plot as _plot
+
+        fn = getattr(_plot, name)
+        params = inspect.signature(fn).parameters.values()
+    except Exception:  # pragma: no cover - defensive; a helper always resolves
+        return f"tengri.plot.{name}(...)"
+
+    required = [
+        p.name
+        for p in params
+        if p.default is inspect.Parameter.empty
+        and p.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+    ]
+    return f"tengri.plot.{name}({', '.join(required)})"
+
+
 def list_plots() -> _RegistryTable:
     """List the plotting helpers in ``tengri.plot``.
 
@@ -1378,7 +1427,7 @@ def list_plots() -> _RegistryTable:
                 "kind": "plot",
                 "status": "production",
                 "short_doc": doc,
-                "use": f"tengri.plot.{name}(...)",
+                "use": _plot_call_hint(name),
             }
             for name, doc in _PLOT_HELPERS
         ]
@@ -1997,6 +2046,21 @@ def _every_menu_lister() -> tuple:
     the hand-written unions: **+2 menus, 0 lost, 460 -> 490 rows walked, and 0
     new multi-menu names**, so no existing lookup changes its answer.
 
+    The population scanned is the **union of both export lists**, and that
+    matters as much as deriving the set at all. ``dir(tengri)`` is not the
+    public surface: it is curated down to ~30 obvious entry points on purpose
+    ("not the 175-item kitchen sink of every public symbol",
+    :mod:`tengri.__init__`). Scanning it alone made the derivation inherit the
+    curation — ``list_parameters``, ``list_properties``,
+    ``list_filter_conventions`` and ``list_available_ssps`` are exported and
+    not curated, so they stayed invisible and **410 further advertised names
+    stayed refused**, 358 of them parameters. Unioning ``__all__`` is the rule
+    #1608 established when the same blind spot made ``check_api_coverage.py``
+    report 0 missing while 6 were. Measured at that widening: **+4 menus, 0
+    lost, 490 -> 935 rows walked, 463 -> 887 names (+424), and 0 answers
+    changed** — the last of which is true only because of the scan order
+    below, not for free.
+
     Cached because discovery *calls* each ``list_*`` to check its shape:
     uncached that was 95 ms, **49% of a 193 ms** ``describe()``, paid again on
     every lookup. The set of menus cannot change within a process, so it is
@@ -2009,7 +2073,15 @@ def _every_menu_lister() -> tuple:
     for fn in (*_menu_listers(), *(getattr(tengri, n, None) for n in _EXTRA_MENU_LISTER_NAMES)):
         if fn is not None:
             seen[fn.__name__] = fn
-    for attr in sorted(dir(tengri)):
+    # Curated names first, export-only names after. Order is not cosmetic:
+    # ``describe`` reports ``matches[0]``, so a menu discovered earlier wins a
+    # name that several menus print. Scanning the union in one sorted pass put
+    # ``list_available_ssps`` ahead of ``list_known_ssps`` and moved all 21 SSP
+    # names onto the newly-found menu — 21 answers changed, for a change whose
+    # whole claim is that it adds names without altering any.
+    curated = sorted(dir(tengri))
+    export_only = sorted(set(tengri.__all__) - set(dir(tengri)))
+    for attr in (*curated, *export_only):
         if not attr.startswith("list_") or attr in seen:
             continue
         fn = getattr(tengri, attr, None)
@@ -2729,89 +2801,32 @@ def search(query: str) -> _RegistryTable:
     return _RegistryTable(hits)
 
 
-#: Every public menu, in forward-model order: what the galaxy does first, then
-#: what the telescope does, then what the fitter does.
-#:
-#: Held as *keys*, not as functions. Two of the menus (``known_ssps``,
-#: ``instruments``) live in modules that import this one, so naming their
-#: functions at module scope here is a circular import. Keys resolve to
-#: ``tengri.list_<key>`` at call time instead, which keeps the property that
-#: matters: the key and the function it calls cannot disagree, because one is
-#: spelled from the other. A key with no function behind it raises
-#: ``AttributeError`` on the first call rather than silently dropping a menu.
-#:
-#: The census test in ``tests/contract/test_list_all_is_complete.py`` enforces
-#: the other half — that no public ``list_*`` is missing from this tuple.
-#:
-#: ``list_all`` itself is excluded, and so is ``list_properties``: properties are
-#: derived outputs of a built model, not a menu of things you can select at
-#: build time, and it is not re-exported at package level.
-_ALL_MENUS: tuple[str, ...] = (
-    "components",
-    # Stars
-    "sfh_models",
-    "age_kernels",
-    "metallicity_modes",
-    "known_ssps",
-    # Dust
-    "dust_models",
-    "dust_laws",
-    "dust_emission_models",
-    # Gas
-    "nebular_backends",
-    "shock_models",
-    # AGN
-    "agn_models",
-    "agn_blocks",
-    # Everything else that emits or absorbs
-    "igm_models",
-    "radio_models",
-    "radio_blocks",
-    "xray_models",
-    # The telescope
-    "filters",
-    "instruments",
-    # The fit
-    "inference_methods",
-    "recipes",
-    "plots",
-)
-
-
 def list_all() -> dict[str, _RegistryTable]:
     """Return every menu — the single notebook cell that shows the whole code.
 
     Returns
     -------
     dict
-        One entry per public ``list_*`` function, keyed by that function's name
-        with the ``list_`` prefix removed (``list_sfh_models`` -> ``sfh_models``).
-        Each value is a `_RegistryTable` (list[dict]) that prints as a table.
+        One key per menu, named after its lister without the ``list_`` prefix
+        (``list_dust_laws`` -> ``dust_laws``). Each value is a
+        `_RegistryTable` (list[dict]) that prints as a table.
 
     Notes
     -----
-    The keys are not enumerated here on purpose. This docstring used to name six
-    of them while the function returned nine and the package exported twenty-one,
-    so a reader could believe tengri had no IGM, radio, X-ray, shock, or
-    metallicity menu at all (#1724). The contract is now structural: every public
-    ``list_*`` appears exactly once, and
-    ``tests/contract/test_list_all_is_complete.py`` fails if a newly added menu
-    is not wired into :data:`_ALL_MENUS`.
+    The keys are derived from the same census :func:`describe` and
+    :func:`search` sweep, not listed here. :func:`_menu_listers` names this
+    function as one of the three that "all walk this one tuple" — it was the
+    one that never walked it, returning a hand-written dict of nine literals
+    while 25 menus existed. So it showed 9 of 25, and its own ``Returns``
+    section named only six of the nine it did return, while
+    :mod:`tengri.__init__` tells readers it "enumerates every registry live".
 
-    Every value is a fresh table built on call. This is the wide overview, so it
-    touches every registry — reach for the individual ``list_*`` when you want
-    one menu.
-
-    Examples
-    --------
-    >>> menus = tengri.list_all()
-    >>> sorted(menus)[:3]
-    ['age_kernels', 'agn_blocks', 'agn_models']
-    >>> menus["igm_models"]  # doctest: +SKIP
+    Deriving the keys preserves all nine that were there — every one is its
+    lister's name minus the prefix — and adds the sixteen that were missing,
+    so this widens the result without renaming anything: 9 -> 25 categories,
+    921 rows.
     """
-    import tengri
-
-    return {key: getattr(tengri, f"list_{key}")() for key in _ALL_MENUS}
+    return {fn.__name__.removeprefix("list_"): fn() for fn in _every_menu_lister()}
 
 
 def list_properties(*, group: str | None = None) -> _RegistryTable:

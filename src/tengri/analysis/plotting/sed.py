@@ -74,17 +74,23 @@ def plot_sed_fit(
         noise = flux * 0.05
         fig = plot_sed_fit(wave, flux, noise, show_residuals=False)
     """
-    if show_residuals:
+    # The residual panel needs `posterior_draws` to have anything in it, so it
+    # is built only when both are present. Keying it on `show_residuals` alone
+    # meant the DEFAULT call — observed photometry, no posterior yet — drew an
+    # empty box under the SED. `ax=` is honoured whenever no residual panel is
+    # being added; a caller's own Axes cannot be split in two.
+    want_residuals = show_residuals and posterior_draws is not None
+    ax_res = None
+    if want_residuals and ax is None:
         fig = plt.figure(figsize=(8, 5))
         gs = GridSpec(2, 1, height_ratios=[3, 1], hspace=0.05)
         ax_main = fig.add_subplot(gs[0])
         ax_res = fig.add_subplot(gs[1], sharex=ax_main)
+    elif ax is None:
+        fig, ax_main = plt.subplots(figsize=(8, 4))
     else:
-        if ax is None:
-            fig, ax_main = plt.subplots(figsize=(8, 4))
-        else:
-            ax_main = ax
-            fig = ax.figure
+        ax_main = ax
+        fig = ax.figure
 
     # Data points with error bars
     ax_main.errorbar(
@@ -140,7 +146,7 @@ def plot_sed_fit(
                 color=bcol,
             )
 
-    if show_residuals and posterior_draws is not None:
+    if ax_res is not None:
         median_pred = np.median(posterior_draws, axis=0)
         residuals = (flux_obs - median_pred) / noise
         ax_res.axhline(0, color="0.5", ls="--", lw=0.8)
@@ -155,10 +161,14 @@ def plot_sed_fit(
         ax_res.set_ylabel(r"$(d - f)/\sigma$")
         ax_res.set_ylim(-4, 4)
         plt.setp(ax_main.get_xticklabels(), visible=False)
-        return fig
     else:
         ax_main.set_xlabel(r"Wavelength ($\AA$)")
-        return ax_main
+    # One return type. This used to hand back a Figure on the residual branch
+    # and an Axes otherwise, so what the caller held depended on whether they
+    # had passed `posterior_draws` — and `fig.savefig(...)`, which the
+    # docstring, the module example and the sibling plot_spectrum_fit all
+    # imply, raised AttributeError on the common path.
+    return fig
 
 
 # ═══════════════════════════════════════════════════════════════════

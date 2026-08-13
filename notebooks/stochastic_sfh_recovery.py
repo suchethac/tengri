@@ -170,7 +170,7 @@ def build(observation, n_grid=N_GRID):
         ssp_data=ssp_data,
         observation=observation,
         sfh={"type": ["dpl", "field"], "all_params": FREE},
-        stellar={"met_logzsol": Fixed(-0.3)},
+        met={"logzsol": Fixed(-0.3)},
         dust=builders.dust.two_component(defaults=FREE, law_bc="calzetti"),
         neb=builders.neb.ssp(),
         redshift=Fixed(Z_GAL),

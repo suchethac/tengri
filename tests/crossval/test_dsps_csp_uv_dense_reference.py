@@ -60,7 +60,7 @@ def _build_state():
     ssp = load_ssp_data(str(_BC03))
     model = SEDModel.build(
         ssp_data=ssp,
-        stellar={"logzsol": Fixed(_MET_002), "*": FIXED},
+        met={"logzsol": Fixed(_MET_002), "*": FIXED},
         sfh={
             "type": "delayed",
             "tau_gyr": Fixed(1.0),

@@ -469,6 +469,61 @@ def _memoized_approx_clone(model, cfg):
     return clone
 
 
+def fast_nebular_can_engage(model) -> bool:
+    """Can ``FeaturePrecomp`` actually do anything for this model?
+
+    ``FeaturePrecomp`` serves the line channel from a per-Q_H grid, and doing so
+    requires zeroing ``sed_nebular``. Since #1281 that is only permitted when nothing
+    downstream reads the continuum — and ``DustSEDComponent`` declares it as an input,
+    so **any model with dust disarms the fast path entirely**.
+
+    Measured on main, one run, dust-free control in the same run, gradient FLOPs off
+    the compiled HLO:
+
+    ==========  ==============  ==============  ========
+    model       ``WavePrecomp`` ``+Feature``    ratio
+    ==========  ==============  ==============  ========
+    with dust   65,438,628      65,438,628      **1.00x**
+    no dust     54,827,036       1,789,868      30.63x
+    ==========  ==============  ==============  ========
+
+    Exact FLOP equality is the signature of a config that never reaches the graph,
+    not of a lever with little left to pull (#1748).
+
+    This is not a regression to undo. On the pre-#1281 tree the fast pair's photometry
+    for a dusty model differed from exact by **0.41 %**, against 0.0115 % for a
+    dust-free control — the shortcut was buying a biased answer, and a constant
+    forward bias enters the gradient multiplied by SNR (#1671). What was wrong was
+    advertising a speedup that no longer existed.
+
+    Parameters
+    ----------
+    model : SEDModel
+        The fit's model.
+
+    Returns
+    -------
+    bool
+        ``True`` when the grid could serve photometry. ``False`` for any model whose
+        chain reads ``sed_nebular``.
+
+    Notes
+    -----
+    Delegates to :func:`~tengri.forward.sed_model._nebular_continuum_consumers`, the
+    same expression ``enable_fast_nebular`` uses to set ``must_materialize_sed``, so
+    the advice and the behavior cannot drift apart.
+    """
+    from tengri.forward.sed_model import _nebular_continuum_consumers
+
+    chain = getattr(model, "_cached_component_chain", None)
+    if chain is None:
+        builder = getattr(model, "_build_component_chain", None)
+        if builder is None:
+            return True
+        chain = builder()
+    return not _nebular_continuum_consumers(chain)
+
+
 def _has_line_adjacent_channel(model) -> bool:
     """Whether the observation carries a channel that reads line internals.
 
@@ -723,7 +778,19 @@ def _resolve_batch_fit_approx(model, approx, data_type):
             # and catalog fits evaluate the forward model the most. When the
             # wave LUT is already configured, only the feature LUT is appended;
             # re-appending WavePrecomp would duplicate it.
-            if not has_feature and not _has_line_adjacent_channel(model):
+            #
+            # #1748: and only when the fast path can ENGAGE. Since #1281 a chain
+            # that reads ``sed_nebular`` — anything with dust — disarms the grid's
+            # photometry shortcut, so the top-up is bit-identical in compiled FLOPs
+            # while still changing ``compile_signature()``. Batch surfaces pay that
+            # per resolved clone, so skipping it here is the larger of the two wins.
+            # The "dominant lever" numbers above were measured on the pre-gate tree
+            # and hold only for a model with no ``sed_nebular`` consumer.
+            if (
+                not has_feature
+                and not _has_line_adjacent_channel(model)
+                and fast_nebular_can_engage(model)
+            ):
                 existing = tuple(getattr(model, "approx_configs", ()))
                 extra = (FeaturePrecomp(),) if has_wave else (cfg, FeaturePrecomp())
                 with contextlib.suppress(Exception):
@@ -1366,8 +1433,18 @@ class Fitter:
         # which the fast grid does not serve (#1665). Such a fit pays the
         # full-grid forward regardless, so the LUT would be a wrapper around
         # the cost it exists to avoid, and a broken one. Correctness outranks
-        # the ~21x line speedup, and the refusal is loud rather than silent.
-        wants_lut = self._fits_lines(model) and not _has_line_adjacent_channel(model)
+        # the line speedup, and the refusal is loud rather than silent.
+        #
+        # A model whose chain reads ``sed_nebular`` (i.e. anything with dust) also
+        # gets nothing: measured bit-identical compiled FLOPs with and without
+        # ``FeaturePrecomp`` since #1281. Appending it there is not merely useless —
+        # it changes ``compile_signature()``, so the fit pays a second compiled
+        # kernel to add a config with no effect (#1748).
+        wants_lut = (
+            self._fits_lines(model)
+            and not _has_line_adjacent_channel(model)
+            and fast_nebular_can_engage(model)
+        )
         return (base, FeaturePrecomp()) if wants_lut else base
 
     def _add_feature_precomp(self, model, *, warn_on_failure: bool = True):
@@ -1420,6 +1497,13 @@ class Fitter:
         # observation also carries an index or ratio channel must stay off the
         # feature LUT, whatever route asked for it.
         if _has_line_adjacent_channel(model):
+            return model
+        # Nor top up a model the LUT cannot help. Since #1281 a chain that reads
+        # ``sed_nebular`` — anything with dust — disarms the grid's photometry
+        # shortcut, and the top-up is then measured bit-identical in compiled FLOPs
+        # while still changing ``compile_signature()``: a second compiled kernel for
+        # no effect (#1748). Returning the model untouched is strictly better.
+        if not fast_nebular_can_engage(model):
             return model
         existing = tuple(getattr(model, "approx_configs", ()))
         try:
@@ -1506,6 +1590,14 @@ class Fitter:
                 self.data_type == "photometry"
                 and not self._fits_lines(model)
                 and not _has_line_adjacent_channel(model)
+                # #1748: and only when the grid can actually serve photometry. A
+                # chain that reads ``sed_nebular`` — anything with dust — disarms
+                # the shortcut since #1281, making this append bit-identical in
+                # compiled FLOPs while still changing ``compile_signature()``.
+                # This branch appends the config directly rather than through
+                # ``_add_feature_precomp``, so it needs the predicate of its own;
+                # guarding only the helper left this path attaching it anyway.
+                and fast_nebular_can_engage(model)
             ):
                 # #1596: a photometry-only Cue fit measured ~4x SLOWER than
                 # the same fit WITH a line channel, because FeaturePrecomp —
@@ -1544,6 +1636,13 @@ class Fitter:
             # remedy that cannot be applied, and advice you cannot act on reads
             # as a defect in the caller's model.
             return
+        if not fast_nebular_can_engage(model):
+            # Same reasoning, a different cause: this model's chain reads
+            # ``sed_nebular`` (dust does), so the grid may not serve photometry and
+            # ``FeaturePrecomp`` is measured bit-identical here — 1.00x, not 21x
+            # (#1748). Quoting a speedup the user cannot obtain sends them to change
+            # a setting that will do nothing, and reads as a defect in their model.
+            return
         state = getattr(model, "approx", None)
         if state is not None and state.feature_precomp:
             return
@@ -1553,7 +1652,7 @@ class Fitter:
             "Fitting an emission-line channel without FeaturePrecomp: every "
             "likelihood evaluation reconstructs the full-wavelength SED just to "
             "obtain the line fluxes, measured at ~21x the per-gradient cost "
-            "(6.95 ms vs 0.31 ms on a 5-band, 3-line model). Pass "
+            "(6.95 ms vs 0.31 ms on a 5-band, 3-line model, with no dust). Pass "
             "approx=(WavePrecomp(), FeaturePrecomp()), or drop approx= to use "
             "the default 'auto' policy, which adds it for you.",
             UserWarning,
