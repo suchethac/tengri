@@ -33,11 +33,9 @@
 # (A_V = 1) and DL07 IR re-emission at (q_PAH, U_min, γ) = (2.5, 1.0, 0.05).
 # Each section sweeps one physics block around this fiducial.
 #
-# Stellar templates, star formation histories, attenuation curves, dust IR,
-# and IGM absorption match BAGPIPES to floating-point or to a few percent
-# at matched parameters. The dust IR shape agreement depends critically on
-# the DL07 PDR luminosity weighting — without it the warm component is ~14×
-# under-weighted. The nebular block is the principal exception: BAGPIPES
+# The dust IR shape agreement depends on the DL07 PDR luminosity weighting —
+# without it the warm component is ~14× under-weighted. The nebular block is
+# the principal exception: BAGPIPES
 # uses Cloudy v25 grids, while tengri uses Cue (Li et al. 2025), a neural
 # emulator trained on Cloudy v17. The Hα ratio difference is quantified in §9.
 #
@@ -146,10 +144,9 @@ print(
 # 2006; Kroupa 2001) at Z = Z⊙ from 1 Myr to 10 Gyr. **Single SSPs**,
 # overlaid: BAGPIPES' raw `bc03_miles_stellar_grids.fits` (solid) read
 # directly with no SFH module, against the same templates re-shaped
-# into tengri's HDF5 (dashed). The curves sit on top of each other; the
-# lower panel shows the relative residual `|tengri − BAGPIPES| /
-# BAGPIPES`, ~1e-7 from float32 round-trip through the HDF5 repackaging — both
-# codes consume identical numerics.
+# into tengri's HDF5 (dashed), over the relative residual
+# `|tengri − BAGPIPES| / BAGPIPES` — ~1e-7, the float32 round-trip through
+# the HDF5 repackaging.
 
 # %%
 from astropy.io import fits as _fits
@@ -219,7 +216,7 @@ save_fig("bagpipes_01_ssp_bc03_miles.png")
 # Both integrate to the same formed mass — BAGPIPES via `massformed`,
 # tengri via `log_total_mass`.
 #
-# The right panel evaluates `state.derived["sfr_history"]` from a built
+# tengri's side evaluates `state.derived["sfr_history"]` from a built
 # `SEDModel` on the 256-point log-spaced lookback grid the SFH-convolution
 # code uses. The printed `∫SFR dt` check confirms the area integrates to
 # `10**log_total_mass`.
