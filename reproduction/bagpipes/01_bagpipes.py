@@ -972,13 +972,19 @@ save_fig("bagpipes_06_dust_ir.png")
 # reports integrated, continuum-subtracted line luminosity (width- and
 # grid-independent).
 #
-# On a young starburst — the regime Cue is trained for — the two agree closely.
-# The Balmer lines land within 2 % (Hα 0.98×, Hβ 0.98×), [O III] 5007 within
-# 1 %, and the free-free/free-bound continuum within 3 % in line-free windows.
-# [O II] 3727 is the outlier at 0.77×: a collisionally excited line, so it is
-# exponentially sensitive to electron temperature and to the O/H scaling each
-# code assumes, and it is the one place where the v17-vs-v25 Cloudy difference
-# is doing visible work.
+# On a young starburst — the regime Cue is trained for — the two agree closely:
+#
+# | feature | tengri/BAGPIPES | |
+# |---|---|---|
+# | Hα | 0.98× | within 2 % |
+# | Hβ | 0.98× | within 2 % |
+# | [O III] 5007 | — | within 1 % |
+# | free-free/free-bound continuum | — | within 3 % in line-free windows |
+# | [O II] 3727 | 0.77× | the outlier |
+#
+# [O II] 3727 is collisionally excited, so it is exponentially sensitive to
+# electron temperature and to the O/H scaling each code assumes. It is the one
+# place where the v17-vs-v25 Cloudy difference is doing visible work.
 #
 # The **Balmer decrement** is the check that matters most, and it is not a
 # free parameter: Case B recombination pins Hα/Hβ near 2.86 whatever the
