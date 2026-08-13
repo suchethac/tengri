@@ -115,6 +115,19 @@ def transplant_source(py_path: Path, ipynb_path: Path) -> tuple[int, int]:
             f"{ipynb_path.name}: embedded figures changed during transplant "
             f"({len(before)} -> {len(after)}). Refusing to publish."
         )
+    # A hash comparison alone passes trivially when both sides are empty, which
+    # is exactly the state a half-finished render leaves behind: jupytext has
+    # replaced the .ipynb but nbconvert has not written its outputs yet. Every
+    # reproduction notebook has figures, so zero means "not rendered yet", and
+    # publishing it would push an empty page to the docs site while the
+    # docs-sync contract test stayed green -- it compares source against docs,
+    # and two equally-empty notebooks agree.
+    if not after:
+        raise LayoutChanged(
+            f"{ipynb_path.name} has no embedded figures. Every reproduction "
+            "notebook has some, so this is an unrendered or half-rendered "
+            "notebook. Refusing to publish; finish the render first."
+        )
     return len(existing.cells), len(after)
 
 
