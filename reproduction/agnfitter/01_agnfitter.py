@@ -366,25 +366,28 @@ save_fig("agnfitter_03_stellar_sed.png")
 # %% [markdown]
 # ## §4 Disk reddening law (Prevot SMC)
 #
-# AGNFITTER-RX reddens the accretion disk (not the host) with an analytic
-# Prevot et al. (1984) SMC fit, ``k_raw(λ) = 1.39 λ_µm^−1.2 − 0.38``, applied
-# as ``A_λ = k_raw(λ) · E(B−V)`` with no reddening blueward of 200 eV
-# (``MODEL_AGNfitter.BBBred_Prevot``). That routine *declares* ``RV = 2.72`` —
-# the value Prevot+1984 measured for the SMC — and passes it to its inner
-# ``function_prevot(x, RV)``, but the function ignores the argument and returns
-# the bare ``k_raw``. So AGNFITTER-RX's *effective* total-to-selective ratio is
-# ``k_raw(0.55 µm) ≈ 2.468`` (the fit's value at V), not the 2.72 it declares —
-# this is the origin of the 10% below, and it is a code-level detail, not a
-# calibration choice.
+# Both codes redden the accretion disk (not the host) with the same analytic
+# Prevot et al. (1984) SMC fit, ``k_raw(λ) = 1.39 λ_µm^−1.2 − 0.38``, and no
+# reddening blueward of 200 eV. They normalize it differently:
 #
-# tengri's disc obscuration (`agn_ebv_disc`, the `EBVbbb` analog) applies the
-# ``RV`` AGNFITTER-RX intended: it normalizes the same fit's shape to
-# ``k(λ) = k_raw(λ)/k_raw(V)`` (so ``k(V) = 1``) and pins ``R_V = 2.72``, giving
-# ``A_λ = k(λ) · R_V · E(B−V) = k_raw · (2.72/2.468) · E(B−V)``. The two differ
-# by the uniform factor ``2.72/2.468 ≈ 1.102`` in A_λ at matched E(B−V): the
-# *shape* is identical, so the AGNFITTER-RX ``EBVbbb`` posterior maps onto
-# tengri's as ``E(B−V)_tengri ≈ E(B−V)_AGNFITTER / 1.102``. tengri's amplitude
-# is the more physical one — it matches both Prevot+1984's measured SMC R_V and
+# | | AGNFITTER-RX (``BBBred_Prevot``) | tengri (`agn_ebv_disc`) |
+# |---|---|---|
+# | applied as | ``A_λ = k_raw(λ) · E(B−V)`` | ``A_λ = k(λ) · R_V · E(B−V)``, ``k(λ) = k_raw(λ)/k_raw(V)`` |
+# | effective R_V | ``k_raw(0.55 µm) ≈ 2.468`` | ``2.72`` |
+# | declared R_V | ``2.72`` | ``2.72`` |
+#
+# AGNFITTER-RX *declares* ``RV = 2.72`` — the value Prevot+1984 measured for the
+# SMC — and passes it to its inner ``function_prevot(x, RV)``, but the function
+# ignores the argument and returns the bare ``k_raw``. Its effective
+# total-to-selective ratio is therefore the fit's value at V, not the 2.72 it
+# declares. This is a code-level detail, not a calibration choice, and it is the
+# origin of the 10% below.
+#
+# The *shape* is identical, so the two differ by the uniform factor
+# ``2.72/2.468 ≈ 1.102`` in A_λ at matched E(B−V), and the AGNFITTER-RX
+# ``EBVbbb`` posterior maps onto tengri's as
+# ``E(B−V)_tengri ≈ E(B−V)_AGNFITTER / 1.102``. tengri's amplitude is the more
+# physical one — it matches both Prevot+1984's measured SMC R_V and
 # AGNFITTER-RX's own declared value.
 #
 # A note on provenance: this analytic fit is AGNFITTER-RX's *own* SMC
@@ -685,68 +688,72 @@ print(
 # R06/SN12/KD18. AGNFITTER-RX finds this single feature drives a Bayes factor
 # ≈10⁵·¹ over R06.
 #
-# SN12 (Slone & Netzer 2012) was, until this work, the one disk library
-# tengri lacked — every "Netzer" reference in tengri pointed to the unrelated
-# Laor & Netzer (1989) self-gravity radius. tengri's new `slone_netzer` disc
-# block reads the SN12 α-disc grid directly from AGNFITTER-RX's published
-# `SN12.pickle` (the M_BH = 8.6, log Ṁ/Ṁ_edd ≈ −2.0 grid point is shown on
-# both sides).
+# | library | tengri block | agreement at the matched node |
+# |---|---|---|
+# | THB21 | `qsogen` (+ line and FeII blocks) | continuum and near-IR agree; the lines do not — see the ladder below |
+# | SN12 | `slone_netzer` | node-exact bilinear interpolation; the peak lands on AGNFITTER-RX at every grid node |
+# | KD18 | `kubota_done` | ≤0.07 dex across 1000 Å–1 µm; diverges only in the wings |
+# | R06 | `richards2006` | median 0.0002 dex over 0.15–3 µm, once carriage is matched |
 #
-# How well each tengri block matches:
+# AGNFITTER-RX is drawn as a thick, semi-transparent band and tengri as a thin
+# line on top, so the two stay distinguishable where they overlay exactly.
+
+# %% [markdown]
+# ### THB21 — why the vendored template understates the 0.7 µm bump
 #
-# * **THB21 — reproduced, and faithful to the source.** The 0.7 µm bump is an
-#   emission-line feature, so `qsogen` must run *with* its line and FeII blocks
-#   (continuum alone misses it entirely). With them on, tengri's Hα/2500 Å
-#   contrast (~4.5) lands on the *published* Temple, Hewett & Banerji (2021)
-#   qsogen reference (4.68 — cross-checked below against the committed
-#   `qsogen_detailed_reference`), while AGNFITTER-RX's stored THB21 template
-#   reads only 2.45. That gap is not a tengri error; it is two compounding
-#   effects in the vendored template, both quantified in the ladder printed
-#   under the figure: (1) its 1024-point common grid samples Hα every ~104 Å —
-#   wider than the broad line itself (~66 Å FWHM) — so point-sampling tengri's
-#   own native qsogen onto that grid drops its Hα/2500 from 4.5 to ~2.8, most of
-#   the way to AGNFITTER-RX's value; and (2) the stored template is weaker still
-#   (2.45), a small residual from AGNFITTER-RX's particular luminosity/Baldwin
-#   realization. tengri evaluates qsogen at native
-#   resolution, so it recovers the full line. The near-IR hot-dust inflection
-#   that Temple+2021 fold into their *composite* template is, in both codes'
-#   decomposition, the torus's job (§9c) — which is why the disc panels here
-#   agree in the continuum and near-IR and diverge only at the lines.
-# * **SN12 — reproduced** by the `slone_netzer` block. It interpolates the
-#   108-template grid with node-exact bilinear interpolation, so the SN12 peak
-#   lands on AGNFITTER-RX's at every grid node (the peak shifts strongly with
-#   accretion rate, so the original smooth-kernel interpolation smeared it by
-#   30–50% — now fixed).
-# * **KD18 — reproduced** (with a parameterization note). tengri's full
-#   Kubota & Done 3-zone block (`kubota_done`: a Novikov-Thorne outer disc +
-#   warm Comptonization + a hot corona) is *luminosity-first*: the Eddington
-#   ratio is derived from `agn_log_lbol` and `agn_log_mbh` (λ_Edd =
-#   L_bol/L_Edd), so `agn_log_ledd` is deprecated and ignored for this disc.
-#   To land on an AGNFITTER-RX grid node (logM_BH, logλ_Edd) we therefore set
-#   L_bol = λ_Edd · L_Edd(M_BH), computed below from the same physical
-#   constants tengri uses. At the matched node the two realizations agree
-#   across the UV–optical to ≤0.07 dex (the residual box quantifies the
-#   1000 Å–1 µm disc window), and diverge only in the wings: tengri sits
-#   slightly *above* AGNFITTER-RX in the near-IR (> 1 µm) and the far-UV. That
-#   is not a tengri error — tengri integrates its outer disc out to the physical
-#   self-gravity (Toomre) radius (Laor & Netzer 1989; the qsosed-canonical
-#   R_out ≈ 1300 R_g at this node), so it carries the coolest outer annuli that
-#   AGNFITTER-RX's stored template truncates. The residual is the documented
-#   spread between a precomputed qsosed template grid (AGNFITTER-RX) and tengri's
-#   from-scratch three-zone integration, whose warm-Comptonization proxy is a
-#   documented approximation; the far-IR / X-ray tails (hot corona, seed-photon
-#   rollover) the two codes treat differently and are not compared here.
-# * **R06 — the same template.** Both sides use the identical Richards+2006
-#   composite; the only subtlety is carriage. tengri's `richards2006` returns
-#   the physical L_ν, while AGNFITTER-RX stores the published νL_ν array
-#   directly (it never divides by ν). Left uncorrected the two would sit a
-#   factor of ν apart. The panel puts AGNFITTER-RX's R06 onto the same L_ν
-#   axis (divides by ν) so it shows the *same template* — the two curves then
-#   overlay to a median 0.0002 dex over 0.15–3 µm (printed below).
+# The bump is an emission-line feature, so `qsogen` must run *with* its line and
+# FeII blocks; the continuum alone misses it entirely. With them on tengri lands
+# on the published qsogen reference, and AGNFITTER-RX's stored template does not:
 #
-# Throughout this panel AGNFITTER-RX is drawn as a thick, semi-transparent band
-# and tengri as a thin line on top, so the two stay distinguishable even where
-# they lie exactly on each other.
+# | Hα/2500 Å | source |
+# |---|---|
+# | 4.68 | Temple, Hewett & Banerji (2021), published qsogen |
+# | ~4.5 | tengri `qsogen`, native resolution |
+# | ~2.8 | tengri `qsogen`, point-sampled onto the 1024-point common grid |
+# | 2.45 | AGNFITTER-RX's stored THB21 template |
+#
+# Two compounding effects, neither a tengri error. The common grid samples Hα
+# every ~104 Å — wider than the ~66 Å FWHM line — which costs most of the gap;
+# the stored template is weaker still, a residual of AGNFITTER-RX's particular
+# luminosity/Baldwin realization. tengri evaluates qsogen at native resolution
+# and recovers the full line (cross-checked below against the committed
+# `qsogen_detailed_reference`). The near-IR hot-dust inflection Temple+2021 fold
+# into their *composite* template is, in both codes' decomposition, the torus's
+# job (§9c) — which is why the disc panels agree in the continuum and near-IR
+# and diverge only at the lines.
+
+# %% [markdown]
+# ### Parameterization notes for SN12, KD18 and R06
+#
+# **SN12** (Slone & Netzer 2012) was, until this work, the one disk library
+# tengri lacked — every
+# "Netzer" reference in tengri pointed to the unrelated Laor & Netzer (1989)
+# self-gravity radius. The `slone_netzer` block reads the SN12 α-disc grid
+# directly from AGNFITTER-RX's published `SN12.pickle` (the M_BH = 8.6,
+# log Ṁ/Ṁ_edd ≈ −2.0 grid point is shown on both sides). The peak shifts
+# strongly with accretion rate, so the original smooth-kernel interpolation
+# smeared it by 30–50%; the block now interpolates the 108-template grid
+# node-exactly.
+#
+# **KD18 is luminosity-first.** tengri's three-zone `kubota_done` (Novikov-Thorne
+# outer disc + warm Comptonization + hot corona) derives the Eddington ratio from
+# `agn_log_lbol` and `agn_log_mbh` (λ_Edd = L_bol/L_Edd), so `agn_log_ledd` is
+# deprecated and ignored for this disc. Landing on an AGNFITTER-RX grid node
+# (logM_BH, logλ_Edd) therefore means setting L_bol = λ_Edd · L_Edd(M_BH),
+# computed below from the same physical constants tengri uses. tengri sits
+# slightly *above* AGNFITTER-RX beyond 1 µm and in the far-UV because it
+# integrates its outer disc out to the physical self-gravity (Toomre) radius
+# (Laor & Netzer 1989; the qsosed-canonical R_out ≈ 1300 R_g at this node),
+# carrying the coolest outer annuli that the stored template truncates. The
+# warm-Comptonization proxy is a documented approximation; the far-IR / X-ray
+# tails (hot corona, seed-photon rollover) are treated differently by the two
+# codes and are not compared here.
+#
+# **R06 is the same template on both sides** — the only subtlety is carriage.
+# tengri's `richards2006` returns the physical L_ν, while AGNFITTER-RX stores the
+# published νL_ν array directly and never divides by ν. Left uncorrected the two
+# would sit a factor of ν apart, so the panel divides AGNFITTER-RX's R06 by ν to
+# put both on the same L_ν axis.
 
 # %%
 from tengri.utils.physics_constants import C_CGS, G_GRAV, L_SUN, M_PROTON, M_SUN, SIGMA_T
