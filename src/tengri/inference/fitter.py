@@ -470,12 +470,30 @@ def _memoized_approx_clone(model, cfg):
 
 
 def fast_nebular_can_engage(model) -> bool:
-    """Can ``FeaturePrecomp`` actually do anything for this model?
+    """Can the fast nebular grid serve **photometry** for this model?
 
-    ``FeaturePrecomp`` serves the line channel from a per-Q_H grid, and doing so
-    requires zeroing ``sed_nebular``. Since #1281 that is only permitted when nothing
-    downstream reads the continuum — and ``DustSEDComponent`` declares it as an input,
-    so **any model with dust disarms the fast path entirely**.
+    Narrower than its original name suggests, and the difference cost a measured
+    4.77x (#1770): this answers one of ``FeaturePrecomp``'s two jobs, not both.
+
+    * **Photometry** — served from a per-Q_H grid, which requires zeroing
+      ``sed_nebular``. Since #1281 that is only permitted when nothing downstream
+      reads the continuum, and ``DustSEDComponent`` declares it as an input, so
+      **any model with dust disarms this shortcut entirely**. That is what this
+      predicate reports, and why #1748 stopped attaching the config for a
+      photometry-only fit.
+    * **A line channel** — served by supplying the line fluxes from the table, so
+      ``loss_functions`` need not set ``needs_state=True`` and rebuild the
+      full-grid SED through ``predict_state`` on every likelihood evaluation.
+      **Dust does not touch this**, and this predicate says nothing about it.
+
+    Consult it for the photometry top-up. Do **not** consult it to decide whether
+    a line-flux fit gets the LUT: #1760 did, on the strength of a guard that
+    measured ``jnp.sum(model.predict_photometry(params))`` — a photometry
+    objective, which cannot observe the line-channel saving — and every dusty
+    line-flux fit silently went back to the pre-#1477 cost. Measured on the
+    #1477 fixture, gradient FLOPs of the fit objective: 1,933,823 with
+    ``WavePrecomp`` alone against 405,825 with the LUT added, beside a dust-free
+    control identical to the digit either way.
 
     Measured on main, one run, dust-free control in the same run, gradient FLOPs off
     the compiled HLO:
@@ -1435,19 +1453,19 @@ class Fitter:
         # the cost it exists to avoid, and a broken one. Correctness outranks
         # the line speedup, and the refusal is loud rather than silent.
         #
-        # A model whose chain reads ``sed_nebular`` (i.e. anything with dust) also
-        # gets nothing: measured bit-identical compiled FLOPs with and without
-        # ``FeaturePrecomp`` since #1281. Appending it there is not merely useless —
-        # it changes ``compile_signature()``, so the fit pays a second compiled
-        # kernel to add a config with no effect (#1748).
-        wants_lut = (
-            self._fits_lines(model)
-            and not _has_line_adjacent_channel(model)
-            and fast_nebular_can_engage(model)
-        )
+        # No ``fast_nebular_can_engage`` gate here, deliberately (#1770). That
+        # predicate answers whether the grid may serve PHOTOMETRY without
+        # materializing ``sed_nebular``, which dust disarms (#1748/#1281). This
+        # branch serves a LINE channel, where the LUT's value is that the line
+        # fluxes come from the table instead of ``needs_state=True`` forcing a
+        # full-grid ``predict_state`` per likelihood — dust does not touch that.
+        # Gating it here cost a measured 4.77x on every dusty line-flux fit.
+        wants_lut = self._fits_lines(model) and not _has_line_adjacent_channel(model)
         return (base, FeaturePrecomp()) if wants_lut else base
 
-    def _add_feature_precomp(self, model, *, warn_on_failure: bool = True):
+    def _add_feature_precomp(
+        self, model, *, warn_on_failure: bool = True, serves_line_channel: bool = True
+    ):
         """Top up a build-time ``approx=`` with ``FeaturePrecomp``.
 
         A model built with ``approx=WavePrecomp()`` used to be returned
@@ -1498,12 +1516,20 @@ class Fitter:
         # feature LUT, whatever route asked for it.
         if _has_line_adjacent_channel(model):
             return model
-        # Nor top up a model the LUT cannot help. Since #1281 a chain that reads
-        # ``sed_nebular`` — anything with dust — disarms the grid's photometry
-        # shortcut, and the top-up is then measured bit-identical in compiled FLOPs
-        # while still changing ``compile_signature()``: a second compiled kernel for
-        # no effect (#1748). Returning the model untouched is strictly better.
-        if not fast_nebular_can_engage(model):
+        # Nor top up a model the LUT cannot help — but "cannot help" is channel
+        # specific, and conflating the two channels is what #1770 was (see
+        # ``fast_nebular_can_engage``). The dust gate applies to the PHOTOMETRY
+        # shortcut only: since #1281 a chain that reads ``sed_nebular`` disarms it,
+        # so appending the config there buys a second compiled kernel for no effect
+        # (#1748). A LINE channel is served by a different mechanism — the LUT
+        # supplies the line fluxes directly, instead of ``needs_state=True`` driving
+        # a full-grid ``predict_state`` rebuild per likelihood — and that mechanism
+        # is unaffected by dust. Measured on the #1477 fixture, a dusty model with
+        # three line fluxes, gradient FLOPs of the fit objective:
+        # WavePrecomp 1,933,823 -> WavePrecomp+FeaturePrecomp 405,825, a 4.77x
+        # reduction, against a dust-free control that is identical to the digit
+        # (251,783 either way) because the top-up has already happened there.
+        if not serves_line_channel and not fast_nebular_can_engage(model):
             return model
         existing = tuple(getattr(model, "approx_configs", ()))
         try:
@@ -1569,7 +1595,7 @@ class Fitter:
                 # place. Restating it here is what let the two spellings drift
                 # apart in the first place.
                 if self._fits_lines(model):
-                    return self._add_feature_precomp(model)
+                    return self._add_feature_precomp(model, serves_line_channel=True)
                 # #1683: #1596 in its BUILD-TIME spelling. The fix that landed
                 # in #1656 tops up only the branch below, where the model carries
                 # no approx at all; a photometry-only Cue model built WITH
@@ -1581,7 +1607,9 @@ class Fitter:
                 # failure: a backend with nothing to tabulate is the common
                 # case here, not an anomaly worth warning about.
                 if self.data_type == "photometry" and not _has_line_adjacent_channel(model):
-                    return self._add_feature_precomp(model, warn_on_failure=False)
+                    return self._add_feature_precomp(
+                        model, warn_on_failure=False, serves_line_channel=False
+                    )
                 return model
             cfg = self._auto_approx_config(model)
             if cfg is None:
@@ -1636,13 +1664,11 @@ class Fitter:
             # remedy that cannot be applied, and advice you cannot act on reads
             # as a defect in the caller's model.
             return
-        if not fast_nebular_can_engage(model):
-            # Same reasoning, a different cause: this model's chain reads
-            # ``sed_nebular`` (dust does), so the grid may not serve photometry and
-            # ``FeaturePrecomp`` is measured bit-identical here — 1.00x, not 21x
-            # (#1748). Quoting a speedup the user cannot obtain sends them to change
-            # a setting that will do nothing, and reads as a defect in their model.
-            return
+        # No ``fast_nebular_can_engage`` gate (#1770). It was added here on the
+        # reading that a dusty model gains nothing from the LUT — true of the
+        # photometry shortcut, false of this channel, where the saving is the
+        # ``predict_state`` rebuild rather than the nebular grid. On a dusty
+        # line-flux fit the advice IS actionable: 4.77x in gradient FLOPs.
         state = getattr(model, "approx", None)
         if state is not None and state.feature_precomp:
             return
