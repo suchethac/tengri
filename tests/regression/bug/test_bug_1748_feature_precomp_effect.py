@@ -4,14 +4,30 @@ r"""``FeaturePrecomp`` must not be attached to a model it cannot help (#1748).
 Since #1281 the fast nebular grid may serve photometry only when nothing downstream
 reads ``sed_nebular``, because serving it requires zeroing the continuum and the dust
 energy balance reads it to size the absorbed budget. ``DustSEDComponent`` declares it
-as an input, so **any model with dust disarms the fast path** — and for months three
+as an input, so **any model with dust disarms that channel** — and for months three
 warnings, two shipped resolvers and ``CLAUDE.md`` went on advertising a ~21x line
 speedup that was measured at **1.00x, bit-identical compiled FLOPs**.
 
-This is not a regression to undo. On the pre-#1281 tree the fast pair's photometry for
-a dusty model differed from exact by **0.41 %** against 0.0115 % for a dust-free
-control — the shortcut bought a biased answer, and a constant forward bias enters the
-gradient multiplied by SNR (#1671). What was wrong was the advertising.
+**``FeaturePrecomp`` has two consumers, and this file tests both** (#1770). The
+nebular continuum shortcut above is one. The other is the line channel: the LUT
+flips ``needs_state`` in ``loss_functions``, so the likelihood stops rebuilding the
+full-grid SED to read a handful of line fluxes (#1477). Dust does not disarm that —
+measured on the fit objective of a **dusty** model, 1.08x (Cue) and 7.19x (baked-in),
+against a *photometry* gradient on the same model that is bit-identical. #1760 gated
+both consumers on the continuum predicate and silently withdrew the second; every
+test here stayed green, because every fixture was photometry-only. **A guard is only
+as wide as the channels its fixtures carry.**
+
+Note the two thresholds: exact equality proves a config never reached the compiled
+graph, and is the right assertion for the photometry case. 8 % is not equality — a
+thin margin still means the config engaged. Asserting "inert" where the truth is
+"thin" is how the line consumer got written off.
+
+The #1281 correctness fix is not a regression to undo. On the pre-#1281 tree the fast
+pair's photometry for a dusty model differed from exact by **0.41 %** against
+0.0115 % for a dust-free control — the shortcut bought a biased answer, and a
+constant forward bias enters the gradient multiplied by SNR (#1671). What was wrong
+was the advertising.
 
 **Why FLOPs and not wall clock.** A timing guard on this would be folded away: XLA
 already proved it can compile the "exact" arm down to the fast one and make a
@@ -33,8 +49,50 @@ pytestmark = pytest.mark.regression_bug
 _PARAMS_BASE = {"sfh_delayed_log_total_mass": 10.0}
 
 
-def _build(ssp, approx, *, dust: bool):
-    from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, Uniform
+_LINES = ("Halpha", "Hbeta", "OIII_5007")
+_LINE_WAVES = (6564.61, 4862.71, 5008.24)
+
+
+def _observation(*, lines: bool):
+    """Photometry, optionally plus a measured line-flux channel.
+
+    The channel is the whole point of the ``lines=True`` arm: ``FeaturePrecomp``'s
+    second consumer only exists when the loss has line fluxes to serve, so a
+    photometry-only fixture cannot see it — which is exactly how #1760 shipped past
+    the rest of this file.
+    """
+    import warnings
+
+    from tengri import Observation, Photometry
+    from tengri.observation.line_flux_data import LineFluxData
+
+    phot = Photometry.from_names(["sdss_g", "sdss_r", "sdss_i"])
+    if not lines:
+        return Observation(photometry=phot)
+    with warnings.catch_warnings():
+        # Observation(line_fluxes=...) is deprecated in favor of Data(lines=...)
+        # (#1321); the channel-presence contract under test is unchanged by that.
+        warnings.simplefilter("ignore", DeprecationWarning)
+        return Observation(
+            photometry=phot,
+            line_fluxes=LineFluxData(
+                names=_LINES,
+                fluxes=jnp.asarray([1e-16, 3e-17, 5e-17]),
+                errors=jnp.asarray([1e-17, 3e-18, 5e-18]),
+                wavelengths=jnp.asarray(_LINE_WAVES),
+            ),
+        )
+
+
+def _build(ssp, approx, *, dust: bool, lines: bool = False, neb: str = "cue"):
+    """Build a model. ``neb`` selects which ``FeaturePrecomp`` ROUTE the model takes.
+
+    ``'cue'`` publishes a Q_H-linear catalog and takes the ``'grid'`` route; ``'none'``
+    on a baked-in/wNE SSP leaves the lines inside the templates and takes the
+    ``'window'`` route. The two have different engagement conditions, so a fixture
+    that only ever exercises one cannot see a gate that conflates them.
+    """
+    from tengri import FIXED, Fixed, SEDModel, Uniform
 
     dust_group = (
         {
@@ -51,7 +109,7 @@ def _build(ssp, approx, *, dust: bool):
     )
     return SEDModel.build(
         ssp_data=ssp,
-        observation=Observation(photometry=Photometry.from_names(["sdss_g", "sdss_r", "sdss_i"])),
+        observation=_observation(lines=lines),
         sfh={
             "type": "delayed",
             "all_params": FIXED,
@@ -60,7 +118,7 @@ def _build(ssp, approx, *, dust: bool):
             "age_gyr": 5.0,
         },
         dust=dust_group,
-        neb={"type": "cue", "all_params": FIXED},
+        neb={"type": "none"} if neb == "none" else {"type": neb, "all_params": FIXED},
         redshift=Fixed(0.1),
         approx=approx,
     )
@@ -153,4 +211,125 @@ def test_the_resolver_does_not_attach_a_config_that_cannot_engage(ssp_data_fsps)
         "the resolver attached FeaturePrecomp to a dusty model, where it is measured "
         "bit-identical in compiled FLOPs — a separate compiled kernel for no effect "
         "(#1748)."
+    )
+
+
+def _objective_flops(model, approx, *, n_bands: int = 3):
+    """FLOPs of the compiled gradient of the FIT OBJECTIVE under ``approx``.
+
+    Distinct from :func:`_grad_flops` on purpose. That one differentiates
+    ``predict_photometry``, which has no line channel at all — so it cannot see
+    ``FeaturePrecomp``'s second consumer, and reading it as the whole story is what
+    #1760 did. The line LUT acts inside the likelihood, via ``needs_state``.
+
+    ``approx`` goes to the **Fitter**, not to ``SEDModel.build``. A build-time config
+    with the fitter left on its ``"auto"`` default is not a controlled comparison:
+    "auto" TOPS UP, so a WavePrecomp-only arm silently acquires FeaturePrecomp and
+    both arms resolve to the same config. That reads as bit-identical FLOPs and looks
+    exactly like the inertness this file exists to detect. An explicit config is
+    respected as given.
+    """
+    import warnings
+
+    from tengri.inference.context import InferenceContext
+    from tengri.inference.fitter import Fitter
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        fitter = Fitter(
+            model,
+            jnp.full(n_bands, 1e-17),
+            jnp.full(n_bands, 1e-18),
+            data_type="photometry",
+            approx=approx,
+        )
+        resolved = fitter._resolve_fit_approx(model, approx)
+        state = getattr(resolved, "approx", None)
+        wanted = any(type(c).__name__ == "FeaturePrecomp" for c in approx)
+        got = bool(state is not None and getattr(state, "feature_precomp", False))
+        assert got == wanted, (
+            f"the arm is not the arm it claims to be: asked for feature_precomp="
+            f"{wanted}, resolved to {got}. Assert the treatment arm is LIVE before "
+            "reading any ratio off it."
+        )
+        ctx = InferenceContext.from_target(fitter)
+        x0 = ctx.initial_params(jax.random.PRNGKey(0))
+        args = ctx.data_args
+        grad = jax.grad(ctx.neg_log_posterior_fn, argnums=0)
+        analysis = jax.jit(grad).lower(x0, args).compile().cost_analysis()
+    if isinstance(analysis, (list, tuple)):
+        analysis = analysis[0]
+    return int(analysis["flops"])
+
+
+@pytest.mark.parametrize(
+    ("neb", "ssp_fixture", "expect"),
+    [
+        # Cue publishes a Q_H-linear catalog; a baked-in/wNE SSP keeps its lines in
+        # the templates and is measured off the spectrum. Different mechanisms, same
+        # verdict once a line channel exists — which is why the fix is a disjunction
+        # over consumers rather than a dispatch on the backend.
+        ("cue", "ssp_data_fsps", 1.05),
+        ("none", "synthetic_ssp_wide", 3.0),
+    ],
+    ids=["cue-grid", "bakedin-window"],
+)
+def test_a_line_channel_revives_the_lut_on_a_dusty_model(request, neb, ssp_fixture, expect):
+    """The regression #1760 shipped: dust does not make the LUT inert for LINES.
+
+    #1748 measured a dusty model's *photometry* gradient bit-identical with and
+    without ``FeaturePrecomp`` and gated the config on that. But the line channel is
+    a second consumer — ``loss_functions`` sets ``needs_state = ... or
+    (has_line_fluxes and not fast_lines)`` — and it is not disarmed by dust.
+
+    Measured on the fit objective, dusty, fitting three line fluxes:
+    Cue **46,607,124 -> 43,211,740 (1.08x)**, baked-in
+    **1,986,819 -> 276,186 (7.19x)**. The Cue margin is thin, and that is the point:
+    thin is not *bit-identical*. Exact equality is what proves a config never reached
+    the graph; 8 % proves it reached it and paid for itself.
+    """
+    from tengri import FeaturePrecomp, WavePrecomp
+
+    ssp = request.getfixturevalue(ssp_fixture)
+    model = _build(ssp, None, dust=True, lines=True, neb=neb)
+
+    wave = _objective_flops(model, (WavePrecomp(),))
+    pair = _objective_flops(model, (WavePrecomp(), FeaturePrecomp()))
+    assert pair * expect < wave, (
+        f"FeaturePrecomp bought only {wave / pair:.2f}x on a DUSTY {neb} model that "
+        f"fits line fluxes ({wave:,} -> {pair:,} objective gradient FLOPs); expected "
+        f"at least {expect:.2f}x. Dust disarms the nebular continuum shortcut, not "
+        "the line channel — do not gate the two on one predicate (#1770)."
+    )
+
+
+def test_the_resolver_attaches_the_lut_for_a_dusty_line_fit(ssp_data_fsps):
+    """The same resolver, the same dusty model — opposite verdicts, decided by lines.
+
+    Companion to ``test_the_resolver_does_not_attach_a_config_that_cannot_engage``.
+    Pinning only the "does not attach" half is what let a gate that *never* attaches
+    look correct: both halves have to be asserted, or the guard cannot tell a correct
+    refusal from a broken one.
+    """
+    import warnings
+
+    from tengri.inference.fitter import Fitter, fast_nebular_can_engage, feature_precomp_can_engage
+
+    dusty_lines = _build(ssp_data_fsps, None, dust=True, lines=True)
+
+    # The narrow predicate still says no — the continuum shortcut really is disarmed.
+    assert not fast_nebular_can_engage(dusty_lines)
+    # The question a resolver must actually ask says yes: the line consumer is live.
+    assert feature_precomp_can_engage(dusty_lines)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        fitter = Fitter(dusty_lines, jnp.full(3, 1e-17), jnp.full(3, 1e-18))
+        resolved = fitter._resolve_fit_approx(dusty_lines, "auto")
+
+    state = getattr(resolved, "approx", None)
+    assert state is not None and getattr(state, "feature_precomp", False), (
+        "a dusty line-flux fit did not get FeaturePrecomp under approx='auto' — every "
+        "likelihood evaluation reconstructs the full-grid SED to read a few line "
+        "fluxes (#1770)."
     )

@@ -470,15 +470,20 @@ def _memoized_approx_clone(model, cfg):
 
 
 def fast_nebular_can_engage(model) -> bool:
-    """Can ``FeaturePrecomp`` actually do anything for this model?
+    """Can the fast nebular **continuum** grid serve this model's photometry?
 
-    ``FeaturePrecomp`` serves the line channel from a per-Q_H grid, and doing so
+    Answers about ONE of ``FeaturePrecomp``'s two consumers. Ask
+    :func:`feature_precomp_can_engage` whether the config is worth attaching at all —
+    the line-flux channel is served by a mechanism this predicate knows nothing about,
+    and gating both on this one is exactly what #1760 shipped and #1770 undid.
+
+    The photometry shortcut serves filter fluxes from a per-Q_H grid, and doing so
     requires zeroing ``sed_nebular``. Since #1281 that is only permitted when nothing
     downstream reads the continuum — and ``DustSEDComponent`` declares it as an input,
-    so **any model with dust disarms the fast path entirely**.
+    so **any model with dust disarms this channel**.
 
     Measured on main, one run, dust-free control in the same run, gradient FLOPs off
-    the compiled HLO:
+    the compiled HLO of a **photometry** gradient:
 
     ==========  ==============  ==============  ========
     model       ``WavePrecomp`` ``+Feature``    ratio
@@ -522,6 +527,79 @@ def fast_nebular_can_engage(model) -> bool:
             return True
         chain = builder()
     return not _nebular_continuum_consumers(chain)
+
+
+def _observation_fits_line_fluxes(model) -> bool:
+    """Whether the model's own Observation carries a measured line-flux channel.
+
+    The model-visible half of :meth:`Fitter._fits_line_fluxes`, for the resolvers
+    that run without a ``Fitter`` (the batch/catalog surfaces). A fit that overrides
+    the channel with ``line_flux_data=`` passes the resolved answer explicitly rather
+    than relying on this.
+    """
+    obs = getattr(model, "observation", None)
+    return obs is not None and getattr(obs, "line_fluxes", None) is not None
+
+
+def feature_precomp_can_engage(model, *, fits_lines: bool | None = None) -> bool:
+    """Can ``FeaturePrecomp`` do anything for this fit — by **either** route?
+
+    ``FeaturePrecomp`` has two independent consumers, and #1760 gated both on the
+    first, silently withdrawing the second:
+
+    1. **The nebular continuum shortcut** — serves photometry from a per-Q_H grid,
+       which requires zeroing ``sed_nebular``, so dust disarms it (#1281/#1748).
+       That question is :func:`fast_nebular_can_engage`.
+    2. **The line channel** — ``loss_functions`` sets ``needs_state = ... or
+       (has_line_fluxes and not fast_lines)``, so the LUT is what stops every
+       likelihood evaluation rebuilding the full-grid SED to read a handful of line
+       fluxes (#1477). Dust does not disarm this.
+
+    Measured, gradient FLOPs off the compiled HLO of the **fit objective** — not
+    ``predict_photometry``, which has no line channel at all, and measuring only
+    there is how #1760 shipped. Each arm's config is passed to the ``Fitter``
+    explicitly, because ``"auto"`` tops up and would resolve both arms to the same
+    config (a 1.00x that means "one config", not "no effect"):
+
+    ==========================  ==============  ==============  =========
+    model                       ``WavePrecomp`` ``+Feature``    ratio
+    ==========================  ==============  ==============  =========
+    Cue, dusty, fits lines        46,607,124      43,211,740    **1.08x**
+    Cue, dust-free, fits lines    46,188,972       2,355,879    19.61x
+    baked-in, dusty, lines         1,986,819         276,186    7.19x
+    baked-in, dust-free, lines     1,087,790         184,226    5.90x
+    ==========================  ==============  ==============  =========
+
+    Dusty Cue is the interesting row: 1.08x is small, but it is **not** the
+    bit-identical 65,438,628 == 65,438,628 that #1748 measured on the same model's
+    *photometry* gradient. Exact equality means the config never reached the graph;
+    8 % means it reached it and paid. A one-off second compiled kernel for 8 % off
+    every gradient in a fit is worth taking.
+
+    So the rule is a disjunction over the two consumers, not a route dispatch: every
+    row above is attached except a dusty model with **no** line channel, which is
+    exactly #1748.
+
+    Parameters
+    ----------
+    model : SEDModel
+        The fit's model.
+    fits_lines : bool or None, keyword-only, optional
+        Whether this fit has a line channel, when the caller knows better than the
+        Observation does — a ``Fitter`` resolves ``line_flux_data=`` overrides and
+        spectroscopy nuisance amplitudes that the model cannot see. ``None`` reads
+        the Observation via :func:`_observation_fits_line_fluxes`.
+
+    Returns
+    -------
+    bool
+        ``True`` when at least one consumer can use the LUT. A backend that supports
+        neither still returns ``True`` here: arming it raises, and the callers catch
+        that and report it, which is better advice than a silent refusal.
+    """
+    if fits_lines is None:
+        fits_lines = _observation_fits_line_fluxes(model)
+    return bool(fits_lines) or fast_nebular_can_engage(model)
 
 
 def _has_line_adjacent_channel(model) -> bool:
@@ -779,17 +857,22 @@ def _resolve_batch_fit_approx(model, approx, data_type):
             # wave LUT is already configured, only the feature LUT is appended;
             # re-appending WavePrecomp would duplicate it.
             #
-            # #1748: and only when the fast path can ENGAGE. Since #1281 a chain
-            # that reads ``sed_nebular`` — anything with dust — disarms the grid's
-            # photometry shortcut, so the top-up is bit-identical in compiled FLOPs
-            # while still changing ``compile_signature()``. Batch surfaces pay that
-            # per resolved clone, so skipping it here is the larger of the two wins.
-            # The "dominant lever" numbers above were measured on the pre-gate tree
-            # and hold only for a model with no ``sed_nebular`` consumer.
+            # #1748: and only when the LUT can ENGAGE by SOME route. A chain that
+            # reads ``sed_nebular`` — anything with dust — disarms the *continuum*
+            # shortcut since #1281, making the top-up bit-identical in compiled
+            # FLOPs while still changing ``compile_signature()``, and batch surfaces
+            # pay that per resolved clone. The "dominant lever" numbers above were
+            # measured on the pre-gate tree and hold only for a model with no
+            # ``sed_nebular`` consumer.
+            #
+            # #1770: but a batch fit whose Observation carries line fluxes is served
+            # by the OTHER consumer, which dust does not touch — measured 4.67x on a
+            # dusty model. ``data_type`` names the primary data array, not the channel
+            # set, so "photometry" here does not mean "no lines".
             if (
                 not has_feature
                 and not _has_line_adjacent_channel(model)
-                and fast_nebular_can_engage(model)
+                and feature_precomp_can_engage(model)
             ):
                 existing = tuple(getattr(model, "approx_configs", ()))
                 extra = (FeaturePrecomp(),) if has_wave else (cfg, FeaturePrecomp())
@@ -1435,19 +1518,24 @@ class Fitter:
         # the cost it exists to avoid, and a broken one. Correctness outranks
         # the line speedup, and the refusal is loud rather than silent.
         #
-        # A model whose chain reads ``sed_nebular`` (i.e. anything with dust) also
-        # gets nothing: measured bit-identical compiled FLOPs with and without
-        # ``FeaturePrecomp`` since #1281. Appending it there is not merely useless —
-        # it changes ``compile_signature()``, so the fit pays a second compiled
-        # kernel to add a config with no effect (#1748).
+        # ``feature_precomp_can_engage``, NOT ``fast_nebular_can_engage``. #1760 put
+        # the latter here and broke the branch it guards: it answers about the
+        # nebular CONTINUUM shortcut, which dust disarms, while this branch fires
+        # precisely when a line channel — the other consumer — is present. On the
+        # same dusty model the two mechanisms measured 1.00x and 1.08x-to-7.19x
+        # (#1770). ``fits_lines=True`` is passed because it is already established
+        # by the conjunct to the left; re-deriving it off the Observation would
+        # miss a ``line_flux_data=`` override.
         wants_lut = (
             self._fits_lines(model)
             and not _has_line_adjacent_channel(model)
-            and fast_nebular_can_engage(model)
+            and feature_precomp_can_engage(model, fits_lines=True)
         )
         return (base, FeaturePrecomp()) if wants_lut else base
 
-    def _add_feature_precomp(self, model, *, warn_on_failure: bool = True):
+    def _add_feature_precomp(
+        self, model, *, warn_on_failure: bool = True, fits_lines: bool | None = None
+    ):
         """Top up a build-time ``approx=`` with ``FeaturePrecomp``.
 
         A model built with ``approx=WavePrecomp()`` used to be returned
@@ -1473,6 +1561,12 @@ class Fitter:
             top-up, where a backend with nothing to tabulate is the *expected*
             case rather than an anomaly — warning there would fire on every
             non-Cue model and name a remedy the caller cannot apply.
+        fits_lines : bool or None, keyword-only, optional
+            Whether this fit has a line channel, forwarded to
+            :func:`feature_precomp_can_engage`. ``None`` lets that predicate read the
+            Observation. Deliberately distinct from ``warn_on_failure``, which the two
+            callers happen to co-vary with today: collapsing them would make one flag
+            gate both "is this worth attaching" and "is failing worth announcing".
 
         Returns
         -------
@@ -1498,12 +1592,17 @@ class Fitter:
         # feature LUT, whatever route asked for it.
         if _has_line_adjacent_channel(model):
             return model
-        # Nor top up a model the LUT cannot help. Since #1281 a chain that reads
-        # ``sed_nebular`` — anything with dust — disarms the grid's photometry
-        # shortcut, and the top-up is then measured bit-identical in compiled FLOPs
-        # while still changing ``compile_signature()``: a second compiled kernel for
-        # no effect (#1748). Returning the model untouched is strictly better.
-        if not fast_nebular_can_engage(model):
+        # Nor top up a model the LUT cannot help by EITHER route. A chain that reads
+        # ``sed_nebular`` — anything with dust — disarms the continuum shortcut since
+        # #1281, and the top-up is then bit-identical in compiled FLOPs while still
+        # changing ``compile_signature()``: a second compiled kernel for no effect
+        # (#1748). But the line-flux consumer is untouched by dust and measured 4.67x
+        # on that same dusty model, so the question has to be asked about both
+        # (#1770). ``fits_lines`` carries the caller's resolved answer because a
+        # ``line_flux_data=`` override and marginalized spectroscopy amplitudes are
+        # invisible on the Observation; it is a separate argument from
+        # ``warn_on_failure`` on purpose — one switch must not gate two decisions.
+        if not feature_precomp_can_engage(model, fits_lines=fits_lines):
             return model
         existing = tuple(getattr(model, "approx_configs", ()))
         try:
@@ -1569,7 +1668,10 @@ class Fitter:
                 # place. Restating it here is what let the two spellings drift
                 # apart in the first place.
                 if self._fits_lines(model):
-                    return self._add_feature_precomp(model)
+                    # fits_lines=True is the whole reason this branch fired; passing
+                    # it keeps the top-up from re-deriving a narrower answer off the
+                    # Observation and refusing a fit that does have a line channel.
+                    return self._add_feature_precomp(model, fits_lines=True)
                 # #1683: #1596 in its BUILD-TIME spelling. The fix that landed
                 # in #1656 tops up only the branch below, where the model carries
                 # no approx at all; a photometry-only Cue model built WITH
@@ -1581,7 +1683,11 @@ class Fitter:
                 # failure: a backend with nothing to tabulate is the common
                 # case here, not an anomaly worth warning about.
                 if self.data_type == "photometry" and not _has_line_adjacent_channel(model):
-                    return self._add_feature_precomp(model, warn_on_failure=False)
+                    # Reached only when ``_fits_lines`` was False just above, so the
+                    # continuum shortcut is the only consumer left to justify the LUT.
+                    return self._add_feature_precomp(
+                        model, warn_on_failure=False, fits_lines=False
+                    )
                 return model
             cfg = self._auto_approx_config(model)
             if cfg is None:
@@ -1597,6 +1703,14 @@ class Fitter:
                 # This branch appends the config directly rather than through
                 # ``_add_feature_precomp``, so it needs the predicate of its own;
                 # guarding only the helper left this path attaching it anyway.
+                #
+                # The NARROW predicate is correct here, and this is the one site
+                # where it is: the conjunction above already requires
+                # ``not self._fits_lines(model)``, so the line consumer is ruled out
+                # by construction and the continuum shortcut is all that is left to
+                # justify the append. Widening this to
+                # ``feature_precomp_can_engage`` would be a no-op at best and would
+                # blur why the other sites had to change (#1770).
                 and fast_nebular_can_engage(model)
             ):
                 # #1596: a photometry-only Cue fit measured ~4x SLOWER than
@@ -1636,12 +1750,17 @@ class Fitter:
             # remedy that cannot be applied, and advice you cannot act on reads
             # as a defect in the caller's model.
             return
-        if not fast_nebular_can_engage(model):
-            # Same reasoning, a different cause: this model's chain reads
-            # ``sed_nebular`` (dust does), so the grid may not serve photometry and
-            # ``FeaturePrecomp`` is measured bit-identical here — 1.00x, not 21x
-            # (#1748). Quoting a speedup the user cannot obtain sends them to change
-            # a setting that will do nothing, and reads as a defect in their model.
+        if not feature_precomp_can_engage(model, fits_lines=True):
+            # Same reasoning, a different cause: no consumer can use the LUT, so
+            # quoting a speedup the user cannot obtain sends them to change a setting
+            # that will do nothing, and reads as a defect in their model.
+            #
+            # ``fits_lines=True`` is not a formality — this method returns early
+            # unless ``_fits_lines`` already said so. #1760 wrote
+            # ``fast_nebular_can_engage`` here instead and silenced the warning for
+            # every dusty line fit, i.e. for the models that had the most to gain
+            # (4.67x measured). The suppression is for a LUT that cannot engage,
+            # never for one that merely cannot engage via the continuum (#1770).
             return
         state = getattr(model, "approx", None)
         if state is not None and state.feature_precomp:
