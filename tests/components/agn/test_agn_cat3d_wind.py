@@ -117,16 +117,137 @@ def test_jit_compatible(torus_fn, wavelength) -> None:
     chex.assert_tree_all_finite(sed)
 
 
-def test_grad_flows_through_all_axes(torus_fn, wavelength) -> None:
-    """Gradient must flow through each of the three grid axes."""
-
-    def scalar_loss(ci: float, a: float, fwd: float) -> float:
+def _scalar_loss(torus_fn, wavelength):
+    def loss(ci: float, a: float, fwd: float) -> float:
         sed = torus_fn(wavelength, agn_cos_inc=ci, agn_a_cat3d=a, agn_fwd_cat3d=fwd)
         return jnp.log1p(jnp.sum(sed))
 
-    grads = jax.grad(scalar_loss, argnums=(0, 1, 2))(0.5, -2.0, 0.2)
-    for g in grads:
-        assert jnp.isfinite(g)
+    return loss
+
+
+# Measured extent of the three grid axes: outside these, the interpolation
+# clamps and the derivative along that axis is exactly zero (see
+# test_gradient_is_exactly_zero_off_grid).  a in [-3.0, -1.5], fwd in
+# (1.0, 2.25].  An interior point is required for any gradient assertion.
+_INTERIOR = (0.5, -2.0, 1.5)
+
+
+def test_grad_flows_through_all_axes(torus_fn, wavelength) -> None:
+    """Gradient must flow through each of the three grid axes.
+
+    The docstring's claim, now actually asserted.  This previously evaluated
+    at ``fwd=0.2`` — below the grid's lower edge of 1.0, where the fwd
+    interpolation is clamped and ``d/d(fwd)`` is identically zero.  The
+    assertion was ``isfinite``, which zero satisfies, so the one axis the
+    test names in its own title was dead and the test still passed.
+    """
+    grads = jax.grad(_scalar_loss(torus_fn, wavelength), argnums=(0, 1, 2))(*_INTERIOR)
+    names = ("agn_cos_inc", "agn_a_cat3d", "agn_fwd_cat3d")
+    for name, g in zip(names, grads, strict=True):
+        assert jnp.isfinite(g), f"{name}: gradient is not finite ({g})"
+        assert float(g) != 0.0, f"{name}: gradient is identically zero — axis is dead"
+
+
+@pytest.mark.parametrize(
+    ("axis", "point", "argnum"),
+    [
+        ("agn_a_cat3d below grid", (0.5, -3.5, 1.5), 1),
+        ("agn_a_cat3d above grid", (0.5, -1.0, 1.5), 1),
+        ("agn_fwd_cat3d below grid", (0.5, -2.0, 0.5), 2),
+        ("agn_fwd_cat3d above grid", (0.5, -2.0, 2.5), 2),
+    ],
+)
+def test_gradient_is_exactly_zero_off_grid(torus_fn, wavelength, axis, point, argnum) -> None:
+    """Off the template grid the interpolation clamps, so the axis loses its gradient.
+
+    Documented rather than asserted-around: a fitter whose sampler wanders
+    outside the grid gets no restoring force along that axis and stalls
+    there silently, because the value stays finite the whole time.  Pinning
+    it means the trap is visible, and a future switch to an extrapolating
+    kernel turns this red instead of changing fit behaviour unremarked.
+    """
+    g = jax.grad(_scalar_loss(torus_fn, wavelength), argnums=argnum)(*point)
+    assert float(g) == 0.0, f"{axis}: expected a clamped (zero) gradient, got {float(g)}"
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "cat3d_wind: d/d(agn_cos_inc) is wrong at both ends of the declared "
+        "Uniform(0, 1) prior, while correct in the interior. At cos_inc=0 "
+        "(edge-on) it is exactly -0.0 against a limit of -3.941267e-01. At "
+        "cos_inc=1 (face-on) it is exactly HALF the limit: -1.176157 vs "
+        "-2.352332, ratio 2.000016 / 2.000037 / 2.000010 / 1.999975 at "
+        "(a,fwd) = (-2.0,1.5) / (-2.5,2.0) / (-1.75,1.2) / (-3.0,1.1). "
+        "Interior points are clean to 6 s.f., so this is an endpoint "
+        "convention, not a general interpolation defect."
+    ),
+)
+@pytest.mark.parametrize(
+    ("cos_inc", "nudge"),
+    [pytest.param(0.0, 1e-6, id="edge-on"), pytest.param(1.0, -1e-6, id="face-on")],
+)
+def test_cos_inc_gradient_is_right_at_the_prior_endpoints(
+    torus_fn, wavelength, cos_inc, nudge
+) -> None:
+    """Both endpoints carry prior mass, so a broken derivative there is live.
+
+    ``agn_cos_inc`` is declared ``Uniform(0.0, 1.0)`` and its description
+    reads "0=edge-on, 1=face-on" — these are not academic corners but the
+    two most natural inclinations a user pins by hand.  The SED value is
+    finite at both, so nothing warns; only the derivative is wrong, and a
+    fitter reads that as a flat (or half-strength) direction.
+    """
+    grad_fn = jax.grad(_scalar_loss(torus_fn, wavelength), argnums=0)
+    at_endpoint = float(grad_fn(cos_inc, -2.0, 1.5))
+    just_inside = float(grad_fn(cos_inc + nudge, -2.0, 1.5))
+    assert at_endpoint == pytest.approx(just_inside, rel=1e-3), (
+        f"cos_inc={cos_inc}: derivative {at_endpoint:.6e} disagrees with its "
+        f"own one-sided limit {just_inside:.6e}"
+    )
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "The unified dispatch wrapper turns the face-on endpoint into a "
+        "non-finite gradient that the raw grid function does not have: "
+        "d/d(agn_cos_inc) at cos_inc=1.0 is +inf for agn_lum_ratio in "
+        "{0.1, 0.5, 1.0} and NaN for agn_lum_ratio=0.0, at every (a,fwd) "
+        "tried. The SED value there is finite (loss 150.037) and the limit "
+        "is well-behaved: -1.110820 (0.99), -1.055614 (0.999), -1.047113 "
+        "(0.9999), -1.046148 (0.999999). The raw path returns a finite "
+        "-1.176157 at the same point, so the wrapper introduces this."
+    ),
+)
+@pytest.mark.parametrize("lum_ratio", [0.0, 0.1, 1.0])
+def test_unified_face_on_gradient_is_finite(wavelength, lum_ratio) -> None:
+    """A non-finite gradient at a sampled parameter value poisons the fit.
+
+    Nothing upstream warns, because the forward value is finite — the NaN
+    only appears once the sampler applies the update, far from its cause.
+    """
+    import warnings
+
+    from tengri.components.agn.unified import resolve_agn_model
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        fn = resolve_agn_model("cat3d_wind")
+
+    def loss(ci: float) -> float:
+        sed = fn(
+            wavelength,
+            agn_log_lbol=44.0,
+            agn_lum_ratio=lum_ratio,
+            agn_cos_inc=ci,
+            agn_a_cat3d=-2.0,
+            agn_fwd_cat3d=1.5,
+        )
+        return jnp.log1p(jnp.sum(sed))
+
+    g = jax.grad(loss)(1.0)
+    assert jnp.isfinite(g), f"lum_ratio={lum_ratio}: d/d(agn_cos_inc) = {float(g)}"
 
 
 def test_unified_dispatch_registered() -> None:

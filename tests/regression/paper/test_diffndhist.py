@@ -107,48 +107,145 @@ class TestTwNdhistWeighted:
         assert jnp.isclose(mean_bin1, 100.0, atol=1.0)
 
 
+_BINS_LO = jnp.array([[0.0], [5.0]])
+_BINS_HI = jnp.array([[5.0], [10.0]])
+_SIGMA = 0.5
+
+# The triweight kernel has COMPACT support of exactly +/-3 sigma, so where a
+# point sits relative to a bin edge decides whether it has a derivative at
+# all.  These two lie 0.6 and 1.8 sigma outside the edge at 5.0 — inside the
+# support, and deliberately asymmetric about it: the symmetric pair
+# [[4.5], [5.5]] balances the two bins and lands on a stationary point of
+# sum(hist**2), where every gradient is zero for reasons that have nothing to
+# do with differentiability.
+_LIVE_DATA = jnp.array([[4.7], [5.9]])
+
+# 4 sigma from the nearest edge: outside the kernel support entirely.
+_DEAD_DATA = jnp.array([[3.0], [7.0]])
+
+
 class TestDifferentiability:
-    """Verify jax.grad passes through the histogram."""
+    """jax.grad must carry real signal through the histogram, not finite zeros.
+
+    Every test in this class used to evaluate at ``[[3.0], [7.0]]`` — both
+    points 4 sigma from the nearest bin edge, so outside the triweight's
+    compact support, where the true derivative is exactly 0.0.  The
+    assertions were ``isfinite``, which zero satisfies.  Wrapping the
+    histogram in ``jax.lax.stop_gradient`` would not have failed any of them.
+    """
 
     def test_grad_through_ndhist(self):
         def loss(data):
-            ndsig = jnp.full_like(data, 0.5)
-            ndbins_lo = jnp.array([[0.0], [5.0]])
-            ndbins_hi = jnp.array([[5.0], [10.0]])
-            hist = tw_ndhist(data, ndsig, ndbins_lo, ndbins_hi)
+            hist = tw_ndhist(data, jnp.full_like(data, _SIGMA), _BINS_LO, _BINS_HI)
             return jnp.sum(hist**2)
 
-        data = jnp.array([[3.0], [7.0]])
-        grads = assert_grad_matches_fd(loss, data)
-        chex.assert_equal_shape([grads, data])
+        grads = assert_grad_matches_fd(loss, _LIVE_DATA)
+        chex.assert_equal_shape([grads, _LIVE_DATA])
         chex.assert_tree_all_finite(grads)
+        for i, g in enumerate(grads.ravel()):
+            assert float(g) != 0.0, f"data[{i}]: no gradient reaches the histogram"
 
     def test_grad_through_weighted_ndhist(self):
-        def loss(data, y):
-            ndsig = jnp.full_like(data, 0.5)
-            ndbins_lo = jnp.array([[0.0], [5.0]])
-            ndbins_hi = jnp.array([[5.0], [10.0]])
-            wh = tw_ndhist_weighted(data, ndsig, y, ndbins_lo, ndbins_hi)
-            return jnp.sum(wh)
+        """Uses sum-of-squares: a bare sum is position-invariant by construction.
 
-        data = jnp.array([[3.0], [7.0]])
+        ``sum(tw_ndhist_weighted(...))`` equals ``sum(y)`` for any interior
+        data — see TestWeightConservation — so the old ``jnp.sum(wh)`` loss
+        had ``d/d(data) == 0`` identically, for every input, independent of
+        where the points sat.  Squaring makes the loss depend on how the
+        weight is *split* between bins, which is the thing being smoothed.
+        """
+
+        def loss(data, y):
+            wh = tw_ndhist_weighted(data, jnp.full_like(data, _SIGMA), y, _BINS_LO, _BINS_HI)
+            return jnp.sum(wh**2)
+
         y = jnp.array([1.0, 2.0])
-        grads_data, grads_y = jax.grad(loss, argnums=(0, 1))(data, y)
+        grads_data, grads_y = jax.grad(loss, argnums=(0, 1))(_LIVE_DATA, y)
         chex.assert_tree_all_finite(grads_data)
         chex.assert_tree_all_finite(grads_y)
+        for i, g in enumerate(grads_data.ravel()):
+            assert float(g) != 0.0, f"data[{i}]: weighted histogram is detached"
+        for i, g in enumerate(grads_y.ravel()):
+            assert float(g) != 0.0, f"y[{i}]: weights are detached"
 
     def test_grad_through_scatter(self):
         def loss(sig):
-            data = jnp.array([[3.0], [7.0]])
-            ndbins_lo = jnp.array([[0.0], [5.0]])
-            ndbins_hi = jnp.array([[5.0], [10.0]])
-            hist = tw_ndhist(data, sig, ndbins_lo, ndbins_hi)
+            hist = tw_ndhist(_LIVE_DATA, sig, _BINS_LO, _BINS_HI)
             return jnp.sum(hist**2)
 
-        sig = jnp.array([[0.5], [0.5]])
+        sig = jnp.full_like(_LIVE_DATA, _SIGMA)
         grads = assert_grad_matches_fd(loss, sig)
         chex.assert_equal_shape([grads, sig])
         chex.assert_tree_all_finite(grads)
+        for i, g in enumerate(grads.ravel()):
+            assert float(g) != 0.0, f"sigma[{i}]: scatter has no gradient"
+
+    @pytest.mark.parametrize("n_sigma", [3.0, 4.0])
+    def test_gradient_vanishes_outside_the_kernel_support(self, n_sigma):
+        """Beyond 3 sigma the derivative is exactly zero — the trap, pinned.
+
+        This is correct behaviour for a compactly supported kernel, not a
+        bug, but it is why the three tests above were silently vacuous: the
+        value stays finite the whole way out, so only a non-zero check can
+        tell "differentiable" from "far enough away not to matter".
+        """
+        x = 5.0 - n_sigma * _SIGMA
+        data = jnp.array([[float(x)], [7.0]])
+
+        def loss(d):
+            hist = tw_ndhist(d, jnp.full_like(d, _SIGMA), _BINS_LO, _BINS_HI)
+            return jnp.sum(hist**2)
+
+        g = float(jax.grad(loss)(data).ravel()[0])
+        assert abs(g) <= 1e-15, f"{n_sigma} sigma out: expected no gradient, got {g:.3e}"
+
+    def test_the_old_fixture_had_no_gradient_at_all(self):
+        """The exact point the three tests above used to evaluate at.
+
+        Both members of ``[[3.0], [7.0]]`` sit 4 sigma from the edge at 5.0.
+        Every gradient there is identically zero — w.r.t. data and w.r.t.
+        scatter — so ``isfinite`` was satisfied by a number carrying no
+        information.  Kept as the standing proof that the fixture move was
+        necessary rather than cosmetic.
+        """
+
+        def data_loss(d):
+            hist = tw_ndhist(d, jnp.full_like(d, _SIGMA), _BINS_LO, _BINS_HI)
+            return jnp.sum(hist**2)
+
+        def sig_loss(s):
+            return jnp.sum(tw_ndhist(_DEAD_DATA, s, _BINS_LO, _BINS_HI) ** 2)
+
+        assert not jnp.any(jax.grad(data_loss)(_DEAD_DATA))
+        assert not jnp.any(jax.grad(sig_loss)(jnp.full_like(_DEAD_DATA, _SIGMA)))
+
+
+class TestWeightConservation:
+    """The weighted histogram must preserve total weight where it can."""
+
+    @pytest.mark.parametrize("x", [2.0, 3.0, 5.0, 7.0, 8.0])
+    def test_total_weight_is_conserved_in_the_interior(self, x):
+        """Smoothing redistributes weight between bins; it must not create it."""
+        data = jnp.array([[float(x)], [7.0]])
+        y = jnp.array([1.0, 2.0])
+        wh = tw_ndhist_weighted(data, jnp.full_like(data, _SIGMA), y, _BINS_LO, _BINS_HI)
+        assert float(jnp.sum(wh)) == pytest.approx(float(jnp.sum(y)), rel=1e-12)
+
+    @pytest.mark.parametrize(
+        ("x", "expected"), [(0.0, 2.5), (10.0, 2.5), (0.5, 2.82670325), (9.5, 2.82670325)]
+    )
+    def test_weight_leaks_off_the_ends_of_the_binned_domain(self, x, expected):
+        """Sitting on the outer edge loses exactly half of that point's weight.
+
+        The kernel spills past the first/last bin and that mass is dropped.
+        Worth pinning: a catalog whose extreme objects sit at the domain edge
+        is silently down-weighted, and the total still looks plausible.
+        """
+        data = jnp.array([[float(x)], [7.0]])
+        y = jnp.array([1.0, 2.0])
+        wh = tw_ndhist_weighted(data, jnp.full_like(data, _SIGMA), y, _BINS_LO, _BINS_HI)
+        assert float(jnp.sum(wh)) == pytest.approx(expected, rel=1e-6)
+        assert float(jnp.sum(wh)) < float(jnp.sum(y))
 
 
 class TestJIT:
