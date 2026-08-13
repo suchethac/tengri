@@ -105,7 +105,7 @@ def test_boost_raises_youngest_weight_and_conserves_mass():
             "log_total_mass": Fixed(log_mass),
             "*": FIXED,
         },
-        stellar={"met_logzsol": Fixed(0.0), "*": FIXED},
+        met={"logzsol": Fixed(0.0), "*": FIXED},
         dust={
             "type": "two_component",
             "tau_bc": Fixed(0.0),
@@ -180,7 +180,7 @@ def test_qh_recovers_exact_convolution_real_grid(real_ssp_only):
             "log_total_mass": Fixed(0.0),
             "*": FIXED,
         },
-        stellar={"met_logzsol": Fixed(0.0), "*": FIXED},
+        met={"logzsol": Fixed(0.0), "*": FIXED},
         dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
         redshift=Fixed(z),
     )

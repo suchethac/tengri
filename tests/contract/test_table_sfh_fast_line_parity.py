@@ -84,7 +84,7 @@ def _build(synthetic_ssp_wide, synthetic_tophat_obs, *, met_table=False):
     if met_table:
         # Metallicity's structural axis lives under the `stellar` group as
         # `met_mode` — there is no top-level `met` group in the build grammar.
-        groups["stellar"] = {"met_mode": "table"}
+        groups["met"] = {"type": "table"}
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         return SEDModel.build(**groups)

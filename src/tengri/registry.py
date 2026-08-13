@@ -338,7 +338,10 @@ def _usage_hint(name: str, kind: str) -> str:
     if kind == "shock_model":
         return f"SEDModel.build(..., shock={{'type': '{name}'}})"
     if kind == "metallicity_mode":
-        return f"SEDModel.build(..., stellar={{'met_mode': '{name}'}})"
+        # ``met={'type': ...}``, the parallel of ``sfh={'type': ...}`` (#1720),
+        # which replaced ``stellar={'met_mode': ...}``. One spelling, and it is
+        # the one the rest of the grammar uses.
+        return f"SEDModel.build(..., met={{'type': '{name}'}})"
     if kind == "igm_model":
         return f"SEDModel.build(..., igm={{'type': '{name}'}})"
     if kind == "component":
@@ -356,7 +359,7 @@ def _usage_hint(name: str, kind: str) -> str:
 # was another of that formula's phantoms; it is real now, but it names the
 # structural axis only — the formula still guesses wrong for every other group.)
 _COMPONENT_MENUS: dict[str, str] = {
-    "stellar": "list_sfh_models() / list_metallicity_modes()",
+    "met": "list_metallicity_modes()",
     "dust": "list_dust_models() / list_dust_laws() / list_dust_emission_models()",
     "agn": "list_agn_models() / list_agn_blocks()",
     "nebular": "list_nebular_backends()",
@@ -1162,9 +1165,10 @@ def list_shock_models(*, status: str | None = None) -> _RegistryTable:
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
 
-# Metallicity modes — the ``stellar={'met_mode': ...}`` axis. Names are NOT
+# Metallicity modes — the ``met={'type': ...}`` axis (#1720, replacing the
+# ``stellar={'met_mode': ...}`` spelling of #311). Names are NOT
 # listed here: :func:`list_metallicity_modes` derives them from ``MET_REGISTRY``
-# itself, the same dict ``_translate_stellar`` validates against, so a mode
+# itself, the same dict ``_translate_met`` validates against, so a mode
 # added to the physics cannot be missing from the menu. This table carries only
 # the prose, lifted from each mode's section header in ``met_registry.py``.
 _METALLICITY_MODE_METADATA: dict[str, dict[str, str]] = {
@@ -1182,7 +1186,7 @@ _METALLICITY_MODE_METADATA: dict[str, dict[str, str]] = {
 
 
 def list_metallicity_modes(*, status: str | None = None) -> _RegistryTable:
-    """List the metallicity modes — the ``stellar={'met_mode': ...}`` choice.
+    """List the metallicity modes — the ``met={'type': ...}`` choice.
 
     The metallicity axis is structural in the same sense as the SFH or dust
     axis: it decides whether a fit carries one metallicity, an evolving one, or

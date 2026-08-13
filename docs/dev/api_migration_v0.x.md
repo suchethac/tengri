@@ -1026,6 +1026,44 @@ engine; new code should use `Catalog`.
 
 ---
 
+## Metallicity is the `met` group (2026-08, #1720)
+
+**Breaking — no shim.** The `stellar` build group is removed; metallicity is
+configured through `met`, parallel to `sfh`.
+
+| old (removed)                        | new                          |
+| ------------------------------------ | ---------------------------- |
+| `stellar={'met_mode': 'table'}`      | `met={'type': 'table'}`      |
+| `stellar={'met_mode': 'ramp'}`       | `met={'type': 'ramp'}`       |
+| `stellar={'met_logzsol': Uniform(…)}`| `met={'logzsol': Uniform(…)}`|
+| `stellar={'met_logzsol_0': …}`       | `met={'logzsol_0': …}`       |
+
+`tengri.list_metallicity_modes()` is the live menu.
+
+Two anomalies stacked here, which is why the old form was hard to guess. Every
+other group selects its variant with `type`; `stellar` alone used `met_mode`.
+And the group was *named* for the component rather than for what it configured,
+so `met={'type': 'table'}` — the spelling both conventions imply — was the one
+form the grammar rejected. #1677 was filed by someone writing what the grammar
+should have accepted.
+
+**Why no `deprecated_alias` shim**, against the usual rule below: the shims in
+`_deprecated.py` rename a *symbol*, where old and new denote the same object. A
+build-group key is parsed, not imported, and accepting both spellings would mean
+carrying two grammars through `parse_groups`, `to_groups()`, the provenance
+tags, and every wildcard sweep — the duplication the change exists to remove.
+`stellar=` raises instead, carrying the translation, because `difflib` will not
+suggest `met` for `stellar`: they share no prefix, so the generic unknown-group
+error would leave a reader holding a dead name with no route forward.
+
+Note this makes the raised message the *only* migration aid in the code, which
+is a load-bearing role a string is badly suited to — it shipped once reading
+"`met={'type': 'table'}` becomes `met={'type': 'table'}`" after a rename sweep
+rewrote the before-side. A test now asserts the message names the keys it
+translates *from*.
+
+---
+
 ## How to update this document
 
 1. Land the rename or move with a `deprecated_alias` shim in

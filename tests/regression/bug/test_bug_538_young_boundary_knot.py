@@ -106,7 +106,7 @@ def test_young_knot_preserves_mass_conservation():
                 "log_total_mass": Fixed(log_mass),
                 "*": FIXED,
             },
-            stellar={"met_logzsol": Fixed(0.0), "*": FIXED},
+            met={"logzsol": Fixed(0.0), "*": FIXED},
             dust={
                 "type": "two_component",
                 "tau_bc": Fixed(0.0),

@@ -280,6 +280,67 @@ class GridSupportWarning(AdvisoryWarning):
     """
 
 
+class OutOfSSPGridWarning(UserWarning):
+    """An ingested metallicity history reaches past the SSP's metallicity grid.
+
+    The metallicity lookup ``jnp.clip``s onto ``ssp_lgmet``, so a node outside
+    the grid returns the edge template: ``logzsol = -6`` was measured to give
+    byte-identical photometry to the grid edge at ``-2.152`` (issue #1677). The
+    SED stays smooth and plausible, which is what makes it hard to notice.
+
+    :func:`~tengri.inference.history_ingest.ingest_histories` raises on this by
+    default; this category is what ``on_out_of_grid='warn'`` emits instead. It is
+    deliberately **not** an :class:`AdvisoryWarning`: advisories describe a model
+    being constructed and are silenced wholesale by the introspection paths,
+    whereas this describes *data* arriving at ingest and must survive them.
+
+    The payload carries ``mass_fraction_outside`` — the share of stellar mass
+    formed on clamped nodes — because node counts alone do not say whether the
+    clamp matters. Read it back with
+    :func:`~tengri.config.exceptions.measurements_of`.
+    """
+
+
+class MetallicityUnitWarning(UserWarning):
+    """A metallicity history looks like a metal mass fraction read as log10(Z/Zsun).
+
+    ``met_unit=`` exists so a caller can declare which convention a history
+    arrives in, but declaring it is optional and the default is ``'logzsol'``.
+    That default cannot be checked against the SSP grid, because a mass fraction
+    is a small *positive* number and small positive log10(Z/Zsun) values are
+    legal — ``Z = 0.011`` read as log10(Z/Zsun) is 1.03 :math:`Z_\\odot`, well
+    inside every grid. The out-of-range guard is structurally unable to see it;
+    the result is a plausible all-solar SED (issue #1677).
+
+    What separates the two is dynamic range, not magnitude. Chemical enrichment
+    moves Z(t) by orders of magnitude across cosmic time, so a history whose
+    every node sits inside a ~0.1 dex band immediately above solar is a mass
+    fraction essentially every time.
+
+    The test runs on the **converted** values, so a history correctly declared
+    ``met_unit='z_mass_fraction'`` lands near :math:`-2 \\ldots 0` and never
+    trips it. Only the ambiguous case is reachable.
+    """
+
+
+class GasStellarMetallicityWarning(UserWarning):
+    """Enriched stars sitting in gas that never enriched with them.
+
+    Stellar metallicity (which SSP templates the population is drawn from) and
+    gas-phase metallicity (which drives nebular emission) are separate
+    parameters, and correctly so — inflow of pristine gas genuinely decouples
+    them. But ``neb_logZ_gas`` has a *declared default* of -0.3, and the build
+    grammar always supplies it, so the ``if neb_logZ_gas is None: neb_logZ_gas
+    = log_z`` inheritance inside the CLOUDY / Cue / MAPPINGS backends never
+    runs. Measured: leaving it unset is bit-identical to setting -0.3 (#1677).
+
+    A tabulated stellar history therefore enriches the stars while the gas stays
+    pinned at 0.5 :math:`Z_\\odot`, silently. This warns only when the value was
+    left at its declaration and the caller passed neither ``met_gas=`` nor a
+    ``neb_logZ_gas`` column — a deliberate offset never trips it.
+    """
+
+
 class PrecompBiasWarning(AdvisoryWarning):
     """The precompute LUT's forward bias, amplified by this fit's SNR, is material.
 

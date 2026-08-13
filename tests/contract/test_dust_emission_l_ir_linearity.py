@@ -47,7 +47,7 @@ def _model(ssp, model_name, eta, **emission_extra):
     emission.update(emission_extra)
     return SEDModel.build(
         ssp_data=ssp,
-        stellar={"logzsol": Fixed(0.0), "*": FIXED},
+        met={"logzsol": Fixed(0.0), "*": FIXED},
         sfh={
             "type": "delayed",
             "tau_gyr": Fixed(1.0),

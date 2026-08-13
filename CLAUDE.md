@@ -181,6 +181,16 @@ model = SEDModel.build(
   wildcard (`FREE`/`FIXED`; default `FIXED`; the `'*'` synonym is still accepted
   but slated for deprecation), and per-parameter short-form overrides (e.g.
   `'beta'` inside the sfh group resolves to `sfh_dpl_beta`).
+- **`met` is the metallicity group**, parallel to `sfh`: `met={'type': 'table'}`,
+  `met={'type': 'ramp', 'logzsol_0': ...}`, `met={'logzsol': Uniform(...)}`.
+  The `stellar={'met_mode': ...}` spelling of #311 is **gone** (#1720) — it was
+  the one group naming its structural key something other than `'type'`, and the
+  only group whose name did not match what it configured, which is how #1677
+  shipped advice the grammar refused. Passing `stellar=` raises with the
+  translation. `tengri.list_metallicity_modes()` is the live menu.
+  **The group census is derived**, not restated: `valid_groups` comes from
+  `_GROUP_STRUCTURAL_KEYS`, and `SEDModel.build`'s signature is the one
+  remaining hand-maintained copy — add a group to both.
 - Sub-blocks: `dust.emission`, plus the six AGN composable selectors —
   `agn.disc`, `agn.torus`, `agn.nlr`, `agn.blr`, `agn.feii`, `agn.atten`
   (the deprecated `agn.lines` alias expands to an nlr/blr pair). Each nests
@@ -281,7 +291,7 @@ Deprecated (warn + delegate; do not use, do not teach):
 ## Key conventions
 
 - **Physical constants**: Import from `utils/physics_constants.py` — do NOT define local constant literals. Exception: `L_SUN_CUE = 3.839e33` in `cue.py` is intentional (Cue training convention, not IAU 2015).
-- **Metallicity**: SSP grid is `log10(Z)` absolute, not `log10(Z/Zsun)`. Offset: `LOG10_ZSUN = -1.848` (Asplund 2009, **Zsun = 0.0142**, matches MIST). User-facing `met_logzsol` and `neb_logZ_gas` are `log10(Z/Zsun)` (param_map adds LOG10_ZSUN). **Default** `met_logzsol = 0.0` (solar — matches FSPS / Bagpipes). Per-SSP-library Zsun differs: BC03/Padova = 0.0190, PARSEC = 0.0152, BASTI = 0.0200 — see `LOG10_ZSUN_BY_LIBRARY` in `parameters/translate.py`. For bit-exact cross-code comparisons (e.g. CIGALE BC03), reason in **absolute** `log_z_abs = met_logzsol + LOG10_ZSUN` and pin that. See #412 for the audit trace.
+- **Metallicity**: SSP grid is `log10(Z)` absolute, not `log10(Z/Zsun)`. Offset: `LOG10_ZSUN = -1.848` (Asplund 2009, **Zsun = 0.0142**, matches MIST). User-facing `met_logzsol` and `neb_logZ_gas` are `log10(Z/Zsun)` (param_map adds LOG10_ZSUN). **Default** `met_logzsol = 0.0` (solar — matches FSPS / Bagpipes). Per-SSP-library Zsun differs: BC03/Padova = 0.0190, PARSEC = 0.0152, BASTI = 0.0200 — see `LOG10_ZSUN_BY_LIBRARY` in `parameters/translate.py`. For bit-exact cross-code comparisons (e.g. CIGALE BC03), reason in **absolute** `log_z_abs = met_logzsol + LOG10_ZSUN` and pin that. See #412 for the audit trace. **Simulation Z(t) histories** enter via `Catalog.from_histories(..., met=, met_gas=, met_unit=)` and are validated in `inference/history_ingest.py`: the lookup clips onto `ssp_lgmet` inside JIT where nothing can raise, so ingest is the only gate — it refuses off-grid nodes by default (`on_out_of_grid='raise'`, unlike the build-time scalar check of #442 which only warns) and flags a metal mass fraction read as `logzsol`, which is *in-grid* and so invisible to any range check (#1677). **Stellar and gas-phase Z are separate knobs**: `met=` is a per-age history selecting SSP templates, `met_gas=` a per-galaxy scalar driving nebular emission. They do **not** track each other — the `if neb_logZ_gas is None: neb_logZ_gas = log_z` inheritance in the four photoionized backends is dead code on the build path, because the grammar always supplies `neb_logZ_gas`'s declared `Fixed(-0.3)` (measured: unset is bit-exact with `-0.3`). A tabulated `met=` beside that default warns rather than enriching the stars but not the gas.
 - **ParamSpec free params** use full prefixes: `sfh_dpl_alpha`, `sfh_field_psd_sigma` — NOT shorthand. Check with `spec.free_params`.
 - **PSD timescale**: high-level API is **Myr** (`psd_tau_myr`); internal is **years** (`psd_tau_yr`).
 - **`agn_log_lbol`**: always `log10(L_bol / L_sun)` at API level. AGN functions convert to erg/s internally.

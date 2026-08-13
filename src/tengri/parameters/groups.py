@@ -745,13 +745,16 @@ def parse_groups(**kwargs) -> Parameters:
     # (issue #311); otherwise it stays in ``"sfh"`` so the legacy
     # ``sfh={'*': FIXED}`` wildcard keeps cascading over met_* params
     # — preserves pre-#311 behavior for every fixture/recipe that didn't
-    # pass a ``stellar={}`` block.
+    # pass a ``met={}`` block.
     dust_emission_active = structural_params.dust_emission is not None
-    has_stellar_block = isinstance(kwargs.get("stellar"), dict)
+    has_met_block = isinstance(kwargs.get("met"), dict)
+    # ``met`` owns met_* when present (#1720), else ``sfh`` — the pre-#311
+    # default, kept so a legacy ``sfh={'*': FIXED}`` wildcard still cascades
+    # over met_* for fixtures and recipes that pass no metallicity block.
     param_partition = _partition_by_group(
         structural_params.all_params,
         dust_emission_active,
-        met_group="stellar" if has_stellar_block else "sfh",
+        met_group="met" if has_met_block else "sfh",
     )
 
     # Resolve each parameter's final distribution
@@ -1597,18 +1600,13 @@ def _wildcard_scopes(
 
 def _translate_structural(groups: dict) -> dict:
     """Resolve each group's `type` choice into the matching Parameters kwargs."""
-    valid_groups = {
-        "sfh",
-        "stellar",
-        "dust",
-        "neb",
-        "shock",
-        "igm",
-        "radio",
-        "xray",
-        "agn",
-        "foreground",
-    }
+    # Derived, not restated. This was a second hand-maintained copy of the group
+    # list, and the two had to be edited together with nothing checking that they
+    # were: a group added to ``_GROUP_STRUCTURAL_KEYS`` alone would be rejected
+    # here as unknown, and one added only here would accept any key at all.
+    # Dotted entries are sub-blocks (``dust.emission``, ``igm.dla``), reached
+    # through their parent rather than named at top level.
+    valid_groups = {k for k in _GROUP_STRUCTURAL_KEYS if "." not in k}
     result = {}
 
     # Suggested model when someone tries the (unsupported) bool form for an
@@ -1624,6 +1622,18 @@ def _translate_structural(groups: dict) -> dict:
             # SEDModel-only kwarg (e.g. ``approx=WavePrecomp()``) splatted
             # in from a recipe — ignore at the parameters layer.
             continue
+
+        if group_name == "stellar":
+            raise ValueError(
+                "the 'stellar' group is gone (#1720); its one setting was the "
+                "metallicity mode, and that now lives in 'met', which selects "
+                "with 'type' like every other group. "
+                "A 'met_mode' key becomes met={'type': ...} — so the tabulated "
+                "mode is met={'type': 'table'} — and a 'met_logzsol' key becomes "
+                "met={'logzsol': ...}. "
+                "Two spellings of one setting was the maintenance cost this "
+                "removes; tengri.list_metallicity_modes() shows the current form."
+            )
 
         if group_name not in valid_groups:
             suggestions = difflib.get_close_matches(group_name, valid_groups, n=2, cutoff=0.6)
@@ -1653,8 +1663,8 @@ def _translate_structural(groups: dict) -> dict:
 
         if group_name == "sfh":
             _translate_sfh(group_dict, result)
-        elif group_name == "stellar":
-            _translate_stellar(group_dict, result)
+        elif group_name == "met":
+            _translate_met(group_dict, result)
         elif group_name == "dust":
             _translate_dust(group_dict, result)
         elif group_name == "neb":
@@ -1869,22 +1879,54 @@ def _translate_sfh(sfh_dict: dict, result: dict) -> None:
     result["mean_sfh_type"] = sfh_type
 
 
-def _translate_stellar(stellar_dict: dict, result: dict) -> None:
-    """Resolve ``stellar.met_mode`` into the matching Parameters kwarg.
+def _translate_met(met_dict: dict, result: dict) -> None:
+    """Resolve ``met.type`` into ``met_mode`` — the parallel of ``sfh.type`` (#1720).
 
-    Wires the chemical-evolution mode (``delta``, ``ramp``, ``two_step``,
-    ``psb_two_step``, ``bins``, ``bins_continuity``, ``chem_evol``, ``table``)
-    through the nested-dict builder. Per-mode parameters (``logzsol_old``,
-    ``logzsol_young``, ``step_age_gyr``, etc.) flow through the standard
-    pass-2 resolver, since :func:`_partition_by_group` routes ``met_*``
-    declarations into this group.
+    ``sfh`` and ``met`` describe the same thing from two angles: how much mass
+    formed when, and at what metallicity. They should read the same at the call
+    site, and until #1720 they did not — the metallicity mode lived under
+    ``stellar`` and used ``met_mode`` where every other group uses ``type``.
 
-    See :func:`tengri.components.stellar.sfh.met_registry` for the full
-    list of registered modes and their per-mode parameters.
+    That asymmetry is what produced #1677: ``Catalog.from_histories`` advised
+    ``met={'type': 'table'}``, the form both conventions imply, and the grammar
+    rejected it. The advice was right and the grammar was the outlier, so the
+    grammar moved.
+
+    ``stellar={'met_mode': ...}`` (the #311 spelling) is **gone**, not
+    deprecated: two spellings of one setting is a maintenance cost with no
+    upside, and every call site in the repo moved with this change. Passing
+    ``stellar=`` now raises with the one-line translation.
+
+    Parameters
+    ----------
+    met_dict : dict
+        The ``met=`` group. ``'type'`` selects a mode from ``MET_REGISTRY``.
+    result : dict
+        Parameters kwargs being assembled; ``met_mode`` is written into it.
+
+    Raises
+    ------
+    ValueError
+        If ``type`` is not a registered metallicity mode.
+
+    Notes
+    -----
+    **JIT-compatible**: no — construction-time grammar translation.
     """
+    if "met_mode" in met_dict:
+        raise ValueError(
+            "the met group selects its mode with 'type', like every other group "
+            "— not with 'met_mode'. Write met={'type': 'table'}. ('met_mode' is "
+            "the key of the older met={'type': ...} spelling, which also "
+            "still works; this mixes the two.)"
+        )
+    _set_met_mode(met_dict.get("type"), result, key="met={'type': ...}")
+
+
+def _set_met_mode(met_mode, result: dict, *, key: str) -> None:
+    """Validate a metallicity mode and record it, whichever spelling supplied it."""
     from tengri.components.stellar.sfh.met_registry import MET_REGISTRY
 
-    met_mode = stellar_dict.get("met_mode")
     if met_mode is None:
         # No explicit mode; let auto-inference (from per-param keys) decide.
         return
@@ -1894,7 +1936,8 @@ def _translate_stellar(stellar_dict: dict, result: dict) -> None:
         suggestions = difflib.get_close_matches(met_mode, valid_modes, n=2, cutoff=0.6)
         suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
         raise ValueError(
-            f"Unknown met_mode '{met_mode}'. Valid modes: {', '.join(valid_modes)}.{suggest_str}"
+            f"Unknown metallicity mode '{met_mode}' in {key}. Valid modes: "
+            f"{', '.join(valid_modes)}.{suggest_str}"
         )
 
     result["met_mode"] = met_mode
@@ -2492,7 +2535,11 @@ _AGN_SUBBLOCK_KEYS = frozenset({"disc", "torus", "nlr", "blr", "feii", "atten", 
 #: Keys nested in a sub-block (e.g. ``dust.emission``) appear separately.
 _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     "sfh": frozenset({"type", "*", "bin_edges_gyr", "age_kernel", "field_centering"}),
-    "stellar": frozenset({"met_mode", "*"}),
+    # ``met`` is the parallel of ``sfh``: both describe the stellar population's
+    # history, and both select a model with ``type`` like every other group
+    # (#1720). It replaces ``met={'type': ...}`` (#311) outright — two
+    # spellings of one setting is the maintenance cost this removes.
+    "met": frozenset({"type", "*"}),
     "dust": frozenset(
         {
             "type",
@@ -2605,11 +2652,15 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
         _Structural("age_kernel", "age_kernel", None),
         _Structural("field_centering", "field_centering", 1.0),
     ),
-    "stellar": (
-        # Always-emit would force a stellar={} entry onto every round-trip,
-        # which noisily breaks existing diff-against-from_groups call sites.
-        _Structural("met_mode", "met_mode", "delta"),
+    "met": (
+        # Emitted as 'type', the key every other group uses (#1720). Defaulting
+        # to 'delta' keeps it off the round-trip for the ordinary model, so a
+        # met={} entry is never forced onto call sites that diff against
+        # from_groups.
+        _Structural("type", "met_mode", "delta"),
     ),
+    # No 'stellar' entry: that group is gone (#1720). Its one setting was the
+    # metallicity mode, and it is emitted above as met={'type': ...}.
     "dust": (
         # Witt & Gordon (2000) screen selectors (FSPS dust_type=3). Only read
         # by the parser when the dust type is wg00, so a non-WG00 spec always
@@ -2779,7 +2830,7 @@ def _validate_user_keys(
     "AI slop" failure mode of the nested-dict API before this validator
     was added (issue tracked in the forward-model cleanup arc).
     """
-    valid_top_groups = {"sfh", "stellar", "dust", "neb", "shock", "igm", "radio", "xray", "agn"}
+    valid_top_groups = {"sfh", "met", "dust", "neb", "shock", "igm", "radio", "xray", "agn"}
 
     # Build the AGN cross-level acceptance set (shared params land in any sub-block).
     agn_shared_names = _short_names_for_group("agn", param_partition)
@@ -3640,15 +3691,17 @@ def parameters_to_groups(spec: Parameters) -> dict:
     True
     """
     result = {}
-    # Emit a ``stellar`` block on the round-trip only when ``met_mode`` is
-    # non-default OR the user explicitly built the spec with a stellar group
-    # (provenance check). Otherwise keep met_* under ``sfh`` for back-compat
-    # with the legacy fixtures that pre-#311 expected.
-    use_stellar = getattr(spec, "met_mode", "delta") != "delta"
+    # Emit a ``met`` block on the round-trip only when ``met_mode`` is
+    # non-default. Otherwise keep met_* under ``sfh`` for back-compat with the
+    # legacy fixtures that pre-#311 expected.
+    #
+    # The block emitted is ``met`` (#1720), which is the only spelling now:
+    # ``met={'type': ...}``, the parallel of ``sfh={'type': ...}``.
+    use_met_block = getattr(spec, "met_mode", "delta") != "delta"
     partition = _partition_by_group(
         spec.all_params,
         spec.dust_emission is not None,
-        met_group="stellar" if use_stellar else "sfh",
+        met_group="met" if use_met_block else "sfh",
     )
     provenance = getattr(spec, "_group_provenance", {})
 

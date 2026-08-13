@@ -28,7 +28,7 @@ def _build_psb(ssp, log_total_mass=10.0):
     """A dust-free, solar-metallicity psb_suess2022 model at z = 0."""
     return SEDModel.build(
         ssp_data=ssp,
-        stellar={"logzsol": Fixed(0.0), "*": FIXED},
+        met={"logzsol": Fixed(0.0), "*": FIXED},
         sfh={
             "type": "psb_suess2022",
             "log_total_mass": Fixed(log_total_mass),

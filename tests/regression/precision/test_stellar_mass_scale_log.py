@@ -37,7 +37,7 @@ def _model(ssp, log_mass=10.0):
     """
     return SEDModel.build(
         ssp_data=ssp,
-        stellar={"logzsol": Fixed(0.0), "*": FIXED},
+        met={"logzsol": Fixed(0.0), "*": FIXED},
         sfh={
             "type": "delayed",
             "tau_gyr": Fixed(1.0),
@@ -115,7 +115,7 @@ def test_dust_energy_balance_uses_the_published_log_scale(synthetic_ssp_wide):
     """
     model = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
-        stellar={"logzsol": Fixed(0.0), "*": FIXED},
+        met={"logzsol": Fixed(0.0), "*": FIXED},
         sfh={
             "type": "delayed",
             "tau_gyr": Fixed(1.0),

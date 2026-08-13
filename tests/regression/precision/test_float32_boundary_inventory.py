@@ -123,7 +123,7 @@ def _model(ssp):
     """Stellar + two-component dust + Dale IR emission, everything pinned."""
     return SEDModel.build(
         ssp_data=ssp,
-        stellar={"logzsol": Fixed(0.0), "*": FIXED},
+        met={"logzsol": Fixed(0.0), "*": FIXED},
         sfh={
             "type": "delayed",
             "tau_gyr": Fixed(1.0),

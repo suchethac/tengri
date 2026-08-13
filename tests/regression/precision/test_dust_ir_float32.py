@@ -88,7 +88,7 @@ def _physical_ssp(ssp):
 def _model(ssp, emission_type):
     return SEDModel.build(
         ssp_data=ssp,
-        stellar={"logzsol": Fixed(0.0), "*": FIXED},
+        met={"logzsol": Fixed(0.0), "*": FIXED},
         sfh={
             "type": "delayed",
             "tau_gyr": Fixed(1.0),

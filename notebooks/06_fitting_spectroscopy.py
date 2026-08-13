@@ -103,7 +103,7 @@ sed_model = SEDModel.build(
         tau_diff=Uniform(0.0, 1.0),
     ),
     neb=builders.neb.none(),
-    stellar={"met_logzsol": Uniform(-1.5, 0.3)},
+    met={"logzsol": Uniform(-1.5, 0.3)},
     redshift=Fixed(Z_GAL),
 )
 forward = ForwardModel.build(sed=sed_model)
