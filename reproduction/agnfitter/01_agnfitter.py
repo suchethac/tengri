@@ -26,8 +26,8 @@
 # orthogonal tracers that break the infrared–ultraviolet degeneracies that
 # limited the original submm-to-UV AGNfitter.
 #
-# This notebook places AGNFITTER-RX's model libraries next to tengri's on the
-# same axes and in the same units (erg/s/Hz), with focus on the AGN block.
+# This notebook places AGNFITTER-RX's model libraries next to tengri's, with
+# focus on the AGN block.
 # The headline comparisons are the two model *face-offs* that drive the
 # paper's conclusions: **§9a** — accretion-disk libraries R06, SN12, KD18, THB21.
 # THB21 wins (Bayes factor ≈10⁵·¹ over R06) because it alone carries the
@@ -38,13 +38,10 @@
 #
 # Tengri's `cat3d_wind`, `silva04`, `skirtor_agnfitter`, `slone_netzer`,
 # and `schreiber2018` blocks evaluate the same template libraries AGNFITTER-RX
-# publishes; those panels are direct checks of tengri implementations. Every
-# claim of agreement prints the number that backs it — peak-normalized residual,
-# attenuation in magnitudes, a slope — next to its panel. Every tengri model
-# is built through the public `SEDModel.build` grammar (disc/torus/atten
-# sub-blocks, radio and X-ray groups), so the notebook doubles as an end-to-end
-# test that every AGNFITTER-RX-parity parameter is actually wired through the
-# public API.
+# publishes. Every tengri model here is built through the public
+# `SEDModel.build` grammar (disc/torus/atten sub-blocks, radio and X-ray
+# groups), so the notebook doubles as an end-to-end test that every
+# AGNFITTER-RX-parity parameter is actually wired through the public API.
 
 # %% [markdown]
 # ## Setup
@@ -169,7 +166,7 @@ NO_DUST = {"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0)
 # ## tengri AGN helpers
 #
 # Each AGN face-off builds a single tengri block in isolation and reads the
-# AGN SED off ``state.derived["sed_agn"]``. We normalize shapes at a common
+# AGN SED off ``state.derived["sed_agn"]``. Shapes are normalized at a common
 # anchor (2500 Å for disks, the IR peak for tori) so the comparison is of
 # spectral shape at matched parameters, independent of the per-code luminosity
 # bookkeeping. One default matters here: tengri's CIGALE-faithful AGN applies
@@ -280,8 +277,7 @@ def tengri_torus(torus_type, *, log_lbol=11.0, **torus_params):
 # %% [markdown]
 # ## §1 Stellar populations
 #
-# Both codes use identical BC03 + Chabrier SSPs. The panel shows tengri's
-# library at representative ages (0.1 and 5 Gyr).
+# tengri's library at representative ages (0.1 and 5 Gyr).
 
 # %%
 fig, ax = plt.subplots(figsize=(7, 4.5))
@@ -315,8 +311,8 @@ save_fig("agnfitter_01_ssp_bc03.png")
 #
 # AGNFITTER-RX adopts τ-model (delayed-exponential) star formation histories.
 # Tengri's parametric SFHs rescale the shape so that ``∫ SFR dt = 10**log_total_mass``.
-# The panel reads the pipeline SFR history off ``state.derived["sfr_history"]``
-# (not an analytic curve) and verifies mass closure via trapezoid integration.
+# The SFR history is read off ``state.derived["sfr_history"]`` — not an
+# analytic curve — with mass closure verified via trapezoid integration.
 
 # %%
 m = SEDModel.build(ssp_data=ssp, sfh=SFH_FIDUCIAL, dust=NO_DUST, redshift=Fixed(0.0))
@@ -351,9 +347,7 @@ print(f"§2  int SFR dt = {mass_formed:.4e} M_sun  (target 1.0000e{LOG_MASS:.0f}
 #
 # The fiducial host's stellar continuum from tengri — the same quantity
 # AGNFITTER-RX's GA (host stellar) component contributes, reddened by
-# SMC/Calzetti law at fit time. The panel is compact by design, since the
-# underlying SSPs are identical published models; the focus is on the AGN
-# components in the panels that follow.
+# SMC/Calzetti law at fit time.
 
 # %%
 m = SEDModel.build(ssp_data=ssp, sfh=SFH_FIDUCIAL, dust=NO_DUST, redshift=Fixed(0.0))
@@ -402,7 +396,7 @@ save_fig("agnfitter_03_stellar_sed.png")
 # AGNFITTER-RX's ``BBBred_Prevot`` — the ``EBVbbb`` free parameter both codes
 # expose — not to qsogen's internal reddening.
 #
-# The right panel leads with the payoff — tengri at the convention-matched
+# tengri at the convention-matched
 # ``E(B−V)/1.102`` lies exactly on AGNFITTER-RX's band (identical *law*), with
 # the raw same-``E(B−V)`` curve shown faint underneath to mark the +10.2%
 # reparametrization. tengri's reddening is exercised through ``SEDModel.build``
@@ -513,7 +507,7 @@ print(
 # curves on one axis: they differ in both *shape* (the empirical quasar curve is
 # not the analytic SMC fit — it is greyer in the UV) and *V-band normalization*
 # (AGNFITTER-RX 2.468, tengri-Prevot 2.72, qsogen 3.1). See §9d/§9a for the
-# qsogen disc itself; here we isolate its reddening curve.
+# qsogen disc itself; this panel isolates its reddening curve.
 
 # %%
 from tengri.components.dust.qsogen_ext import qsogen_quasar_extinction
@@ -575,10 +569,9 @@ print(
 # overlay). **`schreiber2016`** — analytic approximation (modified blackbody +
 # Drude PAH), fast and differentiable but PAH weaker than tabulated S17.
 # **`dale2014`** — modern Dale+2014 library, parameterized by radiation-field
-# hardness α (not node-for-node match to S17). All peak-normalized. The left
-# panel below shows the two node-exact matches (each pair one color — thick band
-# AGNFITTER-RX, thin line tengri); the right panel shows the two differentiable
-# alternatives.
+# hardness α (not node-for-node match to S17). All peak-normalized: the two
+# node-exact matches first (each pair one color — thick band AGNFITTER-RX,
+# thin line tengri), then the two differentiable alternatives.
 
 # %%
 import jax.numpy as jnp
@@ -699,7 +692,7 @@ print(
 # `SN12.pickle` (the M_BH = 8.6, log Ṁ/Ṁ_edd ≈ −2.0 grid point is shown on
 # both sides).
 #
-# How well each tengri block matches, panel by panel:
+# How well each tengri block matches:
 #
 # * **THB21 — reproduced, and faithful to the source.** The 0.7 µm bump is an
 #   emission-line feature, so `qsogen` must run *with* its line and FeII blocks
