@@ -82,7 +82,7 @@ def _ssp(lo_dex: float, hi_dex: float, n_wave: int = 2000) -> SSPData:
     The continuum dies below the Lyman limit, which a plain ``(5000/lambda)**2``
     power law does not. That is not cosmetic on the wide grids here: continued
     to 0.1 A it makes the *stellar* flux in the X-ray band enormous, swamping
-    any X-ray component and cancelling to **negative** photometry. Measured on
+    any X-ray component and canceling to **negative** photometry. Measured on
     such a grid, ``lopez24`` appeared bit-identical to ``yang20`` under
     WavePrecomp -- a defect that does not exist. With the break in place the two
     separate by 14.3 on the exact path and 13.9 under WavePrecomp.

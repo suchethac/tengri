@@ -198,7 +198,7 @@ class DustAttenuationSEDComponent(TemplateThreading):
         finite-difference slope, the sub-band quadrature, the rest band and the
         spectroscopy pixels — and every one must use the same curve with the
         same parameters. Six independent call sites are six chances for one to
-        keep the old behaviour and put two different screens in one model.
+        keep the old behavior and put two different screens in one model.
         """
         from tengri.components.dust._apply import _TWO_COMPONENT_LAW_PARAMS
 
