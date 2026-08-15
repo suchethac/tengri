@@ -51,6 +51,7 @@ import numpy as np
 warnings.filterwarnings("ignore")
 
 import jax.numpy as jnp
+from reproduction._validation import IR_BANDS, filter_rows, print_filter_table
 from reproduction.agnfitter._drivers import agnfitter_driver as A, units as U
 
 from tengri.dust import DUST_EMISSION_MODELS
@@ -140,6 +141,16 @@ def main():
         DUST_EMISSION_MODELS["dh02_ce01"](jnp.asarray(w_dh), 1.0, dust_log_lir=LOG_LIR)
     )
     compare("DH02_CE01 / dh02_ce01", w_dh, L_dh, L_dh02, results)
+
+    # The same templates through real IR bandpasses. A pixel residual says the
+    # curves agree; a band ratio says what a MIPS or SPIRE measurement of them
+    # would agree to, which is the number an observer actually compares.
+    for name, (w, ref_n, ten_n) in results.items():
+        print_filter_table(
+            filter_rows(w, ten_n, ref_n, filters=IR_BANDS),
+            ref_name="AGNFITTER",
+            title=f"{name} — peak-normalized templates through IR bandpasses",
+        )
 
     n = len(results)
     fig, axes = plt.subplots(2, n, figsize=(6 * n, 7), squeeze=False,

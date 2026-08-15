@@ -49,9 +49,51 @@ floating point. Worth stating plainly because the first version of this script
 reported the 10% as an unexplained discrepancy: a matched-input validator is
 only as good as the conventions it remembers to match.
 
-Nebular is OFF on both sides: FSPS uses Byler+2017 Cloudy grids and tengri uses
-the Cue emulator, which are different models by design (01_prospector.py §8
-quantifies the Halpha ratio). AGN is off; Prospector has no X-ray or radio.
+Nebular is off for the *continuum* comparison -- FSPS uses Byler+2017 Cloudy
+grids and tengri uses the Cue emulator, which are different models by design
+(01_prospector.py §8 quantifies the Halpha ratio). AGN is off; Prospector has
+no X-ray or radio.
+
+FINDING -- the bandpass ladder reaches where the wavelength windows could not
+-----------------------------------------------------------------------------
+The band table is 23 real transmission curves from GALEX FUV (0.15 um) to
+SCUBA-2 850 um -- 3.75 decades -- replacing six hand-drawn wavelength windows
+that stopped at 300 um. At the fully-matched configuration all 23 agree to a
+median 0.999x.
+
+One band does not: **WISE W1 at 1.046x**, the only entry outside 5%. It was
+invisible before because 3.39 um fell in the gap between the old ``NIR 1-3 um``
+and ``MIR 8-30 um`` windows. W1 sits where the stellar Rayleigh-Jeans tail hands
+over to the hottest dust, so it is the band most sensitive to where each code
+draws that boundary -- worth a look, and exactly the kind of thing a window
+table cannot report.
+
+The ratios are safe to read without knowing which bandpass weight FSPS uses
+internally: the photon (1/lambda) and energy (1/lambda^2) conventions move
+them by 2.6e-4, measured in the run rather than assumed, because both spectra
+pass through the identical average.
+
+FINDING -- Lyman alpha, and only Lyman alpha, disagrees
+------------------------------------------------------
+With nebular on and the gas parameters matched (logU = -2, logZ_gas = 0), the
+optical lines agree well: [O II] 0.98x, Hbeta 1.03x, [O III] 0.87-0.88x,
+Halpha 0.95x, [S II] 1.16-1.18x. Both Balmer decrements are sound --
+Halpha/Hbeta = 3.01 (FSPS) and 2.79 (tengri) against Case B ~ 2.86 -- so the
+recombination physics matches on both sides.
+
+Lyman alpha does not, by a factor of ~120:
+
+    FSPS      Lya/Hbeta =  0.60
+    tengri    Lya/Hbeta = 71.19
+
+Lya is a resonant line: its escape depends on scattering and on dust
+destruction inside the H II region, which every code treats by its own
+convention, so a large divergence here is a modelling choice rather than a
+defect. What the table adds is that the divergence is *confined* to it. Two
+caveats on the number: both grids carry only three points at 10 A spacing
+across the line, so it is resolution-limited (the ratio survives because both
+sides are measured identically), and no claim is made here about which value is
+right -- that needs the Case B Lya/Hbeta checked against a source, not recalled.
 """
 
 import os
@@ -70,6 +112,13 @@ import numpy as np
 
 warnings.filterwarnings("ignore")
 
+from reproduction._validation import (
+    convention_sensitivity,
+    filter_rows,
+    line_rows,
+    print_filter_table,
+    print_line_table,
+)
 from reproduction.prospector._drivers import prospector_driver as P, units as U
 
 from tengri import FIXED, Fixed, SEDModel
@@ -168,39 +217,81 @@ def tengri_stellar_dust(ssp, tau_bc, *, include_lyc=False):
     return np.asarray(s.wave), np.asarray(s.sed_intrinsic)
 
 
-BANDS = {
-    "FUV 1216-1900 Å": (1216, 1900),
-    "NUV 2000-3000 Å": (2000, 3000),
-    "optical 0.3-0.8 µm": (3000, 8000),
-    "NIR 1-3 µm": (1e4, 3e4),
-    "MIR 8-30 µm": (8e4, 3e5),
-    "FIR 60-300 µm": (6e5, 3e6),
-}
+# Nebular section: a young constant-SFR population, where the lines dominate
+# (01_prospector.py §8 fiducial).
+NEB_AGE = 0.01  # Gyr
+NEB_LOGU, NEB_LOGZ, NEB_LOGMASS = -2.0, 0.0, 9.0
 
 
-def report(w_f, L_t, L_f, title):
-    """Print a band-by-band median-ratio table.
+def report(w_f, L_t, L_f, title, *, compact=False):
+    """Print the bandpass ratio table for one configuration.
 
     Parameters
     ----------
     w_f : array_like, shape (n_wave,)
-        Reference wavelength grid [Angstrom].
+        Reference wavelength grid [Angstrom]; both SEDs are already on it.
     L_t, L_f : array_like, shape (n_wave,)
         tengri and FSPS L_nu on that grid [erg/s/Hz].
     title : str
         Heading printed above the table.
+    compact : bool, optional
+        One summary line instead of the full ladder.
     """
-    print(f"\n  {title}")
-    print(f"  {'band':<20} {'tengri/FSPS':>14} {'med|resid|':>11}")
-    print("  " + "-" * 50)
-    for name, (a, b) in BANDS.items():
-        m = (w_f >= a) & (w_f <= b) & (L_f > 0) & (L_t > 0)
-        if not m.any():
-            continue
-        r = L_t[m] / L_f[m]
-        med = float(np.median(r))
-        flag = " OK" if 0.95 <= med <= 1.05 else "  <-- check"
-        print(f"  {name:<20} {med:>13.3f}× {float(np.median(np.abs(r - 1))):>10.1%}{flag}")
+    print_filter_table(
+        filter_rows(w_f, L_t, L_f),
+        ref_name="FSPS",
+        title=title,
+        compact=compact,
+    )
+
+
+def nebular_only():
+    """Nebular-only L_nu from both codes at matched gas parameters.
+
+    FSPS is isolated as (neb on) - (neb off) at the same SFH; tengri publishes
+    ``sed_nebular`` directly. FSPS's curve is per 1 Msun formed, so it is
+    rescaled to the tengri build's formed mass.
+
+    Returns
+    -------
+    tuple of ndarray
+        ``(w_fsps, L_fsps, w_tengri, L_tengri)``; L_nu in [erg/s/Hz].
+    """
+    w_p, L_p = P.isolate(
+        dict(
+            sfh=1,
+            const=1.0,
+            tage=NEB_AGE,
+            add_neb_emission=True,
+            gas_logu=NEB_LOGU,
+            gas_logz=NEB_LOGZ,
+        ),
+        dict(sfh=1, const=1.0, tage=NEB_AGE),
+    )
+    L_p = np.clip(L_p, 0.0, None) * 10.0**NEB_LOGMASS
+
+    ssp = load_ssp_data(str(HERE / "_drivers" / "data" / "fsps_mist_miles_chabrier.h5"))
+    m = SEDModel.build(
+        ssp_data=ssp,
+        met={"logzsol": Fixed(MET_LOGZSOL), "*": FIXED},
+        sfh={
+            "type": "const",
+            "start_gyr": Fixed(NEB_AGE),
+            "end_gyr": Fixed(0.0),
+            "log_total_mass": Fixed(NEB_LOGMASS),
+            "*": FIXED,
+        },
+        dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+        neb={
+            "type": "cue",
+            "neb_logU": Fixed(NEB_LOGU),
+            "neb_logZ_gas": Fixed(NEB_LOGZ),
+            "*": FIXED,
+        },
+        redshift=Fixed(0.0),
+    )
+    s = m.predict_state({})
+    return w_p, L_p, np.asarray(s.wave), np.asarray(s.derived["sed_nebular"])
 
 
 def main():
@@ -209,19 +300,49 @@ def main():
 
     w_f, L_f = fsps_stellar_dust()
 
+    print("\n  Controls (each wrong in a known way):")
+
     # The wrong mapping: a birth-cloud/diffuse split of the same A_V.
     w_t, L_t = tengri_stellar_dust(ssp, tau_bc=TAU_DIFF)
-    report(w_f, U.regrid(w_t, L_t, w_f), L_f, "tau_bc + tau_diff split (NOT FSPS-equivalent)")
+    report(
+        w_f,
+        U.regrid(w_t, L_t, w_f),
+        L_f,
+        "tau_bc + tau_diff split (NOT FSPS-equivalent)",
+        compact=True,
+    )
 
     # Right screen, but tengri's canonical energy balance: the dust IR runs
     # ~10% low because LyC is excluded from the budget.
     w_t, L_t = tengri_stellar_dust(ssp, tau_bc=0.0)
-    report(w_f, U.regrid(w_t, L_t, w_f), L_f, "tau_bc = 0, LyC excluded (tengri default)")
+    report(
+        w_f,
+        U.regrid(w_t, L_t, w_f),
+        L_f,
+        "tau_bc = 0, LyC excluded (tengri default)",
+        compact=True,
+    )
 
     # Both conventions matched: single screen AND LyC in the budget.
     w_t, L_t = tengri_stellar_dust(ssp, tau_bc=0.0, include_lyc=True)
     L_t_on_f = U.regrid(w_t, L_t, w_f)
     report(w_f, L_t_on_f, L_f, "tau_bc = 0 + eb_include_lyc (fully FSPS-equivalent)")
+
+    # The ratios above are read without knowing which bandpass weight FSPS
+    # uses internally; this is the evidence that that is safe.
+    print(
+        f"\n  bandpass-convention sensitivity (photon vs energy weight): "
+        f"{convention_sensitivity(w_f, L_t_on_f, L_f):.2e}"
+    )
+
+    # Emission lines, at matched gas parameters. Not a parity check -- see
+    # print_line_table's Notes.
+    w_pn, L_pn, w_tn, L_tn = nebular_only()
+    print_line_table(
+        line_rows(w_tn, L_tn, w_pn, L_pn, line_lum=U.line_lum),
+        ref_name="FSPS",
+        title="Emission lines — tengri Cue vs FSPS Byler+2017 (matched logU, logZ_gas)",
+    )
 
     fig, (ax, axr) = plt.subplots(
         2, 1, figsize=(12, 7), sharex=True, gridspec_kw={"height_ratios": [3, 1]}

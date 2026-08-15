@@ -54,6 +54,11 @@ import numpy as np
 
 warnings.filterwarnings("ignore")
 
+from reproduction._validation import (
+    convention_sensitivity,
+    filter_rows,
+    print_filter_table,
+)
 from reproduction.cigale._drivers import cigale_driver as C, units as U
 
 from tengri import FIXED, Fixed, SEDModel
@@ -124,28 +129,26 @@ def tengri_stellar_dust(ssp, tau_bc):
     return np.asarray(s.wave), np.asarray(s.sed_intrinsic)
 
 
-BANDS = {
-    "FUV 1216-1900 Å": (1216, 1900),
-    "NUV 2000-3000 Å": (2000, 3000),
-    "optical 0.3-0.8 µm": (3000, 8000),
-    "NIR 1-3 µm": (1e4, 3e4),
-    "MIR 8-30 µm": (8e4, 3e5),
-    "FIR 60-300 µm": (6e5, 3e6),
-}
+def report(w_c, L_t, L_c, title, *, compact=False):
+    """Print the bandpass ratio table for one configuration.
 
-
-def report(w_c, L_t, L_c, title):
-    print(f"\n  {title}")
-    print(f"  {'band':<20} {'tengri/CIGALE':>14} {'med|resid|':>11}")
-    print("  " + "-" * 50)
-    for name, (a, b) in BANDS.items():
-        m = (w_c >= a) & (w_c <= b) & (L_c > 0) & (L_t > 0)
-        if not m.any():
-            continue
-        r = L_t[m] / L_c[m]
-        med = float(np.median(r))
-        flag = " OK" if 0.95 <= med <= 1.05 else "  <-- check"
-        print(f"  {name:<20} {med:>13.3f}× {float(np.median(np.abs(r - 1))):>10.1%}{flag}")
+    Parameters
+    ----------
+    w_c : array_like, shape (n_wave,)
+        Reference wavelength grid [Angstrom]; both SEDs are already on it.
+    L_t, L_c : array_like, shape (n_wave,)
+        tengri and CIGALE L_nu on that grid [erg/s/Hz].
+    title : str
+        Heading printed above the table.
+    compact : bool, optional
+        One summary line instead of the full ladder.
+    """
+    print_filter_table(
+        filter_rows(w_c, L_t, L_c),
+        ref_name="CIGALE",
+        title=title,
+        compact=compact,
+    )
 
 
 def main():
@@ -158,17 +161,24 @@ def main():
     # Wrong mapping (BC+diffuse split, as in 01_cigale.py §setup).
     tau_bc_split = R_V * (1.0 - F_CONT) * E_BV / 1.086
     w_t, L_t = tengri_stellar_dust(ssp, tau_bc=tau_bc_split)
+    print("\n  Control (wrong in a known way):")
     report(
         w_c,
         U.regrid(w_t, L_t, w_c),
         L_c,
         "BC+diffuse split (01_cigale.py §setup mapping) — over-attenuates FUV",
+        compact=True,
     )
 
     # Correct CIGALE-equivalent mapping (single diffuse screen).
     w_t2, L_t2 = tengri_stellar_dust(ssp, tau_bc=0.0)
     L_t2_c = U.regrid(w_t2, L_t2, w_c)
     report(w_c, L_t2_c, L_c, "single diffuse Calzetti screen (tau_bc=0) — CIGALE-equivalent")
+
+    print(
+        f"\n  bandpass-convention sensitivity (photon vs energy weight): "
+        f"{convention_sensitivity(w_c, L_t2_c, L_c):.2e}"
+    )
 
     # Parameter map.
     print("\n  parameter mapping (tengri <-> CIGALE):")

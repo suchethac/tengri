@@ -56,6 +56,14 @@ import numpy as np
 
 warnings.filterwarnings("ignore")
 
+from reproduction._validation import (
+    UV_TO_NIR,
+    convention_sensitivity,
+    filter_rows,
+    line_rows,
+    print_filter_table,
+    print_line_table,
+)
 from reproduction.synthesizer._drivers import synthesizer_driver as S, units as U
 
 from tengri import FIXED, Fixed, SEDModel
@@ -136,37 +144,79 @@ def tengri_stellar_dust(ssp, tau_bc):
     return np.asarray(s.wave), np.asarray(s.sed_intrinsic)
 
 
-BANDS = {
-    "FUV 1216-1900 Å": (1216, 1900),
-    "NUV 2000-3000 Å": (2000, 3000),
-    "optical 0.3-0.8 µm": (3000, 8000),
-    "NIR 1-3 µm": (1e4, 3e4),
-}
+# Nebular section: a young constant-SFR population, where the lines dominate
+# (01_synthesizer.py fiducial).
+NEB_AGE = 0.01  # Gyr
+NEB_LOGU, NEB_LOGZ, NEB_LOGMASS = -2.0, 0.0, 9.0
 
 
-def report(w_s, L_t, L_s, title):
-    """Print a band-by-band median-ratio table.
+def nebular_only(ssp):
+    """Nebular-only L_nu from both codes at matched metallicity.
+
+    Synthesizer returns its ``nebular`` spectrum directly from
+    ``NebularEmission``; tengri publishes ``sed_nebular``.
+
+    Parameters
+    ----------
+    ssp : SSPData
+        The repackaged Synthesizer test grid.
+
+    Returns
+    -------
+    tuple of ndarray
+        ``(w_synth, L_synth, w_tengri, L_tengri)``; L_nu in [erg/s/Hz].
+    """
+    w_s, L_s = S.nebular_sed(age_gyr=NEB_AGE, metallicity=Z_ABS, log_mass=NEB_LOGMASS)
+    L_s = np.clip(L_s, 0.0, None)
+
+    m = SEDModel.build(
+        ssp_data=ssp,
+        met={"logzsol": Fixed(MET_LOGZSOL), "*": FIXED},
+        sfh={
+            "type": "const",
+            "start_gyr": Fixed(NEB_AGE),
+            "end_gyr": Fixed(0.0),
+            "log_total_mass": Fixed(NEB_LOGMASS),
+            "*": FIXED,
+        },
+        dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+        neb={
+            "type": "cue",
+            "neb_logU": Fixed(NEB_LOGU),
+            "neb_logZ_gas": Fixed(NEB_LOGZ),
+            "*": FIXED,
+        },
+        redshift=Fixed(0.0),
+    )
+    s = m.predict_state({})
+    return w_s, L_s, np.asarray(s.wave), np.asarray(s.derived["sed_nebular"])
+
+
+def report(w_s, L_t, L_s, title, *, compact=False):
+    """Print the bandpass ratio table for one configuration.
 
     Parameters
     ----------
     w_s : array_like, shape (n_wave,)
-        Reference wavelength grid [Angstrom].
+        Reference wavelength grid [Angstrom]; both SEDs are already on it.
     L_t, L_s : array_like, shape (n_wave,)
         tengri and Synthesizer L_nu on that grid [erg/s/Hz].
     title : str
         Heading printed above the table.
+    compact : bool, optional
+        One summary line instead of the full ladder.
+
+    Notes
+    -----
+    Scoped to :data:`~reproduction._validation.UV_TO_NIR`: this comparison is
+    stellar + attenuation, with no matched dust-emission block on either side.
     """
-    print(f"\n  {title}")
-    print(f"  {'band':<20} {'tengri/Synth':>15} {'med|resid|':>11}")
-    print("  " + "-" * 51)
-    for name, (a, b) in BANDS.items():
-        m = (w_s >= a) & (w_s <= b) & (L_s > 0) & (L_t > 0)
-        if not m.any():
-            continue
-        r = L_t[m] / L_s[m]
-        med = float(np.median(r))
-        flag = " OK" if 0.95 <= med <= 1.05 else "  <-- check"
-        print(f"  {name:<20} {med:>14.3f}× {float(np.median(np.abs(r - 1))):>10.1%}{flag}")
+    print_filter_table(
+        filter_rows(w_s, L_t, L_s, filters=UV_TO_NIR),
+        ref_name="Synth",
+        title=title,
+        compact=compact,
+    )
 
 
 def main():
@@ -176,16 +226,32 @@ def main():
     w_s, L_s = synthesizer_stellar_dust()
 
     w_t, L_t = tengri_stellar_dust(ssp, tau_bc=TAU_DIFF)
+    print("\n  Control (wrong in a known way):")
     report(
         w_s,
         U.regrid(w_t, L_t, w_s),
         L_s,
         "tau_bc + tau_diff split (NOT Synthesizer-equivalent)",
+        compact=True,
     )
 
     w_t, L_t = tengri_stellar_dust(ssp, tau_bc=0.0)
     L_t_on_s = U.regrid(w_t, L_t, w_s)
     report(w_s, L_t_on_s, L_s, "tau_bc = 0, single diffuse screen (Synthesizer-equivalent)")
+
+    print(
+        f"\n  bandpass-convention sensitivity (photon vs energy weight): "
+        f"{convention_sensitivity(w_s, L_t_on_s, L_s, filters=UV_TO_NIR):.2e}"
+    )
+
+    # Emission lines, at matched gas parameters. Not a parity check -- see
+    # print_line_table's Notes.
+    w_sn, L_sn, w_tn, L_tn = nebular_only(ssp)
+    print_line_table(
+        line_rows(w_tn, L_tn, w_sn, L_sn, line_lum=U.line_lum),
+        ref_name="Synth",
+        title="Emission lines — tengri Cue vs Synthesizer Cloudy c23.01 (matched Z)",
+    )
 
     fig, (ax, axr) = plt.subplots(
         2, 1, figsize=(12, 7), sharex=True, gridspec_kw={"height_ratios": [3, 1]}

@@ -49,6 +49,14 @@ import numpy as np
 
 warnings.filterwarnings("ignore")
 
+from reproduction._validation import (
+    UV_TO_NIR,
+    convention_sensitivity,
+    filter_rows,
+    line_rows,
+    print_filter_table,
+    print_line_table,
+)
 from reproduction.bagpipes._drivers import bagpipes_driver as B, units as U
 
 from tengri import FIXED, Fixed, SEDModel
@@ -126,37 +134,85 @@ def tengri_stellar_dust(ssp, tau_bc):
     return np.asarray(s.wave), np.asarray(s.sed_intrinsic)
 
 
-BANDS = {
-    "FUV 1216-1900 Å": (1216, 1900),
-    "NUV 2000-3000 Å": (2000, 3000),
-    "optical 0.3-0.8 µm": (3000, 8000),
-    "NIR 1-3 µm": (1e4, 3e4),
-}
+# Nebular section: a young constant-SFR population, where the lines dominate
+# (01_bagpipes.py §9 fiducial).
+NEB_AGE = 0.01  # Gyr
+NEB_LOGU, NEB_LOGZ, NEB_LOGMASS = -2.0, 0.0, 9.0
+
+# BAGPIPES' default 747-point grid spans 1 A to 1e8 A and smears Cloudy v25's
+# lines into bumps; §9 hands it a dense optical grid instead.
+_NEB_SPEC_WAVS = np.arange(900.0, 7000.0, 1.0)
 
 
-def report(w_b, L_t, L_b, title):
-    """Print a band-by-band median-ratio table.
+def report(w_b, L_t, L_b, title, *, compact=False):
+    """Print the bandpass ratio table for one configuration.
 
     Parameters
     ----------
     w_b : array_like, shape (n_wave,)
-        Reference wavelength grid [Angstrom].
+        Reference wavelength grid [Angstrom]; both SEDs are already on it.
     L_t, L_b : array_like, shape (n_wave,)
         tengri and BAGPIPES L_nu on that grid [erg/s/Hz].
     title : str
         Heading printed above the table.
+    compact : bool, optional
+        One summary line instead of the full ladder.
     """
-    print(f"\n  {title}")
-    print(f"  {'band':<20} {'tengri/BAGPIPES':>16} {'med|resid|':>11}")
-    print("  " + "-" * 52)
-    for name, (a, b) in BANDS.items():
-        m = (w_b >= a) & (w_b <= b) & (L_b > 0) & (L_t > 0)
-        if not m.any():
-            continue
-        r = L_t[m] / L_b[m]
-        med = float(np.median(r))
-        flag = " OK" if 0.95 <= med <= 1.05 else "  <-- check"
-        print(f"  {name:<20} {med:>15.3f}× {float(np.median(np.abs(r - 1))):>10.1%}{flag}")
+    print_filter_table(
+        filter_rows(w_b, L_t, L_b, filters=UV_TO_NIR),
+        ref_name="BAGPIPES",
+        title=title,
+        compact=compact,
+    )
+
+
+def nebular_only(ssp):
+    """Nebular-only L_nu from both codes at matched gas parameters.
+
+    BAGPIPES is isolated as (neb on) - (neb off) at the same SFH; tengri
+    publishes ``sed_nebular`` directly.
+
+    Parameters
+    ----------
+    ssp : SSPData
+        The repackaged BC03/MILES grid.
+
+    Returns
+    -------
+    tuple of ndarray
+        ``(w_bagpipes, L_bagpipes, w_tengri, L_tengri)``; L_nu in [erg/s/Hz].
+    """
+    base = {"metallicity": 1.0, "age_min": 0.0, "age_max": NEB_AGE, "massformed": NEB_LOGMASS}
+    on = B._build_model(
+        {"redshift": 0.0, "constant": base, "nebular": {"logU": NEB_LOGU}},
+        spec_wavs=_NEB_SPEC_WAVS,
+    )
+    off = B._build_model({"redshift": 0.0, "constant": base}, spec_wavs=_NEB_SPEC_WAVS)
+    w_b = on.spectrum[:, 0]
+    to_lnu = w_b**2 / U.C_ANGSTROM_PER_S
+    L_b = np.clip((on.spectrum[:, 1] - off.spectrum[:, 1]) * to_lnu, 0.0, None)
+
+    m = SEDModel.build(
+        ssp_data=ssp,
+        met={"logzsol": Fixed(MET_LOGZSOL), "*": FIXED},
+        sfh={
+            "type": "const",
+            "start_gyr": Fixed(NEB_AGE),
+            "end_gyr": Fixed(0.0),
+            "log_total_mass": Fixed(NEB_LOGMASS),
+            "*": FIXED,
+        },
+        dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+        neb={
+            "type": "cue",
+            "neb_logU": Fixed(NEB_LOGU),
+            "neb_logZ_gas": Fixed(NEB_LOGZ),
+            "*": FIXED,
+        },
+        redshift=Fixed(0.0),
+    )
+    s = m.predict_state({})
+    return w_b, L_b, np.asarray(s.wave), np.asarray(s.derived["sed_nebular"])
 
 
 def main():
@@ -167,12 +223,38 @@ def main():
 
     # The wrong mapping: a birth-cloud/diffuse split of the same A_V.
     w_t, L_t = tengri_stellar_dust(ssp, tau_bc=TAU_DIFF)
-    report(w_b, U.regrid(w_t, L_t, w_b), L_b, "tau_bc + tau_diff split (NOT BAGPIPES-equivalent)")
+    print("\n  Control (wrong in a known way):")
+    report(
+        w_b,
+        U.regrid(w_t, L_t, w_b),
+        L_b,
+        "tau_bc + tau_diff split (NOT BAGPIPES-equivalent)",
+        compact=True,
+    )
 
     # The BAGPIPES-equivalent mapping: one diffuse screen.
     w_t, L_t = tengri_stellar_dust(ssp, tau_bc=0.0)
     L_t_on_b = U.regrid(w_t, L_t, w_b)
     report(w_b, L_t_on_b, L_b, "tau_bc = 0, single diffuse screen (BAGPIPES-equivalent)")
+
+    print(
+        f"\n  bandpass-convention sensitivity (photon vs energy weight): "
+        f"{convention_sensitivity(w_b, L_t_on_b, L_b, filters=UV_TO_NIR):.2e}"
+    )
+    print(
+        "  ladder stops at 2MASS Ks by design: BAGPIPES applies energy balance and\n"
+        "  re-emits in the IR, the matched tengri build carries no dust.emission\n"
+        "  block, so redder bands would compare two different models (see UV_TO_NIR)."
+    )
+
+    # Emission lines, at matched gas parameters. Not a parity check -- see
+    # print_line_table's Notes.
+    w_bn, L_bn, w_tn, L_tn = nebular_only(ssp)
+    print_line_table(
+        line_rows(w_tn, L_tn, w_bn, L_bn, line_lum=U.line_lum),
+        ref_name="BAGPIPES",
+        title="Emission lines — tengri Cue vs BAGPIPES Cloudy v25 (matched logU, logZ_gas)",
+    )
 
     fig, (ax, axr) = plt.subplots(
         2, 1, figsize=(12, 7), sharex=True, gridspec_kw={"height_ratios": [3, 1]}

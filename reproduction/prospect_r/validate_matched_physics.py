@@ -54,6 +54,12 @@ import numpy as np
 
 warnings.filterwarnings("ignore")
 
+from reproduction._validation import (
+    UV_TO_NIR,
+    convention_sensitivity,
+    filter_rows,
+    print_filter_table,
+)
 from reproduction.prospect_r._drivers import prospect_driver as P, units as U
 
 from tengri import FIXED, Fixed, SEDModel
@@ -143,37 +149,31 @@ def tengri_stellar_dust(ssp, log_mass, *, collapse_screen=False):
     return np.asarray(s.wave), np.asarray(s.sed_intrinsic)
 
 
-BANDS = {
-    "FUV 1216-1900 Å": (1216, 1900),
-    "NUV 2000-3000 Å": (2000, 3000),
-    "optical 0.3-0.8 µm": (3000, 8000),
-    "NIR 1-3 µm": (1e4, 3e4),
-}
-
-
-def report(w_p, L_t, L_p, title):
-    """Print a band-by-band median-ratio table.
+def report(w_p, L_t, L_p, title, *, compact=False):
+    """Print the bandpass ratio table for one configuration.
 
     Parameters
     ----------
     w_p : array_like, shape (n_wave,)
-        Reference wavelength grid [Angstrom].
+        Reference wavelength grid [Angstrom]; both SEDs are already on it.
     L_t, L_p : array_like, shape (n_wave,)
         tengri and ProSpect L_nu on that grid [erg/s/Hz].
     title : str
         Heading printed above the table.
+    compact : bool, optional
+        One summary line instead of the full ladder.
+
+    Notes
+    -----
+    Scoped to :data:`~reproduction._validation.UV_TO_NIR`: this comparison is
+    stellar + attenuation, with no matched dust-emission block on either side.
     """
-    print(f"\n  {title}")
-    print(f"  {'band':<20} {'tengri/ProSpect':>16} {'med|resid|':>11}")
-    print("  " + "-" * 52)
-    for name, (a, b) in BANDS.items():
-        m = (w_p >= a) & (w_p <= b) & (L_p > 0) & (L_t > 0)
-        if not m.any():
-            continue
-        r = L_t[m] / L_p[m]
-        med = float(np.median(r))
-        flag = " OK" if 0.95 <= med <= 1.05 else "  <-- check"
-        print(f"  {name:<20} {med:>15.3f}× {float(np.median(np.abs(r - 1))):>10.1%}{flag}")
+    print_filter_table(
+        filter_rows(w_p, L_t, L_p, filters=UV_TO_NIR),
+        ref_name="ProSpect",
+        title=title,
+        compact=compact,
+    )
 
 
 def main():
@@ -199,11 +199,18 @@ def main():
     report(w_p, L_t_on_p, L_p, "tau_bc = tau_birth, tau_diff = tau_screen (ProSpect-equivalent)")
 
     w_t2, L_t2 = tengri_stellar_dust(ssp, log_mass=log_mass, collapse_screen=True)
+    print("\n  Control (wrong in a known way):")
     report(
         w_p,
         U.regrid(w_t2, L_t2, w_p),
         L_p,
         "collapsed to one screen (the OTHER codes' mapping — wrong here)",
+        compact=True,
+    )
+
+    print(
+        f"\n  bandpass-convention sensitivity (photon vs energy weight): "
+        f"{convention_sensitivity(w_p, L_t_on_p, L_p, filters=UV_TO_NIR):.2e}"
     )
 
     fig, (ax, axr) = plt.subplots(
