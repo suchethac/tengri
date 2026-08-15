@@ -781,7 +781,31 @@ jobs:
   coverage:
     runs-on: ubuntu-latest
     needs: smoke
-    if: ${{ github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+    # NOT on `push`. This job and `test` run the SAME 8 shards over the SAME
+    # paths at the SAME `-n`; the invocations differ only in `--cov` (here) and
+    # `--timeout=600 --timeout-method=thread` (there). Verified 2026-08-13 by
+    # comparing both matrices field by field: 8 == 8, and every
+    # (shard, paths, nproc) triple identical.
+    #
+    # `test` runs on everything except a bare `labeled` PR event, so before this
+    # change a push to `main` ran BOTH — 16 shards of identical tests, out of 24
+    # jobs total for the push. Removing `push` here drops the push path to 16
+    # jobs (-33%) and takes the serial `coverage (regression-*)` shards, the
+    # slowest things in the workflow, off `main`'s critical path.
+    #
+    # Nothing stops being tested. Every test still runs on every commit to
+    # `main` — once, under `test`, which is also the half carrying the pytest
+    # timeout. What moves is coverage REPORTING, from per-commit to the nightly
+    # `schedule` (and `workflow_dispatch` on demand). Codecov merges uploads
+    # natively, so the merged report is unaffected; only its cadence changes.
+    #
+    # Why this matters beyond runner minutes: at ~34 merges/day the push path
+    # was outrunning the concurrent-job ceiling, so `Tests` on `main` took
+    # 222-387 min wall-clock against ~21 min of compute. On 2026-08-12 a red
+    # landed at 08:57, was fixed at 09:50, and CI first reported it at 10:13 --
+    # 23 minutes AFTER the fix had merged, with five commits stacked on the red
+    # in between. Halving the push path is the cheapest lever on that lag.
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     strategy:
       fail-fast: false
       matrix:
