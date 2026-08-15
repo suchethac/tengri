@@ -125,6 +125,29 @@ class AGNXRayCoronaSEDComponent(SEDModelComponent):
 
     # Reads AGN bolometric luminosity with fallback
     inputs: ClassVar[dict[str, str]] = {}
+
+    #: The L_2500 anchor chain :meth:`predict` reads, declared so the
+    #: orchestrator actually supplies it.
+    #:
+    #: Without this the component was **silent**: ``predict`` reads
+    #: ``inputs.get("L_2500_intrinsic", 0.0)`` and its siblings, nothing was
+    #: passed, every anchor fell back to 0.0, and the corona emitted exactly
+    #: zero -- measured ``sum(sed_xray) == 0.0`` beneath a luminous AGN whose
+    #: disc published ``L_2500_intrinsic = 5.53e29``.
+    #:
+    #: That is why building this component is not on its own a fix for #1684.
+    #: Routing the name to its own class without this trades "silently delivers
+    #: yang20's physics" for "silently delivers nothing" -- the same fail-open,
+    #: and one that a test asserting only "differs from yang20" cannot see,
+    #: because a silent component differs from an emitting one.
+    #:
+    #: ``XRayAirdSEDComponent`` does not need this only because its fallbacks
+    #: are non-zero (``inputs.get("sfr", 1.0)``), so it emits from the default.
+    optional_inputs: ClassVar[dict[str, str]] = {
+        "L_2500_intrinsic": "erg/s/Hz",
+        "L_2500_30deg": "erg/s/Hz",
+        "L_agn_bol": "erg/s",
+    }
     # ``sed_xray`` and nothing else, matching XRayAirdSEDComponent. This
     # previously declared ``L_xray_agn``, which is not a DerivedState field, so
     # it spilled into ``_extras`` and tripped the ADR-0007 guard on every build.

@@ -2515,6 +2515,9 @@ _XRAY_PARAMS_BY_MODEL: dict[str, frozenset[str]] = {
     ),
     # Aird+2015 XRB scaling: the Lehmer+2016 offsets, and no corona.
     "xray_aird": frozenset({"xray_det_hmxb", "xray_det_lmxb"}),
+    # The alpha_ox corona and nothing else: no XRB channel, so the Lehmer+2016
+    # offsets are genuinely unread here, and no N_H screen.
+    "agn_xray_corona": frozenset({"xray_gamma_agn", "xray_E_cut", "xray_delta_alpha_ox"}),
 }
 #: What the shared ``XRaySEDComponent`` corona reads on its non-``lopez24``
 #: branch (``yang20`` / ``simple`` / ``agn_xray_corona``, which all resolve to

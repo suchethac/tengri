@@ -117,6 +117,47 @@ def test_corona_name_is_not_silently_yang20(name, xray_ssp, xray_obs):
     )
 
 
+@pytest.mark.parametrize("name", ("yang20", *_DISTINCT_FROM_YANG20))
+def test_every_corona_actually_emits(name, xray_ssp, xray_obs):
+    """Each X-ray name must put real flux into ``sed_xray``.
+
+    "Differs from yang20" does not imply this, and the gap is not theoretical:
+    when ``agn_xray_corona`` was first routed to its own class it built
+    correctly, separated from yang20 by max rel 1.0, and emitted **exactly
+    zero** -- it reads its L_2500 anchor from ``inputs`` and declared no
+    optional inputs, so every anchor fell back to 0.0. A silent component
+    differs from an emitting one, so the sibling comparison passed while the
+    fix had traded "silently delivers yang20's physics" for "silently delivers
+    nothing".
+
+    This asserts the thing the user actually wants: that selecting the name
+    produces X-ray emission.
+    """
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        model = SEDModel.build(
+            ssp_data=xray_ssp,
+            observation=xray_obs,
+            sfh={"type": "dpl", "all_params": FIXED},
+            agn=_LUMINOUS_AGN,
+            xray={"type": name},
+            redshift=Fixed(0.5),
+        )
+        params = model.spec.sample(jax.random.PRNGKey(0))
+        state = model.predict_state(params)
+
+    sed_xray = getattr(state.derived, "sed_xray", None)
+    assert sed_xray is not None, f"xray={name!r} published no sed_xray at all"
+    total = float(np.sum(np.asarray(sed_xray)))
+    assert total > 0.0, (
+        f"xray={name!r} builds but emits nothing: sum(sed_xray) == {total}. "
+        "A silent component still 'differs from yang20', so only this "
+        "assertion can tell the two apart."
+    )
+
+
 def test_simple_is_still_the_declared_yang20_alias(xray_ssp, xray_obs):
     """``simple`` and ``yang20`` are one model under two names, by declaration.
 
