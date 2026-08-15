@@ -492,10 +492,19 @@ def _pei92_curve(
     """
     wave_um = wavelength / 1e4  # (n_wave,)
     # xi(lambda) = sum_i a_i / ((lam/lam_i)^n_i + (lam_i/lam)^n_i + b_i)
-    # shape: (n_components, n_wave)
-    ratio = wave_um[None, :] / lam_i[:, None]
-    denom = ratio ** n_i[:, None] + ratio ** (-n_i[:, None]) + b_i[:, None]
-    xi = jnp.sum(a_i[:, None] / denom, axis=0)
+    #
+    # The Drude component axis is TRAILING, so the reduction is axis=-1 and this
+    # holds for a wavelength grid of any rank. Spelling it the other way round
+    # (``wave_um[None, :]`` against ``lam_i[:, None]``) pins the input to rank 1:
+    # it works on the exact path, which passes a 1-D grid, and raises under
+    # WavePrecomp, which evaluates the curve on a (sub-band, age, filter) grid
+    # where the 6-component axis collides with the filter axis. Every other
+    # attenuation law is elementwise in wavelength and so broadcast at any rank;
+    # only the Pei-92 pair sums over a component axis, which is why smc and lmc
+    # alone were unusable on the path every fitter resolves approx="auto" to.
+    ratio = wave_um[..., None] / lam_i  # (..., n_components)
+    denom = ratio**n_i + ratio ** (-n_i) + b_i
+    xi = jnp.sum(a_i / denom, axis=-1)  # (...)
 
     # Pei 1992 Drude sum gives extinction proportional to tau(lambda).
     # A(lambda)/A(V) = xi(lambda) / xi(V). Normalize to k(5500 A) = 1.
