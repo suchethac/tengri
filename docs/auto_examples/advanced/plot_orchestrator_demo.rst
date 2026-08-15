@@ -31,7 +31,7 @@ See plot_joint_fit.py and plot_radio_xray.py for the public-API path.
 The orchestrator layer may change; forward-compatible SED building goes
 through the SEDModel.build() nested-dict grammar and recipes.
 
-.. GENERATED FROM PYTHON SOURCE LINES 15-137
+.. GENERATED FROM PYTHON SOURCE LINES 15-144
 
 
 
@@ -46,8 +46,6 @@ through the SEDModel.build() nested-dict grammar and recipes.
  .. code-block:: none
 
     chain: stellar → nebular → dust → dust_emission → agn → radio → xray → igm
-    /tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit__lambda': FileNotFoundError: [Errno 2] No such file or directory: '~/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
     L_bol (stellar)        = 2.87e+43 erg/s
     log_mstar              = 0.794  (6.23 Msun)
     L_ir (dust)            = 3.58e+34 erg/s
@@ -133,6 +131,13 @@ through the SEDModel.build() nested-dict grammar and recipes.
             "xray_delta_alpha_ox": jnp.asarray(-1.4),
             # log10 N_H [cm^-2] photoelectric absorption (#768); 20 = unobscured.
             "xray_log_nh": jnp.asarray(20.0),
+            # Lehmer+2016 XRB luminosity offsets [dex], read since #1706. 0.0 is the
+            # declared default: the term scales by 10**offset, so this is no offset.
+            # Every xray_* parameter is indexed directly by the component, so this
+            # hand-rolled dict -- the point of the low-level orchestrator API -- must
+            # supply each one; a missing key is a KeyError, not a silent default.
+            "xray_det_hmxb": jnp.asarray(0.0),
+            "xray_det_lmxb": jnp.asarray(0.0),
             "redshift": jnp.asarray(0.0),
         }
 
@@ -188,7 +193,7 @@ through the SEDModel.build() nested-dict grammar and recipes.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.469 seconds)
+   **Total running time of the script:** (0 minutes 5.260 seconds)
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_orchestrator_demo.py:

@@ -17,6 +17,7 @@ References
 import chex
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
 # Age of the universe today [yr], from the default cosmology — never a
@@ -40,23 +41,57 @@ class TestConstantSFHPhysics:
     """Constant SFH: flat between start and end times."""
 
     def test_flat_between_boundaries(self):
-        """SFR should be constant in the active window."""
-        from tengri.components.stellar.sfh import constant_sfh
+        """SFR is *exactly* constant strictly inside the active window.
 
-        sfr = constant_sfh(T_LOOKBACK, log_total_mass=10.0, start=1e9, end=10e9)
-        active = (T_LOOKBACK >= 1e9) & (T_LOOKBACK <= 10e9)
-        sfr_active = sfr[active]
-        if len(sfr_active) > 2:
-            cv = float(jnp.std(sfr_active) / jnp.mean(sfr_active))
-            assert cv < 0.01, f"Constant SFH should be flat, CV={cv:.4f}"
+        The interior is flat to machine precision, so this asserts that rather
+        than a tolerance. The only departures are the two cells straddling
+        ``start`` and ``end``, where the window edge falls between grid points
+        and the partial cell is apportioned — which is precisely why
+        ``test_mass_integral_correct`` gets the total right. Measuring the
+        boundary cell and calling it non-flatness is what this test used to do,
+        under a CV < 0.01 tolerance loose enough to hide that the interior is
+        perfect (#1728).
+        """
+        from tengri.components.stellar.sfh import constant
+
+        start, end = 1e9, 10e9
+        sfr = constant(T_LOOKBACK, log_total_mass=10.0, start=start, end=end)
+
+        # Exclude one grid cell either side; T_LOOKBACK is geometric, so a
+        # multiplicative margin is the right shape for the exclusion.
+        interior = (start * 1.05 < T_LOOKBACK) & (end * 0.95 > T_LOOKBACK)
+        assert int(jnp.sum(interior)) > 10, "test grid too coarse to probe the interior"
+
+        sfr_interior = sfr[interior]
+        cv = float(jnp.std(sfr_interior) / jnp.mean(sfr_interior))
+        assert cv < 1e-12, f"constant SFH must be exactly flat inside the window, CV={cv:.3e}"
+
+    def test_window_is_respected_and_edges_are_bounded(self):
+        """Outside the window there is no star formation, and edges interpolate.
+
+        Separates the window's *shape* claim from the flatness claim above, so
+        an edge-apportioning change fails here with a message about edges.
+        """
+        from tengri.components.stellar.sfh import constant
+
+        start, end = 1e9, 10e9
+        sfr = constant(T_LOOKBACK, log_total_mass=10.0, start=start, end=end)
+        plateau = float(jnp.max(sfr))
+
+        outside = (start * 0.95 > T_LOOKBACK) | (end * 1.05 < T_LOOKBACK)
+        assert float(jnp.max(sfr[outside])) == 0.0, "no star formation outside the window"
+
+        assert plateau > 0.0
+        assert float(jnp.min(sfr)) >= 0.0, "SFR must never go negative"
+        assert float(jnp.max(sfr)) <= plateau, "no cell may exceed the plateau"
 
     def test_mass_integral_correct(self):
         """Integral of SFR * dt = 10**log_total_mass."""
-        from tengri.components.stellar.sfh import constant_sfh
+        from tengri.components.stellar.sfh import constant
 
         log_total_mass = 10.0
         start, end = 1e9, 10e9
-        sfr = constant_sfh(T_LOOKBACK, log_total_mass=log_total_mass, start=start, end=end)
+        sfr = constant(T_LOOKBACK, log_total_mass=log_total_mass, start=start, end=end)
         mass = float(jnp.trapezoid(sfr, T_LOOKBACK))
         expected = 10.0**log_total_mass
         assert abs(mass / expected - 1.0) < 0.01, (
@@ -76,9 +111,9 @@ class TestExponentialSFHPhysics:
         With start=0, peak is at present and SFR declines into the past.
         We verify the exponential decay behavior.
         """
-        from tengri.components.stellar.sfh import exponential_sfh
+        from tengri.components.stellar.sfh import exponential
 
-        sfr = exponential_sfh(T_LOOKBACK, log_total_mass=1.0, tau=2e9, start=0.0)
+        sfr = exponential(T_LOOKBACK, log_total_mass=1.0, tau=2e9, start=0.0)
         # SFR should be highest at small lookback (near present) and decay
         young = T_LOOKBACK < 1e9
         old = T_LOOKBACK > 5e9
@@ -96,11 +131,11 @@ class TestDelayedExponentialPhysics:
 
     def test_peaks_after_start(self):
         """SFR should NOT peak at start — peak is displaced by tau."""
-        from tengri.components.stellar.sfh import delayed_exponential_sfh
+        from tengri.components.stellar.sfh import delayed_exponential
 
         # start=0 means SF begins at lookback=0 (present day). Peak at ~tau.
         tau = 3e9
-        sfr = delayed_exponential_sfh(T_LOOKBACK, log_total_mass=1.0, start=0.0, tau=tau)
+        sfr = delayed_exponential(T_LOOKBACK, log_total_mass=1.0, start=0.0, tau=tau)
         peak_lbt = float(T_LOOKBACK[jnp.argmax(sfr)])
         # Peak should be near tau in lookback time
         assert 0.5e9 < peak_lbt < 10e9, f"Delayed exp peak at {peak_lbt / 1e9:.1f} Gyr"
@@ -179,17 +214,76 @@ class TestSkewNormalPhysics:
         )
 
     def test_snorm_skew_changes_shape(self):
-        """Non-zero skew should produce different SFH than zero skew."""
+        """Non-zero skew produces a different SFH than zero skew.
+
+        Compared *relatively*. The SFH is normalized to total mass, so an
+        absolute threshold is meaningless: this assertion used to read
+        ``sum|diff| > 0.1`` against ``log_total_mass=1.0`` — ten solar masses
+        spread over 14 Gyr, i.e. SFRs of order 1e-9, which cannot reach 0.1 no
+        matter how much the shape changes (#1728). The shapes differ by 5x
+        relatively.
+        """
         from tengri.components.stellar.sfh import snorm
 
-        peak = 5e9
-        width = 2e9
-        sfr_sym = snorm(T_LOOKBACK, log_total_mass=1.0, peak_lbt=peak, width=width, skew=0.0)
-        sfr_skew = snorm(T_LOOKBACK, log_total_mass=1.0, peak_lbt=peak, width=width, skew=2.0)
+        peak, width = 5e9, 2e9
+        sfr_sym = snorm(T_LOOKBACK, log_total_mass=10.0, peak_lbt=peak, width=width, skew=0.0)
+        sfr_skew = snorm(T_LOOKBACK, log_total_mass=10.0, peak_lbt=peak, width=width, skew=2.0)
 
-        # Shapes should differ
-        diff = float(jnp.sum(jnp.abs(sfr_sym - sfr_skew)))
-        assert diff > 0.1, "Non-zero skew should change SFH shape"
+        relative = float(jnp.sum(jnp.abs(sfr_sym - sfr_skew)) / jnp.sum(sfr_sym))
+        assert relative > 0.1, f"skew should change the shape, relative difference {relative:.3g}"
+
+    def test_snorm_peak_lbt_is_the_mode_at_any_skew(self):
+        """``peak_lbt`` pins the mode, not the location parameter.
+
+        For a raw skew-normal, changing the shape parameter moves the mode away
+        from the location parameter. This family re-parameterizes so the peak
+        stays where the user asked for it — which is what makes ``peak_lbt``
+        interpretable as "when this galaxy formed most of its stars" at any
+        skew. Untested until now; a regression here would silently re-interpret
+        every fitted ``peak_lbt``.
+        """
+        from tengri.components.stellar.sfh import snorm
+
+        peak, width = 5e9, 2e9
+        modes = []
+        for skew in (-2.0, 0.0, 2.0):
+            sfr = snorm(T_LOOKBACK, log_total_mass=10.0, peak_lbt=peak, width=width, skew=skew)
+            modes.append(float(T_LOOKBACK[int(jnp.argmax(sfr))]))
+
+        for skew, mode in zip((-2.0, 0.0, 2.0), modes, strict=True):
+            assert abs(mode / peak - 1.0) < 0.05, (
+                f"skew={skew:+.1f} moved the mode to {mode / 1e9:.2f} Gyr, expected 5 Gyr"
+            )
+
+    def test_snorm_skew_sign_sets_which_side_the_tail_falls_on(self):
+        """Positive skew shifts mass to recent times; negative to early times.
+
+        The sign convention is the part a user can get backwards, and nothing
+        pinned it. Measured as the mass formed before the peak (larger lookback)
+        over the mass formed after it.
+        """
+        from tengri.components.stellar.sfh import snorm
+
+        peak, width = 5e9, 2e9
+
+        def early_over_late(skew: float) -> float:
+            sfr = snorm(T_LOOKBACK, log_total_mass=10.0, peak_lbt=peak, width=width, skew=skew)
+            older = peak < T_LOOKBACK
+            early = float(jnp.trapezoid(sfr[older], T_LOOKBACK[older]))
+            late = float(jnp.trapezoid(sfr[~older], T_LOOKBACK[~older]))
+            return early / max(late, 1e-99)
+
+        negative, symmetric, positive = (early_over_late(s) for s in (-2.0, 0.0, 2.0))
+
+        np.testing.assert_allclose(symmetric, 1.0, rtol=0.1)
+        assert positive < symmetric < negative, (
+            "skew must be monotonic in the early/late mass ratio, got "
+            f"{positive:.3f} (skew=+2), {symmetric:.3f} (0), {negative:.3f} (-2)"
+        )
+        assert positive < 0.5, (
+            f"skew=+2 should put most mass at recent times, ratio {positive:.3f}"
+        )
+        assert negative > 2.0, f"skew=-2 should put most mass at early times, ratio {negative:.3f}"
 
     def test_tsnorm_truncation_suppresses_recent(self):
         """Truncation reduces SFR at recent times."""
@@ -253,10 +347,10 @@ class TestContinuitySFHPhysics:
 
     def test_mass_conservation(self):
         """Integrated SFR × dt must equal 10^log_total_mass."""
-        from tengri.components.stellar.sfh import continuity_sfh
+        from tengri.components.stellar.sfh import continuity
 
         age_yr = jnp.geomspace(1e6, 13.7e9, 1000)
-        sfr = continuity_sfh(
+        sfr = continuity(
             age_yr,
             log_total_mass=10.0,
             ratio_0=0.0,
@@ -272,10 +366,10 @@ class TestContinuitySFHPhysics:
 
     def test_flat_sfh_from_zero_ratios(self):
         """All ratios = 0 → flat SFH (constant across all bins)."""
-        from tengri.components.stellar.sfh import continuity_sfh
+        from tengri.components.stellar.sfh import continuity
 
         age_yr = jnp.geomspace(1e8, 13e9, 500)
-        sfr = continuity_sfh(
+        sfr = continuity(
             age_yr,
             log_total_mass=10.0,
             ratio_0=0.0,
@@ -293,10 +387,10 @@ class TestContinuitySFHPhysics:
 
     def test_positive_ratios_rising_sfh(self):
         """Positive ratios → rising SFH (more SF at recent times)."""
-        from tengri.components.stellar.sfh import continuity_sfh
+        from tengri.components.stellar.sfh import continuity
 
         age_yr = jnp.geomspace(1e6, 13.7e9, 1000)
-        sfr = continuity_sfh(
+        sfr = continuity(
             age_yr,
             log_total_mass=10.0,
             ratio_0=0.5,
@@ -323,10 +417,10 @@ class TestDirichletSFHPhysics:
 
     def test_mass_conservation(self):
         """Integrated SFR × dt must equal 10^log_total_mass."""
-        from tengri.components.stellar.sfh import dirichlet_sfh
+        from tengri.components.stellar.sfh import dirichlet
 
         age_yr = jnp.geomspace(1e6, 13.7e9, 1000)
-        sfr = dirichlet_sfh(
+        sfr = dirichlet(
             age_yr,
             log_total_mass=10.0,
             z_frac_0=0.5,
@@ -344,11 +438,11 @@ class TestDirichletSFHPhysics:
 
     def test_sfr_non_negative(self):
         """SFR must be non-negative everywhere."""
-        from tengri.components.stellar.sfh import dirichlet_sfh
+        from tengri.components.stellar.sfh import dirichlet
 
         age_yr = jnp.geomspace(1e6, 13.7e9, 1000)
         for z_val in [0.1, 0.5, 0.9]:
-            sfr = dirichlet_sfh(
+            sfr = dirichlet(
                 age_yr,
                 log_total_mass=10.0,
                 z_frac_0=z_val,
@@ -362,10 +456,10 @@ class TestDirichletSFHPhysics:
 
     def test_extreme_z_concentrates_mass(self):
         """z_frac_0 near 1 concentrates mass in youngest bin."""
-        from tengri.components.stellar.sfh import dirichlet_sfh
+        from tengri.components.stellar.sfh import dirichlet
 
         age_yr = jnp.geomspace(1e6, 13.7e9, 1000)
-        sfr = dirichlet_sfh(
+        sfr = dirichlet(
             age_yr,
             log_total_mass=10.0,
             z_frac_0=0.99,

@@ -1990,6 +1990,11 @@ class Parameters:
             # not the one the declaration carries (#1586).
             "user_free_grid": "[user FREE -> grid]",
             "wildcard_free_grid": f"[{WILDCARD_ALIAS} FREE -> grid]",
+            # A wildcard-FREE that found no declared prior. The parameter stays
+            # Fixed, so reporting the request would put a row reading FREE
+            # inside the Fixed block (#1726). The remedy is in the tag: give it
+            # a prior explicitly.
+            "wildcard_free_pinned": f"[{WILDCARD_ALIAS} FREE -> pinned, no prior]",
         }
 
         # Parameter table

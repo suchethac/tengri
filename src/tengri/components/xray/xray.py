@@ -951,8 +951,8 @@ def xray_hotgas(
 
     References
     ----------
-    .. [1] G. Yang et al., "Fitting AGN/galaxy X-ray-to-radio SEDs with
-       CIGALE and improvement of the code," MNRAS, 491, 740 (2020).
+    .. [1] G. Yang et al., "X-CIGALE: fitting AGN/galaxy SEDs from X-ray
+       to infrared," MNRAS, 491, 740 (2020).
        https://doi.org/10.1093/mnras/stz3001
     .. [2] G. Yang et al., "Fitting AGN/galaxy X-ray-to-radio SEDs with
        CIGALE and improvement of the code," ApJ, 927, 192 (2022).
@@ -1257,8 +1257,8 @@ def xray_agn_corona(
        dependence of narrow emission-line regions in nearby active galactic
        nuclei," ApJ, 665, 1004 (2007).
        https://doi.org/10.1086/519990
-    .. [2] G. Yang et al., "Fitting AGN/galaxy X-ray-to-radio SEDs with
-       CIGALE and improvement of the code," MNRAS, 491, 740 (2020).
+    .. [2] G. Yang et al., "X-CIGALE: fitting AGN/galaxy SEDs from X-ray
+       to infrared," MNRAS, 491, 740 (2020).
        https://doi.org/10.1093/mnras/stz3001
     .. [3] G. Yang et al., "Fitting AGN/galaxy X-ray-to-radio SEDs with
        CIGALE and improvement of the code," ApJ, 927, 192 (2022).
@@ -1854,6 +1854,8 @@ def xray_total_lopez24_terms(
     gamma_agn: float = 1.8,
     E_cut: float = 300.0,
     log_nh: float = 20.0,
+    log_L_hmxb_offset: float = 0.0,
+    log_L_lmxb_offset: float = 0.0,
     **_kwargs,
 ) -> dict[str, jnp.ndarray]:
     r"""Unsummed X-ray SED terms using IRX-based AGN (Lopez+2024) + XRBs.
@@ -1910,6 +1912,10 @@ def xray_total_lopez24_terms(
     See :func:`xray_agn_corona_lopez24` for the α_IRX model details
     and :func:`xray_xrb_terms` for the XRB component structure.
     """
+    # ``log_L_*_offset`` are named explicitly in this signature rather than left
+    # to ``**_kwargs``: swallowed there they would be accepted and discarded, and
+    # a fix to the yang20 call site alone would have looked wired while doing
+    # nothing here (#1706).
     xrb_terms = xray_xrb_terms(
         wavelength,
         sfr=sfr,
@@ -1918,6 +1924,8 @@ def xray_total_lopez24_terms(
         gamma_hmxb=gamma_hmxb,
         gamma_lmxb=gamma_lmxb,
         E_cut=E_cut,
+        log_L_hmxb_offset=log_L_hmxb_offset,
+        log_L_lmxb_offset=log_L_lmxb_offset,
     )
     # Hot gas (CIGALE lopez24: 8.3e31 × SFR), shared with the yang20 path.
     hotgas = xray_hotgas(wavelength, sfr, gamma=1.0, E_cut=1.0)

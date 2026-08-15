@@ -2822,7 +2822,7 @@ def search(query: str) -> _RegistryTable:
 
 
 def list_all() -> dict[str, _RegistryTable]:
-    """Return everything available — useful for a single notebook cell overview.
+    """Return every menu — the single notebook cell that shows the whole code.
 
     Returns
     -------
