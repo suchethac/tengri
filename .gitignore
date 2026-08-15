@@ -122,6 +122,10 @@ analysis/figures/
 /profiling/
 notebook_execution.log
 notebook_metrics.json
+# Per-notebook nbconvert transcripts (`=== Running NN (timeout 1800s) ===` plus
+# XLA warnings). `notebook_execution.log` above covers the single combined log;
+# these are the per-notebook ones the orchestrator writes alongside it.
+notebooks/logs/
 
 # Sphinx docs build artifacts
 docs/_build/
