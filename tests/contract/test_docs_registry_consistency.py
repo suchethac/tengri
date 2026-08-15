@@ -128,13 +128,20 @@ def test_hint_map_does_not_shadow_a_real_backend() -> None:
 # crash. `vi` is the working NIFTy geoVI path and is what the name meant.
 _STALE_INFERENCE_NAMES = {"vi_native": "vi"}
 
+# ``docs/inference/index.md`` sat in this tuple but does not exist, and
+# ``_page_text`` skips a missing file rather than failing — so that case reported
+# "skipped" instead of checking anything. Replaced with the three inference pages
+# that are really there. The contributor-only pages moved under ``internal/``;
+# they are still worth checking because they remain readable on GitHub.
 _METHOD_PAGES = (
     *_PUBLISHED_PAGES,
     "docs/performance/index.md",
     "docs/performance/memory.md",
     "docs/method_selection.md",
-    "docs/advanced/convergence.md",
-    "docs/inference/index.md",
+    "docs/internal/advanced/convergence.md",
+    "docs/internal/inference/scaling.md",
+    "docs/internal/inference/jit_compile.md",
+    "docs/internal/inference/joint_information_content.md",
 )
 
 

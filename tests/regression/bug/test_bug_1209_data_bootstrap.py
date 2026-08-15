@@ -281,7 +281,7 @@ def test_default_ssp_builds_the_cue_recipes(recipe_name):
 
     These four recipes use the Cue nebular backend, which *rejects* wNE grids
     (``CueWNESSPError``). Under the old wNE default this exact pattern — the one
-    ``docs/recipes/jwst_nirspec_spectroscopy.md`` prints — raised on the first
+    ``docs/internal/recipes/jwst_nirspec_spectroscopy.md`` prints — raised on the first
     line a new user would type. Five of ten recipes were unbuildable that way.
     """
     tengri = pytest.importorskip("tengri")

@@ -548,11 +548,17 @@ intersphinx_mapping = {
 
 exclude_patterns = [
     "_build",
-    # Agent-authored design plans and specs. They were `docs/superpowers/{plans,specs}`
-    # and needed two more entries here ("superpowers", "specs") to stay out of the
-    # build; folding them under `internal/` means one exclude covers them and anything
-    # else contributor-only that lands here later.
+    # Everything contributor-only: agent-authored plans and specs (was
+    # `superpowers/{plans,specs}`, needing two entries of its own) plus the six
+    # narrative sections listed further down. One rule now covers them and
+    # anything else contributor-facing that lands here later.
+    #
+    # Both forms on purpose. The bare name prunes the directory during
+    # traversal; the `**` form is what `dev/**` and `adr/**` already use to keep
+    # their contents from building as orphans. The bare entry predates the
+    # directory existing, so it has never actually been exercised.
     "internal",
+    "internal/**",
     "**.ipynb_checkpoints",
     # Synthesizer reproduction notebook kept out of the published docs by
     # request (removed from the reproduction toctree). Excluded so Sphinx
@@ -576,13 +582,15 @@ exclude_patterns = [
     "auto_examples/**/*.codeobj.json",
     "auto_examples/**/*.zip",
     "auto_examples/**/*.ipynb",
-    # Narrative sections superseded by repo root notebooks/ spine.
-    # ``forward_model/`` and ``fitting/`` are gone: the former's one page is
-    # now published as ``forward_model.md``, the latter held only a toctree.
-    "getting_started/**",
-    "inference/**",
-    "advanced/**",
-    "developer/**",
+    # ``getting_started/``, ``inference/``, ``advanced/``, ``developer/``,
+    # ``user/`` and ``recipes/`` each had a line here. They were narrative
+    # sections superseded by the repo-root notebooks/ spine, hidden one at a
+    # time over 2026-06/07 — every call sound on its own, but the result was
+    # six rules and 19 maintained pages sitting in ``docs/`` that no reader
+    # could reach. They now live under ``internal/``, which the single
+    # ``internal`` entry near the top of this list already covers.
+    # (``forward_model/`` and ``fitting/`` are gone entirely: the former's one
+    # page is published as ``forward_model.md``, the latter held only a toctree.)
     "dev/**",
     # Architecture Decision Records are contributor-facing design history, not
     # part of the published user docs. They live on disk / GitHub but are
@@ -603,8 +611,6 @@ exclude_patterns = [
     # published sidebar). Excluded so they don't build as half-accessible
     # orphans emitting "not in any toctree" warnings. Still on disk / GitHub.
     "spine/05_adding_a_model.ipynb",
-    "recipes/**",
-    "user/**",
     # Fitting-photometry spine notebook hidden from the published sidebar
     # (2026-06): the quickstart already covers a full photometry fit +
     # posterior, so this longer treatment is redundant. Inbound prose links

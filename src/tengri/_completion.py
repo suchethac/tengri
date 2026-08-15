@@ -12,7 +12,7 @@ They had already drifted into two spellings, ``sorted(__all__)`` and
 ``__dir__`` returns. The divergence was drift rather than design, so this
 module keeps the sorted spelling and both groups collapse onto it.
 
-``tests/regression/bug/test_bug_1431_curated_dir.py`` fails on any new
+``tests/contract/test_curated_dir_mechanism.py`` fails on any new
 module-level ``def __dir__`` under ``src/tengri``, so the boilerplate cannot
 grow back.
 """

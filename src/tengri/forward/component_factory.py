@@ -571,8 +571,10 @@ def build_components(
     # publishes/requires. The sort is stable (preserves input order
     # among components with no ordering constraint), so the canonical
     # pipeline reproduces the previous hand-coded order byte-for-byte —
-    # verified by the contract-graph + SED-output snapshot tests in
-    # tests/integration/test_derived_contract_snapshots.py.
+    # verified by tests/contract/test_topological_sort.py. This cited
+    # tests/integration/test_derived_contract_snapshots.py until that file was
+    # deleted in #1029; the SED-output half of the check went with it, so the
+    # surviving guarantee is the ordering one.
     components = topological_sort(components)
 
     # ADR-0004: construction-time contract check. After the sort,
