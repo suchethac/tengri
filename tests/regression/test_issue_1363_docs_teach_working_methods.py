@@ -34,7 +34,7 @@ _PRESCRIPTIVE = re.compile(r'(?:method\s*=\s*|\.run\s*\(\s*)["\']([a-z0-9_]+)["\
 
 #: Docs a reader is meant to copy from. Plans and dev benchmarks are working notes and
 #: legitimately record what was run at the time, including broken backends.
-_SEARCH_DIRS = ("docs/superpowers/specs", "docs/inference", "docs/user", "docs/advanced")
+_SEARCH_DIRS = ("docs/internal/specs", "docs/inference", "docs/user", "docs/advanced")
 _SKIP_PARTS = ("/plans/", "/dev/", "/archive/", "/adr/")
 
 

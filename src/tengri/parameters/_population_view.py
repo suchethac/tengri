@@ -9,7 +9,7 @@ spec is that :meth:`sample` returns per-galaxy params with shape
 ``(N,)`` (or ``(N, n_grid)`` for stochastic-SFH ``psd_xi``).
 
 See the implementation plan
-``docs/superpowers/plans/2026-05-22-population-sed-batched-forward.md``
+``docs/internal/plans/2026-05-22-population-sed-batched-forward.md``
 for design rationale (Task 2).
 """
 

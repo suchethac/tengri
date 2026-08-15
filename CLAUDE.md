@@ -120,6 +120,21 @@ Deprecated aliases (never use in new code): `Model`, `ParamSpec`, `SpectroscopyC
 - JIT/grad/vmap compatibility MUST be stated in Notes for all `components/` and `forward/` functions.
 - VERIFY equations against the original paper before writing — do not rely on memory or other code.
 
+**Where docs go.** `docs/` serves two audiences and `docs/conf.py` publishes only one of
+them: the `exclude_patterns` list there keeps the whole contributor-only side out of the
+built site. Check that list before adding a page — being excluded is the default for
+anything a user is not meant to read.
+
+- Agent-authored design plans and specs → `docs/internal/plans/` and
+  `docs/internal/specs/`. The brainstorming skill defaults to writing under a
+  docs/superpowers/ directory instead; this line is the project preference that overrides
+  that default, and the old tree was moved so a single `internal` exclude covers every
+  contributor-only page.
+- Contributor handbook (naming, style, architecture narratives) → `docs/dev/`.
+- Anything a user should read → the published tree, plus a toctree entry in
+  `docs/index.md`. A page that is neither excluded nor in a toctree builds as an orphan
+  and emits a warning.
+
 ## Package structure
 
 **For "where do I look to edit X?" — see [`docs/dev/where-things-live.md`](docs/dev/where-things-live.md).**

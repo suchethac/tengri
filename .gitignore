@@ -155,6 +155,23 @@ _galrun/
 /*_audit.py
 /quick_test*.py
 /final_audit*.py
+# Diagnostic scripts belong in scripts/diagnose/. Eight `diagnose_*.py` sat at the
+# repo root until #1783 moved them; this rule is what stops the next one landing
+# there, the same way the audit rules above do.
+/diagnose_*.py
+/_scratch*
+
+# Stray output directories at the repo root.
+#
+# The spine notebooks in `notebooks/` savefig to a *relative* `_figs/`, so running
+# one from the repo root writes a second, divergent copy of the same figures to
+# `/_figs/` instead of `notebooks/_figs/`. That copy was tracked and had drifted a
+# month stale before anyone noticed, because nothing resolves to it — the notebooks
+# read `notebooks/_figs/` and the published docs read `docs/spine/_figs/`.
+# `/results/` and `/figures/` accumulated single files the same way.
+/_figs/
+/results/
+/figures/
 !data/grahsp/grahsp_templates.h5
 !data/qsogen_emline_template.h5
 !data/qsogen_detailed_reference.npz
