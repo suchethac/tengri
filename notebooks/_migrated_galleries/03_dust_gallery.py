@@ -1261,7 +1261,7 @@ color_grid = np.zeros((len(tau_range), len(age_range)))
 for i_t, tau in enumerate(tau_range):
     for i_a, age in enumerate(age_range):
         spec_grid = Parameters(
-            sfh_tsnorm_log_total_mass=10.0),
+            sfh_tsnorm_log_total_mass=Fixed(10.0),
             sfh_tsnorm_peak_lbt_gyr=Fixed(float(age)),
             sfh_tsnorm_width_gyr=Fixed(2.0),
             sfh_tsnorm_skew=Fixed(0.0),
