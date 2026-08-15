@@ -177,7 +177,11 @@ _galrun/
 /results/
 /figures/
 !data/grahsp/grahsp_templates.h5
-!data/qsogen_emline_template.h5
+# `!data/qsogen_emline_template.h5` was here. QSOGen loads the *.dat* template
+# (`find_data("qsogen_emline_template.dat")` in components/agn/qsogen.py); the
+# .h5 arrived in the #1029 data-gating sweep and nothing ever read it. This
+# un-ignore line was its only mention in the tree, which is what kept a 157 KB
+# binary committed for a loader that wants a different file.
 !data/qsogen_detailed_reference.npz
 !data/external_sed_reference.npz
 !data/feltre_grid.h5
