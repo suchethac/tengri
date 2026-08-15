@@ -23,6 +23,28 @@ _CAT3D_GRID = _DATA / "cat3d_wind_torus_grid.h5"
 jax.config.update("jax_enable_x64", True)
 
 
+def _declared_param_names(registry_key: str) -> set[str]:
+    """Fully-prefixed parameter names a registered component actually declares.
+
+    Used to check an adapter's ``AXIS_PARAMS`` against the component it serves,
+    rather than against a copy of itself. Pinning ``AXIS_PARAMS`` to a literal
+    only proves nobody edited the literal: both adapters here asserted their own
+    declaration and stayed green while naming parameters no ``Parameters`` can
+    hold, so the axes could never collapse (#1738).
+    """
+    import tengri  # noqa: F401  -- populates the component registry
+    from tengri.components.sed_model_component import _REGISTRY
+
+    cls = _REGISTRY[registry_key]
+    prefix = getattr(cls, "parameter_prefix", "") or ""
+    return {
+        f"{prefix}{attr}"
+        for attr, value in vars(cls).items()
+        if not attr.startswith("_")
+        and (hasattr(value, "sample") or hasattr(value, "unstandardize"))
+    }
+
+
 @pytest.fixture(scope="module")
 def filter_set():
     centers = np.array([3.5e4, 1.0e5, 3.0e5, 1.0e6])  # MIR–FIR (Angstrom)
@@ -41,7 +63,13 @@ class TestSilva04Adapter:
     def test_imports_and_axes(self):
         from tengri.components.agn import silva04_precompute
 
-        assert silva04_precompute.AXIS_PARAMS == ("silva04_log_NH",)
+        axes = silva04_precompute.AXIS_PARAMS
+        assert len(axes) == 1, f"silva04 has one grid axis, declares {len(axes)}"
+        assert set(axes) <= _declared_param_names("silva04"), (
+            f"silva04_precompute declares axis names {sorted(axes)} that the "
+            f"silva04 component does not declare; the axis can never be "
+            f"collapsed and nothing raises (#1738)"
+        )
 
     @pytest.mark.skipif(not _SILVA04_GRID.exists(), reason="silva04 grid not present")
     def test_precompute_and_lookup(self, filter_set):
@@ -71,11 +99,13 @@ class TestCAT3DWindAdapter:
     def test_imports_and_axes(self):
         from tengri.components.agn import cat3d_precompute
 
-        assert set(cat3d_precompute.AXIS_PARAMS) == {
-            "cat3d_cos_inc",
-            "cat3d_a",
-            "cat3d_fwd",
-        }
+        axes = cat3d_precompute.AXIS_PARAMS
+        assert len(axes) == 3, f"cat3d_wind has three grid axes, declares {len(axes)}"
+        assert set(axes) <= _declared_param_names("cat3d_wind"), (
+            f"cat3d_precompute declares axis names {sorted(axes)} that the "
+            f"cat3d_wind component does not declare; the axes can never be "
+            f"collapsed and nothing raises (#1738)"
+        )
 
     @pytest.mark.skipif(not _CAT3D_GRID.exists(), reason="cat3d_wind grid not present")
     def test_precompute_and_lookup(self, filter_set):

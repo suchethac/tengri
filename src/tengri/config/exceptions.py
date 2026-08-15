@@ -436,9 +436,11 @@ class DeadPrecomputeAxisWarning(AdvisoryWarning):
     component's declared parameter names and its precompute module's
     ``AXIS_PARAMS`` drift apart, ``pname in fixed_values`` is simply always
     ``False``: no axis is ever collapsed, no error is raised, and the promised
-    grid reduction silently never happens. ``cat3d_precompute`` declares
+    grid reduction silently never happens. ``cat3d_precompute`` declared
     ``cat3d_cos_inc`` while ``Cat3DTorus`` declares ``parameter_prefix = "agn_"``
-    and ``cos_inc``, so the live name is ``agn_cos_inc`` (issue #1738).
+    and ``cos_inc``, so the live name is ``agn_cos_inc``. That one is repaired,
+    along with five siblings; four adapters still carry an axis label that was
+    never a user parameter at all, which a rename cannot fix (issue #1738).
 
     This fires only when *no* declared axis name is a valid parameter for the
     model being built — a name set that cannot resolve under any assignment,

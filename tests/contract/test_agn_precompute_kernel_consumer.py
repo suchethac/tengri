@@ -178,9 +178,9 @@ class TestCat3dPrecomputeConsumer:
         # cat3d has 3 axes: cos_inc, a, fwd
         phot = jitted_lookup(
             jnp.float64(10.5),
-            jnp.float64(0.5),  # cat3d_cos_inc
-            jnp.float64(0.5),  # cat3d_a
-            jnp.float64(0.3),  # cat3d_fwd
+            jnp.float64(0.5),  # agn_cos_inc
+            jnp.float64(0.5),  # agn_a_cat3d
+            jnp.float64(0.3),  # agn_fwd_cat3d
             agn_torus_frac=jnp.float64(0.5),
         )
 

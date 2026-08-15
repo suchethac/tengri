@@ -223,7 +223,7 @@ class TestQsogenPrecomputeAxisCollapse:
 
 
 class TestSilva04PrecomputeAxisCollapse:
-    """Test axis collapse for Silva04 (silva04_log_NH)."""
+    """Test axis collapse for Silva04 (agn_log_nh_silva)."""
 
     _DATA = Path(__file__).parent.parent.parent.parent / "data"
 
@@ -256,7 +256,9 @@ class TestSilva04PrecomputeAxisCollapse:
         midpoint_idx = len(ax) // 2
         pinned_value = float(ax[midpoint_idx])
 
-        spec = _make_mock_params({"silva04_log_NH": pinned_value})
+        # Read the name off the adapter, not a copy of it — see the note in
+        # TestXrayPrecomputeAxisCollapse (#1738).
+        spec = _make_mock_params({adapter.AXIS_PARAMS[0]: pinned_value})
         coll = adapter.precompute(
             waves, trans, redshift, parameters=spec, grid_path=str(grid_file)
         )

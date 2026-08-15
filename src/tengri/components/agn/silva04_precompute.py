@@ -39,7 +39,7 @@ from tengri.utils.grid_interp import (
 from tengri.utils.interpolation import edges_for_grid
 
 # Silva+04 grid parametrized by hydrogen column density only.
-AXIS_PARAMS: tuple[str, ...] = ("silva04_log_NH",)
+AXIS_PARAMS: tuple[str, ...] = ("agn_log_nh_silva",)
 
 
 def precompute_silva04_photometry(
@@ -160,7 +160,7 @@ def build_silva04_photometry_lookup(precomp: dict):
     callable
         Function with signature::
 
-            fn(agn_log_lbol, silva04_log_NH, agn_torus_frac)
+            fn(agn_log_lbol, agn_log_nh_silva, agn_torus_frac)
                 -> ndarray, shape (n_filters,)
 
         Returns torus L_ν [erg/s/Hz]. Caller applies
@@ -191,7 +191,7 @@ def build_silva04_photometry_lookup(precomp: dict):
     @jax.jit
     def silva04_phot(
         agn_log_lbol,
-        silva04_log_NH,
+        agn_log_nh_silva,
         agn_torus_frac,
     ):
         """Compute Silva+04 torus photometry via triweight interpolation on 1D grid.
@@ -201,7 +201,7 @@ def build_silva04_photometry_lookup(precomp: dict):
         # grid_phot stores L_ν [erg/s/Hz] per L_sun of L_bol (unit torus fraction)
         # Return: L_bol_lsun [L_sun] * torus_frac * phot [erg/s/Hz/L_sun] = L_ν [erg/s/Hz]
         l_bol_lsun = 10.0**agn_log_lbol
-        point = (silva04_log_NH,)
+        point = (agn_log_nh_silva,)
         phot_per_lsun = interp_nd_triweight(grid_phot, axes, edges, point)
         return l_bol_lsun * agn_torus_frac * phot_per_lsun
 
