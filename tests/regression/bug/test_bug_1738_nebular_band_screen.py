@@ -24,13 +24,25 @@ continuum got the K-point sub-band quadrature in #1122; nebular was left behind,
     so the quadrature cannot reach it."*
 
 **Why this is fixed exactly rather than by mirroring #1122's quadrature.** A sub-band
-tensor would only *converge* toward the right answer (1/K²). It is unnecessary here:
-on any model with dust the nebular continuum is already materialized —
-``DustSEDComponent`` declares ``sed_nebular`` an input, which is what disarms the fast
-nebular grid (#1281, #1748) — and the dust component already computes and republishes
-its *reddened* form. Integrating that through the band is exact and reads a dense array
-already live in the compiled graph. Where the dense continuum is **not** materialized
-there is no dust consumer, hence no screen, hence nothing to fix.
+tensor would only *converge* toward the right answer (1/K²), and it is unnecessary
+under ``dust={'type': 'two_component'}``: there the nebular continuum is already
+materialized — ``DustSEDComponent`` declares ``sed_nebular`` an input, which is what
+disarms the fast nebular grid (#1281, #1748) — and that component already computes and
+republishes its *reddened* form. Integrating that through the band is exact and reads a
+dense array already live in the compiled graph.
+
+**Scope — this covers two-component dust only.** An earlier draft of this paragraph
+said "on any model with dust", which measurement contradicted within a day.
+``single_component`` reddens nebular too, but via a screen applied to the
+already-summed ``sed_intrinsic``: it declares ``sed_nebular`` an *optional* input
+purely as a topological ordering edge, so no separately reddened nebular SED exists
+there to project, and the λ_eff form survives (measured ~3x over the stellar floor;
+bounded in ``tests/contract/test_precomp_channel_drift.py``). Deliberately sequenced
+after #1808 — see the ``predict_via_precomp`` accuracy ledger for why building on
+today's cached ``k(λ)`` would make the two screens disagree later.
+
+Where the dense continuum is genuinely **not** materialized there is no dust consumer,
+hence no screen, hence nothing to fix.
 
 **Measured on this fixture before the fix** (real FSPS SSP, SDSS *griz*, delayed SFH,
 Cue nebular; max relative ``predict_photometry`` difference, precomp vs exact):
