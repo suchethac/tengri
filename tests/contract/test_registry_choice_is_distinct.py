@@ -260,16 +260,20 @@ DECLARED_COINCIDENT: list[dict] = [
 KNOWN_UNDISTINCT: list[dict] = [
     {
         "group": "xray",
-        "names": {"simple", "yang20", "xray_aird", "agn_xray_corona"},
+        "names": {"simple", "yang20", "agn_xray_corona"},
         "reason": (
-            "#1684 -- four production X-ray names, one model, measured on a "
-            "0.1 A - 1 mm grid beneath a luminous AGN. One pair is a declared "
-            "alias ('simple' == 'yang20' physics, groups.py:1663); "
-            "xray_aird and agn_xray_corona are not, and are the two #1684 "
-            "reports. This is the unfinished half of #1120, which closed after "
-            "adding the names to the grammar allowlist but not to "
-            "component_factory, turning that issue's loud ValueError into "
-            "silence.\n\n"
+            "#1684, the remaining half. 'simple' == 'yang20' is a declared "
+            "alias (groups.py:1663) and stays. 'agn_xray_corona' is not: it "
+            "ships its own component class, and component_factory now routes a "
+            "name to its own class -- but only when that class's "
+            "parameter_prefix matches what the group supplies. This one "
+            "declares gamma / e_cut / delta_alpha_ox under 'agn_xray_', which "
+            "no group provides, so routing it raises KeyError: 'gamma' inside "
+            "predict. Wiring it is a public parameter-surface change, not a "
+            "factory one. See "
+            "tests/regression/bug/test_xray_names_build_their_own_component.py\n\n"
+            "'xray_aird' was in this class and is now fixed -- it declares its "
+            "parameters under 'xray_' and builds its own component.\n\n"
             "lopez24 is deliberately NOT in this class. It separates at max "
             "rel 8.0e-06 once a disc is present -- its alpha_ox branch needs "
             "an L_2500 to act on. An earlier revision of this file omitted the "

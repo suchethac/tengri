@@ -542,13 +542,39 @@ def build_components(
     if use_xray:
         from tengri.components.xray.component import XRaySEDComponentConfig
 
-        components.append(
-            _resolve_registry_component(
-                "xray",
-                "xray",
-                config=XRaySEDComponentConfig(model=xray_model),
+        # A name that registers its own component class builds that class.
+        # ``xray_aird`` and ``agn_xray_corona`` each ship one -- with their own
+        # config and their own ``predict`` -- and this resolved the key "xray"
+        # unconditionally, passing the name as a config field instead.
+        # ``XRaySEDComponent`` branches on ``config.model`` for ``lopez24`` and
+        # falls through to the yang20 corona otherwise, so both names produced a
+        # bit-identical SED to ``yang20``: #1684, the unfinished half of #1120,
+        # which closed after adding the names to the grammar allowlist but not
+        # here, turning that issue's loud ValueError into silence.
+        #
+        # Derived from the registry rather than a hand-written list, so a corona
+        # registered later is wired by existing -- but only if the group can
+        # actually feed it. A component is routed here only when its
+        # ``parameter_prefix`` matches the prefix the ``xray`` group declares
+        # its parameters under. ``xray_aird`` uses ``xray_`` and is fed;
+        # ``agn_xray_corona`` declares ``gamma`` / ``e_cut`` /
+        # ``delta_alpha_ox`` under ``agn_xray_``, which no group supplies, so
+        # building it raises ``KeyError: 'gamma'`` inside ``predict``. Wiring it
+        # means adding those names to the parameter space -- a public-surface
+        # change, not a factory one -- so it stays on the shared component until
+        # that is decided. Left on the shared component rather than swapped for
+        # an internal KeyError; #1684 tracks the remaining half.
+        _xray_cls = _REGISTRY.get(xray_model) if xray_model != "xray" else None
+        if _xray_cls is not None and getattr(_xray_cls, "parameter_prefix", None) == "xray_":
+            components.append(_resolve_registry_component("xray", xray_model))
+        else:
+            components.append(
+                _resolve_registry_component(
+                    "xray",
+                    "xray",
+                    config=XRaySEDComponentConfig(model=xray_model),
+                )
             )
-        )
     if use_igm or use_dla:
         from tengri.components.igm.component import IGMSEDComponentConfig
 
