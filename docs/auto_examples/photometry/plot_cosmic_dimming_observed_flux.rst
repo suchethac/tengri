@@ -22,7 +22,7 @@ Cosmic dimming and K-correction with redshift
 ==============================================
 
 How does the observed photometric flux of a FIXED-luminosity galaxy decline with
-redshift? We track a star-forming galaxy (log M* = 10.5, SFR = 10 Msun/yr) across
+redshift? We track a star-forming galaxy (log M* = 10.5, SFR = 10 M☉/yr) across
 z = 0.1 to 6 in three optical/infrared bands (SDSS r, JWST J, JWST H), visualizing
 the three physical effects:
 
@@ -53,19 +53,8 @@ surface brightness; Sandage (1988) on K-corrections as pedagogical tools.
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
-      return load_ssp_data(str(candidate))
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -223,7 +212,7 @@ surface brightness; Sandage (1988) on K-corrections as pedagogical tools.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 26.864 seconds)
+   **Total running time of the script:** (0 minutes 13.315 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_cosmic_dimming_observed_flux.py:

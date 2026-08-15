@@ -2,16 +2,9 @@
 Age-metallicity color degeneracy in SDSS colors
 ==================================================
 
-Young, metal-rich and old, metal-poor stellar populations can produce
-similar colors — a fundamental degeneracy in stellar population
-inference. This example builds a 2D grid of single-burst SSP-like models
-varying age (log10(t/Gyr) = -2 to 1.1) and metallicity (log10(Z/Zsun) = -2 to 0.4),
-then plots three SDSS broadband colors (u − r, g − r, NUV − r) as
-pcolormesh grids to visualize the degeneracy.
-
-Each (age, Z) point uses a narrow Gaussian-like SFH (tsnorm)
-centered at the appropriate lookback time, fixed dust extinction,
-and redshift z = 0.05 to avoid numerical issues at z = 0.
+Per-SSP-library solar metallicity differs: MIST Z☉ = 0.0142, BC03/Padova
+Z☉ = 0.0190, PARSEC Z☉ = 0.0152, BASTI Z☉ = 0.0200. A given logzsol
+is only meaningful against its library.
 """
 
 import os

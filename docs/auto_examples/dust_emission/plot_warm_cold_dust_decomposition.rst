@@ -52,7 +52,7 @@ References
    "Decomposing Dust Attenuation and Emission from Dust and Stellar
    Emission Models".
    *The Astrophysical Journal*, 787(1), 35.
-   https://doi.org/10.1088/0004-637X/787/1/35
+   https://doi.org/10.1088/0004–637X/787/1/35
 
 .. GENERATED FROM PYTHON SOURCE LINES 38-230
 
@@ -68,8 +68,10 @@ References
 
  .. code-block:: none
 
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
-      return load_ssp_data(str(candidate))
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/dust_emission/plot_warm_cold_dust_decomposition.py:228: UserWarning: Glyph 956 (\N{GREEK SMALL LETTER MU}) missing from font(s) cmr10.
+      fig.tight_layout()
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/dust_emission/plot_warm_cold_dust_decomposition.py:229: UserWarning: Glyph 956 (\N{GREEK SMALL LETTER MU}) missing from font(s) cmr10.
+      plt.savefig("plot_warm_cold_dust_decomposition.png", dpi=150, bbox_inches="tight")
 
 
 
@@ -272,6 +274,11 @@ References
 
     fig.tight_layout()
     plt.savefig("plot_warm_cold_dust_decomposition.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 6.527 seconds)
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_warm_cold_dust_decomposition.py:

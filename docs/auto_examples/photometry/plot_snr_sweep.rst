@@ -18,14 +18,14 @@
 .. _sphx_glr_auto_examples_photometry_plot_snr_sweep.py:
 
 
-Posterior width tracks 1/SNR for fixed-truth SDSS photometry
+Posterior width tracks 1/S/N for fixed-truth SDSS photometry
 =============================================================
 
 Same star-forming galaxy, same SDSS *ugriz* set, three signal-to-noise
 levels (5, 20, 100). For each S/N we mock the photometry, run a MAP
 fit, and overlay the recovered SED on the truth. The figure surfaces the
 expected scaling — posterior offset and band-by-band residuals shrink as
-1/SNR — and makes the inference cost concrete: even at S/N=5 the dust
+1/S/N — and makes the inference cost concrete: even at S/N=5 the dust
 amplitude is degenerate enough that a single MAP run misses it by ~0.3
 mag in the *u* band.
 
@@ -45,30 +45,10 @@ Reference: Conroy 2013, ARA&A, 51, 393.
 
  .. code-block:: none
 
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-805/src/tengri/forward/sed_model.py:7566: WildcardPartialFreeWarning: 'all_params: FREE' freed 6 of 8 parameters in group 'sfh'. These have no declared prior, only Fixed defaults, so they stay pinned:
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/src/tengri/forward/sed_model.py:8270: WildcardPartialFreeWarning: 'all_params: FREE' freed 6 of 8 parameters in group 'sfh'. These have no declared prior, only Fixed defaults, so they stay pinned:
       met_alpha_fe, met_logzsol_scatter
     The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. sfh={'met_alpha_fe': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
       spec = parse_groups(**groups)
-    /Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit__impl': FileNotFoundError: [Errno 2] No such file or directory: '/Users/suchethacooray/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit__normal': FileNotFoundError: [Errno 2] No such file or directory: '/Users/suchethacooray/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_greater': FileNotFoundError: [Errno 2] No such file or directory: '/Users/suchethacooray/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_less_equal': FileNotFoundError: [Errno 2] No such file or directory: '/Users/suchethacooray/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit__where': FileNotFoundError: [Errno 2] No such file or directory: '/Users/suchethacooray/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_val_and_grad': FileNotFoundError: [Errno 2] No such file or directory: '/Users/suchethacooray/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_predict_photometry': FileNotFoundError: [Errno 2] No such file or directory: '/Users/suchethacooray/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_predict_properties': FileNotFoundError: [Errno 2] No such file or directory: '/Users/suchethacooray/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_single_step': FileNotFoundError: [Errno 2] No such file or directory: '/Users/suchethacooray/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_scan_batch': FileNotFoundError: [Errno 2] No such file or directory: '/Users/suchethacooray/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
 
 
 
@@ -163,7 +143,7 @@ Reference: Conroy 2013, ARA&A, 51, 393.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 12.486 seconds)
+   **Total running time of the script:** (0 minutes 14.027 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_snr_sweep.py:

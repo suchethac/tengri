@@ -18,16 +18,11 @@
 #
 # A tengri model is a few blocks of physics — a star-formation history, a dust
 # law, a nebular backend, optionally an AGN — and a statement of which
-# parameters are free. The nested-dict grammar (after Bagpipes) lets you write
+# parameters are free. The nested-dict grammar (after BAGPIPES) lets you write
 # that down one block at a time: a dict per group, with `'type'` for the
-# structural choice and an `'all_params'` wildcard for free/fixed. It reads back
-# the way you wrote it. (`'all_params'` is the preferred spelling of the
-# wildcard; the older `'*'` is still accepted but is slated for deprecation.)
-#
-# This notebook builds the same model four ways and shows they agree, then uses
-# the grammar to swap one block at a time — SFH family, dust law, IR template —
-# and reads the change off the SED. Along the way, `model.spec.summary()` tells
-# you where every parameter value came from.
+# structural choice and an `'all_params'` wildcard for free/fixed.
+# (`'all_params'` is the preferred spelling of the wildcard; the older `'*'`
+# is still accepted but is slated for deprecation.)
 
 # %% [markdown]
 # ## Setup

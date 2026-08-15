@@ -21,27 +21,16 @@
 Hubble Tension: Cosmology-dependent distance modulus
 =====================================================
 
-Observed-frame flux of a rest-frame SED depends on cosmological distances,
-which vary with H0 and Ω_M. This example quantifies the Hubble tension
-(H0 tension between local measurements ~73 km/s/Mpc and CMB measurements
-~67.4 km/s/Mpc) by showing how apparent magnitude shifts by ~0.15 mag
-across cosmic time.
-
-We build a single rest-frame SED model under two cosmologies:
-1. Planck 2018 (H0=67.4 km/s/Mpc, Ω_M=0.315)
-2. Riess et al. 2022 (H0=73 km/s/Mpc, Ω_M=0.30)
-
-Then predict observed-frame SDSS r-band photometry across redshift z=0.05–3
-to show how Δm = m_Riess - m_Planck grows with redshift.
+Planck 2018: H₀ = 67.4 km/s/Mpc, Ω_M = 0.315. Riess et al. 2022:
+H₀ = 73.04 ± 1.04 km/s/Mpc, Ω_M = 0.30. Apparent magnitude shift is ~0.15 mag
+across z = 0.05–3.
 
 References
 ----------
 
-* Planck 2018: Planck Collaboration et al. 2020, A&A, 641, A6
-* Riess et al. 2022: ApJL, 934, L7 (local H0=73.04±1.04 km/s/Mpc)
-* Hubble tension review: Di Valentino et al. 2021, Nature Astron., 5, 629
+Riess et al. 2022, ApJL, 934, L7 (local H₀ measurement).
 
-.. GENERATED FROM PYTHON SOURCE LINES 26-126
+.. GENERATED FROM PYTHON SOURCE LINES 14-114
 
 
 
@@ -51,8 +40,33 @@ References
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/src/tengri/forward/sed_model.py:8270: WildcardPartialFreeWarning: 'all_params: FREE' freed 6 of 8 parameters in group 'sfh'. These have no declared prior, only Fixed defaults, so they stay pinned:
+      met_alpha_fe, met_logzsol_scatter
+    The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. sfh={'met_alpha_fe': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
+      spec = parse_groups(**groups)
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/usecases/plot_usecase_cosmology_distance_modulus.py:112: UserWarning: Glyph 8320 (\N{SUBSCRIPT ZERO}) missing from font(s) cmr10.
+      fig.tight_layout()
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/usecases/plot_usecase_cosmology_distance_modulus.py:112: UserWarning: Glyph 916 (\N{GREEK CAPITAL LETTER DELTA}) missing from font(s) cmr10.
+      fig.tight_layout()
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/usecases/plot_usecase_cosmology_distance_modulus.py:112: UserWarning: Glyph 956 (\N{GREEK SMALL LETTER MU}) missing from font(s) cmr10.
+      fig.tight_layout()
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/usecases/plot_usecase_cosmology_distance_modulus.py:113: UserWarning: Glyph 8320 (\N{SUBSCRIPT ZERO}) missing from font(s) cmr10.
+      plt.savefig("plot_usecase_cosmology_distance_modulus.png", dpi=150, bbox_inches="tight")
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/usecases/plot_usecase_cosmology_distance_modulus.py:113: UserWarning: Glyph 916 (\N{GREEK CAPITAL LETTER DELTA}) missing from font(s) cmr10.
+      plt.savefig("plot_usecase_cosmology_distance_modulus.png", dpi=150, bbox_inches="tight")
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/usecases/plot_usecase_cosmology_distance_modulus.py:113: UserWarning: Glyph 956 (\N{GREEK SMALL LETTER MU}) missing from font(s) cmr10.
+      plt.savefig("plot_usecase_cosmology_distance_modulus.png", dpi=150, bbox_inches="tight")
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -156,6 +170,11 @@ References
 
     fig.tight_layout()
     plt.savefig("plot_usecase_cosmology_distance_modulus.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 3.160 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_cosmology_distance_modulus.py:

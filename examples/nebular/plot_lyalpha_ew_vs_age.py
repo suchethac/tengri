@@ -2,23 +2,14 @@
 Lyman-alpha equivalent width peaks at young ages, varies with gas metallicity
 ==============================================================================
 
-Lyman-alpha (Lyα) equivalent width (EW) traces stellar population age
-through the presence and strength of massive O stars. We construct a
-sequence of constant star-formation-rate (CSF) models with ages ranging
-from 1 Myr to 30 Myr across three gas metallicities (Z = 0.1, 0.5, 1.0 Zsun),
-compute the rest-frame Lyα emission line luminosity and the underlying
-continuum at 1216 Å, then derive EW(Lyα) = L(Lyα) / L_continuum.
-
-Key result: EW peaks at ~3–5 Myr when spectral type O dominates ionization,
-then decays past 10 Myr as stars age. Higher metallicity suppresses ionizing
-photon production, reducing peak EW and shifting the peak slightly older.
+Lyα rest-frame wavelength is 1216 Å (vacuum). EW peaks at 3–5 Myr when O-type
+stars dominate ionization, then decays past 10 Myr. Higher metallicity
+suppresses ionizing photon production, reducing peak EW.
 
 References
 ----------
-Charlot & Fall 1993 (ApJ 405, 538) — Empirical population synthesis and
-spectral evolution across age and metallicity.
-Schaerer 2003 (A&A 397, 527) — Ionizing photon production in massive
-starburst populations.
+
+Schaerer 2003, A&A, 397, 527 (ionizing photon production in massive starburst populations).
 """
 
 import os

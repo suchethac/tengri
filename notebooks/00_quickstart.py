@@ -125,7 +125,7 @@ citations.print_citations(sed_model)
 # ## Mock observation
 #
 # One draw from the prior is the truth. `generate_mock` returns the
-# noiseless model fluxes, Gaussian uncertainties at the requested SNR,
+# noiseless model fluxes, Gaussian uncertainties at the requested S/N,
 # and a noisy realization.
 
 # %%

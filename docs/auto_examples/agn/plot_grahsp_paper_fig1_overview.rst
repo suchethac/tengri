@@ -26,7 +26,7 @@ model components sum to the total emission (black). The AGN side is the
 GRAHSP bending power-law disk/BBB (blue), iron + emission-line forest (red),
 and the dusty torus (yellow dashed), normalized so the disk has
 :math:`L_{5100\,\mathrm{\AA}}^{\rm AGN}=10^{44}\,\mathrm{erg\,s^{-1}}
-=10^{37}\,\mathrm{W}` (blue square); the torus is anchored at 12 µm (yellow
+=10^{37}\,\mathrm{W}` (blue square); the torus is anchored at 12 μm (yellow
 diamond). The host is a stellar population (purple) and its reprocessed dust
 emission (green).
 
@@ -52,9 +52,7 @@ emission (green).
 
  .. code-block:: none
 
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
-      return load_ssp_data(str(candidate))
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/examples/agn/plot_grahsp_paper_fig1_overview.py:123: RuntimeWarning: divide by zero encountered in divide
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/agn/plot_grahsp_paper_fig1_overview.py:123: RuntimeWarning: divide by zero encountered in divide
       "top", functions=(lambda x: C_AA_HZ / 1e4 / x, lambda nu: C_AA_HZ / 1e4 / nu)
 
 
@@ -177,7 +175,7 @@ emission (green).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.020 seconds)
+   **Total running time of the script:** (1 minutes 30.432 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_grahsp_paper_fig1_overview.py:

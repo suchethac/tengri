@@ -126,7 +126,7 @@ print(f"\nFree parameters ({sed_model.spec.n_free}): {', '.join(sed_model.spec.f
 # ## Mock observation
 #
 # One draw from the prior is the truth (so the truth is always inside the
-# prior — no chance of the broken "truth outside the prior" setup). SNR = 20 is
+# prior — no chance of the broken "truth outside the prior" setup). S/N = 20 is
 # realistic for a survey source.
 
 # %%

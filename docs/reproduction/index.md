@@ -20,7 +20,7 @@ notebook ends with a full-SED head-to-head with a residual panel.
   core forward model: SSPs, delayed-τ SFH, Calzetti and Kriek & Conroy
   attenuation, Draine & Li 2007 IR, the Byler nebular grid, and Madau
   IGM.
-- **{doc}`agnfitter`**: AGNFITTER-RX (Martínez-Ramírez et al. 2024). An
+- **{doc}`agnfitter`**: AGNfitter-RX (Martínez-Ramírez et al. 2024). An
   AGN-first, radio-to-X-ray deep dive: four accretion-disk libraries
   (R06, SN12, KD18, THB21) and four torus libraries (S04, NK08, SKIRTOR,
   CAT3D-Wind) head to head, plus the X-ray corona and radio jets.

@@ -5,10 +5,12 @@
 Use Cases
 =========
 
-Paper-style figures and diagnostic plots — UVJ diagram, JWST color-color,
-SFR-indicator comparison, mass completeness, age–dust degeneracy, and
-emission-line Pearson coefficients.
+Paper-style diagnostics: UVJ, JWST color-color, SFR indicators, mass completeness, age–dust degeneracy, emission-line correlations.
 
+
+.. raw:: html
+
+  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
 
 
 .. raw:: html
@@ -53,7 +55,7 @@ emission-line Pearson coefficients.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The Balmer decrement measures dust attenuation via hydrogen recombination line ratios: H-alpha / H-beta is sensitive to extinction (Calzetti et al. 2000). Without dust, the intrinsic ratio is ~2.78–2.86 (Case B). Here we sweep dust optical depth (τ_diff ∈ [0, 2]) and measure how the predicted H-alpha and H-beta change. We derive A_V = 1.086 × τ_diff and compare against the Calzetti+2000 expectation.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The Balmer decrement measures dust attenuation via hydrogen recombination line ratios: Hα / H-beta is sensitive to extinction (Calzetti et al. 2000). Without dust, the intrinsic ratio is ~2.78–2.86 (Case B). Here we sweep dust optical depth (τ_diff ∈ [0, 2]) and measure how the predicted Hα and H-beta change. We derive A_V = 1.086 × τ_diff and compare against the Calzetti+2000 expectation.">
 
 .. only:: html
 
@@ -70,7 +72,7 @@ emission-line Pearson coefficients.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Observed-frame flux of a rest-frame SED depends on cosmological distances, which vary with H0 and Ω_M. This example quantifies the Hubble tension (H0 tension between local measurements ~73 km/s/Mpc and CMB measurements ~67.4 km/s/Mpc) by showing how apparent magnitude shifts by ~0.15 mag across cosmic time.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Planck 2018: H₀ = 67.4 km/s/Mpc, Ω_M = 0.315. Riess et al. 2022: H₀ = 73.04 ± 1.04 km/s/Mpc, Ω_M = 0.30. Apparent magnitude shift is ~0.15 mag across z = 0.05–3.">
 
 .. only:: html
 
@@ -121,7 +123,7 @@ emission-line Pearson coefficients.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates the U-dropout (Lyman-break) selection technique for identifying galaxies at redshift z~3 based on rest-frame ultraviolet color-color selection. Generates 200 mock galaxies spanning z = 0.1–4.0 with both star-forming and quiescent star formation histories, each with light dust. Computes observed-frame U, G, R photometry and overlays the Steidel+1996 U-dropout selection box.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Steidel+1996 U-dropout box is calibrated for a specific filter set and does not transfer to arbitrary filters: (U − G) &gt; 1.0, (G − R) &lt; 1.5, (U − G) &gt; 1.5(G − R) + 0.3. True z~3 galaxies cluster inside; lower-redshift galaxies fall outside.">
 
 .. only:: html
 
@@ -172,7 +174,7 @@ emission-line Pearson coefficients.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Generates 150 mock galaxies spanning star-forming (z=1-7), passive (z=1-3), and dusty/AGN (z=2-4) populations. Computes JWST NIRCam F150W-F277W vs F277W-F444W colors and plots the diagnostic plane. Shows how JWST color-color diagnostics separate spectral types and enable redshift estimation in the rest-frame UV-to-IR with minimal prior knowledge.">
+    <div class="sphx-glr-thumbcontainer" tooltip="JWST NIRCam color-color diagnostics for high-z galaxy classification">
 
 .. only:: html
 
@@ -189,7 +191,7 @@ emission-line Pearson coefficients.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Three of the most-used star-formation-rate indicators agree only for specific assumed SFHs. This example demonstrates the Kennicutt+1998 baseline calibrations under constant-SFR assumption, then explores how stochastic (bursty) star formation introduces variance in each indicator.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Kennicutt+1998 baseline calibrations under constant-SFR assumption: L_FUV(1500 Å): SFR/L_FUV = 1.4 × 10⁻²⁸; L_Hα: SFR/L_Hα = 7.9 × 10⁻⁴²; L_IR(8–1000 μm): SFR/L_IR = 4.5 × 10⁻⁴⁴. Stochastic SFH introduces variance in each indicator; Hα most sensitive to recent star formation.">
 
 .. only:: html
 
@@ -342,7 +344,7 @@ emission-line Pearson coefficients.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="A cornerstone of dust modeling is energy conservation: the UV light absorbed by dust must be re-radiated in the infrared. This example constructs 15 tengri SEDModels with optical depth τ_V ∈ {0, 0.1, ..., 4} and validates that integrated infrared luminosity (8–1000 μm) matches the absorbed UV (912–3000 Å rest-frame).">
+    <div class="sphx-glr-thumbcontainer" tooltip="For any self-consistent dust model: L_IR ≈ L_UV_absorbed. Using tabulated Dale14 templates, agreement reaches ~5% across τ_V ∈ {0, 0.1, …, 4}. Non-conservation flags calibration issues in the dust emission routing.">
 
 .. only:: html
 
@@ -359,7 +361,7 @@ emission-line Pearson coefficients.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Generates a mock star-forming and quiescent galaxy population and plots each on the rest-frame UVJ color-color plane (U-V vs V-J). The Williams+2009 quiescent wedge (z &lt; 1) marks the boundary between dusty star-forming and passive galaxies — a key degeneracy-breaking diagnostic.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Rest-frame U−V vs V−J colors separate star-forming from quiescent galaxies. The Williams+2009 quiescent wedge marks the boundary between dusty star-forming and passive systems.">
 
 .. only:: html
 

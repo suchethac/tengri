@@ -153,7 +153,7 @@ the fit and tag the outputs after.
 - **PSD timescale** is **Myr** as `psd_tau_myr` at the API level,
   **years** as `psd_tau_yr` internally. The internal-param map handles
   the `1e6` factor.
-- **Metallicity offset.** `met_logzsol` is `log10(Z/Z_sun)` (user) but
+- **Metallicity offset.** `met_logzsol` is `log10(Z/Z☉)` (user) but
   the SSP grid is `log10(Z)` absolute. The translation adds
   `LOG10_ZSUN = -1.848`, defined in `tengri.utils.physics_constants`.
   Do not reproduce this constant by hand.
@@ -223,7 +223,7 @@ tengri.list_filter_conventions()
 # name     short_doc
 # ───────  ─────────────────────────────────────────────────────────────────────────
 # bessell  Photon-counting, weight 1/lambda (default; DSPS/FSPS/sedpy).
-# energy   Energy-counting, weight 1/lambda^2 / flat-in-frequency (CIGALE/bagpipes).
+# energy   Energy-counting, weight 1/lambda^2 / flat-in-frequency (CIGALE/BAGPIPES).
 # [2 results — filter_convention]
 ```
 

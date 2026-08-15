@@ -33,7 +33,7 @@ Silva) vs phenomenological graybodies.
 ``fritz`` and ``skirtor`` are the two CIGALE production tori — smooth
 (Fritz+2006) versus clumpy (Stalevski+2016) — so contrasting them on
 this panel isolates the smooth-vs-clumpy silicate-feature behavior
-near 9.7 and 18 micron.
+near 9.7 and 18 μm.
 
 .. GENERATED FROM PYTHON SOURCE LINES 19-97
 
@@ -45,8 +45,21 @@ near 9.7 and 18 micron.
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/agn/plot_agn_torus_compare.py:95: UserWarning: Glyph 246 (\N{LATIN SMALL LETTER O WITH DIAERESIS}) missing from font(s) cmr10.
+      fig.tight_layout()
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/agn/plot_agn_torus_compare.py:96: UserWarning: Glyph 246 (\N{LATIN SMALL LETTER O WITH DIAERESIS}) missing from font(s) cmr10.
+      plt.savefig("plot_agn_torus_compare.png", dpi=150, bbox_inches="tight")
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -132,7 +145,7 @@ near 9.7 and 18 micron.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 15.851 seconds)
+   **Total running time of the script:** (0 minutes 24.633 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_torus_compare.py:

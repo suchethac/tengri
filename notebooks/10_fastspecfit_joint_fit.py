@@ -189,7 +189,7 @@ def build(line_data, approx):
 # ## Mock catalog
 #
 # One truth galaxy — a star-forming disc at z = 0.1 — and one noisy realization
-# of its DESI photometry (SNR 20) and its FastSpecFit lines (SNR 10 on the
+# of its DESI photometry (S/N 20) and its FastSpecFit lines (S/N 10 on the
 # strong lines). Both channels are generated from the same truth so they agree
 # by construction; `predict_line_fluxes` gives the pure emission, matching the
 # catalog convention.

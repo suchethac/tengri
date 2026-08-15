@@ -22,9 +22,9 @@ Balmer Decrement Tests Dust Attenuation on Emission Lines
 ==========================================================
 
 The Balmer decrement measures dust attenuation via hydrogen recombination line
-ratios: H-alpha / H-beta is sensitive to extinction (Calzetti et al. 2000).
+ratios: Hα / H-beta is sensitive to extinction (Calzetti et al. 2000).
 Without dust, the intrinsic ratio is ~2.78–2.86 (Case B). Here we sweep
-dust optical depth (τ_diff ∈ [0, 2]) and measure how the predicted H-alpha
+dust optical depth (τ_diff ∈ [0, 2]) and measure how the predicted Hα
 and H-beta change. We derive A_V = 1.086 × τ_diff and compare against the
 Calzetti+2000 expectation.
 
@@ -192,7 +192,7 @@ attenuation law).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 8.616 seconds)
+   **Total running time of the script:** (0 minutes 2.460 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_balmer_decrement_av.py:

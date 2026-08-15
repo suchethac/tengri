@@ -21,25 +21,18 @@
 Submillimeter galaxy SED: dust-obscured starburst at z=3
 =========================================================
 
-Submillimeter galaxies (SMGs) are the most luminous starbursts in the universe,
-hidden behind massive dust columns. This example constructs a z=3 SMG SED with
-M* = 2×10^11 Msun, SFR = 500 Msun/yr, and τ_V ≈ 3.5 — typical of ALMA-detected
-sources and the SCUBA-2 850 μm parent population.
-
-The rest-frame SED is dominated by dust re-emission (infrared peak), with the
-UV utterly absorbed. When observed at z=3, the 850 μm emission (rest-frame
-far-infrared peak) redshifts to 3.4 mm, landing precisely in the negative
-K-correction sweet spot that makes SMGs so luminous at centimeter wavelengths
-(Blain et al. 2002). Two panels show the contrast: rest-frame physics on the
-left, observer-frame windows on the right.
+Dust-obscured starburst at z = 3 with a heavily attenuated diffuse ISM
+(`tau_diff = 3.0`). The negative K-correction is what makes submillimeter
+selection nearly distance-independent over z ≈ 1–6: as a source recedes, the
+observing band walks up the steep Rayleigh-Jeans side of the dust peak, and the
+two effects very nearly cancel (Blain+2002).
 
 References
 ----------
 
-- Blain et al. 2002, PhR, 369, 111 (SMG demographics and K-corrections)
-- Casey et al. 2014, PhR, 541, 45 (SMG surveys and model comparison)
+Blain et al. 2002, PhR, 369, 111 (SMG demographics and K-corrections).
 
-.. GENERATED FROM PYTHON SOURCE LINES 24-202
+.. GENERATED FROM PYTHON SOURCE LINES 16-194
 
 
 
@@ -49,8 +42,27 @@ References
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/src/tengri/forward/orchestrator.py:794: SFHBeforeBigBangWarning: Star formation history forms 96% of its stellar mass before the Big Bang at z=3.00 (cosmic age 2.15 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/multiwavelength/plot_submillimeter_galaxy_sed.py:192: UserWarning: Glyph 956 (\N{GREEK SMALL LETTER MU}) missing from font(s) cmr10.
+      fig.tight_layout()
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/multiwavelength/plot_submillimeter_galaxy_sed.py:192: UserWarning: Glyph 8594 (\N{RIGHTWARDS ARROW}) missing from font(s) cmr10.
+      fig.tight_layout()
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/multiwavelength/plot_submillimeter_galaxy_sed.py:193: UserWarning: Glyph 956 (\N{GREEK SMALL LETTER MU}) missing from font(s) cmr10.
+      plt.savefig("plot_submillimeter_galaxy_sed.png", dpi=150, bbox_inches="tight")
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/multiwavelength/plot_submillimeter_galaxy_sed.py:193: UserWarning: Glyph 8594 (\N{RIGHTWARDS ARROW}) missing from font(s) cmr10.
+      plt.savefig("plot_submillimeter_galaxy_sed.png", dpi=150, bbox_inches="tight")
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -232,6 +244,11 @@ References
 
     fig.tight_layout()
     plt.savefig("plot_submillimeter_galaxy_sed.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.437 seconds)
 
 
 .. _sphx_glr_download_auto_examples_multiwavelength_plot_submillimeter_galaxy_sed.py:

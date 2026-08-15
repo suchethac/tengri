@@ -37,9 +37,9 @@ where the break lands in each filter set.
 
 Key intuitions this figure makes obvious:
 
-- At z = 0.5, the break lands in HST/WFC3 F105W–F160W (1.0–1.6 µm)
-- At z = 1.0, the break has moved into JWST/NIRCam F150W–F200W (1.5–2.0 µm)
-- At z = 2.0, the break is now in JWST/NIRCam F277W–F356W (2.8–3.6 µm)
+- At z = 0.5, the break lands in HST/WFC3 F105W–F160W (1.0–1.6 μm)
+- At z = 1.0, the break has moved into JWST/NIRCam F150W–F200W (1.5–2.0 μm)
+- At z = 2.0, the break is now in JWST/NIRCam F277W–F356W (2.8–3.6 μm)
 - At higher z, the break escapes the NIR and enters mid-IR (MIRI)
 - A dusty low-z galaxy and a dust-free high-z galaxy can have nearly
   identical colors because the dust absorption and the age/dust
@@ -59,8 +59,21 @@ et al. 2000 (PASP, 112, 1145) and the Bruzual & Charlot 2003 (MNRAS, 344,
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/src/tengri/forward/orchestrator.py:794: SFHBeforeBigBangWarning: Star formation history forms 39% of its stellar mass before the Big Bang at z=3.00 (cosmic age 2.15 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/src/tengri/forward/orchestrator.py:794: SFHBeforeBigBangWarning: Star formation history forms 83% of its stellar mass before the Big Bang at z=4.00 (cosmic age 1.54 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -225,6 +238,11 @@ et al. 2000 (PASP, 112, 1145) and the Bruzual & Charlot 2003 (MNRAS, 344,
 
     fig.tight_layout()
     plt.savefig("plot_balmer_break_redshift_evolution.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.623 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_balmer_break_redshift_evolution.py:

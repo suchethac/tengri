@@ -112,7 +112,7 @@ print(f"Free parameters ({sed_model.spec.n_free}): {', '.join(sed_model.spec.fre
 # %% [markdown]
 # ## Mock observation
 #
-# Truth with an interior metallicity; one noisy realization at SNR = 30 per
+# Truth with an interior metallicity; one noisy realization at S/N = 30 per
 # pixel.
 
 # %%

@@ -21,29 +21,12 @@
 Building the panchromatic SED component by component
 =====================================================
 
-Tengri assembles a galaxy SED out of named blocks that can each be toggled
-on or off at build time. We construct six models that successively add one
-more block, then overlay the rest-frame :math:`\nu L_\nu` after each
-addition. Every block has a visible signature somewhere in the SED:
+Energy is conserved: dust attenuation removes UV/optical flux, which is
+re-radiated in the far-infrared (Dale 2014 templates restore the balance).
+IGM absorption (Inoue 2014) sculpts the rest-frame continuum below the
+Lyman break (912 Å).
 
-1. **Stellar only** — bare BC03/MILES stellar continuum, no reprocessing.
-2. **+ Nebular** — Hα, [O III], Lyman continuum bound–free, plus warm
-   free–free below 1 μm.
-3. **+ Dust attenuation** — Calzetti two-component law removes UV and
-   optical flux.
-4. **+ Dust IR emission** — Dale 2014 templates re-radiate the absorbed
-   flux in the far-infrared, restoring the energy balance.
-5. **+ AGN** — Kubota & Done multicolor disc adds a UV bump and a soft
-   X-ray excess.
-6. **+ IGM** — Inoue 2014 absorption sculpts the rest-frame continuum
-   shortward of Lyα and the Lyman break.
-
-The shared parameter set is identical across the panels; only the build
-config differs. Use the figure to remember what each block does in the
-absence of the others, and to compare visual budgets before deciding
-which blocks a particular dataset can constrain.
-
-.. GENERATED FROM PYTHON SOURCE LINES 27-156
+.. GENERATED FROM PYTHON SOURCE LINES 10-139
 
 
 
@@ -53,19 +36,8 @@ which blocks a particular dataset can constrain.
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
-      return load_ssp_data(str(candidate))
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -202,7 +174,7 @@ which blocks a particular dataset can constrain.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 43.711 seconds)
+   **Total running time of the script:** (0 minutes 7.335 seconds)
 
 
 .. _sphx_glr_download_auto_examples_sps_plot_component_buildup.py:

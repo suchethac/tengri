@@ -2,7 +2,7 @@
 Panchromatic SED of a low-metallicity dwarf irregular galaxy
 =============================================================
 
-A low-mass, low-metallicity dwarf irregular (M*~10^8 Msun, Z~0.1 Zsun)
+A low-mass, low-metallicity dwarf irregular (M*~10^8 M☉, Z~0.1 Z☉)
 with high specific star formation rate. The SED highlights: strong UV
 continuum from young stars, dominant optical emission lines (Hα 6563 Å,
 [OIII] 5007 Å, Hβ) on a faint continuum, minimal dust attenuation, and
@@ -18,7 +18,7 @@ starburst signature visible from UV through optical.
 
 .. [1] Östlin, G., et al. (2014).
    *Astrophys. J.* **797**, 11.
-   https://doi.org/10.1088/0004-637X/797/1/11
+   https://doi.org/10.1088/0004–637X/797/1/11
 
 .. [2] Chabrier, G. (2003).
    *Publ. Astron. Soc. Pac.* **115**, 763–795.
@@ -26,7 +26,7 @@ starburst signature visible from UV through optical.
 
 .. [3] Cue, C. (2009).
    *Astrophys. J. Suppl. Ser.* **183**, 1–39.
-   https://doi.org/10.1088/0067-0049/183/1/1
+   https://doi.org/10.1088/0067–0049/183/1/1
 """
 
 import warnings

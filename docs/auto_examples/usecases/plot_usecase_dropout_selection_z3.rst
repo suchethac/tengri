@@ -21,22 +21,17 @@
 z~3 Lyman-break galaxy U-dropout selection: color-color diagnosis
 ===================================================================
 
-Demonstrates the U-dropout (Lyman-break) selection technique for identifying
-galaxies at redshift z~3 based on rest-frame ultraviolet color-color selection.
-Generates 200 mock galaxies spanning z = 0.1–4.0 with both star-forming and
-quiescent star formation histories, each with light dust. Computes observed-frame
-U, G, R photometry and overlays the Steidel+1996 U-dropout selection box.
+Steidel+1996 U-dropout box is calibrated for a specific filter set and does
+not transfer to arbitrary filters: (U − G) > 1.0, (G − R) < 1.5,
+(U − G) > 1.5(G − R) + 0.3. True z~3 galaxies cluster inside; lower-redshift
+galaxies fall outside.
 
-The U-dropout box is defined by:
-  (U - G) > 1.0
-  (G - R) < 1.5
-  (U - G) > 1.5 * (G - R) + 0.3
+References
+----------
 
-True z~3 galaxies cluster inside the box; lower-redshift galaxies fall outside,
-demonstrating the technique's redshift selectivity. References: Steidel+1996,
-Madau+1996 dropout technique.
+Steidel et al. 1996, ApJL, 462, L17 (Lyman-break selection at z ~ 3).
 
-.. GENERATED FROM PYTHON SOURCE LINES 20-205
+.. GENERATED FROM PYTHON SOURCE LINES 15-200
 
 
 
@@ -46,19 +41,8 @@ Madau+1996 dropout technique.
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
-      return load_ssp_data(str(candidate))
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -251,7 +235,7 @@ Madau+1996 dropout technique.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.693 seconds)
+   **Total running time of the script:** (0 minutes 3.862 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_dropout_selection_z3.py:

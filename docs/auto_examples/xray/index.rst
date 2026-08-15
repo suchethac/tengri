@@ -5,21 +5,12 @@
 X-ray Emission
 ==============
 
-Multi-wavelength X-ray components: X-ray binaries (HMXB + LMXB) and AGN coronae.
+X-ray binaries (HMXB, LMXB) scaled with SFR and stellar mass. AGN coronae: luminosity, photon index γ, exponential cutoff E_cut, UV-to-X-ray slope α_ox.
 
-Star-Forming Galaxies
----------------------
 
-- ``plot_xray_sf.py`` — X-ray binary scaling with SFR and stellar mass
+.. raw:: html
 
-AGN Coronae
------------
-
-- ``plot_xray_agn.py`` — AGN X-ray coronae: luminosity sequence and spectral hardness
-- ``plot_xray_gamma_sweep.py`` — Photon index γ controls power-law steepness
-- ``plot_E_cut_sweep.py`` — Exponential cutoff E_cut governs hard-tail rollover
-- ``plot_alpha_ox_sweep.py`` — UV-to-X-ray slope α_ox controls normalization
-
+  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
 
 
 .. raw:: html
@@ -115,7 +106,7 @@ AGN Coronae
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The CIGALE-faithful obscured-AGN spectral model combines two knobs that classification surveys often confound: delta_alpha_ox (offset from the empirical alpha_OX-L_2500 relation, controlling the intrinsic X-ray-to-UV ratio) and log N_H (line-of-sight column density, suppressing soft-band flux through zphabs × cabs). We compute the hardness ratio HR = (H - S) / (H + S) with S = 0.5-2 keV and H = 2-10 keV across the joint (delta_alpha_ox, log N_H) plane on a fixed L_2500 anchor (= L_bol = 1e45 erg/s through the Hopkins+2007 bolometric correction).">
+    <div class="sphx-glr-thumbcontainer" tooltip="The CIGALE-faithful obscured-AGN spectral model combines two knobs that classification surveys often confound: delta_alpha_ox (offset from the empirical alpha_OX-L_2500 relation, controlling the intrinsic X-ray-to-UV ratio) and log N_H (line-of-sight column density, suppressing soft-band flux through zphabs × cabs). We compute the hardness ratio HR = (H - S) / (H + S) with S = 0.5-2 keV and H = 2–10 keV across the joint (delta_alpha_ox, log N_H) plane on a fixed L_2500 anchor (= L_bol = 1e45 erg/s through the Hopkins+2007 bolometric correction).">
 
 .. only:: html
 
@@ -200,7 +191,7 @@ AGN Coronae
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="X-ray binaries (XRBs) are the dominant X-ray sources in star-forming galaxies once an AGN is excluded. High-mass XRBs trace the recent star-formation rate (Mineo+2012), while low-mass XRBs trace the integrated stellar mass (Lehmer+2019). The two scalings have different spectral shapes too: HMXBs are slightly harder, LMXBs slightly softer. Two side-by-side sweeps — SFR (left) at fixed M_star = 1e11 M_sun, and M_star (right) at fixed SFR = 10 M_sun/yr — separate the two channels on the same axes.">
+    <div class="sphx-glr-thumbcontainer" tooltip="X-ray binaries (XRBs) are the dominant X-ray sources in star-forming galaxies once an AGN is excluded. High-mass XRBs trace the recent star-formation rate (Mineo+2012), while low-mass XRBs trace the integrated stellar mass (Lehmer+2019). The two scalings have different spectral shapes too: HMXBs are slightly harder, LMXBs slightly softer. Two side-by-side sweeps — SFR (left) at fixed M_star = 1e11 M☉, and M_star (right) at fixed SFR = 10 M☉/yr — separate the two channels on the same axes.">
 
 .. only:: html
 
@@ -217,7 +208,7 @@ AGN Coronae
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="At fixed host (constant SFR = 3 M_sun/yr, Mineo+12 HMXB contribution) we sweep the composable AGN&#x27;s bolometric luminosity agn_log_lbol from 9 to 13 (in log L_sun). The host XRB component is a flat power-law below ~10 keV; the AGN corona contributes a much harder power-law that dominates above log L_bol ≳ 11.">
+    <div class="sphx-glr-thumbcontainer" tooltip="At fixed host (constant SFR = 3 M☉/yr, Mineo+12 HMXB contribution) we sweep the composable AGN&#x27;s bolometric luminosity agn_log_lbol from 9 to 13 (in log L_sun). The host XRB component is a flat power-law below ~10 keV; the AGN corona contributes a much harder power-law that dominates above log L_bol ≳ 11.">
 
 .. only:: html
 

@@ -3,7 +3,7 @@ What each shipped tengri recipe produces
 ==========================================
 
 Six curated recipes span galaxy populations: star-forming at 0–6 (bare-stellar
-SSP), quiescent at z ≈ 0.05 (bare-stellar, tau_diff-free to trace dust),
+SSP), quiescent at z ≈ 0.05 (bare-stellar, τ_diff-free to trace dust),
 AGN panchromatic (bare-stellar, full AGN composite with disc+torus+radio+xray),
 stochastic JWST high-z with burstiness (bare-stellar, DPL+field at 0.5–12),
 mock-recovery minimal (any SSP, 4–5 free params for benchmarking), and

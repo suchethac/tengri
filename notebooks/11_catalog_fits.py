@@ -79,10 +79,10 @@ print(
 # %% [markdown]
 # ## The observation: LSST *ugrizy* + Euclid near-IR
 #
-# Rubin LSST measures six broad optical bands, *ugrizy* (0.32–1.0 µm). On its own
+# Rubin LSST measures six broad optical bands, *ugrizy* (0.32–1.0 μm). On its own
 # that constrains a photometric redshift well below z ≈ 1, where the 4000 Å break
 # still sits inside the optical. The Rubin–Euclid overlap adds the Euclid NISP
-# *Y/J/H* near-IR (1.0–2.0 µm), which follows the break to higher redshift and
+# *Y/J/H* near-IR (1.0–2.0 μm), which follows the break to higher redshift and
 # pins the stellar mass — the "other bands that may be there" in a real LSST-era
 # catalog. Nine bands total; the same machinery takes any set your survey has.
 
@@ -162,7 +162,7 @@ print(f"WavePrecomp LUT built in {build_wall:.1f} s (one-time; content-hash-cach
 # ## A mock catalog
 #
 # `N` galaxies spread across redshift and stellar mass, each a noisy realization
-# of its own truth at a fixed depth (SNR 20). The catalog is a list of
+# of its own truth at a fixed depth (S/N 20). The catalog is a list of
 # `{"flux_obs", "noise"}` dicts, stacked into the table `Catalog` ingests. Truths are
 # drawn once so we can score the recovery at the end.
 

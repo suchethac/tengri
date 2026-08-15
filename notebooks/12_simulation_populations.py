@@ -24,7 +24,7 @@
 #
 # ```text
 #     in :  t [Gyr]        (n_t,)      cosmic time, shared or per galaxy
-#           SFR(t)         (N, n_t)    Msun/yr
+#           SFR(t)         (N, n_t)    M☉/yr
 #           Z(t)           (N, n_t)    stellar metallicity
 #     out:  photometry     (N, n_β)    erg/s/cm2/Hz
 #           line fluxes    (N,)  each  erg/s/cm2
@@ -123,7 +123,7 @@ print(f"{phot.n_filters} bands   free parameters: {fwd.spec.free_params}")
 #
 # Replace `simulation_snapshot` with your reader. Only three things matter:
 # the shapes, the units, and `met_unit=` — declare it, because `Z = 2e-4` is a
-# legal value both as a mass fraction and as log10(Z/Zsun), and reading one as
+# legal value both as a mass fraction and as log10(Z/Z☉), and reading one as
 # the other is a silent factor of ~70.
 
 # %%
@@ -357,18 +357,11 @@ print("      roll your own, pad the last chunk and discard the extra rows.")
 # %% [markdown]
 # ### How wide can the vmap go?
 #
-# Throughput stops improving long before memory does, so the ceiling is set by
-# **memory**, and it is worth measuring rather than guessing. Every galaxy in a
-# batch carries its own intermediates through the SSP machinery, so the working
-# set is linear in the batch width once the fixed overhead is amortized. Measure
-# the slope and the ceiling follows:
-#
 # $$ \text{max width} \;\approx\; \frac{\text{RAM you can spare}}{\text{MB per galaxy}} $$
 #
-# `ru_maxrss` is a **high-water mark**, so this sweep has to run before anything
-# heavier does, and increasing width order is what makes the deltas meaningful.
-# (It is also in bytes on macOS and kilobytes on Linux — a portability trap
-# worth knowing if you copy this helper.)
+# `ru_maxrss` is a high-water mark — a monotonic peak recorded since the process
+# started. To measure the slope, run this sweep before any heavier code, in increasing
+# width order. (It is in bytes on macOS and kilobytes on Linux — a portability trap.)
 
 # %%
 _RSS_SCALE = 1.0 if sys.platform == "darwin" else 1024.0  # bytes on macOS, kB on Linux
@@ -601,10 +594,10 @@ for n in (256, 1024, 4096):
 #
 # cat = Catalog.from_histories(fwd, t_gyr=t, sfr=sfr, met=Z,
 #                              met_unit="z_mass_fraction")
-# mock = cat.simulate(lines=("Halpha", "OIII_5007"),
+# mock = cat.simulate(lines=("Hα", "OIII_5007"),
 #                     properties=("stellar_mass", "sfr_100myr"), chunk_size=128)
 # mock.photometry            # (N, n_bands)  erg/s/cm2/Hz
-# mock.lines["Halpha"]       # (N,)          erg/s/cm2
+# mock.lines["Hα"]       # (N,)          erg/s/cm2
 # mock.to_table()
 # ```
 #

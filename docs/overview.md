@@ -2,7 +2,7 @@
 
 Galaxy SEDs encode stellar mass assembly, chemical enrichment, and dust processing. Tengri recovers these from broadband photometry and spectra using one forward model that spans stellar populations through X-ray, all driven by shared parameters.
 
-Built on [JAX](https://jax.readthedocs.io) and [DSPS](https://github.com/ArgonneCPAC/dsps). Inference backends (optimizers, samplers, variational inference) plug in as registrations. `tengri.summary()` prints the live count for every registry; new components register themselves.
+Built on [JAX](https://jax.readthedocs.io) and [DSPS](https://github.com/ArgonneCPAC/DSPS). Inference backends (optimizers, samplers, variational inference) plug in as registrations. `tengri.summary()` prints the live count for every registry; new components register themselves.
 
 ## Philosophy
 

@@ -2,27 +2,10 @@
 Building the panchromatic SED component by component
 =====================================================
 
-Tengri assembles a galaxy SED out of named blocks that can each be toggled
-on or off at build time. We construct six models that successively add one
-more block, then overlay the rest-frame :math:`\\nu L_\\nu` after each
-addition. Every block has a visible signature somewhere in the SED:
-
-1. **Stellar only** — bare BC03/MILES stellar continuum, no reprocessing.
-2. **+ Nebular** — Hα, [O III], Lyman continuum bound–free, plus warm
-   free–free below 1 μm.
-3. **+ Dust attenuation** — Calzetti two-component law removes UV and
-   optical flux.
-4. **+ Dust IR emission** — Dale 2014 templates re-radiate the absorbed
-   flux in the far-infrared, restoring the energy balance.
-5. **+ AGN** — Kubota & Done multicolor disc adds a UV bump and a soft
-   X-ray excess.
-6. **+ IGM** — Inoue 2014 absorption sculpts the rest-frame continuum
-   shortward of Lyα and the Lyman break.
-
-The shared parameter set is identical across the panels; only the build
-config differs. Use the figure to remember what each block does in the
-absence of the others, and to compare visual budgets before deciding
-which blocks a particular dataset can constrain.
+Energy is conserved: dust attenuation removes UV/optical flux, which is
+re-radiated in the far-infrared (Dale 2014 templates restore the balance).
+IGM absorption (Inoue 2014) sculpts the rest-frame continuum below the
+Lyman break (912 Å).
 """
 
 import warnings

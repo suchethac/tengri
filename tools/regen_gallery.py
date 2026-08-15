@@ -41,6 +41,14 @@ Usage
 Requires the optional data grids (SSP, SKIRTOR, astrodust, ...): the examples
 actually execute. CI cannot run this — it has neither the grids nor the RAM,
 which is why the rendered gallery is committed in the first place.
+
+Batch in single digits. Every requested example runs inside **one** sphinx
+process, and the per-example JAX/SSP allocations are not fully released between
+them, so the peak grows with the batch. Forty at once was OOM-killed on a 48 GB
+machine (``sphinx exit=-9``); eight at a time completes. The snapshot in step 3
+survives the kill, so a killed batch leaves the gallery intact rather than
+hollowed out — but it also does no work, so prefer several small batches over
+one large one. ``--stale`` on a large drift is exactly the case to split up.
 """
 
 from __future__ import annotations

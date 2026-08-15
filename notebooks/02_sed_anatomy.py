@@ -315,7 +315,7 @@ for label, sfh_dict, color in [
     m = SEDModel.build(ssp_data=ssp, observation=obs, **cfg)
     p = m.spec.sample(jax.random.PRNGKey(0))
     w, sed = predict_rest(m, p)
-    ax.plot(w / 1e4, w * sed * 0 + 2.998e18 / w * sed, label=label, color=color, lw=1.3)
+    ax.plot(w / 1e4, 2.998e18 / w * sed, label=label, color=color, lw=1.3)
 ax.set_xscale("log")
 ax.set_yscale("log")
 ax.set_xlim(0.05, 30)

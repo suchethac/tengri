@@ -26,7 +26,7 @@ At high dust optical depth, UV-only SFR estimators severely underestimate
 the true SFR because dusty starbursts radiate most energy in the infrared.
 The hybrid SFR(UV+IR) recipe recovers the true SFR by combining both tracers.
 
-This example sweeps dust optical depth tau_V from 0 to 4 across 12 models.
+This example sweeps dust optical depth τ_V from 0 to 4 across 12 models.
 We compare three estimators:
 
 - **SFR(UV)**: UV luminosity at 1500 Å (dust-attenuated; Kennicutt 1998)
@@ -55,8 +55,33 @@ References
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:228: UserWarning: Glyph 197 (\N{LATIN CAPITAL LETTER A WITH RING ABOVE}) missing from font(s) cmr10.
+      fig.tight_layout()
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:228: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
+      fig.tight_layout()
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:228: UserWarning: Glyph 956 (\N{GREEK SMALL LETTER MU}) missing from font(s) cmr10.
+      fig.tight_layout()
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:228: UserWarning: Glyph 8857 (\N{CIRCLED DOT OPERATOR}) missing from font(s) cmr10.
+      fig.tight_layout()
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:229: UserWarning: Glyph 197 (\N{LATIN CAPITAL LETTER A WITH RING ABOVE}) missing from font(s) cmr10.
+      plt.savefig("plot_usecase_sfr_uv_ir_consistency.png", dpi=150, bbox_inches="tight")
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:229: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
+      plt.savefig("plot_usecase_sfr_uv_ir_consistency.png", dpi=150, bbox_inches="tight")
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:229: UserWarning: Glyph 956 (\N{GREEK SMALL LETTER MU}) missing from font(s) cmr10.
+      plt.savefig("plot_usecase_sfr_uv_ir_consistency.png", dpi=150, bbox_inches="tight")
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:229: UserWarning: Glyph 8857 (\N{CIRCLED DOT OPERATOR}) missing from font(s) cmr10.
+      plt.savefig("plot_usecase_sfr_uv_ir_consistency.png", dpi=150, bbox_inches="tight")
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -264,7 +289,7 @@ References
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.071 seconds)
+   **Total running time of the script:** (0 minutes 11.365 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_sfr_uv_ir_consistency.py:

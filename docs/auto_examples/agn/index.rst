@@ -5,12 +5,12 @@
 AGN Models
 ==========
 
-Composable active-galactic-nucleus SEDs — accretion-disc continua
-(multicolor, KD18, relagn, qsogen), torus libraries (SKIRTOR, Nenkova,
-CAT3D, Silva), narrow-/broad-line and FeII emission, polar-dust and
-Type 1/2 attenuation, the X-ray corona via the alpha_ox relation, and
-parity checks against CIGALE, GRAHSP, and AGNfitter.
+Torus models in `components/agn/torus.py` are toy models; SKIRTOR is the one for science. Disc continua (multicolor, KD18, relagn, qsogen), narrow-/broad-line and FeII emission, polar-dust and Type 1/2 attenuation, X-ray corona via α_ox relation. Cross-validated against CIGALE, GRAHSP, AGNfitter.
 
+
+.. raw:: html
+
+  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
 
 
 .. raw:: html
@@ -361,7 +361,7 @@ parity checks against CIGALE, GRAHSP, and AGNfitter.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The iron pseudo-continuum (the &quot;FeII forest&quot;) is a defining feature of type-1 AGN optical/UV spectra. GRAHSP offers two templates: the photoionization model of Bruhweiler &amp; Verner (2008) (the upstream default) and the empirical Veron-Cetty, Joly &amp; Veron (2004) template. They differ most in the relative strength and shape of the UV (2200-3000 Å) and optical (4400-5400 Å) multiplet blends.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The iron pseudo-continuum (the &quot;FeII forest&quot;) is a defining feature of type-1 AGN optical/UV spectra. GRAHSP offers two templates: the photoionization model of Bruhweiler &amp; Verner (2008) (the upstream default) and the empirical Veron-Cetty, Joly &amp; Veron (2004) template. They differ most in the relative strength and shape of the UV (2200–3000 Å) and optical (4400–5400 Å) multiplet blends.">
 
 .. only:: html
 
@@ -378,7 +378,7 @@ parity checks against CIGALE, GRAHSP, and AGNfitter.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Reproduction of Fig. 1 of Buchner et al. (2024, GRAHSP): how the individual model components sum to the total emission (black). The AGN side is the GRAHSP bending power-law disk/BBB (blue), iron + emission-line forest (red), and the dusty torus (yellow dashed), normalized so the disk has L_{5100\,\mathrm{\AA}}^{\rm AGN}=10^{44}\,\mathrm{erg\,s^{-1}} =10^{37}\,\mathrm{W} (blue square); the torus is anchored at 12 µm (yellow diamond). The host is a stellar population (purple) and its reprocessed dust emission (green).">
+    <div class="sphx-glr-thumbcontainer" tooltip="Reproduction of Fig. 1 of Buchner et al. (2024, GRAHSP): how the individual model components sum to the total emission (black). The AGN side is the GRAHSP bending power-law disk/BBB (blue), iron + emission-line forest (red), and the dusty torus (yellow dashed), normalized so the disk has L_{5100\,\mathrm{\AA}}^{\rm AGN}=10^{44}\,\mathrm{erg\,s^{-1}} =10^{37}\,\mathrm{W} (blue square); the torus is anchored at 12 μm (yellow diamond). The host is a stellar population (purple) and its reprocessed dust emission (green).">
 
 .. only:: html
 
@@ -463,7 +463,7 @@ parity checks against CIGALE, GRAHSP, and AGNfitter.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Identical AGN configuration (multicolor disc + SKIRTOR torus at log L_bol = 12.5), one with the narrow-line region (FWHM ~ a few hundred km/s, characteristic Type-2 spectrum) and the other with the broad-line region (FWHM ~ thousands of km/s, Type-1). Side-by-side zooms on the UV (Ly-alpha, C IV) and the optical (Hbeta, [O III], Halpha) make the velocity-width contrast unmistakable while controlling for continuum.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Identical AGN configuration (multicolor disc + SKIRTOR torus at log L_bol = 12.5), one with the narrow-line region (FWHM ~ a few hundred km/s, characteristic Type-2 spectrum) and the other with the broad-line region (FWHM ~ thousands of km/s, Type-1). Side-by-side zooms on the UV (Ly-alpha, C IV) and the optical (Hbeta, [O III], Hα) make the velocity-width contrast unmistakable while controlling for continuum.">
 
 .. only:: html
 
@@ -559,7 +559,7 @@ parity checks against CIGALE, GRAHSP, and AGNfitter.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Silva+04 torus: Obscuration and the 9.7 micron silicate feature</div>
+      <div class="sphx-glr-thumbnail-title">Silva+04 torus: Obscuration and the 9.7 μm silicate feature</div>
     </div>
 
 
@@ -701,7 +701,7 @@ parity checks against CIGALE, GRAHSP, and AGNfitter.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The composable AGN runner sums disc + broad/narrow lines + FeII + torus, but a real dusty torus also obscures the central engine along edge-on sightlines while its own infrared emission is not re-extinguished by that same screen. tengri applies this inclination-dependent torus screen automatically whenever the torus is one of the two CIGALE production grids (``skirtor`` or fritz); it closes the &quot;disc + torus composed additively, no torus screen on disc&quot; gap (#294).">
+    <div class="sphx-glr-thumbcontainer" tooltip="The composable AGN runner sums disc + broad/narrow lines + FeII + torus, but a real dusty torus also obscures the central engine along edge-on sightlines while its own infrared emission is not re-extinguished by that same screen. tengri applies this inclination-dependent torus screen automatically whenever the torus is one of the two CIGALE production grids (``skirtor`` or fritz).">
 
 .. only:: html
 
