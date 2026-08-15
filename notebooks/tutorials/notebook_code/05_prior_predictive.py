@@ -77,7 +77,7 @@ WAVE_OBS = jnp.linspace(3800.0, 9200.0, 200)
 # %%
 # Good prior
 spec_good = Parameters(
-    sfh_tsnorm_log_total_mass=10.0, 2.5),
+    sfh_tsnorm_log_total_mass=Fixed(10.0),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
     sfh_tsnorm_skew=Uniform(-3.0, 3.0),
@@ -183,7 +183,7 @@ plt.show()
 # %%
 # Bad prior: dust way too wide
 spec_bad = Parameters(
-    sfh_tsnorm_log_total_mass=10.0, 2.5),
+    sfh_tsnorm_log_total_mass=Fixed(10.0),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
     sfh_tsnorm_skew=Uniform(-3.0, 3.0),
@@ -246,7 +246,7 @@ plt.show()
 
 # %%
 spec_stoch = Parameters(
-    sfh_tsnorm_log_total_mass=10.0, 2.5),
+    sfh_tsnorm_log_total_mass=Fixed(10.0),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
     sfh_tsnorm_skew=Uniform(-3.0, 3.0),
