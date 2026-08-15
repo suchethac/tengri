@@ -96,10 +96,24 @@ def _observation() -> Observation:
     return Observation(photometry=Photometry(filters=curves))
 
 
-# Grid span and output surface per kind. The X-ray and radio spans are not
-# cosmetic: on the shared 100 A - 1 mm grid their emission falls off the end
-# and every model in the menu measures identical, which is a false positive
-# for exactly the defect this file exists to detect.
+# A luminous AGN. The X-ray corona models tie their emission to the disc's
+# L_2500 via alpha_ox, so without a disc there is nothing for the corona
+# prescription to act on and every X-ray name measures identical -- for an
+# honest reason. This fixture is the difference between reporting four aliased
+# X-ray models and reporting five: an earlier revision of this file omitted it
+# and wrongly recorded ``lopez24`` as a fifth member of the class.
+_LUMINOUS_AGN: dict = {
+    "type": "composable",
+    "disc": {"type": "multicolor"},
+    "torus": {"type": "skirtor"},
+    "log_lbol": Fixed(13.0),
+}
+
+# Grid span, output surface, and required scaffolding per kind. None of these
+# are cosmetic. On the shared 100 A - 1 mm grid X-ray and radio emission falls
+# off the end and every model in the menu measures identical, which is a false
+# positive for exactly the defect this file exists to detect; and a corona
+# model with no disc beneath it is the same trap one level up.
 _KIND_INSTRUMENT: dict[str, tuple[float, float, str]] = {
     "xray": (-1.0, 7.0, "rest"),  # 0.1 A - 1 mm
     "radio": (2.0, 10.0, "rest"),  # 100 A - 1 m
@@ -108,11 +122,31 @@ _KIND_INSTRUMENT: dict[str, tuple[float, float, str]] = {
     "agn": (1.0, 7.0, "rest"),
 }
 
+#: Groups a kind needs present before its own choice can matter.
+_KIND_SCAFFOLD: dict[str, dict] = {
+    "xray": {"agn": _LUMINOUS_AGN},
+    "radio": {"agn": _LUMINOUS_AGN},
+}
+
+#: Wavelength window [A] a kind's physics actually occupies, when it is narrower
+#: than the grid. Comparing over the whole grid is not the same as comparing
+#: where the component lives, and the difference is not academic: radio_dpl vs
+#: radio_powerlaw measures 1.45e-09 at the 1 mm IR/mm boundary -- just above the
+#: inertness tolerance, over 0.69% of the grid -- while in the radio band itself
+#: it is 9.1e-16. Judged grid-wide, that boundary artifact reads as "the double
+#: power-law works"; judged in the radio band, the truth is that it changes
+#: nothing where radio physics lives.
+_KIND_BAND: dict[str, tuple[float, float]] = {
+    "radio": (1.0e9, 1.0e11),  # ~10 cm - 10 m
+    "xray": (0.1, 1.0e2),  # 0.1 - 100 A
+}
+
 
 def _sed(group: str, cfg: dict | None, *, extra: dict | None = None) -> jnp.ndarray:
-    """Build one configuration and return its SED on the right instrument."""
+    """Build one configuration and return its SED where the physics lives."""
     lo, hi, surface = _KIND_INSTRUMENT[group]
     groups: dict = {"sfh": {"type": "const"}}
+    groups.update(_KIND_SCAFFOLD.get(group, {}))
     if cfg is not None:
         groups[group] = cfg
     groups.update(extra or {})
@@ -122,11 +156,35 @@ def _sed(group: str, cfg: dict | None, *, extra: dict | None = None) -> jnp.ndar
         model = SEDModel.build(ssp_data=_ssp(lo, hi), observation=_observation(), **groups)
         params = model.spec.sample(jax.random.PRNGKey(0))
         pred = model.predict(params)
-        return jnp.asarray(pred.obs_sed() if surface == "obs" else pred.rest_sed())
+        sed = jnp.asarray(pred.obs_sed() if surface == "obs" else pred.rest_sed())
+        band = _KIND_BAND.get(group)
+        if band is None:
+            return sed
+        axis = jnp.asarray(pred.wave_obs if surface == "obs" else pred.wave_rest)
+        return sed[(axis >= band[0]) & (axis <= band[1])]
 
 
-def _identical(a: jnp.ndarray, b: jnp.ndarray) -> bool:
-    return a.shape == b.shape and bool(jnp.array_equal(a, b))
+#: Two outputs closer than this are not a distinction a user could act on.
+#: Matches ``_INERT_TOL`` in ``test_wildcard_scope_is_variant_aware.py`` so both
+#: suites answer "does this choice matter?" against the same bar.
+_INERT_TOL = 1e-9
+
+
+def _indistinguishable(a: jnp.ndarray, b: jnp.ndarray) -> bool:
+    """Is the difference between two choices below the point of mattering?
+
+    Bit-identity is the usual signature here -- most classes in this file
+    measure exactly 0.0, which is the fingerprint of one model reached by two
+    names. But it is the wrong bar on its own: ``radio_dpl`` differs from the
+    single power-law by ~3e-9 relative, which is not bit-identical and is also
+    not a double power-law. Judging that pair by ``array_equal`` alone would
+    have declared the #1461 defect fixed on the strength of floating-point
+    noise.
+    """
+    if a.shape != b.shape:
+        return False
+    denom = jnp.where(jnp.abs(b) > 0, jnp.abs(b), 1.0)
+    return bool(jnp.max(jnp.abs(a - b) / denom) <= _INERT_TOL)
 
 
 # ── Ledger 1: coincidences that are correct by construction ──────────
@@ -178,15 +236,20 @@ DECLARED_COINCIDENT: list[dict] = [
 KNOWN_UNDISTINCT: list[dict] = [
     {
         "group": "xray",
-        "names": {"simple", "yang20", "xray_aird", "agn_xray_corona", "lopez24"},
+        "names": {"simple", "yang20", "xray_aird", "agn_xray_corona"},
         "reason": (
-            "#1684 -- every production X-ray model is bit-identical to every "
-            "other, measured on a 0.1 A - 1 mm grid that contains the X-ray "
-            "band. Two of these are declared aliases ('simple' == 'yang20' "
-            "physics, groups.py:1663); the rest are not. component.py:454 "
-            "branches on config.model == 'lopez24' and that branch is never "
-            "reached from xray={'type': 'lopez24'}. #1684 reports two "
-            "aliased models; measured here it is all five."
+            "#1684 -- four production X-ray names, one model, measured on a "
+            "0.1 A - 1 mm grid beneath a luminous AGN. One pair is a declared "
+            "alias ('simple' == 'yang20' physics, groups.py:1663); "
+            "xray_aird and agn_xray_corona are not, and are the two #1684 "
+            "reports. This is the unfinished half of #1120, which closed after "
+            "adding the names to the grammar allowlist but not to "
+            "component_factory, turning that issue's loud ValueError into "
+            "silence.\n\n"
+            "lopez24 is deliberately NOT in this class. It separates at max "
+            "rel 8.0e-06 once a disc is present -- its alpha_ox branch needs "
+            "an L_2500 to act on. An earlier revision of this file omitted the "
+            "AGN scaffold and recorded it here wrongly; see _LUMINOUS_AGN."
         ),
     },
     {
@@ -302,7 +365,7 @@ def test_no_undeclared_twins(group: str) -> None:
     undeclared: list[str] = []
     for i, a in enumerate(names):
         for b in names[i + 1 :]:
-            if not _identical(seds[a], seds[b]):
+            if not _indistinguishable(seds[a], seds[b]):
                 continue
             if _covered(group, a, b):
                 continue
@@ -332,7 +395,7 @@ def test_known_undistinct_ledger_is_current(entry: dict) -> None:
     seds = {n: _sed(group, _type_cfg(group, n), extra=extra) for n in names}
 
     reference = names[0]
-    separated = [n for n in names[1:] if not _identical(seds[reference], seds[n])]
+    separated = [n for n in names[1:] if not _indistinguishable(seds[reference], seds[n])]
     assert not separated, (
         f"{group}: {separated} no longer match {reference!r} -- the defect "
         f"recorded as:\n    {entry['reason']}\nappears to be FIXED for those "
@@ -355,7 +418,7 @@ def test_declared_coincidence_has_a_working_separator(entry: dict) -> None:
     sed_a = _sed(entry["group"], cfg_a)
     sed_b = _sed(entry["group"], cfg_b)
 
-    assert not _identical(sed_a, sed_b), (
+    assert not _indistinguishable(sed_a, sed_b), (
         f"{entry['group']}: the separator declared for {sorted(entry['names'])} "
         "does not separate the models -- they are bit-identical even with it "
         "applied. The coincidence is therefore not 'correct at default "
