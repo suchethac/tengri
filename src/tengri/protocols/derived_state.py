@@ -335,6 +335,26 @@ class DerivedState:
     # For BakedIn nebular this is None — the nebular emission is already
     # baked into the SSP grid and therefore included in stellar_phot_lnu_precomp.
     nebular_phot_lnu_precomp: jnp.ndarray | None = None
+    # The same bucket with the young-limit dust screen already integrated THROUGH
+    # each band, published by the dust component from the reddened continuum it
+    # computes anyway (#1738). ``predict_via_precomp`` prefers this over reddening
+    # ``nebular_phot_lnu_precomp`` at λ_eff, which is only correct where the screen
+    # is flat across the filter — and nebular emission is line-dominated, so it is
+    # not. Exact rather than the K-point form the stellar continuum uses (#1122),
+    # because the reddened continuum is already on the full grid here. ``None`` when
+    # no dust component runs, in which case there is no screen to integrate.
+    #
+    # THE SUFFIX IS LOAD-BEARING. ``predict_via_precomp`` sums every key ending
+    # ``_phot_lnu_precomp`` into the total, and ``_restband_lnu_precomp`` likewise.
+    # These two are REPLACEMENT terms, not additive contributions: renaming either to
+    # end in the discovered suffix would sum the nebular bucket twice, once bare and
+    # once reddened. The ``_attenuated_`` infix is what keeps them out of that sweep.
+    nebular_phot_lnu_attenuated_precomp: jnp.ndarray | None = None
+    # The rest-frame twin, integrated with the filter at z=0 where
+    # ``phot_rest_fnu`` projects. Emitted with its observed-frame partner or not at
+    # all: shipping only the observed one is #1665, which left every rest-frame
+    # consumer on the λ_eff screen and moved 13/13 spectral indices silently.
+    nebular_restband_lnu_attenuated_precomp: jnp.ndarray | None = None
     # Shock (MAPPINGS V) per filter — rest-frame Lν, erg/s/Hz, intrinsic (no
     # dust, no cosmology), exactly like ``nebular_phot_lnu_precomp``. A separate
     # additive component from the photoionized backend (#851), so it carries its

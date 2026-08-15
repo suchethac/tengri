@@ -767,6 +767,58 @@ class DustSEDComponent(TemplateThreading):
             derived_overrides["dust_bc_attenuation_slope_precomp"] = a_bc_slope
             derived_overrides["dust_diff_attenuation_precomp"] = a_diff
             derived_overrides["dust_diff_attenuation_slope_precomp"] = a_diff_slope
+
+            # The nebular bucket's screen, integrated THROUGH the band rather than
+            # sampled at λ_eff (#1738). ``A(λ_eff)·Φ_neb`` is only correct where the
+            # screen is flat across the filter, and nebular emission is line-dominated:
+            # a line sits where it sits, not at λ_eff, so the sampled screen is wrong
+            # by the screen's own variation across the band. Measured on a real FSPS
+            # SSP through SDSS griz, that error inflated the precomp-vs-exact gap by up
+            # to 26x over the stellar-only floor while nebular carried only 0.8-3.5 %
+            # of the band flux.
+            #
+            # This is EXACT, not the K-point convergent form the stellar continuum
+            # uses (#1122): ``sed_neb_attenuated`` is the reddened continuum on the
+            # full grid, so its band integral is the answer ``predict()`` computes.
+            # Affordable for the same reason it is needed — a dusty model already
+            # materializes the nebular continuum (``DustSEDComponent`` declares
+            # ``sed_nebular`` an input, which is what disarms the fast nebular grid,
+            # #1281/#1748), so the dense array is already live in the compiled graph
+            # and no dead-code elimination is given up. Where it is NOT materialized
+            # there is no dust consumer, hence no screen, hence nothing to correct.
+            # Guarded on the bucket this term REPLACES, not on the continuum it reads.
+            # A ``neb={'type': 'none'}`` model still publishes ``sed_nebular`` — as
+            # zeros — so keying off the continuum does not discriminate, and the
+            # projection READS the dense grid: on a dust-only model it resurrects the
+            # full-resolution chain XLA had eliminated, measured at 197,365 ->
+            # 1,285,037 gradient FLOPs (6.5x). That elimination is the entire point of
+            # the LUT (#1109), and spending it to integrate zeros is the worst
+            # available trade. ``nebular_phot_lnu_precomp`` is absent exactly when
+            # there is no λ_eff screening to correct — including BakedIn nebular,
+            # whose emission is already inside the stellar LUT.
+            _neb_phot = state.derived.get("nebular_phot_lnu_precomp")
+            if _neb_phot is not None and _sed_neb is not None:
+                from tengri.components._band_projection import (
+                    project_additive_onto_photometry,
+                )
+                from tengri.parameters.resolve import require_redshift
+
+                z_neb = jnp.asarray(
+                    require_redshift(params, "components.dust.two_component.apply")
+                )
+                fw_pad = state.derived.get("phot_filter_waves_padded")
+                ft_pad = state.derived.get("phot_filter_trans_padded")
+                derived_overrides["nebular_phot_lnu_attenuated_precomp"] = (
+                    project_additive_onto_photometry(
+                        None,  # no band response: a multiplicative screen is not rank-1
+                        sed_neb_attenuated,
+                        wave,
+                        filter_eff,
+                        fw_pad,
+                        ft_pad,
+                        z_neb,
+                    )
+                )
             # Log-derivatives d(ln A)/dλ = −τ·k'(λ_eff), published directly (no
             # division by A) so the two-component Taylor projection (#617) is
             # NaN-safe where A → 0 (e.g. X-ray/UV bands far off the dust curve):
@@ -805,6 +857,24 @@ class DustSEDComponent(TemplateThreading):
                 derived_overrides["dust_diff_restband_attenuation_precomp"] = jnp.exp(
                     -tau_diff * law_diff_fn(rb_eff, n_slope=n_slope_diff)
                 )
+            # The rest-frame twin of the band-integrated nebular screen above (#1738).
+            # Emitted HERE, beside its observed-frame partner, because emitting only
+            # one is #1665: every rest-frame consumer silently kept the λ_eff screen
+            # and 13/13 spectral indices moved with nothing raised. ``redshift=0``
+            # puts the filter in the rest frame, where ``phot_rest_fnu`` projects.
+            if rb_eff is not None and _neb_phot is not None and _sed_neb is not None:
+                derived_overrides["nebular_restband_lnu_attenuated_precomp"] = (
+                    project_additive_onto_photometry(
+                        None,
+                        sed_neb_attenuated,
+                        wave,
+                        rb_eff,
+                        fw_pad,
+                        ft_pad,
+                        jnp.zeros_like(z_neb),
+                    )
+                )
+
             rb_sub_waves = state.derived.get("stellar_restband_subband_waves_precomp")
             if rb_sub_waves is not None:
                 derived_overrides["dust_bc_restband_attenuation_subband_precomp"] = jnp.exp(

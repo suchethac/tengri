@@ -257,6 +257,13 @@ _CANONICAL_UNITS: dict[str, str] = {
     # Nebular — photometry LUT (only non-BakedIn backends
     # publish, when ``approx=WavePrecomp()`` is set).
     "nebular_phot_lnu_precomp": "erg/s/Hz",
+    # The same bucket with the young-limit screen integrated THROUGH each band,
+    # published by the dust component from the reddened continuum (#1738). Replaces
+    # the lambda_eff screening of the key above rather than adding to it — the
+    # ``_attenuated_`` infix is what keeps it out of the ``*_phot_lnu_precomp``
+    # summation sweep in ``predict_via_precomp``.
+    "nebular_phot_lnu_attenuated_precomp": "erg/s/Hz",
+    "nebular_restband_lnu_attenuated_precomp": "erg/s/Hz",
     # Shock (MAPPINGS V) — filter LUT. A separate additive component from the
     # photoionized nebular backend (#851), so it carries its own key (#1375).
     "shock_phot_lnu_precomp": "erg/s/Hz",

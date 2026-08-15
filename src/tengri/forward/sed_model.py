@@ -389,9 +389,14 @@ class WavePrecomp:
     ``band_integration="effective_wavelength"`` (or ``"taylor"``, if
     ``taylor_correction=True`` accompanies it); prefer naming the scheme.
 
-    Only the *multiplicative* stellar + nebular screen needs this. Additive emitters
-    (dust IR, radio, X-ray, AGN) factorize exactly through the rank-1/rank-K band
-    response of #1107/#1117 and are unaffected."""
+    Only the *multiplicative* stellar screen needs this. Additive emitters (dust IR,
+    radio, X-ray, AGN) factorize exactly through the rank-1/rank-K band response of
+    #1107/#1117 and are unaffected. Nebular is not affected either, for the opposite
+    reason: it never had a sub-band tensor to size, and since #1738 it does not need
+    one — its screen is integrated through the band exactly, from the reddened
+    continuum a dusty model materializes anyway. (This said "stellar + nebular" for
+    as long as the nebular bucket was in fact screened at a single wavelength per
+    band, which is the error #1738 removed.)"""
 
     taylor_correction: bool | None = None
     """First-order spectral-moment (Ψ) correction to the effective-wavelength dust
