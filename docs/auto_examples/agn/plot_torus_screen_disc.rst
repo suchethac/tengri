@@ -26,8 +26,7 @@ but a real dusty torus also *obscures the central engine* along edge-on
 sightlines while its own infrared emission is not re-extinguished by that
 same screen. ``tengri`` applies this inclination-dependent **torus screen**
 automatically whenever the torus is one of the two CIGALE production grids
-(``skirtor`` or ``fritz``); it closes the "disc + torus composed additively,
-no torus screen on disc" gap (#294).
+(``skirtor`` or ``fritz``).
 
 Here a single Stalevski+2016 (``skirtor``) torus reprocesses a fixed
 Kubota & Done (2018) disc at ``log L_bol = 12.5`` (in log L_sun). Only the
@@ -44,7 +43,7 @@ Geometry (``skirtor2016`` convention): the sightline enters the torus when
 The Type-1/Type-2 transition is a sigmoid in ``cos i`` (C^1, gradient-safe
 for HMC/VI), so a default face-on model is left unchanged.
 
-.. GENERATED FROM PYTHON SOURCE LINES 28-102
+.. GENERATED FROM PYTHON SOURCE LINES 27-101
 
 
 
@@ -133,6 +132,11 @@ for HMC/VI), so a default face-on model is left unchanged.
 
     fig.tight_layout()
     plt.savefig("plot_torus_screen_disc.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.311 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_torus_screen_disc.py:

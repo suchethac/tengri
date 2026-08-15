@@ -2,11 +2,12 @@
 Recipe introspection and SED morphology comparison
 ===================================================
 
-The tengri public API ships recipes for common SED fitting scenarios
-(star-forming, quiescent, AGN). This example showcases the introspection API
-(``tengri.list_recipes()``, ``tengri.describe_recipe()``) and visually
-differentiates the rest-frame SED morphology across three representative
-models: young star-former, quiescent, and AGN-dominated.
+Call ``tengri.list_recipes()`` to see the shipped menu with SSP requirements
+(bare-stellar, wNE, or any) and ``tengri.describe_recipe(name)`` to fetch
+a recipe's docstring. Three models showcase the morphological diversity:
+star-forming (DPL+Cue nebular, free z to 6), quiescent at z=0.05 (dexp,
+lower dust ceiling), and AGN-panchromatic (full composite, z to 6).
+All require bare-stellar SSP (Cue backend).
 """
 
 import io

@@ -16,19 +16,14 @@
 # %% [markdown]
 # # Parameter sweeps
 #
-# Vary one knob, plot a fan of SEDs. It's the cheapest way to develop
-# physical intuition for a forward model — and because tengri's model is
-# pure JAX, sweeps that would take a Python loop in a non-differentiable
-# code can be batched through `vmap` and run in a single compiled call.
+# Vary one knob, plot a fan of SEDs — the cheapest way to build physical intuition.
+# Because tengri's model is pure JAX, sweeps can be batched through `vmap` and run
+# in a single compiled call. This notebook covers:
 #
-# This notebook covers four kinds of sweep:
-#
-# 1. A 1-D sweep with the gallery's `sweep_parameter` helper (the canonical
-#    idiom — same one used by the 15+ scripts in `examples/`).
-# 2. A prior fan via `sample_sfh_prior` (sweep parameter values *drawn*
-#    from a registered prior, not picked by hand).
-# 3. An `Instrument`-driven photometric setup (no hand-rolled filter lists).
-# 4. A 2-D photometric grid via `predict_photometry_batch` and `jax.vmap`.
+# 1. 1-D sweeps with `sweep_parameter`.
+# 2. Prior fans via `sample_sfh_prior`.
+# 3. Photometric setup with `Instrument`.
+# 4. 2-D photometric grids via `predict_photometry_batch` and `jax.vmap`.
 
 # %%
 import os
@@ -71,10 +66,11 @@ ssp = tengri.load_ssp("ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0", down
 # %% [markdown]
 # ## 1-D sweep with `sweep_parameter`
 #
-# Build a fixed star-forming galaxy and vary one knob. `sweep_parameter`
-# loops in Python, but each forward call hits tengri's persistent JIT
-# cache, so the per-iteration cost after the first is the cost of
-# `model.predict` itself.
+# Build a fixed star-forming galaxy and vary one knob. A sweep holds all other
+# parameters at their fixed values, so the fan understates the real degeneracy
+# — a full fit frees other parameters and expands the contours. `sweep_parameter`
+# loops in Python, but each forward call hits the persistent JIT cache, so after
+# the first iteration the per-call cost is just `model.predict`.
 
 # %%
 spec_sf = Parameters(
@@ -104,16 +100,12 @@ fig.tight_layout()
 plt.show()
 
 # %% [markdown]
-# Same idiom for any other knob — see `examples/dust/`, `examples/agn/`,
-# `examples/spectroscopy/` for ~15 worked sweeps across the model.
 
 # %% [markdown]
 # ## A prior fan via `sample_sfh_prior`
 #
-# Sometimes the question isn't "what does this knob do?" but "what range
-# of behavior does my prior actually allow?". `sample_sfh_prior` draws
-# from a registered SFH family's default prior block and returns the SFR
-# curves directly; one line, no `Parameters` boilerplate.
+# What range of behavior does the prior actually allow? `sample_sfh_prior` draws
+# from a registered SFH family's default prior and returns the SFR curves directly.
 
 # %%
 age_grid_yr, curves = sample_sfh_prior(
@@ -159,9 +151,7 @@ plt.show()
 # %% [markdown]
 # ## Photometric setup with `Instrument`
 #
-# Photometric sweeps need a filter set. The new `Instrument` registry
-# bundles the canonical sets so you don't reach for `Photometry.from_names([...])`
-# every time. Compare a few:
+# The `Instrument` registry bundles canonical filter sets:
 
 # %%
 for inst_factory in (Instrument.SDSS, Instrument.JWST_NIRCam, Instrument.WISE):
@@ -171,10 +161,9 @@ for inst_factory in (Instrument.SDSS, Instrument.JWST_NIRCam, Instrument.WISE):
 # %% [markdown]
 # ## A 2-D photometric grid via `predict_photometry_batch`
 #
-# For sweeps over more than one axis the right tool is `model.predict_photometry_batch`,
-# which is a `jax.vmap` of the per-galaxy predictor. We sweep `met_logzsol`
-# against `dust_tau_diff` for an SDSS-band model and look at how the
-# *color* `g - r` moves across the grid.
+# For multi-axis sweeps, use `model.predict_photometry_batch`, a `jax.vmap` of
+# the per-galaxy predictor. We sweep `met_logzsol` against `dust_tau_diff` for
+# an SDSS model and track how the *color* `g - r` moves.
 
 # %%
 spec_grid = Parameters(
@@ -234,19 +223,14 @@ fig.tight_layout()
 plt.show()
 
 # %% [markdown]
-# 256 forward evaluations, one compiled `vmap` call. Both axes contribute
-# to redder colors; the partial degeneracy between metallicity and dust
-# is the canonical reason photometric SED fitting needs spectroscopy
-# (see [`06_fitting_spectroscopy`](06_fitting_spectroscopy.py) and
-# [`07_joint_photo_spec`](07_joint_photo_spec.py)).
+# 256 forward evaluations in one compiled `vmap` call. Both axes drive redder
+# colors; the metallicity–dust degeneracy is why photo-z fits need spectroscopy.
 
 # %% [markdown]
 # ## Sweeping a categorical knob: dust attenuation law
 #
-# Most sweeps move along a continuous parameter. But categorical knobs —
-# which dust law? which AGN model? — also benefit from a "fan" plot,
-# even if the points are discrete. Here we hold τ_diff fixed and swap
-# the diffuse-ISM attenuation law through five named families.
+# Categorical knobs (dust law, AGN model) also benefit from a "fan" plot.
+# Here we hold τ_diff fixed and sweep the diffuse-ISM attenuation law.
 
 # %%
 DUST_LAW_LABELS = {
@@ -300,11 +284,9 @@ plt.show()
 # %% [markdown]
 # ## Photometric tracks across redshift
 #
-# The same galaxy at five redshifts gives five photometric points in any
-# color-color diagram — together they trace a curve that high-z
-# selection cuts (Lyman-break, BzK, dropouts) actually live on. Here we
-# vmap a single SFH/dust truth across `z ∈ [0.5, 8]` through JWST
-# NIRCam and plot F150W − F277W vs F277W − F444W.
+# One galaxy traced across redshifts traces a locus in color-color space
+# that high-z selection cuts (Lyman-break, BzK, dropouts) live on. Here we
+# vmap a single SFH/dust truth across z ∈ [0.5, 8] through JWST NIRCam.
 
 # %%
 inst_jwst = Instrument.JWST_NIRCam()
@@ -349,17 +331,15 @@ fig.tight_layout()
 plt.show()
 
 # %% [markdown]
-# The kink at z ≈ 6 is the Lyman break exiting F150W. The same vmap
-# pattern scales straight to a population: replace the broadcast values
-# with full per-galaxy parameter arrays and you get a color-color
-# scatter for thousands of mock galaxies in one compiled call.
+# The kink at z ≈ 6 is the Lyman break exiting F150W. The same `vmap` pattern
+# scales to populations: replace broadcast values with per-galaxy arrays for
+# thousands of mock galaxies in one compiled call.
 
 # %% [markdown]
 # ## AGN bolometric luminosity sweep
 #
-# AGN contribution scales with `agn_log_lbol = log10(L_bol / L_sun)`.
-# Sweep it on top of a fixed star-forming host and watch the IR/MIR
-# rise above the host as the AGN turns up.
+# Vary `agn_log_lbol = log10(L_bol / L_sun)` on top of a fixed star-forming host
+# to see the IR/MIR rise as the AGN turns up.
 
 # %%
 spec_agn = Parameters(
@@ -393,22 +373,17 @@ fig.tight_layout()
 plt.show()
 
 # %% [markdown]
-# Below `log L_bol ≈ 10` the SED is host-dominated; above ~12 the AGN
-# disc dominates the rest-UV through optical and the torus dominates
-# the mid-IR. The crossover band is where AGN/SF decompositions are
-# most identifiable — and most degenerate.
+# Below `log L_bol ≈ 10` the SED is host-dominated; above ~12 the AGN disc
+# dominates UV–optical and the torus dominates mid-IR. The crossover is where
+# AGN/SF decompositions are most identifiable — and most degenerate.
 
 # %% [markdown]
 # ## Stochastic SFH: PSD-driven burstiness
 #
-# tengri's research differentiator is stochastic, IFT correlated-field
-# SFHs with PSD-governed burstiness. The "knobs" here aren't classical
-# parameters — they're the PSD amplitude (`σ`, in dex of SFR variability)
-# and timescale (`τ`, in Myr). At fixed `σ`, varying `τ` interpolates
-# between fast spiky variability (small `τ`) and slow drift (large `τ`).
-#
-# We sample the latent xi vector from `N(0, I)` for each draw and
-# realize the GP modulator on the canonical log-age grid.
+# Tengri's stochastic SFHs use IFT correlated fields with PSD-governed burstiness.
+# The two knobs are the PSD amplitude (`σ`, in dex of SFR variability) and
+# timescale (`τ`, in Myr). At fixed `σ`, varying `τ` spans fast spiky variability
+# (small `τ`) to slow drift (large `τ`).
 
 # %%
 from tengri.components.stellar.sfh import compute_field_gp
@@ -458,20 +433,17 @@ fig.tight_layout()
 plt.show()
 
 # %% [markdown]
-# Each panel shows six independent realizations from the same prior.
-# Short `τ` produces ~10-Myr ringing; long `τ` produces smooth drift
-# from a couple of `e`-folds below the mean to a couple above. This is
-# the prior the geoVI fit in [`05_fitting_photometry`](05_fitting_photometry.py)
-# explores — the fan above is what "uninformative on burstiness shape"
-# actually means.
+# Each panel shows six independent realizations from the same prior. Short `τ`
+# produces ~10-Myr ringing; long `τ` produces smooth drift. This is the prior
+# that VI and NUTS fits explore — the fan above is what "uninformative on
+# burstiness shape" actually means.
 
 # %% [markdown]
 # ## Timing: Python loop vs `vmap` batch
 #
-# `sweep_parameter` uses a Python loop with cached JIT — fine for ≤ 30
-# values. For finer grids (or 2-D), `predict_photometry_batch` is a
-# single compiled `vmap` and runs an order of magnitude faster after
-# warmup. Quick benchmark on the SDSS model from earlier.
+# `sweep_parameter` loops in Python with cached JIT — fine for ≤ 30 values.
+# For finer grids or 2-D, `predict_photometry_batch` is a single compiled
+# `vmap`, an order of magnitude faster after warmup.
 
 # %%
 import time
@@ -507,23 +479,15 @@ print(f"  loop  ({n} galaxies): {t_loop * 1e3:6.1f} ms")
 print(f"  speedup: {speedup:5.1f}×")
 
 # %% [markdown]
-# Numbers depend on the model and machine, but `vmap` usually wins by
-# at least 5×–20× once the batch is more than a handful of points;
-# Python's per-call overhead dominates the loop path. For population
-# fits, this is the difference between "rerun overnight" and "rerun
-# over coffee".
+# `Vmap` usually wins by 5×–20× once the batch exceeds a handful of points;
+# Python's per-call overhead dominates the loop path.
 
 # %% [markdown]
-# ## What you can do with these
+# ## Applications
 #
-# - Build intuition for a new prior before you let a sampler near it.
-# - Stress-test the forward model: extreme values that *should* break
-#   things are cheap to try in a sweep.
-# - Sanity-check that the registered defaults span the regime you care
-#   about. If your prior fan looks wrong, the fit will be wrong.
-# - Pick informative bands: a 2-D photometric grid plus a color cut tells
-#   you which filter pairs actually constrain a parameter you care about.
-# - Trace photometric tracks for high-redshift selection cuts before
-#   committing to a survey strategy.
-# - For research-grade stochastic SFH work, sweep `(σ, τ)` to see what
-#   the prior actually allows, *then* fit.
+# - Build physical intuition for a new prior before fitting.
+# - Stress-test the forward model at extremes.
+# - Verify registered defaults span your regime of interest.
+# - Pick informative filter pairs via 2-D photometric grids and color cuts.
+# - Trace photometric tracks for high-z selection cuts before survey design.
+# - For stochastic SFH work, sweep `(σ, τ)` to see what the prior allows, then fit.

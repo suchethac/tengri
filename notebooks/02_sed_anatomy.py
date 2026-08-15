@@ -132,11 +132,6 @@ obs = Observation(photometry=Photometry.from_names(filters))
 # a physically reasonable value so the figure is reproducible.
 
 # %%
-# ``log_lbol`` is log10(L_bol / Lsun) — set the disc to a modest AGN.
-# At z = 2 (cosmic age 3.29 Gyr) a parametric DPL inevitably has some
-# support before the Big Bang, which tengri flags with an
-# ``SFHBeforeBigBangWarning`` and truncates; the absolute mass scale is
-# irrelevant for this shape-only anatomy figure, so we silence it above.
 kitchen_sink = dict(
     sfh={
         "type": "dpl",
@@ -194,7 +189,6 @@ nu = 2.998e18 / wave_rest  # Hz
 total = np.asarray(state.sed_intrinsic)  # erg/s/Hz, post-dust-attenuation + emission
 
 
-# Per-component contributions from the orchestrator's derived bundle.
 def _get(key, default=None):
     arr = state.derived.get(key, default)
     return None if arr is None else np.asarray(arr)
@@ -415,25 +409,10 @@ model_edited = SEDModel.build(ssp_data=ssp, observation=obs, **groups)
 print(model_edited.summary())
 
 # %% [markdown]
-# ## What each layer does, in one sentence
-#
-# - **Stellar continuum.** DSPS-driven SSP integration: an SFH +
-#   metallicity history projects onto an age × wavelength grid and sums
-#   to the intrinsic L_ν.
-# - **Dust attenuation.** Birth-cloud (Calzetti) and diffuse-ISM optical
-#   depths reshape the UV–NIR. Energy absorbed is bookkept as `L_ir`.
-# - **Dust emission.** Dale 2014 / Draine–Li / THEMIS templates
-#   re-radiate `L_ir` from 8 to 1000 µm.
-# - **Nebular.** Cue (neural emulator on Cloudy 17.03) gives photoionized
-#   continuum + 128 emission lines from `nion` and ionization conditions.
-# - **AGN.** Disc (multicolor / Kubota–Done / ADAF / power-law) +
-#   torus (SKIRTOR / Nenkova / CAT3D / Silva04 / toy) + NLR (Cue) +
-#   BLR (qsogen).
-# - **Radio.** Free-free + synchrotron from the IR–radio correlation
-#   plus an AGN power-law if a disc is present.
-# - **X-ray.** Lusso & Risaliti 2017 L_2500 → L_2keV with optional
-#   ADAF / Comptonization refinements.
-# - **IGM.** Inoue 2014 Lyman-alpha forest opacity at z > 0.
+# **Stellar**: SSP integration of SFH + metallicity. **Dust atten**: Calzetti
+# birth-cloud + diffuse ISM. **Dust emission**: Dale 2014 etc. **Nebular**:
+# Cue continuum + lines. **AGN**: disc + torus + NLR. **Radio**: free-free
+# + synchrotron. **X-ray**: L_2500 → L_2keV. **IGM**: Inoue 2014 opacity.
 
 # %% [markdown]
 # ## The money shot — one model, X-rays to radio
@@ -512,21 +491,12 @@ lnu_age = _comp("lnu_age")
 sed_stars = lnu_age.sum(axis=0) if lnu_age is not None else None
 sed_total = np.asarray(state.sed_intrinsic)
 
-# X-ray, with line-of-sight obscuration as a teaching point.
-# ``state.derived["sed_xray"]`` is the full Yang+2020 / X-CIGALE X-ray —
-# XRB + hot gas + AGN corona — at the default column N_H = 1e20 (the corona
-# is driven by the AGN-published ``L_2500_intrinsic`` via the Just+2007 α_ox
-# relation; #722/#746). It is already in the black total. To show how
-# line-of-sight absorption carves the soft band, we recompute the X-ray at
-# N_H = 1e23 with the model's own 2500 Å luminosity (Morrison & McCammon 1983
-# + Wilms+2000 photoelectric + Compton). N_H is not yet a build-time
-# parameter, so the obscured variant goes through the public ``tengri.xray`` API.
+# X-ray with line-of-sight absorption (N_H = 1e23) to show how
+# photoelectric absorption carves the soft band.
 from tengri.xray import xray_total
 
 _sfr = float(state.derived["sfr"])
 _mstar = 10.0 ** float(state.derived["log_mstar"])
-# Same l_2500 the X-ray component uses: intrinsic disc 2500 Å, falling back to
-# the Hopkins+2007 bolometric correction when the disc value is unavailable.
 _l2500 = float(state.derived.get("L_2500_intrinsic", 0.0))
 if _l2500 <= 0.0:
     _l2500 = float(state.derived["L_agn_bol"]) / (5.15 * 1.199e15)

@@ -16,34 +16,25 @@
 # %% [markdown]
 # # Joint spec-phot with a physical aperture
 #
-# Surveys like SDSS measure two things about the same galaxy: **total-flux
-# photometry** (the whole galaxy as seen through broad filters) and
-# **fiber spectroscopy** (only the part of the galaxy that fell inside a
-# few-arcsec fiber). The two see different fractions of the galaxy's
-# total light. How do you reconcile them in a joint SED fit?
+# SDSS measures **total-flux photometry** (whole galaxy through broad filters)
+# and **fiber spectroscopy** (only the nuclear region inside a ~2-arcsec fiber).
+# The two see different fractions of total light. How to reconcile them?
 #
-# The classical answer is to scale the spectrum by a single number until
-# it matches the photometry — equivalent to assuming the galaxy is a
-# **flat slab** of uniform surface brightness across the aperture. Real
-# galaxies are not flat slabs: they have Sérsic-shaped surface-brightness
-# profiles, and the fiber captures only the bright nuclear region while
-# the photometry integrates the extended outer envelope. The flat-slab
-# assumption biases the recovered stellar mass and SFR by tens of
-# percent for typical galaxies and substantially more for compact
-# spheroidals.
+# The classical approach scales the spectrum by a single number to match photometry —
+# equivalent to assuming a **flat slab** of uniform surface brightness. Real galaxies
+# have Sérsic profiles; the fiber captures the bright nuclear region while photometry
+# integrates the extended envelope, so the two disagree on what fraction of the light
+# the fiber saw. The aperture fractions printed below set the size of that disagreement.
 #
-# This notebook walks through the corrected aperture handling that
-# Tengri's spatial sub-model makes explicit:
+# Tengri's spatial sub-model makes the correction explicit:
 #
 # 1. Specify a **`SpatialModel`** with a Sérsic profile.
-# 2. Compose an **`Observation`** with both broadband photometry and a
+# 2. Compose an **`Observation`** with both photometry and a
 #    **`FiberSpectroscopyObservation`** that knows the fiber radius.
-# 3. The `ForwardModel.predict` chain runs `SED → Spatial`, then the
-#    observation integrates the spatial profile inside the fiber mask
-#    and scales the spectrum by that fraction. The photometry is
-#    untouched (it's already total flux).
+# 3. The `ForwardModel.predict` chain runs `SED → Spatial`, then integrates
+#    the spatial profile inside the fiber mask and scales the spectrum by that
+#    fraction. Photometry is untouched (already total flux).
 #
-# The architecture is in `docs/dev/forward-model-architecture.md` §3.3.
 # The aperture-fraction math is in `tengri.observation.fiber_aperture`.
 
 # %%
@@ -132,16 +123,14 @@ print()
 print(f"Ratio (flat-slab / Sérsic): {frac_flat / frac_sersic:.2f}")
 
 # %% [markdown]
-# **What this means for SED fitting.** When the same flux normalization
-# is used for both spectrum and photometry, a flat-slab assumption
-# implies the fiber captures `frac_flat` of the total. The physical
-# Sérsic profile says it actually captures `frac_sersic`. If you fit
-# both jointly with the wrong aperture model, you push the inferred
-# total-flux normalization up or down to compensate — biasing
-# **stellar mass**, **star-formation rate**, and **dust attenuation**.
-#
-# Sérsic n=1 (this notebook): the bias is modest. Try `n=4`
-# (de Vaucouleurs spheroidal) below and the ratio gets much worse.
+# **For SED fitting:** When the same flux normalization scales both spectrum and
+# photometry, the assumed aperture fraction changes the inferred total flux. The
+# flat-slab assumption says the fiber captures `frac_flat` of total light. The
+# physical Sérsic profile says it captures `frac_sersic`. If you fit jointly with
+# the wrong aperture, the minimizer pushes the total-flux amplitude up or down to
+# compensate — biasing stellar mass, SFR, and dust attenuation. Concentration sets
+# how far apart the two fractions sit: compare the n=1 exponential disk above with
+# the n=4 de Vaucouleurs profile printed below.
 
 # %%
 params_dv = {**params_sersic, "spatial_n": jnp.float64(4.0)}
@@ -184,21 +173,14 @@ print(
 # # fit["spec_fnu"] — scaled by aperture_fraction(Sérsic, fiber)
 # ```
 #
-# Compare this against a flat-slab fit (`SpatialModel(components=[FlatSlab()])`):
-# the two ForwardModels share the same SED chain and observation; only
-# the spatial sub-model differs. Run both, compare recovered stellar
-# masses, and read off the bias the flat-slab approximation would
-# introduce on this dataset.
-#
-# The same machinery generalizes to imaging (resolved 2-D maps via a
-# future `ImagingObservation`) and to IFU spectroscopy — the spatial
-# sub-model is the common substrate.
+# Compare against a flat-slab fit (`SpatialModel(components=[FlatSlab()])`):
+# the two ForwardModels share the same SED chain and observation; only the spatial
+# sub-model differs. Run both and read the bias the flat-slab assumption introduces
+# on this dataset. The same machinery generalizes to imaging and IFU spectroscopy.
 
 # %% [markdown]
-# ## Further reading
+# ## Reference
 #
-# - Architecture spec: `docs/dev/forward-model-architecture.md` §2 (the
-#   motivating story), §3.3 (B-path keys reserved for color gradients).
 # - Spatial profiles: `tengri.components.spatial.{Sersic, Exponential, FlatSlab}`.
 # - Aperture math: `tengri.observation.fiber_aperture`.
 # - Composer: `tengri.observation.joint_observation.JointObservation`.

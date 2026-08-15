@@ -21,14 +21,9 @@
 Recovering a truncated-skew-normal SFH from SDSS photometry via MAP
 ===================================================================
 
-Demonstrates the simplest inference workflow: building a flexible SFH model
-with free dust parameters, generating mock photometry at S/N = 20, then running
-MAP to recover the input star formation history and dust attenuation. The figure
-shows the recovered SFH (dashed) against the ground truth (solid).
+Reference: Conroy+2013.
 
-Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
-
-.. GENERATED FROM PYTHON SOURCE LINES 12-112
+.. GENERATED FROM PYTHON SOURCE LINES 7-107
 
 
 
@@ -38,19 +33,8 @@ Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/src/tengri/components/stellar/sps/dsps_wrapper.py:206: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
-      return load_ssp_data(str(candidate))
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -158,7 +142,7 @@ Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.472 seconds)
+   **Total running time of the script:** (0 minutes 8.970 seconds)
 
 
 .. _sphx_glr_download_auto_examples_workflows_plot_workflow_method_comparison.py:

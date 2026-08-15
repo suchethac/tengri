@@ -136,28 +136,11 @@ print(f"Mock: {len(flux)}-pixel R=2000 spectrum, SNR = 30/pixel")
 # %% [markdown]
 # ## Fit
 #
-# `HMC_VALIDATED` is the convergence-validated fixed-length HMC recipe shared
-# by the fitting notebooks (dense mass, n_warmup=1000, n_leapfrog=20); it mixes
-# this six-parameter posterior cleanly. The data is a spectrum and the
-# observation says so, so there is no channel to declare. With
-# `SpectrumPrecomp` the forward pass is the lookup-table path, so the whole fit
-# runs in seconds rather than minutes.
+# `HMC_VALIDATED` uses validated settings. `SpectrumPrecomp` enables the
+# lookup-table forward pass.
 
 # %%
 t0 = time.perf_counter()
-# `precondition=True` is load-bearing here, not decoration. This posterior has a
-# sharp step-size cliff: warmup adaptation lands on ~0.063 unpreconditioned and
-# every transition then diverges, whereas whitening the metric lands on ~0.047
-# and the chain samples cleanly. Measured, one fresh process per arm:
-#
-#     precondition  warmup   step    divergences  unique draws
-#     off             300    0.041      0            568
-#     off            1000    0.063    544              1
-#     on             1000    0.047      0            572
-#
-# Preconditioning is opt-in since #1398; this fit is one of the cases that wants
-# it. A frozen chain is no longer silent — `rhat()` refuses to report on one
-# (#1438) — but it is better not to land there.
 posterior = forward.fit(
     flux, noise, key=jax.random.PRNGKey(1), precondition=True, **HMC_VALIDATED
 )

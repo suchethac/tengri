@@ -1,37 +1,12 @@
 # Overview
 
-Galaxy SEDs carry the cumulative record of stellar mass assembly,
-chemical enrichment, and dust processing. Recovering stellar mass,
-star-formation history, dust, and metallicity from broadband
-photometry and spectra is one of the oldest inference problems in
-extragalactic astronomy, and the data volumes coming over the next
-decade make the problem harder than the codes built in the 2010s
-were designed for.
+Galaxy SEDs encode stellar mass assembly, chemical enrichment, and dust processing. Tengri recovers these from broadband photometry and spectra using one forward model that spans stellar populations through X-ray, all driven by shared parameters.
 
-Tengri is a panchromatic galaxy SED inference library written in
-[JAX](https://jax.readthedocs.io) on top of
-[DSPS](https://github.com/ArgonneCPAC/dsps). A single forward model
-covers stellar populations, dust attenuation and emission, nebular
-gas, AGN, the IGM, radio, and X-ray, all driven by one shared set of
-physical parameters. Inference is also modular: the `Fitter`
-interface delegates to optimizers from `optax`, samplers from
-`BlackJAX`, and variational inference from `NIFTy.re`, so adopting a
-new backend is a registration, not a rewrite.
-
-Contributions are welcome (new SFH families, dust laws, AGN
-templates, observation modes, samplers) through the issue tracker
-on the `tengri-project` GitHub organization, which the repository
-will move to shortly.
+Built on [JAX](https://jax.readthedocs.io) and [DSPS](https://github.com/ArgonneCPAC/dsps). Inference backends (optimizers, samplers, variational inference) plug in as registrations. `tengri.summary()` prints the live count for every registry; new components register themselves.
 
 ## Philosophy
 
-The forward model is the artifact. Inference is a thin shell on top
-of it, so switching backend is a one-line change and the gradient
-never has to be re-derived. Physics lives in components, instruments
-live in observation, so a dust law and a fiber aperture correction
-never end up in the same file. Adding a new physics component, or a
-new sampler from BlackJAX, optax, or NIFTy, is a registration, with
-no edits to anything else.
+The forward model is the artifact. Inference is a thin shell, so backend swaps are one-line changes. Physics lives in components; instruments in observation. Adding a dust law or sampler is a registration, not a rewrite.
 
 ## What's modular
 
@@ -99,108 +74,30 @@ stacked into a single fit.
 
 ### Components
 
-A component is the atomic unit of physics. Each one declares its
-parameters, what state it reads from upstream components, what state
-it publishes to downstream ones, and how to evaluate itself on a
-wavelength grid. Adding a new dust attenuation law, a new SFH family,
-or a new AGN torus library is one file in this layer; the parameter
-registry, the `reads`/`publishes` contract, and the JIT plumbing all
-discover the component automatically.
+Each component declares parameters, reads from upstream, publishes to downstream, and evaluates on a wavelength grid. A new dust law or AGN library is one file; the registry and JIT plumbing auto-discover it.
 
-The Stellar component is the entry point on the spectral side. It
-reads the SFH, weights the SSP grid by age, and writes the
-intrinsic rest-frame $L_\nu$ into the running state. Dust attenuation
-then reads $L_\nu$ and writes both the attenuated SED and the
-absorbed luminosity $L_{\rm absorbed}$. Dust IR emission reads
-$L_{\rm absorbed}$ and adds an IR component back, so energy balance
-is enforced by the contract rather than by a separate calibration
-step. Nebular, AGN, IGM, radio, and X-ray are layered on top, each
-declaring its own reads and publishes.
-
-The same pattern handles morphology. A `SpatialComponent` declares
-its parameters (effective radius, Sérsic index, axis ratio, position
-angle, …) and writes a 2D profile into the state. Sérsic,
-exponential, flat-slab, and bulge+disk profiles are built in;
-correlated-field spatial priors plug in the same way.
+Energy balance is enforced by contract: Stellar emits L_ν, Dust attenuation publishes L_absorbed, Dust IR emission consumes it. Nebular, AGN, IGM, radio, and X-ray layer on top. Spatial components (Sérsic, exponential, bulge+disk) follow the same pattern.
 
 ### Sub-models
 
-Sub-models compose components into a complete spectral or spatial
-chain. They are thin: an `SEDModel` is a list of SED components plus
-the validator that checks the `reads`/`publishes` graph is closed; a
-`SpatialModel` is the same on the spatial side. A `SpatialSEDModel`
-just runs both in sequence, with the SED chain first so that spatial
-components can read mass, age, or color state if they need it.
-There is no special-casing for stellar atmospheres, hierarchical
-SFHs, or per-age morphology. Those are all components or
-sub-models, slotted in through the same interface.
+An `SEDModel` is components plus a validator that closes the reads/publishes graph. A `SpatialModel` does the same spatially. Hierarchical SFHs, per-age morphology, and stellar atmospheres are components or sub-models, not special cases.
 
 ### ForwardModel
 
-`ForwardModel` is what inference actually talks to. It owns the
-`Parameters` object, holds one or more populations (each a sub-model
-plus an optional spatial model), wires everything to the
-`Observation`, and exposes a single `.predict(params)` that returns
-the predicted data. Whether there is one population or three, whether
-each population has a spatial counterpart, and whether the
-observation is photometry, spectroscopy, fiber spectroscopy, imaging,
-or some joint product, is invisible to the sampler.
-
-Multi-population is supported from day one. A fit with an AGN point
-source, a Sérsic bulge, and an exponential disc is three populations
-under one `ForwardModel`, with parameter names namespaced by
-population so nothing collides.
+What inference talks to. Owns `Parameters`, holds populations (sub-model + optional spatial model), wires to `Observation`, exposes `.predict(params)`. Multi-population from day one: AGN point source, Sérsic bulge, exponential disc are three populations with namespaced parameters.
 
 ### Observation
 
-The observation layer is where instruments live. `Photometry`
-integrates the predicted SED through filter curves. `Spectroscopy`
-resamples and applies a line-spread function. `FiberSpectroscopy`
-adds an aperture correction that integrates the spatial profile
-through the fiber footprint, which is what makes physically correct
-joint photometry + fiber-spectrum fits a one-liner at the
-`ForwardModel` level rather than a hack inside an SED component.
-`Imaging` and joint observations follow the same pattern.
-
-The whole architecture turns the most common galaxy SED inference
-setup (broadband photometry of the whole galaxy plus a fiber spectrum
-of the inner core) into a clean composition rather than a slab
-approximation. The fiber sees the Sérsic core; the broadband sees
-core plus envelope; the spatial component models the profile, the
-observation integrates it through the fiber footprint, and only
-then are predictions compared to data.
+Instruments live here. `Photometry` integrates through filter curves. `Spectroscopy` resamples + LSF. `FiberSpectroscopy` corrects aperture via spatial profile integration—making joint photo + fiber fits one-liners rather than hacks in components. `Imaging` and joint observations follow the same pattern.
 
 ### Likelihood and inference
 
-The likelihood (Gaussian, Student-t, or a composite) scores
-`Observation.predict(params)` against the data. Inference sits one
-layer above, asking the forward model for
-$\log p(\text{data} \mid \text{params})$ and nothing else, which is
-why `optax`, `BlackJAX`, and `NIFTy.re` plug in without touching the
-physics.
+Likelihood (Gaussian, Student-t, composite) scores predictions against data. Inference asks for $\log p(\text{data} \mid \text{params})$ and nothing else. Backends plug in unchanged.
 
 ## Why JAX
 
-JAX is the substrate that lets us deliver speed, gradients, and
-modularity in one codebase. None of the alternatives we considered
-let us hit all three at once.
+Automatic differentiation: $\partial \log p / \partial\theta$ for free at the cost of one extra forward pass. Stays correct under interpolation and emulators, where finite differences fail.
 
-Automatic differentiation gives us $\partial \log p / \partial\theta$
-for every parameter at roughly the cost of one extra forward pass. It
-stays correct under interpolation, table lookups, and emulator
-evaluations, where finite differences silently break. Once you start
-composing a Charlot & Fall dust screen on top of a non-parametric SFH
-on top of a Cue nebular emulator, hand-derived gradients stop being
-maintainable; autodiff is what keeps the math honest.
+JIT compilation makes the forward model competitive with C. `vmap` vectorizes across galaxy samples. One source runs on CPU, GPU, TPU.
 
-JIT compilation makes the forward model competitive with hand-written
-C, and `vmap` vectorizes across a galaxy sample without writing the
-loop yourself. The same source file runs on CPU, GPU, and TPU, which
-is the only reason hierarchical population fits over thousands of
-galaxies are practically affordable.
-
-The discipline JAX imposes (pure functions, declared array shapes,
-no in-place mutation inside a JIT, no Python `if` on a traced value)
-takes some getting used to. We have tried to absorb most of that cost
-in the library, so that a user calling `fitter.run(...)` does not have
-to think about traced arrays.
+JAX's discipline (pure functions, declared shapes, no mutation, no Python `if` on traced values) costs upfront. We absorb that cost in the library.

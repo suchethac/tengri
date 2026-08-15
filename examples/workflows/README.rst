@@ -1,5 +1,4 @@
 Workflows
 =========
 
-End-to-end fitting workflows — BPT classification, dust Monte-Carlo
-resampling, high-z LBG fits, method comparison, and post-starburst recovery.
+End-to-end workflows: BPT classification, dust resampling, high-z LBG fits, method comparison, post-starburst recovery.

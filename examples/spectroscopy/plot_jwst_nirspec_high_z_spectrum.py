@@ -31,7 +31,7 @@ warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 # Model Setup
 # ============================================================================
 # Using bare-stellar SSP (fsps_prsc_miles_chabrier) with Cue nebular backend.
-# Building without observation= to work around issue #277 (Cue + observation breaks).
+# Build the model without observation= to access the full SED for resampling.
 
 ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
 

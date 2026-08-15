@@ -193,10 +193,7 @@ print(f"  Redshift now fixed: {'redshift' not in model3.spec.free_params}")
 # %% [markdown]
 # ## Builder factories
 #
-# `tengri.builders` has a callable for every variant and backend — `builders.
-# sfh.dpl(...)`, `builders.dust.two_component(...)`, and so on. Each returns the
-# same dict you would write by hand, but the editor can autocomplete the
-# parameter names and catch a typo before you run. Below is one of each block.
+# `tengri.builders.*` factories provide autocomplete and early error detection.
 
 # %% [markdown]
 # ### SFH variants — 26+ parametrizations

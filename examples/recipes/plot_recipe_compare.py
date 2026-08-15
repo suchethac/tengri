@@ -2,19 +2,14 @@
 What each shipped tengri recipe produces
 ==========================================
 
-``tengri.recipes`` ships several curated starting-point model configs
-that map common astronomer use-cases onto the nested-dict ``SEDModel.build``
-grammar. This card overlays the rest-frame SED of every shipped recipe
-so users can pick by eye:
-
-- ``star_forming_photometry`` — broadband photometric fit of a typical SF galaxy
-- ``quiescent_z0``           — old red passively-evolving system
-- ``agn_panchromatic``       — composable AGN + host
-- ``stochastic_sfh_jwst``    — IFT correlated-field SFH for high-z JWST data
-- ``mock_recovery_minimal``  — smallest model usable for parameter-recovery tests
-- ``dust_demo``              — emphasis on dust attenuation + emission
-
-Each is built with no overrides and evaluated at default parameter values.
+Six curated recipes span galaxy populations: star-forming at 0–6 (bare-stellar
+SSP), quiescent at z ≈ 0.05 (bare-stellar, tau_diff-free to trace dust),
+AGN panchromatic (bare-stellar, full AGN composite with disc+torus+radio+xray),
+stochastic JWST high-z with burstiness (bare-stellar, DPL+field at 0.5–12),
+mock-recovery minimal (any SSP, 4–5 free params for benchmarking), and
+dust-demo (wNE only — baked nebular emission visualized). All use WavePrecomp()
+except photoz (ztable does not cover z > 12). Use ``load_ssp("*.wNE")`` only
+for dust_demo; others silently under-predict if fed wNE.
 """
 
 import os

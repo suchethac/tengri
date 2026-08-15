@@ -15,11 +15,6 @@ on a flat input spectrum, and plot the resulting attenuation curve
 alongside the bare Calzetti and the Cardelli+1989 MW shape. The bump
 is parametrized by amplitude :math:`E_b` and FWHM :math:`\gamma`;
 setting :math:`E_b=0` recovers Calzetti exactly.
-
-See ``docs/dev/sed-model-components.md`` for the full integration path
-(registering the law into the dust group schema) and three worked
-examples (analytic, library, NN emulator). ADR-0011 is the design
-decision.
 """
 
 import warnings

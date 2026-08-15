@@ -29,7 +29,7 @@ for the full decision table.
 
 Reference: Calzetti+2000 (attenuation law).
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-143
+.. GENERATED FROM PYTHON SOURCE LINES 13-147
 
 
 
@@ -49,10 +49,10 @@ Reference: Calzetti+2000 (attenuation law).
       spec = parse_groups(**groups)
     MAP fit diagnostics:
       χ²: 3.02  |  n_bands: 5  |  max|residual|/σ: 1.41
-    SFH parameter recovery:
-      log M* [M☉]:     truth 10.000  fit 10.167
-      peak age [Gyr]:  truth 3.000  fit 4.410
-      τ_diff [mag]:    truth 0.300  fit 0.451
+    SFH parameter recovery (truth -> fit):
+      log M* [M☉]   : 10.000 -> 10.167
+      peak age [Gyr]: 3.000 -> 4.410
+      τ_diff [mag]  : 0.300 -> 0.451
 
 
 
@@ -125,12 +125,16 @@ Reference: Calzetti+2000 (attenuation law).
                      np.asarray(mock.flux_obs)) / np.asarray(mock.noise)
     chi2 = np.sum(residual_phot**2)
     n_bands = len(mock.flux_obs)
+    max_resid = np.max(np.abs(residual_phot))
     print("MAP fit diagnostics:")
-    print(f"  χ²: {chi2:.2f}  |  n_bands: {n_bands}  |  max|residual|/σ: {np.max(np.abs(residual_phot)):.2f}")
-    print("SFH parameter recovery:")
-    print(f"  log M* [M☉]:     truth {truth['sfh_tsnorm_log_total_mass']:.3f}  fit {fit_params['sfh_tsnorm_log_total_mass']:.3f}")
-    print(f"  peak age [Gyr]:  truth {truth['sfh_tsnorm_peak_lbt_gyr']:.3f}  fit {fit_params['sfh_tsnorm_peak_lbt_gyr']:.3f}")
-    print(f"  τ_diff [mag]:    truth {truth['dust_tau_diff']:.3f}  fit {fit_params['dust_tau_diff']:.3f}")
+    print(f"  χ²: {chi2:.2f}  |  n_bands: {n_bands}  |  max|residual|/σ: {max_resid:.2f}")
+    print("SFH parameter recovery (truth -> fit):")
+    for label, key in (
+        ("log M* [M☉]   ", "sfh_tsnorm_log_total_mass"),
+        ("peak age [Gyr]", "sfh_tsnorm_peak_lbt_gyr"),
+        ("τ_diff [mag]  ", "dust_tau_diff"),
+    ):
+        print(f"  {label}: {truth[key]:.3f} -> {fit_params[key]:.3f}")
 
     flux_truth = np.asarray(mock.flux_true)
     flux_fit = np.asarray(model.predict_photometry(fit_params))
@@ -197,7 +201,7 @@ Reference: Calzetti+2000 (attenuation law).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 11.327 seconds)
+   **Total running time of the script:** (0 minutes 13.016 seconds)
 
 
 .. _sphx_glr_download_auto_examples_quickstart_plot_first_fit.py:

@@ -31,7 +31,7 @@ inefficient ADAF, empirical composite vs first-principles continuum.
 
 Swap any one into a full model with ``agn={'disc': {'type': <name>}}``.
 
-.. GENERATED FROM PYTHON SOURCE LINES 15-98
+.. GENERATED FROM PYTHON SOURCE LINES 15-97
 
 
 
@@ -87,10 +87,9 @@ Swap any one into a full model with ``agn={'disc': {'type': <name>}}``.
     DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
     # `powerlaw` is a bare phenomenological disc that tengri deprecates for science
-    # fits (use multicolor or kubota_done for that). It is on this panel ON PURPOSE —
-    # the point is to show what a power-law gives up against a physically derived
-    # disc. Its DeprecationWarning is therefore expected here, and only here;
-    # suppressing it narrowly keeps the gallery gate (#1146) meaningful everywhere else.
+    # fits (use multicolor or kubota_done for that). It is on this panel to show
+    # what a power-law gives up against a physically derived disc. The
+    # DeprecationWarning is expected here only.
     warnings.filterwarnings("ignore", message=".*powerlaw_disc is deprecated.*")
 
     ssp = tengri.load_ssp()
@@ -133,7 +132,7 @@ Swap any one into a full model with ``agn={'disc': {'type': <name>}}``.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 6.460 seconds)
+   **Total running time of the script:** (0 minutes 10.902 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_disc_compare.py:

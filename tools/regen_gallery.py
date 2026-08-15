@@ -194,6 +194,12 @@ def main() -> int:
     # conf.py switches to the committed renders when CI is set; we are the
     # machine that produces them, so make sure execution is on.
     env.pop("CI", None)
+    # sphinx-gallery executes each script from the gallery output directory, not
+    # the repo root, so a relative ``data/filters`` lookup misses and the filter
+    # loader falls through to an SVO download -- which fails without astroquery
+    # and network. The script runs fine by hand and only breaks under the build,
+    # which makes it a confusing failure. Pin the data directory absolutely.
+    env.setdefault("TENGRI_DATA_DIR", str(REPO / "data"))
 
     # The snapshot deliberately outlives a crash. These builds execute real
     # science examples and can be OOM-killed mid-flight; an auto-deleting

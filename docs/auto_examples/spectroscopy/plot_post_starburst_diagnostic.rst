@@ -173,7 +173,7 @@ References
         dust = {"type": "two_component", "all_params": tengri.FIXED, "tau_bc": 0.0, "tau_diff": 0.0}
         neb = {"type": "cue", "all_params": tengri.FIXED}
 
-        # Build model; z=0.05 avoids NaN singularity at z=0 (#290)
+        # Build model; z=0.05 avoids numerical singularities in cosmology at z=0
         model = tengri.SEDModel.build(
             ssp,
             sfh=sfh,

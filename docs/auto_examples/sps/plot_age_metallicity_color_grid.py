@@ -11,7 +11,7 @@ pcolormesh grids to visualize the degeneracy.
 
 Each (age, Z) point uses a narrow Gaussian-like SFH (tsnorm)
 centered at the appropriate lookback time, fixed dust extinction,
-and redshift z = 0.05 (to avoid NaN at z = 0, issue #290).
+and redshift z = 0.05 to avoid numerical issues at z = 0.
 """
 
 import os

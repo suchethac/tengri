@@ -149,7 +149,7 @@ print(f"Mock: {len(flux_obs)} bands, SNR = 20")
 # once; the subsequent `forward.fit` reuses that compile cache. We use two
 # parallel chains (via `jax.vmap`) — enough for a genuine cross-chain split-R̂,
 # and the `vmap` memory scales with the chain count, so two keeps the peak well
-# clear of the jetsam threshold on a laptop (see docs/dev/notebook_orchestration_oom.md).
+# clear of the jetsam threshold on a laptop.
 
 # %%
 t = time.perf_counter()
@@ -195,9 +195,10 @@ rhat_max = max(float(v) for v in rhat.values())
 print(f"\nmax R̂ = {rhat_max:.4f}   divergences = {n_div}   (2 chains × 600 draws)")
 
 # %% [markdown]
-# Chain traces for the three parameters that drive the degeneracy — stellar
-# mass, metallicity, diffuse dust. Well-mixed chains overlap and look like
-# white noise; a trapped chain wanders or separates.
+# <!-- docs-voice: criterion -->
+# Chain traces for the three parameters driving the age–metallicity–dust
+# degeneracy. Well-mixed chains overlap and look like white noise; chains
+# that separate or wander indicate poor mixing.
 
 # %%
 trace_params = [

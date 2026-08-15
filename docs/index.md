@@ -7,17 +7,9 @@
   </p>
 </div>
 
-Tengri is a panchromatic galaxy SED inference library, written in
-JAX. The same forward model covers stellar populations, dust,
-nebular emission, AGN, and the IGM, from X-rays out to the radio.
-Inference is modular too: the `Fitter` interface borrows optimizers
-from `optax`, samplers from `BlackJAX`, and variational inference
-from `NIFTy.re`. Gradients are available everywhere, and they are
-exact.
+Tengri is a panchromatic galaxy SED inference library in JAX. One forward model covers stellar populations, dust, nebular emission, AGN, and IGM, from X-rays to radio. Inference backends plug in as registrations: optimizers from `optax`, samplers from `BlackJAX`, variational inference from `NIFTy.re`. Gradients are exact.
 
-Tengri is pre-1.0 and developed as a community effort. The public
-API is still moving in places. The repository will move to the
-`tengri-project` GitHub organization shortly.
+Pre-1.0, developed as a community effort. The public API is still moving in places. The repository will move to the `tengri-project` GitHub organization shortly.
 
 ---
 
@@ -32,21 +24,9 @@ originates from; no religious claim or appropriation is intended.*
 
 ## At a glance
 
-The forward model is one object. Stellar populations, dust, nebular
-emission, AGN, IGM, radio, and X-ray are all registered components
-that compose into a single SED chain. There is no separate fast path
-for grid fits and slow path for Bayesian inference; both run against
-the same code.
+One object manages everything: all components (stellar, dust, nebular, AGN, IGM, radio, X-ray) register into a single SED chain. Pure JAX means JIT, `vmap`, and autodiff work from SSP grid to log-likelihood. One code path serves both grid exploration and Bayesian inference.
 
-Everything is differentiable. Pure-JAX components mean JIT compilation
-and `vmap` come for free, and autodiff is clean from the SSP grid
-through to the log-likelihood.
-
-Building a model reads like a recipe rather than a configuration
-file. `SEDModel.build(sfh={...}, dust={...}, neb={...})` and the
-curated entries in `tengri.recipes` cover most of the cases we have
-needed in practice. `model.spec.summary()` shows you which parameters
-you set, which are free, and which fell back to library defaults.
+Build via recipe: `SEDModel.build(sfh={...}, dust={...}, neb={...})`. The `tengri.recipes` module covers standard cases.
 
 ```python
 import jax
@@ -78,11 +58,6 @@ print(result.summary_table())
 
 ## Discover what's installed
 
-The registries are introspectable from Python. `summary()` prints the
-live count of every component, sampler, recipe, and SSP grid the
-running install knows about; `help()` is a curated cheat-sheet with
-the most common entry points.
-
 ```python
 import tengri
 
@@ -94,26 +69,17 @@ tengri.search("torus")      # full-text across the registry
 tengri.doctor()             # install + JAX backend + SSP files
 ```
 
-Nothing in the table updates by hand: a model registered through
-`@register_agn_model` shows up in `summary()` without a documentation
-edit. The same commands are mirrored on the CLI
-(`python -m tengri summary`, …).
+Available from the CLI: `python -m tengri summary`. Nothing updates by hand: a model registered through `@register_agn_model` shows up in the registries without a documentation edit.
 
 ## Citation
 
-Tengri does component-level citation. Every physics block, SSP grid,
-and inference backend carries its own citation, so the BibTeX for a
-fit is assembled from what actually ran:
+Component-level citation: every model, SSP grid, and backend carries its own cite.
 
 ```python
-tengri.print_components_bibtex(result)   # BibTeX for every component that ran
+tengri.print_components_bibtex(result)   # BibTeX for components that ran
 ```
 
-This keeps the acknowledgement section of a paper honest as you swap
-a dust law or a sampler. The full block (methods paper, SSP grids,
-nebular and AGN templates, samplers) lives on the
-[Citing tengri](citation) page. While Paper I is in preparation, the
-shortest in-text citation is:
+While Paper I is in preparation, cite tengri as:
 
 > Cooray et al., *tengri: A Differentiable Framework for
 > High-Dimensional Bayesian Inference from Galaxy Spectral Energy
@@ -121,30 +87,13 @@ shortest in-text citation is:
 
 ## How this was built
 
-The majority of tengri was developed in roughly two months in close
-collaboration between a human author and AI agents, across the
-physics modules, the inference layer, and the test suite. Human and
-AI agents working together is a deliberate part of the design
-philosophy going forward. We are now in the trust-building phase,
-verifying every component against established codes and keeping the
-development trail open (including an `AGENTS.md` in the repo) so
-the trust is earned empirically rather than asserted.
+Built in close collaboration between a human author and AI agents. Components are verified against established codes; the development trail is kept open in the repository.
 
 ## Get involved
 
-Contributors at every level, from anywhere in the world, are
-welcome. Open an issue, send a PR, or write. If a science case you
-care about isn't supported yet (a new emission mechanism, a
-non-standard observation mode, a sampler from a paper you read last
-week), that's exactly the conversation we want to have. The
-longer-term ambition is for tengri to be a unifying platform for the
-kinds of inference that high-dimensional, modular, differentiable
-forward models make possible.
+Contributors at every level are welcome. If a science case you care about isn't supported yet (a new emission mechanism, an observation mode, a sampler from a paper you read last week), that's exactly the conversation we want to have.
 
-For anything that doesn't fit in an issue (collaborations, the
-`tengri-project` org move, joining the project), write to
-[astro.tengri@gmail.com](mailto:astro.tengri@gmail.com) or
-[cooraysuchetha@gmail.com](mailto:cooraysuchetha@gmail.com).
+Contribute via the issue tracker at [github.com/suchethac/tengri](https://github.com/suchethac/tengri), or write [astro.tengri@gmail.com](mailto:astro.tengri@gmail.com) for anything that doesn't fit in an issue—collaborations, the org move, joining the project.
 
 ## License
 

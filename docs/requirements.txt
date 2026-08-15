@@ -9,3 +9,11 @@ numpydoc>=1.5
 sphinx-copybutton>=0.5
 sphinx-design>=0.5
 sphinx-gallery>=0.15
+
+# Pinned, not floored. Gallery renders are committed under docs/auto_examples/
+# and guarded by md5 in tools/check_gallery_fresh.py, so the renderer is part of
+# the artifact. A patch bump changes pixels: 3.10.9 re-rendered plot_first_fit
+# with a 10% larger IDAT stream and no figure change. 278 of the 280 committed
+# renders were produced with 3.10.8. Regenerate on anything else and the diff is
+# version noise indistinguishable from a real figure change.
+matplotlib==3.10.8

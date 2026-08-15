@@ -30,7 +30,7 @@ pcolormesh grids to visualize the degeneracy.
 
 Each (age, Z) point uses a narrow Gaussian-like SFH (tsnorm)
 centered at the appropriate lookback time, fixed dust extinction,
-and redshift z = 0.05 (to avoid NaN at z = 0, issue #290).
+and redshift z = 0.05 to avoid numerical issues at z = 0.
 
 .. GENERATED FROM PYTHON SOURCE LINES 16-118
 
@@ -42,21 +42,8 @@ and redshift z = 0.05 (to avoid NaN at z = 0, issue #290).
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
-      return load_ssp_data(str(candidate))
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/forward/sed_model.py:1111: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.122 Gyr at peak sfh_tsnorm_peak_lbt_gyr=1 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.122 for smooth behavior.
-      param_map_deltas.append(self._init_sfh(spec))
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -166,7 +153,7 @@ and redshift z = 0.05 (to avoid NaN at z = 0, issue #290).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.044 seconds)
+   **Total running time of the script:** (0 minutes 2.447 seconds)
 
 
 .. _sphx_glr_download_auto_examples_sps_plot_age_metallicity_color_grid.py:

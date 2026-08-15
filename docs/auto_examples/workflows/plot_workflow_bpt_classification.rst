@@ -21,21 +21,15 @@
 BPT diagram: emission lines from the baked-in nebular SSP
 =========================================================
 
-Demonstrates BPT ([OIII]/Hβ vs [NII]/Hα) line ratios computed
-directly from the model's rest-frame SED via continuum-subtracted
-boxcar integration around each line center, swept across a stellar
-metallicity grid. The Kewley+2001 and Kauffmann+2003 demarcation
-lines are overlaid for context.
+BPT ([OIII]/Hβ vs [NII]/Hα) line ratios computed directly from the
+rest-frame SED via continuum-subtracted boxcar integration around each
+line center, swept across a stellar metallicity grid. The Kewley+2001
+and Kauffmann+2003 demarcation lines distinguish star-forming galaxies
+from AGN.
 
-The AGN-fraction axis of the previous version requires the discrete
-``Prediction.lines.*`` API on a backend that exposes per-line
-luminosities (cb19 / cloudy / cue); the BakedIn SSP backend used
-here does not. See issue #361 for the per-backend status.
+References: Kewley+2001; Kauffmann+2003.
 
-Reference: Kewley et al. 2001, ApJ, 556, 121 (theoretical classification);
-Kauffmann et al. 2003, MNRAS, 346, 1055 (empirical SF boundary).
-
-.. GENERATED FROM PYTHON SOURCE LINES 19-140
+.. GENERATED FROM PYTHON SOURCE LINES 13-134
 
 
 
@@ -45,19 +39,8 @@ Kauffmann et al. 2003, MNRAS, 346, 1055 (empirical SF boundary).
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
-      return load_ssp_data(str(candidate))
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -182,11 +165,6 @@ Kauffmann et al. 2003, MNRAS, 346, 1055 (empirical SF boundary).
 
     fig.tight_layout()
     plt.savefig("plot_workflow_bpt_classification.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.062 seconds)
 
 
 .. _sphx_glr_download_auto_examples_workflows_plot_workflow_bpt_classification.py:

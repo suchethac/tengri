@@ -147,11 +147,7 @@ for d in MyModifiedBlackbody().declared_parameters():
 # declared above is reachable from the standard nested-dict grammar:
 
 # %%
-# `load_ssp` resolves the grid wherever it lives, so this demo does not depend
-# on the working directory. The gate here used to test a working-directory-
-# relative path with os.path.exists, which *silently* took the else-branch
-# whenever the notebook ran from anywhere but the repository root — publishing
-# "skipping the build demo" in place of the content it exists to show.
+# `load_ssp` resolves the grid wherever it lives.
 SSP_NAME = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0"
 
 try:
@@ -182,36 +178,8 @@ else:
     print("Fetch a grid with tengri.download_ssp(), or set $TENGRI_DATA_DIR.")
 
 # %% [markdown]
-# ## What the framework gives you for free
-#
-# Everything below happened automatically — no code added on top of the
-# 20 lines of `MyModifiedBlackbody`:
-#
-# - **Priors flowed to inference.** `model.spec.free_params` lists
-#   `dust_T` and `dust_beta` (if you set them `Uniform`). The chosen
-#   sampler — MAP, NUTS, VI, NSS — picks them up as standard free
-#   parameters. The posterior summary lists them with units intact.
-#
-# - **Cross-component contract enforced.** Because `inputs = {"L_absorbed":
-#   "erg/s"}` is declared, `validate_pipeline` checks at construction
-#   time that an upstream component publishes `L_absorbed` with matching
-#   units. Wire it wrong and you fail at build time, not silently at
-#   runtime.
-#
-# - **WavePrecomp compatibility.** Switch `approx=WavePrecomp()` on the
-#   `SEDModel.build()` call and the framework calls your `predict` at
-#   per-filter effective wavelengths instead of the full grid. Same
-#   function, ~5–10× faster broadband-photometry runs at the
-#   documented ~0.5 % tolerance (Zacharegkas+2025).
-#
-# - **Optional Taylor refinement.** Setting `taylor_order = 1` on the
-#   class would have JAX auto-differentiate `predict` w.r.t. `wave` and
-#   use the moment $\Psi$ that stellar publishes to get a first-order
-#   accuracy bump — still no extra code from you.
-#
-# - **Reachable by name.** `SEDModel.build(dust={'emission': {'type':
-#   'my_modified_blackbody'}})` finds the class — `__init_subclass__`
-#   registered `(name, cls)` automatically.
+# Automatic: priors flow to inference, cross-component contract enforced,
+# WavePrecomp compatible, registry-registered.
 
 # %% [markdown]
 # ## Three other shapes the same contract covers

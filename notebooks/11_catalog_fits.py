@@ -265,23 +265,23 @@ print(
 )
 
 # %% [markdown]
+# ## Method: why HMC and not VI or NUTS?
+#
+# The native VI backends raise `NotImplementedError` on this catalog path
+# (per-galaxy redshift + presence masks are incompatible with vmapped VI). On the
+# batched path, use `method="mcmc_nuts"` or `method="mcmc_hmc"` (both vectorizable)
+# or `method="map"` (sequential). HMC's fixed-length trajectories keep per-posterior
+# cost predictable across the catalog.
+
+# %% [markdown]
 # ## The timing, in detail
 #
-# The whole catalog is one compiled program, `O(1)` in the catalog size `N`: the
-# compile is paid **once** (and the persistent JAX cache elides it on re-runs),
-# not once per galaxy.
+# The whole catalog is one compiled program, `O(1)` in catalog size `N`: the compile
+# is paid once (and the persistent JAX cache elides it on re-runs).
 #
-# **Batching speeds up the per-galaxy cost — even on a single CPU.** A 3-D fit with
-# nine bands is a *tiny* problem: run one galaxy at a time and the CPU's vector
-# units and BLAS threads sit mostly idle, with the wall dominated by per-step
-# dispatch overhead. Advancing `K` galaxy-chains *together* makes every array `K`
-# times larger, which actually feeds those units and amortizes the overhead — so
-# the time *per galaxy* falls as `K` grows. The [chunk-size sweep](#The-parallel-speedup:-a-chunk-size-sweep)
-# below measures exactly this. A **GPU** extends the same effect much further —
-# `K` chains across thousands of lanes at once — which is where the largest
-# catalogs are fit; see the throughput benchmark
-# (`bench/scripts/benchmark_catalog_throughput.py`) and the SLURM scripts
-# (`scripts/slurm/`).
+# **Batching speeds up per-galaxy cost** even on a single CPU. Advancing `K`
+# galaxy-chains together makes every array `K` times larger, which feeds vector units
+# and amortizes per-step overhead.
 
 # %%
 backend = jax.devices()[0].platform.upper()
@@ -360,24 +360,17 @@ plt.show()
 # %% [markdown]
 # ## Did the parallel fit recover the truth?
 #
-# Speed is worthless if the posteriors are wrong. Every galaxy in the
-# `CatalogPosterior` is a full `Posterior` (`catalog.posteriors[i]`), carrying its
-# own chain in `.samples`. We stack the three free parameters over the galaxy axis,
-# take the 16/50/84 percentiles per galaxy, and compare to the injected truth. The
-# **photometric redshift**, the **stellar mass**, and the **dust optical depth**
-# all track the 1:1 line — the standard photo-z scatter `sigma_NMAD` of `dz/(1+z)`,
-# the mass offset, and the dust offset are all small.
+# Each galaxy in the `CatalogPosterior` is a full `Posterior` (`catalog.posteriors[i]`),
+# carrying its own chain in `.samples`. The three free parameters are stacked over the
+# galaxy axis, 16/50/84 percentiles computed per galaxy, and compared to the injected
+# truth.
 #
-# Because dust is *fit* here (not fixed), the fit marginalizes the strongest
-# nuisance–redshift degeneracy, so the intervals are more honest than a dust-fixed
-# model would report — but they are still *conditional* on the fixed SFH shape,
-# metallicity, and the SSP's baked-in nebular logU/escape-fraction, so they can
-# under-cover somewhat. The dust–redshift degeneracy also widens the photo-z
-# posterior relative to a dust-fixed fit: that extra scatter is the honest cost of
-# not knowing the dust. A fully flexible SFH and a *fitted* nebular backend are in
+# The dust fit (rather than fixed) marginalizes the redshift–dust degeneracy,
+# so the intervals are more honest than a dust-fixed model would report. They remain
+# *conditional* on the fixed SFH shape, metallicity, and the SSP's baked-in nebular
+# logU/escape-fraction. A fully flexible SFH and a *fitted* nebular backend are in
 # notebooks [`05`](05_fitting_photometry.py) and
-# [`10`](10_fastspecfit_joint_fit.py); the point of this notebook is the parallel
-# machinery and the throughput.
+# [`10`](10_fastspecfit_joint_fit.py); this notebook is the parallel machinery and throughput.
 
 
 # %%
@@ -393,13 +386,13 @@ z_lo, z_med, z_hi = np.percentile(z_samp, [16, 50, 84], axis=1)
 m_lo, m_med, m_hi = np.percentile(m_samp, [16, 50, 84], axis=1)
 t_lo, t_med, t_hi = np.percentile(t_samp, [16, 50, 84], axis=1)
 
-z_cov = int(np.sum((z_lo <= z_true) & (z_true <= z_hi)))
-m_cov = int(np.sum((m_lo <= logm_true) & (logm_true <= m_hi)))
-t_cov = int(np.sum((t_lo <= tau_true) & (tau_true <= t_hi)))
 dz = (z_med - z_true) / (1.0 + z_true)  # standard photo-z residual
 sig_nmad = 1.4826 * np.median(np.abs(dz - np.median(dz)))
 dlogm = float(np.median(np.abs(m_med - logm_true)))
 dtau = float(np.median(np.abs(t_med - tau_true)))
+z_cov = int(np.sum((z_lo <= z_true) & (z_true <= z_hi)))
+m_cov = int(np.sum((m_lo <= logm_true) & (logm_true <= m_hi)))
+t_cov = int(np.sum((t_lo <= tau_true) & (tau_true <= t_hi)))
 print(f"Photo-z:   sigma_NMAD(dz/(1+z)) = {sig_nmad:.3f}   (68% interval covers {z_cov}/{N_GAL})")
 print(f"log M*:    median |Δ| = {dlogm:.3f} dex             (68% interval covers {m_cov}/{N_GAL})")
 print(f"dust tau:  median |Δ| = {dtau:.3f}                 (68% interval covers {t_cov}/{N_GAL})")
@@ -443,41 +436,20 @@ plt.show()
 # %% [markdown]
 # ## Summary
 #
-# - A catalog of independent galaxies is **embarrassingly parallel**, and each
-#   galaxy is a cheap low-dimensional posterior — so the catalog default is
-#   **per-galaxy HMC** (`mcmc_hmc`; `mcmc_nuts` vectorizes too), not VI. HMC's
-#   fixed-length trajectories keep the per-posterior cost predictable, which is
-#   what a catalog rewards — the measured time per posterior is in the table above.
+# - A catalog of independent galaxies is **embarrassingly parallel**. The default
+#   is **per-galaxy HMC** (`mcmc_nuts` vectorizes too), where fixed-length
+#   trajectories keep the per-posterior cost predictable.
 # - **`Catalog.fit(method="mcmc_hmc", forward_chunk_size=K)`** fits the whole
-#   catalog as *one* vectorized program: `K` galaxies advance per sampler step and
-#   the compiled graph is `O(1)` in the catalog size, so the compile is paid once
-#   and amortizes over the catalog. `K = 1` is the serial baseline; `K = N` is
-#   fully vectorized. Changing `K` changes only the throughput, never the
-#   posterior — the vectorization is bit-exact (covered by the chunk-invariance
-#   tests in `tests/inference/test_catalog_mcmc_vmap.py`).
-# - **The per-posterior cost is the sampler, not the dimensionality.** Each fit is
-#   ~220 HMC iterations x 20 leapfrog steps ~ 4400 forward-model gradient
-#   evaluations; the 3 free parameters are cheap, the ~4400 SED evaluations are the
-#   cost. Batching `K` chains amortizes the per-step overhead, so the **measured
-#   time per galaxy falls as `K` grows even on one CPU**: the sweep above drops from
-#   16.9 s/posterior at `K=1` (serial) to 5.8 s at `K=12` — a **2.9x speedup from
-#   batching alone, no GPU** (a 3-D fit is tiny and underfills the cores serially;
-#   batching feeds the vector units). The exact factor is machine- and load-
-#   dependent — measured here between ~3x and ~5x across runs — which is why the
-#   sweep measures it live rather than quoting a constant. A GPU extends this much
-#   further.
-# - **Free redshift rides `WavePrecomp`** — the LUT is tabulated over redshift, so
-#   a photo-z fit interpolates the table (nebular emission lines and all) instead
-#   of re-integrating the forward model per step. Baking the nebular emission into
-#   the SSP (the wNE grid) keeps the line-boosted colors while adding **zero**
-#   per-step cost — no nebular emulator runs inside the sampler.
-# - The vectorized fit **recovers photo-z, stellar mass, and dust** across the
-#   catalog — the throughput does not come at the cost of the science, even with
-#   the dust–redshift degeneracy left in.
-# - A **GPU** extends the same batching effect much further — the `K` chains run
-#   across thousands of lanes at once, so the same call scales to thousands of
-#   galaxies. For the measured GPU throughput see
-#   `bench/scripts/benchmark_catalog_throughput.py`; for cluster-scale catalogs
-#   (one GPU per slice, array jobs) see `scripts/slurm/`; and to shard *one* very
-#   high-dimensional hierarchical fit across devices, see
-#   `docs/advanced/hierarchical.md` (VI, the other track).
+#   catalog as one vectorized program: `K` galaxies advance per sampler step, the
+#   compiled graph is `O(1)` in catalog size, and the compile is paid once and
+#   amortized. Changing `K` changes only throughput, never the posterior — the
+#   vectorization is bit-exact.
+# - **The per-posterior cost is sampler iterations, not the small parameter space.**
+#   Batching `K` chains amortizes per-step overhead, so per-galaxy time falls as
+#   `K` grows — a factor of several on one CPU from batching alone.
+# - **Free redshift rides `WavePrecomp`** — the LUT is tabulated over redshift,
+#   so a photo-z fit interpolates it instead of re-integrating per step. Baking
+#   nebular emission into the SSP (the wNE grid) keeps the line-boosted colors at
+#   **zero per-step cost**.
+# - A **GPU** extends batching much further, scaling to thousands of galaxies in
+#   a single call.

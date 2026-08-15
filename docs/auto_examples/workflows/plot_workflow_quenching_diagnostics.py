@@ -2,23 +2,12 @@
 Three diagnostics of quenching epoch in one figure
 ====================================================
 
-When did star formation in a galaxy stop? Optical-only color, the
-4000 Å break, and Hα equivalent width respond on different timescales:
-NUV − r reddens within ~100 Myr of quenching (loss of O/B stars),
-``D_n(4000)`` continues to rise over 1–3 Gyr as A stars evolve, and
-Hα EW drops fastest of all (within ~10 Myr) since it tracks only the
-youngest ionizing photons.
+When did star formation stop? Optical color, the 4000 Å break, and Hα
+equivalent width respond on different timescales: NUV − r reddens within
+~100 Myr (loss of O/B stars); D_n(4000) rises over 1–3 Gyr (A-star evolution);
+Hα EW drops fastest (≲10 Myr, youngest ionizing photons only).
 
-We sweep the truncation epoch ``t_quench`` of a constant-SFR
-population from 10 Myr to 5 Gyr ago and show all three diagnostics on
-the same x-axis so the reader can see which observation is the right
-clock for a given quenching timescale.
-
-References:
-
-- Kauffmann+2003, MNRAS, 341, 33 (D_n(4000) vs Hα EW)
-- Martin+2007, ApJS, 173, 342 (NUV − r and the green valley)
-
+References: Kauffmann+2003; Martin+2007.
 """
 
 import os

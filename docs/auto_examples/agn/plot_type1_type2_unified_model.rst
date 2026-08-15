@@ -35,10 +35,9 @@ effect** — the same accretion disc + dusty torus system appears as:
 This gallery shows both sightlines for the same AGN (L_bol = 10^12 L_sun) using
 the composable unified AGN model in tengri, plus a smooth 3-angle transition
 narrative (Type 1 → Intermediate → Type 2) demonstrating how the optical SED
-and feature visibility evolve continuously with inclination angle. The Type 2
-configuration demonstrates the library limitation noted in caveat #294: the
-torus does not properly screen the disc from the observer, resulting in
-over-bright Type-2 continuum.
+and feature visibility evolve continuously with inclination angle. In Type 2
+edge-on sightlines, the torus screening of the disc is incomplete, resulting
+in over-bright continuum in the UV/optical.
 
 References
 ----------
@@ -48,7 +47,7 @@ References
 .. [2] Antonucci, R. 1993, ARA&A, 31, 473
    "Unified Models for Active Galactic Nuclei and Quasars"
 
-.. GENERATED FROM PYTHON SOURCE LINES 32-220
+.. GENERATED FROM PYTHON SOURCE LINES 31-219
 
 
 
@@ -75,10 +74,6 @@ References
  .. code-block:: none
 
     Building Type 1 (face-on, BLR) model...
-    /Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_interp_nd_triweight': FileNotFoundError: [Errno 2] No such file or directory: '/Users/suchethacooray/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_scan': FileNotFoundError: [Errno 2] No such file or directory: '/Users/suchethacooray/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
     Building Type 2 (edge-on, NLR) model...
     Saved: plot_type1_type2_unified_model.png
     Saved: plot_type1_type2_unified_model_transition.png
@@ -284,7 +279,7 @@ References
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.552 seconds)
+   **Total running time of the script:** (0 minutes 5.401 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_type1_type2_unified_model.py:

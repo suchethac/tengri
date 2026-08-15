@@ -42,15 +42,11 @@
 # emulator off the per-gradient path. The lines do ride it, but what it caches is
 # the *gas* calculation, which is why the name misleads.
 #
-# **And on this fit neither one buys you much** — we measure that below rather
-# than claim otherwise. An observation carrying a line channel already keeps the
-# nebular work off the per-gradient path, so the exact forward is *already* fast
-# here and the opt-ins have little left to remove. Where `FeaturePrecomp` earns
-# its keep is the case that looks like it should not need it: the **same model
-# fit to photometry alone**, where every likelihood evaluation re-runs Cue and
-# the grid is worth ~7x against a 1.23x noise floor. "I am not fitting lines" is the
-# opposite of a reason to skip it — the `FeaturePrecomp` docstring carries that
-# measurement, as does `docs/dev/api_migration_v0.x.md`.
+# **On this fit neither one buys much** — an observation carrying a line channel
+# already keeps the nebular work off the per-gradient path, so the exact forward
+# starts fast and the opt-ins have little left to remove. Where `FeaturePrecomp`
+# earns its keep is the counter-intuitive case: the **same model fit to photometry
+# alone**, where every likelihood evaluation re-runs Cue and the grid is worth ~7x.
 #
 # The catalog-scale argument is separate and survives either way: the look-up is
 # shared work across galaxies, so it is amortized once and reused — see
@@ -108,7 +104,12 @@ C_POST, C_TRUTH, C_DATA, C_LINE = "#3a76d9", "0.15", "#c3372a", "#2e8b57"
 # lines, [O III], [N II], and [S II]. The line wavelengths come straight from
 # the built-in `LineList`; the observed fluxes and their errors go into a
 # `LineFluxData`, which the `Observation` carries alongside the photometry.
-# `model.fit` then fits both channels through one likelihood — no extra wiring.
+#
+# **Critical:** `predict_line_fluxes` returns **pure, deblended, absorption-corrected
+# emission** — the same quantity FastSpecFit's `LINE_FLUX` reports (Gaussian on a
+# continuum-subtracted spectrum). A window-integrated flux measurement is a *different*
+# quantity (carries stellar absorption and mis-deblends [N II]). Never compare
+# tengri predictions to window integrals or they will bias the fit.
 
 # %%
 SSP_NAME = "fsps_prsc_miles_chabrier"  # bare-stellar SSP (Cue adds the nebular emission)
@@ -774,20 +775,13 @@ print(
 #   forward starts out fast and the lookups have little left to remove.
 # - The two opt-ins are **not one per data channel**. `FeaturePrecomp` caches the
 #   *nebular* calculation, not the line channel: with `neb_logU` and
-#   `neb_logZ_gas` free, a likelihood evaluation without it can re-run the Cue
-#   emulator. That is why the case it rescues is the counter-intuitive one — the
-#   same model fit to **photometry alone**, where it is worth roughly an order of
-#   magnitude. "I am not fitting lines" is not a reason to leave it off. That the
-#   photometry-only case is the *slower* one is a defect, tracked as issue #1596.
-# - **The truth lands inside the 68% interval for the reported parameters** —
-#   the coverage line printed above is the measurement, and on six parameters at
-#   68% nominal coverage both five and six are what a calibrated interval should
-#   give, so do not read a single miss as a failure (or a clean sweep as proof).
-#   Stellar mass and SFR are the tightest. Metallicity / dust / gas conditions
-#   are the broad, degenerate sector — the posterior *width* is the honest
-#   statement of that. More information (a full spectrum — notebook 06 — an
-#   auroral line, or the UV slope) narrows it, not a faster fit.
-# - Two residual systematics matter when fitting a *real* catalog: the nebular
-#   model floor (Cue reproduces FSPS's Cloudy to ~10%, ~30% for [S II]), and the
-#   fiber aperture (line fluxes are aperture-limited; photometry is total — apply
-#   the catalog's aperture correction or fiber-match).
+#   `neb_logZ_gas` free, a likelihood evaluation without it can re-run Cue
+#   every step. That is why it rescues the counter-intuitive case: the **same
+#   model fit to photometry alone**, worth roughly an order of magnitude.
+# - Stellar mass and SFR are well constrained. Metallicity / dust / gas conditions
+#   trade off along a broad, degenerate ridge — the posterior *width* is the honest
+#   statement of that. More information (a full spectrum, an auroral line, or the
+#   UV slope) narrows it.
+# - When fitting real catalogs, account for: the nebular model floor (Cue reproduces
+#   Cloudy to ~10%, ~30% for [S II]), and the fiber aperture (line fluxes are
+#   aperture-limited; photometry is total).

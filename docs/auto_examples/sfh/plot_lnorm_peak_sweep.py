@@ -4,10 +4,10 @@ Log-normal peak time shifts stellar age and SED morphology
 
 The peak time of a log-normal SFH controls when most stars formed, shifting the
 age structure and dramatically affecting UV slope, 4000 Å break strength, and
-NIR luminosity. Following the Carnall+2018 / BAGPIPES convention (#514), the
-peak is measured in *cosmic time since formation* (T = age - lookback); larger
-peak times therefore correspond to more recent star formation. We vary the peak
-across its prior range with every other parameter fixed.
+NIR luminosity. Following Carnall+2018 / BAGPIPES, the peak is measured in
+*cosmic time since formation* (T = age - lookback); larger peak times
+correspond to more recent star formation. We vary the peak across its prior
+range with every other parameter fixed.
 """
 
 import os

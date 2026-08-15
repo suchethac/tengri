@@ -28,16 +28,15 @@ dust optical depth (τ_diff ∈ [0, 2]) and measure how the predicted H-alpha
 and H-beta change. We derive A_V = 1.086 × τ_diff and compare against the
 Calzetti+2000 expectation.
 
-Status: as of issue #313 fix, ``predict(params).lines`` now folds in the
-diffuse dust attenuation. The tengri trace rises from the intrinsic ~2.85
-to ~4.3 at A_V ≈ 2 mag; the Calzetti+2000 curve climbs steeper, suggesting
-the birth-cloud component or the dust normalization differs slightly from
-the pure Calzetti law applied here as the reference.
+``predict(params).lines`` folds in the diffuse dust attenuation, so the
+predicted decrement already carries it. The curve here climbs less steeply
+than the pure Calzetti law used as the reference: birth-cloud attenuation and
+the dust normalization both differ from that idealization.
 
 Reference: Calzetti et al. 2000, ApJ, 533, 682 (Balmer decrement and dust
 attenuation law).
 
-.. GENERATED FROM PYTHON SOURCE LINES 21-158
+.. GENERATED FROM PYTHON SOURCE LINES 20-157
 
 
 
@@ -178,7 +177,7 @@ attenuation law).
     ax.text(
         0.98,
         0.05,
-        "After issue #313 fix: tengri now folds diffuse dust into line predictions",
+        "Line predictions include diffuse dust attenuation",
         transform=ax.transAxes,
         fontsize=9,
         va="bottom",
@@ -193,7 +192,7 @@ attenuation law).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.210 seconds)
+   **Total running time of the script:** (0 minutes 8.616 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_balmer_decrement_av.py:

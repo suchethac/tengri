@@ -2,29 +2,12 @@
 Automatic differentiation: parameter sensitivities via jax.grad
 ===============================================================
 
-Every photometric band's flux is a differentiable function of model parameters.
-This example computes sensitivities ∂(log F) / ∂(log θ) — the logarithmic
-elasticity of each photometric band to changes in four key stellar population
-parameters: peak star formation rate, metallicity, dust optical depth, and
-age. Astronomers fitting galaxy SEDs in other codes use finite differences
-(∂F/∂θ ≈ [F(θ+δ) − F(θ−δ)] / (2δ), slow and numerically fragile); tengri
-exposes JAX's autodiff to compute these sensitivities exactly in one forward
-and one reverse pass per parameter. This heatmap demonstrates the approach.
+Compute logarithmic sensitivities ∂(log F) / ∂(log θ) for each photometric
+band. Finite-difference methods (∂F/∂θ ≈ [F(θ+δ) − F(θ−δ)] / (2δ)) are slow
+and fragile; JAX autodiff computes exact sensitivities via one forward and
+reverse pass per parameter.
 
-The 5×4 grid shows normalized sensitivities: dust τ strongly suppresses the
-UV (negative in u-band), metallicity weakly enriches long-wavelength colors,
-and age has opposing effects across the spectrum (younger = brighter UV,
-older = redder continuum through dust absorption).
-
-References:
-
-  - Bradbury et al. 2018 (JAX: composable transformations):
-
-    arXiv:1811.02693
-
-  - Hearin et al. 2023 (DSPS — differentiable stellar population synthesis):
-    arXiv:2308.16742
-
+References: Bradbury+2018 (JAX); Hearin+2023 (DSPS).
 """
 
 import os

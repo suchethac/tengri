@@ -93,14 +93,8 @@ flux_obs, noise = mock["flux_obs"], mock["noise"]
 # %% [markdown]
 # ## Figure 1 — the posterior gradient
 #
-# Two of the free parameters, varied on a 60×60 grid with the rest fixed
-# at truth: the peak SFR and the birth-cloud optical depth. Left panel:
-# the log-posterior surface, with contours at 1σ / 2σ / 3σ. Right panel:
-# `jax.grad` of the same quantity, plotted as a vector field.
-#
-# A gradient-free sampler explores by trial-and-error; a gradient-based
-# sampler reads the arrows. In one or two dozen dimensions that is the
-# difference between hours and seconds.
+# Left: log-posterior surface, with 1σ / 2σ / 3σ contours. Right: `jax.grad`
+# as a vector field. Gradient-based samplers follow these arrows.
 
 # %%
 log_sfr_grid = np.linspace(-1.5, 2.0, 30)
@@ -205,12 +199,8 @@ grad_at_truth = jax.grad(loss)(truth)
 # %% [markdown]
 # ## Figure 2 — forward-model throughput
 #
-# A single forward call (the JIT'd `predict_observables`) versus a
-# `vmap` over 10 000 parameter draws. The batched call is far below
-# 10 000× the single-call cost: cold-compile is paid once, then XLA
-# broadcasts the same compiled graph across the batch axis. This is
-# the unit of speed-up that lets gradient samplers, population fits,
-# and posterior-predictive sweeps fit on a laptop.
+# Single forward call vs. `vmap` over 10 000 draws. Batched cost is far below
+# 10 000× single-call: XLA broadcasts the compiled graph across the batch.
 
 # %%
 # Warm the JIT cache.
@@ -265,13 +255,10 @@ fig2.tight_layout()
 fig2.savefig(FIG_DIR / "01_wallclock.png", dpi=300, bbox_inches="tight")
 
 # %% [markdown]
-# ## Two switches worth knowing
-#
-# **`compile=`** controls how the forward model is JIT-wrapped at build
-# time. `per_component` (the default) compiles each `SEDComponent`
-# independently — fast cold start, friendly to notebook edits. `fused`
-# compiles the full pipeline as one graph — slower first call, fastest
-# steady state, what you want inside a population fit.
+# `compile="per_component"` is the default and compiles each component
+# independently: fast cold start, friendly to notebook edits. `compile="fused"`
+# compiles the whole pipeline as one graph — slower first call, fastest steady
+# state, which is what a population fit wants.
 
 # %%
 model_fused = SEDModel.build(
@@ -282,20 +269,6 @@ model_fused = SEDModel.build(
 )
 
 # %% [markdown]
-# **Persistent JAX cache.** `import tengri` enables an on-disk JIT cache
-# at `~/.cache/tengri_jax_cache`. Restarting the kernel or launching a
-# Slurm worker does not trigger recompilation of unchanged components;
-# the first forward pass of a fresh process is already warm. Cache
-# management lives in four verbs: `tengri.lean` (default, drop the
-# engine after each fit), `tengri.persistent` (keep it for repeated
-# same-shape fits), `tengri.gc` (one-shot collect), and
-# `tengri.clear_shared_caches()` (full reset for clean benchmarking).
-#
-# ## What this opens up
-#
-# Population fits across thousands of galaxies become tractable on a
-# laptop, not just a cluster. Hierarchical priors, where each galaxy's
-# posterior informs a shared parent distribution, are sampled jointly
-# rather than post-hoc. High-dimensional non-parametric SFHs (≥30
-# bins) are sampled in minutes. The next notebooks build the model up
-# component by component.
+# `import tengri` enables an on-disk JIT cache at `~/.cache/tengri_jax_cache`,
+# so a restarted kernel or a fresh Slurm worker does not recompile unchanged
+# components.

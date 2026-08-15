@@ -23,15 +23,10 @@ Photo-z degeneracy: chi² landscape over redshift and stellar mass
 
 Galaxy photometry is degenerate in redshift and stellar mass — the same
 galaxy can look identical at different redshifts if the mass is adjusted.
-We mock a star-forming galaxy at z=2.5 with known stellar mass, observe it
-in ugrizYJHK bands at S/N=10, then compute χ² on a 2D grid of (z, M*) to
-show the classic photo-z degeneracy valley. The figure maps χ² as a heatmap
-with 1σ/2σ/3σ contours and overlays the true redshift.
 
-Reference: Bolzonella et al. 2000, A&A, 363, 476 (HYPERZ photometric
-redshift); Brammer et al. 2008, ApJ, 686, 1503 (EAZY photometric redshift).
+References: Bolzonella+2000; Brammer+2008.
 
-.. GENERATED FROM PYTHON SOURCE LINES 15-34
+.. GENERATED FROM PYTHON SOURCE LINES 10-29
 
 .. code-block:: Python
 
@@ -61,7 +56,7 @@ redshift); Brammer et al. 2008, ApJ, 686, 1503 (EAZY photometric redshift).
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 35-40
+.. GENERATED FROM PYTHON SOURCE LINES 30-35
 
 Redshift and stellar mass are the two axes of the grid — so they are *free
 parameters*, not structural choices, and both vary inside a single model.
@@ -69,7 +64,7 @@ There is no reason to rebuild anything as we walk the grid: a free parameter
 takes a different value on every evaluation, which is exactly what a grid is.
 The rest of the template (SFH shape, dust) is held fixed.
 
-.. GENERATED FROM PYTHON SOURCE LINES 41-82
+.. GENERATED FROM PYTHON SOURCE LINES 36-77
 
 .. code-block:: Python
 
@@ -121,7 +116,7 @@ The rest of the template (SFH shape, dust) is held fixed.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 83-107
+.. GENERATED FROM PYTHON SOURCE LINES 78-102
 
 .. code-block:: Python
 
@@ -156,14 +151,14 @@ The rest of the template (SFH shape, dust) is held fixed.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 108-112
+.. GENERATED FROM PYTHON SOURCE LINES 103-107
 
 `predict_photometry` is the lean, vmap-safe surface, so the whole grid is one
 compiled call. We map over the mass axis and sequence the redshift axis with
 `lax.map`: a flat 65x65 vmap would materialize every SED at once (>10 GB),
 whereas one row at a time peaks near 3 GB.
 
-.. GENERATED FROM PYTHON SOURCE LINES 113-136
+.. GENERATED FROM PYTHON SOURCE LINES 108-131
 
 .. code-block:: Python
 
@@ -197,7 +192,7 @@ whereas one row at a time peaks near 3 GB.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 137-190
+.. GENERATED FROM PYTHON SOURCE LINES 132-185
 
 .. code-block:: Python
 
@@ -263,13 +258,20 @@ whereas one row at a time peaks near 3 GB.
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/inference/plot_photoz_chi2_grid.py:140: UserWarning: Log scale: values of z <= 0 have been masked
+      im = ax.contourf(
+
 
 
 
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (2 minutes 2.416 seconds)
+   **Total running time of the script:** (0 minutes 27.170 seconds)
 
 
 .. _sphx_glr_download_auto_examples_inference_plot_photoz_chi2_grid.py:

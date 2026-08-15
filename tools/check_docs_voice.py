@@ -112,7 +112,10 @@ DEV_PATTERNS = {
     "issue_ref": re.compile(r"#\d{3,4}"),
     "claude_md": re.compile(r"\bCLAUDE\.md\b"),
     "agents_md": re.compile(r"\bAGENTS\.md\b"),
-    "private_var": re.compile(r"\b_[A-Z][A-Z0-9_]{2,}\b"),
+    # Not preceded by an identifier char or a closing bracket: physics prose
+    # writes subscripts like E(B-V)_BBB and sigma_NMAD, which are notation,
+    # not private Python names.
+    "private_var": re.compile(r"(?<![A-Za-z0-9)\]])\b_[A-Z][A-Z0-9_]{2,}\b"),
     "dev_path": re.compile(r"\bdocs/(dev|adr)/"),
 }
 
@@ -359,7 +362,11 @@ def _check_dev_detail_leakage(text: str) -> list[str]:
         violations.append("CLAUDE.md reference found")
     if DEV_PATTERNS["agents_md"].search(masked):
         violations.append("AGENTS.md reference found")
-    if DEV_PATTERNS["dev_path"].search(masked):
+    # A full github.com blob URL is the sanctioned way to point at an unpublished
+    # tree -- readme.md does exactly this. Only bare site-relative paths are dead
+    # links, so strip absolute URLs before looking for them.
+    without_urls = re.sub(r"https?://\S+", "", masked)
+    if DEV_PATTERNS["dev_path"].search(without_urls):
         violations.append("Reference to docs/dev or docs/adr found")
 
     for m in DEV_PATTERNS["private_var"].finditer(masked):
@@ -437,8 +444,11 @@ def _check_notation_canon(text: str) -> list[str]:
                 canonical = next(ref for ref in REF_CODE_CANON if ref.lower() == word.lower())
                 violations.append(f"Non-canonical casing '{word}' (should be '{canonical}')")
 
-    # Check en-dashes in numeric ranges: flag hyphen between numbers
-    if re.search(r"\d+-\d+", masked):
+    # Check en-dashes in numeric ranges: flag hyphen between numbers. ISO dates
+    # (2026-04-08, 2026-05) are not ranges and must keep their hyphens, so drop
+    # them before looking. Same for version strings like 0.4.6-rc1.
+    no_dates = re.sub(r"\b\d{4}-\d{2}(-\d{2})?\b", "", masked)
+    if re.search(r"\d+-\d+", no_dates):
         violations.append("Numeric range with hyphen (should be en-dash –)")
 
     return violations
@@ -505,15 +515,32 @@ def _check_prose_vs_output(text: str, adjacent_cell_has_output: bool) -> list[st
 
     Only flags STRONG tokens that characterize a number the reader can see.
     Drops weak tokens like "agree"/"matches"/"close to" (used for setup description).
+
+    Suppression: a ``<!-- docs-voice: criterion -->`` marker anywhere in the cell
+    suppresses the finding. The distinction this check cannot make is semantic:
+    "these chains are well-mixed" grades the run in front of the reader, while
+    "well-mixed chains overlap and look like white noise" teaches them how to read
+    the plot and is true of every run. The second is what the docs are for. Without
+    an escape hatch the only prose that reliably passes is prose that says nothing,
+    so the marker is deliberate, greppable, and belongs only on durable criteria.
     """
     violations = []
 
     if not adjacent_cell_has_output:
         return violations
 
-    text_lower = text.lower()
+    if "<!-- docs-voice: criterion -->" in text:
+        return violations
+
+    # Interrogative lines pose the question the printed output answers -- a
+    # heading like "Did the parallel fit recover the truth?" asserts nothing.
+    text_lower = "\n".join(
+        line for line in text.lower().splitlines() if not line.rstrip().endswith("?")
+    )
     for token in EVALUATIVE_TOKENS_STRONG:
-        if token in text_lower:
+        # Word-boundary match: substring matching flags "recovery table" on the
+        # token "recover", which is a noun phrase naming a table, not a verdict.
+        if re.search(rf"\b{re.escape(token)}\b", text_lower):
             violations.append(
                 f"Evaluative token '{token}' in prose adjacent to code output "
                 f"(verdict must not characterize what reader can see printed)"
