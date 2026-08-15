@@ -268,9 +268,14 @@ def _apply_lsf_variable_r(
             1.0,
             0.0,
         )
-        n_in_bin = jnp.maximum(jnp.sum(bin_mask), 1.0)
-        sigma_mean = jnp.sum(sigma_eff_kms * bin_mask) / n_in_bin
-        dlnwave_mean = jnp.sum(dlnwave_local * bin_mask) / n_in_bin
+        # Both clamps written out rather than hoisted into a shared name: XLA
+        # common-subexpression-eliminates them, and tools/check_zero_hiding_clamps.py
+        # matches the division syntactically, so hoisting would retire a site from
+        # that audit while the clamp is still there — shrinking the inventory
+        # silently is the one thing that guard exists to prevent.
+        n_in_bin = jnp.sum(bin_mask)
+        sigma_mean = jnp.sum(sigma_eff_kms * bin_mask) / jnp.maximum(n_in_bin, 1.0)
+        dlnwave_mean = jnp.sum(dlnwave_local * bin_mask) / jnp.maximum(n_in_bin, 1.0)
 
         # FFT convolution with this sigma, at this bin's own pixel scale
         sigma_pix = (sigma_mean / _C_KM_S) / dlnwave_mean
