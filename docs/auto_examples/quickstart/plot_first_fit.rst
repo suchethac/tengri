@@ -18,19 +18,18 @@
 .. _sphx_glr_auto_examples_quickstart_plot_first_fit.py:
 
 
-Recovering a star-forming galaxy from 5-band SDSS photometry
-============================================================
+Recovering stellar mass from 5-band SDSS photometry
+====================================================
 
-The simplest end-to-end tengri workflow. We build a model with a
-truncated-skew-normal SFH and a two-component Calzetti dust attenuation,
-mock SDSS *ugriz* photometry at S/N = 20, then run a MAP fit to recover the
-input parameters. The figure shows the full rest-frame SED behind the five
-observed bands and the residuals of the MAP fit relative to the noise level.
+MAP returns a point estimate; nothing here estimates uncertainty. Six free
+parameters, which is the validated ceiling for ``method="mcmc_nuts"``;
+``method="laplace"`` is the cheaper route to intervals, from the Hessian at the
+MAP. ``vi`` and ``mcmc_raytrace`` target D ≳ 20. See the method-selection page
+for the full decision table.
 
-Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview); Calzetti
-et al. 2000, ApJ, 533, 682 (attenuation law).
+Reference: Calzetti+2000 (attenuation law).
 
-.. GENERATED FROM PYTHON SOURCE LINES 14-132
+.. GENERATED FROM PYTHON SOURCE LINES 13-143
 
 
 
@@ -44,38 +43,16 @@ et al. 2000, ApJ, 533, 682 (attenuation law).
 
  .. code-block:: none
 
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-805/src/tengri/forward/sed_model.py:7566: WildcardPartialFreeWarning: 'all_params: FREE' freed 6 of 8 parameters in group 'sfh'. These have no declared prior, only Fixed defaults, so they stay pinned:
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/src/tengri/forward/sed_model.py:8270: WildcardPartialFreeWarning: 'all_params: FREE' freed 6 of 8 parameters in group 'sfh'. These have no declared prior, only Fixed defaults, so they stay pinned:
       met_alpha_fe, met_logzsol_scatter
     The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. sfh={'met_alpha_fe': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
       spec = parse_groups(**groups)
-    /Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit__impl': FileNotFoundError: [Errno 2] No such file or directory: '/Users/suchethacooray/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit__normal': FileNotFoundError: [Errno 2] No such file or directory: '/Users/suchethacooray/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_multiply': FileNotFoundError: [Errno 2] No such file or directory: '/Users/suchethacooray/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit__power': FileNotFoundError: [Errno 2] No such file or directory: '/Users/suchethacooray/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit__threefry_split': FileNotFoundError: [Errno 2] No such file or directory: '/Users/suchethacooray/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_val_and_grad': FileNotFoundError: [Errno 2] No such file or directory: '/Users/suchethacooray/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_predict_photometry': FileNotFoundError: [Errno 2] No such file or directory: '/Users/suchethacooray/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_predict_properties': FileNotFoundError: [Errno 2] No such file or directory: '/Users/suchethacooray/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_single_step': FileNotFoundError: [Errno 2] No such file or directory: '/Users/suchethacooray/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_scan_batch': FileNotFoundError: [Errno 2] No such file or directory: '/Users/suchethacooray/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit__mean': FileNotFoundError: [Errno 2] No such file or directory: '/Users/suchethacooray/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_broadcast_in_dim': FileNotFoundError: [Errno 2] No such file or directory: '/Users/suchethacooray/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_age_at_z': FileNotFoundError: [Errno 2] No such file or directory: '/Users/suchethacooray/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_trapezoid': FileNotFoundError: [Errno 2] No such file or directory: '/Users/suchethacooray/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
+    MAP fit diagnostics:
+      χ²: 3.02  |  n_bands: 5  |  max|residual|/σ: 1.41
+    SFH parameter recovery:
+      log M* [M☉]:     truth 10.000  fit 10.167
+      peak age [Gyr]:  truth 3.000  fit 4.410
+      τ_diff [mag]:    truth 0.300  fit 0.451
 
 
 
@@ -143,6 +120,18 @@ et al. 2000, ApJ, 533, 682 (attenuation law).
     )
     fit_params = posterior.params
 
+    # Print fit diagnostics
+    residual_phot = (np.asarray(model.predict_photometry(fit_params)) -
+                     np.asarray(mock.flux_obs)) / np.asarray(mock.noise)
+    chi2 = np.sum(residual_phot**2)
+    n_bands = len(mock.flux_obs)
+    print("MAP fit diagnostics:")
+    print(f"  χ²: {chi2:.2f}  |  n_bands: {n_bands}  |  max|residual|/σ: {np.max(np.abs(residual_phot)):.2f}")
+    print("SFH parameter recovery:")
+    print(f"  log M* [M☉]:     truth {truth['sfh_tsnorm_log_total_mass']:.3f}  fit {fit_params['sfh_tsnorm_log_total_mass']:.3f}")
+    print(f"  peak age [Gyr]:  truth {truth['sfh_tsnorm_peak_lbt_gyr']:.3f}  fit {fit_params['sfh_tsnorm_peak_lbt_gyr']:.3f}")
+    print(f"  τ_diff [mag]:    truth {truth['dust_tau_diff']:.3f}  fit {fit_params['dust_tau_diff']:.3f}")
+
     flux_truth = np.asarray(mock.flux_true)
     flux_fit = np.asarray(model.predict_photometry(fit_params))
     flux_obs = np.asarray(mock.flux_obs)
@@ -208,7 +197,7 @@ et al. 2000, ApJ, 533, 682 (attenuation law).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 27.281 seconds)
+   **Total running time of the script:** (0 minutes 11.327 seconds)
 
 
 .. _sphx_glr_download_auto_examples_quickstart_plot_first_fit.py:

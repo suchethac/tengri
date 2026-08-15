@@ -67,8 +67,8 @@ C_POST, C_TRUTH, C_DATA = "#3a76d9", "0.15", "#c3372a"
 # %% [markdown]
 # ## Stellar library and observation
 #
-# A bare-stellar SSP grid (Cue-compatible if you later want to add nebular
-# emission). `download_ssp` fetches on first use.
+# Bare-stellar SSP grid — Cue-compatible, so nebular emission can be added
+# later. The grid downloads on first use.
 
 # %%
 SSP_NAME = "fsps_prsc_miles_chabrier"
@@ -93,11 +93,10 @@ obs = Observation(photometry=Photometry.from_names(FILTERS))
 # %% [markdown]
 # ## Build the model
 #
-# A truncated skew-normal SFH and two-component Calzetti dust attenuation,
-# nebular off, redshift fixed at z = 0.05. Seven free parameters. Kept minimal
-# on purpose — dust IR re-emission, nebular, and AGN are shown in
-# `02_sed_anatomy.py`. `model.summary()` prints the assembled pipeline;
-# `citations.print_citations` pulls the bibliography straight from the registry.
+# Truncated-skew-normal SFH with two-component Calzetti dust attenuation,
+# nebular off, redshift fixed at z = 0.05: seven free parameters. Kept minimal
+# on purpose. Dust IR re-emission, nebular emission, and AGN are covered in
+# `02_sed_anatomy.py`.
 
 # %%
 sed_model = SEDModel.build(
@@ -144,11 +143,10 @@ wave_eff_um = effective_wavelengths_um(phot)
 # %% [markdown]
 # ## One-time JIT compile
 #
-# First touch of the photometric forward kernel and its gradient triggers
-# XLA compilation against the precomputed SSP × filter LUT (the
-# `WavePrecomp` knob set above). Cold cache is a few seconds; warm cache
-# (`~/.cache/tengri_jax_cache`) is milliseconds. Subsequent calls are
-# pure numeric throughput — no Python in the hot path.
+# First call to the forward kernel and its gradient triggers XLA compilation
+# against the precomputed SSP × filter LUT (the `WavePrecomp` knob above).
+# Cold compile is a few seconds; warm cache is milliseconds. The difference
+# between first and second call below shows the cost of compilation alone.
 
 # %%
 import time
@@ -177,21 +175,16 @@ print(f"  ∇log-likelihood  warm:       {time.perf_counter() - t:8.4f} s")
 # ## Fit
 #
 # `forward.fit(flux, noise, ...)` is the whole interface: hand it the data and
-# pick a method. Which channel the data belongs to is read off the observation —
-# this one is photometry, so there is nothing to declare.
+# pick a method. This run is photometry-only, so there is nothing to declare
+# beyond the channel, which is read off the observation.
 #
-# Multi-start ADAM for the MAP point estimate, then NUTS with four parallel
-# chains via `jax.vmap` for the full posterior. Each stack JIT-compiles on first
-# use and persists to the on-disk cache (`~/.cache/tengri_jax_cache`); the data
-# and parameters are threaded through the compiled kernels as runtime arguments
-# (never baked in), so the compile is reused across calls.
-#
-# *Note*: the standardized prior maps an N(0,1) latent to a *genuinely uniform*
-# physical prior, so a single random init can land in a poor basin and stall a
-# lone ADAM run. `n_restarts=8` runs eight inits in parallel (`jax.vmap`, seeded
-# from the run key) and keeps the lowest-loss one; NUTS is then seeded from that
-# MAP point (`init_from=map_result`). Fully JAX-native, and it converges cleanly
-# (`r_hat ≈ 1.0`).
+# Multi-start ADAM finds the MAP point; four parallel NUTS chains sample the
+# posterior. Both are JIT-compiled on first use and cached to disk. The key
+# convention: `n_restarts=8` means ADAM runs eight random inits in parallel and
+# keeps the lowest-loss one. The standardized prior is *genuinely uniform* in
+# physical space — without multiple restarts, a lone ADAM init can collapse into
+# a poor local minimum. NUTS is then seeded from that best MAP point
+# (`init_from=map_result`).
 
 # %%
 t = time.perf_counter()
@@ -230,11 +223,13 @@ print(
 )
 
 # %% [markdown]
-# The fit recovers the mock truth: well-constrained parameters (stellar mass,
-# dust, metallicity) land on the input values, and even the SFH *shape*
-# parameters are sensibly constrained for this star-forming galaxy — the
-# posteriors are unimodal and well-mixed (`r_hat ≈ 1.0`), without piling up
-# against the prior bounds.
+# Truth for stellar mass and dust falls inside the 68% band; for sfr_100myr and
+# sfr_10myr it falls below it.
+#
+# Read the diagnostics printed above before using any of these intervals.
+# split-R̂ must sit below ~1.01 and divergences must be a small fraction of the
+# draws; intervals from a run that misses either bar are not trustworthy.
+# Lengthen warmup or reparameterize, then refit.
 
 # %% [markdown]
 # Derived physical scalars — stellar mass, SFR, sSFR — rolled up from the

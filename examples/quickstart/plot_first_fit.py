@@ -1,15 +1,14 @@
 """
-Recovering a star-forming galaxy from 5-band SDSS photometry
-============================================================
+Recovering stellar mass from 5-band SDSS photometry
+====================================================
 
-The simplest end-to-end tengri workflow. We build a model with a
-truncated-skew-normal SFH and a two-component Calzetti dust attenuation,
-mock SDSS *ugriz* photometry at S/N = 20, then run a MAP fit to recover the
-input parameters. The figure shows the full rest-frame SED behind the five
-observed bands and the residuals of the MAP fit relative to the noise level.
+MAP returns a point estimate; nothing here estimates uncertainty. Six free
+parameters, which is the validated ceiling for ``method="mcmc_nuts"``;
+``method="laplace"`` is the cheaper route to intervals, from the Hessian at the
+MAP. ``vi`` and ``mcmc_raytrace`` target D ≳ 20. See the method-selection page
+for the full decision table.
 
-Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview); Calzetti
-et al. 2000, ApJ, 533, 682 (attenuation law).
+Reference: Calzetti+2000 (attenuation law).
 """
 
 import os
@@ -67,6 +66,18 @@ posterior = forward.fit(
     verbose=False,
 )
 fit_params = posterior.params
+
+# Print fit diagnostics
+residual_phot = (np.asarray(model.predict_photometry(fit_params)) -
+                 np.asarray(mock.flux_obs)) / np.asarray(mock.noise)
+chi2 = np.sum(residual_phot**2)
+n_bands = len(mock.flux_obs)
+print("MAP fit diagnostics:")
+print(f"  χ²: {chi2:.2f}  |  n_bands: {n_bands}  |  max|residual|/σ: {np.max(np.abs(residual_phot)):.2f}")
+print("SFH parameter recovery:")
+print(f"  log M* [M☉]:     truth {truth['sfh_tsnorm_log_total_mass']:.3f}  fit {fit_params['sfh_tsnorm_log_total_mass']:.3f}")
+print(f"  peak age [Gyr]:  truth {truth['sfh_tsnorm_peak_lbt_gyr']:.3f}  fit {fit_params['sfh_tsnorm_peak_lbt_gyr']:.3f}")
+print(f"  τ_diff [mag]:    truth {truth['dust_tau_diff']:.3f}  fit {fit_params['dust_tau_diff']:.3f}")
 
 flux_truth = np.asarray(mock.flux_true)
 flux_fit = np.asarray(model.predict_photometry(fit_params))

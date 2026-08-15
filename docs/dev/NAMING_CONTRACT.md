@@ -481,3 +481,41 @@ the build on any British spelling in `src/`, `tests/`, hand-written docs,
 locally, or `--fix` to rewrite case-preserving. Data-contract exceptions live in
 `ALLOWED_TOKENS`; the rename-ledger docs and this guard's own test fixtures are
 in `EXCLUDE_FILES`.
+
+---
+
+## 11. Prose Notation
+
+**Governing rule: Unicode in prose, ASCII in code.** Bare ASCII stays inside code spans and literal parameter names — `tau_diff` is the actual kwarg and must never be "corrected" to `τ_diff` when it appears as an identifier. This rule explicitly forbids blanket find-and-replace across all contexts.
+
+### Canonical notation table
+
+| Concept | Prose | Code / literal |
+|---|---|---|
+| Citation | `Calzetti+2000`; multiples `Calzetti+2000; Draine+2007` | full ref in `Reference:` line |
+| micron | `μm` (U+03BC GREEK SMALL LETTER MU only) | `um` in identifiers |
+| Angstrom | `Å` | `AA` |
+| Solar mass | `M☉` | `Msun` |
+| Solar metallicity | `Z☉` | `Zsun` |
+| Optical depth | `τ_diff`, `τ_bc`, `τ_V` | `tau_diff`, `tau_bc`, `tau_V` |
+| Redshift, exact | `z = 3` (spaced) | — |
+| Redshift, approximate | `z ≈ 3` (spaced); never `z~3` | — |
+| Balmer alpha | `Hα` | `H_alpha` |
+| Gelman-Rubin | `R̂` | `r_hat` |
+| Multiplier | `1.46×` | — |
+| Signal-to-noise | `S/N` | `snr` |
+| Numeric range | en-dash: `16–84%` | — |
+| Chi-square | `χ²` | `chi2` |
+| Library name | `tengri` lowercase; `Tengri` only sentence-initial | `tengri` |
+| Reference codes | each project's own styling: `BAGPIPES`, `Prospector`, `CIGALE`, `AGNfitter`, `Synthesizer`, `FSPS`, `DSPS` | — |
+
+### Enforcement
+
+Enforcement targets confusable codepoints — U+00B5 MICRO SIGN (which is why U+03BC is canonical), ligatures, homoglyphs, and non-breaking spaces — with intentional typography (superscripts, subscripts, ellipsis) explicitly permitted. The CI guard `tools/check_docs_voice.py` enforces this contract.
+
+### Motivation
+
+Measured across the 325-file user-facing corpus:
+- 472 citations split three ways (inconsistent separators and spacing)
+- 167 redshift forms split six ways (spacing, `~` vs `≈`, bare values)
+- 126 micron uses split across two visually identical codepoints: `µm` (U+00B5 MICRO SIGN, 53 uses) vs `μm` (U+03BC GREEK SMALL LETTER MU, 56 uses) plus bare `um` and full `micron`
