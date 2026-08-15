@@ -107,6 +107,8 @@ class Photometry:
         if len(self.filters) == 0:
             raise ValueError("Photometry requires at least one filter.")
 
+        self._reject_non_filter_curves()
+
         # Normalize a string convention (e.g. "energy") to the enum so the
         # JIT static-argument cache key is stable.
         if not isinstance(self.convention, FilterConvention):
@@ -142,6 +144,50 @@ class Photometry:
         object.__setattr__(self, "_fw_padded", fw_p)
         object.__setattr__(self, "_ft_padded", ft_p)
         object.__setattr__(self, "_n_valid", n_v)
+
+    def _reject_non_filter_curves(self) -> None:
+        """Refuse anything that is not a FilterCurve, naming the remedy (#1735).
+
+        ``filters`` is the first positional parameter and ``list_filters()``
+        hands out exactly the strings a new user then passes here, so
+        ``Photometry(["sdss_g", ...])`` is the obvious first guess. Without this
+        the strings were accepted, stored, and only failed partway through
+        ``__post_init__`` with ``'str' object has no attribute 'name'`` — a
+        message naming neither filters, nor ``from_names``, nor what was
+        expected.
+        """
+        from tengri.config.exceptions import ConfigError
+
+        # A bare string is a sequence of characters, so it passes the length
+        # check and then reports one failure per letter.
+        if isinstance(self.filters, str):
+            raise ConfigError(
+                f"Photometry(filters=...) expects FilterCurve objects, got a bare "
+                f"string {self.filters!r}. To build from filter names use "
+                f'Photometry.from_names(["{self.filters}"]); '
+                f"tengri.list_filters() lists the available names."
+            )
+
+        bad = [(i, f) for i, f in enumerate(self.filters) if not isinstance(f, FilterCurve)]
+        if not bad:
+            return
+
+        index, value = bad[0]
+        got = type(value).__name__
+        if got == "str":
+            names = ", ".join(repr(f) for f in self.filters if isinstance(f, str))
+            raise ConfigError(
+                f"Photometry(filters=...) expects FilterCurve objects, got str at "
+                f"index {index} ({value!r}). To build from filter names use "
+                f"Photometry.from_names([{names}]); "
+                f"tengri.list_filters() lists the available names."
+            )
+        raise ConfigError(
+            f"Photometry(filters=...) expects FilterCurve objects, got {got} at "
+            f"index {index}. Build from filter names with "
+            f'Photometry.from_names(["sdss_g", ...]), or pass FilterCurve '
+            f"objects directly; tengri.list_filters() lists the available names."
+        )
 
     @staticmethod
     def from_names(

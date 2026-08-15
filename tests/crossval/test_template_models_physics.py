@@ -183,18 +183,54 @@ class TestAstrodustTemplatePhysics:
         l_bol = float(-jnp.trapezoid(sed, nu))
         np.testing.assert_allclose(l_bol, l_absorbed, rtol=0.10)
 
-    def test_qpah_affects_mir(self):
-        """qPAH parameter must change MIR PAH feature strength."""
+    def test_qpah_does_not_apply_to_astrodust(self):
+        """Astrodust has no qPAH dimension — the published grid has one PAH population.
+
+        From the module docstring of ``astrodust_hd23``: *"Single fiducial PAH
+        size distribution and ionization fraction (Hensley & Draine 2022) —
+        there is no published (qpah, size) grid for this model."* So
+        ``dust_qpah`` is inapplicable here, not accidentally dropped, and the
+        output is identical to full precision across its whole range.
+
+        This test previously asserted that higher qPAH strengthens the 7.7 um
+        feature, i.e. asserted a dimension the model does not have (#1728). It
+        is inverted rather than deleted because the invariance is worth
+        pinning: ``astrodust`` takes ``**kwargs``, so a caller can pass
+        ``dust_qpah`` and have it silently accepted. Anyone who later wires a
+        qPAH grid in should see this test fail and update it deliberately.
+        """
         from tengri.components.dust.emission import astrodust
 
         wave = jnp.logspace(np.log10(5e4), np.log10(1.5e5), 500)
-        sed_low = astrodust(wave, 1e10, dust_qpah=0.5)
-        sed_high = astrodust(wave, 1e10, dust_qpah=4.0)
+        seds = [np.asarray(astrodust(wave, 1e10, dust_qpah=q)) for q in (0.5, 2.0, 4.6)]
 
-        # 7.7 um PAH feature region
-        pah_mask = (wave > 7e4) & (wave < 8.5e4)
-        assert float(jnp.mean(sed_high[pah_mask])) > float(jnp.mean(sed_low[pah_mask])), (
-            "Higher qPAH should strengthen PAH features in Astrodust"
+        # Not bit-equality: a handful of points drift by ~7e-15 relative, which
+        # is float noise, not a qPAH dependence. Any real grid interpolation
+        # would move the 7.7 um feature by percent, not by machine epsilon.
+        for other in seds[1:]:
+            np.testing.assert_allclose(
+                seds[0],
+                other,
+                rtol=1e-10,
+                atol=0.0,
+                err_msg="astrodust has no qPAH grid; the SED must not depend on dust_qpah",
+            )
+
+    def test_umin_is_the_knob_astrodust_does_respond_to(self):
+        """The radiation-field intensity is astrodust's real free parameter.
+
+        Guards the test above: an invariance test passes trivially if the model
+        ignores *everything*. This pins that the component is live.
+        """
+        from tengri.components.dust.emission import astrodust
+
+        wave = jnp.logspace(np.log10(3e4), np.log10(1e7), 800)
+        cool = np.asarray(astrodust(wave, 1e10, dust_umin=0.5))
+        hot = np.asarray(astrodust(wave, 1e10, dust_umin=5.0))
+
+        assert not np.allclose(cool, hot, rtol=1e-6, atol=0.0), (
+            "astrodust must respond to dust_umin; identical SEDs mean the "
+            "template interpolation is not wired"
         )
 
     def test_pah_features_present(self):
@@ -401,9 +437,22 @@ class TestDale2014TemplatePhysics:
         )
 
 
-# ── MAGPHYS — da Cunha+2008 (analytic, always available) ──────────
+# ── MAGPHYS — da Cunha+2008 (NOT IMPLEMENTED) ─────────────────────
 
 
+@pytest.mark.skip(
+    reason=(
+        "#1728: magphys_dc08 does not exist. Nothing MAGPHYS-related is in "
+        "components.dust.emission_templates or in list_dust_emission_models(); "
+        "these nine tests and tests/crossval/test_magphys_crossval.py (already "
+        "module-skipped for the same reason) describe a model that was never "
+        "built. Kept rather than deleted because they are a usable spec for it: "
+        "the xi sum constraint, the four-component decomposition and the "
+        "temperature ordering are all da Cunha+2008 Eq. 6 and would be the right "
+        "tests on the day it lands. Implement or delete — but do not leave a "
+        "filename implying coverage that does not exist."
+    )
+)
 class TestMagphysPhysics:
     """MAGPHYS 4-component dust emission physics from da Cunha+2008."""
 

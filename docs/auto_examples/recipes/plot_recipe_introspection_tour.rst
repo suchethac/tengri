@@ -41,7 +41,7 @@ models: young star-former, quiescent, and AGN-dominated.
 
  .. code-block:: none
 
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 5% of its stellar mass before the Big Bang at z=5.18 (cosmic age 1.12 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+    /tengri/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 5% of its stellar mass before the Big Bang at z=5.18 (cosmic age 1.12 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
       state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
 
 

@@ -27,7 +27,7 @@ _E_BV_STARS = 0.44 * 0.3
 TAU_DIFF_FIDUCIAL = 4.05 * _E_BV_STARS / 1.086
 TAU_BC_FIDUCIAL = 0.0
 
-STELLAR_FIDUCIAL = {"logzsol": Fixed(MET_LOGZSOL_FIDUCIAL), "*": FIXED}
+MET_FIDUCIAL = {"logzsol": Fixed(MET_LOGZSOL_FIDUCIAL), "*": FIXED}
 
 _sfh_args_d = (
     "sfhdelayed",
@@ -55,7 +55,7 @@ w_base, L_base = C.to_lnu(sed_c_base)
 # tengri: stellar+dust baseline
 m_agn_base = SEDModel.build(
     ssp_data=ssp,
-    stellar=STELLAR_FIDUCIAL,
+    met=MET_FIDUCIAL,
     sfh={
         "type": "delayed",
         "tau_gyr": Fixed(1.0),
@@ -110,7 +110,7 @@ w_skirt, L_skirt = C.to_lnu(sed_skirtor)
 # tengri: full chain + AGN
 m_agn = SEDModel.build(
     ssp_data=ssp,
-    stellar=STELLAR_FIDUCIAL,
+    met=MET_FIDUCIAL,
     sfh={
         "type": "delayed",
         "tau_gyr": Fixed(1.0),

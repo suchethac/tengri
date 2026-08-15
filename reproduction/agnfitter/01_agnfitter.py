@@ -139,7 +139,7 @@ _SSP_CANDIDATES = [
     _HERE / "_drivers" / "data" / "bc03_chabrier.h5",
     Path("data/bc03_pdva_stelib_chabrier.h5"),
     Path(tengri.__file__).resolve().parents[2] / "data" / "bc03_pdva_stelib_chabrier.h5",
-    Path("/Users/suchethacooray/Projects/tengri/data/bc03_pdva_stelib_chabrier.h5"),
+    Path(__file__).resolve().parents[2] / "data" / "bc03_pdva_stelib_chabrier.h5",
 ]
 _ssp_file = next((p for p in _SSP_CANDIDATES if p.is_file()), None)
 if _ssp_file is None:

@@ -1477,11 +1477,12 @@ def create_dh02_ce01_from_grid(grid_path: str | dict) -> Callable:
     ----------
     grid_path : str or dict
         Path to ``dh02_ce01_grid.h5`` (built by
-        ``scripts/build_dh02_ce01_grid.py``), or an already-loaded template dict
-        as returned by :func:`load_dh02_ce01_lnu_grid`. Accepting the loaded
-        form lets the component thread its grid as a JIT argument instead of
-        closing over concrete arrays, which bakes them into the graph
-        (``create_themis_from_grid`` takes the same two forms).
+        ``scripts/build_dh02_ce01_grid.py``), or an already-loaded grid dict
+        from :func:`load_dh02_ce01_lnu_grid`. The dict form is what lets the
+        component thread the library in as a traced argument instead of
+        capturing it as a compile-time constant (#1649); passing a path here
+        inside a trace bakes 1.32 MB into the graph. Mirrors
+        :func:`create_bosa_from_grid`.
 
     Returns
     -------

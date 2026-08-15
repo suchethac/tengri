@@ -1,7 +1,13 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Dale & Helou (2002) + Chary & Elbaz (2001) dust emission as SEDModelComponent.
+"""DH02_CE01 cold-dust emission library as a SEDModelComponent.
 
 Wraps the pure closure from :mod:`tengri.components.dust.emission`.
+
+Without this class the grammar type ``dh02_ce01`` resolved on the exploration
+path (``model.predict``, which dispatches through the legacy
+``DUST_EMISSION_MODELS`` dict) and raised on the inference path
+(``model.predict_photometry``, which resolves the ``_REGISTRY`` component) —
+so an advertised model could be looked at but never fitted (#1777).
 """
 
 from __future__ import annotations
@@ -16,42 +22,50 @@ __all__ = ["DH02CE01IRSEDComponent"]
 
 
 class DH02CE01IRSEDComponent(EmissionComponent):
-    r"""Dale & Helou (2002) / Chary & Elbaz (2001) cold-dust IR emission template.
+    r"""Dale & Helou (2002) + Chary & Elbaz (2001) cold-dust template library.
 
-    Wraps the pure closure built from the tabulated DH02+CE01 template library.
-    Its single grid axis is the total infrared luminosity
-    :math:`\log_{10}(L_{\rm IR}/L_\odot)`, tabulated over [8.3, 14.3].
+    The library published with AGNfitter-rX is a **single-axis** grid indexed
+    by :math:`\log_{10}(L_{\rm IR}/L_\odot)`. Templates are linearly
+    interpolated along that axis to pick the emission *shape*, and the result
+    is renormalized by frequency integral so the emitted power equals the
+    absorbed power:
 
-    Unlike its sibling templates this component declares **no free parameter**.
-    ``components/grid_support.py`` records the reason:
+    .. math::
 
-        dh02_ce01 is deliberately absent: its only grid axis is L_TIR, derived
-        from L_absorbed by energy balance rather than set by the user, so no
-        prior can overhang it.
+        L_\nu(\lambda) = \frac{L_{\rm abs}}{\int T_\nu \, d\nu} \, T_\nu(\lambda)
 
-    So the template is selected from the absorbed luminosity the dust chain
-    already supplies, via :math:`\log_{10}(L_{\rm IR}/L_\odot)` with
-    :data:`~tengri.utils.physics_constants.L_SUN`. The closure clips that to
-    the tabulated range.
+    where :math:`T_\nu` is the interpolated template [arbitrary units],
+    :math:`L_{\rm abs}` is the dust-absorbed luminosity [erg/s] supplied by the
+    energy-balance step, and :math:`L_\nu` is the emitted spectral luminosity
+    density [erg/s/Hz].
+
+    This component declares **no free parameters**, which is deliberate and
+    matches the statement in ``components/grid_support.py``: the library's only
+    grid axis is :math:`L_{\rm TIR}`, "derived from L_absorbed by energy
+    balance rather than set by the user, so no prior can overhang it". The
+    closure's ``dust_log_lir`` therefore keeps its own default of 10.0, exactly
+    as the legacy dispatch has always called it — enabling the registry path
+    changes no number.
 
     Notes
     -----
     **JIT-compatible**: yes — all operations are ``jnp`` primitives.
 
-    **Gradient-safe**: yes — differentiable except at the grid boundaries,
-    where the luminosity axis is clipped.
+    **Gradient-safe**: yes — differentiable via linear interpolation.
 
-    **Template auto-loading**: the closure lazy-loads ``dh02_ce01_grid.h5`` on
-    first call (at trace time). After lazy loading, all subsequent calls are
-    pure JAX.
+    **Known limitation, not introduced here**: the *shape* selected is
+    always the :math:`\log_{10}(L_{\rm IR}/L_\odot) = 10` template, because the
+    closure's ``dust_log_lir`` default is a constant and nothing derives it
+    from ``L_ir``. The normalization does use ``L_ir``, so the emitted power is
+    right while the template shape does not track luminosity. AGNfitter-rX
+    fits ``irlum`` as a free parameter. Reconciling the two is a physics
+    change with a moved number, so it is reported rather than folded into the
+    wiring fix that gave this model an inference path at all.
 
-    This component existed only as a loader plus a grammar entry until #1738.
-    ``_valid_dust_emission_types()`` accepted the name and
-    :func:`~tengri.registry.list_dust_emission_models` advertised it as
-    ``status='production'``, but no class was registered, so
-    ``dust={'emission': {'type': 'dh02_ce01'}}`` raised at build. It was the
-    only one of the nineteen dust-emission types with no component, and the
-    registry emit census added for #1738 is what surfaced it.
+    Implements the same template library as AGNfitter-rX
+    (Martínez-Ramírez et al. 2024 [3]_); the grid data are repackaged from that
+    release by ``scripts/build_dh02_ce01_grid.py`` and cross-validated in
+    ``tests/crossval/test_dh02_ce01_vs_agnfitter.py``.
 
     References
     ----------
@@ -62,49 +76,40 @@ class DH02CE01IRSEDComponent(EmissionComponent):
     .. [2] Chary, R. & Elbaz, D., 2001, "Interpreting the Cosmic Infrared
        Background: Constraints on the Evolution of the Dust-enshrouded Star
        Formation Rate", ApJ, 556, 562. https://doi.org/10.1086/321609
-
+    .. [3] Martínez-Ramírez, L. N., et al., 2024, "AGNfitter-rx: Modeling the
+       radio-to-X-ray spectral energy distributions of AGNs", A&A, 688, A46.
+       https://doi.org/10.1051/0004-6361/202449329
     """
 
     name: str = "dh02_ce01"
 
-    #: Empty deliberately: neither Dale & Helou (2002) nor Chary & Elbaz (2001)
-    #: has a key in ``tengri.citations.registry.REGISTRY`` yet, and a citation
-    #: tuple naming absent keys would advertise provenance it cannot deliver.
-    #: The papers are cited in the References section above.
-    _citations_tuple: ClassVar[tuple[str, ...]] = ()
+    _citations_tuple: ClassVar[tuple[str, ...]] = (
+        "dale_helou2002",
+        "chary_elbaz2001",
+    )
 
     accepts_threaded_templates: ClassVar[bool] = True
 
     def load(self, wave: jnp.ndarray | None = None):
-        """Load the DH02+CE01 grid so it can be threaded rather than baked.
-
-        Parameters
-        ----------
-        wave : ndarray, optional
-            Unused. The tabulated grid is wavelength-independent; ``predict``
-            resamples onto its own ``wave``, so the bundle can be resolved once
-            at build time and threaded in.
+        """Load the grid so it can be threaded as an argument, not baked.
 
         Returns
         -------
         dict or None
             Template arrays from :func:`load_dh02_ce01_lnu_grid`, or ``None``
-            when ``dh02_ce01_grid.h5`` is absent -- the component then falls
-            back to the module-level lazy loader, which bakes 1.3 MB.
+            when the HDF5 file is absent — the backend then falls back to its
+            module-level load.
 
         Notes
         -----
-        **JIT-compatible**: no, deliberately -- runs at build time so the arrays
-        reach :meth:`predict` as a traced argument rather than a constant.
+        **JIT-compatible**: no, deliberately — runs at build time.
         """
         del wave
         from tengri.components.dust.emission.emission import _find_data_file
         from tengri.components.dust.emission_templates import load_dh02_ce01_lnu_grid
 
         path = _find_data_file("dh02_ce01_grid.h5")
-        if path is None:
-            return None
-        return load_dh02_ce01_lnu_grid(path)
+        return None if path is None else load_dh02_ce01_lnu_grid(path)
 
     def predict(
         self,
@@ -115,50 +120,44 @@ class DH02CE01IRSEDComponent(EmissionComponent):
         L_ir: float,
         templates=None,
     ) -> tuple[jnp.ndarray, dict[str, jnp.ndarray]]:
-        r"""Compute DH02+CE01 dust emission.
+        """Compute DH02_CE01 cold-dust emission.
 
         Parameters
         ----------
         p : dict
-            Parameters with prefix stripped. Unused: this template has no free
-            parameter, its grid axis being derived from ``L_ir``.
-        sed_in : ndarray, shape (n_wave,)
-            Input SED [erg/s/Hz] (typically zeros for a dust emission component).
-        wave : ndarray, shape (n_wave,)
+            Parameters with the ``dust_`` prefix stripped. Empty — this model
+            declares none; see the class Notes.
+        sed_in : array_like, shape (n_wave,)
+            SED from upstream [erg/s/Hz]; zeros when this is the first
+            emission component.
+        wave : array_like, shape (n_wave,)
             Rest-frame wavelength grid [Angstrom].
         L_ir : float
-            Total absorbed luminosity [erg/s].
+            Dust-absorbed luminosity to re-radiate [erg/s].
+        templates : dict, optional
+            Grid threaded in as a traced argument. When ``None`` the
+            module-level lazy loader is used, which captures the library as a
+            compile-time constant (1.32 MB, #1649).
 
         Returns
         -------
-        tuple[ndarray, dict]
-            ``(sed_out, published)`` where ``sed_out`` is the updated SED
-            [erg/s/Hz] and ``published`` carries ``"sed_dust_ir"`` [erg/s/Hz].
+        tuple of (ndarray, dict)
+            ``(sed_out, published)`` — ``sed_out`` has shape ``(n_wave,)``
+            [erg/s/Hz], and ``published`` carries ``"sed_dust_ir"`` [erg/s/Hz].
 
         Notes
         -----
-        The template index is
-
-        .. math:: \log_{10}(L_{\rm IR} / L_\odot)
-
-        with :math:`L_{\rm IR}` the absorbed luminosity [erg/s]. The floor on
-        the ratio keeps the logarithm finite when the dust chain absorbs
-        nothing; the closure clips the result into the tabulated range anyway.
+        **JIT-compatible**: yes.
         """
         del p
-        from tengri.utils.physics_constants import L_SUN
-
-        log_lir = jnp.log10(jnp.maximum(jnp.asarray(L_ir) / L_SUN, 1e-30))
         if templates is not None:
-            # Build the interpolation over the THREADED arrays. Closing over
-            # tracers inside the current trace is fine; what bakes is a closure
-            # over concrete arrays, which is what the module-level lazy loader
-            # below produces.
+            # Closure built over the THREADED arrays: capturing a tracer is
+            # fine, capturing a concrete array is what bakes (#1649).
             from tengri.components.dust.emission_templates import create_dh02_ce01_from_grid
 
-            sed = create_dh02_ce01_from_grid(templates)(wave, L_ir, dust_log_lir=log_lir)
+            sed = create_dh02_ce01_from_grid(templates)(wave, L_ir)
         else:
-            from tengri.components.dust.emission import DUST_EMISSION_MODELS
+            from tengri.components.dust.emission.emission import DUST_EMISSION_MODELS
 
-            sed = DUST_EMISSION_MODELS["dh02_ce01"](wave, L_ir, dust_log_lir=log_lir)
+            sed = DUST_EMISSION_MODELS["dh02_ce01"](wave, L_ir)
         return sed_in + sed, {"sed_dust_ir": sed}

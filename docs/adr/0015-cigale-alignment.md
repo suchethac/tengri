@@ -135,11 +135,11 @@ For a canonical Type-1 quasar at z=1, agn_log_lbol=12 (L_bol ≈ 10^45 erg/s), i
 
 .. [6] Kovacevic, A. B., et al. (2010). The Fe II Emission in Active Galactic Nuclei. ApJS, 189, 15. https://doi.org/10.1088/0067-0049/189/1/15
 
-.. [7] Richardson, C. T., et al. (2014). Predicting the Emission Line Spectrum of Quasars. ApJ, 786, 87. https://doi.org/10.1088/0004-637X/786/1/87
+.. [7] Richardson, C. T., Allen, J. T., Baldwin, J. A., Hewett, P. C., & Ferland, G. J. (2014). Interpreting the ionization sequence in AGN emission-line spectra. MNRAS, 437, 2376. https://doi.org/10.1093/mnras/stt2056
 
 .. [8] Lehmer, B. D., et al. (2016). The Low-luminosity End of the Radius–Luminosity Relationship for Active Galactic Nuclei. ApJ, 825, 7. https://doi.org/10.3847/0004-637X/825/1/7
 
-.. [9] Yang, G., et al. (2020). X-CIGALE: photoionization model-inspired 3D AGN unification. MNRAS, 491, 740. https://doi.org/10.1093/mnras/stz3001
+.. [9] Yang, G., et al. (2020). X-CIGALE: fitting AGN/galaxy SEDs from X-ray to infrared. MNRAS, 491, 740. https://doi.org/10.1093/mnras/stz3001
 
 .. [10] Boquien, M., et al. (2019). CIGALE: Code Investigating GALaxy Emission. A&A, 622, A103. https://doi.org/10.1051/0004-6361/201834156
 

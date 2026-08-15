@@ -42,9 +42,14 @@ TEMPLATE_MODELS = (
     "schreiber2018",
     "astrodust",
     "pah_drude",
-    # Registered for #1738: it had a grammar entry, a menu entry and
-    # status='production' but no component, so it was unselectable and this
-    # inventory never saw it. Measured here like the rest.
+    # Registered as a component in #1777 — before that it resolved only on the
+    # legacy loader path, so the completeness guard below could not see it and
+    # this file's claim silently excluded it. (#1738's registry emit census
+    # reached the same gap independently, from the menu side.) Measured here,
+    # not assumed: float64 peak 3.1452e+30 (float32-representable), sed_dust_ir
+    # fully finite in pure float32, peak-relative float32-vs-float64 error
+    # 2.09e-04 — the same order as dale2014's 9.03e-05 and far inside the
+    # 2e-2 bound.
     "dh02_ce01",
     # Analytic Planck closures, float32-clean since the nu**3 intermediate was
     # removed from planck_bnu (#1206).

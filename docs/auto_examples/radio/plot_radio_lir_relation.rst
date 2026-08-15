@@ -43,7 +43,7 @@ Reference: Bell 2003, ApJ 586, 794.
 
  .. code-block:: none
 
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/examples/radio/plot_radio_lir_relation.py:57: UserWarning: Attempt to set non-positive ylim on a log-scaled axis will be ignored.
+    /tengri/examples/radio/plot_radio_lir_relation.py:57: UserWarning: Attempt to set non-positive ylim on a log-scaled axis will be ignored.
       ax.set_ylim(ymin / 3.0, ymax * 3.0)
 
 

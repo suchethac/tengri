@@ -97,8 +97,8 @@ def test_sedmodel_name_attribute(sed_model_minimal) -> None:
 - [ ] **Step 2: Verify failing**
 
 ```bash
-PYTHONPATH=/Users/suchethacooray/Projects/tengri/.claude/worktrees/architecture/src \
-    /Users/suchethacooray/Projects/tengri/.venv/bin/pytest \
+PYTHONPATH=/tengri/src \
+    /tengri/.venv/bin/pytest \
     tests/unit/forward/test_sedmodel_as_submodel.py -v
 ```
 
@@ -202,8 +202,8 @@ def _prior_for(spec, pname):
 - [ ] **Step 4: Verify passing**
 
 ```bash
-PYTHONPATH=/Users/suchethacooray/Projects/tengri/.claude/worktrees/architecture/src \
-    /Users/suchethacooray/Projects/tengri/.venv/bin/pytest \
+PYTHONPATH=/tengri/src \
+    /tengri/.venv/bin/pytest \
     tests/unit/forward/test_sedmodel_as_submodel.py -v
 ```
 
@@ -212,10 +212,10 @@ Expected: 4 passed.
 - [ ] **Step 5: Lint**
 
 ```bash
-/Users/suchethacooray/Projects/tengri/.venv/bin/ruff check \
+/tengri/.venv/bin/ruff check \
     src/tengri/forward/sed_model.py \
     tests/unit/forward/test_sedmodel_as_submodel.py
-/Users/suchethacooray/Projects/tengri/.venv/bin/ruff format --check \
+/tengri/.venv/bin/ruff format --check \
     src/tengri/forward/sed_model.py \
     tests/unit/forward/test_sedmodel_as_submodel.py
 ```
@@ -280,8 +280,8 @@ per_pop[pop.name] = {"phot_fnu": pop.sed.predict_photometry(params)}
 - [ ] **Step 3: Run all existing forward tests**
 
 ```bash
-PYTHONPATH=/Users/suchethacooray/Projects/tengri/.claude/worktrees/architecture/src \
-    /Users/suchethacooray/Projects/tengri/.venv/bin/pytest \
+PYTHONPATH=/tengri/src \
+    /tengri/.venv/bin/pytest \
     tests/unit/forward/ -v
 ```
 
@@ -290,7 +290,7 @@ Expected: all forward-model tests still pass (`test_forward_model.py` 6 tests, `
 - [ ] **Step 4: Lint**
 
 ```bash
-/Users/suchethacooray/Projects/tengri/.venv/bin/ruff check \
+/tengri/.venv/bin/ruff check \
     src/tengri/forward/forward_model.py
 ```
 
@@ -340,8 +340,8 @@ git rm src/tengri/forward/_sed_submodel_adapter.py tests/unit/forward/test_sed_s
 - [ ] **Step 3: Run forward tests**
 
 ```bash
-PYTHONPATH=/Users/suchethacooray/Projects/tengri/.claude/worktrees/architecture/src \
-    /Users/suchethacooray/Projects/tengri/.venv/bin/pytest \
+PYTHONPATH=/tengri/src \
+    /tengri/.venv/bin/pytest \
     tests/unit/forward/ -v
 ```
 
@@ -350,7 +350,7 @@ Expected: all remaining forward tests pass (14 = 4 population + 6 forward_model 
 - [ ] **Step 4: Lint**
 
 ```bash
-/Users/suchethacooray/Projects/tengri/.venv/bin/ruff check src/ tests/
+/tengri/.venv/bin/ruff check src/ tests/
 ```
 
 - [ ] **Step 5: Commit**
@@ -399,8 +399,8 @@ git commit -m "docs: SEDModel satisfies SubModel; adapter deleted"
 - [ ] **Step 1: Targeted forward + protocols tests**
 
 ```bash
-PYTHONPATH=/Users/suchethacooray/Projects/tengri/.claude/worktrees/architecture/src \
-    /Users/suchethacooray/Projects/tengri/.venv/bin/pytest \
+PYTHONPATH=/tengri/src \
+    /tengri/.venv/bin/pytest \
     tests/unit/protocols tests/unit/forward tests/integration/test_forward_model_jit.py \
     tests/contract/test_public_api_surface.py tests/contract/test_public_surface.py -q
 ```
@@ -410,7 +410,7 @@ Expected: all pass.
 - [ ] **Step 2: Project-wide lint**
 
 ```bash
-/Users/suchethacooray/Projects/tengri/.venv/bin/ruff check src/ tests/
+/tengri/.venv/bin/ruff check src/ tests/
 ```
 
 Expected: clean.
@@ -418,8 +418,8 @@ Expected: clean.
 - [ ] **Step 3: Public import smoke test**
 
 ```bash
-PYTHONPATH=/Users/suchethacooray/Projects/tengri/.claude/worktrees/architecture/src \
-    /Users/suchethacooray/Projects/tengri/.venv/bin/python -c "
+PYTHONPATH=/tengri/src \
+    /tengri/.venv/bin/python -c "
 from tengri import ForwardModel, Population, SEDModel
 from tengri.protocols import SubModel
 sed = SEDModel.__name__

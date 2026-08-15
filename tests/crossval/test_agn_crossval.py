@@ -133,7 +133,7 @@ class TestMulticolorDiscPeak:
         wavelength = jnp.geomspace(10.0, 50000.0, 2000)
         l_nu = multicolor_disc(
             wavelength,
-            agn_log_lbol=44.0,
+            agn_log_lbol=10.42,
             agn_log_mbh=8.0,
             agn_log_ledd=-1.0,
             agn_a_spin=0.0,
@@ -157,13 +157,13 @@ class TestMulticolorDiscPeak:
 
         l_nu_low = multicolor_disc(
             wavelength,
-            agn_log_lbol=44.0,
+            agn_log_lbol=10.42,
             agn_log_mbh=7.0,
             agn_log_ledd=-1.0,
         )
         l_nu_high = multicolor_disc(
             wavelength,
-            agn_log_lbol=44.0,
+            agn_log_lbol=10.42,
             agn_log_mbh=9.0,
             agn_log_ledd=-1.0,
         )
@@ -209,11 +209,11 @@ class TestBLRBalmerDecrement:
 
     def test_blr_emission_produces_flux(self):
         """BLR emission should produce non-zero line flux around H-alpha."""
-        from tengri.components.agn.blr import blr_emission
+        from tengri.components.agn.blr import compute_blr_sed
 
         wavelength = jnp.linspace(6400.0, 6700.0, 500)
         l_bol_erg = 1e44
-        l_nu = blr_emission(wavelength, l_disc_bol_erg=l_bol_erg)
+        l_nu = compute_blr_sed(wavelength, l_disc_bol_erg=l_bol_erg)
         # Should have a clear peak near H-alpha
         peak_idx = int(jnp.argmax(l_nu))
         peak_wave = float(wavelength[peak_idx])
@@ -229,51 +229,50 @@ class TestNLRLineRatios:
     """Verify NLR forbidden line ratios match atomic physics predictions."""
 
     def test_oiii_ratio(self):
-        """[OIII] 5007/4959 = 2.98 (Storey & Zeippen 2000)."""
-        from tengri.components.agn.nlr import _NLR_LINES
+        """[OIII] 5007/4959 = 2.98 (Storey & Zeippen 2000).
 
-        lines = np.array(_NLR_LINES)
-        oiii_5007 = lines[np.abs(lines[:, 0] - 5007.0) < 5.0, 1]
-        oiii_4959 = lines[np.abs(lines[:, 0] - 4959.0) < 5.0, 1]
+        Measured from the emitted spectrum; this read the private ``_NLR_LINES``
+        table, removed in a refactor (#1728).
+        """
+        from ._nlr_measure import OIII_4959, OIII_5007, doublet_ratio
 
-        assert len(oiii_5007) > 0, "[OIII] 5007 line not found"
-        assert len(oiii_4959) > 0, "[OIII] 4959 line not found"
-
-        ratio = float(oiii_5007[0]) / float(oiii_4959[0])
-        # Storey & Zeippen (2000): 5007/4959 = 2.98
         np.testing.assert_allclose(
-            ratio,
+            doublet_ratio(OIII_5007, OIII_4959),
             2.98,
             rtol=0.02,
             err_msg="[OIII] 5007/4959 ratio deviates from Storey & Zeippen 2000",
         )
 
     def test_nii_ratio(self):
-        """[NII] 6583/6548 ~ 2.94 (Storey & Zeippen 2000)."""
-        from tengri.components.agn.nlr import _NLR_LINES
+        """[NII] 6583/6548 reproduces a42's *measured* 2.70, not the atomic 2.94.
 
-        lines = np.array(_NLR_LINES)
-        nii_6583 = lines[np.abs(lines[:, 0] - 6583.0) < 5.0, 1]
-        nii_6548 = lines[np.abs(lines[:, 0] - 6548.0) < 5.0, 1]
+        Both lines leave the same upper level, so in a photoionization model the
+        ratio is fixed by the transition probabilities alone. Richardson+2014
+        Table 3 is not a model — it is dereddened strengths measured off stacked
+        SDSS composites, in which 6548 is a weak line on the H-alpha wing and
+        comes out ~9% strong. tengri carries the table verbatim (parity with
+        Prospector), so the emitted spectrum inherits 2.70.
 
-        assert len(nii_6583) > 0, "[NII] 6583 line not found"
-        assert len(nii_6548) > 0, "[NII] 6548 line not found"
+        Asserting the atomic value here was the error behind #1752: it read a
+        measurement systematic as a code defect and the template was edited to
+        satisfy it. The atomic constraint is enforced where it applies — on the
+        MAPPINGS shock component and the Cloudy-grid NLR backends.
+        """
+        from ._nlr_measure import NII_6548, NII_6583, doublet_ratio
 
-        ratio = float(nii_6583[0]) / float(nii_6548[0])
-        # Expected: [NII] 6583/6548 ~ 2.94
         np.testing.assert_allclose(
-            ratio,
-            3.0,
+            doublet_ratio(NII_6583, NII_6548),
+            2.13 / 0.79,
             rtol=0.05,
-            err_msg="[NII] 6583/6548 ratio deviates from atomic physics prediction",
+            err_msg="[NII] 6583/6548 no longer reproduces the Richardson+2014 a42 table",
         )
 
     def test_nlr_emission_nonzero(self):
         """NLR emission should produce detectable flux at [OIII] 5007."""
-        from tengri.components.agn.nlr import nlr_emission
+        from tengri.components.agn.nlr import compute_nlr_sed
 
         wavelength = jnp.linspace(4900.0, 5100.0, 200)
-        l_nu = nlr_emission(wavelength, l_disc_bol_erg=1e44)
+        l_nu = compute_nlr_sed(wavelength, l_disc_bol_erg=1e44)
         peak_idx = int(jnp.argmax(l_nu))
         peak_wave = float(wavelength[peak_idx])
         assert abs(peak_wave - 5007.0) < 15.0, (
@@ -385,14 +384,14 @@ class TestGeometricMasking:
         wavelength = jnp.linspace(1000.0, 10000.0, 500)
         l_type1 = unified_nlr_blr(
             wavelength,
-            agn_log_lbol=44.0,
+            agn_log_lbol=10.42,
             agn_cos_inc=1.0,  # face-on, Type 1
             agn_theta_torus=30.0,
             agn_lum_ratio=1.0,
         )
         l_type2 = unified_nlr_blr(
             wavelength,
-            agn_log_lbol=44.0,
+            agn_log_lbol=10.42,
             agn_cos_inc=0.0,  # edge-on, Type 2
             agn_theta_torus=30.0,
             agn_lum_ratio=1.0,
@@ -437,14 +436,14 @@ class TestPolarDust:
         wavelength = jnp.linspace(1000.0, 10000.0, 500)
         l_unreddened = unified_nlr_blr(
             wavelength,
-            agn_log_lbol=44.0,
+            agn_log_lbol=10.42,
             agn_cos_inc=1.0,
             agn_polar_ebv=0.0,
             agn_lum_ratio=1.0,
         )
         l_reddened = unified_nlr_blr(
             wavelength,
-            agn_log_lbol=44.0,
+            agn_log_lbol=10.42,
             agn_cos_inc=1.0,
             agn_polar_ebv=0.1,
             agn_lum_ratio=1.0,
@@ -472,7 +471,7 @@ class TestKubotaDone3Zone:
 
         wavelength = jnp.geomspace(1.0, 100000.0, 5000)
         params = dict(
-            agn_log_lbol=44.0,
+            agn_log_lbol=10.42,
             agn_log_mbh=8.0,
             agn_log_ledd=-1.0,
             agn_a_spin=0.0,
@@ -504,7 +503,7 @@ class TestKubotaDone3Zone:
 
         wavelength = jnp.geomspace(1.0, 100000.0, 5000)
         params = dict(
-            agn_log_lbol=44.0,
+            agn_log_lbol=10.42,
             agn_log_mbh=8.0,
             agn_log_ledd=-1.0,
             agn_a_spin=0.0,
@@ -532,7 +531,7 @@ class TestKubotaDone3Zone:
         wavelength = jnp.geomspace(1.0, 100000.0, 5000)
         l_nu = kubota_done_disc(
             wavelength,
-            agn_log_lbol=44.0,
+            agn_log_lbol=10.42,
             agn_log_mbh=8.0,
             agn_log_ledd=-1.0,
             agn_f_hard=0.02,
@@ -634,46 +633,57 @@ class TestAlphaOxCrossval:
 
 
 class TestXrayAnisotropyCrossval:
-    """Cross-validate X-ray anisotropy against Yang+2022 Equation 2.
+    r"""Cross-validate X-ray anisotropy against Yang+2022, anchored at 30 deg.
 
-    f(theta) = a1 * cos(theta) + a2 * cos^2(theta) + (1 - a1 - a2)
+    .. math::
+
+        f(\mu) = \frac{a_1 \mu + a_2 \mu^2 + (1 - a_1 - a_2)}
+                      {1 - 0.13397 a_1 - 0.25 a_2}
+
+    The denominator is the numerator at :math:`\mu = \cos 30°`, so
+    :math:`f(\cos 30°) = 1`: the input spectrum is the alpha_ox-anchored 30 deg
+    corona, matching X-CIGALE (#980). These tests asserted the un-normalized
+    polynomial, i.e. the pre-#980 code (#1728).
     """
 
-    def test_30deg_anisotropy(self):
-        """For (a1=0.5, a2=0): L_X(30deg)/L_X(0) should be (1+cos30)/2.
+    #: Numerator at cos 30 deg for a1=0.5, a2=0 — the normalization constant.
+    _ANCHOR = 1.0 - 0.13397 * 0.5
 
-        f(30) = 0.5 * cos(30) + 0 + 0.5 = 0.5 * 0.866 + 0.5 = 0.933.
+    def test_30deg_anisotropy(self):
+        """30 deg is the anchor itself: f = 1 exactly.
+
+        Not 0.933. That is the *numerator* at 30 deg, and it is precisely what
+        the denominator divides out — the alpha_ox(L_2500) relation supplying
+        L_2keV is defined at this inclination, so the correction must leave it
+        unchanged here.
         """
         from tengri.components.xray import xray_anisotropy
 
         l_x = jnp.array([1.0])
-        cos_30 = np.cos(np.radians(30.0))
+        cos_30 = float(np.cos(np.radians(30.0)))
         result = float(xray_anisotropy(l_x, cos_inc=cos_30, a1=0.5, a2=0.0)[0])
-        expected = 0.5 * cos_30 + 0.5  # = 0.933
         np.testing.assert_allclose(
             result,
-            expected,
-            atol=0.001,
-            err_msg="L_X at 30 deg deviates from Yang+2022 formula",
+            1.0,
+            atol=2e-5,
+            err_msg="30 deg is the anchor inclination; f must be 1 there",
         )
 
     def test_70deg_anisotropy(self):
-        """For (a1=0.5, a2=0): L_X(70deg)/L_X(0) should be (1+cos70)/2.
-
-        f(70) = 0.5 * cos(70) + 0.5 = 0.5 * 0.342 + 0.5 = 0.671.
-        """
+        """Edge-on-ward of the anchor the corona dims, by the anchored formula."""
         from tengri.components.xray import xray_anisotropy
 
         l_x = jnp.array([1.0])
-        cos_70 = np.cos(np.radians(70.0))
+        cos_70 = float(np.cos(np.radians(70.0)))
         result = float(xray_anisotropy(l_x, cos_inc=cos_70, a1=0.5, a2=0.0)[0])
-        expected = 0.5 * cos_70 + 0.5  # = 0.671
+        expected = (0.5 * cos_70 + 0.5) / self._ANCHOR  # 0.671 / 0.933015 = 0.719
         np.testing.assert_allclose(
             result,
             expected,
             atol=0.001,
-            err_msg="L_X at 70 deg deviates from Yang+2022 formula",
+            err_msg="L_X at 70 deg deviates from the anchored Yang+2022 formula",
         )
+        assert result < 1.0, "70 deg must be fainter than the 30 deg anchor"
 
     def test_type1_type2_ratio(self):
         """L_X(30deg)/L_X(70deg) should match COSMOS Type1/Type2 (~1.4x).

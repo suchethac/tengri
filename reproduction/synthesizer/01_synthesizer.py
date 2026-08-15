@@ -334,7 +334,7 @@ print(
 # %%
 from tengri.dust import list_laws
 
-_tengri_laws = list_laws(headline=False)
+_tengri_laws = list_laws(headline=False).to_dict("fn")
 wave_law = np.logspace(np.log10(1000.0), np.log10(30000.0), 2000)
 
 

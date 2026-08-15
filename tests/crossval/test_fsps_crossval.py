@@ -428,10 +428,10 @@ class TestAGNCrossval:
 
     def test_unified_has_both_components(self):
         """Unified AGN should have emission in both UV and IR."""
-        from tengri.components.agn.unified import simple_agn
+        from tengri.components.agn.unified import multicolor_agn
 
         wave = jnp.linspace(500, 200000, 5000)
-        l_nu = simple_agn(
+        l_nu = multicolor_agn(
             wave,
             agn_log_lbol=11.0,
             agn_lum_ratio=1.0,
@@ -452,11 +452,11 @@ class TestAGNCrossval:
 
     def test_higher_lbol_more_luminous(self):
         """Doubling L_bol should roughly double the AGN SED."""
-        from tengri.components.agn.unified import simple_agn
+        from tengri.components.agn.unified import multicolor_agn
 
         wave = jnp.linspace(1000, 100000, 2000)
-        l_lo = simple_agn(wave, agn_log_lbol=10.0, agn_lum_ratio=1.0)
-        l_hi = simple_agn(wave, agn_log_lbol=11.0, agn_lum_ratio=1.0)
+        l_lo = multicolor_agn(wave, agn_log_lbol=10.0, agn_lum_ratio=1.0)
+        l_hi = multicolor_agn(wave, agn_log_lbol=11.0, agn_lum_ratio=1.0)
 
         # 10x L_bol should give ~10x more emission
         ratio = float(jnp.sum(l_hi)) / float(jnp.sum(l_lo))
@@ -464,12 +464,12 @@ class TestAGNCrossval:
 
     def test_covering_factor_shifts_uv_ir_balance(self):
         """Higher covering factor should shift power from UV to IR."""
-        from tengri.components.agn.unified import simple_agn
+        from tengri.components.agn.unified import multicolor_agn
 
         wave = jnp.linspace(500, 200000, 5000)
 
-        l_low_cf = simple_agn(wave, agn_log_lbol=11.0, agn_lum_ratio=1.0, agn_torus_frac=0.2)
-        l_high_cf = simple_agn(wave, agn_log_lbol=11.0, agn_lum_ratio=1.0, agn_torus_frac=0.8)
+        l_low_cf = multicolor_agn(wave, agn_log_lbol=11.0, agn_lum_ratio=1.0, agn_torus_frac=0.2)
+        l_high_cf = multicolor_agn(wave, agn_log_lbol=11.0, agn_lum_ratio=1.0, agn_torus_frac=0.8)
 
         uv_mask = (wave > 1000) & (wave < 3000)
         ir_mask = (wave > 30000) & (wave < 100000)

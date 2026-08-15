@@ -31,7 +31,6 @@ References
    ApJ, 178, 347 (1972). https://doi.org/10.1086/151796
 .. [3] A. Laor and H. Netzer, "Massive thin accretion discs – I. Calculated spectra,"
    MNRAS, 238, 897 (1989). https://doi.org/10.1093/mnras/238.3.897
-   (CITATION-AUDIT NOTE: not found in ~/writing-workspace; verify against source)
 .. [4] M. Boquien et al., "CIGALE: a python Code Investigating GALaxy Emission,"
    A&A, 622, A103 (2019). https://doi.org/10.1051/0004-6361/201834156
 """

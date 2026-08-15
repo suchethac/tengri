@@ -1,5 +1,24 @@
 # Citation Audit for tengri
 
+> **Archived, and partly wrong — do not copy citations out of this file.**
+>
+> This is a snapshot of the reference strings *as they appeared in the code*
+> when the audit ran. Several of those strings were themselves fabricated, and
+> at least two were copied outward from here into `src/`, `tests/` and
+> `examples/` before anyone checked them. Known bad entries retained below for
+> the record:
+>
+> * Entry 22 — "Li Z. et al. 2024, ApJ, 969, 28, *Cue: An Emulator for
+>   AGN-Dominated Emission*" — no such paper. The real reference is Li, Yijia
+>   et al. 2025, ApJ, **986**, 9, *"Cue: A Fast and Flexible Photoionization
+>   Emulator for Modeling Nebular Emission Powered by Almost Any Ionizing
+>   Source"*, arXiv:2405.04598, doi:10.3847/1538-4357/adcab4.
+> * Line 624 — Feltre+2016 given as doi:10.1093/mnras/stw2180, which resolves
+>   to an unrelated exoplanet-dynamics paper. The real DOI is
+>   10.1093/mnras/stv2794.
+>
+> Corrected in #1801. The curated list is `src/tengri/citations/references.bib`.
+
 ## Summary
 
 - **Total unique references found in code**: 158

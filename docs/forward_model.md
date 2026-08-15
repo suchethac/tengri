@@ -211,6 +211,7 @@ gradient-traceable, and batchable through `vmap`.
 | [`06_fitting_spectroscopy`](spine/06_fitting_spectroscopy) | Spectroscopy-only fits with calibration |
 | [`07_joint_photo_spec`](spine/07_joint_photo_spec) | Combining photometry and spectroscopy in one likelihood |
 | [`11_catalog_fits`](spine/11_catalog_fits) | Fitting a catalog of galaxies |
+| [`12_simulation_populations`](spine/12_simulation_populations) | Forward-modeling tabulated SFH and Z(t) histories from a simulation to photometry and emission lines, and how to make it fast (`jit(vmap)`, `WavePrecomp`, batch width) |
 
 The pedagogical order in the spine is *SFH → dust → nebular → AGN →
 multi-wavelength*, which mirrors the order of decisions a user typically

@@ -27,10 +27,10 @@ depends entirely on the nebular backend the model is built with.
 
 We hold the SFH (a young starburst with peak SFR ≈ 30 yr ago), dust,
 and metallicity fixed, and toggle the nebular block between Cue
-(Li+2024 neural emulator) and ``none`` (stellar continuum only).
+(Li+2025 neural emulator) and ``none`` (stellar continuum only).
 The lines that vanish in the right column are the gas's signature.
 
-Reference: Li et al. 2024, ApJ submitted (Cue emulator).
+Reference: Li et al. 2025, ApJ, 986, 9 (Cue emulator; arXiv:2405.04598).
 
 .. GENERATED FROM PYTHON SOURCE LINES 16-100
 
@@ -135,7 +135,7 @@ Reference: Li et al. 2024, ApJ submitted (Cue emulator).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.654 seconds)
+   **Total running time of the script:** (0 minutes 4.602 seconds)
 
 
 .. _sphx_glr_download_auto_examples_quickstart_plot_swap_nebular_backend.py:
