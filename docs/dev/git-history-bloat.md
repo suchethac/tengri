@@ -92,16 +92,45 @@ Scenario A is the one arguably worth it — 268 MB for essentially zero semantic
 there, the cost is not the risk of the rewrite but the force-push to a public repo, which
 is disruptive out of proportion to 268 MB.
 
-**Fix the inflow instead.** These are cheap and carry no history risk:
+**Fix the inflow instead.**
 
-1. **Strip notebook outputs on commit.** `nbstripout` as a pre-commit hook, or jupytext
-   `.py` as the committed source of truth with `.ipynb` gitignored. `.gitignore` already
-   takes this approach for `notebooks/*.ipynb` — the numeric-prefixed spine notebooks are
-   the deliberate exception, kept executed so GitHub renders them. Extending the pattern to
-   `docs/reproduction/*.ipynb` would stop the single largest inflow.
-2. **Split `src/tengri/forward/sed_model.py`.** 8823 lines is the reviewability problem;
+### Not by stripping outputs
+
+An earlier version of this page recommended `nbstripout` on `docs/reproduction/*.ipynb`
+as the way to stop the largest inflow. **That is wrong and would break the published
+site.** `docs/conf.py` sets `nbsphinx_execute = "never"`, so the committed outputs *are*
+the figures the site displays — `docs/reproduction/cigale.ipynb` carries 18 cells of
+embedded PNG. Stripping them blanks every reproduction and spine page, and breaks
+`tests/contract/test_reproduction_docs_sync.py`, which asserts the embedded figure hashes
+match between each source notebook and its docs copy.
+
+The `.gitignore` precedent that suggested it does not generalize: `notebooks/*.ipynb` is
+ignored *because* those are jupytext pairs whose `.py` is the source of truth, and the
+numeric-prefixed spine notebooks are un-ignored precisely so their outputs survive for
+rendering. Every committed notebook in this repository carries outputs on purpose.
+
+### What actually applies
+
+1. **A size ceiling, enforced.** `tools/check_notebook_size.py` runs in the `lint` job and
+   fails any committed notebook over 4 MB (largest today: 3.00 MB). This does not shrink
+   history — nothing does, short of the rewrite this page argues against — but it turns the
+   next 3 MB notebook into a decision instead of a surprise.
+2. **Externalize the figures.** The structural fix. Write figures to a `_figs/` directory
+   and reference them instead of embedding base64: an unchanged figure then re-commits as
+   the *same* blob rather than a new one, and PNG on disk is ~⅓ smaller than its base64
+   form. The directories already exist on both sides — `reproduction/<name>/_figs/`, which
+   `scripts/_render_s9.py` and `scripts/_render_audit_radio_xray.py` already write into, and
+   `docs/reproduction/_figs/` — so the pattern is established; the notebooks just do not use
+   it for their inline figures. This is a real refactor of six published notebooks plus the
+   sync test, so it wants its own change with a docs build to verify.
+3. **Stop committing each reproduction notebook twice.** `reproduction/<name>/01_<name>.ipynb`
+   and `docs/reproduction/<name>.ipynb` are near-identical by construction — the sync test
+   asserts their figures match — so every re-render costs ~5 MB, not ~2.5 MB. Generating the
+   docs copy at build time, the way `scripts/sync_spine_notebooks_for_docs.py` already does
+   for the spine, would halve reproduction inflow with no visual change.
+4. **Split `src/tengri/forward/sed_model.py`.** 8823 lines is the reviewability problem;
    the history cost is a bonus.
-3. **Keep `.nb_home/` and `data/*.h5` gitignored.** Both rules exist and work. The caches
+5. **Keep `.nb_home/` and `data/*.h5` gitignored.** Both rules exist and work. The caches
    entered history before the rule did.
 
 If the clone size becomes a real barrier to contributors, revisit scenario B — and do it

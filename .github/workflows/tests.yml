@@ -149,6 +149,14 @@ jobs:
       # plt.show() a no-op so the page renders with no plots. Stdlib-only, same
       # as the guards above.
       - run: python tools/check_notebook_renders.py
+      # Executed notebooks are 40% of this repo's history (1451 MB across all
+      # revisions, more than every HDF5 grid combined) because base64-embedded
+      # figures cannot be delta-compressed, so each revision stores the whole
+      # file again. docs/reproduction/cigale.ipynb alone is 126.6 MB over 51
+      # revisions, and it is committed twice. nbstripout is not the fix — those
+      # outputs are the published figures — so this caps how large they may get.
+      # Stdlib-only, same as the guards above. See docs/dev/git-history-bloat.md.
+      - run: python tools/check_notebook_size.py
       # NOTE: `gen_property_table.py --check` cannot live here. This job installs
       # ruff and nothing else, and the generator imports tengri (hence jax) to read
       # the property registry. It runs in `smoke`, which does `pip install -e`.

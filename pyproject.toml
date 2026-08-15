@@ -144,9 +144,15 @@ src = ["src", "tests"]
 # archive consolidation; both were already gone from `notebooks/` root and now sit
 # under `notebooks/archive/2026-04/`, which the first entry covers. Keep this list
 # matched to directories that exist — a stale exclude reads as deliberate coverage.
+#
+# `notebooks/tutorials` was excluded too, until a `Parameters(...)` call with an
+# unmatched paren sat in two published tutorials long enough to be committed in
+# both the .py and the paired .ipynb. Nothing caught it: this exclude hid it from
+# ruff, tutorials are absent from SPINE_SLUGS so check_notebook_renders never
+# looked, and docs/conf.py sets nbsphinx_execute = "never". Only the frozen
+# archive is excluded now.
 exclude = [
     "notebooks/archive",
-    "notebooks/tutorials",
 ]
 
 [tool.ruff.lint]
