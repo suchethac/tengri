@@ -45,6 +45,27 @@ def _page_text(rel: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def test_every_named_page_exists() -> None:
+    """Every page this module names must be on disk.
+
+    ``_page_text`` skips a missing file, which is right for a partial checkout
+    and wrong for a typo or a rename: the case reports "skipped" and the suite
+    stays green while checking nothing. ``docs/inference/index.md`` sat in
+    ``_METHOD_PAGES`` in exactly that state, which is where this module's one
+    persistent skip was coming from.
+
+    Kept separate from the parametrized tests on purpose -- those consume
+    ``_page_text`` and would themselves skip.
+    """
+    named = dict.fromkeys((*_PUBLISHED_PAGES, *_METHOD_PAGES))
+    missing = [rel for rel in named if not (_REPO_ROOT / rel).is_file()]
+    assert not missing, (
+        f"These pages are named here but do not exist: {missing}. Every test "
+        f"parametrized over them skips silently, so the suite reports success "
+        f"without reading them. Fix the paths or drop the entries."
+    )
+
+
 @pytest.mark.parametrize("rel", _PUBLISHED_PAGES)
 @pytest.mark.parametrize("stale", sorted(_NEBULAR_TYPE_HINTS))
 def test_published_pages_do_not_advertise_stale_nebular_names(rel: str, stale: str) -> None:
