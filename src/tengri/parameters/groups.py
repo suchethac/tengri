@@ -2490,11 +2490,45 @@ _RADIO_AGN_PARAMS_BY_MODEL: dict[str, frozenset[str]] = {
 #: it: measured on a UV-to-X-ray fixture with a luminous AGN, ``alpha_irx``
 #: moves the SED by 62% under ``lopez24`` and by *exactly* zero under every
 #: other model, while the wildcard freed it for all of them.
+#: **The "shared params are deliberately absent" rule above ended with #1684.**
+#: It held while every X-ray type resolved to one component, so ``gamma_agn`` /
+#: ``E_cut`` / ``log_nh`` / the XRB offsets were read by all of them and could
+#: not be pinned by omission. ``xray_aird`` now builds ``XRayAirdSEDComponent``,
+#: which reads the XRB offsets and none of the corona parameters — measured:
+#: under ``xray_aird`` the wildcard freed ``xray_E_cut``, ``xray_gamma_agn`` and
+#: ``xray_log_nh`` while none of the three could move the SED, beside
+#: ``xray_det_hmxb`` / ``xray_det_lmxb`` which could.
+#:
+#: So every entry now lists what its model reads in full, rather than only the
+#: names unique to it. Omission no longer means "shared", it means "not read" —
+#: which is what the narrowing needs to be able to say.
 _XRAY_PARAMS_BY_MODEL: dict[str, frozenset[str]] = {
-    "lopez24": frozenset({"xray_alpha_irx"}),
+    "lopez24": frozenset(
+        {
+            "xray_alpha_irx",
+            "xray_E_cut",
+            "xray_gamma_agn",
+            "xray_log_nh",
+            "xray_det_hmxb",
+            "xray_det_lmxb",
+        }
+    ),
+    # Aird+2015 XRB scaling: the Lehmer+2016 offsets, and no corona.
+    "xray_aird": frozenset({"xray_det_hmxb", "xray_det_lmxb"}),
 }
-#: What the non-``lopez24`` branch reads instead.
-_XRAY_DEFAULT_MODEL_PARAMS: frozenset[str] = frozenset({"xray_delta_alpha_ox"})
+#: What the shared ``XRaySEDComponent`` corona reads on its non-``lopez24``
+#: branch (``yang20`` / ``simple`` / ``agn_xray_corona``, which all resolve to
+#: it). ``xray_alpha_irx`` is absent because only the lopez24 branch reads it.
+_XRAY_DEFAULT_MODEL_PARAMS: frozenset[str] = frozenset(
+    {
+        "xray_delta_alpha_ox",
+        "xray_E_cut",
+        "xray_gamma_agn",
+        "xray_log_nh",
+        "xray_det_hmxb",
+        "xray_det_lmxb",
+    }
+)
 #: Union of the above: the names the scope may narrow away.
 _XRAY_VARIANT_PARAMS: frozenset[str] = _XRAY_DEFAULT_MODEL_PARAMS | frozenset().union(
     *_XRAY_PARAMS_BY_MODEL.values()
