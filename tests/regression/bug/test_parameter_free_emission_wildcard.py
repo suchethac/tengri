@@ -29,16 +29,34 @@ unscoped wildcard, so the residual grows as engines are added.
 
 The fix separates the two cases by asking rather than inferring:
 ``declares_no_parameters = True`` says "genuinely none", and only then does
-``_declared_param_names`` narrow to the empty set. ``energy_balance_split``
-does not carry the marker and keeps ``None``.
+``_declared_param_names`` narrow to the empty set.
+
+``energy_balance_split`` answers the same question from the other side. It
+originally kept ``None`` -- correct for this bug, but it left *its* wildcard
+unnarrowed too, and a later census measured that engine at **20 freed, 6 read,
+14 inert**: the same defect, in the engine this fix deliberately did not touch.
+It now carries ``reads_parameters``, naming the knobs it reads. So an empty
+``_priors`` is three questions and each gets its own answer, with ``None``
+reserved for a component that has stated nothing.
 
 Note on ``dust_eta_balance``, the one live parameter in the table above: it is
 the engine-agnostic energy-balance relaxation (``L_IR = eta * L_absorbed``),
 declared in ``_params.py`` rather than on any engine. Every engine that
 declares its own priors *already* excludes it from this wildcard -- ``dale2014``
 frees only ``dust_alpha_dale`` -- so narrowing these two makes them consistent
-with the other eleven rather than taking a live knob away from them. It remains
-settable explicitly, and freeable through the ``dust`` group.
+with the other eleven rather than taking a live knob away from them.
+
+An earlier revision of this note added "and freeable through the ``dust``
+group". That was wrong, and it is corrected here rather than deleted because
+the mistake is instructive: the grammar partitions ``eta_balance`` into
+**dust.emission**, so ``dust={'eta_balance': ...}`` raises *"'eta_balance' is a
+'dust.emission' parameter, not a 'dust' one"* and ``dust={'*': FREE}`` does not
+reach it either (measured: that wildcard frees ``dust_tau_bc`` and
+``dust_tau_diff`` only). For a parameter-free engine that is harmless -- there
+is no engine to un-anchor. For ``energy_balance_split`` it is not, which is why
+that engine's ``reads_parameters`` includes ``dust_eta_balance`` even though its
+``predict`` never reads it: leaving it out would have made a live parameter
+freeable by no wildcard at all.
 """
 
 from __future__ import annotations
@@ -178,4 +196,21 @@ def test_parameter_free_engine_is_declared_not_inferred(engine):
             "energy_balance_split reads six parameters declared in "
             "components/dust/_params.py; marking it parameter-free would pin all six."
         )
-        assert _declared_param_names("energy_balance_split") is None
+        # It answers the same question from the other side, via
+        # ``reads_parameters``. What matters is that the two engines get
+        # *different* answers -- this one must never be narrowed to the empty
+        # set, which is what would pin every knob it reads.
+        split_declared = _declared_param_names("energy_balance_split")
+        assert split_declared, (
+            "energy_balance_split narrowed to an empty/None declared set. Empty "
+            "would pin all six knobs it reads; the marker that distinguishes it "
+            f"from {engine} has stopped working. Got: {split_declared!r}"
+        )
+        assert split_declared != _declared_param_names(engine), (
+            f"energy_balance_split and {engine} now narrow to the same set, so the "
+            "empty-_priors ambiguity is no longer being resolved."
+        )
+        assert "dust_T_warm" in split_declared, (
+            "energy_balance_split's declared set no longer contains dust_T_warm, "
+            f"a knob its predict reads. Got: {sorted(split_declared)}"
+        )

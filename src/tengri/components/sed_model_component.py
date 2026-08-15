@@ -286,6 +286,27 @@ class SEDModelComponent(TemplateThreading):
     #: the whole static union, which is #1482.
     declares_no_parameters: ClassVar[bool] = False
 
+    #: Fully-prefixed parameter names a component reads but declares elsewhere.
+    #:
+    #: The other half of the ambiguity :attr:`declares_no_parameters` resolves.
+    #: An empty ``_priors`` has two readings, and that attribute only answers
+    #: one of them ("I read nothing"). This answers the other: *"I read these,
+    #: and they are declared somewhere else."*
+    #:
+    #: ``energy_balance_split`` is the case. Its warm/cold and AGN-IR knobs live
+    #: in ``components/dust/_params.py`` rather than on the class, because
+    #: ``dust_eta_balance`` and the energy-balance bookkeeping are shared with
+    #: the attenuator and re-declaring them here would raise a duplicate
+    #: declaration. With neither marker set, ``_declared_param_names`` returns
+    #: ``None`` and leaves the group unnarrowed -- so ``'*': FREE`` hands the
+    #: sampler the whole static union of every IR engine's parameters. Measured
+    #: on that backend: **20 freed, 6 read, 14 inert** -- #1482 exactly, in the
+    #: one engine the original fix could not reach.
+    #:
+    #: Names are stored already prefixed, because that is how they are declared;
+    #: :attr:`parameter_prefix` is not applied to them a second time.
+    reads_parameters: ClassVar[frozenset[str]] = frozenset()
+
     #: Domain to publish precompute keys under, when it differs from ``name``.
     #:
     #: ``name`` is the registry key, and the precompute keys are derived from it

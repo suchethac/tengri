@@ -1200,16 +1200,23 @@ def _declared_param_names(component_type: str) -> frozenset[str] | None:
 
     Notes
     -----
-    An empty ``_priors`` must stay ``None`` (unnarrowed), **not** an empty
-    frozenset. The two are not the same question, and two registered engines
-    sit on opposite sides of it: ``pah_drude`` is genuinely parameter-free (a
-    pure template shape), while ``energy_balance_split`` reads six real knobs
-    (``dust_T_warm``, ``dust_f_cold``, ``dust_L_agn_ir``, ...) that are declared
-    in ``components/dust/_params.py`` rather than on the class, because
-    re-declaring them alongside the attenuator's would raise a duplicate
-    declaration. Nothing introspectable separates the two cases, so returning an
-    empty set here would silently pin all six of the latter's parameters — the
-    very failure this narrowing exists to prevent.
+    An empty ``_priors`` is **three** questions wearing one shape, and inferring
+    from it is wrong for two of them. The component is asked instead:
+
+    * ``declares_no_parameters = True`` — genuinely parameter-free
+      (``pah_drude``, a pure template shape). Narrowing to the empty set is
+      correct: it is what every engine that *does* declare priors gets.
+    * ``reads_parameters = {...}`` — reads real knobs declared elsewhere.
+      ``energy_balance_split``'s warm/cold knobs live in
+      ``components/dust/_params.py`` because re-declaring them beside the
+      attenuator's would raise a duplicate declaration.
+    * neither — unknown, so return ``None`` and leave the wildcard alone rather
+      than guess.
+
+    Returning an empty frozenset for the second case would pin every one of that
+    engine's parameters; returning ``None`` for the first leaves it freeing the
+    whole static union, which is #1482. Both markers exist because the two
+    failures are opposite and neither is introspectable.
     """
     from tengri.forward.component_factory import _EMISSION_TYPE_ALIASES, _REGISTRY
 
@@ -1225,6 +1232,13 @@ def _declared_param_names(component_type: str) -> frozenset[str] | None:
         # ``components/dust/_params.py`` and would all be pinned.
         if getattr(cls, "declares_no_parameters", False):
             return frozenset()
+        # ...and a component that names the parameters it reads elsewhere is
+        # answering the same question from the other side. Without this branch
+        # ``energy_balance_split`` stays unnarrowed and ``'*': FREE`` hands the
+        # sampler 20 parameters for the 6 it reads (measured).
+        declared_elsewhere = getattr(cls, "reads_parameters", None)
+        if declared_elsewhere:
+            return frozenset(declared_elsewhere)
         return None
     prefix = getattr(cls, "parameter_prefix", "")
     return frozenset(prefix + name for name in priors)

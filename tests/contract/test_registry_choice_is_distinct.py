@@ -50,13 +50,15 @@ Measured on origin/main @ 57baf39ed, 2026-08-15.
 
 from __future__ import annotations
 
+import gc
 import warnings
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
-from tengri import FREE, Fixed, SEDModel
+from tengri import FREE, Fixed, SEDModel, WavePrecomp
 from tengri.components.stellar.sps.dsps_wrapper import SSPData
 from tengri.observation import Observation, Photometry
 from tengri.observation.photometry import FilterCurve
@@ -658,4 +660,217 @@ def test_control_a_live_parameter_is_not_flagged() -> None:
     assert abs(grads["dust_tau_diff"]) / abs(scale) > 1e-3, (
         "dust_tau_diff's gradient is vanishing relative to the objective; the "
         "harness can no longer resolve a live parameter from a dead one."
+    )
+
+
+# ── Axis 3: the census must ask its question on the path fits take ───
+#
+# Everything above measures ``model.predict()`` -- the exact path. That is
+# only half the surface a user meets. Every fit resolves ``approx="auto"`` to
+# ``WavePrecomp`` for photometry (``Fitter``, ``PopulationFitter``,
+# ``CatalogFitter``), so a name can be perfectly well behaved under
+# ``predict()`` and still be unusable, or indistinguishable, in an actual fit.
+#
+# That gap is not hypothetical. ``smc`` and ``lmc`` -- both production, both
+# among the most used curves in SED fitting -- built and predicted fine on the
+# exact path and raised ``ValueError: Incompatible shapes for broadcasting``
+# under ``WavePrecomp``, so selecting them failed at *fit* time, after the user
+# had chosen the law and started fitting. No test in this file could see it,
+# because no test in this file crossed the seam.
+
+#: Filter centers [A] per kind, placed where that kind's physics lives.
+#:
+#: The optical set used by :func:`_observation` is right for ``dust`` and
+#: ``igm`` and useless for ``xray`` and ``radio``: an X-ray corona moves no
+#: optical band, so every corona name would measure identical and the axis
+#: would report a clean bill of health it had not earned. This is the same
+#: fixture-adequacy trap as :data:`_KIND_BAND`, one surface further out --
+#: and it is the specific error that produced the withdrawn ``lopez24``
+#: finding, which was measured against an optical-only objective.
+_KIND_FILTERS: dict[str, tuple[float, ...]] = {
+    "xray": (1.0, 5.0, 20.0, 60.0),  # 0.1 - 100 A
+    "radio": (1.0e9, 5.0e9, 2.0e10, 8.0e10),  # ~10 cm - 10 m
+    "igm": (3500.0, 4800.0, 6200.0, 9000.0),
+    "dust": (3500.0, 4800.0, 6200.0, 9000.0),
+}
+
+
+def _observation_for(group: str) -> Observation:
+    """Top-hat photometry in the band where ``group``'s physics lives."""
+
+    def _tophat(center: float, frac: float = 0.16, n: int = 40) -> FilterCurve:
+        wave = jnp.linspace(center * (1.0 - frac), center * (1.0 + frac), n)
+        trans = jnp.sin(jnp.linspace(0.0, jnp.pi, n)) * 0.6
+        return FilterCurve(wave=wave, trans=trans, name=f"b{center:.3g}")
+
+    return Observation(
+        photometry=Photometry(filters=tuple(_tophat(c) for c in _KIND_FILTERS[group]))
+    )
+
+
+#: Wavelength samples for the two path tests.
+#:
+#: Deliberately coarser than the 1200 used by :func:`_sed`. These two tests
+#: build every production name twice -- once per path -- and a ``WavePrecomp``
+#: LUT is (sub-bands x ages x filters x z) per model. At the census's default
+#: grid that is enough live arrays to be OOM-killed partway through (measured:
+#: SIGKILL at 22 tests), which reads as a flaky suite rather than as a result.
+#: Neither test needs spectral resolution: one asks "is this finite", the other
+#: compares two models on the *same* grid, so a coarse grid shifts both sides
+#: equally.
+_PATH_N_WAVE = 400
+
+#: z-table span for the precompute LUT. Must cover :data:`_IGM_TEST_Z`; the
+#: sampling is coarse for the same memory reason, and is not load-bearing
+#: because every comparison is between two models at one redshift.
+_PATH_PRECOMP = WavePrecomp(n_z=8, z_min=0.0, z_max=8.0)
+
+
+def _photometry(group: str, cfg: dict, approx) -> np.ndarray:
+    """Band fluxes for one configuration, on the exact or the precompute path.
+
+    Uses ``predict_photometry`` rather than ``predict`` deliberately: it is the
+    surface ``WavePrecomp`` actually serves, and the one every fit calls.
+
+    Drops every reference to the model before returning -- see
+    :data:`_PATH_N_WAVE` for why holding them is not affordable here.
+    """
+    lo, hi, _ = _KIND_INSTRUMENT[group]
+    groups: dict = {"sfh": {"type": "const"}}
+    groups.update(_KIND_SCAFFOLD.get(group, {}))
+    groups[group] = cfg
+    if group == "igm":
+        groups["redshift"] = Fixed(_IGM_TEST_Z)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        model = SEDModel.build(
+            ssp_data=_ssp(lo, hi, n_wave=_PATH_N_WAVE),
+            observation=_observation_for(group),
+            approx=approx,
+            **groups,
+        )
+        params = model.spec.sample(jax.random.PRNGKey(0))
+        out = np.asarray(model.predict_photometry(params))
+
+    del model, params
+    gc.collect()
+    return out
+
+
+_PATHS: tuple[tuple[str, object], ...] = (("exact", None), ("WavePrecomp", _PATH_PRECOMP))
+
+#: ``group -> {name: {path: photometry-or-exception}}``, built once per session.
+#:
+#: The two tests below ask different questions of the *same* measurement, and
+#: computing it twice is what made this pair too heavy to run: each pass builds
+#: every production name on both paths, and the models -- an SSP cube, a
+#: SKIRTOR template library, and a ``WavePrecomp`` LUT apiece -- dominate peak
+#: RSS. Sharing the pass halves it, and what stays resident afterwards is a
+#: handful of 4-element arrays.
+_PATH_CACHE: dict[str, dict[str, dict[str, np.ndarray | Exception]]] = {}
+
+
+def _path_measurements(group: str) -> dict[str, dict[str, np.ndarray | Exception]]:
+    """Photometry for every production name in ``group``, on both paths.
+
+    Exceptions are captured rather than raised so one unbuildable name is
+    reported as a finding by the reachability test instead of aborting the
+    whole census before the other names are measured.
+    """
+    if group not in _PATH_CACHE:
+        out: dict[str, dict[str, np.ndarray | Exception]] = {}
+        for name in (n for n in _menu_names(group) if n != "none"):
+            row: dict[str, np.ndarray | Exception] = {}
+            for label, approx in _PATHS:
+                try:
+                    row[label] = _photometry(group, _type_cfg(group, name), approx)
+                except Exception as exc:
+                    # Captured, not swallowed: the reachability test reports it.
+                    row[label] = exc
+            out[name] = row
+        _PATH_CACHE[group] = out
+    return _PATH_CACHE[group]
+
+
+@pytest.mark.parametrize("group", ["xray", "radio", "igm", "dust"])
+def test_every_production_name_predicts_on_both_paths(group: str) -> None:
+    """A production name must be usable in a fit, not merely in ``predict()``.
+
+    Reachability, asserted for all 36 production names across the four menus.
+    Non-vacuous: ``smc`` and ``lmc`` raise here before the ``_pei92_curve``
+    rank fix, which is the defect this axis was added to generalize.
+
+    "Finite" is the bar rather than "distinct" on purpose -- distinctness is
+    the job of :func:`test_no_undeclared_twins` and of the path-agreement test
+    below. This one only asserts that choosing the name does not detonate, or
+    silently produce garbage, on the path a fit takes.
+    """
+    failures: list[str] = []
+    for name, row in _path_measurements(group).items():
+        for label, _ in _PATHS:
+            phot = row[label]
+            if isinstance(phot, Exception):
+                failures.append(f"{group}={name!r} on {label}: {type(phot).__name__}: {phot}")
+            elif not np.all(np.isfinite(phot)):
+                failures.append(f"{group}={name!r} on {label}: non-finite photometry")
+            elif not np.all(phot > 0.0):
+                failures.append(f"{group}={name!r} on {label}: photometry is not positive")
+
+    assert not failures, (
+        "A name advertised as production is not usable on a path a user reaches.\n  "
+        + "\n  ".join(failures)
+        + "\n\nEvery fitter resolves approx='auto' to WavePrecomp for photometry, so a "
+        "failure on that path is a failure at fit time -- after the user has chosen "
+        "the model and started fitting."
+    )
+
+
+@pytest.mark.parametrize("group", ["xray", "radio", "igm", "dust"])
+def test_a_distinction_survives_the_precompute_path(group: str) -> None:
+    """A choice that matters exactly must still matter under the LUT.
+
+    The failure this guards against is subtler than a crash: two names that are
+    genuinely different models on the exact path collapsing to bit-identical
+    under ``WavePrecomp``. The user picks a model, the fit silently runs a
+    different one, and nothing raises. ``predict()`` would show the
+    distinction, so no test above this line could catch it.
+
+    Currently green for every pair in all four menus. It is a regression guard,
+    not a live defect -- and it is stated that way rather than skipped, because
+    the pair that made this axis worth writing (``lopez24`` vs the other
+    coronae) turned out to be an artifact of measuring X-ray models against an
+    optical-only objective. Measured in the X-ray band with a disc beneath the
+    corona, the distinction survives precompute intact.
+    """
+    rows = _path_measurements(group)
+    # A name that failed to build is the reachability test's finding, not this
+    # one's; including it here would report the same defect twice in different
+    # words.
+    names = [
+        n
+        for n, row in rows.items()
+        if not any(isinstance(row[label], Exception) for label, _ in _PATHS)
+    ]
+    exact = {n: rows[n]["exact"] for n in names}
+    precomp = {n: rows[n]["WavePrecomp"] for n in names}
+
+    def _rel(a: np.ndarray, b: np.ndarray) -> float:
+        denom = np.where(np.abs(b) > 0, np.abs(b), 1.0)
+        return float(np.max(np.abs(a - b) / denom))
+
+    erased: list[str] = []
+    for i, a in enumerate(names):
+        for b in names[i + 1 :]:
+            r_exact, r_precomp = _rel(exact[a], exact[b]), _rel(precomp[a], precomp[b])
+            if r_exact > _INERT_TOL and r_precomp <= _INERT_TOL:
+                erased.append(
+                    f"{group}: {a!r} vs {b!r} differ by {r_exact:.3e} exactly "
+                    f"but {r_precomp:.3e} under WavePrecomp"
+                )
+
+    assert not erased, (
+        "The precompute path erased a distinction the exact path makes. In a fit "
+        "-- which is always the precompute path for photometry -- these names are "
+        "the same model, with no warning:\n  " + "\n  ".join(erased)
     )
