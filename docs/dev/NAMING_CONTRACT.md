@@ -267,6 +267,18 @@ There are exactly two, and nothing else is public:
 
 `predict_properties(params, names=...)` is the **single** JIT/vmap surface for derived quantities.
 
+**`predict_state` is not one of them** (#1736). It is the internal bridge to the orchestrator — called by `predict_observables_jit` and `ForwardModel.predict_observables` — and its return type and keys may change without a deprecation cycle. Its docstring called itself "the public bridge" until #1736; two reviewers auditing the published notebooks read the two sources and reached opposite conclusions about whether to teach it to beginners, and the quickstart nearly shipped a paragraph doing so. Saying nothing here is what allowed that, so this says it.
+
+**Per-component SEDs have a public surface — use it:**
+
+```python
+comp = model.predict(params).sed.components
+comp["sed_intrinsic"]   # stellar, pre-dust [erg/s/Hz]
+comp["sed_dust_ir"]     # and sed_nebular, sed_agn, sed_attenuated, sed_total, ...
+```
+
+`pred.sed.components` reuses the prediction's cached forward state (no second forward pass) and returns a plain dict of named arrays. This matters because the pull toward `predict_state` is real: the component-decomposition figures are among the best pages in the docs, and before this was written down there was no obvious compliant way to draw them. There is: the line above. Note also that `predict_state` returns a `ForwardState`, whose `derived` dict §4b.6 documents as internal — so the shortcut leads straight into an object this contract tells readers not to touch.
+
 ### 4b.6 Two names that are not what they look like
 
 These have each caused real, shipped bugs. Read them before touching prediction code.

@@ -6665,10 +6665,32 @@ class SEDModel:
         keep using :meth:`predict_photometry`/:meth:`predict_spectrum`
         until the full integration adapter ships.
 
-        This is the public bridge between :class:`SEDModel`'s
-        configuration surface and the orchestrator: it lets users with
-        an existing ``SEDModel`` go through ``run_components`` without
-        re-typing the chain at every call site.
+        **Not a public surface, despite what this docstring used to say**
+        (#1736). The prediction contract — ``docs/dev/NAMING_CONTRACT.md``
+        §4b, binding on code, docs, notebooks and examples — names three:
+        :meth:`predict`, :meth:`predict_photometry` and
+        :meth:`predict_properties`. ``predict_state`` is not among them.
+        It is the internal bridge from this model's configuration surface
+        to the orchestrator, called by :meth:`predict_observables_jit` and
+        by ``ForwardModel.predict_observables``; its return type and the
+        keys on it may change without a deprecation cycle.
+
+        **If you reached for this to get per-component SEDs, use**
+        :attr:`pred.sed.components
+        <tengri.forward.prediction.SEDProperties.components>` **instead**::
+
+            comp = model.predict(params).sed.components
+            comp["sed_intrinsic"]  # stellar, pre-dust  [erg/s/Hz]
+            comp["sed_dust_ir"]  # and sed_nebular, sed_agn, sed_total, ...
+
+        That is the supported decomposition, it reuses the prediction's
+        cached forward state (no second forward pass), and it returns a
+        plain dict of named arrays rather than a pipeline object. Reaching
+        through ``predict_state`` instead hands you a
+        :class:`~tengri.protocols.ForwardState`, whose ``derived`` dict
+        CLAUDE.md explicitly documents as internal — so the convenient
+        path out of this method leads directly into an object the
+        conventions tell readers not to touch.
 
         Parameters
         ----------

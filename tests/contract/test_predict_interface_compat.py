@@ -134,3 +134,55 @@ class TestComponentsPromotion:
         state_before = pred._cache["_state"]
         _ = pred.sed.components
         assert pred._cache["_state"] is state_before
+
+
+class TestPredictStateIsNotAdvertisedAsPublic:
+    """``predict_state`` must not contradict the prediction contract (#1736).
+
+    Two authoritative sources disagreed. ``NAMING_CONTRACT.md`` §4b names the
+    public prediction surfaces and ``predict_state`` is not among them, while
+    the method's own docstring opened with "This is the public bridge ...".
+    Docstrings *are* the API reference here — ``docs/api/*.rst`` are autodoc
+    stubs — so the two readings were equally authoritative, and two reviewers
+    auditing the published notebooks reached opposite conclusions about whether
+    to teach it to beginners. The quickstart nearly shipped a paragraph doing so.
+
+    Resolved as internal, because the pull toward it was a missing *public*
+    accessor for per-component SEDs, and that accessor exists:
+    ``pred.sed.components`` (covered by the class above). These tests pin the
+    resolution so the wording cannot drift back.
+    """
+
+    def test_docstring_does_not_claim_to_be_public(self):
+        doc = SEDModel.predict_state.__doc__ or ""
+        assert "public bridge" not in doc, (
+            "predict_state's docstring calls itself 'the public bridge' again. "
+            "NAMING_CONTRACT §4b names the public prediction surfaces and this "
+            "is not one of them; a docstring is the API reference here, so this "
+            "wording is the contract disagreeing with itself (#1736)."
+        )
+
+    def test_docstring_points_at_the_public_replacement(self):
+        doc = SEDModel.predict_state.__doc__ or ""
+        assert "components" in doc, (
+            "predict_state no longer names the supported alternative. Telling a "
+            "reader a surface is internal without saying what replaces it is why "
+            "the notebooks reached for it: the component-decomposition figures "
+            "had no other documented path. Name pred.sed.components (#1736)."
+        )
+
+    def test_contract_document_states_the_resolution(self):
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parents[2]
+        contract = (root / "docs" / "dev" / "NAMING_CONTRACT.md").read_text(encoding="utf-8")
+        assert "predict_state" in contract, (
+            "NAMING_CONTRACT.md does not mention predict_state. Silence is what "
+            "let the docstring and the contract disagree for as long as they did "
+            "-- a reader checking the contract found nothing either way (#1736)."
+        )
+        assert "pred.sed.components" in contract, (
+            "NAMING_CONTRACT.md marks predict_state non-public without naming the "
+            "public per-component surface, which leaves the decomposition figures "
+            "with no compliant path -- the exact gap that caused #1736."
+        )
