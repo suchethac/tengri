@@ -50,7 +50,15 @@ def test_radio_xray_in_waveprecomp(group, band_wave, fam):
     valid = (_valid_radio_types() if group == "radio" else _valid_xray_types()) - {"none"}
     if not valid:
         pytest.skip(f"no valid {group} type")
-    gtype = sorted(valid)[0]
+    # Not sorted(valid)[0]. For xray that is ``agn_xray_corona``, whose corona
+    # is anchored to the AGN disc's L_2500 -- with no AGN in ``base`` below it
+    # correctly emits nothing, and this test needs the band to carry flux. It
+    # passed historically only because that name silently resolved to the
+    # shared component and delivered yang20's XRB physics, which is driven by
+    # star formation and so emits without an AGN (#1684).
+    _PREFERRED = {"xray": "yang20", "radio": "condon92"}
+    preferred = _PREFERRED.get(group)
+    gtype = preferred if preferred in valid else sorted(valid)[0]
 
     filt = tuple(
         FilterCurve(
