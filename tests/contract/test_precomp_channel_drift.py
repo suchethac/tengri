@@ -20,13 +20,20 @@ a decision to accept a larger divergence and belongs in review, not in a quiet e
 
 Measured 2026-08-15 on the FSPS SSP through SDSS *gri*, delayed SFH, z as noted:
 
-=====================  ==========================  ===================
-channel added          measured max rel. gap       bound here
-=====================  ==========================  ===================
-stellar only           3.2e-05 - 7.8e-04           2e-03
-+ nebular (Cue)        3.1e-05 - 7.8e-04           2e-03
-+ shock (MAPPINGS V)   4.5e-02 - 3.8e-01           5e-01
-=====================  ==========================  ===================
+=============================  ======================  ===================
+channel added                  measured max rel. gap   bound here
+=============================  ======================  ===================
+stellar only                   3.2e-05 - 7.8e-04       2e-03
++ nebular, two_component       3.1e-05 - 7.8e-04       2e-03
++ nebular, single_component    1.8e-03 - 2.0e-03       5e-03
++ shock (MAPPINGS V)           4.5e-02 - 3.8e-01       5e-01
+=============================  ======================  ===================
+
+**The two nebular rows differ because the #1738 fix reaches only one of them.** That
+row split is the point: a single "nebular" row would have averaged an exact channel
+together with a defective one and reported something true of neither. The
+``predict_via_precomp`` docstring claimed nebular was exact *full stop* for about a
+day before measurement contradicted it — the qualifier is load-bearing, not pedantry.
 
 **The shock row pins a known defect, not an acceptable state** — and it is a *bigger*
 defect than the tree's own comments say. ``predict_via_precomp`` documents shock at
@@ -56,16 +63,36 @@ pytestmark = pytest.mark.contract
 
 _STELLAR_FLOOR_BOUND = 2e-3
 _NEBULAR_BOUND = 2e-3
+#: Known-defect ceiling for nebular under ``single_component`` dust, which the #1738
+#: fix does not reach. Measured worst case 1.955e-03; not a target. See the module
+#: docstring — closing it is sequenced after #1808.
+_SINGLE_COMPONENT_NEBULAR_BOUND = 5e-3
 #: Known-defect ceiling — see the module docstring. Not a target. Measured worst case
 #: is 3.77e-01 (tau=2, z=1); the headroom here is for grid/filter drift only, and the
 #: right way to change this number is downward, by fixing the channel.
 _SHOCK_BOUND = 5e-1
 
 
-def _build(ssp, approx, *, tau_diff, tau_bc, z, neb, shock):
+def _build(ssp, approx, *, tau_diff, tau_bc, z, neb, shock, dust_type="two_component"):
     from tengri import FIXED, Fixed, Observation, Photometry, SEDModel
 
     shock_group = {"frac": 1.0, "all_params": FIXED} if shock else {"type": "none"}
+    if dust_type == "single_component":
+        # One screen over all stars; tau_v is its depth. tau_bc has no analog here.
+        dust_group = {
+            "type": "single_component",
+            "law_bc": "calzetti",
+            "all_params": FIXED,
+            "tau_v": tau_diff,
+        }
+    else:
+        dust_group = {
+            "type": "two_component",
+            "law_bc": "calzetti",
+            "all_params": FIXED,
+            "tau_diff": tau_diff,
+            "tau_bc": tau_bc,
+        }
     return SEDModel.build(
         ssp_data=ssp,
         observation=Observation(photometry=Photometry.from_names(["sdss_g", "sdss_r", "sdss_i"])),
@@ -76,13 +103,7 @@ def _build(ssp, approx, *, tau_diff, tau_bc, z, neb, shock):
             "tau_gyr": 1.0,
             "age_gyr": 5.0,
         },
-        dust={
-            "type": "two_component",
-            "law_bc": "calzetti",
-            "all_params": FIXED,
-            "tau_diff": tau_diff,
-            "tau_bc": tau_bc,
-        },
+        dust=dust_group,
         neb={"type": neb, "all_params": FIXED},
         shock=shock_group,
         redshift=Fixed(z),
@@ -90,10 +111,10 @@ def _build(ssp, approx, *, tau_diff, tau_bc, z, neb, shock):
     )
 
 
-def _gap(ssp, *, tau_diff, tau_bc, z, neb, shock):
+def _gap(ssp, *, tau_diff, tau_bc, z, neb, shock, dust_type="two_component"):
     from tengri import WavePrecomp
 
-    kw = dict(tau_diff=tau_diff, tau_bc=tau_bc, z=z, neb=neb, shock=shock)
+    kw = dict(tau_diff=tau_diff, tau_bc=tau_bc, z=z, neb=neb, shock=shock, dust_type=dust_type)
     exact = np.asarray(_build(ssp, None, **kw).predict_photometry({}))
     lut = np.asarray(_build(ssp, WavePrecomp(), **kw).predict_photometry({}))
     return float(np.max(np.abs(lut - exact) / np.maximum(np.abs(exact), 1e-300)))
@@ -149,6 +170,59 @@ def test_shock_channel_stays_within_its_known_defect_bound(ssp_data_fsps, tau_di
     assert gap < _SHOCK_BOUND, (
         f"shock precomp gap {gap:.3e} exceeds the known-defect ceiling "
         f"{_SHOCK_BOUND:.2e} at tau_diff={tau_diff}, tau_bc={tau_bc}, z={z}."
+    )
+
+
+@pytest.mark.parametrize(("tau_diff", "tau_bc", "z"), _SCREENS)
+def test_single_component_nebular_stays_within_its_known_defect_bound(
+    ssp_data_fsps, tau_diff, tau_bc, z
+):
+    """The #1738 fix covers two-component dust only; bound what it does not reach.
+
+    ``single_component`` reddens nebular through a screen applied to the
+    already-summed ``sed_intrinsic``, so no separately reddened nebular SED exists
+    for the band projection to consume and the lambda_eff form survives. Measured
+    ~3x over the stellar floor — an order of magnitude better than the 26x removed on
+    two-component, and still worth pinning so it cannot drift while it waits on #1808.
+    """
+    gap = _gap(
+        ssp_data_fsps,
+        tau_diff=tau_diff,
+        tau_bc=tau_bc,
+        z=z,
+        neb="cue",
+        shock=False,
+        dust_type="single_component",
+    )
+    assert gap < _SINGLE_COMPONENT_NEBULAR_BOUND, (
+        f"single_component nebular precomp gap {gap:.3e} exceeds the known-defect "
+        f"ceiling {_SINGLE_COMPONENT_NEBULAR_BOUND:.2e} at tau_v={tau_diff}, z={z}."
+    )
+
+
+def test_the_two_component_fix_did_not_reach_single_component(ssp_data_fsps):
+    """Pin the SCOPE of #1738, not just its effect.
+
+    Two assertions that must both hold, because either alone is misleading. The
+    two-component arm proves the exact band-integrated screen is engaging at all;
+    the single-component arm proves this test is still measuring a real gap. If the
+    single-component arm ever drops to the floor, the fix has been extended and this
+    test plus the bound above are stale — tighten them in that change.
+    """
+    kw = dict(tau_diff=1.0, tau_bc=1.0, z=0.05, neb="cue", shock=False)
+    floor = _gap(ssp_data_fsps, neb="none", tau_diff=1.0, tau_bc=1.0, z=0.05, shock=False)
+    two_comp = _gap(ssp_data_fsps, dust_type="two_component", **kw)
+    single = _gap(ssp_data_fsps, dust_type="single_component", **kw)
+
+    assert two_comp <= floor * 1.5 + 1e-5, (
+        f"two_component nebular ({two_comp:.3e}) is no longer at the stellar floor "
+        f"({floor:.3e}); the exact band-integrated screen has stopped engaging."
+    )
+    assert single > 2.0 * two_comp, (
+        f"single_component nebular ({single:.3e}) is no longer materially worse than "
+        f"two_component ({two_comp:.3e}). Either the fix was extended — in which case "
+        "tighten _SINGLE_COMPONENT_NEBULAR_BOUND and delete this test — or the "
+        "two-component path regressed."
     )
 
 
