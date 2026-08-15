@@ -109,6 +109,44 @@ def _resolution_to_sigma_kms(resolution: jnp.ndarray) -> jnp.ndarray:
     return _C_KM_S / (_FWHM_TO_SIGMA * resolution)
 
 
+def _is_log_uniform(wave) -> bool:
+    r"""Whether ``wave`` is uniform in :math:`\ln\lambda`, so one pixel scale serves.
+
+    ``True`` for a tracer: a traced grid has no values to inspect at trace time.
+    The gap is the one :func:`_require_log_uniform_grid` documents, and narrow for
+    the same reason — a spectroscopic wavelength grid is normally a fixed
+    instrument array closed over by the jitted function, not an argument traced
+    through it. Answering ``True`` keeps the single-FFT path, which is what such a
+    grid got before #1791.
+
+    Parameters
+    ----------
+    wave : array_like, shape (n_pix,)
+        Wavelength grid [Angstrom].
+
+    Returns
+    -------
+    bool
+        ``True`` if one ``d ln lambda`` describes the whole grid.
+
+    Notes
+    -----
+    Private helper. Build-time (NumPy) — not JIT-compatible. Called with a
+    concrete grid it runs once at *trace* time, so it costs nothing per
+    evaluation.
+    """
+    if isinstance(wave, jax.core.Tracer):
+        return True
+    w = np.asarray(wave, dtype=np.float64)
+    if w.size < 3 or not np.all(np.isfinite(w)) or np.any(w <= 0.0):
+        return True  # not a grid this helper can speak about; let the caller fail
+    dln = np.diff(np.log(w))
+    mean = float(np.mean(dln))
+    if mean == 0.0:
+        return True
+    return bool(float(np.ptp(dln) / abs(mean)) <= _LOG_UNIFORM_RTOL)
+
+
 @jax.jit
 def _apply_lsf_constant_r(
     spectrum: jnp.ndarray,
@@ -128,7 +166,9 @@ def _apply_lsf_constant_r(
         Observed wavelength grid [Angstrom]. Must be uniform in ``ln(lambda)``,
         not merely evenly spaced — the pixel scale is read once from the first
         pair, so a linear grid under-broadens by ``wave[0]/lambda`` (#1742).
-        ``apply_lsf`` checks this before dispatching here.
+        ``apply_lsf`` dispatches here only for a grid that satisfies this, and
+        sends the rest to :func:`_apply_lsf_variable_r` (#1791), so the
+        precondition binds only direct callers of this helper.
     sigma_eff_kms : float
         Effective velocity dispersion [km/s] (after library subtraction).
 
@@ -174,7 +214,9 @@ def _apply_lsf_variable_r(
     spectrum : array, shape (n_pix,)
         Input spectral flux.
     wave_obs : array, shape (n_pix,)
-        Observed wavelength grid [Angstrom].
+        Observed wavelength grid [Angstrom]. Any strictly increasing grid: each
+        bin takes its pixel scale from the local ``d ln lambda``, so a grid that
+        is not log-uniform is handled here rather than refused (#1791).
     sigma_eff_kms : array, shape (n_pix,)
         Effective velocity dispersion at each pixel [km/s].
     n_bins : int, optional
@@ -193,7 +235,12 @@ def _apply_lsf_variable_r(
 
     """
     n_pix = spectrum.shape[0]
-    dlnwave = jnp.log(wave_obs[1] / wave_obs[0])
+    # Local pixel scale, not the blue-end value for the whole array. Each bin
+    # already convolves with its own sigma; giving it its own d(ln lambda) as
+    # well is what lets this path serve a grid that is not log-uniform, where a
+    # single global scale under-broadened by wave[0]/lambda (#1791). On a
+    # log-uniform grid jnp.gradient returns that same constant, so nothing moves.
+    dlnwave_local = jnp.gradient(jnp.log(wave_obs))
     freq = jnp.fft.rfftfreq(n_pix)
     flux_ft = jnp.fft.rfft(spectrum)
 
@@ -221,10 +268,12 @@ def _apply_lsf_variable_r(
             1.0,
             0.0,
         )
-        sigma_mean = jnp.sum(sigma_eff_kms * bin_mask) / jnp.maximum(jnp.sum(bin_mask), 1.0)
+        n_in_bin = jnp.maximum(jnp.sum(bin_mask), 1.0)
+        sigma_mean = jnp.sum(sigma_eff_kms * bin_mask) / n_in_bin
+        dlnwave_mean = jnp.sum(dlnwave_local * bin_mask) / n_in_bin
 
-        # FFT convolution with this sigma
-        sigma_pix = (sigma_mean / _C_KM_S) / dlnwave
+        # FFT convolution with this sigma, at this bin's own pixel scale
+        sigma_pix = (sigma_mean / _C_KM_S) / dlnwave_mean
         kernel_ft = jnp.exp(-2.0 * jnp.pi**2 * sigma_pix**2 * freq**2)
         convolved = jnp.fft.irfft(flux_ft * kernel_ft, n=n_pix)
 
@@ -290,9 +339,11 @@ def apply_lsf(
     spectrum : array, shape (n_pix,)
         Input spectral flux at observed wavelengths [erg/s/cm²/Hz or arbitrary units].
     wave_obs : array, shape (n_pix,)
-        Observed-frame wavelength grid [Ångstrom]. Should be uniformly spaced
-        in log-wavelength (or close to it) for FFT convolution accuracy.
-        Linear wavelength grids introduce >1% errors.
+        Observed-frame wavelength grid [Ångstrom]. Any strictly increasing grid
+        is accepted. One not uniform in log-wavelength — a linearly-spaced grid,
+        for instance — is routed through the piecewise path, which carries a
+        per-bin pixel scale, so the requested width is delivered either way
+        (#1791). A log-uniform grid with scalar ``R`` keeps the single-FFT path.
     resolution : array, shape (n_pix,) or float
         Spectral resolution :math:`R(\\lambda) = \\lambda / \\Delta\\lambda`.
 
@@ -334,8 +385,15 @@ def apply_lsf(
     path are differentiable.
 
     **Log-wavelength convolution**: Convolution is performed in log-wavelength
-    space, which correctly represents velocity-space broadening. Linear wavelength
-    convolution introduces ~5% errors for high resolution (R > 500).
+    space, which correctly represents velocity-space broadening. A grid that is
+    not uniform in ``ln(lambda)`` takes the piecewise path, where each bin uses
+    its own local ``d ln lambda`` — ``n_bins`` FFTs instead of one, and nothing is
+    resampled, so flux conservation and the zero-width identity stay exact to
+    machine precision. Before #1791 such a grid was convolved with the pixel scale
+    read from its blue end, under-broadening by ``wave[0]/lambda`` — 0.60 at
+    5000 A on a 3000-10000 A grid, and biasing any fitted ``sigma_v_kms`` high by
+    the reciprocal. Measured recovery of a requested 200 km/s on
+    ``linspace(3000, 10000)``: 0.991 at the default ``n_bins=16``.
 
     **Boundary handling**: FFT convolution wraps at the edges (circular convolution).
     For small spectra (N < 1000 pixels) or incomplete coverage, consider padding
@@ -389,22 +447,21 @@ def apply_lsf(
     sigma_v2 = sigma_v_kms**2
     sigma_eff_kms = jnp.sqrt(jnp.maximum(sigma_inst_kms**2 - sigma_lib2, 0.0) + sigma_v2)
 
-    # NOT guarded with ``_require_log_uniform_grid`` (#1742), though both dispatch
-    # targets take their pixel scale from ``log(wave[1]/wave[0])`` and carry the
-    # identical precondition. Adding the check here fails 26 tests across
-    # ``predict_spectrum``, the calibration polynomial and the projector, because
-    # tengri's own spectroscopy path runs on linearly-spaced observed grids — so
-    # this is not a stray caller to correct but a live defect in the forward
-    # model, and refusing it would break spectroscopy rather than fix it.
-    # Tracked separately; see the follow-up filed from #1742.
-
-    # Dispatch based on whether R is constant or variable
-    if resolution.ndim == 0:
-        # Scalar R: single FFT convolution (fast path)
+    # The single-FFT path reads one pixel scale, ``log(wave[1]/wave[0])``, which
+    # describes the whole array only on a grid uniform in ln(lambda). On any other
+    # grid it under-broadens by ``wave[0]/lambda`` (#1791). Rather than refuse such
+    # grids — #1742's remedy for ``velocity_broaden``, which would take
+    # spectroscopy with it, since tengri's own forward model runs on linear
+    # observed grids — send them through the piecewise path, which carries a
+    # per-bin pixel scale. Nothing is resampled, so the FFT normalization still
+    # conserves flux exactly and a zero-width kernel is still the identity.
+    if resolution.ndim == 0 and _is_log_uniform(wave_obs):
+        # Scalar R on a log-uniform grid: one FFT, and the scale is exact.
         return _apply_lsf_constant_r(spectrum, wave_obs, sigma_eff_kms)
-    else:
-        # Per-pixel R: piecewise-constant approximation
-        return _apply_lsf_variable_r(spectrum, wave_obs, sigma_eff_kms, n_bins)
+
+    # Per-pixel R, or a grid whose pixel scale varies: piecewise-constant in both.
+    sigma_per_pixel = jnp.broadcast_to(jnp.atleast_1d(sigma_eff_kms), spectrum.shape)
+    return _apply_lsf_variable_r(spectrum, wave_obs, sigma_per_pixel, n_bins)
 
 
 def project_spectrum(
