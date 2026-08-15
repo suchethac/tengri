@@ -622,12 +622,17 @@ exclude_patterns = [
     # posterior, so this longer treatment is redundant. Inbound prose links
     # in 04/06/07 now point at the quickstart instead.
     "spine/05_fitting_photometry.ipynb",
-    # Guides section hidden from the published sidebar (2026-06). Two of the
-    # original four are now published: ``method_selection.md`` (README points
-    # at it) and ``known_limitations.md`` (a runtime warning in
-    # ``sed_model.py`` tells users to read it). The two below stay excluded
-    # because ``spine/07_joint_photo_spec`` and ``tengri.list_recipes()``
-    # already cover them; inbound links were repointed there.
-    "recipes.md",
-    "joint_fitting.md",
+    # The Guides section was hidden from the published sidebar in 2026-06. Two
+    # of the original four are published again: ``method_selection.md`` (README
+    # points at it) and ``known_limitations.md`` (a runtime warning in
+    # ``sed_model.py`` tells users to read it). The other two -- ``recipes.md``
+    # and ``joint_fitting.md`` -- had entries here; they now live under
+    # ``internal/``, covered by the rule at the top of this list, since
+    # ``spine/07_joint_photo_spec`` and ``tengri.list_recipes()`` already serve
+    # readers and nothing outside ``docs/`` linked either page.
+    #
+    # ``known_bugs.md`` and ``changelog.md`` above stay at ``docs/`` root
+    # deliberately: 30 files cite the former, and both are named in
+    # check_british_spelling and check_doc_examples exemption lists. Moving them
+    # would be churn across three tools for no reader-visible gain.
 ]
