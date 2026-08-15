@@ -162,6 +162,30 @@ class TestPredictStateIsNotAdvertisedAsPublic:
             "wording is the contract disagreeing with itself (#1736)."
         )
 
+    def test_docstring_does_not_read_as_deprecated(self):
+        """Internal is not the same status as deprecated, and a substring decides.
+
+        ``test_predict_surface_classification.py`` derives the deprecated label
+        with ``"deprecat" in doc.lower()``, so prose in this docstring *is* the
+        classification. The first draft of this fix wrote "may change without a
+        deprecation cycle" -- accurate English, and it moved ``predict_state``
+        out of ``UNSANCTIONED_PREDICT_METHODS`` into the deprecated set and took
+        the contract shard red.
+
+        The distinction is real, not bookkeeping: deprecated means scheduled for
+        removal with a named successor, while ``predict_state`` has production
+        callers (``predict_observables_jit``, ``ForwardModel.predict_observables``)
+        and is going nowhere. It is unsanctioned, which is the bucket for "live,
+        un-deprecated, outside the sanctioned three".
+        """
+        doc = (SEDModel.predict_state.__doc__ or "").lower()
+        assert "deprecat" not in doc, (
+            "predict_state's docstring contains 'deprecat', which reclassifies it "
+            "as a deprecated method in test_predict_surface_classification.py and "
+            "fails the contract shard. It is UNSANCTIONED, not deprecated -- it has "
+            "production callers. Say 'no stability guarantee' instead."
+        )
+
     def test_docstring_points_at_the_public_replacement(self):
         doc = SEDModel.predict_state.__doc__ or ""
         assert "components" in doc, (

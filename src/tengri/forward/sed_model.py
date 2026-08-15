@@ -6673,7 +6673,15 @@ class SEDModel:
         It is the internal bridge from this model's configuration surface
         to the orchestrator, called by :meth:`predict_observables_jit` and
         by ``ForwardModel.predict_observables``; its return type and the
-        keys on it may change without a deprecation cycle.
+        keys on it carry no stability guarantee and may change without
+        notice.
+
+        It is **not** on the removal path either — it has production
+        callers and is classified ``UNSANCTIONED`` rather than retired
+        (``tests/contract/test_public_api_surface.py``). Do not describe
+        it with the d-word: ``test_predict_surface_classification.py``
+        derives that label by searching this docstring for the substring,
+        so the wording here *is* the classification.
 
         **If you reached for this to get per-component SEDs, use**
         :attr:`pred.sed.components
