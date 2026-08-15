@@ -72,12 +72,25 @@ def _ssp(lo_dex: float, hi_dex: float, n_wave: int = 2000) -> SSPData:
 
     Mirrors the ``synthetic_ssp_wide`` fixture but with a caller-chosen span,
     because a component can only be measured on a grid that contains its band.
+
+    The continuum dies below the Lyman limit, which a plain ``(5000/lambda)**2``
+    power law does not. That is not cosmetic on the wide grids here: continued
+    to 0.1 A it makes the *stellar* flux in the X-ray band enormous, swamping
+    any X-ray component and cancelling to **negative** photometry. Measured on
+    such a grid, ``lopez24`` appeared bit-identical to ``yang20`` under
+    WavePrecomp -- a defect that does not exist. With the break in place the two
+    separate by 14.3 on the exact path and 13.9 under WavePrecomp.
+
+    The break is at 912 A rather than 1216 A on purpose: the 912-1216 A window
+    is where the Lyman forest acts, and IGM prescriptions are compared through
+    it (see ``_IGM_TEST_Z``), so it must keep flux.
     """
     n_age = 25
     wave = jnp.logspace(lo_dex, hi_dex, n_wave)
     ages_gyr = jnp.linspace(-3.0, 1.14, n_age)
     lgmet = jnp.array([-4.0, -2.65, -1.3])
-    base = (5000.0 / wave) ** 2
+    lyman_break = 1.0 / (1.0 + jnp.exp(-(wave - 912.0) / 40.0))
+    base = (5000.0 / wave) ** 2 * lyman_break
     flux = (
         base[None, None, :]
         * (1.0 + 0.15 * (ages_gyr - ages_gyr.mean()))[None, :, None]
@@ -85,7 +98,7 @@ def _ssp(lo_dex: float, hi_dex: float, n_wave: int = 2000) -> SSPData:
     )
     return SSPData(
         ssp_wave=wave,
-        ssp_flux=jnp.abs(flux) + 1e-12,
+        ssp_flux=jnp.abs(flux) + 1e-30,
         ssp_lg_age_gyr=ages_gyr,
         ssp_lgmet=lgmet,
     )
