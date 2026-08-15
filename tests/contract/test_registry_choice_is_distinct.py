@@ -26,10 +26,17 @@ convergence.  Nothing warns.
 wrong instrument, and every wrong answer here looks like a bug:
 
 * IGM is an *observed-frame* transform.  ``rest_sed()`` cannot see it, and at
-  z=0 there is nothing to see -- so IGM is measured on ``obs_sed()`` at z=3.
+  z=0 there is nothing to see -- so IGM is measured on ``obs_sed()``, and at a
+  redshift where the models under comparison actually differ (``_IGM_TEST_Z``).
 * X-ray emits below 100 A and radio beyond 1 mm.  On the shared 100 A - 1 mm
   fixture grid both fall off the end and every model looks identical.  Each
-  kind therefore gets a grid that spans its own band.
+  kind therefore gets a grid that spans its own band, and the scaffolding its
+  own physics needs (``_KIND_SCAFFOLD``) -- an X-ray corona with no disc
+  beneath it has no ``L_2500`` to act on.
+
+Every one of those four rules was added after a wrong answer that looked like a
+defect: two were published as issue comments before being caught, and one
+(#1809) was filed as an issue and withdrawn.
 
 **The ledgers are exact, not permissive.**  A declared coincidence must name a
 knob that separates the pair, and the test *verifies the knob separates them*
@@ -140,6 +147,23 @@ _KIND_BAND: dict[str, tuple[float, float]] = {
     "radio": (1.0e9, 1.0e11),  # ~10 cm - 10 m
     "xray": (0.1, 1.0e2),  # 0.1 - 100 A
 }
+
+#: Redshift at which IGM prescriptions are compared.
+#:
+#: Not a free choice. ``asada25`` is Inoue+2014 plus the Asada+2025 proximate-CGM
+#: damping wing, whose column follows
+#: ``log10 N_HI(z) = 3.592 / (1 + exp(-1.841(z - 6))) + 18.001``. At z=3 that is
+#: ~1e18 cm^-2, and its effect on the transmission is exactly zero: blueward of
+#: Lyman-alpha the mean IGM is already saturated, so extra absorption takes 0 to
+#: 0, and redward a 1e18 column's wing is below numerical significance. Measured:
+#: asada25 and inoue14 are bit-identical at z=3 and z=5, and differ by up to 1.0
+#: at z=7 and z=9.
+#:
+#: So comparing IGM models at z=3 says only that the CGM term is negligible
+#: there, which is correct physics. An earlier revision of this file did exactly
+#: that and recorded the pair as a defect; #1809 was filed on that basis and
+#: withdrawn.
+_IGM_TEST_Z = 7.0
 
 
 def _sed(group: str, cfg: dict | None, *, extra: dict | None = None) -> jnp.ndarray:
@@ -268,13 +292,17 @@ KNOWN_UNDISTINCT: list[dict] = [
     },
     {
         "group": "igm",
-        "names": {"inoue", "inoue14", "asada25"},
+        "names": {"inoue", "inoue14"},
         "reason": (
-            "asada25 (Asada+2025) is bit-identical to inoue14 on obs_sed at "
-            "z=3, where the IGM is optically thick and the two prescriptions "
-            "should differ. ('inoue' is a legitimate name alias of 'inoue14'; "
-            "it is in this class because the class records what is measured, "
-            "and asada25 matching them is the defect.) No issue filed yet."
+            "'inoue' is a documented back-compat alias of 'inoue14' -- both "
+            "resolve to the same function through _IGM_ALIASES, and it was the "
+            "internal default before 2026-05 while the dict grammar used "
+            "'inoue14'. One model under two names by intent, so no knob can "
+            "separate them and this is not a DECLARED_COINCIDENT entry.\n\n"
+            "asada25 was in this class in an earlier revision and has been "
+            "removed: it is bit-identical to inoue14 only below z~6, which is "
+            "correct physics rather than a defect. See _IGM_TEST_Z. #1809 was "
+            "filed on the earlier measurement and withdrawn."
         ),
     },
     {
@@ -356,7 +384,7 @@ def test_no_undeclared_twins(group: str) -> None:
     names = [n for n in _menu_names(group) if n != "none"]
     seds: dict[str, jnp.ndarray] = {}
     for name in names:
-        extra = {"redshift": Fixed(3.0)} if group == "igm" else None
+        extra = {"redshift": Fixed(_IGM_TEST_Z)} if group == "igm" else None
         try:
             seds[name] = _sed(group, _type_cfg(group, name), extra=extra)
         except Exception as exc:
@@ -391,7 +419,7 @@ def test_known_undistinct_ledger_is_current(entry: dict) -> None:
     """
     group = entry["group"]
     names = sorted(entry["names"])
-    extra = {"redshift": Fixed(3.0)} if group == "igm" else None
+    extra = {"redshift": Fixed(_IGM_TEST_Z)} if group == "igm" else None
     seds = {n: _sed(group, _type_cfg(group, n), extra=extra) for n in names}
 
     reference = names[0]
