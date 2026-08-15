@@ -92,7 +92,11 @@ def _restband_lnu(state) -> jnp.ndarray:
     shock = state.derived.get("shock_restband_lnu_precomp")
     stellar = stellar if stellar is not None else jnp.zeros_like(total)
     nebular = nebular if nebular is not None else jnp.zeros_like(total)
-    nebular = nebular + (shock if shock is not None else jnp.zeros_like(total))
+    # Shock kept separately as well as summed in: the sum defines the screened bucket
+    # that ``unattenuated`` is the complement of, but only nebular has an exact
+    # band-integrated screen (#1738), so the two halves are reddened differently below.
+    shock_only = shock if shock is not None else jnp.zeros_like(total)
+    nebular = nebular + shock_only
     unattenuated = total - stellar - nebular
 
     a_bc = state.derived.get("dust_bc_restband_attenuation_precomp")
@@ -113,7 +117,13 @@ def _restband_lnu(state) -> jnp.ndarray:
         else:
             stellar_att = a_diff * a_bc * stellar
         # Nebular arises in the HII regions around the youngest stars, so it sees the
-        # full young-limit screen (y=1), matching the exact path.
+        # full young-limit screen (y=1), matching the exact path. Where the dust
+        # component published the reddened continuum integrated through the rest band,
+        # prefer it: sampling the screen at the pivot is only correct where the screen
+        # is flat across the filter, and nebular emission is line-dominated (#1738).
+        nebular_exact = state.derived.get("nebular_restband_lnu_attenuated_precomp")
+        if nebular_exact is not None:
+            return stellar_att + nebular_exact + a_diff * a_bc * shock_only + unattenuated
         return stellar_att + a_diff * a_bc * nebular + unattenuated
 
     if a_single is not None:
@@ -910,7 +920,7 @@ class Observation:
         *,
         observables_type=None,
     ):
-        """Project observables via the photometric LUT instead of integrating ``sed_intrinsic``.
+        r"""Project observables via the photometric LUT instead of integrating ``sed_intrinsic``.
 
         Opt-in fast path for ``approx=WavePrecomp()``. Sums all
         ``*_phot_lnu_lut`` keys present in ``state.derived`` (the
@@ -961,6 +971,62 @@ class Observation:
         Notes
         -----
         **JIT-compatible**: yes — pure JAX arithmetic on the LUT entries.
+
+        **This is a second implementation of :meth:`predict`, not a spelling of
+        it.** The two are kept in sync by hand, deliberately: the speedup exists
+        because this path reaches its answer without ever referencing the dense
+        SED, which lets XLA dead-code-eliminate the full-resolution chain
+        (#1109). Collapsing the two would delete the optimization. The standing
+        goal is therefore not to merge them but to shrink and *bound* the
+        divergence channel by channel, and to keep the remaining approximations
+        named with their measured size — which is what follows.
+
+        **Accuracy ledger — where this path differs from** :meth:`predict`:
+
+        - **Stellar continuum** — K-point sub-band quadrature (#1122). The
+          screen is *evaluated* at each node rather than sampled once, and
+          converges as :math:`1/K^2`. K=5 (default): ≲0.6 % worst case in GALEX
+          FUV; 3.2e-05 to 7.8e-04 on an FSPS/SDSS *griz* reference model over
+          :math:`\tau_{\rm diff} \le 2`, :math:`z \le 1`. **This is the floor
+          for the whole path** — no other channel can do better than the
+          bucket that dominates the broadband.
+        - **Nebular** — *exact* since #1738. The dust component publishes the
+          reddened continuum integrated through each band
+          (``nebular_phot_lnu_attenuated_precomp``), so there is no
+          band-averaging error left to quote: ≤3.5e-06 against the exact path
+          on a fixture built to maximize it. Previously screened at
+          :math:`\lambda_{\rm eff}`, which inflated the total gap by up to 26x
+          over the stellar floor while carrying only 0.8-3.5 % of the band flux.
+        - **Shock** — the worst remaining channel by two orders of magnitude, and
+          **not** a band-averaging error despite what this docstring said for a
+          long time. This path multiplies shock by ``a_diff·a_bc``; the exact
+          path applies *no* stellar dust screen to it at all, because
+          ``two_component`` never reads ``sed_shock`` and adds the non-nebular
+          remainder unattenuated. Measured on an FSPS SSP through SDSS *gri*:
+          **4.5 %** at :math:`\tau_{\rm bc}`\ =1/z=0.05, **7.4 %** at
+          :math:`\tau`\ =2/z=0.05, **37.7 %** at :math:`\tau`\ =2/z=1 — and in
+          the exact path shock's contribution over its intrinsic value is
+          1.66e-55 whatever :math:`\tau` is, i.e. the bare cosmology factor.
+          A quadrature cannot close a factor-of-40 disagreement about *whether*
+          a screen applies. Which path is right is a physics question, so the
+          gap is bounded (``tests/contract/test_precomp_channel_drift.py``)
+          rather than silently resolved.
+        - **IGM** — ``igm_phot_factor`` band-averages :math:`T` alone,
+          forming :math:`\langle S\rangle\langle T\rangle` where the flux needs
+          :math:`\langle S\,T\rangle`. Across GALEX FUV at :math:`z\approx0.8`
+          the transmission runs ~1 to ~0 *inside* the band and that covariance
+          term reaches **−9.5 %**. Folded into the sub-band weights (#1135)
+          wherever a mean-IGM model is precomputable; patchy reionization and
+          DLAs read free parameters, so those configs keep the live path.
+        - **Additive emitters** (dust IR, radio, X-ray, AGN) — exact via the
+          rank-1/rank-K band response where the emitter factorizes, else a dense
+          band integral, else a single :math:`\lambda_{\rm eff}` sample; see
+          :func:`~tengri.components._band_projection.project_additive_onto_photometry`
+          for which branch a given component takes.
+
+        Re-measure rather than quoting these: every figure above is a property
+        of an SSP grid, a filter set and a K, none of which are fixed by this
+        method.
 
         See Also
         --------
@@ -1026,17 +1092,34 @@ class Observation:
         # ``unattenuated_phi`` would make the LUT read high wherever the screen
         # bites, and only for models that enable shock (#1375, #851).
         #
-        # KNOWN RESIDUAL. Like the nebular bucket, shock is a single number per
-        # filter, so the screen is applied at λ_eff rather than evaluated across
-        # the band the way the stellar sub-band quadrature does (#1122). That
-        # approximation is worse for shock than for a smooth continuum, because
-        # shock emission is line-dominated and the lines sit where the screen
-        # differs most from its band average. Measured LUT-vs-exact on synthetic
-        # SDSS-like bands, shock frac=1.0: 2.4 % at z=0.05/tau_bc=0.5, 5.1 % at
-        # z=0.5/tau_bc=2, 8.3 % at z=1/tau_bc=2. With tau=0 the two paths agree
-        # to roundoff, which localizes the whole residual here rather than in
-        # the filter integration. Fixing it means giving shock a sub-band LUT.
+        # KNOWN RESIDUAL — and NOT the band-averaging one this comment used to
+        # claim. It read "like the nebular bucket, shock is a single number per
+        # filter, so the screen is applied at λ_eff... fixing it means giving
+        # shock a sub-band LUT". Measured, that is the wrong mechanism: the
+        # EXACT path applies no stellar screen to shock at all. two_component
+        # never reads sed_shock — it forms non_stellar_other = non_stellar_pre_dust
+        # - sed_neb and adds that bucket unattenuated — while this line multiplies
+        # shock by a_diff·a_bc (0.025-0.109 at tau_bc=2). In the exact path
+        # shock's photometric contribution over its intrinsic value measures
+        # 1.66e-55 whatever tau is: the bare cosmology factor.
+        #
+        # So the gap is 4.5 % at tau_bc=1/z=0.05, 7.4 % at tau=2/z=0.05 and
+        # 37.7 % at tau=2/z=1 on an FSPS SSP through SDSS gri — a disagreement
+        # about WHETHER the screen applies, which no quadrature can close. With
+        # tau=0 the paths agree to roundoff, localizing it here rather than in
+        # the filter integration. Whether shocked gas should sit behind the
+        # stellar screen is a physics decision, so this is left as measured and
+        # bounded in tests/contract/test_precomp_channel_drift.py.
         shock_phi_for_dust = state.derived.get("shock_phot_lnu_precomp")
+        # Kept SEPARATE from the nebular bucket as well as summed into it. The sum is
+        # what ``unattenuated_phi`` must be built from (it is the whole screened
+        # bucket), but the two halves are no longer screened the same way: nebular has
+        # an exact band-integrated form below and shock does not (#1738). Collapsing
+        # them into one array first would force shock's λ_eff treatment back onto
+        # nebular.
+        shock_only_phi = (
+            shock_phi_for_dust if shock_phi_for_dust is not None else jnp.zeros_like(total_phi)
+        )
         if shock_phi_for_dust is not None:
             nebular_phi_for_dust = nebular_phi_for_dust + shock_phi_for_dust
         dust_attenuable_phi = stellar_phi + nebular_phi_for_dust
@@ -1123,11 +1206,25 @@ class Observation:
             # nebular-line-dominated bands ~18 % (τ=0.5) to ~37 % (τ=1) too
             # bright.
             #
-            # Still evaluated at λ_eff: the nebular component publishes no sub-band
-            # tensors, so the quadrature cannot reach it. Its intra-filter residual
-            # is unchanged from before #1122 — no regression, but the stellar
-            # continuum (which dominates the broadband) is now the accurate term.
-            nebular_attenuated = a_diff_lut * a_bc_lut * nebular_phi_for_dust
+            # No longer evaluated at λ_eff (#1738). The dust component publishes the
+            # reddened nebular continuum integrated THROUGH each band, which is the
+            # quantity the exact path computes — not the K-point approximation to it
+            # that the stellar continuum uses (#1122), because the reddened nebular
+            # continuum is already on the full grid wherever a dust component runs at
+            # all. Sampling the screen at one wavelength per band is only correct
+            # where the screen is flat across the filter, and nebular emission is
+            # line-dominated: measured on a real FSPS SSP through SDSS griz it
+            # inflated the precomp-vs-exact gap by up to 26x over the stellar-only
+            # floor, on a bucket carrying just 0.8-3.5 % of the band flux.
+            #
+            # Shock stays on the λ_eff screen — it publishes no such term, and it is
+            # a separate additive component (#851). Its own residual is documented
+            # above and is unchanged here.
+            nebular_exact = state.derived.get("nebular_phot_lnu_attenuated_precomp")
+            if nebular_exact is not None:
+                nebular_attenuated = nebular_exact + a_diff_lut * a_bc_lut * shock_only_phi
+            else:
+                nebular_attenuated = a_diff_lut * a_bc_lut * nebular_phi_for_dust
             total_lnu = stellar_attenuated + nebular_attenuated + unattenuated_phi
 
         # Single-component dust via the Taylor expansion
