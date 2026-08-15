@@ -36,6 +36,30 @@ CIGALE case where the split was applied wrongly.
 Nebular is OFF on both sides: ProSpect ties Halpha to the SFR and distributes
 other lines via Levesque et al. (2010), while tengri uses the Cue emulator on
 Cloudy 17 — different models by design (01_prospect_r.py §8).
+
+NOT VALIDATED — radio, and why this file does not report it
+-----------------------------------------------------------
+ProSpect has ``addradio_SF``, so a radio comparison looks available, and the
+CIGALE and AGNFITTER validators both carry one. It is not reported here because
+the number cannot be trusted through this driver, and a validator that prints an
+untrustworthy number is worse than one that prints none.
+
+``prospect_sed`` returns ``FinalLum``, ``StarsAtten``, ``StarsUnAtten``,
+``DustEmit`` and ``AGN`` — there is no separable radio component, so the radio
+has to be read off ``FinalLum`` where nothing else contributes, or differenced
+against a radio-off run. Measured, both fail:
+
+* ProSpect's grid ends at 22.39 cm and 1.4 GHz is 21.4 cm, so the most
+  important frequency in radio astronomy sits one grid point from the edge.
+  The radio-on and radio-off runs return 3.8e-167 and 9.1e+26 there — 190
+  orders of magnitude apart for two runs that should differ by a few percent,
+  which is extrapolation, not physics.
+* Where the grid is sound the radio barely registers: 0.54% of ``FinalLum`` at
+  5 GHz and 0.03% at 100 GHz. Differencing two nearly-equal large numbers to
+  recover a fraction of a percent is not a measurement.
+
+Reporting it would need a driver change — expose ProSpect's radio component
+directly, and extend the grid past 21 cm — not a change to this file.
 """
 
 import os

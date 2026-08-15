@@ -51,7 +51,13 @@ import numpy as np
 warnings.filterwarnings("ignore")
 
 import jax.numpy as jnp
-from reproduction._validation import IR_BANDS, filter_rows, print_filter_table
+from reproduction._validation import (
+    IR_BANDS,
+    filter_rows,
+    print_filter_table,
+    print_radio_table,
+    radio_rows,
+)
 from reproduction.agnfitter._drivers import agnfitter_driver as A, units as U
 
 from tengri.dust import DUST_EMISSION_MODELS
@@ -118,6 +124,58 @@ def compare(name, w_ref, L_ref, L_tengri, results):
     results[name] = (w_ref, ref_n, ten_n)
 
 
+# AGN radio (01_agnfitter.py §11). Both codes are compared as *shapes*,
+# normalized at 5 GHz, because the amplitude is set by radio loudness — a free
+# parameter on both sides and not a physics claim.
+L_AGN_BOL = 1e45  # erg/s
+DPL_PARS = dict(alpha1=-0.75, alpha2=-0.1, log_nu_t=10.0, log_nu_cut=13.0)
+NU_NORM = 5.0e9  # Hz
+
+
+def radio_report():
+    """Compare both AGN radio laws against the AGNFITTER-RX branches they mirror.
+
+    Notes
+    -----
+    Two laws, two upstream branches: ``radio_agn`` is the single power law
+    (``nRADdata == 1``) and ``radio_agn_dpl`` the broken one (``nRADdata > 3``
+    / DPL-4) of Martinez-Ramirez et al. 2024, Eqs. 9-10. Comparing the SPL
+    against the DPL branch, or vice versa, would measure the difference between
+    two deliberately different laws and read as a defect.
+
+    Shapes are normalized at 5 GHz so the table tests the *slope*, which is the
+    physics, rather than radio loudness, which is a fitted amplitude.
+    """
+    import numpy as _np
+
+    from tengri.radio import radio_agn, radio_agn_dpl
+
+    freq = _np.geomspace(1e8, 1e12, 400)  # 0.1-1000 GHz
+    wave = U.C_ANGSTROM_PER_S / freq
+
+    def _norm(w, L):
+        ref = float(_np.interp(U.C_ANGSTROM_PER_S / NU_NORM, w[::-1], _np.asarray(L)[::-1]))
+        return _np.asarray(L) / ref if ref > 0 else _np.asarray(L)
+
+    for label, ten, ref in (
+        (
+            "SPL — radio_agn vs AGNFITTER nRADdata==1",
+            radio_agn(jnp.asarray(wave), L_AGN_BOL, radio_loudness=1.0, alpha_agn=0.75),
+            A.agn_radio_spl(freq)[1],
+        ),
+        (
+            "DPL — radio_agn_dpl vs AGNFITTER DPL-4",
+            radio_agn_dpl(jnp.asarray(wave), L_AGN_BOL, radio_loudness=1.0, **DPL_PARS),
+            A.agn_radio_dpl(freq, **DPL_PARS)[1],
+        ),
+    ):
+        print_radio_table(
+            radio_rows(wave, _norm(wave, ten), _norm(wave, ref)),
+            ref_name="AGNFITTER",
+            title=f"AGN radio, normalized at 5 GHz — {label}",
+        )
+
+
 def main():
     A.require_available()
     U.verify_unit_conversion(rtol=1e-3)
@@ -151,6 +209,8 @@ def main():
             ref_name="AGNFITTER",
             title=f"{name} — peak-normalized templates through IR bandpasses",
         )
+
+    radio_report()
 
     n = len(results)
     fig, axes = plt.subplots(2, n, figsize=(6 * n, 7), squeeze=False,

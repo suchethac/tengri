@@ -1,5 +1,5 @@
-"""Shared helpers for the matched-input validators: broadband photometry
-and emission lines.
+"""Shared helpers for the matched-input validators: broadband photometry,
+emission lines, radio, and X-ray.
 
 The per-comparison ``validate_matched_physics.py`` scripts started with six
 hand-written wavelength *windows* (``FUV 1216-1900 A`` and friends) topping out
@@ -13,13 +13,17 @@ at 300 um. Two things were missing:
   the SED has structure inside the band -- which is exactly the case across the
   Balmer/4000 A break, the PAH complex, and any strong line.
 
-This module supplies both, plus the emission-line half of the same question.
+This module supplies both, and asks the same question of the three channels a
+window table never reached at all: emission lines, radio, and X-ray. Those
+three are compared at discrete lines/frequencies/energies rather than through
+bandpasses -- no cm-wave or X-ray transmission curves ship in ``data/filters``,
+and it is how each of those measurements is actually quoted.
 
 Why here and not in ``_drivers/units.py``
 -----------------------------------------
 CONTRACT section 3 says shared helpers live in ``_drivers/units.py``,
 byte-identical across comparisons. That rule is about helpers the *notebooks*
-use. These are validator-only: putting filter I/O and a 26-entry bandpass ladder
+use. These are validator-only: putting filter I/O and a 23-entry bandpass ladder
 into six copies of a module every notebook imports would cost the notebook path
 and buy it nothing. One module, imported by the validators alone. CONTRACT
 section 3 records the carve-out.
@@ -59,7 +63,9 @@ __all__ = [
     "BROAD_FILTERS",
     "IR_BANDS",
     "KEY_LINES",
+    "RADIO_FREQS",
     "UV_TO_NIR",
+    "XRAY_ENERGIES",
     "band_average",
     "convention_sensitivity",
     "filter_rows",
@@ -68,6 +74,10 @@ __all__ = [
     "pivot_wavelength",
     "print_filter_table",
     "print_line_table",
+    "print_radio_table",
+    "print_xray_table",
+    "radio_rows",
+    "xray_rows",
 ]
 
 _ROOT = Path(__file__).resolve().parents[1]
@@ -419,6 +429,270 @@ def convention_sensitivity(
     b = {r[0]: r[4] for r in filter_rows(w_ref, L_t, L_ref, filters=filters, weight="energy")}
     d = [abs(a[k] - b[k]) for k in a if np.isfinite(a[k]) and np.isfinite(b[k])]
     return float(max(d)) if d else float("nan")
+
+
+# ---------------------------------------------------------------------------
+# X-ray
+# ---------------------------------------------------------------------------
+
+
+def _kev_to_hz() -> float:
+    """``KEV_TO_HZ`` from the package, not a local literal.
+
+    The X-ray module converts with ``nu = E_keV * KEV_TO_HZ``
+    (:mod:`tengri.components.xray.xray`); going through the same constant means
+    the validator lands on exactly the frequency the model was evaluated at,
+    rather than a hand-carried ``12.398 / E`` that agrees to five digits and
+    then drifts.
+    """
+    from tengri.utils.physics_constants import KEV_TO_HZ
+
+    return float(KEV_TO_HZ)
+
+
+XRAY_ENERGIES: tuple[tuple[str, float], ...] = (
+    ("0.5 keV", 0.5),
+    ("1 keV", 1.0),
+    ("2 keV", 2.0),
+    ("5 keV", 5.0),
+    ("10 keV", 10.0),
+    ("20 keV", 20.0),
+)
+"""Rest-frame energies [keV] spanning the soft and hard X-ray bands.
+
+**2 keV is the load-bearing entry**: :math:`\\alpha_{ox}` is defined between
+:math:`L_{2500}` and :math:`L_{2\\,\\mathrm{keV}}`, so once both codes are put
+on one :math:`L_{2500}` the 2 keV ratio is what the matched anchor predicts.
+The others test the corona's *shape* -- photon index and the high-energy
+cutoff -- which the anchor does not constrain.
+"""
+
+
+def kev_to_angstrom(e_kev: float) -> float:
+    """Photon energy [keV] to wavelength [Angstrom].
+
+    Parameters
+    ----------
+    e_kev : float
+        Photon energy [keV].
+
+    Returns
+    -------
+    float
+        Wavelength [Angstrom].
+    """
+    return C_AA / (e_kev * _kev_to_hz())
+
+
+def xray_rows(
+    w_ref: np.ndarray,
+    L_t: np.ndarray,
+    L_ref: np.ndarray,
+    *,
+    energies: tuple[tuple[str, float], ...] = XRAY_ENERGIES,
+) -> list[tuple[str, float, float, float, float]]:
+    """Evaluate both SEDs at each X-ray energy and form the ratio.
+
+    Parameters
+    ----------
+    w_ref : array_like, shape (n_wave,)
+        Shared rest-frame wavelength grid [Angstrom].
+    L_t, L_ref : array_like, shape (n_wave,)
+        tengri and reference-code :math:`L_\\nu` [erg/s/Hz] on ``w_ref``.
+    energies : tuple of (str, float), optional
+        ``(label, energy_kev)`` pairs. Defaults to :data:`XRAY_ENERGIES`.
+
+    Returns
+    -------
+    list of tuple
+        ``(label, energy_kev, L_t, L_ref, ratio)``; ``nan`` where the grid does
+        not reach or either side is non-positive.
+    """
+    w_ref = np.asarray(w_ref, float)
+    order = np.argsort(w_ref)
+    w_o = w_ref[order]
+    t_o, r_o = np.asarray(L_t, float)[order], np.asarray(L_ref, float)[order]
+
+    rows = []
+    for label, e_kev in energies:
+        lam = kev_to_angstrom(e_kev)
+        if lam < w_o.min() or lam > w_o.max():
+            rows.append((label, e_kev, float("nan"), float("nan"), float("nan")))
+            continue
+        a = float(np.interp(lam, w_o, t_o))
+        b = float(np.interp(lam, w_o, r_o))
+        ratio = a / b if (a > 0 and b > 0) else float("nan")
+        rows.append((label, e_kev, a, b, ratio))
+    return rows
+
+
+def print_xray_table(
+    rows: list[tuple[str, float, float, float, float]],
+    *,
+    ref_name: str,
+    title: str,
+    tol: float = 0.05,
+) -> None:
+    """Print the X-ray ratio table and the photon-index difference.
+
+    Parameters
+    ----------
+    rows : list of tuple
+        As returned by :func:`xray_rows`.
+    ref_name : str
+        Reference code's name, for the column header.
+    title : str
+        Heading printed above the table.
+    tol : float, optional
+        Flag threshold on ``|ratio - 1|``. Default 0.05.
+
+    Notes
+    -----
+    The effective photon index :math:`\\Gamma` is fitted from
+    :math:`L_\\nu \\propto E^{1-\\Gamma}` across the covered energies and printed
+    for both sides, for the same reason the radio table fits a spectral index:
+    a flat offset is a normalization difference (one anchor, one
+    :math:`\\alpha_{ox}`) while a tilt is a different corona.
+    """
+    print(f"\n  {title}")
+    print(f"  {'energy':<12} {'keV':>7} {'tengri/' + ref_name:>16}")
+    print("  " + "-" * 44)
+    for label, e_kev, _a, _b, ratio in rows:
+        if not np.isfinite(ratio):
+            print(f"  {label:<12} {e_kev:>7.2f} {'--':>16}   (outside SED grid)")
+            continue
+        flag = " OK" if abs(ratio - 1.0) <= tol else "  <-- check"
+        print(f"  {label:<12} {e_kev:>7.2f} {ratio:>15.3f}x{flag}")
+
+    good = [(r[1], r[2], r[3]) for r in rows if np.isfinite(r[4])]
+    if len(good) >= 2:
+        lg_e = np.log10([g[0] for g in good])
+        g_t = 1.0 - float(np.polyfit(lg_e, np.log10([g[1] for g in good]), 1)[0])
+        g_r = 1.0 - float(np.polyfit(lg_e, np.log10([g[2] for g in good]), 1)[0])
+        print(
+            f"  photon index Gamma (L_nu ~ E^(1-Gamma)): "
+            f"tengri {g_t:.3f}, {ref_name} {g_r:.3f}  (delta {g_t - g_r:+.3f})"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Radio
+# ---------------------------------------------------------------------------
+
+RADIO_FREQS: tuple[tuple[str, float], ...] = (
+    ("LOFAR 150MHz", 0.15e9),
+    ("GMRT 325MHz", 0.325e9),
+    ("VLA 1.4GHz", 1.4e9),
+    ("VLA 3GHz", 3.0e9),
+    ("VLA 5GHz", 5.0e9),
+    ("VLA 10GHz", 10.0e9),
+    ("ALMA B3 100GHz", 100.0e9),
+)
+"""Standard survey frequencies [Hz], 150 MHz to 100 GHz.
+
+Radio is compared at discrete frequencies rather than through bandpasses, for
+the plain reason that no cm-wave transmission curves ship in ``data/filters``
+(the reddest are sub-mm: LABOCA 345 GHz, SCUBA-2). It is also how the
+measurement is actually quoted -- an interferometer delivers a flux at a
+frequency, not a broadband magnitude -- so nothing is lost.
+
+Spanning 150 MHz to 100 GHz matters for what it tests: the synchrotron slope is
+a *power law*, so a ratio at one frequency conflates normalization with slope,
+and only a lever arm separates them. 150 MHz to 10 GHz is nearly two decades.
+"""
+
+
+def radio_rows(
+    w_ref: np.ndarray,
+    L_t: np.ndarray,
+    L_ref: np.ndarray,
+    *,
+    freqs: tuple[tuple[str, float], ...] = RADIO_FREQS,
+) -> list[tuple[str, float, float, float, float]]:
+    """Evaluate both SEDs at each radio frequency and form the ratio.
+
+    Parameters
+    ----------
+    w_ref : array_like, shape (n_wave,)
+        Shared rest-frame wavelength grid [Angstrom].
+    L_t, L_ref : array_like, shape (n_wave,)
+        tengri and reference-code :math:`L_\\nu` [erg/s/Hz] on ``w_ref``.
+    freqs : tuple of (str, float), optional
+        ``(label, frequency_hz)`` pairs. Defaults to :data:`RADIO_FREQS`.
+
+    Returns
+    -------
+    list of tuple
+        ``(label, freq_ghz, L_t, L_ref, ratio)``. Frequencies outside the grid,
+        or where either side is non-positive, carry ``nan``.
+    """
+    w_ref = np.asarray(w_ref, float)
+    order = np.argsort(w_ref)
+    w_o = w_ref[order]
+    t_o, r_o = np.asarray(L_t, float)[order], np.asarray(L_ref, float)[order]
+
+    rows = []
+    for label, nu in freqs:
+        lam = C_AA / nu  # [Angstrom]
+        if lam < w_o.min() or lam > w_o.max():
+            rows.append((label, nu / 1e9, float("nan"), float("nan"), float("nan")))
+            continue
+        a = float(np.interp(lam, w_o, t_o))
+        b = float(np.interp(lam, w_o, r_o))
+        ratio = a / b if (a > 0 and b > 0) else float("nan")
+        rows.append((label, nu / 1e9, a, b, ratio))
+    return rows
+
+
+def print_radio_table(
+    rows: list[tuple[str, float, float, float, float]],
+    *,
+    ref_name: str,
+    title: str,
+    tol: float = 0.05,
+) -> None:
+    """Print the radio ratio table, plus the spectral index on both sides.
+
+    Parameters
+    ----------
+    rows : list of tuple
+        As returned by :func:`radio_rows`.
+    ref_name : str
+        Reference code's name, for the column header.
+    title : str
+        Heading printed above the table.
+    tol : float, optional
+        Flag threshold on ``|ratio - 1|``. Default 0.05.
+
+    Notes
+    -----
+    The spectral index :math:`\\alpha` in :math:`L_\\nu \\propto \\nu^{-\\alpha}`
+    is fitted across the covered frequencies and printed for each side, because
+    it is the number the ratios cannot give. A constant offset at every
+    frequency is a normalization difference -- one q_IR, one radio loudness --
+    while a drift across the decade is a *slope* difference, which is a
+    different model rather than a different scaling. Two codes can agree at
+    1.4 GHz and disagree about everything else.
+    """
+    print(f"\n  {title}")
+    print(f"  {'band':<16} {'GHz':>8} {'tengri/' + ref_name:>16}")
+    print("  " + "-" * 46)
+    for label, ghz, _a, _b, ratio in rows:
+        if not np.isfinite(ratio):
+            print(f"  {label:<16} {ghz:>8.3f} {'--':>16}   (outside SED grid)")
+            continue
+        flag = " OK" if abs(ratio - 1.0) <= tol else "  <-- check"
+        print(f"  {label:<16} {ghz:>8.3f} {ratio:>15.3f}x{flag}")
+
+    good = [(r[1], r[2], r[3]) for r in rows if np.isfinite(r[4])]
+    if len(good) >= 2:
+        lg_nu = np.log10([g[0] for g in good])
+        a_t = -float(np.polyfit(lg_nu, np.log10([g[1] for g in good]), 1)[0])
+        a_r = -float(np.polyfit(lg_nu, np.log10([g[2] for g in good]), 1)[0])
+        print(
+            f"  spectral index alpha (L_nu ~ nu^-alpha): "
+            f"tengri {a_t:.3f}, {ref_name} {a_r:.3f}  (delta {a_t - a_r:+.3f})"
+        )
 
 
 # ---------------------------------------------------------------------------
