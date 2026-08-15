@@ -17,7 +17,7 @@ Cross-component contract
 ------------------------
 Inputs: L_agn_bol (AGN bolometric luminosity) from upstream AGN component
         (with fallback to 0 if not present).
-Outputs: sed_xray (X-ray luminosity on the pipeline wavelength grid).
+Outputs: L_xray_agn (X-ray luminosity on pipeline wavelength grid).
 
 Notes
 -----
@@ -46,6 +46,7 @@ import jax.numpy as jnp
 
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.components.xray.xray import xray_agn_corona
+from tengri.parameters.priors import Fixed, Uniform
 from tengri.protocols.component import (
     ParamDeclaration,
     SEDComponentConfig,
@@ -74,12 +75,11 @@ class AGNXRayCoronaSEDComponent(SEDModelComponent):
     empirical alpha_ox(L_2500) relation (Just+2007 by default), following
     the X-CIGALE corona treatment.
 
-    Reads three parameters from the ``xray`` group rather than declaring its
-    own (see :attr:`parameter_prefix`):
+    Free parameters (3):
 
-    - ``xray_gamma_agn``: X-ray photon index (Gamma)
-    - ``xray_delta_alpha_ox``: offset [dex] on the Just+2007 alpha_ox(L_2500)
-    - ``xray_E_cut``: high-energy cutoff [keV]
+    - agn_xray_gamma: X-ray photon index (Gamma)
+    - agn_xray_delta_alpha_ox: offset [dex] on the Just+2007 alpha_ox(L_2500)
+    - agn_xray_e_cut: high-energy cutoff [keV]
 
     Notes
     -----
@@ -100,38 +100,26 @@ class AGNXRayCoronaSEDComponent(SEDModelComponent):
         self.config = AGNXRayCoronaSEDComponentConfig()
 
     name: str = "agn_xray_corona"
+    parameter_prefix: str = "agn_xray_"
 
-    #: The ``xray`` group's prefix, not a private one.
-    #:
-    #: This declared ``gamma`` / ``delta_alpha_ox`` / ``e_cut`` under
-    #: ``agn_xray_``, a prefix no group supplies, so its sliced parameter dict
-    #: was empty and building it raised ``KeyError: 'gamma'`` inside
-    #: :meth:`predict`. That is why ``component_factory`` could not route this
-    #: name and it silently delivered ``yang20``'s physics instead (#1684, the
-    #: unfinished half of #1120).
-    #:
-    #: The three were duplicates rather than new knobs: the ``xray`` group
-    #: already declares ``xray_gamma_agn``, ``xray_E_cut`` and
-    #: ``xray_delta_alpha_ox``, which are the same three quantities. Reading
-    #: those instead of declaring a parallel set keeps one name per physical
-    #: knob and needs no addition to the public parameter surface.
-    parameter_prefix: str = "xray_"
-
-    #: Publish into the shared ``xray`` domain rather than under the registry
-    #: key — ``DerivedState`` declares ``xray_*`` precompute fields, and keying
-    #: them off ``name`` would spill ``agn_xray_corona_*`` into ``_extras`` and
-    #: trip the ADR-0007 guard. Only one X-ray component is ever built.
-    publish_name: ClassVar[str] = "xray"
+    # Free parameters
+    gamma = Uniform(
+        1.4,
+        2.4,
+        description="X-ray photon index",
+        units="dimensionless",
+        default=1.9,
+    )
+    # Offset on the empirical alpha_ox(L_2500), NOT an absolute alpha_ox.
+    # The absolute default -1.4 was silently re-applied on top of Just+2007
+    # (alpha_ox ~ -2.8, a 3.6 dex under-prediction) until #981.
+    delta_alpha_ox = Fixed(0.0, description="Offset on Just+2007 alpha_ox(L_2500)", units="dex")
+    e_cut = Fixed(300.0, description="High-energy cutoff", units="keV")
 
     # Reads AGN bolometric luminosity with fallback
     inputs: ClassVar[dict[str, str]] = {}
-    # ``sed_xray`` and nothing else, matching XRayAirdSEDComponent. This
-    # previously declared ``L_xray_agn``, which is not a DerivedState field, so
-    # it spilled into ``_extras`` and tripped the ADR-0007 guard on every build.
-    # Nothing consumed it — the component was never built — and
-    # ``state_to_xray_quantities`` derives ``l_x_agn`` independently.
     outputs: ClassVar[dict[str, str]] = {
-        "sed_xray": "erg/s/Hz",
+        "L_xray_agn": "erg/s",
     }
 
     def load(self, wave: jnp.ndarray | None = None) -> None:
@@ -154,8 +142,7 @@ class AGNXRayCoronaSEDComponent(SEDModelComponent):
         Parameters
         ----------
         p : mapping[str, ndarray]
-            Parameters with the ``xray_`` prefix stripped: ``gamma_agn``,
-            ``delta_alpha_ox``, ``E_cut``.
+            Parameters with prefix stripped: gamma, delta_alpha_ox, e_cut.
         sed_in : ndarray
             Input SED (stellar + nebular + radio).
         wave : ndarray
@@ -169,7 +156,7 @@ class AGNXRayCoronaSEDComponent(SEDModelComponent):
         tuple[ndarray, mapping]
 
             - sed_out: sed_in + X-ray continuum.
-            - published: Dict with "sed_xray" (the X-ray continuum).
+            - published: Dict with "L_xray_agn" (integrated X-ray luminosity).
 
         """
         # L_2500 anchor chain (matches the live ``xray/component.py``):
@@ -197,15 +184,14 @@ class AGNXRayCoronaSEDComponent(SEDModelComponent):
         L_xray = xray_agn_corona(
             wave,
             l_2500_30deg_erg_hz=L_2500,
-            # Names are the xray group's, prefix-stripped: xray_gamma_agn ->
-            # gamma_agn, xray_E_cut -> E_cut, xray_delta_alpha_ox ->
-            # delta_alpha_ox. Reading the group's parameters rather than a
-            # private agn_xray_* set is what makes this component buildable.
-            gamma=jnp.asarray(p["gamma_agn"]),
-            E_cut=jnp.asarray(p["E_cut"]),
+            gamma=jnp.asarray(p["gamma"]),
+            E_cut=jnp.asarray(p["e_cut"]),
             delta_alpha_ox=jnp.asarray(p["delta_alpha_ox"]),
         )
 
+        # Integrate X-ray luminosity over spectrum
+        L_xray_total = jnp.trapezoid(L_xray, wave)
+
         return sed_in + L_xray, {
-            "sed_xray": L_xray,
+            "L_xray_agn": L_xray_total,
         }

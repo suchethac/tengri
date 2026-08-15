@@ -41,7 +41,11 @@ from tengri.observation.photometry import FilterCurve
 pytestmark = pytest.mark.regression_bug
 
 #: Corona prescriptions that must each produce their own SED.
-_DISTINCT_FROM_YANG20 = ("xray_aird", "agn_xray_corona", "lopez24")
+#:
+#: ``agn_xray_corona`` is deliberately absent -- see
+#: :func:`test_agn_xray_corona_is_still_pending` for why, and for the assertion
+#: that keeps that statement honest.
+_DISTINCT_FROM_YANG20 = ("xray_aird", "lopez24")
 
 _LUMINOUS_AGN = {
     "type": "composable",
@@ -131,6 +135,33 @@ def test_simple_is_still_the_declared_yang20_alias(xray_ssp, xray_obs):
         "'simple' and 'yang20' are documented as the same physics "
         "(parameters/groups.py). They now differ -- either the alias was broken "
         "or the declaration is stale."
+    )
+
+
+def test_agn_xray_corona_is_still_pending(xray_ssp, xray_obs):
+    """The other half of #1684, and why routing it would not have fixed it.
+
+    ``AGNXRayCoronaSEDComponent`` declares ``gamma`` / ``e_cut`` /
+    ``delta_alpha_ox`` under ``parameter_prefix = "agn_xray_"``. No group
+    supplies parameters under that prefix, so building it raises
+    ``KeyError: 'gamma'`` inside ``predict`` -- measured. Wiring it means adding
+    those names to the parameter space, which is a public-surface change rather
+    than a factory one, so it stays on the shared component.
+
+    Asserted as still-aliased, not skipped: when the parameters are declared and
+    it is routed, this turns red and forces both this test and the routing
+    predicate in ``component_factory`` to be updated together.
+    """
+    assert (
+        _max_rel(
+            _rest_sed(xray_ssp, xray_obs, "agn_xray_corona"),
+            _rest_sed(xray_ssp, xray_obs, "yang20"),
+        )
+        <= 1e-9
+    ), (
+        "'agn_xray_corona' now differs from 'yang20' -- the remaining half of "
+        "#1684 appears to be wired. Move it into _DISTINCT_FROM_YANG20 and "
+        "delete this test."
     )
 
 
