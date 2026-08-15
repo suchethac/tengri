@@ -14,7 +14,7 @@ user's **choice** is.  Three shapes, all of which the emit census is blind to:
 shape         symptom                                             example
 ============  ==================================================  ============
 ``inert``     output bit-identical to the group-absent baseline    #1488
-``twin``      two different names produce bit-identical output     #1684, #1461
+``twin``      two different names produce bit-identical output     #1684
 ``dead knob`` a free parameter has an exactly-zero gradient        this file
 ============  ==================================================  ============
 
@@ -66,6 +66,12 @@ pytestmark = pytest.mark.contract
 
 # ── Instrument ───────────────────────────────────────────────────────
 
+#: Puts the synthetic SSP on a real galaxy's luminosity scale (L_ir ~ 6e44
+#: erg/s). A synthetic continuum is normally normalization-free, because every
+#: comparison here is relative -- but not when one component's amplitude is
+#: derived from another's. See :func:`_ssp`.
+_LUMINOSITY_SCALE = 1e-15
+
 
 def _ssp(lo_dex: float, hi_dex: float, n_wave: int = 2000) -> SSPData:
     """Synthetic SSP spanning a configurable decade range.
@@ -84,13 +90,22 @@ def _ssp(lo_dex: float, hi_dex: float, n_wave: int = 2000) -> SSPData:
     The break is at 912 A rather than 1216 A on purpose: the 912-1216 A window
     is where the Lyman forest acts, and IGM prescriptions are compared through
     it (see ``_IGM_TEST_Z``), so it must keep flux.
+
+    ``_LUMINOSITY_SCALE`` matters for the same reason the break does. Unscaled,
+    this SSP gives ``L_ir = 6.2e59`` erg/s -- fifteen orders above a real galaxy
+    -- and the radio free-free term, which tracks the ionizing output, inflates
+    with it: measured 1.95e43 against an AGN synchrotron term of 1.02e30. Every
+    AGN radio knob is then invisible underneath, and ``radio_dpl`` measures
+    identical to ``radio_powerlaw``. Both are artifacts of the normalization.
+    Scaled to ``L_ir ~ 6e44``, ``radio_loudness`` moves the 21 cm flux by 9761x
+    and dpl separates from powerlaw by 0.69.
     """
     n_age = 25
     wave = jnp.logspace(lo_dex, hi_dex, n_wave)
     ages_gyr = jnp.linspace(-3.0, 1.14, n_age)
     lgmet = jnp.array([-4.0, -2.65, -1.3])
     lyman_break = 1.0 / (1.0 + jnp.exp(-(wave - 912.0) / 40.0))
-    base = (5000.0 / wave) ** 2 * lyman_break
+    base = (5000.0 / wave) ** 2 * lyman_break * _LUMINOSITY_SCALE
     flux = (
         base[None, None, :]
         * (1.0 + 0.15 * (ages_gyr - ages_gyr.mean()))[None, :, None]
@@ -214,9 +229,9 @@ def _indistinguishable(a: jnp.ndarray, b: jnp.ndarray) -> bool:
     measure exactly 0.0, which is the fingerprint of one model reached by two
     names. But it is the wrong bar on its own: ``radio_dpl`` differs from the
     single power-law by ~3e-9 relative, which is not bit-identical and is also
-    not a double power-law. Judging that pair by ``array_equal`` alone would
-    have declared the #1461 defect fixed on the strength of floating-point
-    noise.
+    not a double power-law. Judging such a pair by ``array_equal`` alone
+    decides on floating-point noise, in whichever direction the noise happens
+    to fall.
     """
     if a.shape != b.shape:
         return False
@@ -252,15 +267,27 @@ DECLARED_COINCIDENT: list[dict] = [
             },
         ),
     },
+    {
+        "group": "radio",
+        "names": {"condon92", "radio_powerlaw"},
+        "reason": (
+            "condon92 predates the SF/AGN split and names the composite, so "
+            "_legacy_radio_type_to_blocks resolves it to (bell2003, powerlaw) "
+            "-- exactly what radio_powerlaw selects. Documented in that "
+            "function's own docstring. One pair of names, one resolved model."
+        ),
+        "separator": (
+            {"type": "condon92"},
+            {"agn": {"type": "dpl"}},
+        ),
+    },
 ]
-# Note on an entry that is NOT here: condon92 == radio_powerlaw is documented
-# in _legacy_radio_type_to_blocks as correct by construction (condon92 names
-# the composite and resolves to (bell2003, powerlaw), which is what
-# radio_powerlaw selects). It cannot be declared here, because the only knob
-# that would separate the pair is radio={'agn': {'type': 'dpl'}} -- and that
-# knob is inert, which is the #1461 regression below. The benign explanation
-# is currently unverifiable *because of* the defect, so the pair is recorded
-# as measured fact in KNOWN_UNDISTINCT until the defect is fixed.
+# This entry has a history worth keeping. An earlier revision could not declare
+# it, because the separator below measured as inert and the pair was recorded as
+# a #1461 defect instead. The separator was not inert; this file's SSP was
+# unnormalized, so free-free swamped the AGN radio arm (see _LUMINOSITY_SCALE).
+# The ledger refusing an unverifiable claim was right; what it was refusing was
+# a bad measurement rather than a bad declaration.
 
 
 # ── Ledger 2: defects this census detects and that are still open ────
@@ -293,20 +320,13 @@ KNOWN_UNDISTINCT: list[dict] = [
             "AGN scaffold and recorded it here wrongly; see _LUMINOUS_AGN."
         ),
     },
-    {
-        "group": "radio",
-        "names": {"condon92", "radio_powerlaw", "radio_dpl"},
-        "reason": (
-            "#1461 regression -- radio_dpl's name DOES reach the config "
-            "(radio_agn_model='dpl', verified on the built spec) but the "
-            "Martinez-Ramirez+2024 double power-law never reaches the SED. "
-            "#1461 fixed the grammar layer; nothing asserted the outcome the "
-            "fix existed to produce, so the defect returned one layer down. "
-            "condon92 == radio_powerlaw is separately legitimate (see "
-            "DECLARED_COINCIDENT); it is included here because the class is "
-            "mutually identical and the ledger records measured fact."
-        ),
-    },
+    # No radio entry. An earlier revision recorded {condon92, radio_powerlaw,
+    # radio_dpl} here as a #1461 regression. That was wrong, and the cause was
+    # this file's own SSP normalization -- see _LUMINOSITY_SCALE. radio_dpl
+    # separates from radio_powerlaw by 0.69 (composable) and 0.54 (legacy
+    # spelling), on both prediction paths, beside a control of 6.4e10.
+    # condon92 == radio_powerlaw remains, and is legitimate: see
+    # DECLARED_COINCIDENT.
     {
         "group": "igm",
         "names": {"inoue", "inoue14"},
