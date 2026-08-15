@@ -115,23 +115,36 @@ rendering. Every committed notebook in this repository carries outputs on purpos
    fails any committed notebook over 4 MB (largest today: 3.00 MB). This does not shrink
    history — nothing does, short of the rewrite this page argues against — but it turns the
    next 3 MB notebook into a decision instead of a surprise.
-2. **Externalize the figures.** The structural fix. Write figures to a `_figs/` directory
-   and reference them instead of embedding base64: an unchanged figure then re-commits as
-   the *same* blob rather than a new one, and PNG on disk is ~⅓ smaller than its base64
-   form. The directories already exist on both sides — `reproduction/<name>/_figs/`, which
-   `scripts/_render_s9.py` and `scripts/_render_audit_radio_xray.py` already write into, and
-   `docs/reproduction/_figs/` — so the pattern is established; the notebooks just do not use
-   it for their inline figures. This is a real refactor of six published notebooks plus the
-   sync test, so it wants its own change with a docs build to verify.
-3. **Stop committing each reproduction notebook twice.** `reproduction/<name>/01_<name>.ipynb`
-   and `docs/reproduction/<name>.ipynb` are near-identical by construction — the sync test
-   asserts their figures match — so every re-render costs ~5 MB, not ~2.5 MB. Generating the
-   docs copy at build time, the way `scripts/sync_spine_notebooks_for_docs.py` already does
-   for the spine, would halve reproduction inflow with no visual change.
-4. **Split `src/tengri/forward/sed_model.py`.** 8823 lines is the reviewability problem;
+2. **Split `src/tengri/forward/sed_model.py`.** 8823 lines is the reviewability problem;
    the history cost is a bonus.
-5. **Keep `.nb_home/` and `data/*.h5` gitignored.** Both rules exist and work. The caches
+3. **Keep `.nb_home/` and `data/*.h5` gitignored.** Both rules exist and work. The caches
    entered history before the rule did.
+
+### Two fixes that look obvious and are already decided against
+
+An earlier version of this page proposed both. Read `reproduction/CONTRACT.md` §8 before
+reaching for either — it is the reason they are not oversights.
+
+**Generating `docs/reproduction/<slug>.ipynb` at build time.** Each reproduction notebook
+is committed twice, source and docs copy, so a single re-render costs about 5 MB rather
+than 2.5 MB. Halving that by generating the docs copy the way
+`scripts/sync_spine_notebooks_for_docs.py` does for the spine is exactly what §8 forbids:
+*"The docs site shows committed copies, not the sources."* The spine can be generated
+because its notebooks are jupytext pairs this repository can re-run. The reproduction
+notebooks cannot: they are evidence of runs against CIGALE, Bagpipes, AGNfitter,
+Prospector, prospect_r and Synthesizer, none of which CI can execute. A frozen committed
+artifact is the point — it is what guarantees the numbers on the site are the numbers that
+were actually produced. `docs-preview.yml` records the same distinction in its path filter.
+
+**Externalizing the embedded figures.** Partly done already: §8 says the site serves the
+notebooks *"plus the PNGs in `docs/reproduction/_figs/`"*, and
+`scripts/_render_s9.py` and `scripts/_render_audit_radio_xray.py` write into
+`reproduction/<name>/_figs/`. What remains embedded is pinned by
+`tests/contract/test_reproduction_docs_sync.py`, which compares the SHA-1 of every embedded
+PNG in document order between source and docs copy. Moving those out is a change to a
+contractual, tested arrangement, and it cannot be validated without re-running the six
+source notebooks — which needs the six external codes. Anyone attempting it needs those
+installed, not just a docs build.
 
 If the clone size becomes a real barrier to contributors, revisit scenario B — and do it
 once, announced, alongside a tagged release, rather than incrementally.
