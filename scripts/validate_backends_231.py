@@ -50,7 +50,7 @@ from tengri import (
 )
 from tengri.inference._backend_registry import _BACKENDS
 
-DATA = Path("/Users/suchethacooray/Projects/tengri/data")
+DATA = Path(__file__).resolve().parents[1] / "data"
 SSP_FILE = DATA / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
 
 # Backends we explicitly skip (or run with small budgets).

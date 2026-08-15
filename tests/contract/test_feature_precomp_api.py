@@ -109,7 +109,7 @@ def _build(ssp, *, cue, approx, line_data=None, emission=True, dust=True):
         ),
         redshift=Fixed(Z),
         sfh={"type": "dpl", "*": FREE},
-        stellar={"met_logzsol": Uniform(-1.5, 0.3)},
+        met={"logzsol": Uniform(-1.5, 0.3)},
         approx=approx,
         **kw,
     )

@@ -29,7 +29,7 @@ and ``powerlaw_alpha`` (idempotent — single_u/powerlaw are read back unchanged
 
 Usage
 -----
-    PYTHONPATH=. /Users/suchethacooray/Projects/tengri/.venv/bin/python \
+    PYTHONPATH=. .venv/bin/python \
         scripts/build_themis_alpha_axis.py
 """
 

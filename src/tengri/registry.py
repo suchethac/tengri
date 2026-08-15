@@ -338,7 +338,10 @@ def _usage_hint(name: str, kind: str) -> str:
     if kind == "shock_model":
         return f"SEDModel.build(..., shock={{'type': '{name}'}})"
     if kind == "metallicity_mode":
-        return f"SEDModel.build(..., stellar={{'met_mode': '{name}'}})"
+        # ``met={'type': ...}``, the parallel of ``sfh={'type': ...}`` (#1720),
+        # which replaced ``stellar={'met_mode': ...}``. One spelling, and it is
+        # the one the rest of the grammar uses.
+        return f"SEDModel.build(..., met={{'type': '{name}'}})"
     if kind == "igm_model":
         return f"SEDModel.build(..., igm={{'type': '{name}'}})"
     if kind == "component":
@@ -356,7 +359,7 @@ def _usage_hint(name: str, kind: str) -> str:
 # was another of that formula's phantoms; it is real now, but it names the
 # structural axis only — the formula still guesses wrong for every other group.)
 _COMPONENT_MENUS: dict[str, str] = {
-    "stellar": "list_sfh_models() / list_metallicity_modes()",
+    "met": "list_metallicity_modes()",
     "dust": "list_dust_models() / list_dust_laws() / list_dust_emission_models()",
     "agn": "list_agn_models() / list_agn_blocks()",
     "nebular": "list_nebular_backends()",
@@ -751,10 +754,30 @@ def list_dust_laws(*, status: str | None = None) -> _RegistryTable:
 # introspection helper can never drift apart (closes #495 — same pattern
 # as PR #489 for AGN blocks).
 _DUST_EMISSION_METADATA: dict[str, dict[str, str]] = {
+    # A name missing from this table still appears on the menu — the lookup
+    # below falls back to blank strings — so it shows up as a fully-formed row
+    # describing nothing and citing nobody. Three real engines sat that way
+    # (#1777); ``tests/contract/test_menu_rows_are_not_blank.py`` now refuses a
+    # blank description on any advertised model.
     "dl07": {
         "status": "production",
         "citation": "Draine & Li 2007 (ApJ 657, 810)",
         "short_doc": "Diffuse + PAH grain mixture, Umin/Umax/qpah (alias of draine_li2007)",
+    },
+    "dl07_tabulated": {
+        "status": "deprecated",
+        "citation": "Draine & Li 2007 (ApJ 657, 810)",
+        "short_doc": "Deprecated spelling of draine_li2007 — use that name instead",
+    },
+    "dh02_ce01": {
+        "status": "production",
+        "citation": "Dale & Helou 2002 (ApJ 576, 159); Chary & Elbaz 2001 (ApJ 556, 562)",
+        "short_doc": "Cold-dust template library on a single log10(L_IR) axis",
+    },
+    "draine2021_pah": {
+        "status": "production",
+        "citation": "Draine et al. 2021 (ApJ 917, 3)",
+        "short_doc": "PAHspec grid: size distribution, ionization and starlight spectrum",
     },
     "draine_li2007": {
         "status": "production",
@@ -939,10 +962,12 @@ def list_nebular_backends(*, status: str | None = None) -> _RegistryTable:
     for m in out:
         # The generic CLOUDY backend needs a user-supplied grid file:
         # ``neb={'type': 'cloudy'}`` raises "The CLOUDY nebular backend needs a
-        # grid file." Advertise the required ``gridfile`` key so the hint builds.
-        # (``cb19`` ships its own grid and stands alone.)
+        # grid file." The key is ``grid``; this hint advertised ``gridfile``,
+        # so the line printed to fix one failure raised a different one —
+        # "Unknown key 'gridfile' in group 'neb'. Did you mean: grid?" — and
+        # nothing checked either. (``cb19`` ships its own grid and stands alone.)
         if m["name"] == "cloudy":
-            m["use"] = "SEDModel.build(..., neb={'type': 'cloudy', 'gridfile': 'grid.h5'})"
+            m["use"] = "SEDModel.build(..., neb={'type': 'cloudy', 'grid': 'grid.h5'})"
     out = _filter_menu(out, "status", status, listing="list_nebular_backends")
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
@@ -1160,9 +1185,10 @@ def list_shock_models(*, status: str | None = None) -> _RegistryTable:
     return _RegistryTable(sorted(out, key=lambda m: m["name"]))
 
 
-# Metallicity modes — the ``stellar={'met_mode': ...}`` axis. Names are NOT
+# Metallicity modes — the ``met={'type': ...}`` axis (#1720, replacing the
+# ``stellar={'met_mode': ...}`` spelling of #311). Names are NOT
 # listed here: :func:`list_metallicity_modes` derives them from ``MET_REGISTRY``
-# itself, the same dict ``_translate_stellar`` validates against, so a mode
+# itself, the same dict ``_translate_met`` validates against, so a mode
 # added to the physics cannot be missing from the menu. This table carries only
 # the prose, lifted from each mode's section header in ``met_registry.py``.
 _METALLICITY_MODE_METADATA: dict[str, dict[str, str]] = {
@@ -1180,7 +1206,7 @@ _METALLICITY_MODE_METADATA: dict[str, dict[str, str]] = {
 
 
 def list_metallicity_modes(*, status: str | None = None) -> _RegistryTable:
-    """List the metallicity modes — the ``stellar={'met_mode': ...}`` choice.
+    """List the metallicity modes — the ``met={'type': ...}`` choice.
 
     The metallicity axis is structural in the same sense as the SFH or dust
     axis: it decides whether a fit carries one metallicity, an evolving one, or
@@ -1362,6 +1388,51 @@ _PLOT_HELPERS: tuple[tuple[str, str], ...] = (
 )
 
 
+def _plot_call_hint(name: str) -> str:
+    """A ``use:`` hint for one plot helper, naming the arguments it requires.
+
+    Parameters
+    ----------
+    name : str
+        Attribute name in :mod:`tengri.plot`.
+
+    Returns
+    -------
+    str
+        ``tengri.plot.plot_sfh(model, posterior)`` — the required parameters,
+        read off the signature. Falls back to the bare name when the helper
+        cannot be resolved or introspected.
+
+    Notes
+    -----
+    Every row used to read ``tengri.plot.<name>(...)``, which is the ``name``
+    column plus an ellipsis. Of the twenty menus that carry a ``use:`` column,
+    this was the only one whose hint contained no arguments at all — the others
+    give something runnable (``Photometry.from_names(["sdss_u"])``,
+    ``fitter.run("laplace")``, ``SEDModel.build(..., dust={'type': ...})``).
+
+    Derived rather than written down, so a helper that gains or loses a
+    required argument cannot leave a stale hint behind.
+    """
+    import inspect
+
+    try:
+        from tengri import plot as _plot
+
+        fn = getattr(_plot, name)
+        params = inspect.signature(fn).parameters.values()
+    except Exception:  # pragma: no cover - defensive; a helper always resolves
+        return f"tengri.plot.{name}(...)"
+
+    required = [
+        p.name
+        for p in params
+        if p.default is inspect.Parameter.empty
+        and p.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+    ]
+    return f"tengri.plot.{name}({', '.join(required)})"
+
+
 def list_plots() -> _RegistryTable:
     """List the plotting helpers in ``tengri.plot``.
 
@@ -1376,7 +1447,7 @@ def list_plots() -> _RegistryTable:
                 "kind": "plot",
                 "status": "production",
                 "short_doc": doc,
-                "use": f"tengri.plot.{name}(...)",
+                "use": _plot_call_hint(name),
             }
             for name, doc in _PLOT_HELPERS
         ]
@@ -1963,6 +2034,88 @@ def _menu_listers() -> tuple:
     )
 
 
+#: Menus that are not a physics group but are still menus a user can look a
+#: name up in. ``describe`` and ``search`` used to append these by hand at each
+#: call site — a second and third hand-written enumeration of "every menu".
+_EXTRA_MENU_LISTER_NAMES = ("list_components", "list_filters", "list_plots", "list_recipes")
+
+
+@functools.cache
+def _every_menu_lister() -> tuple:
+    """Every ``list_*`` menu a name can be looked up in, derived not listed.
+
+    Returns
+    -------
+    tuple of callable
+        Zero-argument listers, de-duplicated, physics groups first so that a
+        name living in several menus reports them in a stable order.
+
+    Notes
+    -----
+    :func:`_menu_listers` exists so ``describe``/``search``/``list_all`` cannot
+    fall out of sync when a physics group is added — its docstring says so, and
+    names that drift (#1120, #1446). It drifted again anyway, because the guard
+    against a hand-written list *is itself a hand-written list*:
+    ``list_instruments`` and ``list_known_ssps`` were never added, so
+    ``describe('GALEX')`` answered ``Unknown name 'GALEX'`` for a name
+    ``list_instruments()`` advertises — 30 of 490 advertised names.
+
+    So the set is discovered: every public ``tengri.list_*`` returning rows
+    with a ``name`` column is a menu. Adding a menu now costs nothing, and
+    forgetting to register it here is not possible. Measured when this replaced
+    the hand-written unions: **+2 menus, 0 lost, 460 -> 490 rows walked, and 0
+    new multi-menu names**, so no existing lookup changes its answer.
+
+    The population scanned is the **union of both export lists**, and that
+    matters as much as deriving the set at all. ``dir(tengri)`` is not the
+    public surface: it is curated down to ~30 obvious entry points on purpose
+    ("not the 175-item kitchen sink of every public symbol",
+    :mod:`tengri.__init__`). Scanning it alone made the derivation inherit the
+    curation — ``list_parameters``, ``list_properties``,
+    ``list_filter_conventions`` and ``list_available_ssps`` are exported and
+    not curated, so they stayed invisible and **410 further advertised names
+    stayed refused**, 358 of them parameters. Unioning ``__all__`` is the rule
+    #1608 established when the same blind spot made ``check_api_coverage.py``
+    report 0 missing while 6 were. Measured at that widening: **+4 menus, 0
+    lost, 490 -> 935 rows walked, 463 -> 887 names (+424), and 0 answers
+    changed** — the last of which is true only because of the scan order
+    below, not for free.
+
+    Cached because discovery *calls* each ``list_*`` to check its shape:
+    uncached that was 95 ms, **49% of a 193 ms** ``describe()``, paid again on
+    every lookup. The set of menus cannot change within a process, so it is
+    computed once. A test that monkeypatches a ``list_*`` into ``tengri`` must
+    call ``_every_menu_lister.cache_clear()``.
+    """
+    import tengri
+
+    seen: dict[str, callable] = {}
+    for fn in (*_menu_listers(), *(getattr(tengri, n, None) for n in _EXTRA_MENU_LISTER_NAMES)):
+        if fn is not None:
+            seen[fn.__name__] = fn
+    # Curated names first, export-only names after. Order is not cosmetic:
+    # ``describe`` reports ``matches[0]``, so a menu discovered earlier wins a
+    # name that several menus print. Scanning the union in one sorted pass put
+    # ``list_available_ssps`` ahead of ``list_known_ssps`` and moved all 21 SSP
+    # names onto the newly-found menu — 21 answers changed, for a change whose
+    # whole claim is that it adds names without altering any.
+    curated = sorted(dir(tengri))
+    export_only = sorted(set(tengri.__all__) - set(dir(tengri)))
+    for attr in (*curated, *export_only):
+        if not attr.startswith("list_") or attr in seen:
+            continue
+        fn = getattr(tengri, attr, None)
+        if not callable(fn):
+            continue
+        try:
+            rows = fn()
+        except Exception:
+            continue
+        if isinstance(rows, list) and rows and isinstance(rows[0], dict) and "name" in rows[0]:
+            seen[attr] = fn
+    return tuple(seen.values())
+
+
 def _menu_name_aliases() -> dict[str, tuple[str, callable]]:
     """Map each menu's own name, in prose, to that menu.
 
@@ -2010,12 +2163,7 @@ def describe(name: str) -> _DescribeRecord:
     if name in _CORE_CLASSES:
         return _DescribeRecord(_CORE_CLASSES[name])
 
-    matches = [
-        entry
-        for fn in (*_menu_listers(), list_components, list_filters, list_plots, list_recipes)
-        for entry in fn()
-        if entry["name"] == name
-    ]
+    matches = [entry for fn in _every_menu_lister() for entry in fn() if entry["name"] == name]
     if matches:
         record = dict(matches[0])
         # Some names are registered in more than one menu or AGN category —
@@ -2660,7 +2808,10 @@ def search(query: str) -> _RegistryTable:
     # band — i.e. everything except kind/use.
     _SKIP_FIELDS = {"kind", "use"}
     hits: list[dict] = []
-    for fn in (*_menu_listers(), list_components, list_filters, list_plots):
+    # The same derived set describe() walks. This call site listed four extra
+    # menus by hand and omitted list_recipes, so all ten recipes returned zero
+    # hits from search() while describe() resolved every one.
+    for fn in _every_menu_lister():
         for entry in fn():
             haystack = " ".join(
                 str(v) for k, v in entry.items() if k not in _SKIP_FIELDS and isinstance(v, str)
@@ -2671,26 +2822,31 @@ def search(query: str) -> _RegistryTable:
 
 
 def list_all() -> dict[str, _RegistryTable]:
-    """Return everything available — useful for a single notebook cell overview.
+    """Return every menu — the single notebook cell that shows the whole code.
 
     Returns
     -------
     dict
-        Keys: components, inference_methods, agn_models, dust_laws, sfh_models,
-        nebular_backends. Each value is a `_RegistryTable` (list[dict]) that
-        prints as a table.
+        One key per menu, named after its lister without the ``list_`` prefix
+        (``list_dust_laws`` -> ``dust_laws``). Each value is a
+        `_RegistryTable` (list[dict]) that prints as a table.
+
+    Notes
+    -----
+    The keys are derived from the same census :func:`describe` and
+    :func:`search` sweep, not listed here. :func:`_menu_listers` names this
+    function as one of the three that "all walk this one tuple" — it was the
+    one that never walked it, returning a hand-written dict of nine literals
+    while 25 menus existed. So it showed 9 of 25, and its own ``Returns``
+    section named only six of the nine it did return, while
+    :mod:`tengri.__init__` tells readers it "enumerates every registry live".
+
+    Deriving the keys preserves all nine that were there — every one is its
+    lister's name minus the prefix — and adds the sixteen that were missing,
+    so this widens the result without renaming anything: 9 -> 25 categories,
+    921 rows.
     """
-    return {
-        "components": list_components(),
-        "inference_methods": list_inference_methods(),
-        "agn_models": list_agn_models(),
-        "dust_laws": list_dust_laws(),
-        "dust_emission_models": list_dust_emission_models(),
-        "sfh_models": list_sfh_models(),
-        "nebular_backends": list_nebular_backends(),
-        "filters": list_filters(),
-        "plots": list_plots(),
-    }
+    return {fn.__name__.removeprefix("list_"): fn() for fn in _every_menu_lister()}
 
 
 def list_properties(*, group: str | None = None) -> _RegistryTable:

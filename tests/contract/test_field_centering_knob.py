@@ -52,7 +52,7 @@ def _build(ssp, obs=None, **sfh_extra):
         kwargs["observation"] = obs
     return SEDModel.build(
         ssp_data=ssp,
-        stellar={"logzsol": Fixed(0.0), "all_params": FIXED},
+        met={"logzsol": Fixed(0.0), "all_params": FIXED},
         sfh=dict(SFH_FIELD, **sfh_extra),
         dust={
             "type": "two_component",
@@ -170,7 +170,7 @@ class TestFieldCenteringRejectsBadInput:
         with pytest.raises(ValueError, match=r"field_centering.*field"):
             SEDModel.build(
                 ssp_data=synthetic_ssp_wide,
-                stellar={"logzsol": Fixed(0.0), "all_params": FIXED},
+                met={"logzsol": Fixed(0.0), "all_params": FIXED},
                 sfh={
                     "type": "delayed",
                     "tau_gyr": Fixed(1.0),

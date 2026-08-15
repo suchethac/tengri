@@ -27,6 +27,8 @@ from __future__ import annotations
 import jax
 import jax.numpy as jnp
 
+from tengri.utils.scale import pow10 as _pow10
+
 
 def piecewise_powerlaw_disk(
     wavelength: jnp.ndarray,
@@ -76,6 +78,32 @@ def piecewise_powerlaw_disk(
     # Find which segment each wavelength belongs to
     segment_indices = jnp.searchsorted(limits, wavelength, side="right") - 1
     segment_indices = jnp.clip(segment_indices, 0, len(coefs) - 1)
+
+    if wavelength.dtype == jnp.float32:
+        # Float32 (#1206): the two factors of ``wavelength**coef * norm`` blow past
+        # the float32 window in OPPOSITE directions even though their product is
+        # O(1). With a steep segment (coef = -4) at λ ~1e6-1e7 nm,
+        # ``wavelength**coef`` ~1e-36..1e-40 flushes to 0 while the matching
+        # continuity ``norm`` ~1e40 overflows to inf — so ``0 * inf = nan`` over the
+        # whole long-wavelength tail. Build the same spectrum as a single log10 sum
+        # (continuity norms become a cumulative SUM of ``coef_step * log10(limit)``)
+        # and materialize only the representable result. Exact in float64, which is
+        # why the linear form below is kept verbatim for it.
+        log_limits = jnp.log10(limits)
+        # log10(norm_i) = log10(norm_{i-1}) + (coef_{i-1} - coef_i) * log10(limit_i)
+        log_norm_steps = (coefs[:-1] - coefs[1:]) * log_limits[1 : len(coefs)]
+        log_norms = jnp.concatenate(
+            [jnp.zeros((1,), dtype=log_norm_steps.dtype), jnp.cumsum(log_norm_steps)]
+        )
+        log_spectrum = coefs[segment_indices] * jnp.log10(wavelength) + log_norms[segment_indices]
+        # Peak-factor before exponentiating: the absolute level is arbitrary (the
+        # unit-area normalization divides it straight out), so subtracting the peak
+        # keeps every value in range and leaves the normalized result unchanged.
+        log_spectrum = log_spectrum - jnp.max(log_spectrum)
+        spectrum = _pow10(log_spectrum)
+        integral = jnp.trapezoid(spectrum, wavelength)
+        integral_safe = jnp.maximum(jnp.abs(integral), 1e-30)
+        return spectrum / integral_safe
 
     # Compute normalization factors at each breakpoint for continuity
     norms = jnp.ones(len(coefs))

@@ -487,14 +487,38 @@ def fit_ionizing_spectrum(
 
     References
     ----------
-    .. [1] M. Li et al., "The Cue Nebular Emulator: Fast, Interpretable
-       Predictions of Emission-Line Strengths from Stellar Populations,"
+    .. [1] Y. Li et al., "Cue: A Fast and Flexible Photoionization Emulator
+       for Modeling Nebular Emission Powered by Almost Any Ionizing Source,"
        ApJ, 986, 9 (2025). arXiv:2405.04598.
-       https://doi.org/10.3847/1538-4357/ad7fe3
+       https://doi.org/10.3847/1538-4357/adcab4
 
     """
-    wave = np.asarray(wave)
-    flux = np.asarray(flux)
+    # float64 for the whole fit, whatever the SSP shipped as (#1206).
+    #
+    # This routine's guard floors are written below what float32 can hold:
+    # ``np.maximum(seg_flux, 1e-99)`` in :func:`_fit_segment` and
+    # ``1e-70 * norm`` just below. float32's smallest subnormal is 1.4e-45, so
+    # on a float32 SSP BOTH become exactly 0.0 — the floors evaporate, zero flux
+    # survives the clamp, and ``log10(0) = -inf`` enters the least-squares
+    # objective. The fit then returns a degenerate slope and ``log_seglum`` comes
+    # back absurd: measured on fsps_prsc_miles_chabrier, segment 0 at
+    # (met=14, age=28) gave **4.54 dex in float64 and 86.99 dex in float32**, and
+    # 198 of 5580 table entries went ``-inf``. Cue's weighted segment sum then
+    # goes non-finite and takes the whole SED with it — the pure-float32 Cue NaN
+    # that blocked #1206.
+    #
+    # Cast rather than re-floor: raising the two literals to representable values
+    # would fix these two sites and leave every other float32-sensitive
+    # intermediate in a scipy least-squares fit available for the next report.
+    # This is a build-time, once-per-SSP numpy routine producing a small table,
+    # so float64 costs nothing, and #458 already established the pattern in this
+    # same function for ``Q_total`` (and ``Q_seg`` in ``_fit_segment``). Those
+    # two casts are now redundant with this one and deliberately left in place:
+    # they document their own overflow and cost nothing.
+    #
+    # float64 input is unaffected — ``astype`` on a float64 array is a no-op copy.
+    wave = np.asarray(wave, dtype=np.float64)
+    flux = np.asarray(flux, dtype=np.float64)
 
     # Find bin edges in wavelength array
     ind_bin = np.array([max(np.where(wave <= e)[0]) for e in edges[1:]]) + 1
@@ -623,6 +647,21 @@ def precompute_ionizing_params_table(
     code handles these gracefully via clipping and default fallback values.
 
     """
+    # float64 before anything else, including the cache key (#1206).
+    #
+    # Same reason as :func:`fit_ionizing_spectrum`, which this calls per bin, but
+    # the ORDER matters here for a second reason: the fingerprint below is taken
+    # from these arrays, so casting first makes a float32 SSP and its float64
+    # twin hash to the SAME key. Without that they key separately, and a session
+    # running with ``JAX_ENABLE_X64=0`` would both compute a corrupt table and
+    # persist it to the shared on-disk cache under its own key, where it would be
+    # served to every later float32 process. Casting first also strands any such
+    # entry already written by a pre-fix run: it lives under a key nothing
+    # computes any more.
+    ssp_wave = np.asarray(ssp_wave, dtype=np.float64)
+    ssp_flux = np.asarray(ssp_flux, dtype=np.float64)
+    ssp_lgmet = np.asarray(ssp_lgmet, dtype=np.float64)
+
     # Memoize: same SSP grid → identical result. Two-tier cache:
     # 1. In-process dict for fast repeat builds within a single process
     #    (introduced in #418).

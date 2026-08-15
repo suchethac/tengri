@@ -139,7 +139,7 @@ def build_model():
         observation=obs,
         redshift=Uniform(*Z_PRIOR),  # <-- free redshift: a photo-z fit
         sfh={"type": "dpl", "all_params": FIXED, "log_total_mass": Uniform(8.0, 12.0)},
-        stellar={"met_logzsol": Fixed(0.0)},
+        met={"logzsol": Fixed(0.0)},
         # Free diffuse dust optical depth: marginalize the dust-redshift degeneracy.
         dust={
             "type": "two_component",

@@ -41,11 +41,24 @@ import pytest
 
 jax.config.update("jax_enable_x64", True)
 
+#: ``np.trapz`` was removed in numpy 2.0 in favor of ``np.trapezoid``, but
+#: pyproject allows ``numpy>=1.24``, where only ``trapz`` exists. Bind once
+#: rather than at the call site so this file runs across the supported range.
+_trapezoid = getattr(np, "trapezoid", None) or np.trapz
+
+#: Speed of light [Angstrom / s], for the L_nu integrations below.
+_C_AA = 2.99792458e18
+
 pytestmark = pytest.mark.crossval
 
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 _REF_PATH = _DATA_DIR / "external_sed_reference.npz"
 _SSP_PATH = _DATA_DIR / "fsps_prsc_miles_chabrier.h5"
+#: The CLOUDY grid TestNebularTengri needs. Absent, those tests raised
+#: FileNotFoundError out of h5py, which reads like a tengri defect rather than
+#: a missing optional data file — the same reason the reference npz above is
+#: guarded (#1728).
+_CLOUDY_GRID_PATH = _DATA_DIR / "cloudy_grid_pdva.h5"
 
 if not _REF_PATH.is_file():
     pytest.skip(
@@ -108,8 +121,8 @@ def _band_avg(
 
 def _build_tengri_sed(
     ssp_data,
-    start_gyr: float,
-    end_gyr: float,
+    onset_lookback_gyr: float,
+    cessation_lookback_gyr: float,
     logzsol: float = 0.0,
     tau_bc: float = 0.0,
     tau_diff: float = 0.0,
@@ -117,18 +130,42 @@ def _build_tengri_sed(
 ) -> tuple[np.ndarray, np.ndarray, float]:
     """Build tengri SED and return (wave_Å, L_nu_per_Msun_erg/s/Hz, m_formed_Msun).
 
-    Uses log_sfr=0.0 (SFR = 1 Msun/yr) so M_formed = (end-start) * 1e9 Msun.
-    SED is divided by M_formed to give erg/s/Hz per Msun.
+    Both times are **lookback** in Gyr, matching ``sfh_const_start_gyr``
+    ("lookback to SF onset") and ``sfh_const_end_gyr`` ("lookback to SF
+    cessation, 0 = ongoing"). Star formation therefore runs from the *larger*
+    lookback to the smaller: a galaxy forming stars for the last 3 Gyr is
+    ``onset_lookback_gyr=3.0, cessation_lookback_gyr=0.0``.
+
+    This helper used to take ``start_gyr`` / ``end_gyr`` in forward time and
+    hand them straight through, so a 3 Gyr constant history was requested as
+    ``start=0, end=3`` and reached the model as onset=0 — star formation
+    beginning at zero lookback, i.e. now. The bounds validator rejects it
+    (``must have lo > 0``), which is how this surfaced (#1728). Named for the
+    convention so the two cannot be confused again.
+
+    Normalized to SFR = 1 Msun/yr, so M_formed = (onset - cessation) * 1e9
+    Msun and the SED divided by M_formed is erg/s/Hz per Msun.
+
+    ``sfh_const_log_total_mass`` is a **total mass**, not a rate. It was set to
+    ``Fixed(0.0)`` under a comment reading "SFR = 1 Msun/yr", which is the older
+    ``log_sfr`` meaning; 0.0 asks for a total of 1 Msun, so the SED came back
+    already per-Msun and was then divided by M_formed a second time. That is the
+    whole of the "ratio tengri/bagpipes = 0.000" family — tengri was low by
+    exactly M_formed, 3e9 for the 3 Gyr case (#1728). The total mass is now
+    derived from the requested duration.
     """
     from tengri import Parameters
     from tengri.forward.sed_model import SEDModel
     from tengri.parameters.priors import Fixed
 
+    duration_yr = (onset_lookback_gyr - cessation_lookback_gyr) * 1.0e9
+    log_total_mass = float(np.log10(duration_yr))  # SFR = 1 Msun/yr over the window
+
     spec = Parameters(
         mean_sfh_type="const",
-        sfh_const_log_total_mass=Fixed(0.0),  # SFR = 1 Msun/yr
-        sfh_const_start_gyr=Fixed(start_gyr),
-        sfh_const_end_gyr=Fixed(end_gyr),
+        sfh_const_log_total_mass=Fixed(log_total_mass),
+        sfh_const_start_gyr=Fixed(onset_lookback_gyr),
+        sfh_const_end_gyr=Fixed(cessation_lookback_gyr),
         met_logzsol=Fixed(logzsol),
         dust_tau_bc=Fixed(tau_bc),
         dust_tau_diff=Fixed(tau_diff),
@@ -143,7 +180,8 @@ def _build_tengri_sed(
     wave = np.asarray(result.wavelength)  # Å
     sed_total = np.asarray(result.sed)  # erg/s/Hz (total for all stars formed)
 
-    m_formed = (end_gyr - start_gyr) * 1.0e9  # Msun (SFR = 1 Msun/yr)
+    # Duration runs from the larger lookback to the smaller.
+    m_formed = (onset_lookback_gyr - cessation_lookback_gyr) * 1.0e9  # Msun (SFR = 1 Msun/yr)
     sed_per_msun = sed_total / m_formed  # erg/s/Hz per Msun
     return wave, sed_per_msun, m_formed
 
@@ -156,7 +194,9 @@ class TestStarforming:
 
     @pytest.fixture(scope="class")
     def tengri(self, ssp_data):
-        wave, sed_per_msun, m_formed = _build_tengri_sed(ssp_data, start_gyr=0.0, end_gyr=3.0)
+        wave, sed_per_msun, m_formed = _build_tengri_sed(
+            ssp_data, cessation_lookback_gyr=0.0, onset_lookback_gyr=3.0
+        )
         return {"wave": wave, "sed": sed_per_msun, "m_formed": m_formed}
 
     def test_tengri_vs_fsps_vband(self, tengri, ref, ref_wave):
@@ -258,7 +298,9 @@ class TestOldQuenched:
     def tengri(self, ssp_data):
         # tengri: start=5.0 (5 Gyr lookback), end=10.0 (10 Gyr lookback)
         # = SF from formation to 5 Gyr after formation, observed at 10 Gyr
-        wave, sed_per_msun, m_formed = _build_tengri_sed(ssp_data, start_gyr=5.0, end_gyr=10.0)
+        wave, sed_per_msun, m_formed = _build_tengri_sed(
+            ssp_data, cessation_lookback_gyr=5.0, onset_lookback_gyr=10.0
+        )
         return {"wave": wave, "sed": sed_per_msun, "m_formed": m_formed}
 
     def test_tengri_vs_fsps_vband(self, tengri, ref, ref_wave):
@@ -289,8 +331,12 @@ class TestOldQuenched:
         be much lower than a star-forming galaxy. Failure here indicates a bug in
         the SFH truncation logic or CSP time-weighting.
         """
-        _, sf_sed, _ = _build_tengri_sed(ssp_data, start_gyr=0.0, end_gyr=3.0)
-        _, qu_sed, _ = _build_tengri_sed(ssp_data, start_gyr=5.0, end_gyr=10.0)
+        _, sf_sed, _ = _build_tengri_sed(
+            ssp_data, cessation_lookback_gyr=0.0, onset_lookback_gyr=3.0
+        )
+        _, qu_sed, _ = _build_tengri_sed(
+            ssp_data, cessation_lookback_gyr=5.0, onset_lookback_gyr=10.0
+        )
         wave = np.asarray(ssp_data.ssp_wave)
 
         # UV-to-V flux ratio (smaller = redder)
@@ -324,15 +370,15 @@ class TestDustySFG:
 
     @pytest.fixture(scope="class")
     def tengri_clean(self, ssp_data):
-        _, sed, _ = _build_tengri_sed(ssp_data, start_gyr=0.0, end_gyr=3.0)
+        _, sed, _ = _build_tengri_sed(ssp_data, cessation_lookback_gyr=0.0, onset_lookback_gyr=3.0)
         return sed
 
     @pytest.fixture(scope="class")
     def tengri_dusty(self, ssp_data):
         _, sed, _ = _build_tengri_sed(
             ssp_data,
-            start_gyr=0.0,
-            end_gyr=3.0,
+            cessation_lookback_gyr=0.0,
+            onset_lookback_gyr=3.0,
             tau_bc=1.0,
             tau_diff=0.5,
             dust_slope=-0.7,
@@ -460,8 +506,12 @@ class TestColorTrends:
         This is a fundamental prediction of stellar evolution. If this fails,
         the SFH implementation (constant vs truncated) is broken.
         """
-        _, sf_sed, _ = _build_tengri_sed(ssp_data, start_gyr=0.0, end_gyr=3.0)
-        _, qu_sed, _ = _build_tengri_sed(ssp_data, start_gyr=5.0, end_gyr=10.0)
+        _, sf_sed, _ = _build_tengri_sed(
+            ssp_data, cessation_lookback_gyr=0.0, onset_lookback_gyr=3.0
+        )
+        _, qu_sed, _ = _build_tengri_sed(
+            ssp_data, cessation_lookback_gyr=5.0, onset_lookback_gyr=10.0
+        )
         wave = np.asarray(ssp_data.ssp_wave)
 
         sf_color = _band_avg(wave, sf_sed, 2800.0, half_width=200.0) / _band_avg(
@@ -478,9 +528,11 @@ class TestColorTrends:
 
     def test_dust_reddens_galaxy(self, ssp_data):
         """Dusty SFG must be redder (lower UV/V) than clean SFG."""
-        _, sf_clean, _ = _build_tengri_sed(ssp_data, start_gyr=0.0, end_gyr=3.0)
+        _, sf_clean, _ = _build_tengri_sed(
+            ssp_data, cessation_lookback_gyr=0.0, onset_lookback_gyr=3.0
+        )
         _, sf_dusty, _ = _build_tengri_sed(
-            ssp_data, start_gyr=0.0, end_gyr=3.0, tau_bc=1.0, tau_diff=0.5
+            ssp_data, cessation_lookback_gyr=0.0, onset_lookback_gyr=3.0, tau_bc=1.0, tau_diff=0.5
         )
         wave = np.asarray(ssp_data.ssp_wave)
 
@@ -580,7 +632,7 @@ class TestSFRNormalization:
             ssp_data,
             "const",
             {
-                "sfh_const_log_total_mass": 0.0,
+                "sfh_const_log_total_mass": 9.0,
                 "sfh_const_start_gyr": 1.0,
                 "sfh_const_end_gyr": 0.0,
             },
@@ -589,7 +641,7 @@ class TestSFRNormalization:
             ssp_data,
             "const",
             {
-                "sfh_const_log_total_mass": 1.0,
+                "sfh_const_log_total_mass": 10.0,
                 "sfh_const_start_gyr": 1.0,
                 "sfh_const_end_gyr": 0.0,
             },
@@ -620,7 +672,7 @@ class TestSFRNormalization:
             ssp_data,
             "const",
             {
-                "sfh_const_log_total_mass": 1.0,
+                "sfh_const_log_total_mass": 10.0,
                 "sfh_const_start_gyr": 1.0,
                 "sfh_const_end_gyr": 0.0,
             },
@@ -646,7 +698,7 @@ class TestSFRNormalization:
             ssp_data,
             "const",
             {
-                "sfh_const_log_total_mass": 1.0,
+                "sfh_const_log_total_mass": 10.0,
                 "sfh_const_start_gyr": 1.0,
                 "sfh_const_end_gyr": 0.0,
             },
@@ -711,17 +763,20 @@ class TestDelayedTauSFH:
         if key not in ref:
             pytest.skip(f"Reference key {key!r} not in npz")
 
-        # tau=1 Gyr peak, SF observed at ~3 Gyr after peak
-        # M_formed ≈ peak_sfr × tau × e (analytic integral of delayed tau)
-        peak_sfr = 10.0  # Msun/yr (log_total_mass=1.0)
+        # `sfh_dexp_log_total_mass` IS the total mass, so M_formed is just
+        # 10**it — no analytic peak_sfr * tau * e bookkeeping needed. That
+        # expression is a leftover from the rate-normalized `log_sfr` era, and
+        # pairing it with `log_total_mass=1.0` (ten solar masses) divided the
+        # SED by 2.7e10 while it described 10 Msun of stars (#1728).
         tau_gyr = 1.0
-        m_formed = peak_sfr * tau_gyr * 1e9 * np.e  # Msun
+        log_total_mass = 10.0
+        m_formed = 10.0**log_total_mass  # Msun
 
         wave, sed = _build_tengri_sed_raw(
             ssp_data,
             "dexp",
             {
-                "sfh_dexp_log_total_mass": 1.0,
+                "sfh_dexp_log_total_mass": log_total_mass,
                 "sfh_dexp_tau_gyr": tau_gyr,
                 "sfh_dexp_start_gyr": 0.0,
             },
@@ -805,24 +860,26 @@ class TestDPLSFH:
         if key not in ref:
             pytest.skip(f"Reference key {key!r} not in npz")
 
-        # Rough M_formed estimate for DPL (alpha=1.5, beta=5, tau=3 Gyr, peak=10 Msun/yr):
-        # Numerical integration; approximate ≈ peak_sfr × tau × B(1+1/alpha, 1+1/beta)
-        # For simplicity, use tau × peak_sfr × 2 as rough estimate
-        peak_sfr = 10.0
+        # `sfh_dpl_log_total_mass` IS the total mass, so M_formed is exactly
+        # 10**it. The Beta-function approximation this used to carry — and the
+        # "rough: 6e10 Msun" it produced — belongs to the rate-normalized
+        # `log_sfr` era; paired with `log_total_mass=1.0` it divided a 10 Msun
+        # SED by 6e10 (#1728). No approximation is needed now.
         tau_gyr = 3.0
-        m_formed_approx = peak_sfr * tau_gyr * 1e9 * 2.0  # rough: 6e10 Msun
+        log_total_mass = 10.0
+        m_formed = 10.0**log_total_mass  # Msun
 
         wave, sed = _build_tengri_sed_raw(
             ssp_data,
             "dpl",
             {
-                "sfh_dpl_log_total_mass": 1.0,
+                "sfh_dpl_log_total_mass": log_total_mass,
                 "sfh_dpl_alpha": 1.5,
                 "sfh_dpl_beta": 5.0,
                 "sfh_dpl_tau_gyr": tau_gyr,
             },
         )
-        sed_per_msun = sed / m_formed_approx
+        sed_per_msun = sed / m_formed
 
         l_tengri = _band_avg(wave, sed_per_msun, 5500.0)
         l_fsps = _band_avg(ref_wave, ref[key], 5500.0)
@@ -947,21 +1004,24 @@ class TestExpSFH:
         """tengri exponential SFH V-band agrees within 35% of FSPS reference.
 
         Uses dexp SFH (delayed tau); tau=1 Gyr, 5 Gyr observation age.
-        M_formed estimated analytically from delayed-tau integral.
+        M_formed is exactly ``10**sfh_dexp_log_total_mass`` — the SFH is
+        normalized to a total mass, so the analytic delayed-tau integral this
+        used to compute is unnecessary, and pairing it with
+        ``log_total_mass=1.0`` divided a 10 Msun SED by 2.7e10 (#1728).
         """
         key = "fsps_expsfh_tau1gyr"
         if key not in ref:
             pytest.skip(f"Reference key {key!r} not in npz")
 
         tau_gyr = 1.0
-        peak_sfr = 10.0
-        m_formed = peak_sfr * tau_gyr * 1.0e9 * np.e  # analytic dexp integral
+        log_total_mass = 10.0
+        m_formed = 10.0**log_total_mass  # Msun
 
         wave, sed = _build_tengri_sed_raw(
             ssp_data,
             "dexp",
             {
-                "sfh_dexp_log_total_mass": 1.0,
+                "sfh_dexp_log_total_mass": log_total_mass,
                 "sfh_dexp_tau_gyr": tau_gyr,
                 "sfh_dexp_start_gyr": 0.0,
             },
@@ -998,22 +1058,32 @@ def _build_tengri_tau_sed(
     tau_bc: float = 0.0,
     tau_diff: float = 0.0,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Build tengri SED for declining-tau model, normalized by M_formed.
+    """Build tengri SED for the declining-tau (FSPS sfh=1) model.
+
+    Composed as a tabulated SFH rather than selected by name. There is still no
+    ``'tau'`` SFH type — #406 removed that key because users read it as CIGALE's
+    ``sfhdelayed``, which is tau-*delayed* and rises from zero, and the mix-up
+    produced a silent wavelength-dependent residual. These tests had been
+    passing ``sfh_type="tau"`` and failing with ``KeyError`` ever since (#1728).
+
+    The model itself is selectable again as ``'declining_exp'`` (#1750): the
+    name was the problem, not the physics. This helper deliberately keeps the
+    ``table`` composition anyway, because a crossval that builds the reference
+    shape by hand is an independent check of the registered model rather than a
+    restatement of it. ``test_bug_1750_declining_tau_is_selectable.py`` pins the
+    named path; this one pins the physics against FSPS / Bagpipes.
 
     Returns (wave_Å, L_nu per Msun formed in erg/s/Hz).
-    Time conversion: FSPS/bagpipes T_cosmic ↔ tengri t_lb via t_lb = age - T_cosmic.
     """
-    sfh_params = {
-        "sfh_tau_log_total_mass": log_total_mass,
-        "sfh_tau_tau_gyr": tau_gyr,
-        "sfh_tau_age_gyr": age_gyr,
-    }
-    wave, sed = _build_tengri_sed_raw(
-        ssp_data, "tau", sfh_params, logzsol=logzsol, tau_bc=tau_bc, tau_diff=tau_diff
+    return _build_tengri_tau_sed_table(
+        ssp_data,
+        tau_gyr=tau_gyr,
+        age_gyr=age_gyr,
+        log_total_mass=log_total_mass,
+        logzsol=logzsol,
+        tau_bc=tau_bc,
+        tau_diff=tau_diff,
     )
-    total_mass = 10.0**log_total_mass
-    m_formed = _tau_m_formed(total_mass, tau_gyr * 1e9, age_gyr * 1e9)
-    return wave, sed / m_formed
 
 
 def _build_tengri_tau_sed_table(
@@ -1023,6 +1093,7 @@ def _build_tengri_tau_sed_table(
     log_total_mass: float = 1.0,
     logzsol: float = 0.0,
     tau_bc: float = 0.0,
+    tau_diff: float = 0.0,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Build tengri SED for declining-tau model via the 'table' SFH mode.
 
@@ -1045,7 +1116,7 @@ def _build_tengri_tau_sed_table(
         mean_sfh_type="table",
         met_logzsol=Fixed(logzsol),
         dust_tau_bc=Fixed(tau_bc),
-        dust_tau_diff=Fixed(0.0),
+        dust_tau_diff=Fixed(tau_diff),
         dust_slope=Fixed(-0.7),
         redshift=0.01,
     )
@@ -1149,7 +1220,7 @@ class TestTauSFHCrossVal:
         # Both codes must agree the longer-tau galaxy is bluer
         assert delta_tengri > 0, (
             f"tengri Δ(UV/V) = {delta_tengri:.4f} is not positive — "
-            "time-convention sign error in declining_exponential_sfh."
+            "time-convention sign error in declining_exponential."
         )
         assert delta_fsps > 0, f"FSPS Δ(UV/V) = {delta_fsps:.4f} is not positive (sanity check)"
 
@@ -1195,13 +1266,13 @@ class TestTauSFHCrossVal:
         assert color5 > color1, (
             f"tengri 'tau': tau=5 not bluer than tau=1. "
             f"tau5 UV/V = {color5:.4f}, tau1 UV/V = {color1:.4f}. "
-            "Check time-convention sign in declining_exponential_sfh."
+            "Check time-convention sign in declining_exponential."
         )
 
     def test_tau_model_vs_table_mode_consistency(self, ssp_data):
         """tau SFH type and table SFH mode must give the same SED within 2%.
 
-        The 'tau' type evaluates declining_exponential_sfh(t_lb) analytically.
+        The 'tau' type evaluates declining_exponential(t_lb) analytically.
         The 'table' mode samples SFR(T_cosmic) = peak*exp(-T_cosmic/tau) on a
         500-point grid and passes it via sfh_t_gyr/sfh_sfr.
         Both represent the same physical SFH; any residual is integration error.
@@ -1447,6 +1518,13 @@ def _build_tengri_nebular_sed(
 
     Returns (wave_Å, L_nu per Msun formed in erg/s/Hz).
     Galaxy is a constant-SFR burst of duration age_gyr at SFR = 10^log_sfr Msun/yr.
+
+    ``sfh_const_log_total_mass`` is a **total mass**, not a rate. It was being
+    handed ``log_sfr`` directly, so the SED described a galaxy of 10 Msun and
+    was then divided by an m_formed of 1e9 — low by eight orders of magnitude,
+    which is the "ratio tengri/FSPS = 0.000" this file reported (#1728). Same
+    mix-up as `_build_tengri_sed` above; the mass is derived from the requested
+    SFR and duration.
     """
     from tengri import Parameters
     from tengri.forward.sed_model import SEDModel
@@ -1462,7 +1540,7 @@ def _build_tengri_nebular_sed(
         met_logzsol=Fixed(logzsol),
         sfh_const_start_gyr=Fixed(age_gyr),
         sfh_const_end_gyr=Fixed(0.0),
-        sfh_const_log_total_mass=Fixed(log_sfr),
+        sfh_const_log_total_mass=Fixed(float(np.log10(m_formed))),
         neb_logU=Fixed(logU),
         neb_logZ_gas=Fixed(logzsol),
         dust_tau_bc=Fixed(tau_bc),
@@ -1486,6 +1564,38 @@ def _line_peak(
     return float(np.max(sed[mask])) if mask.any() else 0.0
 
 
+def _line_flux(
+    wave: np.ndarray,
+    sed_nu: np.ndarray,
+    center_aa: float,
+    half_width: float = 120.0,
+    cont_half_width: float = 400.0,
+) -> float:
+    """Continuum-subtracted integrated line flux [erg/s per Msun].
+
+    Peak height is not comparable between codes: it depends on how finely each
+    one renders the line. The FSPS reference grid carries 7 points across
+    +/-120 A of Halpha (~33 A spacing, the line unresolved) where tengri's
+    carries 267, so the same line flux appears as an 8.7x difference in peak
+    and a 2.1x difference when integrated. Integrating in frequency, with a
+    local linear continuum removed from the side bands, is resolution-
+    independent and is what "how much Halpha" actually means (#1728).
+    """
+    near = np.abs(wave - center_aa) <= half_width
+    side = (np.abs(wave - center_aa) > half_width) & (np.abs(wave - center_aa) <= cont_half_width)
+    if near.sum() < 2 or side.sum() < 2:
+        return 0.0
+
+    continuum = np.interp(wave[near], wave[side], sed_nu[side])
+    nu = _C_AA / wave[near]
+    order = np.argsort(nu)
+    return abs(float(np.trapezoid((sed_nu[near] - continuum)[order], nu[order])))
+
+
+@pytest.mark.skipif(
+    not _CLOUDY_GRID_PATH.is_file(),
+    reason=f"CLOUDY grid not found at {_CLOUDY_GRID_PATH}",
+)
 class TestNebularTengri:
     """Test tengri's nebular emission pipeline (CLOUDY pdva grid).
 
@@ -1567,25 +1677,33 @@ class TestNebularTengri:
         )
 
     def test_tengri_nebular_ha_amplitude_vs_fsps(self, ssp_data, ref, ref_wave):
-        """Hα peak amplitude per Msun within factor 3 of FSPS.
+        """Hα *integrated line flux* per Msun within factor 3 of FSPS.
 
         Both are age=0.1 Gyr, logU=-2, solar metallicity per Msun formed.
         Factor-of-3 tolerance accommodates CLOUDY pdva vs FSPS nebular grid
         differences while catching order-of-magnitude unit bugs.
+
+        Compared by integrated flux, not peak height. The FSPS reference grid
+        has ~33 A spacing near Halpha — 7 points across the window where tengri
+        has 267, i.e. the line is unresolved there — so peak height measures the
+        grid rather than the physics. The same SEDs differ by 8.7x in peak and
+        **2.1x integrated** (#1728). The old comparison already carried a guard
+        for the degenerate case ("resolution too low for peak test") but not for
+        this one, where the reference is coarse rather than empty.
         """
         key = "fsps_nebular_neb_young_u2"
         if key not in ref:
             pytest.skip(f"Reference key {key!r} not in npz")
 
         wave, sed = _build_tengri_nebular_sed(ssp_data, age_gyr=0.1, logU=-2.0)
-        ha_tengri = _line_peak(wave, sed, self._HA_AA)
-        ha_fsps = _line_peak(ref_wave, ref[key], self._HA_AA)
+        ha_tengri = _line_flux(wave, sed, self._HA_AA)
+        ha_fsps = _line_flux(ref_wave, ref[key], self._HA_AA)
         if ha_fsps <= 0.0:
-            pytest.skip("FSPS reference Hα peak is zero — resolution too low for peak test")
+            pytest.skip("FSPS reference Hα flux is zero — no line in the reference")
         ratio = ha_tengri / ha_fsps
         assert 0.33 <= ratio <= 3.0, (
             f"Hα per Msun tengri/FSPS = {ratio:.3f} (expect 0.33–3.0). "
-            f"tengri={ha_tengri:.3e}, FSPS={ha_fsps:.3e} erg/s/Hz/Msun. "
+            f"tengri={ha_tengri:.3e}, FSPS={ha_fsps:.3e} erg/s/Msun (integrated). "
             "Factor > 3 indicates a nebular grid normalization or unit bug."
         )
 
@@ -1709,7 +1827,9 @@ class TestCalzettiDust:
         except ImportError:
             pytest.skip("calzetti_attenuation not importable")
 
-        wave_t, sed_clean, _ = _build_tengri_sed(ssp_data, start_gyr=0.0, end_gyr=1.0)
+        wave_t, sed_clean, _ = _build_tengri_sed(
+            ssp_data, cessation_lookback_gyr=0.0, onset_lookback_gyr=1.0
+        )
         ebv = 0.40
         tau_v = calzetti_attenuation(wave_t, ebv)
         sed_dusty = sed_clean * np.exp(-tau_v)
@@ -1741,7 +1861,9 @@ class TestCalzettiDust:
             pytest.skip("calzetti_attenuation not importable")
 
         # tengri: compute ratio of dusty/clean at UV and V
-        wave_t, sed_clean, _ = _build_tengri_sed(ssp_data, start_gyr=0.0, end_gyr=1.0)
+        wave_t, sed_clean, _ = _build_tengri_sed(
+            ssp_data, cessation_lookback_gyr=0.0, onset_lookback_gyr=1.0
+        )
         tau_v = calzetti_attenuation(wave_t, 0.40)
         sed_dusty = sed_clean * np.exp(-tau_v)
 
@@ -1840,7 +1962,7 @@ class TestDustEmission:
 class TestTabularSFH:
     """Cross-validate step-function non-parametric SFH from FSPS sfh=3.
 
-    FSPS tabular SFH is the reference for tengri's continuity_sfh / dirichlet_sfh.
+    FSPS tabular SFH is the reference for tengri's continuity / dirichlet.
     Tests verify: SEDs sensible, physically expected color trends hold.
     """
 
@@ -1899,15 +2021,15 @@ class TestTabularSFH:
         )
 
     def test_tengri_nonparametric_color_trend(self, ssp_data):
-        """tengri continuity_sfh: rising SFH should be bluer than quenching SFH.
+        """tengri continuity: rising SFH should be bluer than quenching SFH.
 
         This checks the tengri implementation independently of FSPS.
         Uses the same SFR-per-bin values as TABSFH_CASES in the reference generator.
         """
         try:
-            from tengri.components.stellar.sfh.nonparametric import continuity_sfh
+            from tengri.components.stellar.sfh.nonparametric import continuity
         except ImportError:
-            pytest.skip("continuity_sfh not importable")
+            pytest.skip("continuity not importable")
 
         bin_edges = jnp.array([0.0, 0.1, 0.5, 2.0, 6.0])
         sfr_rising = jnp.array([5.0, 2.0, 0.8, 0.2])
@@ -1916,7 +2038,7 @@ class TestTabularSFH:
         wave = jnp.asarray(ssp_data.ssp_wave)
 
         def uv_over_v(sfr_bins):
-            t_obs, sfr_t = continuity_sfh(bin_edges, sfr_bins, n_pts=200)
+            t_obs, sfr_t = continuity(bin_edges, sfr_bins, n_pts=200)
             # Compute CSP: approximate as sum of SSPs weighted by SFR dt
             from tengri.components.stellar.sps.dsps_wrapper import compute_csp_weights
 
@@ -1930,11 +2052,11 @@ class TestTabularSFH:
             cr = uv_over_v(sfr_rising)
             cq = uv_over_v(sfr_quenching)
         except Exception as exc:
-            pytest.skip(f"continuity_sfh computation failed: {exc}")
+            pytest.skip(f"continuity computation failed: {exc}")
 
         assert cr > cq, (
             f"tengri rising SFH UV/V ({cr:.3f}) not greater than quenching ({cq:.3f}). "
-            "Check searchsorted bin assignment in continuity_sfh."
+            "Check searchsorted bin assignment in continuity."
         )
 
 
@@ -2503,7 +2625,9 @@ class TestMetallicityGrid:
         if key not in ref:
             pytest.skip(f"Reference key {key!r} not in npz (FSPS not installed?)")
 
-        wave, sed_per_msun, _ = _build_tengri_sed(ssp_data, start_gyr=0.0, end_gyr=5.0)
+        wave, sed_per_msun, _ = _build_tengri_sed(
+            ssp_data, cessation_lookback_gyr=0.0, onset_lookback_gyr=5.0
+        )
         l_tengri = _band_avg(wave, sed_per_msun, 5500.0)
         l_fsps = _band_avg(ref_wave, ref[key], 5500.0)
         ratio = l_tengri / l_fsps
@@ -2524,7 +2648,7 @@ class TestMetallicityGrid:
             pytest.skip(f"Reference key {key!r} not in npz (FSPS not installed?)")
 
         wave, sed_per_msun, _ = _build_tengri_sed(
-            ssp_data, start_gyr=0.0, end_gyr=5.0, logzsol=-1.0
+            ssp_data, cessation_lookback_gyr=0.0, onset_lookback_gyr=5.0, logzsol=-1.0
         )
         l_tengri = _band_avg(wave, sed_per_msun, 5500.0)
         l_fsps = _band_avg(ref_wave, ref[key], 5500.0)
@@ -2546,7 +2670,7 @@ class TestMetallicityGrid:
             pytest.skip(f"Reference key {key!r} not in npz (FSPS not installed?)")
 
         wave, sed_per_msun, _ = _build_tengri_sed(
-            ssp_data, start_gyr=0.0, end_gyr=8.0, logzsol=-2.0
+            ssp_data, cessation_lookback_gyr=0.0, onset_lookback_gyr=8.0, logzsol=-2.0
         )
         l_tengri = _band_avg(wave, sed_per_msun, 5500.0)
         l_fsps = _band_avg(ref_wave, ref[key], 5500.0)
@@ -2567,7 +2691,9 @@ class TestMetallicityGrid:
         if key not in ref:
             pytest.skip(f"Reference key {key!r} not in npz (bagpipes not installed?)")
 
-        wave, sed_per_msun, _ = _build_tengri_sed(ssp_data, start_gyr=0.0, end_gyr=5.0)
+        wave, sed_per_msun, _ = _build_tengri_sed(
+            ssp_data, cessation_lookback_gyr=0.0, onset_lookback_gyr=5.0
+        )
         l_tengri = _band_avg(wave, sed_per_msun, 5500.0)
         l_bp = _band_avg(ref_wave, ref[key], 5500.0)
         ratio = l_tengri / l_bp
@@ -2589,7 +2715,7 @@ class TestMetallicityGrid:
             pytest.skip(f"Reference key {key!r} not in npz (bagpipes not installed?)")
 
         wave, sed_per_msun, _ = _build_tengri_sed(
-            ssp_data, start_gyr=0.0, end_gyr=5.0, logzsol=-1.0
+            ssp_data, cessation_lookback_gyr=0.0, onset_lookback_gyr=5.0, logzsol=-1.0
         )
         l_tengri = _band_avg(wave, sed_per_msun, 5500.0)
         l_bp = _band_avg(ref_wave, ref[key], 5500.0)
@@ -2608,7 +2734,9 @@ class TestMetallicityGrid:
         """
 
         def _tengri_uv_v(logzsol: float) -> float:
-            wave, sed, _ = _build_tengri_sed(ssp_data, start_gyr=0.0, end_gyr=5.0, logzsol=logzsol)
+            wave, sed, _ = _build_tengri_sed(
+                ssp_data, cessation_lookback_gyr=0.0, onset_lookback_gyr=5.0, logzsol=logzsol
+            )
             uv = _band_avg(wave, sed, 2800.0, half_width=200.0)
             v = _band_avg(wave, sed, 5500.0)
             return uv / max(v, 1e-40)
@@ -2647,7 +2775,9 @@ class TestHighZPassive:
         if key not in ref:
             pytest.skip(f"Reference key {key!r} not in npz (FSPS not installed?)")
 
-        wave, sed_per_msun, _ = _build_tengri_sed(ssp_data, start_gyr=0.0, end_gyr=5.0)
+        wave, sed_per_msun, _ = _build_tengri_sed(
+            ssp_data, cessation_lookback_gyr=0.0, onset_lookback_gyr=5.0
+        )
         l_tengri = _band_avg(wave, sed_per_msun, 5500.0)
         l_fsps = _band_avg(ref_wave, ref[key], 5500.0)
         ratio = l_tengri / l_fsps
@@ -2666,7 +2796,7 @@ class TestHighZPassive:
             pytest.skip(f"Reference key {key!r} not in npz (FSPS not installed?)")
 
         wave, sed_per_msun, _ = _build_tengri_sed(
-            ssp_data, start_gyr=0.0, end_gyr=3.0, logzsol=-0.3
+            ssp_data, cessation_lookback_gyr=0.0, onset_lookback_gyr=3.0, logzsol=-0.3
         )
         l_tengri = _band_avg(wave, sed_per_msun, 5500.0)
         l_fsps = _band_avg(ref_wave, ref[key], 5500.0)
@@ -2684,7 +2814,7 @@ class TestHighZPassive:
             pytest.skip(f"Reference key {key!r} not in npz (FSPS not installed?)")
 
         wave, sed_per_msun, _ = _build_tengri_sed(
-            ssp_data, start_gyr=0.0, end_gyr=1.5, logzsol=-0.5
+            ssp_data, cessation_lookback_gyr=0.0, onset_lookback_gyr=1.5, logzsol=-0.5
         )
         l_tengri = _band_avg(wave, sed_per_msun, 5500.0)
         l_fsps = _band_avg(ref_wave, ref[key], 5500.0)
@@ -2705,7 +2835,9 @@ class TestHighZPassive:
         if key not in ref:
             pytest.skip(f"Reference key {key!r} not in npz (FSPS not installed?)")
 
-        wave, sed_per_msun, _ = _build_tengri_sed(ssp_data, start_gyr=0.0, end_gyr=5.0)
+        wave, sed_per_msun, _ = _build_tengri_sed(
+            ssp_data, cessation_lookback_gyr=0.0, onset_lookback_gyr=5.0
+        )
         l_tengri = _band_avg(wave, sed_per_msun, 2800.0, half_width=200.0)
         l_fsps = _band_avg(ref_wave, ref[key], 2800.0, half_width=200.0)
         ratio = l_tengri / l_fsps
@@ -2726,7 +2858,9 @@ class TestHighZPassive:
         if key not in ref:
             pytest.skip(f"Reference key {key!r} not in npz (bagpipes not installed?)")
 
-        wave, sed_per_msun, _ = _build_tengri_sed(ssp_data, start_gyr=0.0, end_gyr=5.0)
+        wave, sed_per_msun, _ = _build_tengri_sed(
+            ssp_data, cessation_lookback_gyr=0.0, onset_lookback_gyr=5.0
+        )
         l_tengri = _band_avg(wave, sed_per_msun, 5500.0)
         l_bp = _band_avg(ref_wave, ref[key], 5500.0)
         ratio = l_tengri / l_bp
@@ -2744,7 +2878,9 @@ class TestHighZPassive:
         must show a strong Balmer/D_n4000 break regardless of the external reference.
         Failure → CSP integration is not producing a genuinely old population.
         """
-        wave, sed, _ = _build_tengri_sed(ssp_data, start_gyr=0.0, end_gyr=5.0)
+        wave, sed, _ = _build_tengri_sed(
+            ssp_data, cessation_lookback_gyr=0.0, onset_lookback_gyr=5.0
+        )
         blue_of_break = _band_avg(wave, sed, 3500.0, half_width=150.0)
         red_of_break = _band_avg(wave, sed, 4500.0, half_width=150.0)
         assert red_of_break > blue_of_break * 2.0, (
@@ -2847,7 +2983,9 @@ class TestIMFComparison:
         if key not in ref:
             pytest.skip(f"Reference key {key!r} not in npz (FSPS not installed?)")
 
-        wave, sed_per_msun, _ = _build_tengri_sed(ssp_data, start_gyr=0.0, end_gyr=5.0)
+        wave, sed_per_msun, _ = _build_tengri_sed(
+            ssp_data, cessation_lookback_gyr=0.0, onset_lookback_gyr=5.0
+        )
         l_tengri = _band_avg(wave, sed_per_msun, 5500.0)
         l_fsps = _band_avg(ref_wave, ref[key], 5500.0)
         ratio = l_tengri / l_fsps
@@ -2867,7 +3005,9 @@ class TestIMFComparison:
         if key not in ref:
             pytest.skip(f"Reference key {key!r} not in npz (FSPS not installed?)")
 
-        wave, sed_per_msun, _ = _build_tengri_sed(ssp_data, start_gyr=0.0, end_gyr=5.0)
+        wave, sed_per_msun, _ = _build_tengri_sed(
+            ssp_data, cessation_lookback_gyr=0.0, onset_lookback_gyr=5.0
+        )
         l_tengri = _band_avg(wave, sed_per_msun, 2800.0, half_width=200.0)
         l_fsps = _band_avg(ref_wave, ref[key], 2800.0, half_width=200.0)
         ratio = l_tengri / l_fsps
@@ -2888,7 +3028,9 @@ class TestIMFComparison:
         if key not in ref:
             pytest.skip(f"Reference key {key!r} not in npz (FSPS not installed?)")
 
-        wave, sed_per_msun, _ = _build_tengri_sed(ssp_data, start_gyr=0.0, end_gyr=5.0)
+        wave, sed_per_msun, _ = _build_tengri_sed(
+            ssp_data, cessation_lookback_gyr=0.0, onset_lookback_gyr=5.0
+        )
         l_tengri = _band_avg(wave, sed_per_msun, 5500.0)
         l_salp = _band_avg(ref_wave, ref[key], 5500.0)
         ratio = l_tengri / l_salp
@@ -2920,7 +3062,9 @@ class TestSynthesizerSEDs:
         if key not in ref:
             pytest.skip(f"Reference key {key!r} not in npz (synthesizer not installed?)")
 
-        wave, sed_per_msun, _ = _build_tengri_sed(ssp_data, start_gyr=0.0, end_gyr=3.0)
+        wave, sed_per_msun, _ = _build_tengri_sed(
+            ssp_data, cessation_lookback_gyr=0.0, onset_lookback_gyr=3.0
+        )
         l_tengri = _band_avg(wave, sed_per_msun, 5500.0)
         l_synth = _band_avg(ref_wave, ref[key], 5500.0)
         ratio = l_tengri / l_synth
@@ -2940,7 +3084,9 @@ class TestSynthesizerSEDs:
         if key not in ref:
             pytest.skip(f"Reference key {key!r} not in npz (synthesizer not installed?)")
 
-        wave, sed_per_msun, _ = _build_tengri_sed(ssp_data, start_gyr=0.0, end_gyr=3.0)
+        wave, sed_per_msun, _ = _build_tengri_sed(
+            ssp_data, cessation_lookback_gyr=0.0, onset_lookback_gyr=3.0
+        )
         l_tengri = _band_avg(wave, sed_per_msun, 2800.0, half_width=200.0)
         l_synth = _band_avg(ref_wave, ref[key], 2800.0, half_width=200.0)
         ratio = l_tengri / l_synth
@@ -2960,7 +3106,9 @@ class TestSynthesizerSEDs:
         if key not in ref:
             pytest.skip(f"Reference key {key!r} not in npz (synthesizer not installed?)")
 
-        wave, sed_per_msun, _ = _build_tengri_sed(ssp_data, start_gyr=0.0, end_gyr=10.0)
+        wave, sed_per_msun, _ = _build_tengri_sed(
+            ssp_data, cessation_lookback_gyr=0.0, onset_lookback_gyr=10.0
+        )
         l_tengri = _band_avg(wave, sed_per_msun, 5500.0)
         l_synth = _band_avg(ref_wave, ref[key], 5500.0)
         ratio = l_tengri / l_synth
@@ -3467,7 +3615,7 @@ def _build_tengri_step_sed(
     result = model.predict_rest_sed(params)
     wave = np.asarray(result.wavelength)
     sed = np.asarray(result.sed)
-    m_formed = float(np.trapz(sfr_table, t_cosmic * 1e9))  # convert Gyr → yr
+    m_formed = float(_trapezoid(sfr_table, t_cosmic * 1e9))  # convert Gyr → yr
     return wave, sed / max(m_formed, 1.0)
 
 

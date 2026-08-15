@@ -29,12 +29,14 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.inference._batching import AUTO, resolve_forward_chunk_size
 from tengri.inference._hierarchical_flat import (
     FLAT_SAMPLERS,
     FLAT_UNSUPPORTED,
     run_flat_sampler,
 )
 from tengri.inference.fitter import _resolve_batch_fit_approx, resolve_method
+from tengri.inference.likelihoods.gaussian import diag_noise_operators
 from tengri.utils.transforms import to_bounded, to_unbounded
 
 #: Acceptance below which a Ray Tracing chain is treated as not having sampled.
@@ -175,7 +177,9 @@ class PopulationPosterior:
         if self._model is None:
             raise RuntimeError(
                 "No model reference on this PopulationPosterior — cannot compute "
-                "properties. (It is populated automatically by PopulationFitter.run().)"
+                "properties. PopulationFitter.run() attaches one; it is a runtime "
+                "object and is not persisted, so a posterior read back from disk "
+                "has none and must be reloaded with the model passed in."
             )
 
         posts = [
@@ -841,7 +845,7 @@ class PopulationFitter:
         n_samples=3,
         n_posterior_samples=500,
         posterior_chunk_size=None,
-        forward_chunk_size=1,
+        forward_chunk_size=AUTO,
         memory_mode="low",
         kl_rtol=1e-2,
         n_seeds=3,
@@ -896,17 +900,27 @@ class PopulationFitter:
         from tengri.inference.backends.vi.native import build_native_vi_nonlinear_engine
 
         n_gal = self.n_galaxies
-        K = max(1, int(forward_chunk_size))
+        # K galaxies per dispatch (#1189). Default is AUTO, not 1: a dispatch
+        # carrying one galaxy is the anti-pattern, not a slow path.
+        _sizes = {len(g["flux_obs"]) for g in self.galaxies}
+        _homogeneous = len(_sizes) == 1
+        n_data_per_gal = next(iter(_sizes)) if _homogeneous else None
+        K = resolve_forward_chunk_size(
+            forward_chunk_size,
+            n_gal=n_gal,
+            n_data_per_gal=n_data_per_gal,
+            homogeneous=_homogeneous,
+        )
         # batch_size=K in lax.map handles non-divisible N internally — no padding needed.
-        if K > 1:
-            n_data_per_gal = len(self.galaxies[0]["flux_obs"])
-            for g in self.galaxies[1:]:
-                if len(g["flux_obs"]) != n_data_per_gal:
-                    raise ValueError(
-                        "forward_chunk_size > 1 requires all galaxies to have the same "
-                        f"number of data points; got {n_data_per_gal} and {len(g['flux_obs'])}."
-                    )
-        else:
+        # Only an EXPLICIT K > 1 can reach this: AUTO resolves to 1 when the
+        # catalog is heterogeneous, so widening never turns a working fit into
+        # an error.
+        if K > 1 and not _homogeneous:
+            raise ValueError(
+                "forward_chunk_size > 1 requires all galaxies to have the same "
+                f"number of data points; got sizes {sorted(_sizes)}."
+            )
+        if K == 1:
             n_data_per_gal = None
         spec = self._spec
         stochastic = spec.stochastic
@@ -1206,7 +1220,7 @@ class PopulationFitter:
         n_samples=3,
         n_posterior_samples=500,
         posterior_chunk_size=None,
-        forward_chunk_size=1,
+        forward_chunk_size=AUTO,
         memory_mode="low",
         kl_rtol=1e-2,
         n_seeds=3,
@@ -1246,17 +1260,27 @@ class PopulationFitter:
         from jax.flatten_util import ravel_pytree
 
         n_gal = self.n_galaxies
-        K = max(1, int(forward_chunk_size))
+        # K galaxies per dispatch (#1189). Default is AUTO, not 1: a dispatch
+        # carrying one galaxy is the anti-pattern, not a slow path.
+        _sizes = {len(g["flux_obs"]) for g in self.galaxies}
+        _homogeneous = len(_sizes) == 1
+        n_data_per_gal = next(iter(_sizes)) if _homogeneous else None
+        K = resolve_forward_chunk_size(
+            forward_chunk_size,
+            n_gal=n_gal,
+            n_data_per_gal=n_data_per_gal,
+            homogeneous=_homogeneous,
+        )
         # batch_size=K in lax.map handles non-divisible N internally — no padding needed.
-        if K > 1:
-            n_data_per_gal = len(self.galaxies[0]["flux_obs"])
-            for g in self.galaxies[1:]:
-                if len(g["flux_obs"]) != n_data_per_gal:
-                    raise ValueError(
-                        "forward_chunk_size > 1 requires all galaxies to have the same "
-                        f"number of data points; got {n_data_per_gal} and {len(g['flux_obs'])}."
-                    )
-        else:
+        # Only an EXPLICIT K > 1 can reach this: AUTO resolves to 1 when the
+        # catalog is heterogeneous, so widening never turns a working fit into
+        # an error.
+        if K > 1 and not _homogeneous:
+            raise ValueError(
+                "forward_chunk_size > 1 requires all galaxies to have the same "
+                f"number of data points; got sizes {sorted(_sizes)}."
+            )
+        if K == 1:
             n_data_per_gal = None
         spec = self._spec
         stochastic = spec.stochastic
@@ -1672,15 +1696,13 @@ class PopulationFitter:
 
         # Precompute data
         all_data = []
-        all_noise_inv = []
+        all_noise = []
         for gal in self.galaxies:
-            d = jnp.asarray(gal["flux_obs"])
-            n = jnp.asarray(gal["noise"])
-            all_data.append(d)
-            all_noise_inv.append(1.0 / n**2)
+            all_data.append(jnp.asarray(gal["flux_obs"]))
+            all_noise.append(jnp.asarray(gal["noise"]))
 
         data_concat = jnp.concatenate(all_data)
-        noise_inv_concat = jnp.concatenate(all_noise_inv)
+        noise_concat = jnp.concatenate(all_noise)
 
         # ── Build signal response ─────────────────────────────
         def signal_response(primals):
@@ -1727,7 +1749,11 @@ class PopulationFitter:
 
         signal_response_jit = jax.jit(signal_response)
         nifty_model = jft.Model(signal_response_jit, domain=domain)
-        likelihood = jft.Gaussian(data_concat, noise_inv_concat).amend(nifty_model)
+        # Operators, not arrays — see likelihoods.gaussian.diag_noise_operators (#1206).
+        _cov_inv, _std_inv = diag_noise_operators(noise_concat)
+        likelihood = jft.Gaussian(
+            data_concat, noise_cov_inv=_cov_inv, noise_std_inv=_std_inv
+        ).amend(nifty_model)
 
         # ── Initialize ────────────────────────────────────────
         init = {}
@@ -1983,15 +2009,13 @@ class PopulationFitter:
 
         # Precompute data arrays
         all_data = []
-        all_noise_inv = []
+        all_noise = []
         for gal in galaxies:
-            d = jnp.asarray(gal["flux_obs"])
-            n = jnp.asarray(gal["noise"])
-            all_data.append(d)
-            all_noise_inv.append(1.0 / n**2)
+            all_data.append(jnp.asarray(gal["flux_obs"]))
+            all_noise.append(jnp.asarray(gal["noise"]))
 
         data_concat = jnp.concatenate(all_data)
-        noise_inv_concat = jnp.concatenate(all_noise_inv)
+        noise_concat = jnp.concatenate(all_noise)
 
         # Pre-build model once (PSD params will be overridden per-call)
         model = self.model_factory(psd_sigma=1.0, psd_tau_myr=50.0)
@@ -2049,7 +2073,11 @@ class PopulationFitter:
         nifty_model = jft.Model(signal_response_jit, domain=domain)
 
         # Gaussian likelihood
-        likelihood = jft.Gaussian(data_concat, noise_inv_concat).amend(nifty_model)
+        # Operators, not arrays — see likelihoods.gaussian.diag_noise_operators (#1206).
+        _cov_inv, _std_inv = diag_noise_operators(noise_concat)
+        likelihood = jft.Gaussian(
+            data_concat, noise_cov_inv=_cov_inv, noise_std_inv=_std_inv
+        ).amend(nifty_model)
 
         # ── Initialize ────────────────────────────────────────
         # Batched initialization: one (n_gal,) draw per param instead of a

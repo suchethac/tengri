@@ -130,7 +130,7 @@ def build(obs, approx=None):
             emission=builders.dust.emission.modified_blackbody(defaults=FIXED),
         ),
         neb=builders.neb.none(),
-        stellar={"met_logzsol": Uniform(-1.5, 0.3)},
+        met={"logzsol": Uniform(-1.5, 0.3)},
         redshift=Fixed(Z_GAL),
     )
 

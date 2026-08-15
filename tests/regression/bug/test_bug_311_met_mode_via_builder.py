@@ -1,10 +1,15 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Regression: met_mode reachable via nested-dict builder ``stellar={}``.
+"""Regression: the metallicity mode is reachable from the nested-dict builder.
 
-Issue #311: PR #287 wired five new chemical-evolution modes but they were only
-reachable via legacy ``Parameters(met_mode=...)``, contradicting the design
-goal that ``SEDModel.build`` is the recommended public surface. The fix adds
-a top-level ``stellar={}`` block carrying ``met_mode`` plus per-mode params.
+Issue #311: PR #287 wired five chemical-evolution modes that were reachable only
+through the legacy ``Parameters(met_mode=...)``, contradicting the design goal
+that ``SEDModel.build`` is the recommended public surface. #311 added a
+top-level block for them.
+
+That block was ``stellar={'met_mode': ...}``, and #1720 replaced it with
+``met={'type': ...}`` — the parallel of ``sfh={'type': ...}``, selecting with
+``type`` like every other group. The property #311 established is unchanged and
+still asserted here; only the spelling moved.
 """
 
 from __future__ import annotations
@@ -29,8 +34,8 @@ def test_two_step(ssp):
     m = tengri.SEDModel.build(
         ssp,
         sfh={"type": "dpl", "*": FIXED},
-        stellar={
-            "met_mode": "two_step",
+        met={
+            "type": "two_step",
             "*": FIXED,
             "logzsol_old": Fixed(-1.0),
             "logzsol_young": Fixed(0.0),
@@ -49,8 +54,8 @@ def test_ramp(ssp):
     m = tengri.SEDModel.build(
         ssp,
         sfh={"type": "dpl", "*": FIXED},
-        stellar={
-            "met_mode": "ramp",
+        met={
+            "type": "ramp",
             "*": FIXED,
             "logzsol_0": Fixed(-1.5),
             "logzsol_final": Fixed(0.0),
@@ -61,17 +66,17 @@ def test_ramp(ssp):
 
 
 def test_unknown_met_mode_raises(ssp):
-    with pytest.raises(ValueError, match="Unknown met_mode"):
+    with pytest.raises(ValueError, match="Unknown metallicity mode"):
         tengri.SEDModel.build(
             ssp,
             sfh={"type": "dpl", "*": FIXED},
-            stellar={"met_mode": "two_steps"},  # typo
+            met={"type": "two_steps"},  # typo
             dust={"type": "two_component", "*": FIXED},
         )
 
 
-def test_default_no_stellar_block(ssp):
-    """Omitting stellar={} preserves the default met_mode='delta'."""
+def test_default_no_met_block(ssp):
+    """Omitting met={} preserves the default met_mode='delta'."""
     m = tengri.SEDModel.build(
         ssp,
         sfh={"type": "dpl", "*": FIXED},
@@ -80,13 +85,13 @@ def test_default_no_stellar_block(ssp):
     assert m.spec.met_mode == "delta"
 
 
-def test_roundtrip_emits_stellar_block(ssp):
-    """to_groups() should emit a stellar block when met_mode is non-default."""
+def test_roundtrip_emits_met_block(ssp):
+    """to_groups() should emit a met block when the mode is non-default."""
     m = tengri.SEDModel.build(
         ssp,
         sfh={"type": "dpl", "*": FIXED},
-        stellar={
-            "met_mode": "two_step",
+        met={
+            "type": "two_step",
             "*": FIXED,
             "logzsol_old": Fixed(-1.0),
             "logzsol_young": Fixed(0.0),
@@ -95,5 +100,5 @@ def test_roundtrip_emits_stellar_block(ssp):
         dust={"type": "two_component", "*": FIXED},
     )
     groups = m.spec.to_groups()
-    assert "stellar" in groups
-    assert groups["stellar"]["met_mode"] == "two_step"
+    assert "met" in groups
+    assert groups["met"]["type"] == "two_step"

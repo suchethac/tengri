@@ -96,7 +96,7 @@ obs = Observation(photometry=Photometry.from_names(FILTERS))
 # ## Build the model
 #
 # The quickstart's model, plus two extra free parameters: stellar metallicity
-# (`stellar={"met_logzsol": ...}`) and the diffuse dust optical depth. Eight
+# (`met={"logzsol": ...}`) and the diffuse dust optical depth. Eight
 # free parameters in all. `approx=WavePrecomp()` precomputes the SSP × filter
 # integrals so the warm forward pass stays in the millisecond range — what
 # makes a prewarmed two-chain NUTS run finish in seconds.
@@ -115,7 +115,7 @@ sed_model = SEDModel.build(
         emission=builders.dust.emission.modified_blackbody(defaults=FIXED),
     ),
     neb=builders.neb.none(),
-    stellar={"met_logzsol": Uniform(-1.5, 0.3)},
+    met={"logzsol": Uniform(-1.5, 0.3)},
     redshift=Fixed(0.05),
 )
 forward = ForwardModel.build(sed=sed_model)

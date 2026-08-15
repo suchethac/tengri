@@ -452,7 +452,7 @@ def _grammar_value_sets():
     That is not the same as pinning the rule, and the difference has cost real
     bugs: #1323 made ``xray_aird`` / ``agn_xray_corona`` / ``radio_powerlaw`` /
     ``radio_dpl`` builder-reachable, and a fully green suite said nothing,
-    because no test knew those axes existed. ``stellar={'met_mode': ...}``
+    because no test knew those axes existed. ``met={'type': ...}``
     arrived with no menu at all and nine undiscoverable values for the same
     reason.
 

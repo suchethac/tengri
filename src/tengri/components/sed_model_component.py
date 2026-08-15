@@ -338,21 +338,38 @@ class SEDModelComponent(TemplateThreading):
         is_concrete = "name" in vars(cls)
         if is_concrete:
             # The declared inputs/outputs/optional_inputs dicts must not shadow the
-            # same-named accessor methods once the tuples are collected. Two cases:
+            # same-named accessor methods once the tuples are collected. Three cases:
             #  (a) the dict is on THIS concrete class -> delete it so the base method resolves;
             #  (b) the dict is inherited from an intermediate ABSTRACT base (e.g.
             #      EmissionComponent, sharing the emission I/O contract) -> that dict shadows the
             #      method for this subclass, so rebind the base accessor onto the concrete class.
+            #  (c) BOTH: this concrete class OVERRODE the dict *and* an abstract base also
+            #      declares one -> deleting our dict (a) merely re-exposes the base's dict, so
+            #      the rebind (b) must run afterwards, not as an ``elif``. The tuple was already
+            #      built from the MRO union, so it carries the override either way.
             for _attr in ("inputs", "outputs", "optional_inputs"):
                 if isinstance(vars(cls).get(_attr), dict):
                     delattr(cls, _attr)
-                elif isinstance(getattr(cls, _attr, None), dict):
+                if isinstance(getattr(cls, _attr, None), dict):
                     setattr(cls, _attr, getattr(SEDModelComponent, _attr))
 
         # Citations: read class attribute (tuple of bib keys), store on class.
         # Subclasses declare ``citations = ("calzetti2000", ...)``; the
         # citations() method synthesized below returns the tuple. Default ().
-        citations_attr = vars(cls).get("citations", ())
+        #
+        # ``_citations_tuple`` written directly in the class body is honored as
+        # well. It has to be: the assignment below is unconditional, so a
+        # subclass spelling it that way had its keys overwritten with ``()`` at
+        # class creation — silently, because the attribute it wrote is exactly
+        # the one this line clobbers. THIRTEEN of the fifteen components that
+        # declare citations used that spelling, so `component.citations()`
+        # returned nothing for every dust emission backend in the library
+        # (#1777). Accepting both spellings means neither can be dropped;
+        # ``tests/contract/test_component_citations_are_not_dropped.py``
+        # pins it.
+        citations_attr = vars(cls).get("citations")
+        if citations_attr is None:
+            citations_attr = vars(cls).get("_citations_tuple", ())
         if not isinstance(citations_attr, tuple):
             citations_attr = tuple(citations_attr)
         cls._citations_tuple = citations_attr

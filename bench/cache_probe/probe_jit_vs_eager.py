@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import sys
 import time
+from pathlib import Path
 
 # Use lower threshold so micro-kernels also persist.
 # (Comment this out to see default behaviour.)
@@ -17,9 +18,10 @@ import jax
 
 import tengri
 
-SSP_PATH = (
-    "/Users/suchethacooray/Projects/tengri/data/"
-    "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
+SSP_PATH = str(
+    Path(__file__).resolve().parents[2]
+    / "data"
+    / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
 )
 
 

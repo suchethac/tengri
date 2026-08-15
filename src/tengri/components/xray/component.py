@@ -466,6 +466,8 @@ class XRaySEDComponent(TemplateThreading):
                 gamma_agn=jnp.asarray(params["xray_gamma_agn"]),
                 E_cut=jnp.asarray(params["xray_E_cut"]),
                 log_nh=jnp.asarray(params["xray_log_nh"]),
+                log_L_hmxb_offset=jnp.asarray(params["xray_det_hmxb"]),
+                log_L_lmxb_offset=jnp.asarray(params["xray_det_lmxb"]),
             )
         # ``alpha_ox`` is derived from ``l_2500_30deg`` via the Just+2007
         # relation inside ``xray_total`` (#722 — the disc 2500 A now drives
@@ -486,6 +488,11 @@ class XRaySEDComponent(TemplateThreading):
             delta_alpha_ox=jnp.asarray(params["xray_delta_alpha_ox"]),
             cos_inc=cos_inc,
             log_nh=jnp.asarray(params["xray_log_nh"]),
+            # Lehmer+2016 XRB luminosity offsets (#1706). ``xray_xrb_terms`` has
+            # accepted these all along; the component simply never passed them,
+            # so both were free parameters that nothing read.
+            log_L_hmxb_offset=jnp.asarray(params["xray_det_hmxb"]),
+            log_L_lmxb_offset=jnp.asarray(params["xray_det_lmxb"]),
         )
 
 
@@ -532,6 +539,46 @@ def _l_x_total_fn(state, params):
     return l_x_xrb + l_x_agn
 
 
+def _log_l_x_xrb_fn(state, params):
+    """log10 X-ray luminosity from X-ray binaries [dex re erg/s]."""
+    from tengri.utils.sed_quantities import compute_log_l_x_xrb
+
+    derived = state.derived
+    sfr = jnp.asarray(derived.get("sfr_100myr", derived.get("sfr", 0.0)))
+    log_mstar = jnp.asarray(derived.get("log_mstar", 0.0))
+    return compute_log_l_x_xrb(sfr, log_mstar)
+
+
+def _log_l_x_agn_fn(state, params):
+    """log10 X-ray luminosity from AGN [dex re erg/s]; -inf when the AGN is off."""
+    from tengri.utils.scale import log10_magnitude
+    from tengri.utils.sed_quantities import compute_log_l_x_agn
+
+    derived = state.derived
+    L_agn_bol = jnp.asarray(derived.get("L_agn_bol", 0.0))
+    # -inf, not 0.0: in log space "no AGN" is an exactly-zero luminosity, which is
+    # the -inf sentinel of log10_magnitude (#1527). Returning 0.0 here would claim
+    # 1 erg/s. The linear sibling returns 0.0 for the same state, correctly.
+    active = L_agn_bol > 0.0
+    log_l_bol = log10_magnitude(jnp.where(active, L_agn_bol, 1.0))
+    return jnp.where(active, compute_log_l_x_agn(log_l_bol), -jnp.inf)
+
+
+def _log_l_x_total_fn(state, params):
+    """log10 total X-ray luminosity (XRB + AGN) [dex re erg/s]."""
+    from jax.scipy.special import logsumexp
+
+    from tengri.utils.scale import LN10
+
+    log_xrb = _log_l_x_xrb_fn(state, params)
+    log_agn = _log_l_x_agn_fn(state, params)
+    # The sum of two luminosities is a logsumexp of their logs, and an inactive AGN
+    # at -inf drops out of it exactly — which is why the branch above returns -inf
+    # rather than 0.0.
+    stacked = jnp.stack(jnp.broadcast_arrays(log_xrb, log_agn))
+    return logsumexp(LN10 * stacked, axis=0) / LN10
+
+
 from tengri.forward.properties import Property, register_properties
 
 _XRAY_PROPERTIES = {
@@ -552,6 +599,31 @@ _XRAY_PROPERTIES = {
         group="xray",
         doc="Total X-ray luminosity (XRB + AGN)",
         fn=_l_x_total_fn,
+    ),
+    # Float32-safe companions (#1534). The HMXB coefficient alone is 2.6e39, past
+    # float32's 3.4e38 ceiling, so the linear forms above are `inf` there at ANY
+    # star formation rate — including zero. These are computed in log throughout,
+    # not by taking a log of the linear value, which would inherit the overflow.
+    "log_l_x_xrb": Property(
+        units="dex",
+        group="xray",
+        doc="log10 X-ray luminosity from X-ray binaries [dex re erg/s]; "
+        "float32-safe form of `l_x_xrb`",
+        fn=_log_l_x_xrb_fn,
+    ),
+    "log_l_x_agn": Property(
+        units="dex",
+        group="xray",
+        doc="log10 X-ray luminosity from AGN [dex re erg/s]; float32-safe form of "
+        "`l_x_agn`. -inf when no AGN is present, where the linear form is 0.0",
+        fn=_log_l_x_agn_fn,
+    ),
+    "log_l_x_total": Property(
+        units="dex",
+        group="xray",
+        doc="log10 total X-ray luminosity (XRB + AGN) [dex re erg/s]; "
+        "float32-safe form of `l_x_total`",
+        fn=_log_l_x_total_fn,
     ),
 }
 

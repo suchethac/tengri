@@ -10,8 +10,8 @@
 
 ## Global Constraints
 
-- Base worktree: `/Users/suchethacooray/.claude/jobs/d5f48f27/tmp/wt_banded`, branch `cs/banded-spectroscopy` off origin/main (`9c918b64a`).
-- Run everything with `PYTHONPATH=src /Users/suchethacooray/Projects/tengri/.venv/bin/python` (root venv; worktree src via PYTHONPATH — the editable install points at the ROOT checkout, so PYTHONPATH=src is mandatory).
+- Base worktree: `~/.claude/jobs/d5f48f27/tmp/wt_banded`, branch `cs/banded-spectroscopy` off origin/main (`9c918b64a`).
+- Run everything with `PYTHONPATH=src /tengri/.venv/bin/python` (root venv; worktree src via PYTHONPATH — the editable install points at the ROOT checkout, so PYTHONPATH=src is mandatory).
 - 64-bit precision assumed (`jax_enable_x64`); import `tengri` first in tests to enable it.
 - American-English spelling only (CI guard `tools/check_british_spelling.py`): `normalize`, `center`, `catalog`, `marginalize`.
 - Units in docstring brackets always: `[Angstrom]`, `[erg/s/Hz]`, `[erg/s/cm^2/Hz]`. Array shapes annotated.
@@ -73,7 +73,7 @@ def test_banded_matvec_matches_dense():
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd /Users/suchethacooray/.claude/jobs/d5f48f27/tmp/wt_banded && PYTHONPATH=src /Users/suchethacooray/Projects/tengri/.venv/bin/python -m pytest tests/components/spectroscopy/test_banded_operator.py::test_banded_matvec_matches_dense -q`
+Run: `cd ~/.claude/jobs/d5f48f27/tmp/wt_banded && PYTHONPATH=src /tengri/.venv/bin/python -m pytest tests/components/spectroscopy/test_banded_operator.py::test_banded_matvec_matches_dense -q`
 Expected: FAIL — `ModuleNotFoundError: tengri.observation.banded`.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -170,14 +170,14 @@ def banded_matvec(
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `cd /Users/suchethacooray/.claude/jobs/d5f48f27/tmp/wt_banded && PYTHONPATH=src /Users/suchethacooray/Projects/tengri/.venv/bin/python -m pytest tests/components/spectroscopy/test_banded_operator.py::test_banded_matvec_matches_dense -q`
+Run: `cd ~/.claude/jobs/d5f48f27/tmp/wt_banded && PYTHONPATH=src /tengri/.venv/bin/python -m pytest tests/components/spectroscopy/test_banded_operator.py::test_banded_matvec_matches_dense -q`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-cd /Users/suchethacooray/.claude/jobs/d5f48f27/tmp/wt_banded
-/Users/suchethacooray/Projects/tengri/.venv/bin/ruff format src/tengri/observation/banded.py tests/components/spectroscopy/test_banded_operator.py
+cd ~/.claude/jobs/d5f48f27/tmp/wt_banded
+/tengri/.venv/bin/ruff format src/tengri/observation/banded.py tests/components/spectroscopy/test_banded_operator.py
 git add src/tengri/observation/banded.py tests/components/spectroscopy/test_banded_operator.py
 git commit -m "feat(observation): banded-operator matvec kernel for spectroscopy (#1163)"
 ```
@@ -284,7 +284,7 @@ Expected: PASS (all 4).
 - [ ] **Step 5: Commit**
 
 ```bash
-/Users/suchethacooray/Projects/tengri/.venv/bin/ruff format src/tengri/observation/banded.py tests/components/spectroscopy/test_banded_operator.py
+/tengri/.venv/bin/ruff format src/tengri/observation/banded.py tests/components/spectroscopy/test_banded_operator.py
 git add src/tengri/observation/banded.py tests/components/spectroscopy/test_banded_operator.py
 git commit -m "feat(observation): ingest DESI diagonal-offsets resolution data (#1163)"
 ```
@@ -392,7 +392,7 @@ def gaussian_resolution_bands(
 - [ ] **Step 5: Commit**
 
 ```bash
-/Users/suchethacooray/Projects/tengri/.venv/bin/ruff format src/tengri/observation/banded.py tests/components/spectroscopy/test_banded_operator.py
+/tengri/.venv/bin/ruff format src/tengri/observation/banded.py tests/components/spectroscopy/test_banded_operator.py
 git add -A && git commit -m "feat(observation): Gaussian-equivalent banded LSF; proves R subsumes apply_lsf (#1163)"
 ```
 
@@ -777,7 +777,7 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **Step 2: Run it** — `JAX_PLATFORMS=cpu PYTHONPATH=src /Users/suchethacooray/Projects/tengri/.venv/bin/python bench/scripts/benchmark_spectrum_resample.py`. Capture the table.
+- [ ] **Step 2: Run it** — `JAX_PLATFORMS=cpu PYTHONPATH=src /tengri/.venv/bin/python bench/scripts/benchmark_spectrum_resample.py`. Capture the table.
 - [ ] **Step 3: Record findings** — write `bench/reports/2026-07-15_spectrum_resample.md` with the table and the verdict: at what `n_wave` does the conserving path stay within (say) 0.1% binned-flux error while point-interp drifts, and what wall-clock that buys. This verdict is the go/no-go for a follow-up banded `R_resample`.
 - [ ] **Step 4: Commit** — `bench(observation): coarse-grid resample accuracy vs wall-clock (#1166)`
 
@@ -793,12 +793,12 @@ if __name__ == "__main__":
 - [ ] **Step 1: Full lint + targeted test run**
 
 ```bash
-cd /Users/suchethacooray/.claude/jobs/d5f48f27/tmp/wt_banded
-/Users/suchethacooray/Projects/tengri/.venv/bin/ruff check src/ tests/
-/Users/suchethacooray/Projects/tengri/.venv/bin/ruff format --check src/ tests/
-PYTHONPATH=src /Users/suchethacooray/Projects/tengri/.venv/bin/python tools/check_test_markers.py
-PYTHONPATH=src /Users/suchethacooray/Projects/tengri/.venv/bin/python tools/check_british_spelling.py
-PYTHONPATH=src /Users/suchethacooray/Projects/tengri/.venv/bin/python -m pytest tests/components/spectroscopy/test_banded_operator.py tests/components/spectroscopy/test_resolution_matrix.py tests/physics/spectroscopy/test_resolution_matrix_bias.py tests/regression/bug/test_resolution_matrix_compile_signature.py -q
+cd ~/.claude/jobs/d5f48f27/tmp/wt_banded
+/tengri/.venv/bin/ruff check src/ tests/
+/tengri/.venv/bin/ruff format --check src/ tests/
+PYTHONPATH=src /tengri/.venv/bin/python tools/check_test_markers.py
+PYTHONPATH=src /tengri/.venv/bin/python tools/check_british_spelling.py
+PYTHONPATH=src /tengri/.venv/bin/python -m pytest tests/components/spectroscopy/test_banded_operator.py tests/components/spectroscopy/test_resolution_matrix.py tests/physics/spectroscopy/test_resolution_matrix_bias.py tests/regression/bug/test_resolution_matrix_compile_signature.py -q
 ```
 
 - [ ] **Step 2: Bump the allowlist** for any file over its cap; re-run the file-size guard if one exists (`tools/` — mirror how prior commits bumped `sed_model.py`).

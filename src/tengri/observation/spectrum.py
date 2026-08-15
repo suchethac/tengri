@@ -18,6 +18,7 @@ from functools import partial
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 from tengri.units import lnu_to_fnu
 
@@ -124,7 +125,10 @@ def _apply_lsf_constant_r(
     spectrum : array, shape (n_pix,)
         Input spectral flux.
     wave_obs : array, shape (n_pix,)
-        Observed wavelength grid [Angstrom]. Must be uniformly spaced.
+        Observed wavelength grid [Angstrom]. Must be uniform in ``ln(lambda)``,
+        not merely evenly spaced — the pixel scale is read once from the first
+        pair, so a linear grid under-broadens by ``wave[0]/lambda`` (#1742).
+        ``apply_lsf`` checks this before dispatching here.
     sigma_eff_kms : float
         Effective velocity dispersion [km/s] (after library subtraction).
 
@@ -385,6 +389,15 @@ def apply_lsf(
     sigma_v2 = sigma_v_kms**2
     sigma_eff_kms = jnp.sqrt(jnp.maximum(sigma_inst_kms**2 - sigma_lib2, 0.0) + sigma_v2)
 
+    # NOT guarded with ``_require_log_uniform_grid`` (#1742), though both dispatch
+    # targets take their pixel scale from ``log(wave[1]/wave[0])`` and carry the
+    # identical precondition. Adding the check here fails 26 tests across
+    # ``predict_spectrum``, the calibration polynomial and the projector, because
+    # tengri's own spectroscopy path runs on linearly-spaced observed grids — so
+    # this is not a stray caller to correct but a live defect in the forward
+    # model, and refusing it would break spectroscopy rather than fix it.
+    # Tracked separately; see the follow-up filed from #1742.
+
     # Dispatch based on whether R is constant or variable
     if resolution.ndim == 0:
         # Scalar R: single FFT convolution (fast path)
@@ -623,9 +636,12 @@ def compute_spectrum(
     # Interpolate rest-frame SED
     sed_at_pixels = jnp.interp(wave_rest_query, wave_rest, sed_rest, left=0.0, right=0.0)
 
-    # Scale using lnu_to_fnu conversion for consistency with cosmological flux formula
-    flux_scale = lnu_to_fnu(1.0, dl_cm, redshift)
-    return flux_scale * sed_at_pixels
+    # Apply the (1+z)/(4π d_L²) dimming to the pixel SED directly. A standalone
+    # ``flux_scale = lnu_to_fnu(1.0, ...)`` is ~1e-58 and underflows float32 to
+    # zero (peak 1.0 absorbs none of the -58 decades); applied to sed_at_pixels
+    # (~1e30) apply_log10_scale folds the offset into the array peak and the
+    # result stays in range. Identical in float64 (#1206).
+    return lnu_to_fnu(sed_at_pixels, dl_cm, redshift)
 
 
 def _flux_conserving_resample(
@@ -714,11 +730,64 @@ def compute_spectrum_conserving(
     """
     wave_rest_query = wave_obs / (1.0 + redshift)
     sed_at_pixels = _flux_conserving_resample(wave_rest, sed_rest, wave_rest_query)
-    flux_scale = lnu_to_fnu(1.0, dl_cm, redshift)
-    return flux_scale * sed_at_pixels
+    # Dimming applied to the pixel SED directly, not as a standalone flux_scale
+    # (~1e-58, which underflows float32 to zero). See _resample_to_spectrum
+    # above and #1206.
+    return lnu_to_fnu(sed_at_pixels, dl_cm, redshift)
 
 
-@jax.jit
+#: Fractional spread in ``d(ln lambda)`` tolerated before a grid is called
+#: non-log-uniform. A genuine ``logspace`` grid lands ~1e-14 here; a linear grid
+#: over 4500-5500 A lands ~0.2, so there is four orders of magnitude of daylight
+#: between the two and the threshold is not a tuning knob.
+_LOG_UNIFORM_RTOL = 1e-6
+
+
+def _require_log_uniform_grid(wave, caller: str) -> None:
+    """Raise unless ``wave`` is uniform in ``ln(lambda)`` (#1742).
+
+    A no-op when ``wave`` is a tracer: a traced grid has no values to inspect at
+    trace time. That is a real gap rather than a safe default — it is narrow
+    because a spectroscopic wavelength grid is normally a fixed instrument array
+    closed over by the jitted function, not an argument traced through it.
+
+    Parameters
+    ----------
+    wave : array_like, shape (n_pix,)
+        Wavelength grid to check [Angstrom].
+    caller : str
+        Function name, quoted in the error so the message names the API the user
+        actually called.
+    """
+    if isinstance(wave, jax.core.Tracer):
+        return
+    w = np.asarray(wave, dtype=np.float64)
+    if w.size < 3 or not np.all(np.isfinite(w)) or np.any(w <= 0.0):
+        return  # not a grid this check can speak about; let the caller fail
+    dln = np.diff(np.log(w))
+    mean = float(np.mean(dln))
+    if mean == 0.0:
+        return
+    spread = float(np.ptp(dln) / abs(mean))
+    if spread <= _LOG_UNIFORM_RTOL:
+        return
+    # Report the size of the error, not just its existence: the under-broadening
+    # is a constant factor wave[0]/lambda, so quote it at the array center.
+    lam_mid = float(w[w.size // 2])
+    factor = float(w[0]) / lam_mid
+    raise ValueError(
+        f"{caller} requires a wavelength grid uniform in ln(lambda), but this "
+        f"grid's d(ln lambda) varies by a fraction {spread:.3g} across the array "
+        f"(tolerance {_LOG_UNIFORM_RTOL:g}) — a linearly-spaced grid does this. "
+        f"The convolution is a constant Gaussian in ln(lambda), so one FFT is "
+        f"correct only on a log grid; on this one the broadening would come out "
+        f"low by about {factor:.4g}x at {lam_mid:.1f} A (issue #1742), with no "
+        f"other symptom. Resample onto a log grid first, e.g. "
+        f"wave_log = jnp.logspace(jnp.log10(wave[0]), jnp.log10(wave[-1]), "
+        f"wave.size), interpolate the flux onto it, broaden, and interpolate back."
+    )
+
+
 def velocity_broaden(
     flux: jnp.ndarray,
     wave: jnp.ndarray,
@@ -734,7 +803,9 @@ def velocity_broaden(
     flux : array, shape (n_pix,)
         Input spectral flux.
     wave : array, shape (n_pix,)
-        Wavelength grid [Angstrom]. Must be uniformly spaced.
+        Wavelength grid [Angstrom]. Must be uniformly spaced **in
+        log-wavelength** — e.g. ``jnp.logspace(...)``, not ``jnp.linspace(...)``.
+        A linearly-spaced grid is rejected; see Notes.
     sigma_km_s : float
         Velocity dispersion [km/s]. Typical range: 50–300 km/s.
 
@@ -743,16 +814,73 @@ def velocity_broaden(
     ndarray, shape (n_pix,)
         Broadened spectrum (same units as input).
 
+    Raises
+    ------
+    ValueError
+        If ``wave`` is not uniform in ``ln(lambda)`` and is concrete at trace
+        time. Resample onto a log grid first.
+
     Notes
     -----
     JIT-compatible: yes. Gradient-safe: yes.
-    Assumes uniform log-wavelength spacing for FFT accuracy.
 
+    The convolution is a *constant* Gaussian in ``ln(lambda)``, because
+    ``Delta v / c = Delta ln(lambda)``. That is what makes one FFT correct for
+    the whole array, and it is exact only when the grid is uniform in
+    ``ln(lambda)``.
+
+    **On a linear grid the result is wrong by a constant factor**
+    ``wave[0] / lambda_line`` (issue #1742). ``d(ln lambda) = d(lambda)/lambda``
+    varies as ``1/lambda`` there, so a width read off the first pixel pair sets
+    the kernel by the *bluest* pixel while the feature sits elsewhere. Measured
+    on ``linspace(4500, 5500, 4096)`` with a line at 5000 A: 100 km/s recovered
+    as 90.2, 500 as 450.1 — a constant 0.900 = 4500/5000. The error scales with
+    the wavelength *range*, not the pixel count, so refining the grid does not
+    help: across 3000–10000 A a line at 9000 A would be broadened to 0.33 of the
+    requested width, and a fitted velocity dispersion inherits that smoothly,
+    with nothing looking broken.
+
+    This previously passed silently, and the Parameters section said "uniformly
+    spaced" — instructing users to do the thing that breaks it. It now raises
+    instead, on the reasoning recorded in :mod:`tengri.forward.approx_policy`:
+    a silently-defaulting read is worse than a loud failure.
+
+    The check is skipped when ``wave`` is a tracer, since a traced grid cannot
+    be inspected at trace time. Under ``jax.jit`` with a concrete (closed-over)
+    grid — the usual case for a fixed instrument grid — it still fires.
+
+    Examples
+    --------
+    >>> import jax.numpy as jnp
+    >>> from tengri.observation.spectrum import velocity_broaden
+    >>> wave = jnp.logspace(jnp.log10(4500.0), jnp.log10(5500.0), 256)
+    >>> flux = jnp.ones_like(wave)
+    >>> out = velocity_broaden(flux, wave, 150.0)
+    >>> out.shape == wave.shape
+    True
+
+    """
+    _require_log_uniform_grid(wave, "velocity_broaden")
+    return _velocity_broaden_impl(flux, wave, sigma_km_s)
+
+
+@jax.jit
+def _velocity_broaden_impl(
+    flux: jnp.ndarray,
+    wave: jnp.ndarray,
+    sigma_km_s: float,
+) -> jnp.ndarray:
+    """FFT convolution for :func:`velocity_broaden`, with the check already done.
+
+    Split out so the grid check runs on concrete values: the public function was
+    itself ``@jax.jit``, which makes ``wave`` a tracer inside it, and a guard that
+    can never see its argument is not a guard (#1742).
     """
     sigma_v = sigma_km_s / _C_KM_S  # fractional velocity dispersion
 
-    # Pixel scale in log-wavelength
-    dlnwave = jnp.log(wave[1] / wave[0])  # assumes uniform spacing
+    # Pixel scale in log-wavelength. Constant across the array precisely because
+    # the grid is uniform in ln(lambda) — checked by the caller, not assumed.
+    dlnwave = jnp.log(wave[1] / wave[0])
 
     # Gaussian kernel width in pixels
     sigma_pix = sigma_v / dlnwave

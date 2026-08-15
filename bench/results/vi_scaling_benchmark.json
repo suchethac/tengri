@@ -2222,7 +2222,7 @@
     "forward_chunk_size": 8,
     "wall_s": -1,
     "rss_delta_gb": -1,
-    "error": "elf._build_compositional_kernels()\n                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/suchethacooray/Projects/tengri/src/tengri/forward/sed_model.py\", line 885, in _build_compositional_kernels\n    exact_sed = build_exact_sed(self)\n                ^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/suchethacooray/Projects/tengri/src/tengri/forward/_kernels/exact.py\", line 63, in build_exact_sed\n    dt = model._forward_dtype\n         ^^^^^\nNameError: name 'model' is not defined\n"
+    "error": "elf._build_compositional_kernels()\n                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/tengri/src/tengri/forward/sed_model.py\", line 885, in _build_compositional_kernels\n    exact_sed = build_exact_sed(self)\n                ^^^^^^^^^^^^^^^^^^^^^\n  File \"/tengri/src/tengri/forward/_kernels/exact.py\", line 63, in build_exact_sed\n    dt = model._forward_dtype\n         ^^^^^\nNameError: name 'model' is not defined\n"
   },
   {
     "n_gal": 16,
@@ -2230,7 +2230,7 @@
     "forward_chunk_size": 16,
     "wall_s": -1,
     "rss_delta_gb": -1,
-    "error": "elf._build_compositional_kernels()\n                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/suchethacooray/Projects/tengri/src/tengri/forward/sed_model.py\", line 885, in _build_compositional_kernels\n    exact_sed = build_exact_sed(self)\n                ^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/suchethacooray/Projects/tengri/src/tengri/forward/_kernels/exact.py\", line 63, in build_exact_sed\n    dt = model._forward_dtype\n         ^^^^^\nNameError: name 'model' is not defined\n"
+    "error": "elf._build_compositional_kernels()\n                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/tengri/src/tengri/forward/sed_model.py\", line 885, in _build_compositional_kernels\n    exact_sed = build_exact_sed(self)\n                ^^^^^^^^^^^^^^^^^^^^^\n  File \"/tengri/src/tengri/forward/_kernels/exact.py\", line 63, in build_exact_sed\n    dt = model._forward_dtype\n         ^^^^^\nNameError: name 'model' is not defined\n"
   },
   {
     "n_gal": 32,
@@ -2238,7 +2238,7 @@
     "forward_chunk_size": 32,
     "wall_s": -1,
     "rss_delta_gb": -1,
-    "error": "elf._build_compositional_kernels()\n                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/suchethacooray/Projects/tengri/src/tengri/forward/sed_model.py\", line 885, in _build_compositional_kernels\n    exact_sed = build_exact_sed(self)\n                ^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/suchethacooray/Projects/tengri/src/tengri/forward/_kernels/exact.py\", line 63, in build_exact_sed\n    dt = model._forward_dtype\n         ^^^^^\nNameError: name 'model' is not defined\n"
+    "error": "elf._build_compositional_kernels()\n                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/tengri/src/tengri/forward/sed_model.py\", line 885, in _build_compositional_kernels\n    exact_sed = build_exact_sed(self)\n                ^^^^^^^^^^^^^^^^^^^^^\n  File \"/tengri/src/tengri/forward/_kernels/exact.py\", line 63, in build_exact_sed\n    dt = model._forward_dtype\n         ^^^^^\nNameError: name 'model' is not defined\n"
   },
   {
     "n_gal": 64,
@@ -2246,7 +2246,7 @@
     "forward_chunk_size": 64,
     "wall_s": -1,
     "rss_delta_gb": -1,
-    "error": "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/suchethacooray/Projects/tengri/src/tengri/forward/sed_model.py\", line 885, in _build_compositional_kernels\n    exact_sed = build_exact_sed(self)\n                ^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/suchethacooray/Projects/tengri/src/tengri/forward/_kernels/exact.py\", line 63, in build_exact_sed\n    dt = state.forward_dtype\n         ^^^^^^^^^^^^^^^^^^^\nAttributeError: 'SEDModel' object has no attribute 'forward_dtype'. Did you mean: '_forward_dtype'?\n"
+    "error": "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/tengri/src/tengri/forward/sed_model.py\", line 885, in _build_compositional_kernels\n    exact_sed = build_exact_sed(self)\n                ^^^^^^^^^^^^^^^^^^^^^\n  File \"/tengri/src/tengri/forward/_kernels/exact.py\", line 63, in build_exact_sed\n    dt = state.forward_dtype\n         ^^^^^^^^^^^^^^^^^^^\nAttributeError: 'SEDModel' object has no attribute 'forward_dtype'. Did you mean: '_forward_dtype'?\n"
   },
   {
     "n_gal": 128,
@@ -2254,7 +2254,7 @@
     "forward_chunk_size": 128,
     "wall_s": -1,
     "rss_delta_gb": -1,
-    "error": "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/suchethacooray/Projects/tengri/src/tengri/forward/sed_model.py\", line 885, in _build_compositional_kernels\n    exact_sed = build_exact_sed(self)\n                ^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/suchethacooray/Projects/tengri/src/tengri/forward/_kernels/exact.py\", line 63, in build_exact_sed\n    dt = state.forward_dtype\n         ^^^^^^^^^^^^^^^^^^^\nAttributeError: 'SEDModel' object has no attribute 'forward_dtype'. Did you mean: '_forward_dtype'?\n"
+    "error": "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/tengri/src/tengri/forward/sed_model.py\", line 885, in _build_compositional_kernels\n    exact_sed = build_exact_sed(self)\n                ^^^^^^^^^^^^^^^^^^^^^\n  File \"/tengri/src/tengri/forward/_kernels/exact.py\", line 63, in build_exact_sed\n    dt = state.forward_dtype\n         ^^^^^^^^^^^^^^^^^^^\nAttributeError: 'SEDModel' object has no attribute 'forward_dtype'. Did you mean: '_forward_dtype'?\n"
   },
   {
     "n_gal": 256,
@@ -2262,6 +2262,6 @@
     "forward_chunk_size": 256,
     "wall_s": -1,
     "rss_delta_gb": -1,
-    "error": "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/suchethacooray/Projects/tengri/src/tengri/forward/sed_model.py\", line 885, in _build_compositional_kernels\n    exact_sed = build_exact_sed(self)\n                ^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/suchethacooray/Projects/tengri/src/tengri/forward/_kernels/exact.py\", line 63, in build_exact_sed\n    dt = state.forward_dtype\n         ^^^^^^^^^^^^^^^^^^^\nAttributeError: 'SEDModel' object has no attribute 'forward_dtype'. Did you mean: '_forward_dtype'?\n"
+    "error": "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/tengri/src/tengri/forward/sed_model.py\", line 885, in _build_compositional_kernels\n    exact_sed = build_exact_sed(self)\n                ^^^^^^^^^^^^^^^^^^^^^\n  File \"/tengri/src/tengri/forward/_kernels/exact.py\", line 63, in build_exact_sed\n    dt = state.forward_dtype\n         ^^^^^^^^^^^^^^^^^^^\nAttributeError: 'SEDModel' object has no attribute 'forward_dtype'. Did you mean: '_forward_dtype'?\n"
   }
 ]

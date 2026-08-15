@@ -184,7 +184,7 @@ def TORUS(path, modelsettings):
 
 ### tengri xray.py
 
-**Upstream:** `/Users/suchethacooray/.claude-squad/worktrees/cs/agn-fixes_18b27add16074700/src/tengri/components/xray/xray.py`, lines 207–243
+**Upstream:** `/tengri/agn-fixes_18b27add16074700/src/tengri/components/xray/xray.py`, lines 207–243
 
 **Upstream excerpt:**
 ```python
@@ -220,7 +220,7 @@ def alpha_ox_from_l2500(l_2500_erg_hz: float) -> float:
 
 ### tengri blr.py
 
-**Upstream:** `/Users/suchethacooray/.claude-squad/worktrees/cs/agn-fixes_18b27add16074700/src/tengri/components/agn/blr.py`, lines 80–105
+**Upstream:** `/tengri/agn-fixes_18b27add16074700/src/tengri/components/agn/blr.py`, lines 80–105
 
 **Upstream excerpt:**
 ```python

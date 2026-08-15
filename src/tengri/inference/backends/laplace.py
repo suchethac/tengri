@@ -21,7 +21,11 @@ import jax.numpy as jnp
 import numpy as np
 from jax.flatten_util import ravel_pytree
 
-from tengri.config.exceptions import LaplaceNotAtModeWarning, warn_measured
+from tengri.config.exceptions import (
+    LaplaceNotAtModeWarning,
+    LaplaceVarianceCeilingWarning,
+    warn_measured,
+)
 from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physical
 
 # Newton decrement above which the expansion point is reported as off-mode
@@ -30,6 +34,90 @@ from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physic
 # DRW-field population: converged fits scored 0.0005-0.075, under-converged
 # ones 1.3 upward (issue #1537).
 DEFAULT_STATIONARITY_TOL = 0.1
+
+
+def _regularize_hessian(hessian, min_eigenvalue, regularize=True):
+    """Floor the Hessian spectrum, and report the variance that floors imply.
+
+    Clipping is not damping. ``cov = H^-1``, so flooring an eigenvalue at
+    ``min_eigenvalue`` does not cap that direction's variance — it *assigns* it
+    ``1 / min_eigenvalue`` (``1e6``, i.e. std 1000, at the default). The
+    directions the data constrain least therefore come back with the widest
+    draws, and the width is an artifact of the floor (#1515).
+
+    The count was previously computed and shown only under ``verbose``, which
+    is off by default, so a fit could silently return floor-derived error bars.
+    Extracted from :func:`run_laplace` so the reporting has one home and can be
+    exercised directly on a known-singular Hessian.
+
+    Parameters
+    ----------
+    hessian : jnp.ndarray, shape (n, n)
+        Symmetric Hessian of the loss at the expansion point.
+    min_eigenvalue : float
+        Floor applied to the eigenvalue spectrum.
+    regularize : bool, optional
+        When ``False`` the spectrum is returned untouched and no warning is
+        issued. Default ``True``.
+
+    Returns
+    -------
+    eigenvalues : jnp.ndarray
+        The raw spectrum, before flooring.
+    eigenvalues_clipped : jnp.ndarray
+        The floored spectrum (identical to ``eigenvalues`` when
+        ``regularize=False``).
+    eigenvectors : jnp.ndarray
+        Eigenvectors of ``hessian``; the caller reuses them for the Newton
+        decrement rather than decomposing twice.
+    hessian_reg : jnp.ndarray
+        Hessian rebuilt from the floored spectrum.
+    n_clipped : int
+        How many directions hit the floor.
+
+    Warns
+    -----
+    LaplaceVarianceCeilingWarning
+        When any direction is clipped, carrying the count, the assigned
+        variance and standard deviation, and the smallest unclipped eigenvalue.
+    """
+    eigenvalues, eigenvectors = jnp.linalg.eigh(hessian)
+
+    if not regularize:
+        return eigenvalues, eigenvalues, eigenvectors, hessian, 0
+
+    n_clipped = int(jnp.sum(eigenvalues < min_eigenvalue))
+    eigenvalues_clipped = jnp.maximum(eigenvalues, min_eigenvalue)
+    hessian_reg = eigenvectors @ jnp.diag(eigenvalues_clipped) @ eigenvectors.T
+
+    if n_clipped > 0:
+        n_dim = int(eigenvalues.size)
+        implied_variance = 1.0 / float(min_eigenvalue)
+        implied_std = float(np.sqrt(implied_variance))
+        unclipped = eigenvalues[eigenvalues >= min_eigenvalue]
+        smallest_unclipped = float(jnp.min(unclipped)) if unclipped.size else float("nan")
+        warn_measured(
+            f"Laplace clipped {n_clipped}/{n_dim} Hessian eigenvalues at "
+            f"min_eigenvalue={min_eigenvalue:g}. Because cov = H^-1, each "
+            f"clipped direction is *assigned* variance {implied_variance:.6g} "
+            f"(std {implied_std:.6g}) in the unconstrained parameterization — "
+            f"that width is the floor, not a measurement, and it lands on the "
+            f"directions the data determine least well. Smallest unclipped "
+            f"eigenvalue is {smallest_unclipped:.4g}. If a clipped direction is "
+            f"an exact degeneracy (two parameters entering the model only in "
+            f"combination, as met_alpha_fe and met_logzsol do — #1095), hold "
+            f"one of the pair Fixed rather than lowering the floor.",
+            LaplaceVarianceCeilingWarning,
+            stacklevel=3,
+            n_clipped=n_clipped,
+            n_dim=n_dim,
+            min_eigenvalue=float(min_eigenvalue),
+            implied_variance=implied_variance,
+            implied_std=implied_std,
+            smallest_unclipped_eigenvalue=smallest_unclipped,
+        )
+
+    return eigenvalues, eigenvalues_clipped, eigenvectors, hessian_reg, n_clipped
 
 
 def _finite_diff_hessian(grad_fn, theta_flat, unravel_fn, data_args, eps=1e-5):
@@ -212,17 +300,13 @@ def run_laplace(
     # Symmetrize (numerical safety)
     hessian = 0.5 * (hessian + hessian.T)
 
-    # Eigendecompose for regularization and diagnostics
-    eigenvalues, eigenvectors = jnp.linalg.eigh(hessian)
-    n_clipped = 0
-
-    if regularize:
-        n_clipped = int(jnp.sum(eigenvalues < min_eigenvalue))
-        eigenvalues_clipped = jnp.maximum(eigenvalues, min_eigenvalue)
-        hessian_reg = eigenvectors @ jnp.diag(eigenvalues_clipped) @ eigenvectors.T
-    else:
-        eigenvalues_clipped = eigenvalues
-        hessian_reg = hessian
+    (
+        _eigenvalues_raw,
+        eigenvalues_clipped,
+        eigenvectors,
+        hessian_reg,
+        n_clipped,
+    ) = _regularize_hessian(hessian, min_eigenvalue=min_eigenvalue, regularize=regularize)
 
     # Covariance = H^{-1}
     cov = jnp.linalg.inv(hessian_reg)

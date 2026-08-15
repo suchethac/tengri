@@ -184,6 +184,62 @@ class WildcardPartialFreeWarning(UserWarning):
     """
 
 
+class DeadGradientParameterWarning(UserWarning):
+    """A freed parameter whose gradient is identically zero (#1206).
+
+    The parameter reaches the SED only through a kernel whose derivative rule
+    does not differentiate it, so every gradient-based backend (MAP, NUTS, VI)
+    sees exactly ``0.0``. The sampler never moves it, and the reported posterior
+    is the prior — which is indistinguishable, in the output, from a parameter
+    the data genuinely failed to constrain.
+
+    That ambiguity is the reason this warns at build time rather than being left
+    to inspection: "the posterior equals the prior" is a result a user can
+    reasonably expect to see, so nothing downstream can flag it for them.
+
+    Warns rather than raises: pinning the parameter is a legitimate
+    configuration, the forward model is correct either way, and a gradient-free
+    sampler can still fit it. Filter this category if you are sampling without
+    gradients.
+
+    See Also
+    --------
+    tengri.components.agn.component.Float32UnsafeAGNWarning
+        The same discipline for a block that is numerically unsafe rather than
+        gradient-dead.
+    """
+
+
+class CorruptEnergyBalanceWarning(UserWarning):
+    """The dust energy-balance integrand was non-finite (#1527).
+
+    ``L_absorbed`` came back ``+inf`` because the intrinsic or attenuated SED
+    reaching the energy balance contained ``Inf`` or ``NaN`` — most often the
+    ``Inf * 0`` product of an extreme-metallicity SSP flux (the BUG-NSS-02
+    artifact class), or an attenuation curve whose far-UV extrapolation
+    amplified without bound.
+
+    The ``+inf`` is deliberate and replaces a silent ``0.0``: before #1527 a
+    single corrupt pixel made the whole IR budget vanish and the model emitted
+    a plausible dust-free galaxy, which is a wrong answer that looks like a
+    right one. ``+inf`` instead propagates to ``L_ir`` and shows up as a NaN
+    fit — loud, but on its own it says nothing about *where* the corruption
+    entered, which is what this warning supplies.
+
+    Fires only on the eager forward path. Under ``jit``/``grad``/``vmap`` there
+    is no concrete value to inspect, so nothing is emitted and the ``+inf``
+    travels on its own — exploring corrupt draws during inference is expected
+    and warning per-sample would be unusable.
+
+    See Also
+    --------
+    tengri.forward.energy_balance.bolometric_absorbed_log10
+        The strict producer that emits the ``+inf``.
+    tengri.forward.energy_balance.bolometric_absorbed
+        The linear form, which deliberately keeps the old clamp.
+    """
+
+
 class AdvisoryWarning(UserWarning):
     """Base for construction-time advisories about a model the user is building.
 
@@ -224,6 +280,100 @@ class GridSupportWarning(AdvisoryWarning):
     """
 
 
+class DegenerateParameterPairWarning(AdvisoryWarning):
+    """Two freed parameters that enter the model only through one combination.
+
+    Distinct from :class:`DeadGradientParameterWarning`: neither parameter is
+    dead — each moves the SED on its own. They are simply not *jointly*
+    identifiable, because the forward model reads only a single function of the
+    two. The likelihood is exactly flat along that combination, so the posterior
+    has a ridge rather than a mode.
+
+    The measured instance is ``met_alpha_fe`` with ``met_logzsol`` on an SSP
+    grid carrying no [alpha/Fe] axis (issue #1095): [alpha/Fe] is folded into an
+    effective metallicity as ``log_z_eff = met_logzsol + 0.75 * met_alpha_fe``,
+    and an alpha-enhanced spectrum is *the same array* as a scaled-solar one at
+    0.75 dex higher metallicity — ``numpy.array_equal`` returns ``True``.
+
+    A flat direction is not merely a weak constraint. The Hessian is singular
+    there, so :func:`~tengri.inference.backends.laplace.run_laplace` clips the
+    eigenvalue to ``min_eigenvalue`` and — because ``cov = H^-1`` — *assigns*
+    that direction variance ``1 / min_eigenvalue`` (issue #1515). The reported
+    error bar is an artifact of the floor.
+
+    Warns rather than raises: the forward model is correct, a degenerate pair is
+    a legitimate thing to sample if you want the ridge, and loading an
+    alpha-enhanced grid makes the same pair genuinely identifiable.
+
+    See Also
+    --------
+    tengri.components.stellar.sps.dsps_wrapper.has_alpha_grid
+        The 4D test that decides whether [alpha/Fe] is a real axis (#226) or a
+        reparameterization of metallicity.
+    """
+
+
+class OutOfSSPGridWarning(UserWarning):
+    """An ingested metallicity history reaches past the SSP's metallicity grid.
+
+    The metallicity lookup ``jnp.clip``s onto ``ssp_lgmet``, so a node outside
+    the grid returns the edge template: ``logzsol = -6`` was measured to give
+    byte-identical photometry to the grid edge at ``-2.152`` (issue #1677). The
+    SED stays smooth and plausible, which is what makes it hard to notice.
+
+    :func:`~tengri.inference.history_ingest.ingest_histories` raises on this by
+    default; this category is what ``on_out_of_grid='warn'`` emits instead. It is
+    deliberately **not** an :class:`AdvisoryWarning`: advisories describe a model
+    being constructed and are silenced wholesale by the introspection paths,
+    whereas this describes *data* arriving at ingest and must survive them.
+
+    The payload carries ``mass_fraction_outside`` — the share of stellar mass
+    formed on clamped nodes — because node counts alone do not say whether the
+    clamp matters. Read it back with
+    :func:`~tengri.config.exceptions.measurements_of`.
+    """
+
+
+class MetallicityUnitWarning(UserWarning):
+    """A metallicity history looks like a metal mass fraction read as log10(Z/Zsun).
+
+    ``met_unit=`` exists so a caller can declare which convention a history
+    arrives in, but declaring it is optional and the default is ``'logzsol'``.
+    That default cannot be checked against the SSP grid, because a mass fraction
+    is a small *positive* number and small positive log10(Z/Zsun) values are
+    legal — ``Z = 0.011`` read as log10(Z/Zsun) is 1.03 :math:`Z_\\odot`, well
+    inside every grid. The out-of-range guard is structurally unable to see it;
+    the result is a plausible all-solar SED (issue #1677).
+
+    What separates the two is dynamic range, not magnitude. Chemical enrichment
+    moves Z(t) by orders of magnitude across cosmic time, so a history whose
+    every node sits inside a ~0.1 dex band immediately above solar is a mass
+    fraction essentially every time.
+
+    The test runs on the **converted** values, so a history correctly declared
+    ``met_unit='z_mass_fraction'`` lands near :math:`-2 \\ldots 0` and never
+    trips it. Only the ambiguous case is reachable.
+    """
+
+
+class GasStellarMetallicityWarning(UserWarning):
+    """Enriched stars sitting in gas that never enriched with them.
+
+    Stellar metallicity (which SSP templates the population is drawn from) and
+    gas-phase metallicity (which drives nebular emission) are separate
+    parameters, and correctly so — inflow of pristine gas genuinely decouples
+    them. But ``neb_logZ_gas`` has a *declared default* of -0.3, and the build
+    grammar always supplies it, so the ``if neb_logZ_gas is None: neb_logZ_gas
+    = log_z`` inheritance inside the CLOUDY / Cue / MAPPINGS backends never
+    runs. Measured: leaving it unset is bit-identical to setting -0.3 (#1677).
+
+    A tabulated stellar history therefore enriches the stars while the gas stays
+    pinned at 0.5 :math:`Z_\\odot`, silently. This warns only when the value was
+    left at its declaration and the caller passed neither ``met_gas=`` nor a
+    ``neb_logZ_gas`` column — a deliberate offset never trips it.
+    """
+
+
 class PrecompBiasWarning(AdvisoryWarning):
     """The precompute LUT's forward bias, amplified by this fit's SNR, is material.
 
@@ -244,6 +394,41 @@ class PrecompBiasWarning(AdvisoryWarning):
     speedup (measured 7-10x) is the reason it is the default. For final
     inference at high SNR, rerun with ``approx=None`` (the exact path) or
     compare the two posteriors. Filter this category if the trade is
+    deliberate.
+    """
+
+
+class LaplaceVarianceCeilingWarning(UserWarning):
+    """Eigenvalue clipping assigned a variance ceiling to unconstrained directions.
+
+    ``regularize=True`` floors the Hessian spectrum at ``min_eigenvalue`` to
+    force positive-definiteness, then takes ``cov = H^-1``. Because the
+    covariance is the *inverse*, the floor does not damp the clipped
+    directions — it **assigns** each of them variance ``1 / min_eigenvalue``.
+    At the ``1e-6`` default that is a variance of ``1e6``, i.e. a standard
+    deviation of 1000 in the unconstrained parameterization (issue #1515).
+
+    So the directions the data determine *least* well come back with the
+    *widest* draws, and the number is an artifact of the floor rather than a
+    measurement. The fit still returns a full sample set with finite marginals
+    and nothing fails.
+
+    A clipped direction is usually one of three things, and the remedy differs:
+
+    - **an exact degeneracy** — two parameters that enter the model only in
+      one combination, so the likelihood is flat along a ridge (``met_alpha_fe``
+      and ``met_logzsol`` are exactly this, see
+      :class:`DegenerateParameterPairWarning` and issue #1095). Fix the model,
+      not the floor: hold one of the pair fixed.
+    - **a genuinely unconstrained parameter** — the data carry no information
+      about it. The prior, not ``1 / min_eigenvalue``, is the honest answer;
+      consider fixing it or reporting it as prior-dominated.
+    - **numerical noise** in a finite-difference Hessian near a flat direction,
+      in which case a tighter ``eps`` or an analytic Hessian is the fix.
+
+    Reported as the count of clipped directions, the implied standard
+    deviation, and the smallest unclipped eigenvalue, so the severity is
+    visible rather than inferred. Filter this category when the ceiling is
     deliberate.
     """
 

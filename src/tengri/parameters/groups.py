@@ -94,7 +94,7 @@ import difflib
 import inspect
 import warnings
 from collections.abc import Callable
-from functools import lru_cache
+from functools import cache, lru_cache
 from typing import NamedTuple
 
 from tengri.config.exceptions import (
@@ -520,6 +520,30 @@ _VALID_AGN_FEII_TYPES = _agn_block_types("feii")
 #: Valid AGN attenuation block types (derived from ``AGN_BLOCKS['attenuation']``).
 _VALID_AGN_ATTEN_TYPES = _agn_block_types("attenuation")
 
+#: Top-level groups whose ``type`` the round-trip must be able to emit even when
+#: the group declares no parameters of its own. Exported (rather than inlined in
+#: :func:`parameters_to_groups`) so the contract test's census is *derived* from
+#: the emitter instead of retyped beside it.
+_TOP_LEVEL_TYPED_GROUPS: frozenset[str] = frozenset(
+    {"sfh", "dust", "neb", "shock", "igm", "radio", "xray", "agn"}
+)
+
+#: AGN sub-block name -> the ``Parameters`` attribute holding its selected type.
+#:
+#: Read in BOTH directions: ``_translate_agn_composable`` writes these attributes
+#: from ``agn={'torus': {'type': ...}}``, and ``_extract_group_type`` reads them
+#: back on the round-trip. One table, so the parser and the emitter cannot
+#: disagree about where a sub-block's choice is stored — they did, and the
+#: emitter simply returned ``None`` for the whole family (#1777).
+_AGN_BLOCK_TO_KWARG: dict[str, str] = {
+    "disc": "agn_disc_block",
+    "torus": "agn_torus_block",
+    "nlr": "agn_nlr_block",
+    "blr": "agn_blr_block",
+    "feii": "agn_feii_block",
+    "atten": "agn_attenuation_block",
+}
+
 #: Partition table: agn_* param name -> group path (for sub-block routing).
 #: Maps full agn_* param names to their owning group (agn, agn.disc, agn.torus, etc.)
 _AGN_PARTITION = {
@@ -745,13 +769,16 @@ def parse_groups(**kwargs) -> Parameters:
     # (issue #311); otherwise it stays in ``"sfh"`` so the legacy
     # ``sfh={'*': FIXED}`` wildcard keeps cascading over met_* params
     # — preserves pre-#311 behavior for every fixture/recipe that didn't
-    # pass a ``stellar={}`` block.
+    # pass a ``met={}`` block.
     dust_emission_active = structural_params.dust_emission is not None
-    has_stellar_block = isinstance(kwargs.get("stellar"), dict)
+    has_met_block = isinstance(kwargs.get("met"), dict)
+    # ``met`` owns met_* when present (#1720), else ``sfh`` — the pre-#311
+    # default, kept so a legacy ``sfh={'*': FIXED}`` wildcard still cascades
+    # over met_* for fixtures and recipes that pass no metallicity block.
     param_partition = _partition_by_group(
         structural_params.all_params,
         dust_emission_active,
-        met_group="stellar" if has_stellar_block else "sfh",
+        met_group="met" if has_met_block else "sfh",
     )
 
     # Resolve each parameter's final distribution
@@ -867,9 +894,18 @@ def parse_groups(**kwargs) -> Parameters:
         # ``wildcard_fixed_inactive`` is deliberate block scoping, not a failure,
         # so only the active branch is tracked.
         if tag == "wildcard_free":
-            wildcard_free_outcome.setdefault(group, []).append(
-                (param_name, not final_dist.is_fixed)
-            )
+            freed = not final_dist.is_fixed
+            wildcard_free_outcome.setdefault(group, []).append((param_name, freed))
+            # Report the *outcome*, not the request. A wildcard-FREE that found
+            # no declared prior leaves the parameter Fixed, and tagging it
+            # "[all_params FREE]" put a row reading FREE inside the Fixed block
+            # of ``spec.summary()`` — the one table a user consults to answer
+            # "what did I hold constant?" (#1726). WildcardPartialFreeWarning
+            # says so at build time, but a notebook can miss or filter it, and
+            # the summary is what gets read afterwards. Same principle as the
+            # "_grid" tags below: shown, never silent (#1586).
+            if not freed:
+                tag = "wildcard_free_pinned"
 
         # Apply the resolved distribution when the user addressed this group
         # (a per-param override or wildcard), or for any AGN param whenever the
@@ -947,6 +983,11 @@ def parse_groups(**kwargs) -> Parameters:
 #: Marks a provenance tag whose prior was intersected with a component's grid.
 _GRID_NARROWED_SUFFIX = "_grid"
 
+#: Marks a wildcard-FREE that found no declared prior and left the parameter
+#: Fixed. Both suffixes annotate the *outcome* of a resolution whose *intent*
+#: is carried by the base tag, so :func:`_base_provenance` strips either.
+_WILDCARD_PINNED_SUFFIX = "_pinned"
+
 #: Least fraction of a declared range that may survive an automatic narrowing.
 #:
 #: Trimming a modest dead tail is a tidy-up. Cutting a 2.5 dex prior down to
@@ -957,7 +998,7 @@ _MIN_RETAINED_FRACTION = 0.10
 
 
 def _base_provenance(tag: str) -> str:
-    """Strip the grid-narrowing marker, leaving how the value was *chosen*.
+    """Strip outcome markers, leaving how the value was *chosen*.
 
     ``wildcard_free_grid`` still means "this came from ``all_params: FREE``";
     the suffix only records that the declared range was then intersected with
@@ -965,6 +1006,13 @@ def _base_provenance(tag: str) -> str:
     :func:`parameters_to_groups` has to see the base tag, or a narrowed
     parameter loses its wildcard intent and gets emitted as an explicit
     override instead of collapsing back into ``all_params``.
+
+    ``wildcard_free_pinned`` is the same shape (#1726): the wildcard did reach
+    the parameter, it simply found no declared prior and left it Fixed. The
+    suffix exists so ``spec.summary()`` can report the outcome rather than the
+    request, and must not make the parameter round-trip as an explicit override
+    — the user asked for ``all_params: FREE`` and that is what ``to_groups()``
+    should hand back.
 
     Parameters
     ----------
@@ -974,9 +1022,12 @@ def _base_provenance(tag: str) -> str:
     Returns
     -------
     str
-        The tag without the grid-narrowing marker.
+        The tag without its outcome marker.
     """
-    return tag[: -len(_GRID_NARROWED_SUFFIX)] if tag.endswith(_GRID_NARROWED_SUFFIX) else tag
+    for suffix in (_GRID_NARROWED_SUFFIX, _WILDCARD_PINNED_SUFFIX):
+        if tag.endswith(suffix):
+            return tag[: -len(suffix)]
+    return tag
 
 
 #: Provenance tags whose prior came from the *declaration*, not from the user.
@@ -1234,9 +1285,19 @@ def _format_stuck(group: str, stuck: list[str]) -> tuple[str, str, str]:
         Comma-joined names, truncated with a ``(+N more)`` tail.
     top : str
         Top-level group name — what the caller writes as the kwarg.
-    short : str
-        First stuck name with its group prefix stripped — the short form the
-        caller writes inside the group dict.
+    example : str
+        A ready-to-paste snippet freeing the first stuck parameter, nested at
+        the level the grammar accepts.
+
+    Notes
+    -----
+    The snippet used to be assembled by the callers as
+    ``f"{top}={{{short!r}: Uniform(lo, hi)}}"``, which flattens a sub-block
+    parameter to its top-level group: for ``dust.emission`` that produced
+    ``dust={'alpha_dale': Uniform(lo, hi)}``. The dust level used to accept
+    that spelling and silently discard it, so the advice appeared to work and
+    changed nothing; it is now refused outright. Either way the recommendation
+    has to name the nesting the parameter actually lives at.
     """
     # Show enough that the caller can see what they meant to free without
     # scrolling; groups run to ~22 params at the widest (dust.emission).
@@ -1246,9 +1307,12 @@ def _format_stuck(group: str, stuck: list[str]) -> tuple[str, str, str]:
     )
     top = group.split(".")[0]
     prefix = f"{top}_"
-    example = stuck[0]
-    short = example[len(prefix) :] if example.startswith(prefix) else example
-    return shown, top, short
+    first = stuck[0]
+    short = first[len(prefix) :] if first.startswith(prefix) else first
+    sub = group.split(".", 1)[1] if "." in group else None
+    inner = f"{{{short!r}: Uniform(lo, hi)}}"
+    example = f"{top}={{{sub!r}: {inner}}}" if sub else f"{top}={inner}"
+    return shown, top, example
 
 
 def _check_wildcard_freed_something(
@@ -1297,7 +1361,7 @@ def _check_wildcard_freed_something(
             # Freed everything it covered — exactly what was asked for.
             continue
 
-        shown, top, short = _format_stuck(group, stuck)
+        shown, _top, example = _format_stuck(group, stuck)
 
         if len(stuck) < len(entries):
             warnings.warn(
@@ -1307,7 +1371,7 @@ def _check_wildcard_freed_something(
                 f"  {shown}\n"
                 f"The fit will run with that physics held constant. Pass "
                 f"explicit priors for the ones you meant to vary, e.g. "
-                f"{top}={{{short!r}: Uniform(lo, hi)}}, or filter "
+                f"{example}, or filter "
                 f"WildcardPartialFreeWarning if this is deliberate.",
                 WildcardPartialFreeWarning,
                 stacklevel=3,
@@ -1321,8 +1385,7 @@ def _check_wildcard_freed_something(
             f"FREE resolves to each parameter's registry default, and these "
             f"default to Fixed — so the wildcard would leave every one of them "
             f"pinned and the fit would silently not vary this physics.\n"
-            f"Pass explicit priors instead, e.g. "
-            f"{top}={{{short!r}: Uniform(lo, hi)}}."
+            f"Pass explicit priors instead, e.g. {example}."
         )
 
 
@@ -1585,18 +1648,13 @@ def _wildcard_scopes(
 
 def _translate_structural(groups: dict) -> dict:
     """Resolve each group's `type` choice into the matching Parameters kwargs."""
-    valid_groups = {
-        "sfh",
-        "stellar",
-        "dust",
-        "neb",
-        "shock",
-        "igm",
-        "radio",
-        "xray",
-        "agn",
-        "foreground",
-    }
+    # Derived, not restated. This was a second hand-maintained copy of the group
+    # list, and the two had to be edited together with nothing checking that they
+    # were: a group added to ``_GROUP_STRUCTURAL_KEYS`` alone would be rejected
+    # here as unknown, and one added only here would accept any key at all.
+    # Dotted entries are sub-blocks (``dust.emission``, ``igm.dla``), reached
+    # through their parent rather than named at top level.
+    valid_groups = {k for k in _GROUP_STRUCTURAL_KEYS if "." not in k}
     result = {}
 
     # Suggested model when someone tries the (unsupported) bool form for an
@@ -1612,6 +1670,18 @@ def _translate_structural(groups: dict) -> dict:
             # SEDModel-only kwarg (e.g. ``approx=WavePrecomp()``) splatted
             # in from a recipe — ignore at the parameters layer.
             continue
+
+        if group_name == "stellar":
+            raise ValueError(
+                "the 'stellar' group is gone (#1720); its one setting was the "
+                "metallicity mode, and that now lives in 'met', which selects "
+                "with 'type' like every other group. "
+                "A 'met_mode' key becomes met={'type': ...} — so the tabulated "
+                "mode is met={'type': 'table'} — and a 'met_logzsol' key becomes "
+                "met={'logzsol': ...}. "
+                "Two spellings of one setting was the maintenance cost this "
+                "removes; tengri.list_metallicity_modes() shows the current form."
+            )
 
         if group_name not in valid_groups:
             suggestions = difflib.get_close_matches(group_name, valid_groups, n=2, cutoff=0.6)
@@ -1641,8 +1711,8 @@ def _translate_structural(groups: dict) -> dict:
 
         if group_name == "sfh":
             _translate_sfh(group_dict, result)
-        elif group_name == "stellar":
-            _translate_stellar(group_dict, result)
+        elif group_name == "met":
+            _translate_met(group_dict, result)
         elif group_name == "dust":
             _translate_dust(group_dict, result)
         elif group_name == "neb":
@@ -1857,22 +1927,54 @@ def _translate_sfh(sfh_dict: dict, result: dict) -> None:
     result["mean_sfh_type"] = sfh_type
 
 
-def _translate_stellar(stellar_dict: dict, result: dict) -> None:
-    """Resolve ``stellar.met_mode`` into the matching Parameters kwarg.
+def _translate_met(met_dict: dict, result: dict) -> None:
+    """Resolve ``met.type`` into ``met_mode`` — the parallel of ``sfh.type`` (#1720).
 
-    Wires the chemical-evolution mode (``delta``, ``ramp``, ``two_step``,
-    ``psb_two_step``, ``bins``, ``bins_continuity``, ``chem_evol``, ``table``)
-    through the nested-dict builder. Per-mode parameters (``logzsol_old``,
-    ``logzsol_young``, ``step_age_gyr``, etc.) flow through the standard
-    pass-2 resolver, since :func:`_partition_by_group` routes ``met_*``
-    declarations into this group.
+    ``sfh`` and ``met`` describe the same thing from two angles: how much mass
+    formed when, and at what metallicity. They should read the same at the call
+    site, and until #1720 they did not — the metallicity mode lived under
+    ``stellar`` and used ``met_mode`` where every other group uses ``type``.
 
-    See :func:`tengri.components.stellar.sfh.met_registry` for the full
-    list of registered modes and their per-mode parameters.
+    That asymmetry is what produced #1677: ``Catalog.from_histories`` advised
+    ``met={'type': 'table'}``, the form both conventions imply, and the grammar
+    rejected it. The advice was right and the grammar was the outlier, so the
+    grammar moved.
+
+    ``stellar={'met_mode': ...}`` (the #311 spelling) is **gone**, not
+    deprecated: two spellings of one setting is a maintenance cost with no
+    upside, and every call site in the repo moved with this change. Passing
+    ``stellar=`` now raises with the one-line translation.
+
+    Parameters
+    ----------
+    met_dict : dict
+        The ``met=`` group. ``'type'`` selects a mode from ``MET_REGISTRY``.
+    result : dict
+        Parameters kwargs being assembled; ``met_mode`` is written into it.
+
+    Raises
+    ------
+    ValueError
+        If ``type`` is not a registered metallicity mode.
+
+    Notes
+    -----
+    **JIT-compatible**: no — construction-time grammar translation.
     """
+    if "met_mode" in met_dict:
+        raise ValueError(
+            "the met group selects its mode with 'type', like every other group "
+            "— not with 'met_mode'. Write met={'type': 'table'}. ('met_mode' is "
+            "the key of the older met={'type': ...} spelling, which also "
+            "still works; this mixes the two.)"
+        )
+    _set_met_mode(met_dict.get("type"), result, key="met={'type': ...}")
+
+
+def _set_met_mode(met_mode, result: dict, *, key: str) -> None:
+    """Validate a metallicity mode and record it, whichever spelling supplied it."""
     from tengri.components.stellar.sfh.met_registry import MET_REGISTRY
 
-    met_mode = stellar_dict.get("met_mode")
     if met_mode is None:
         # No explicit mode; let auto-inference (from per-param keys) decide.
         return
@@ -1882,7 +1984,8 @@ def _translate_stellar(stellar_dict: dict, result: dict) -> None:
         suggestions = difflib.get_close_matches(met_mode, valid_modes, n=2, cutoff=0.6)
         suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
         raise ValueError(
-            f"Unknown met_mode '{met_mode}'. Valid modes: {', '.join(valid_modes)}.{suggest_str}"
+            f"Unknown metallicity mode '{met_mode}' in {key}. Valid modes: "
+            f"{', '.join(valid_modes)}.{suggest_str}"
         )
 
     result["met_mode"] = met_mode
@@ -2389,27 +2492,27 @@ _XRAY_VARIANT_PARAMS: frozenset[str] = _XRAY_DEFAULT_MODEL_PARAMS | frozenset().
 )
 #: Declared and freeable, but read by no model the grammar can currently build.
 #:
-#: ``xray_det_hmxb`` / ``xray_det_lmxb`` are the Lehmer+2016 XRB luminosity
-#: offsets. They are inert under *every* X-ray type -- swept across their
-#: declared support they move ``rest_sed()`` by exactly 0.0, beside sibling
-#: ``xray_*`` params on the same build that move it by 9.5e-3 and 98.55 --
-#: because ``XRaySEDComponent._terms()`` never passes them (#1706).
+#: **Empty since #1706.** It held ``xray_det_hmxb`` / ``xray_det_lmxb``, the
+#: Lehmer+2016 XRB luminosity offsets, which were inert under every X-ray type
+#: because ``XRaySEDComponent._terms()`` never passed them on to
+#: ``xray_total_terms`` / ``xray_total_lopez24_terms``. Both call sites now do,
+#: so every model reads them and there is no variant to scope them to.
 #:
-#: This is **not** an ``xray_aird`` problem. ``xray_total_terms``, which the
-#: live component already calls on its default branch, accepts both offsets and
-#: applies them exactly (``10.0**offset`` on a scalar amplitude; measured ratio
-#: 3.162278 for an offset of 0.5, against a predicted ``10**0.5``). Only the
-#: call site is missing. An earlier revision of this comment attributed the
-#: inertness to ``XRayAirdSEDComponent`` being unreachable (#1684); that is the
-#: wrong cause, and wiring that component would fix neither offset.
+#: One prediction in the old note did not survive measurement, and is recorded
+#: here because it is the kind that costs a large refactor: it held that fixing
+#: the offsets also required splitting the precompute XRB grid, since
+#: ``_build_grid_xrb`` bakes HMXB and LMXB into one summed template. It does
+#: not. The band-response precompute derives its amplitudes by calling
+#: ``emission_terms`` at reference wavelengths on every predict, and the offsets
+#: are pure scalar amplitudes, so both accelerated paths inherit the call-site
+#: fix untouched -- verified under ``WavePrecomp()`` and ``precompute=True`` on
+#: both ``yang20`` and ``lopez24`` in
+#: ``tests/regression/bug/test_xray_xrb_offsets_wired.py``.
 #:
-#: They are narrowed away here rather than left free, because a wildcard must
-#: not hand the sampler a dimension nothing reads. **When #1706 threads them
-#: through, delete them from this set entirely** -- every model reads them, so
-#: there is no variant to scope them to. Fixing them also requires splitting the
-#: precompute XRB grid, which bakes HMXB and LMXB into one summed template; see
-#: #1706 for why the exact path alone is not enough.
-_XRAY_UNREACHABLE_PARAMS: frozenset[str] = frozenset({"xray_det_hmxb", "xray_det_lmxb"})
+#: Kept (empty) rather than deleted: the narrowing step in ``parse_groups`` is
+#: the right home for a genuinely unreadable parameter, and the next one should
+#: land here rather than re-deriving the mechanism.
+_XRAY_UNREACHABLE_PARAMS: frozenset[str] = frozenset()
 
 #: Union of every param owned by each radio sub-group, used by the partition
 #: to route names away from the flat ``radio`` group.
@@ -2480,7 +2583,11 @@ _AGN_SUBBLOCK_KEYS = frozenset({"disc", "torus", "nlr", "blr", "feii", "atten", 
 #: Keys nested in a sub-block (e.g. ``dust.emission``) appear separately.
 _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     "sfh": frozenset({"type", "*", "bin_edges_gyr", "age_kernel", "field_centering"}),
-    "stellar": frozenset({"met_mode", "*"}),
+    # ``met`` is the parallel of ``sfh``: both describe the stellar population's
+    # history, and both select a model with ``type`` like every other group
+    # (#1720). It replaces ``met={'type': ...}`` (#311) outright — two
+    # spellings of one setting is the maintenance cost this removes.
+    "met": frozenset({"type", "*"}),
     "dust": frozenset(
         {
             "type",
@@ -2593,11 +2700,15 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
         _Structural("age_kernel", "age_kernel", None),
         _Structural("field_centering", "field_centering", 1.0),
     ),
-    "stellar": (
-        # Always-emit would force a stellar={} entry onto every round-trip,
-        # which noisily breaks existing diff-against-from_groups call sites.
-        _Structural("met_mode", "met_mode", "delta"),
+    "met": (
+        # Emitted as 'type', the key every other group uses (#1720). Defaulting
+        # to 'delta' keeps it off the round-trip for the ordinary model, so a
+        # met={} entry is never forced onto call sites that diff against
+        # from_groups.
+        _Structural("type", "met_mode", "delta"),
     ),
+    # No 'stellar' entry: that group is gone (#1720). Its one setting was the
+    # metallicity mode, and it is emitted above as met={'type': ...}.
     "dust": (
         # Witt & Gordon (2000) screen selectors (FSPS dust_type=3). Only read
         # by the parser when the dust type is wg00, so a non-WG00 spec always
@@ -2767,8 +2878,7 @@ def _validate_user_keys(
     "AI slop" failure mode of the nested-dict API before this validator
     was added (issue tracked in the forward-model cleanup arc).
     """
-    dust_emission_active = structural_params.dust_emission is not None
-    valid_top_groups = {"sfh", "stellar", "dust", "neb", "shock", "igm", "radio", "xray", "agn"}
+    valid_top_groups = {"sfh", "met", "dust", "neb", "shock", "igm", "radio", "xray", "agn"}
 
     # Build the AGN cross-level acceptance set (shared params land in any sub-block).
     agn_shared_names = _short_names_for_group("agn", param_partition)
@@ -2802,12 +2912,18 @@ def _validate_user_keys(
                 param_names = param_names | _short_names_for_group(
                     f"agn.{sub_name}", param_partition
                 )
-        elif top_key == "dust" and dust_emission_active:
-            # Dust top-level accepts the dust.emission param short names
-            # for legacy code that flattens emission params at the dust
-            # level. Treat as a soft acceptance (still resolved via the
-            # dust.emission group path).
-            param_names = param_names | _short_names_for_group("dust.emission", param_partition)
+        # NOTE: the dust top level deliberately does NOT accept dust.emission
+        # short names. It used to, "for legacy code that flattens emission
+        # params at the dust level ... still resolved via the dust.emission
+        # group path" — but the resolution half was never wired. Measured:
+        # **22 of 22** emission params written at the dust level were accepted
+        # and silently discarded, with no error and no warning, so
+        # ``dust={'emission': {...}, 'qpah': Uniform(1, 4)}`` ran the fit with
+        # qpah pinned at its default and one fewer free dimension than the
+        # author wrote. A form that silently does nothing can have no working
+        # caller, so refusing it cannot break code that works today.
+        # (``agn`` genuinely resolves its cross-level names — 14/14 applied —
+        # which is why that union below stays.)
         elif top_key == "igm":
             # The IGM top-level accepts DLA param short names for the
             # builder-factory output form ``igm={'dla': True, 'log_n_hi': ...}``,
@@ -2890,13 +3006,53 @@ def _check_dict_keys(
         for full_name in param_partition:
             suggestion_pool.add(_extract_short_name(full_name, {}))
             suggestion_pool.add(full_name)
+        # A parameter written one level too high is the common case, and
+        # "Unknown key 'alpha' ... Did you mean: alpha?" — the message this
+        # produced before — tells the reader to write exactly what they wrote.
+        # Name the sub-block instead.
+        owner = _subblock_owning(str(key), group, param_partition)
+        if owner is not None:
+            sub = owner.split(".", 1)[1]
+            raise ValueError(
+                f"{key!r} is a {owner!r} parameter, not a {group!r} one, so writing "
+                f"it here would be silently ignored. Nest it: "
+                f"{group}={{{sub!r}: {{{key!r}: ...}}}}."
+            )
         suggestions = difflib.get_close_matches(str(key), list(suggestion_pool), n=2, cutoff=0.6)
+        # A suggestion identical to the rejected key is noise, not help.
+        suggestions = [s for s in suggestions if s != str(key)]
         suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
         raise ValueError(
             f"Unknown key {key!r} in group {group!r}.{suggest_str} "
             f"Valid structural keys for this group are: "
             f"{sorted(_GROUP_STRUCTURAL_KEYS.get(group, frozenset({'type', '*'})))}."
         )
+
+
+def _subblock_owning(key: str, group: str, param_partition: dict[str, str]) -> str | None:
+    """The ``group.sub`` block that declares ``key``, if one does.
+
+    Parameters
+    ----------
+    key : str
+        The rejected key, short or fully prefixed.
+    group : str
+        The group the key was written under.
+    param_partition : dict
+        Full parameter name -> owning group.
+
+    Returns
+    -------
+    str or None
+        ``"dust.emission"``-style owner, or ``None`` when no sub-block of
+        ``group`` declares it.
+    """
+    for sub in _GROUP_STRUCTURAL_KEYS:
+        if not sub.startswith(f"{group}."):
+            continue
+        if key in _short_names_for_group(sub, param_partition):
+            return sub
+    return None
 
 
 def _build_agn_search_view(param_name: str, agn_dict: dict, group: str) -> dict:
@@ -3141,15 +3297,9 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
         "atten": _VALID_AGN_ATTEN_TYPES,
     }
 
-    # Map sub-block names to their result kwargs
-    block_to_kwarg = {
-        "disc": "agn_disc_block",
-        "torus": "agn_torus_block",
-        "nlr": "agn_nlr_block",
-        "blr": "agn_blr_block",
-        "feii": "agn_feii_block",
-        "atten": "agn_attenuation_block",
-    }
+    # Map sub-block names to their result kwargs (module-level: the round-trip
+    # emitter reads the same table, so the two directions cannot drift).
+    block_to_kwarg = _AGN_BLOCK_TO_KWARG
 
     # Process each sub-block
     for block_name, valid_types in block_specs.items():
@@ -3196,6 +3346,7 @@ def _partition_by_group(
     dust_emission_active: bool,
     *,
     met_group: str = "sfh",
+    agn_flat: bool = False,
 ) -> dict[str, str]:
     """Partition parameter names by their owning group.
 
@@ -3208,6 +3359,16 @@ def _partition_by_group(
         All declared parameter names from the structural Parameters.
     dust_emission_active : bool
         If True, dust_emission params belong to "dust.emission"; else ignored.
+    met_group : str, optional
+        Group that ``met_*`` parameters belong to.
+    agn_flat : bool, optional
+        Route every ``agn_*`` parameter to a flat ``"agn"`` group instead of
+        its ``agn.<block>`` sub-block. Set by the round-trip emitter when a
+        *monolithic* AGN model is selected: ``_translate_agn`` raises on a
+        non-composable ``agn['type']`` that appears alongside sub-block keys,
+        so a nested emission would be a dict the grammar refuses to read back.
+        Flat per-parameter keys are accepted there, and the short names are
+        unaffected (both forms strip only the ``agn_`` prefix).
 
     Returns
     -------
@@ -3220,6 +3381,9 @@ def _partition_by_group(
         if name == "redshift" or name == "apply_igm":
             partition[name] = "_toplevel"
         elif name.startswith("agn_"):
+            if agn_flat:
+                partition[name] = "agn"
+                continue
             # Use partition table for fine-grained routing
             partition[name] = _AGN_PARTITION.get(name, "agn")
             # Catch-all for grahsp_* -> disc
@@ -3567,6 +3731,21 @@ def parameters_to_groups(spec: Parameters) -> dict:
     ``tests/contract/test_structural_settings_roundtrip.py`` asserts the two
     tables cannot drift apart again.
 
+    The ``type`` key itself is *not* in that table — it is emitted by
+    :func:`_extract_group_type` — and that exemption hid the same class of
+    loss for a second round (#1777). Two causes, both now pinned by
+    ``tests/contract/test_structural_types_survive_the_roundtrip.py``:
+
+    * the AGN family had one arm returning ``None`` for every ``agn*`` group,
+      so the top-level model and all six sub-block selectors were dropped;
+      28 of 79 structural selections rebuilt as different physics (up to 98%
+      in photometry) and the two AGN recipes lost 14 and 17 free parameters;
+    * a group whose non-default type declares no parameters of its own never
+      reaches the per-group walk, and the fallback that catches those tested a
+      hand-written list naming only ``dust`` and ``igm`` — so
+      ``neb={'type': 'ssp'}`` rebuilt with nebular emission off. The rule is
+      now "differs from :func:`_default_group_type`", read off a bare spec.
+
     Only *non-default* values are emitted, so an untouched group stays
     absent from the output rather than growing noise.
 
@@ -3583,15 +3762,24 @@ def parameters_to_groups(spec: Parameters) -> dict:
     True
     """
     result = {}
-    # Emit a ``stellar`` block on the round-trip only when ``met_mode`` is
-    # non-default OR the user explicitly built the spec with a stellar group
-    # (provenance check). Otherwise keep met_* under ``sfh`` for back-compat
-    # with the legacy fixtures that pre-#311 expected.
-    use_stellar = getattr(spec, "met_mode", "delta") != "delta"
+    # Emit a ``met`` block on the round-trip only when ``met_mode`` is
+    # non-default. Otherwise keep met_* under ``sfh`` for back-compat with the
+    # legacy fixtures that pre-#311 expected.
+    #
+    # The block emitted is ``met`` (#1720), which is the only spelling now:
+    # ``met={'type': ...}``, the parallel of ``sfh={'type': ...}``.
+    use_met_block = getattr(spec, "met_mode", "delta") != "delta"
+    # A monolithic AGN model and the six sub-block selectors are mutually
+    # exclusive surfaces — ``_translate_agn`` raises when a non-composable
+    # ``agn['type']`` appears next to sub-block keys. So the moment the type is
+    # emitted (it was not, before #1777), the nested form has to go.
+    agn_model = getattr(spec, "agn_model", None)
+    agn_flat = agn_model is not None and agn_model != "composable"
     partition = _partition_by_group(
         spec.all_params,
         spec.dust_emission is not None,
-        met_group="stellar" if use_stellar else "sfh",
+        met_group="met" if use_met_block else "sfh",
+        agn_flat=agn_flat,
     )
     provenance = getattr(spec, "_group_provenance", {})
 
@@ -3647,20 +3835,15 @@ def parameters_to_groups(spec: Parameters) -> dict:
             group_output[short_name] = distribution
 
     # Also add groups that have no params but have a configured type (e.g., neb='none')
-    _all_possible_groups = {"sfh", "dust", "neb", "shock", "igm", "radio", "xray", "agn"}
-    for group_name in sorted(_all_possible_groups):
+    for group_name in sorted(_TOP_LEVEL_TYPED_GROUPS):
         if group_name not in result:
             type_value = _extract_group_type(group_name, spec)
+            # Normalize a list type to the tuple the cached default holds, so
+            # a composed SFH is not reported as differing from itself.
+            comparable = tuple(type_value) if isinstance(type_value, list) else type_value
             if type_value is not None and (
-                type_value == "none"
-                or (group_name == "dust" and type_value != "two_component")
-                # An active non-default IGM selection has no params of its
-                # own, so without this it vanished from the round-trip and
-                # a ``madau`` spec silently rebuilt as the default model.
-                or (group_name == "igm" and type_value not in ("inoue", "inoue14"))
+                type_value == "none" or comparable != _default_group_type(group_name)
             ):
-                # Only add if it's a non-default type or a special case
-                # For now, only add 'none' types and other explicit settings
                 result[group_name] = {"type": type_value}
 
     # Groups carrying structural settings but owning no declared parameters
@@ -3694,8 +3877,49 @@ def parameters_to_groups(spec: Parameters) -> dict:
     return result
 
 
+@cache
+def _default_group_type(group_name: str) -> str | tuple | None:
+    """The type a group falls back to when the round-trip omits it.
+
+    Read off a bare ``Parameters()`` through :func:`_extract_group_type`, so it
+    is the *same* code path that reports a spec's type — including that
+    function's boundary translations (``nebular_mode='off'`` -> ``"none"``, the
+    ``shock`` boolean -> ``"mappings"``). Any hand-written copy of these
+    defaults is a second source of truth that drifts.
+
+    That is not hypothetical. The emitter used to decide "is this worth
+    emitting?" from a literal table naming only ``dust`` and ``igm``, so a
+    group whose non-default type happened to declare **no parameters of its
+    own** never reached the round-trip at all: ``neb={'type': 'ssp'}`` rebuilt
+    with nebular emission switched **off** (#1777).
+
+    Parameters
+    ----------
+    group_name : str
+        Group name, e.g. ``"neb"`` or ``"agn.torus"``.
+
+    Returns
+    -------
+    str or tuple or None
+        The default type. Lists are returned as tuples so the result stays
+        hashable for the cache.
+    """
+    value = _extract_group_type(group_name, Parameters())
+    return tuple(value) if isinstance(value, list) else value
+
+
 def _extract_group_type(group_name: str, spec: Parameters) -> str | list[str] | None:
     """Extract the type value for a group from spec settings.
+
+    Notes
+    -----
+    ``None`` means "this group has no type axis, or none is selected", and the
+    round-trip omits the key. That makes an *unimplemented* arm indistinguishable
+    from a genuinely absent axis, which is how the AGN family went unemitted:
+    a single ``elif group_name.startswith("agn"): return None`` covered the
+    top-level model and all six sub-blocks, annotated "more complex composition
+    handled in tests" — no test held it (#1777). Return ``None`` only when the
+    axis really is absent.
 
     Parameters
     ----------
@@ -3747,10 +3971,21 @@ def _extract_group_type(group_name: str, spec: Parameters) -> str | list[str] | 
         return spec.radio_agn_model if getattr(spec, "radio", False) else None
     elif group_name == "xray":
         return spec.xray_model if hasattr(spec, "xray_model") else None
-    elif group_name.startswith("agn"):
-        # AGN sub-blocks extract from agn_model setting
-        # This is a simplification; more complex composition handled in tests
-        return None
+    elif group_name == "agn":
+        # ``None`` means no AGN component at all, and the group is then absent
+        # from the round-trip entirely. Otherwise this is either the literal
+        # ``"composable"`` or a monolithic model name, and both are grammar
+        # types that ``_translate_agn`` accepts back verbatim.
+        return getattr(spec, "agn_model", None)
+    elif group_name.startswith("agn."):
+        block = group_name.split(".", 1)[1]
+        attr = _AGN_BLOCK_TO_KWARG.get(block)
+        if attr is None:
+            return None
+        value = getattr(spec, attr, None)
+        # ``"none"`` is every sub-block's default, so omitting it keeps an
+        # untouched block absent from the output rather than growing noise.
+        return None if value in (None, "none") else value
     return None
 
 
