@@ -112,7 +112,7 @@ def main() -> int:
         print(
             "Error: pcigale is not importable in this environment.\n"
             "Install it (``pip install pcigale``) or run with tengri's "
-            "main venv (``/Users/suchethacooray/Projects/tengri/.venv/bin/python``).",
+            "main venv (``.venv/bin/python``).",
             file=sys.stderr,
         )
         return 1

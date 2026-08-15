@@ -948,21 +948,21 @@ Add an entry under `### Added` in `## [Unreleased]`:
 
 - [ ] Run full new test suite:
   ```bash
-  PYTHONPATH=/Users/suchethacooray/Projects/tengri/.claude/worktrees/architecture/src \
-      /Users/suchethacooray/Projects/tengri/.venv/bin/pytest \
+  PYTHONPATH=/tengri/src \
+      /tengri/.venv/bin/pytest \
       tests/unit/protocols/test_spatial_protocol.py \
       tests/unit/components/spatial/ -q
   ```
 
 - [ ] Project-wide lint:
   ```bash
-  /Users/suchethacooray/Projects/tengri/.venv/bin/ruff check src/ tests/
+  /tengri/.venv/bin/ruff check src/ tests/
   ```
 
 - [ ] Public import smoke:
   ```bash
-  PYTHONPATH=/Users/suchethacooray/Projects/tengri/.claude/worktrees/architecture/src \
-      /Users/suchethacooray/Projects/tengri/.venv/bin/python -c "
+  PYTHONPATH=/tengri/src \
+      /tengri/.venv/bin/python -c "
   from tengri.protocols.spatial import SpatialComponent
   from tengri.components.spatial import Sersic, Exponential, FlatSlab
   print('OK')
