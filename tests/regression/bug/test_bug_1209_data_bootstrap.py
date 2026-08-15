@@ -19,7 +19,7 @@ answers to "where is my data?" had drifted apart:
 
 These pin the invariants that make those states unrepresentable.
 
-Design: docs/superpowers/specs/2026-07-17-consolidate-approx-and-bootstrap-design.md
+Design: docs/internal/specs/2026-07-17-consolidate-approx-and-bootstrap-design.md
 """
 
 import warnings

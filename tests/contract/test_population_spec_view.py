@@ -9,7 +9,7 @@ fails loudly here rather than silently producing wrong-shape outputs
 inside a JIT'd loss function.
 
 Task 2.5 from the plan
-``docs/superpowers/plans/2026-05-22-single-hamiltonian-fitter.md``.
+``docs/internal/plans/2026-05-22-single-hamiltonian-fitter.md``.
 """
 
 from __future__ import annotations

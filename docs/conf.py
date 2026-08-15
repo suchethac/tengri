@@ -548,10 +548,12 @@ intersphinx_mapping = {
 
 exclude_patterns = [
     "_build",
+    # Agent-authored design plans and specs. They were `docs/superpowers/{plans,specs}`
+    # and needed two more entries here ("superpowers", "specs") to stay out of the
+    # build; folding them under `internal/` means one exclude covers them and anything
+    # else contributor-only that lands here later.
     "internal",
     "**.ipynb_checkpoints",
-    "superpowers",
-    "specs",
     # Synthesizer reproduction notebook kept out of the published docs by
     # request (removed from the reproduction toctree). Excluded so Sphinx
     # does not warn about an orphaned document. Restore alongside the
