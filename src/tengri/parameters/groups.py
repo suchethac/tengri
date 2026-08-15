@@ -1216,6 +1216,15 @@ def _declared_param_names(component_type: str) -> frozenset[str] | None:
     cls = _REGISTRY.get(_EMISSION_TYPE_ALIASES.get(component_type, component_type))
     priors = getattr(cls, "_priors", None)
     if not priors:
+        # Empty ``_priors`` is ambiguous, so ask rather than infer. A component
+        # that declares ``declares_no_parameters`` is stating it reads nothing,
+        # and narrowing it to the empty set is then correct -- it is what every
+        # engine that *does* declare priors already gets. Without the marker the
+        # wildcard is left alone, because the other reading of an empty _priors
+        # is ``energy_balance_split``, whose six knobs live in
+        # ``components/dust/_params.py`` and would all be pinned.
+        if getattr(cls, "declares_no_parameters", False):
+            return frozenset()
         return None
     prefix = getattr(cls, "parameter_prefix", "")
     return frozenset(prefix + name for name in priors)

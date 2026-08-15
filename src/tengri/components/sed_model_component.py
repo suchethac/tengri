@@ -269,6 +269,23 @@ class SEDModelComponent(TemplateThreading):
     _optional_inputs_tuple: ClassVar[tuple[DerivedKey, ...]] = ()
     _citations_tuple: ClassVar[tuple[str, ...]] = ()
 
+    #: Set to ``True`` by a component that genuinely reads no parameters.
+    #:
+    #: An empty ``_priors`` is ambiguous and cannot be inferred from: it means
+    #: either "this component reads nothing" (``pah_drude``, a pure template
+    #: shape) or "this component's parameters are declared somewhere other than
+    #: the class" (``energy_balance_split`` reads six knobs declared in
+    #: ``components/dust/_params.py``, because re-declaring them beside the
+    #: attenuator's would raise a duplicate declaration).
+    #:
+    #: ``_declared_param_names`` therefore refuses to guess: it narrows a group
+    #: wildcard to the empty set only when a component *says* it reads nothing,
+    #: and leaves the wildcard alone otherwise. Inferring instead of asking
+    #: would pin all six of the latter's parameters, which is the failure that
+    #: narrowing exists to prevent; not asking at all leaves the former freeing
+    #: the whole static union, which is #1482.
+    declares_no_parameters: ClassVar[bool] = False
+
     # Instance attributes (set by subclass, but with class defaults)
     name: str = "component"
     parameter_prefix: str = "component_"
