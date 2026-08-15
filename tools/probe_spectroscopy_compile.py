@@ -29,7 +29,7 @@ jax.config.update("jax_enable_x64", True)
 import jax.numpy as jnp
 
 from tengri import Fitter, Observation, Parameters, SEDModel, Spectroscopy
-from tengri.components.sps.dsps_wrapper import load_ssp_data
+from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.parameters.priors import Fixed, Uniform
 
 REPO = Path(__file__).resolve().parent.parent

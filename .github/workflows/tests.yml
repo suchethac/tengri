@@ -141,6 +141,18 @@ jobs:
       # same as the guard above.
       - run: python tools/check_zero_hiding_clamps.py
       - run: python tools/check_representable_floors.py
+      # `tools/` is where this repo keeps its own gates and probes, and almost
+      # none of them are invoked by CI — so a rename under src/ breaks them
+      # silently and there is no run to go red. Seven of 34 were dead on arrival
+      # when this guard was added, all on one move
+      # (`tengri.components.sps` -> `tengri.components.stellar.sps`). Among them
+      # was audit_analysis_constants.py, which audits the JIT closure constants
+      # behind the template-baking class that keeps coming back (#1383, #1462,
+      # #1549, #1597) — the detector was itself unusable and nothing said so.
+      # Resolves against the source tree rather than importing, so it stays
+      # stdlib-only like the guards above and still reports on a tree whose
+      # package does not import.
+      - run: python tools/check_tools_imports.py
       # `nbsphinx_execute = "never"`, so the committed docs/spine/**/*.ipynb IS
       # the published page and nothing else checks it still matches the
       # notebooks/*.py it came from. Two ways of losing that have shipped: a
@@ -342,6 +354,14 @@ jobs:
       - run: pip install -e ".[dev]"
       - run: python tools/check_param_prefixes.py
       - run: python tools/check_param_defaults.py
+      # #887's guarantee — every parameter is either freeable by
+      # `all_params: FREE` or refused on the record with one of four reasons —
+      # shipped in #1638 with a guard that promises "adding a new one fails the
+      # build until someone writes down which it is". It was never given a
+      # `- run:` line, so it could not fail any build: the guarantee was
+      # unenforced from the day it landed. Green as written (358 parameters, 78
+      # freeable, 33 pinned), so this turns it on with no ratchet.
+      - run: python tools/check_param_free_priors.py
       - run: python tools/check_test_markers.py
       - run: python tools/check_single_dispatch.py
       - run: python tools/check_registry_completeness.py
