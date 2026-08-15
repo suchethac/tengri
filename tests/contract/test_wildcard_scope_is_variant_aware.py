@@ -83,8 +83,13 @@ away the first:
   ``xray_E_cut`` moved the SED by 85% on the same build. A magnitude argument
   cannot explain a set of exact zeros sitting beside a live parameter.
 
-The remaining two, ``xray_det_hmxb`` / ``xray_det_lmxb``, are inert for a third
-reason that is not scoping at all — see :data:`_XRAY_UNREACHABLE_PARAMS`.
+The remaining two, ``xray_det_hmxb`` / ``xray_det_lmxb``, were inert for a third
+reason that is not scoping at all: the component never passed them to the
+physics. Fixed in #1706, so they are no longer narrowed away and
+:data:`_XRAY_UNREACHABLE_PARAMS` is now empty. Their own guard lives in
+``tests/regression/bug/test_xray_xrb_offsets_wired.py``, which sweeps them on
+both X-ray models and on both accelerated paths — this suite cannot see them,
+because a wildcard test only reaches parameters the wildcard frees.
 """
 
 from __future__ import annotations

@@ -19,6 +19,12 @@ on:
       # and a change to the generator changes every spine page -- neither is
       # under docs/, and without these both shipped with no preview build.
       - "notebooks/**"
+      # The reproduction pages are NOT generated at build time -- the committed
+      # docs/reproduction/<slug>.ipynb is served as-is (CONTRACT §8). So a
+      # reproduction/ edit reaches the site only via its re-copied docs/ twin,
+      # and a PR touching one without the other is exactly what the preview is
+      # for. Listed for the same reason as notebooks/ above, one tree later.
+      - "reproduction/**"
       - "scripts/sync_spine_notebooks_for_docs.py"
       - ".github/workflows/docs-preview.yml"
       - ".github/workflows/docs.yml"

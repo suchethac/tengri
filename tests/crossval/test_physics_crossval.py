@@ -257,11 +257,11 @@ class TestBLRNLRCrossval:
 
     def test_blr_has_broad_lines(self):
         """BLR should produce broad emission (FWHM > 1000 km/s)."""
-        from tengri.components.agn.blr import blr_emission
+        from tengri.components.agn.blr import compute_blr_sed
 
         wave = jnp.linspace(4700, 5000, 1000)
         # l_disc_bol_erg = 10^45 erg/s
-        blr = np.asarray(blr_emission(wave, l_disc_bol_erg=1e45))
+        blr = np.asarray(compute_blr_sed(wave, l_disc_bol_erg=1e45))
         w = np.asarray(wave)
 
         peak = w[np.argmax(blr)]
@@ -276,12 +276,12 @@ class TestBLRNLRCrossval:
 
     def test_nlr_narrower_than_blr(self):
         """NLR lines should be narrower than BLR lines."""
-        from tengri.components.agn.blr import blr_emission
-        from tengri.components.agn.nlr import nlr_emission
+        from tengri.components.agn.blr import compute_blr_sed
+        from tengri.components.agn.nlr import compute_nlr_sed
 
         wave = jnp.linspace(6400, 6700, 1000)
-        blr = np.asarray(blr_emission(wave, l_disc_bol_erg=1e45))
-        nlr = np.asarray(nlr_emission(wave, l_disc_bol_erg=1e45))
+        blr = np.asarray(compute_blr_sed(wave, l_disc_bol_erg=1e45))
+        nlr = np.asarray(compute_nlr_sed(wave, l_disc_bol_erg=1e45))
 
         # Measure FWHM of Hα in both
         def fwhm_pix(flux):
@@ -291,11 +291,11 @@ class TestBLRNLRCrossval:
 
     def test_blr_scales_with_luminosity(self):
         """BLR should scale with disc luminosity."""
-        from tengri.components.agn.blr import blr_emission
+        from tengri.components.agn.blr import compute_blr_sed
 
         wave = jnp.linspace(6400, 6700, 500)
-        blr_lo = np.asarray(blr_emission(wave, l_disc_bol_erg=1e44))
-        blr_hi = np.asarray(blr_emission(wave, l_disc_bol_erg=1e45))
+        blr_lo = np.asarray(compute_blr_sed(wave, l_disc_bol_erg=1e44))
+        blr_hi = np.asarray(compute_blr_sed(wave, l_disc_bol_erg=1e45))
 
         ratio = np.max(blr_hi) / max(np.max(blr_lo), 1e-50)
         np.testing.assert_allclose(ratio, 10.0, rtol=0.5)

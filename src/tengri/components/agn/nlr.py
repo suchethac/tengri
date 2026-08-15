@@ -10,10 +10,16 @@ extends on kpc scales beyond the torus opening angle.
 For computational efficiency this module uses analytic line profiles
 rather than full CLOUDY grids. Each emission line is a Gaussian with
 FWHM ~ 500 km/s (narrow lines) placed at the rest-frame wavelength.
-Line ratios are calibrated to the Richardson et al. (2014) AGN NLR
-template (Table 3, column 'a42'), which provides observationally-derived
-emission-line diagnostics for moderate AGN luminosity at intermediate
-inclination angle.
+
+Line ratios come from Richardson et al. (2014) Table 3, column 'a42' —
+*dereddened emission-line strengths for the AGN locus, relative to Hbeta*.
+Richardson et al. selected SDSS galaxies whose spectra are not dominated by
+star formation, then co-added them into fifteen high-S/N composite spectra
+(``a00`` ... ``a42``) forming a sequence in **NLR ionization level**. The
+column label is a position on that ionization sequence — it is not a
+luminosity, an inclination, or a photoionization-model grid point. The
+numbers are *measurements* off stacked observed spectra, which is what makes
+them empirical rather than theoretical (see the doublet note below).
 
 All functions are pure JAX and JIT-compilable.
 
@@ -35,7 +41,7 @@ NLR module map (#897) — these are **distinct**, not duplicates
 References
 ----------
 
-- Richardson et al. 2014, ApJ, 786, 87 (NLR emission-line template)
+- Richardson et al. 2014, MNRAS, 437, 2376 (NLR emission-line template)
 - Feltre et al. 2016, MNRAS, 456, 3354 (NLR emission-line diagnostics)
 
 """
@@ -140,6 +146,29 @@ _RICHARDSON_WAVES = jnp.array(
     ]
 )
 
+#: DO NOT "correct" the forbidden doublets in this table to their atomic ratios.
+#:
+#: Both members of [O III] 4959/5007, [N II] 6548/6584 and [O I] 6300/6363 decay
+#: from the same upper level, so in a *photoionization model* their intensity
+#: ratio is fixed by the transition probabilities alone and carries no freedom.
+#: That is a constraint on ``components/nebular/shock.py`` and on the Cloudy-grid
+#: backends, and it is enforced there.
+#:
+#: It is **not** a constraint here. Richardson+2014 Table 3 is dereddened line
+#: strengths *measured* off stacked SDSS composites, so each entry carries the
+#: deblending and S/N systematics of the stack. As tabulated, a42 gives
+#: 5007/4959 = 2.97 (atomic 2.98), 6584/6548 = 2.70 (atomic ~2.94) and
+#: 6300/6363 = 3.67 (atomic ~3.00). The [N II] and [O I] deviations are real
+#: properties of the measurement — [N II] 6548 is a weak line on the H-alpha
+#: wing, and 6363 is quoted to one significant figure — not defects to repair.
+#:
+#: #1752 rewrote 6548 to 2.13/2.96 and 4959 to 8.53/2.98 on the atomic argument.
+#: That was wrong twice over: it imposed model physics on a measurement, and it
+#: broke the parity this table exists for — the values below are the published
+#: a42 column, agreeing value-for-value with the same table as carried by
+#: Prospector (``AGNSpecModel.init_aline_info``), which is the claim the
+#: docstring makes. Reverted; the guard is now a parity test against the
+#: published values, not an atomic-ratio assertion.
 _RICHARDSON_FLUXES = jnp.array(
     [
         2.96,
@@ -182,8 +211,9 @@ def compute_nlr_sed_richardson2014(
     The narrow-line region (NLR) is photoionized gas illuminated by the AGN
     accretion disc. This function synthesizes the NLR emission spectrum using
     the emission-line template from Richardson et al. (2014), which provides
-    AGN-specific line ratios derived from the 'a42' column of Table 3
-    (moderate AGN luminosity, intermediate inclination angle).
+    AGN-specific line ratios derived from the 'a42' column of Table 3 — one
+    of fifteen composite SDSS spectra forming a sequence in NLR ionization
+    level.
 
     The NLR receives ``covering_fraction * L_disc`` and converts a fraction
     into line emission only (no power-law continuum). Each line is modeled
@@ -217,14 +247,23 @@ def compute_nlr_sed_richardson2014(
     consistent with typical Seyfert 2 AGN narrow-line ratios. Line profiles
     are Gaussian with fixed FWHM (narrow lines, ~500 km/s).
 
+    **Empirical, not theoretical.** Table 3 lists dereddened strengths measured
+    off stacked observed spectra, so the forbidden doublets do not reproduce
+    their atomic branching ratios exactly ([N II] 6584/6548 = 2.70 against an
+    atomic ~2.94). Those deviations are inherited from the measurement and are
+    deliberately preserved — see the note above ``_RICHARDSON_FLUXES``. For a
+    template whose doublets are tied by construction, use a photoionization
+    backend (``agn={'nlr': {'type': 'synthesizer'}}``) instead.
+
     Implements the same AGN NLR line table as Prospector (Johnson et al. 2021
     [2]_); validated against its output.
 
     References
     ----------
-    .. [1] J. C. Richardson, et al., "Optical Spectroscopy of Post-Starburst
-       Galaxies," ApJ, 2014, 786, 87. Table 3, column 'a42'.
-       https://doi.org/10.1088/0004-637X/786/2/87
+    .. [1] C. T. Richardson, J. T. Allen, J. A. Baldwin, P. C. Hewett, and
+       G. J. Ferland, "Interpreting the ionization sequence in AGN
+       emission-line spectra," MNRAS, 2014, 437, 3, 2376-2403. Table 3,
+       column 'a42'. https://doi.org/10.1093/mnras/stt2056
     .. [2] B. D. Johnson, et al., "Prospector: Inferring the Star Formation
        Histories of Galaxies from Observed Spectral Energy Distributions,"
        ApJS, 254, 22, 2021. https://doi.org/10.3847/1538-4365/abef67

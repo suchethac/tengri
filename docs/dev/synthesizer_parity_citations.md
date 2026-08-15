@@ -113,7 +113,7 @@ Bibkeys recorded below all resolve in source #1 unless otherwise noted.
 | Byler et al. 2017 | `Byler_2017` | |
 | Gutkin, Charlot & Bruzual 2016 | `Gutkin_2016` | |
 | Ferland et al. 2017 (Cloudy 17) | `Ferland_2017` | |
-| Li et al. 2024 (Cue NN emulator) | `Li_2024a` | Disambiguate — `Li_2024b` is a different ALMA paper |
+| Li et al. 2025 (Cue NN emulator) | `Li_2024a` | Key keeps the arXiv year (2405.04598); the paper published as ApJ 986, 9 in 2025. Disambiguate — `Li_2024b` is a different ALMA paper |
 
 | Storey & Zeippen 2000 ([O III] line ratios) | `Storey_2000` | Fetched 2026-05-08 |
 | Ferland et al. 2023 (Cloudy 23) | `Ferland_2023` | Fetched 2026-05-08 |

@@ -9,7 +9,7 @@ Uses ONLY the tengri public API:
 
 Run from worktree root with PYTHONPATH=. so the drivers package resolves:
 
-    PYTHONPATH=. /Users/suchethacooray/Projects/tengri/.venv/bin/python \
+    PYTHONPATH=. .venv/bin/python \
         reproduction/cigale/_drivers/consistency_audit.py
 """
 

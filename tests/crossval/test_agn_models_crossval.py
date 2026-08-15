@@ -41,12 +41,12 @@ class TestQSOGenCrossval:
         Both tengri and original QSOGen use the same broken power-law
         parameterization, so the trend must match.
         """
-        from tengri.components.agn.qsogen import qsogen_sed
+        from tengri.components.agn.qsogen import compute_qsogen_sed
 
         wave = jnp.linspace(912, 30000, 3000)
 
         for slp in [-0.5, 0.0, 0.5]:
-            sed_ds = np.asarray(qsogen_sed(wave, agn_plslp1=slp))
+            sed_ds = np.asarray(compute_qsogen_sed(wave, agn_plslp1=slp))
             ref_key = f"sed_plslp1_{slp:.1f}"
             if ref_key not in qsogen_ref:
                 continue
@@ -79,14 +79,14 @@ class TestQSOGenCrossval:
         tengri convention: plslp1 > 0 -> more UV flux.
         Original Temple+2021: plslp1 < 0 -> bluer (opposite sign).
         """
-        from tengri.components.agn.qsogen import qsogen_sed
+        from tengri.components.agn.qsogen import compute_qsogen_sed
 
         wave = jnp.linspace(912, 30000, 3000)
         wave_np = np.asarray(wave)
 
         colors = []
         for slp in [-0.5, 0.0, 0.5]:
-            sed = np.asarray(qsogen_sed(wave, agn_plslp1=slp))
+            sed = np.asarray(compute_qsogen_sed(wave, agn_plslp1=slp))
             uv = np.mean(sed[(wave_np > 1500) & (wave_np < 2000)])
             opt = np.mean(sed[(wave_np > 5000) & (wave_np < 6000)])
             colors.append(uv / max(opt, 1e-50))
@@ -96,15 +96,15 @@ class TestQSOGenCrossval:
 
     def test_hot_dust_bump(self):
         """Hot dust should create a bump around 1-3 um."""
-        from tengri.components.agn.qsogen import qsogen_sed
+        from tengri.components.agn.qsogen import compute_qsogen_sed
 
         wave = jnp.linspace(912, 100000, 5000)
         wave_np = np.asarray(wave)
 
         # With hot dust
-        sed_with = np.asarray(qsogen_sed(wave, agn_bbnorm=3.96, agn_tbb=1240.0))
+        sed_with = np.asarray(compute_qsogen_sed(wave, agn_bbnorm=3.96, agn_tbb=1240.0))
         # Without hot dust
-        sed_without = np.asarray(qsogen_sed(wave, agn_bbnorm=0.0))
+        sed_without = np.asarray(compute_qsogen_sed(wave, agn_bbnorm=0.0))
 
         # NIR (1-3 um) should be boosted by hot dust
         nir = (wave_np > 10000) & (wave_np < 30000)
@@ -117,13 +117,13 @@ class TestQSOGenCrossval:
 
     def test_dust_reddening(self, qsogen_ref):
         """E(B-V) reddening should suppress UV flux."""
-        from tengri.components.agn.qsogen import qsogen_sed
+        from tengri.components.agn.qsogen import compute_qsogen_sed
 
         wave = jnp.linspace(912, 30000, 3000)
         wave_np = np.asarray(wave)
 
-        sed_clean = np.asarray(qsogen_sed(wave, agn_ebv=0.0))
-        sed_dusty = np.asarray(qsogen_sed(wave, agn_ebv=0.1))
+        sed_clean = np.asarray(compute_qsogen_sed(wave, agn_ebv=0.0))
+        sed_dusty = np.asarray(compute_qsogen_sed(wave, agn_ebv=0.1))
 
         uv_clean = np.mean(sed_clean[(wave_np > 1500) & (wave_np < 2000)])
         uv_dusty = np.mean(sed_dusty[(wave_np > 1500) & (wave_np < 2000)])
@@ -141,12 +141,12 @@ class TestQSOGenCrossval:
 
     def test_differentiable(self):
         """QSOGen should be JAX-differentiable."""
-        from tengri.components.agn.qsogen import qsogen_sed
+        from tengri.components.agn.qsogen import compute_qsogen_sed
 
         wave = jnp.linspace(1000, 30000, 1000)
 
         def loss(slp):
-            sed = qsogen_sed(wave, agn_plslp1=slp)
+            sed = compute_qsogen_sed(wave, agn_plslp1=slp)
             return jnp.sum(sed)
 
         def fd_grad_local(f, x: float, eps: float = 1e-4) -> float:
@@ -476,11 +476,11 @@ class TestQSOGenEmissionLines:
 
     def test_lines_add_flux(self):
         """Emission lines should add positive flux to the continuum."""
-        from tengri.components.agn.qsogen import qsogen_sed
+        from tengri.components.agn.qsogen import compute_qsogen_sed
 
         wave = jnp.linspace(912, 30000, 5000)
-        sed_lines = np.asarray(qsogen_sed(wave))
-        sed_nolines = np.asarray(qsogen_sed(wave, agn_emline_scale=0.0))
+        sed_lines = np.asarray(compute_qsogen_sed(wave))
+        sed_nolines = np.asarray(compute_qsogen_sed(wave, agn_emline_scale=0.0))
 
         # At Hα and [OIII], SED with lines should be brighter
         w = np.asarray(wave)
@@ -492,10 +492,10 @@ class TestQSOGenEmissionLines:
         """Full SED shape should correlate > 0.95 with original."""
         from scipy.stats import pearsonr
 
-        from tengri.components.agn.qsogen import qsogen_sed
+        from tengri.components.agn.qsogen import compute_qsogen_sed
 
         wave = jnp.array(line_ref["wave"])
-        sed_ds = np.asarray(qsogen_sed(wave))
+        sed_ds = np.asarray(compute_qsogen_sed(wave))
 
         c_aa = 2.998e18
         w = np.asarray(wave)
@@ -511,11 +511,11 @@ class TestQSOGenEmissionLines:
 
     def test_halpha_prominent(self):
         """Hα should be a prominent emission line (well above continuum)."""
-        from tengri.components.agn.qsogen import qsogen_sed
+        from tengri.components.agn.qsogen import compute_qsogen_sed
 
         wave = jnp.linspace(4000, 8000, 2000)
-        sed_lines = np.asarray(qsogen_sed(wave))
-        sed_nolines = np.asarray(qsogen_sed(wave, agn_emline_scale=0.0))
+        sed_lines = np.asarray(compute_qsogen_sed(wave))
+        sed_nolines = np.asarray(compute_qsogen_sed(wave, agn_emline_scale=0.0))
 
         excess = sed_lines - sed_nolines
         w = np.asarray(wave)

@@ -101,31 +101,64 @@ class TestXrayPhysics:
     """X-ray binary emission must follow Grimm+2003 scaling."""
 
     def test_hmxb_scales_with_sfr(self):
-        """Grimm+2003: L_X(HMXB) ∝ SFR."""
+        """Grimm+2003: L_X(HMXB) proportional to SFR.
+
+        ``xray_xrb`` returns HMXB + LMXB. The HMXB scaling is only visible with
+        the LMXB term switched off: at SFR=1 with M*=1e10 (sSFR = 1e-10 / yr,
+        an ordinary spiral) LMXB is ~80% of the total, so varying SFR tenfold
+        moves the *sum* by 2.8x. That is the correct answer to a different
+        question, and it is what this test used to assert against (#1728).
+        """
         from tengri.components.xray import xray_xrb
 
         wave = jnp.geomspace(1.0, 100.0, 100)  # X-ray: 0.1-12 keV
-        l_low = xray_xrb(wave, sfr=1.0, stellar_mass=1e10)
-        l_high = xray_xrb(wave, sfr=10.0, stellar_mass=1e10)
+        l_low = xray_xrb(wave, sfr=1.0, stellar_mass=0.0)
+        l_high = xray_xrb(wave, sfr=10.0, stellar_mass=0.0)
         ratio = float(jnp.sum(l_high)) / max(float(jnp.sum(l_low)), 1e-50)
-        assert 5.0 < ratio < 20.0, f"10x SFR should give ~10x HMXB X-ray, got {ratio:.1f}x"
+        assert 9.0 < ratio < 11.0, f"10x SFR should give 10x HMXB X-ray, got {ratio:.2f}x"
 
     def test_lmxb_scales_with_mass(self):
-        """Gilfanov (2004): L_X(LMXB) ∝ M*."""
+        """Gilfanov (2004): L_X(LMXB) proportional to M*.
+
+        Isolated the same way as the HMXB test above: with SFR=0 the HMXB term
+        cannot contribute to the ratio.
+        """
         from tengri.components.xray import xray_xrb
 
         wave = jnp.geomspace(1.0, 100.0, 100)
-        l_low = xray_xrb(wave, sfr=0.01, stellar_mass=1e10)
-        l_high = xray_xrb(wave, sfr=0.01, stellar_mass=1e11)
+        l_low = xray_xrb(wave, sfr=0.0, stellar_mass=1e10)
+        l_high = xray_xrb(wave, sfr=0.0, stellar_mass=1e11)
         ratio = float(jnp.sum(l_high)) / max(float(jnp.sum(l_low)), 1e-50)
-        assert 5.0 < ratio < 20.0, f"10x M* should give ~10x LMXB X-ray, got {ratio:.1f}x"
+        assert 9.0 < ratio < 11.0, f"10x M* should give 10x LMXB X-ray, got {ratio:.2f}x"
+
+    def test_xrb_is_the_sum_of_its_two_terms(self):
+        """The decomposition the two tests above rely on.
+
+        Pinned explicitly so that a future change making ``xray_xrb``
+        non-additive fails here, rather than silently making the isolated
+        scalings above test something other than the model users get.
+        """
+        from tengri.components.xray import xray_xrb
+
+        wave = jnp.geomspace(1.0, 100.0, 100)
+        sfr, mstar = 3.0, 5e10
+        total = xray_xrb(wave, sfr=sfr, stellar_mass=mstar)
+        hmxb_only = xray_xrb(wave, sfr=sfr, stellar_mass=0.0)
+        lmxb_only = xray_xrb(wave, sfr=0.0, stellar_mass=mstar)
+        np.testing.assert_allclose(total, hmxb_only + lmxb_only, rtol=1e-10)
+
+    #: L_nu(2500 A) at the Yang+2020 30 deg anchor, for an L_bol ~ 1e44 erg/s
+    #: AGN: nu(2500 A) = 1.2e15 Hz and nu L_nu ~ L_bol / 5 give ~1.7e28
+    #: erg/s/Hz. ``xray_agn_corona`` takes this, not a bolometric luminosity —
+    #: the corona is derived from the disc UV via alpha_ox(L_2500) (#980).
+    L_2500_FOR_1E44_BOL = 1.7e28
 
     def test_agn_corona_spectral_shape(self):
         """AGN X-ray corona: power-law L_ν ∝ ν^{1-Γ} with cutoff."""
         from tengri.components.xray import xray_agn_corona
 
         wave = jnp.geomspace(0.1, 100.0, 200)  # hard X-ray
-        l_nu = xray_agn_corona(wave, L_agn_bol=1e44, gamma=1.8)
+        l_nu = xray_agn_corona(wave, self.L_2500_FOR_1E44_BOL, gamma=1.8)
         chex.assert_tree_all_finite(l_nu)
         assert float(jnp.sum(l_nu)) > 0
 
@@ -134,8 +167,8 @@ class TestXrayPhysics:
         from tengri.components.xray import xray_agn_corona
 
         wave = jnp.geomspace(1.0, 100.0, 200)
-        l_hard = xray_agn_corona(wave, L_agn_bol=1e44, gamma=1.5)
-        l_soft = xray_agn_corona(wave, L_agn_bol=1e44, gamma=2.2)
+        l_hard = xray_agn_corona(wave, self.L_2500_FOR_1E44_BOL, gamma=1.5)
+        l_soft = xray_agn_corona(wave, self.L_2500_FOR_1E44_BOL, gamma=2.2)
 
         # Soft X-ray (> 10A, lower energy)
         soft_mask = wave > 10.0

@@ -29,12 +29,12 @@ insensitive to ``log U``. The ratio therefore rises monotonically
 with ``log U`` at fixed gas metallicity.
 
 We sweep ``log U`` from -3 to -1 at three sub-solar metallicities
-covered by the Cue emulator (Li+2024), with dust-on-lines and LyC
+covered by the Cue emulator (Li+2025), with dust-on-lines and LyC
 escape switched off so the trend isolates the photoionization
 response cleanly.
 
-Reference: Kewley & Dopita 2002 ApJS 142 35; Li et al. 2024
-(Cue neural emulator).
+Reference: Kewley & Dopita 2002 ApJS 142 35; Li et al. 2025, ApJ, 986, 9
+(Cue neural emulator; arXiv:2405.04598).
 
 .. GENERATED FROM PYTHON SOURCE LINES 20-90
 
@@ -125,7 +125,7 @@ Reference: Kewley & Dopita 2002 ApJS 142 35; Li et al. 2024
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 5.104 seconds)
+   **Total running time of the script:** (0 minutes 3.302 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_oiii_hbeta_logu_at_fixed_z.py:

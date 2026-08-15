@@ -1913,7 +1913,11 @@ class StellarSEDComponent:
             "dense_basis_pure",
             "exp",
             "dexp",
-            "tau",
+            # Was "tau" until #1750. #406 deleted that key from SFH_REGISTRY but
+            # left it here, so this allowlist kept admitting a name the registry
+            # could no longer resolve — dead either way, since the lookup below
+            # raises KeyError first. Same model, unambiguous name.
+            "declining_exp",
             "delayed",
             "periodic",
             "sfh2exp",

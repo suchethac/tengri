@@ -16,6 +16,7 @@ Available models (auto-registered):
 - ``bosa`` — Boquien & Salim (2021) (L_TIR, sSFR)-parameterized
 - ``themis`` — Jones et al. (2017) THEMIS/DustEM
 - ``schreiber2018`` — Schreiber et al. (2018) dust emission templates
+- ``dh02_ce01`` — Dale & Helou (2002) + Chary & Elbaz (2001) cold dust
 
 Notes
 -----
@@ -34,6 +35,9 @@ from tengri.components.dust.emission.templates.dale import (
     Dale2014CigaleIRSEDComponent,
     Dale2014IRSEDComponent,
 )
+from tengri.components.dust.emission.templates.dh02_ce01 import (
+    DH02CE01IRSEDComponent,
+)
 from tengri.components.dust.emission.templates.draine_li import (
     DraineLi2007IRSEDComponent,
     DraineLi2014IRSEDComponent,
@@ -46,6 +50,7 @@ from tengri.components.dust.emission.templates.themis import ThemisIRSEDComponen
 __all__ = [
     "AstrodustIRSEDComponent",
     "BosaIRSEDComponent",
+    "DH02CE01IRSEDComponent",
     "Dale2014CigaleIRSEDComponent",
     "Dale2014IRSEDComponent",
     "DraineLi2007IRSEDComponent",

@@ -200,6 +200,7 @@ The notebook spine in [`notebooks/`](https://github.com/suchethac/tengri/tree/ma
 | 08 | `08_emission_lines.py`         | BPT diagnostics, line ratios, Hα-based SFR                  |
 | 10 | `10_fastspecfit_joint_fit.py`  | joint DESI photometry + emission-line fluxes, timed        |
 | 11 | `11_catalog_fits.py`           | a catalog fit in parallel: LSST+Euclid photo-z, timed      |
+| 12 | `12_simulation_populations.py` | simulation SFH + Z(t) → photometry and lines, ~8k galaxies/s |
 
 For single-figure recipes, see the [examples gallery](https://suchethacooray.com/tengri/auto_examples/index.html).
 
@@ -234,7 +235,9 @@ These read the registries directly, so a model registered via `@register_agn_mod
 
 ## What's modular
 
-Stellar populations come from DSPS SSPs (BC03, BPASS, FSPS, ProGeny).
+Stellar populations are integrated over SSP grids in the DSPS format
+(BC03, BPASS, FSPS, ProGeny) by tengri's own differentiable CIC kernel;
+DSPS's histogram kernel is selectable for cross-code parity.
 The SFH layer covers parametric families (15+, registry-driven),
 non-parametric reconstructions (Leja+ continuity, Dirichlet), and
 stochastic fields (IFT correlated fields with PSD-governed

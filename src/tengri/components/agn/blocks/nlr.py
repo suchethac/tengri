@@ -80,7 +80,7 @@ def _resolve_synthesizer_grid(kind: str) -> str:
 @register_agn_block(
     "nlr",
     "analytic",
-    citation="Richardson et al. 2014, ApJ, 786, 87",
+    citation="Richardson et al. 2014, MNRAS, 437, 2376",
     status="production",
     short_doc="Analytic NLR with Richardson+2014 line ratios and Gaussian broadening",
 )

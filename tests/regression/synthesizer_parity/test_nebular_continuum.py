@@ -16,7 +16,7 @@ Synthesizer source:
 
 Reference papers:
 - Byler et al. 2017, ApJ, 840, 122 (nebular emission / line + continuum decomposition)
-- Li et al. 2024, ApJ, 969, 28 (Cue v1 — nebular model)
+- Li et al. 2025, ApJ, 986, 9 (Cue — nebular model; arXiv:2405.04598)
 """
 
 from __future__ import annotations

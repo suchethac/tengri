@@ -28,7 +28,11 @@ from pathlib import Path
 
 # Note: import tengri inside main() so we can time it.
 
-SSP_PATH = "/Users/suchethacooray/Projects/tengri/data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
+SSP_PATH = str(
+    Path(__file__).resolve().parents[2]
+    / "data"
+    / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
+)
 # Bare SSP not available locally → sf_photo scenario relies on download via public API.
 
 PROBE_DIR = Path(__file__).resolve().parent

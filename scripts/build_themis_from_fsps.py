@@ -25,7 +25,12 @@ import sys
 import h5py
 import numpy as np
 
-SPS = os.environ.get("SPS_HOME", "/Users/suchethacooray/Projects/fsps")
+SPS = os.environ.get("SPS_HOME")
+if not SPS:
+    raise SystemExit(
+        "SPS_HOME is not set. Point it at your FSPS checkout, e.g.\n"
+        "    export SPS_HOME=/path/to/fsps"
+    )
 DUSTEM = os.path.join(SPS, "dust", "dustem")
 # FSPS THEMIS grids (sps_vars.f90, THEMIS block)
 QPAH = np.array([0.02, 0.06, 0.10, 0.14, 0.17, 0.20, 0.24, 0.28, 0.32, 0.36, 0.40]) / 2.2 * 100

@@ -466,6 +466,8 @@ class XRaySEDComponent(TemplateThreading):
                 gamma_agn=jnp.asarray(params["xray_gamma_agn"]),
                 E_cut=jnp.asarray(params["xray_E_cut"]),
                 log_nh=jnp.asarray(params["xray_log_nh"]),
+                log_L_hmxb_offset=jnp.asarray(params["xray_det_hmxb"]),
+                log_L_lmxb_offset=jnp.asarray(params["xray_det_lmxb"]),
             )
         # ``alpha_ox`` is derived from ``l_2500_30deg`` via the Just+2007
         # relation inside ``xray_total`` (#722 — the disc 2500 A now drives
@@ -486,6 +488,11 @@ class XRaySEDComponent(TemplateThreading):
             delta_alpha_ox=jnp.asarray(params["xray_delta_alpha_ox"]),
             cos_inc=cos_inc,
             log_nh=jnp.asarray(params["xray_log_nh"]),
+            # Lehmer+2016 XRB luminosity offsets (#1706). ``xray_xrb_terms`` has
+            # accepted these all along; the component simply never passed them,
+            # so both were free parameters that nothing read.
+            log_L_hmxb_offset=jnp.asarray(params["xray_det_hmxb"]),
+            log_L_lmxb_offset=jnp.asarray(params["xray_det_lmxb"]),
         )
 
 

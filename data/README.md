@@ -55,7 +55,7 @@ its own isochrones internally.
 
 | File | Scientific source | Build path | Usage |
 | --- | --- | --- | --- |
-| `cue_weights.npz` | Cue nebular emulator — Li et al. 2024 (ApJ 969, 28), Li et al. 2025 (ApJ 986, 9) | `scripts/convert_cue_weights.py` converts the trained Speculator pickles shipped with upstream Cue (github.com/yi-jia-li/cue) | Upstream Cue is MIT; redistributed here with attribution — cite Li+ 2024 |
+| `cue_weights.npz` | Cue nebular emulator — Li et al. 2025 (ApJ 986, 9; arXiv:2405.04598) | `scripts/convert_cue_weights.py` converts the trained Speculator pickles shipped with upstream Cue (github.com/yi-jia-li/cue) | Upstream Cue is MIT; redistributed here with attribution — cite Li+ 2025 |
 | `neogal/AGN_NLR_nebular_feltre16` (+ `.tar.gz`) | Feltre et al. 2016 NLR grid | NEOGAL distribution at www.iap.fr/neogal | Paper-published grid; cite Feltre+ 2016; NEOGAL distributes for scientific use |
 | `neogal/nebular_emission_gutkin16.tar.gz`, `neogal/nebular_emission_Z*.txt` | Gutkin et al. 2016 nebular grid | NEOGAL distribution | Paper-published grid; cite Gutkin+ 2016 |
 | `cloudy_raw/emlines_info.dat` | Cloudy default emission-line database | upstream Cloudy 17+ | Cloudy is open source (GPL-compatible); the line list is reference data, cite Ferland+ 2017 |

@@ -311,16 +311,68 @@ class TestBeloborodovExact:
 
 
 class TestJust2007Exact:
-    """alpha_ox = -0.137 * log10(L_2500) + 2.638 — Just+2007 Eq.3."""
+    """alpha_ox = -0.137 * log10(L_2500) + 2.638 — Just+2007 Eq.3.
 
-    @pytest.mark.parametrize("log_l2500", [27.0, 28.0, 29.0, 30.0, 31.0, 32.0])
+    Valid for ``28 <= log10(L_2500) <= 33``; outside that the relation is held
+    at the boundary rather than extrapolated (#861).
+    """
+
+    #: Just+2007's fitted range, from ``_ALPHA_OX_CALIB_RANGE["just2007"]``.
+    LO, HI = 28.0, 33.0
+
+    @staticmethod
+    def _relation(log_l2500: float) -> float:
+        return -0.137 * log_l2500 + 2.638
+
+    @pytest.mark.parametrize("log_l2500", [28.0, 29.0, 30.0, 31.0, 32.0, 33.0])
     def test_exact_formula(self, log_l2500):
-        """Must match the linear relation exactly."""
+        """Inside the calibrated range, match the linear relation exactly."""
         from tengri.components.xray import alpha_ox_from_l2500
 
         result = float(alpha_ox_from_l2500(10.0**log_l2500))
-        expected = -0.137 * log_l2500 + 2.638
-        np.testing.assert_allclose(result, expected, atol=0.001)
+        np.testing.assert_allclose(result, self._relation(log_l2500), atol=0.001)
+
+    @pytest.mark.parametrize("log_l2500", [19.0, 24.0, 27.0, 27.9])
+    def test_held_at_the_boundary_below_the_calibrated_range(self, log_l2500):
+        """Below 28, alpha_ox is held at its faintest-calibrated value.
+
+        This test used to parametrize 27.0 alongside the valid points and assert
+        pure linearity there, so it was asserting the extrapolation the code
+        deliberately refuses (#1728). The refusal is the physics: these are
+        anti-correlations, so alpha_ox rises without bound as L_2500 falls and
+        turns positive below log10(L_2500) ~ 19 — that is L_2keV > L_2500, an
+        X-ray corona brighter than the disc that produced it, which pushes the
+        total X-ray past L_bol. pcigale likewise never extrapolates.
+        """
+        from tengri.components.xray import alpha_ox_from_l2500
+
+        result = float(alpha_ox_from_l2500(10.0**log_l2500))
+        np.testing.assert_allclose(result, self._relation(self.LO), atol=0.001)
+
+    def test_alpha_ox_never_turns_positive(self):
+        """The unphysical regime the clamp exists to prevent, over 15 decades.
+
+        A positive alpha_ox means the corona outshines the disc feeding it. If
+        the clamp is ever removed or its range widened downward, this fails
+        before anything reaches a fit.
+        """
+        from tengri.components.xray import alpha_ox_from_l2500
+
+        for log_l2500 in np.linspace(18.0, 33.0, 61):
+            result = float(alpha_ox_from_l2500(10.0**log_l2500))
+            assert result < 0.0, (
+                f"alpha_ox = {result:.3f} at log L_2500 = {log_l2500:.1f}: "
+                "L_2keV would exceed L_2500"
+            )
+
+    def test_monotonic_and_clamped_at_both_ends(self):
+        """More luminous AGN are X-ray weaker, and neither tail runs away."""
+        from tengri.components.xray import alpha_ox_from_l2500
+
+        values = [float(alpha_ox_from_l2500(10.0**x)) for x in np.linspace(20.0, 36.0, 33)]
+        assert values == sorted(values, reverse=True), "alpha_ox must decrease with L_2500"
+        np.testing.assert_allclose(values[0], self._relation(self.LO), atol=0.001)
+        np.testing.assert_allclose(values[-1], self._relation(self.HI), atol=0.001)
 
 
 # ── 10. POLAR DUST — SMC A_λ = R_V * E(B-V) * k(λ) ────────────────
@@ -466,26 +518,59 @@ class TestDiscEnergyConservation:
 
 
 class TestAnisotropyExact:
-    """f(θ) = a1*cos(θ) + a2*cos²(θ) + (1-a1-a2) — exact values."""
+    r"""Yang+2022 anisotropy, anchored at the 30° reference inclination.
+
+    .. math::
+
+        f(\mu) = \frac{a_1 \mu + a_2 \mu^2 + (1 - a_1 - a_2)}
+                      {1 - 0.13397 a_1 - 0.25 a_2}
+
+    The denominator is the numerator at :math:`\mu = \cos 30°`
+    (:math:`0.13397 = 1 - \cos 30°`, :math:`0.25 = 1 - \cos^2 30°`), so
+    :math:`f(\cos 30°) = 1`. That anchor is not decoration: the α_ox(L_2500)
+    relation supplying ``L_2keV`` is *defined* at 30°, so the input spectrum is
+    the 30° corona and face-on must come out **brighter** than it — 1.0718 at
+    the default :math:`a_1 = 0.5`, not 1.0. X-CIGALE does the same
+    (``yang20.py:231-235``); #980 pinned the convention against CIGALE 2025.1.
+
+    These expectations were computed from the formula above, independently of
+    the implementation.
+    """
 
     @pytest.mark.parametrize(
         "cos_inc,a1,a2,expected_factor",
         [
-            (1.0, 0.5, 0.0, 1.0),  # face-on
-            (0.0, 0.5, 0.0, 0.5),  # edge-on
-            (0.5, 0.5, 0.0, 0.75),  # 60 degrees
-            (1.0, 0.3, 0.2, 1.0),  # face-on, different coeffs
-            (0.0, 0.3, 0.2, 0.5),  # edge-on, different coeffs
-            (0.5, 0.3, 0.2, 0.70),  # 0.3*0.5 + 0.2*0.25 + 0.5 = 0.70
+            # a1=0.5, a2=0 -> denominator 0.933015
+            (1.0, 0.5, 0.0, 1.0717941298),  # face-on: 1.0    / 0.933015
+            (0.0, 0.5, 0.0, 0.5358970649),  # edge-on: 0.5    / 0.933015
+            (0.5, 0.5, 0.0, 0.8038455973),  # 60 deg:  0.75   / 0.933015
+            # a1=0.3, a2=0.2 -> denominator 0.909809
+            (1.0, 0.3, 0.2, 1.0991317958),  # face-on: 1.0    / 0.909809
+            (0.0, 0.3, 0.2, 0.5495658979),  # edge-on: 0.5    / 0.909809
+            (0.5, 0.3, 0.2, 0.7693922571),  # 60 deg:  0.70   / 0.909809
         ],
     )
     def test_exact_values(self, cos_inc, a1, a2, expected_factor):
-        """Anisotropy factor must match analytical formula exactly."""
+        """Anisotropy factor must match the anchored analytical formula exactly."""
         from tengri.components.xray import xray_anisotropy
 
         l_x = jnp.array([1.0])
         result = float(xray_anisotropy(l_x, cos_inc, a1, a2)[0])
-        np.testing.assert_allclose(result, expected_factor, atol=1e-10)
+        np.testing.assert_allclose(result, expected_factor, atol=1e-9)
+
+    def test_anchor_is_unity_at_30_degrees(self):
+        """The property the normalization exists for: f(cos 30°) = 1.
+
+        Pinned separately from the table above so that a change to the anchor
+        fails with a message about the anchor, not about six magic numbers.
+        """
+        from tengri.components.xray import xray_anisotropy
+
+        cos30 = float(np.cos(np.radians(30.0)))
+        l_x = jnp.array([1.0])
+        for a1, a2 in [(0.5, 0.0), (0.3, 0.2), (0.0, 0.0)]:
+            result = float(xray_anisotropy(l_x, cos30, a1, a2)[0])
+            np.testing.assert_allclose(result, 1.0, atol=2e-5)
 
 
 # ── 14. RADIO DPL — analytical shape at reference frequency ───────

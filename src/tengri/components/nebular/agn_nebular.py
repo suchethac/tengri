@@ -138,8 +138,7 @@ References
 
 - Feltre, Charlot & Gutkin 2016, MNRAS, 456, 3354 (arXiv:1511.08217)
 - Chevallard & Charlot 2016, MNRAS, 462, 1415 (BEAGLE)
-- Li et al. 2024, ApJ, 969, 28 (Cue v1)
-- Li et al. 2025, ApJ, 986, 9 (Cue v2, AGN extension)
+- Li et al. 2025, ApJ, 986, 9 (Cue; arXiv:2405.04598)
 - Lovell et al. 2025 (doi:10.33232/001c.145766) + Roper et al. 2026 (doi:10.21105/joss.09436)
 
 """
@@ -197,13 +196,14 @@ def agn_ionspec_from_alpha_pl(alpha_pl: float) -> dict:
 
     References
     ----------
-    .. [1] M. Li et al., "The Cue Nebular Emulator: Fast, Interpretable
-       Predictions of Emission-Line Strengths from Stellar Populations,"
+    .. [1] Y. Li et al., "Cue: A Fast and Flexible Photoionization Emulator
+       for Modeling Nebular Emission Powered by Almost Any Ionizing Source,"
        ApJ, 986, 9 (2025). arXiv:2405.04598.
-       https://doi.org/10.3847/1538-4357/ad7fe3
-    .. [2] A. Feltre, S. Charlot, and J. Gutkin, "Updated photoionization
-       models of the CLOUDY c13.03 code," MNRAS, 456, 3354 (2016).
-       arXiv:1511.08217. https://doi.org/10.1093/mnras/stw2180
+       https://doi.org/10.3847/1538-4357/adcab4
+    .. [2] A. Feltre, S. Charlot, and J. Gutkin, "Nuclear activity versus
+       star formation: emission-line diagnostics at ultraviolet and optical
+       wavelengths," MNRAS, 456, 3354 (2016). arXiv:1511.08217.
+       https://doi.org/10.1093/mnras/stv2794
 
     Notes
     -----
@@ -300,9 +300,10 @@ def _log_qh_from_lacc(l_acc_erg: float, alpha_pl: float) -> float:
 
     References
     ----------
-    .. [1] A. Feltre, S. Charlot, and J. Gutkin, "Updated photoionization
-       models of the CLOUDY c13.03 code," MNRAS, 456, 3354 (2016).
-       arXiv:1511.08217. https://doi.org/10.1093/mnras/stw2180
+    .. [1] A. Feltre, S. Charlot, and J. Gutkin, "Nuclear activity versus
+       star formation: emission-line diagnostics at ultraviolet and optical
+       wavelengths," MNRAS, 456, 3354 (2016). arXiv:1511.08217.
+       https://doi.org/10.1093/mnras/stv2794
 
     Notes
     -----
@@ -407,10 +408,10 @@ def agn_nlr_cue(
 
     References
     ----------
-    .. [1] M. Li et al., "The Cue Nebular Emulator: Fast, Interpretable
-       Predictions of Emission-Line Strengths from Stellar Populations,"
+    .. [1] Y. Li et al., "Cue: A Fast and Flexible Photoionization Emulator
+       for Modeling Nebular Emission Powered by Almost Any Ionizing Source,"
        ApJ, 986, 9 (2025). arXiv:2405.04598.
-       https://doi.org/10.3847/1538-4357/ad7fe3
+       https://doi.org/10.3847/1538-4357/adcab4
 
     Notes
     -----
@@ -1434,13 +1435,14 @@ def agn_nlr_emission(
 
     References
     ----------
-    .. [1] M. Li et al., "The Cue Nebular Emulator: Fast, Interpretable
-       Predictions of Emission-Line Strengths from Stellar Populations,"
+    .. [1] Y. Li et al., "Cue: A Fast and Flexible Photoionization Emulator
+       for Modeling Nebular Emission Powered by Almost Any Ionizing Source,"
        ApJ, 986, 9 (2025). arXiv:2405.04598.
-       https://doi.org/10.3847/1538-4357/ad7fe3
-    .. [2] A. Feltre, S. Charlot, and J. Gutkin, "Updated photoionization
-       models of the CLOUDY c13.03 code," MNRAS, 456, 3354 (2016).
-       arXiv:1511.08217. https://doi.org/10.1093/mnras/stw2180
+       https://doi.org/10.3847/1538-4357/adcab4
+    .. [2] A. Feltre, S. Charlot, and J. Gutkin, "Nuclear activity versus
+       star formation: emission-line diagnostics at ultraviolet and optical
+       wavelengths," MNRAS, 456, 3354 (2016). arXiv:1511.08217.
+       https://doi.org/10.1093/mnras/stv2794
     .. [3] Lovell et al. 2025 (doi:10.33232/001c.145766);
            Roper et al. 2026 (doi:10.21105/joss.09436). Cite both (Synthesizer).
 

@@ -107,8 +107,8 @@ Grid axes: (log O/H, log age, logU, log n_H, log C/O, ΔN/O, HbFrac)
 
 File: `src/tengri/components/nebular/cue.py`
 
-Neural-network emulator for nebular emission (Li et al. 2024, ApJ 969, 28;
-Li et al. 2025, ApJ 986, 9). 12 input parameters: 7 ionizing spectrum shape
+Neural-network emulator for nebular emission (Li et al. 2025, ApJ 986, 9;
+arXiv:2405.04598). 12 input parameters: 7 ionizing spectrum shape
 parameters (4 spectral indices + 3 log-luminosity ratios) plus 5 gas parameters
 (logU, logZ, log n_H, ΔN/O, ΔC/O). Predicts line luminosities for ~271 lines.
 
@@ -240,6 +240,5 @@ to download them when needed.
 - Feltre, Charlot & Gutkin 2016, MNRAS 456, 3354 — AGN NLR grids
 - Byler et al. 2017, ApJ 840, 44 — FSPS/CLOUDY nebular grids
 - Martinez-Paredes et al. 2023, arXiv:2308.05604 — CB_19 / 3MdBs
-- Li et al. 2024, ApJ 969, 28 — Cue emulator
-- Li et al. 2025, ApJ 986, 9 — Cue v2 (AGN extension)
+- Li et al. 2025, ApJ 986, 9 — Cue emulator (arXiv:2405.04598)
 - Lovell et al. 2025, Open J. Astrophys., arXiv:2508.03888 — Synthesizer

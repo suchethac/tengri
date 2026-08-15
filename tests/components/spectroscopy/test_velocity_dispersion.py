@@ -31,8 +31,17 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
 
 @pytest.fixture
 def wave():
-    """Uniformly spaced wavelength grid (200 pixels, 3800-9200 Å)."""
-    return jnp.linspace(3800.0, 9200.0, 200)
+    """Log-uniform wavelength grid (200 pixels, 3800-9200 Å).
+
+    Log-uniform, not linear (#1742). ``velocity_broaden`` convolves with a
+    constant Gaussian in ``ln(lambda)``, which is exact only on a grid uniform
+    in ``ln(lambda)``; on the ``linspace`` this fixture used to return, the
+    broadening came out low by ``wave[0]/lambda`` — reaching 3800/9200 = 0.41 at
+    the red end of this very range. The function now refuses such a grid rather
+    than returning a plausible wrong answer, so every test here was exercising a
+    precondition violation.
+    """
+    return jnp.logspace(jnp.log10(3800.0), jnp.log10(9200.0), 200)
 
 
 @pytest.fixture

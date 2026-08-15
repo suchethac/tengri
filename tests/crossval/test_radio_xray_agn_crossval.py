@@ -145,10 +145,20 @@ class TestXrayCrossval:
         np.testing.assert_allclose(l2 / l1, 2.0, rtol=0.01)
 
     def test_grimm_relation_integrated(self):
-        """HMXB integrated 2-10 keV L_X should match Grimm+2003 within 20%.
+        r"""HMXB integrated 2-10 keV L_X matches the implemented Lehmer+2016 relation.
 
-        Grimm+2003: L_HMXB(2-10 keV) = 2.6e39 erg/s per Msun/yr.
-        We integrate the spectral model over the reference band.
+        tengri implements Lehmer+2016 Eq. 15, which is metallicity-dependent:
+
+        .. math::
+
+            \log(L_X/\mathrm{SFR}) = 40.28 - 62.12 Z + 569.44 Z^2
+                                     - 1833.80 Z^3 + 1968.33 Z^4
+
+        At the module default ``metallicity_z=0.02`` that is 1.78e39, not the
+        2.6e39 this test used to assert. The 2.6e39 comes from
+        Grimm+2003/Mineo+2012, which genuinely differ from Lehmer+2016 by
+        ~30-45% in this band — the `xray.py` docstring claims the two agree,
+        which is arithmetically false (#1755).
         """
         from tengri.components.xray import xray_xrb
 
@@ -162,12 +172,24 @@ class TestXrayCrossval:
         nu = c_aa / np.asarray(wave)
         l_band = abs(np.trapezoid(l_nu[::-1], nu[::-1]))
 
-        # Grimm+2003 reference: 2.6e39 erg/s
+        z_default = 0.02
+        log_l = (
+            40.28
+            - 62.12 * z_default
+            + 569.44 * z_default**2
+            - 1833.80 * z_default**3
+            + 1968.33 * z_default**4
+        )
+        expected = 10.0**log_l  # 1.7825e39
+
         np.testing.assert_allclose(
             l_band,
-            2.6e39,
-            rtol=0.20,
-            err_msg=f"HMXB 2-10 keV L_X = {l_band:.2e}, expected 2.6e39 erg/s (Grimm+2003)",
+            expected,
+            rtol=0.10,
+            err_msg=(
+                f"HMXB 2-10 keV L_X = {l_band:.3e}; Lehmer+2016 at Z=0.02 gives "
+                f"{expected:.3e} erg/s per Msun/yr"
+            ),
         )
 
     def test_xray_exponential_cutoff(self):
@@ -219,11 +241,11 @@ class TestAGNCrossval:
 
     def test_unified_total_luminosity(self):
         """Unified AGN (disc+torus) should conserve total luminosity."""
-        from tengri.components.agn.unified import simple_agn
+        from tengri.components.agn.unified import multicolor_agn
 
         wave = jnp.linspace(100, 500000, 10000)
         l_nu = np.asarray(
-            simple_agn(
+            multicolor_agn(
                 wave,
                 agn_log_lbol=11.0,
                 agn_lum_ratio=1.0,
@@ -242,12 +264,12 @@ class TestAGNCrossval:
 
     def test_type1_vs_type2_covering(self):
         """Higher torus covering should shift UV→IR balance."""
-        from tengri.components.agn.unified import simple_agn
+        from tengri.components.agn.unified import multicolor_agn
 
         wave = jnp.linspace(500, 200000, 5000)
 
         l_type1 = np.asarray(
-            simple_agn(
+            multicolor_agn(
                 wave,
                 agn_log_lbol=11.0,
                 agn_lum_ratio=1.0,
@@ -255,7 +277,7 @@ class TestAGNCrossval:
             )
         )
         l_type2 = np.asarray(
-            simple_agn(
+            multicolor_agn(
                 wave,
                 agn_log_lbol=11.0,
                 agn_lum_ratio=1.0,

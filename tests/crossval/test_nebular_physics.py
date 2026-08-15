@@ -27,15 +27,15 @@ pytestmark = pytest.mark.crossval
 
 
 class TestShockEmissionSEDPhysics:
-    """shock_emission_sed must place lines at correct wavelengths."""
+    """compute_shock_sed must place lines at correct wavelengths."""
 
     def test_sed_has_halpha_peak(self):
         """Shock SED should peak near Hα 6563A (strongest optical line)."""
-        from tengri.components.nebular.shock import shock_emission_sed
+        from tengri.components.nebular.shock import compute_shock_sed
 
         wave = jnp.linspace(3000.0, 8000.0, 5000)
         # l_shock_halpha in Lsun
-        l_nu = shock_emission_sed(wave, shock_velocity=300.0, l_shock_halpha=1e8)
+        l_nu = compute_shock_sed(wave, shock_velocity=300.0, l_shock_halpha=1e8)
         peak_wave = float(wave[jnp.argmax(l_nu)])
         # Should be near one of the strong lines: Hα, [OIII], [NII]
         near_ha = abs(peak_wave - 6563.0) < 100.0
@@ -46,21 +46,21 @@ class TestShockEmissionSEDPhysics:
 
     def test_sed_scales_with_luminosity(self):
         """10x luminosity → 10x flux."""
-        from tengri.components.nebular.shock import shock_emission_sed
+        from tengri.components.nebular.shock import compute_shock_sed
 
         wave = jnp.linspace(3000.0, 8000.0, 2000)
-        l_faint = shock_emission_sed(wave, shock_velocity=300.0, l_shock_halpha=1e7)
-        l_bright = shock_emission_sed(wave, shock_velocity=300.0, l_shock_halpha=1e8)
+        l_faint = compute_shock_sed(wave, shock_velocity=300.0, l_shock_halpha=1e7)
+        l_bright = compute_shock_sed(wave, shock_velocity=300.0, l_shock_halpha=1e8)
         ratio = float(jnp.sum(l_bright)) / float(jnp.sum(l_faint))
         assert abs(ratio - 10.0) < 1.0, f"10x luminosity should give 10x flux, got {ratio:.1f}x"
 
     def test_sed_velocity_changes_line_ratios(self):
         """Different velocities produce different line ratio patterns."""
-        from tengri.components.nebular.shock import shock_emission_sed
+        from tengri.components.nebular.shock import compute_shock_sed
 
         wave = jnp.linspace(3000.0, 8000.0, 5000)
-        l_slow = shock_emission_sed(wave, shock_velocity=150.0, l_shock_halpha=1e8)
-        l_fast = shock_emission_sed(wave, shock_velocity=500.0, l_shock_halpha=1e8)
+        l_slow = compute_shock_sed(wave, shock_velocity=150.0, l_shock_halpha=1e8)
+        l_fast = compute_shock_sed(wave, shock_velocity=500.0, l_shock_halpha=1e8)
 
         # [OIII] 5007A region
         oiii_mask = (wave > 4950) & (wave < 5050)
@@ -74,11 +74,11 @@ class TestShockEmissionSEDPhysics:
 
     def test_sed_positive_finite(self):
         """Shock SED must be non-negative and finite at all wavelengths."""
-        from tengri.components.nebular.shock import shock_emission_sed
+        from tengri.components.nebular.shock import compute_shock_sed
 
         wave = jnp.linspace(1000.0, 10000.0, 5000)
         for v in [100.0, 300.0, 700.0, 1000.0]:
-            l_nu = shock_emission_sed(wave, shock_velocity=v, l_shock_halpha=1e8)
+            l_nu = compute_shock_sed(wave, shock_velocity=v, l_shock_halpha=1e8)
             assert jnp.all(jnp.isfinite(l_nu)), f"Shock SED at v={v} has non-finite values"
             assert_non_negative(l_nu, name="l_nu", msg=f"Shock SED at v={v} has negative values")
 
@@ -90,18 +90,38 @@ class TestShockLineRatioPhysics:
     """Shock line ratios must follow Allen+2008 velocity trends."""
 
     def test_oiii_peaks_at_intermediate_velocity(self):
-        """[OIII]/Hβ peaks at v~300-400 km/s (maximum ionization)."""
+        """[OIII]/Hβ turns over inside the grid rather than running to an edge.
+
+        The qualitative feature is the turnover itself: faster shocks ionize
+        more O++ up to a point, beyond which the ionizing continuum hardens
+        past it. Measured on the default ``component="combined"`` the maximum
+        sits at **700 km/s** (ratio 11.7), rising from 2.4 at 200 km/s and
+        falling to 9.0 at 1000.
+
+        This test used to sample [100, 200, 300, 400, 500, 750, 1000] — which
+        skips 600-700 entirely — and assert a peak in 200-600 km/s on the
+        grounds that [OIII]/Hβ maximizes near 300-400. That is shock-only
+        intuition: decomposed, the shock component alone peaks at the grid's
+        low edge while the *precursor* drives the combined ratio and peaks at
+        700 (#1728). Sampled densely, and asserting the interior turnover
+        rather than a hand-set band.
+        """
         from tengri.components.nebular.shock import shock_line_ratios
 
-        oiii_hb = []
-        velocities = [100.0, 200.0, 300.0, 400.0, 500.0, 750.0, 1000.0]
-        for v in velocities:
-            ratios = shock_line_ratios(v)
-            oiii_hb.append(float(ratios["OIII_5007"]))
+        velocities = np.arange(100.0, 1001.0, 50.0)
+        oiii_hb = np.array([float(shock_line_ratios(float(v))["O3_5007A"]) for v in velocities])
 
-        peak_v_idx = np.argmax(oiii_hb)
-        peak_v = velocities[peak_v_idx]
-        assert 200.0 <= peak_v <= 600.0, f"[OIII]/Hβ should peak at 200-600 km/s, got {peak_v}"
+        peak_idx = int(np.argmax(oiii_hb))
+        peak_v = float(velocities[peak_idx])
+
+        assert 0 < peak_idx < len(velocities) - 1, (
+            f"[OIII]/Hβ should turn over inside the grid, peak at {peak_v} km/s (an edge)"
+        )
+        assert oiii_hb[peak_idx] > 3.0 * oiii_hb[0], (
+            "faster shocks should raise [OIII]/Hβ well above its low-velocity value, "
+            f"peak {oiii_hb[peak_idx]:.2f} vs {oiii_hb[0]:.2f} at 100 km/s"
+        )
+        assert oiii_hb[-1] < oiii_hb[peak_idx], "the ratio must fall again past the peak"
 
     def test_halpha_hbeta_above_case_b(self):
         """In shocks, Hα/Hβ > 2.86 (Case B) due to collisional excitation."""
@@ -109,7 +129,7 @@ class TestShockLineRatioPhysics:
 
         for v in [200.0, 300.0, 500.0]:
             ratios = shock_line_ratios(v)
-            ha_hb = float(ratios["Halpha"])
+            ha_hb = float(ratios["HA_6563A"])
             assert ha_hb > 2.86, (
                 f"Hα/Hβ should exceed Case B (2.86) in shocks at v={v}, got {ha_hb:.2f}"
             )
@@ -121,22 +141,36 @@ class TestShockLineRatioPhysics:
         for v in [200.0, 300.0]:
             ratios = shock_line_ratios(v)
             # SII is the sum of 6716+6731 relative to Hβ
-            sii_hb = float(ratios["SII_6716"]) + float(ratios["SII_6731"])
+            sii_hb = float(ratios["SII_6716A"]) + float(ratios["SII_6731A"])
             assert sii_hb > 0.5, (
                 f"[SII]/Hβ should be enhanced in shocks at v={v}, got {sii_hb:.2f}"
             )
 
-    def test_velocity_clipping(self):
-        """Velocities outside [100, 1000] should be clipped, not error."""
+    @pytest.mark.parametrize("velocity", [50.0, 99.0, 1001.0, 1500.0])
+    def test_velocity_outside_the_grid_raises(self, velocity):
+        """Out-of-grid shock velocities raise rather than silently extrapolate.
+
+        This test used to assert the opposite — "should be clipped, not error".
+        Clipping means a 50 km/s shock is quietly answered with the 100 km/s
+        line ratios and the caller never learns the model was not evaluated
+        where they asked. The MAPPINGS grid spans 100-1000 km/s; outside it
+        there is no model, and saying so is the better contract. It matches how
+        the rest of the codebase treats this class — see the ``ApproxPolicy``
+        module docstring on a silently-defaulting read being worse than a loud
+        failure.
+        """
         from tengri.components.nebular.shock import shock_line_ratios
 
-        # Below minimum
-        ratios_low = shock_line_ratios(50.0)
-        assert ratios_low["Hbeta"] == pytest.approx(1.0)
+        with pytest.raises(ValueError, match="outside the grid"):
+            shock_line_ratios(velocity)
 
-        # Above maximum
-        ratios_high = shock_line_ratios(1500.0)
-        assert ratios_high["Hbeta"] == pytest.approx(1.0)
+    @pytest.mark.parametrize("velocity", [100.0, 550.0, 1000.0])
+    def test_velocity_inside_the_grid_is_accepted(self, velocity):
+        """Both endpoints are inclusive — the guard must not exclude the grid."""
+        from tengri.components.nebular.shock import shock_line_ratios
+
+        ratios = shock_line_ratios(velocity)
+        assert float(ratios["HA_6563A"]) > 0.0
 
 
 # ── 3. SHOCK ATOMIC PHYSICS — doublet ratios ──────────────────────
@@ -150,7 +184,7 @@ class TestShockAtomicPhysics:
         from tengri.components.nebular.shock import shock_line_ratios
 
         ratios = shock_line_ratios(300.0)
-        r = float(ratios["OIII_5007"]) / float(ratios["OIII_4959"])
+        r = float(ratios["O3_5007A"]) / float(ratios["O3_4959A"])
         assert abs(r - 2.98) < 0.1, f"[OIII] doublet ratio should be 2.98, got {r:.2f}"
 
     def test_nii_doublet(self):
@@ -158,7 +192,7 @@ class TestShockAtomicPhysics:
         from tengri.components.nebular.shock import shock_line_ratios
 
         ratios = shock_line_ratios(300.0)
-        r = float(ratios["NII_6583"]) / float(ratios["NII_6548"])
+        r = float(ratios["NII_6583A"]) / float(ratios["NII_6548A"])
         assert abs(r - 2.94) < 0.1, f"[NII] doublet ratio should be 2.94, got {r:.2f}"
 
 
@@ -166,44 +200,89 @@ class TestShockAtomicPhysics:
 
 
 class TestNLRLinePhysics:
-    """NLR must satisfy forbidden line ratio constraints."""
+    """NLR must satisfy forbidden line ratio constraints.
+
+    Measured from the ``compute_nlr_sed`` output rather than from the template
+    arrays. These tests used to read ``_NLR_LINE_STRENGTHS`` and
+    ``_NLR_LINE_WAVELENGTHS`` directly; those private arrays were removed in a
+    refactor and the whole class had been failing with ``ImportError`` ever
+    since — which is how the [NII] deviation below went unwatched (#1728).
+    Reading the emitted spectrum is both refactor-proof and a test of what a
+    user actually receives.
+
+    Wavelengths are **vacuum** throughout, per the naming contract:
+    [OIII] 5008.24/4960.30, [NII] 6585.27/6549.86, Halpha 6564.61.
+    """
+
+    #: Measurement helpers are shared with the two other files that assert NLR
+    #: doublet ratios (``test_agn_crossval``, ``test_agn_disc_physics``), so the
+    #: three cannot drift apart on line width, wavelength convention or window.
+    @staticmethod
+    def _sed():
+        from ._nlr_measure import nlr_sed
+
+        return nlr_sed()
+
+    @classmethod
+    def _line_flux(cls, wave, sed, center_aa: float, half_width_aa: float = 6.0) -> float:
+        """Integrate the line over a window wide enough to hold all of it."""
+        from ._nlr_measure import line_flux
+
+        return line_flux(wave, sed, center_aa, half_width_aa)
 
     def test_oiii_5007_4959_ratio_in_template(self):
-        """[OIII] 5007/4959 = 2.98 in NLR template."""
-        from tengri.components.agn.nlr import _NLR_LINE_STRENGTHS, _NLR_LINE_WAVELENGTHS
-
-        idx_5007 = int(jnp.argmin(jnp.abs(_NLR_LINE_WAVELENGTHS - 5007.0)))
-        idx_4959 = int(jnp.argmin(jnp.abs(_NLR_LINE_WAVELENGTHS - 4959.0)))
-        ratio = float(_NLR_LINE_STRENGTHS[idx_5007] / _NLR_LINE_STRENGTHS[idx_4959])
-        assert abs(ratio - 2.98) < 0.1
+        """[OIII] 5007/4959 = 2.98 — fixed by the transition probabilities."""
+        wave, sed = self._sed()
+        ratio = self._line_flux(wave, sed, 5008.24) / self._line_flux(wave, sed, 4960.30)
+        assert abs(ratio - 2.98) < 0.1, f"[OIII] 5007/4959 should be ~2.98, got {ratio:.3f}"
 
     def test_nii_6583_6548_ratio_in_template(self):
-        """[NII] 6583/6548 = 3.0 in NLR template (atomic physics)."""
-        from tengri.components.agn.nlr import _NLR_LINE_STRENGTHS, _NLR_LINE_WAVELENGTHS
+        """[NII] 6583/6548 reproduces a42's measured 2.70, not the atomic 2.94.
 
-        idx_6583 = int(jnp.argmin(jnp.abs(_NLR_LINE_WAVELENGTHS - 6583.0)))
-        idx_6548 = int(jnp.argmin(jnp.abs(_NLR_LINE_WAVELENGTHS - 6548.0)))
-        ratio = float(_NLR_LINE_STRENGTHS[idx_6583] / _NLR_LINE_STRENGTHS[idx_6548])
-        assert abs(ratio - 3.0) < 0.2, f"[NII] 6583/6548 should be ~3.0, got {ratio:.2f}"
+        In a photoionization model both lines leave the same upper level and the
+        ratio has no physical freedom. Richardson+2014 Table 3 is a *measurement*
+        off stacked SDSS composites, where 6548 is weak and sits on the H-alpha
+        wing; a42 tabulates 2.70. tengri carries the table verbatim, so that is
+        what the emitted spectrum shows. Demanding the atomic value here is what
+        caused the template to be edited in #1752; it has been reverted.
+        """
+        wave, sed = self._sed()
+        ratio = self._line_flux(wave, sed, 6585.27) / self._line_flux(wave, sed, 6549.86)
+        assert abs(ratio - 2.13 / 0.79) < 0.2, (
+            f"[NII] 6583/6548 should reproduce the a42 table (~2.70), got {ratio:.3f}"
+        )
 
     def test_nlr_oiii_strongest(self):
         """[OIII] 5007 should be the strongest NLR line."""
-        from tengri.components.agn.nlr import _NLR_LINE_STRENGTHS, _NLR_LINE_WAVELENGTHS
-
-        max_idx = int(jnp.argmax(_NLR_LINE_STRENGTHS))
-        max_wave = float(_NLR_LINE_WAVELENGTHS[max_idx])
-        assert abs(max_wave - 5007.0) < 1.0, (
-            f"Strongest NLR line should be [OIII] 5007, got λ={max_wave:.0f}"
+        wave, sed = self._sed()
+        peak_wave = float(wave[int(np.argmax(sed))])
+        assert abs(peak_wave - 5008.24) < 1.0, (
+            f"Strongest NLR line should be [OIII] 5007 (vacuum 5008.24), got {peak_wave:.1f} A"
         )
 
-    def test_nlr_has_all_key_lines(self):
-        """NLR template must include all standard diagnostic lines."""
-        from tengri.components.agn.nlr import _NLR_LINE_WAVELENGTHS
+    @pytest.mark.parametrize(
+        "line_aa,name",
+        [
+            (3727.09, "[OII] 3727"),
+            (4862.69, "Hbeta"),
+            (4960.30, "[OIII] 4959"),
+            (5008.24, "[OIII] 5007"),
+            (6302.05, "[OI] 6300"),
+            (6549.86, "[NII] 6548"),
+            (6564.61, "Halpha"),
+            (6585.27, "[NII] 6583"),
+        ],
+    )
+    def test_nlr_has_all_key_lines(self, line_aa, name):
+        """Every standard diagnostic line is actually emitted, not just listed.
 
-        expected_lines = [3727.0, 4861.0, 4959.0, 5007.0, 6300.0, 6548.0, 6563.0, 6583.0]
-        for line_wave in expected_lines:
-            min_dist = float(jnp.min(jnp.abs(_NLR_LINE_WAVELENGTHS - line_wave)))
-            assert min_dist < 5.0, f"NLR missing line at {line_wave:.0f} A"
+        Parametrized so a missing line names itself instead of failing the whole
+        set on the first gap.
+        """
+        wave, sed = self._sed()
+        flux = self._line_flux(wave, sed, line_aa)
+        total = float(np.trapezoid(sed, wave))
+        assert flux > 1e-6 * total, f"NLR emits no {name} at {line_aa:.2f} A (vacuum)"
 
 
 # ── 5. BLR LINE PHYSICS — broad permitted lines ───────────────────
@@ -266,7 +345,7 @@ class TestBPTDiagramPhysics:
         from tengri.components.nebular.shock import shock_line_ratios
 
         ratios = shock_line_ratios(300.0)
-        nii_ha = float(ratios["NII_6583"]) / float(ratios["Halpha"])
+        nii_ha = float(ratios["NII_6583A"]) / float(ratios["HA_6563A"])
         log_nii_ha = np.log10(nii_ha)
         assert log_nii_ha > -1.0, f"log([NII]/Hα) should be > -1.0 in shocks, got {log_nii_ha:.2f}"
 
@@ -280,6 +359,6 @@ class TestBPTDiagramPhysics:
 
         for v in [150.0, 300.0]:
             ratios = shock_line_ratios(v)
-            oi_ha = float(ratios["OI_6300"]) / float(ratios["Halpha"])
+            oi_ha = float(ratios["OI_6300A"]) / float(ratios["HA_6563A"])
             log_oi_ha = np.log10(oi_ha)
             assert log_oi_ha > -1.5, f"log([OI]/Hα) at v={v} should be > -1.5, got {log_oi_ha:.2f}"

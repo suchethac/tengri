@@ -35,7 +35,7 @@ References:
 
 - Inoue et al. 2014, MNRAS, 442, 1805 (escape fraction formalism)
 - Steidel et al. 2018, ApJ, 869, 123 (Lyman continuum observations)
-- Li et al. 2024, ApJ, 969, 28 (Cue emulator)
+- Li et al. 2025, ApJ, 986, 9 (Cue emulator; arXiv:2405.04598)
 
 .. GENERATED FROM PYTHON SOURCE LINES 22-109
 

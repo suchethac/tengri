@@ -51,6 +51,7 @@ from tengri.components.stellar.sfh.mean_sfh import (
     buat08,
     constant,
     constant_then_exponential,
+    declining_exponential,
     delayed_bq,
     delayed_exponential,
     dpl,
@@ -765,16 +766,60 @@ _register(
     short_doc="Delayed exponential SFH",
 )
 
-# Note: the FSPS / Bagpipes-"exponential" declining-from-formation shape
-# (``declining_exponential`` in :mod:`tengri.components.stellar.sfh.mean_sfh`)
-# is **no longer registered** as ``"tau"``. Confusing it with CIGALE's
-# ``sfhdelayed`` (which is τ-delayed and rises from zero) caused a
-# silent wavelength-dependent residual in early audits — see #406 and
-# the reproduction notebook §2. The only τ-style SFH the registry now
-# exposes is ``"delayed"`` below, which matches CIGALE / Bagpipes
-# ``delayed``. The ``declining_exponential`` function remains importable
-# from :mod:`tengri.components.stellar.sfh.mean_sfh` for users who need
-# the FSPS-``sfh=1`` shape and are willing to compose it manually.
+# --- declining_exp (FSPS sfh=1 / Bagpipes 'exponential') ---
+# SFR(T) ∝ exp(-T/τ) with T = age - t_lb: maximal at formation, declining to
+# the present. The classic declining-tau model, and the parametric SFH most
+# often quoted in the literature.
+#
+# Registered as ``declining_exp``, NOT as ``tau`` (#1750). It was previously
+# registered as ``tau``, and #406 removed it because users read that name as
+# CIGALE's ``sfhdelayed`` — which is τ-*delayed* and rises from zero — giving a
+# silent wavelength-dependent residual. Both models have a τ, so ``tau`` cannot
+# distinguish them and putting that name back would reinstate the defect. What
+# #406 actually established is that the *name* was wrong, not that the model
+# should be unreachable: leaving it importable-but-unselectable made
+# ``SEDModel.build`` unable to express FSPS ``sfh=1`` at all, and the
+# FSPS/Bagpipes tau-model parity comparison — the most directly meaningful
+# external check available for a parametric SFH — had no model to run against.
+#
+# ``declining_exp`` states the shape, matches the ``const_exp`` / ``sfh2exp``
+# naming already in this file, and gives ``sfh_declining_exp_tau_gyr`` rather
+# than the ``sfh_tau_tau_gyr`` that spelling ``tau`` would have forced.
+_register(
+    SFHModelSpec(
+        name="declining_exp",
+        fn=declining_exponential,
+        params={
+            "sfh_declining_exp_log_total_mass": ParamDef(
+                "log10 total stellar mass formed [Msun]",
+                _always_true,
+                "",
+                Uniform(7.0, 12.5, default=10.0),
+            ),
+            "sfh_declining_exp_tau_gyr": ParamDef(
+                "e-folding decline timescale (Gyr) — larger τ declines slower",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(0.1, 10.0, default=2.0),
+            ),
+            "sfh_declining_exp_age_gyr": ParamDef(
+                "Galaxy age / lookback time of formation (Gyr)",
+                _lo_positive,
+                "must have lo > 0",
+                Uniform(0.5, 13.0, default=5.0),
+            ),
+        },
+        settings={},
+        internal_param_map={
+            "sfh_declining_exp_log_total_mass": ("log_total_mass", 1.0, 0.0),
+            "sfh_declining_exp_tau_gyr": ("tau", 1e9, 0.0),
+            "sfh_declining_exp_age_gyr": ("age", 1e9, 0.0),
+        },
+        composition_type="additive",
+    ),
+    short_doc="Declining-τ SFH (FSPS sfh=1 / Bagpipes 'exponential')",
+    citation="Conroy et al. 2009 (FSPS); Carnall et al. 2018 (Bagpipes)",
+)
 
 # --- delayed (τ-delayed, matches CIGALE sfh_delayed / Bagpipes 'delayed') ---
 # SFR(T) ∝ T · exp(-T/τ) with T = age - t_lb. Rises from 0 at formation,
