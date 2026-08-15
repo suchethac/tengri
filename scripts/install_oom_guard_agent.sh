@@ -61,6 +61,7 @@ SWAP_GROWTH_GB="${SWAP_GROWTH_GB:-3}"
 SWAP_GROWTH_WINDOW_SEC="${SWAP_GROWTH_WINDOW_SEC:-120}"
 SHED_GB="${SHED_GB:-8}"
 PRESSURE_MIN_PYTHON_GB="${PRESSURE_MIN_PYTHON_GB:-8}"
+PYTHON_SHARE_PCT="${PYTHON_SHARE_PCT:-40}"
 COOLDOWN_SEC="${COOLDOWN_SEC:-60}"
 INTERVAL_SEC="${INTERVAL_SEC:-2}"
 MIN_KILL_MB="${MIN_KILL_MB:-0}"
@@ -93,6 +94,7 @@ cat > "$PLIST" <<PLIST_EOF
         <key>SWAP_GROWTH_WINDOW_SEC</key><string>${SWAP_GROWTH_WINDOW_SEC}</string>
         <key>SHED_GB</key><string>${SHED_GB}</string>
         <key>PRESSURE_MIN_PYTHON_GB</key><string>${PRESSURE_MIN_PYTHON_GB}</string>
+        <key>PYTHON_SHARE_PCT</key><string>${PYTHON_SHARE_PCT}</string>
         <key>COOLDOWN_SEC</key><string>${COOLDOWN_SEC}</string>
         <key>INTERVAL_SEC</key><string>${INTERVAL_SEC}</string>
         <key>MIN_KILL_MB</key><string>${MIN_KILL_MB}</string>
@@ -103,8 +105,16 @@ cat > "$PLIST" <<PLIST_EOF
     <true/>
     <key>KeepAlive</key>
     <true/>
+    <!-- Interactive, NOT Background. Background tells macOS this job is
+         throttleable, which is precisely wrong for a watchdog: it must run
+         when the scheduler is wedged. On 2026-08-16 the guard stopped logging
+         at 01:46:51 and never ticked again before the 01:50 watchdogd-timeout
+         panic - 3.5 minutes starved, in the window it existed for. Nice=-10
+         backs that up with an explicit priority. -->
     <key>ProcessType</key>
-    <string>Background</string>
+    <string>Interactive</string>
+    <key>Nice</key>
+    <integer>-10</integer>
     <key>StandardOutPath</key>
     <string>${LOG_DIR}/tengri-oomguard.out</string>
     <key>StandardErrorPath</key>
