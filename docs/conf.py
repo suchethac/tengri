@@ -607,10 +607,16 @@ exclude_patterns = [
     # dropped from the index in the 2026-05 polish pass).
     "spine/08_emission_lines.ipynb",
     "spine/09_parameter_sweeps.ipynb",
-    # Orphaned leftover pages (not in any toctree, not linked from the
-    # published sidebar). Excluded so they don't build as half-accessible
-    # orphans emitting "not in any toctree" warnings. Still on disk / GitHub.
-    "spine/05_adding_a_model.ipynb",
+    # ``spine/05_adding_a_model.ipynb`` was listed here. Unlike the two above it
+    # was also absent from ``SPINE_SLUGS`` in
+    # ``scripts/sync_spine_notebooks_for_docs.py``, so nothing synced it and
+    # ``tools/check_notebook_renders.py`` did not guard it -- a hand-copy of
+    # ``notebooks/05_adding_a_model.py`` that no longer built, with nothing
+    # keeping it in step with its source. That is the drift #1506 added the
+    # guard to stop, and it had already started: the copy needed editing by hand
+    # alongside its source. The copy is deleted; the source is untouched. To
+    # publish this page again, add its slug to ``SPINE_SLUGS`` and re-run the
+    # sync -- which is how every other spine notebook gets here.
     # Fitting-photometry spine notebook hidden from the published sidebar
     # (2026-06): the quickstart already covers a full photometry fit +
     # posterior, so this longer treatment is redundant. Inbound prose links
