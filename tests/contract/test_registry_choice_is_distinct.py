@@ -268,6 +268,40 @@ DECLARED_COINCIDENT: list[dict] = [
         ),
     },
     {
+        "group": "dust",
+        "names": {"leitherer02", "noll09", "salim_sbl18"},
+        "reason": (
+            "noll09 applies a UV bump and a slope modification to the "
+            "Calzetti+L02 base as (base + bump) * power_law; salim_sbl18 "
+            "applies the same two as base * power_law + bump. Both "
+            "modifications default to zero in each law's own signature, so at "
+            "default each reduces to the unmodified L02 base -- which is what "
+            "leitherer02 selects. Three parameterized generalizations meeting "
+            "at their common origin.\n\n"
+            "This was a KNOWN_UNDISTINCT class until #1808 was fixed, on the "
+            "grounds that the separating knobs were dead on single_component. "
+            "They are live now (dust_delta rel 0.152), so the claim is "
+            "verifiable and belongs here."
+        ),
+        "separator": (
+            {"type": "single_component", "law_bc": "leitherer02"},
+            {"type": "single_component", "law_bc": "noll09", "dust_delta": -0.8},
+        ),
+    },
+    {
+        "group": "dust",
+        "names": {"power_law", "vw07_diff"},
+        "reason": (
+            "vw07_diff is a fixed curve taking no parameters -- the Wild+2007 "
+            "diffuse slope -- and power_law's n_slope defaults to -0.7, the "
+            "same slope. One curve reached two ways, at default."
+        ),
+        "separator": (
+            {"type": "single_component", "law_bc": "vw07_diff"},
+            {"type": "single_component", "law_bc": "power_law", "dust_slope": -2.5},
+        ),
+    },
+    {
         "group": "radio",
         "names": {"condon92", "radio_powerlaw"},
         "reason": (
@@ -342,31 +376,10 @@ KNOWN_UNDISTINCT: list[dict] = [
             "filed on the earlier measurement and withdrawn."
         ),
     },
-    {
-        "group": "dust",
-        "names": {"leitherer02", "noll09", "salim_sbl18"},
-        "reason": (
-            "On the single_component path these three are bit-identical "
-            "because noll09's and salim_sbl18's shape parameters are dead "
-            "there -- see KNOWN_DEAD_PARAMS below: dust_delta and "
-            "dust_bump_strength both have exactly-zero gradients on "
-            "single_component while being live on two_component. With both "
-            "modifications frozen at zero, each law reduces to the "
-            "unmodified Calzetti+L02 base. Fixing the dead parameters "
-            "separates all three."
-        ),
-    },
-    {
-        "group": "dust",
-        "names": {"power_law", "vw07_diff"},
-        "reason": (
-            "vw07_diff is a fixed curve taking no parameters, and power_law "
-            "defaults to n_slope=-0.7 -- the same slope. They coincide only "
-            "because power_law's dust_slope is dead on single_component "
-            "(exactly-zero gradient, see KNOWN_DEAD_PARAMS). Fixing that "
-            "makes power_law steerable and separates the pair."
-        ),
-    },
+    # No dust entries. Two classes lived here, both attributed to the
+    # single_component shape parameters being dead (#1808). They are live now,
+    # and the coincidences that remain are coincidences at DEFAULT values --
+    # which is a DECLARED_COINCIDENT claim, because a knob separates each pair.
 ]
 
 
@@ -498,33 +511,26 @@ def test_declared_coincidence_has_a_working_separator(entry: dict) -> None:
 # the fit cannot move the parameter at all: the posterior returns the prior
 # and reports convergence, with no warning. Each entry is (dust config label,
 # parameter) -> issue/reason.
-_SINGLE_COMPONENT_SHAPE_DEFECT = (
-    "Attenuation-law shape parameters do not reach the curve on the "
-    "single_component path. Measured three independent ways on origin/main "
-    "@ 57baf39ed: (1) dust_slope moves -0.7 -> -2.5 in the sampled parameter "
-    "dict while the SED stays bit-identical; (2) the gradient is exactly 0.0; "
-    "(3) dust_tau_v on the SAME build has a healthy gradient (rel 1.21), so "
-    "the build works and only the shape parameters are dead. The same "
-    "parameters are live on two_component (dust_delta rel 0.265), which is "
-    "the control that makes this a wiring defect rather than a property of "
-    "the laws. Consequence: a fit that frees a UV slope or a 2175 A bump on "
-    "single_component returns the prior and reports convergence. No issue "
-    "filed yet."
-)
-
-KNOWN_DEAD_PARAMS: dict[tuple[str, str], str] = {
-    ("single_component/power_law", "dust_slope"): (
-        _SINGLE_COMPONENT_SHAPE_DEFECT
-        + " This is also what makes power_law bit-identical to vw07_diff, "
-        "which is a fixed -0.7 power law."
-    ),
-    ("single_component/noll09", "dust_delta"): _SINGLE_COMPONENT_SHAPE_DEFECT,
-    ("single_component/noll09", "dust_bump_strength"): _SINGLE_COMPONENT_SHAPE_DEFECT,
-    ("single_component/salim_sbl18", "dust_delta"): _SINGLE_COMPONENT_SHAPE_DEFECT,
-    ("single_component/salim_sbl18", "dust_bump_strength"): _SINGLE_COMPONENT_SHAPE_DEFECT,
-    ("single_component/kriek_conroy", "dust_delta"): _SINGLE_COMPONENT_SHAPE_DEFECT,
-    ("single_component/kriek_conroy", "dust_bump_strength"): _SINGLE_COMPONENT_SHAPE_DEFECT,
-}
+#: Free parameters measured to have an exactly-zero gradient.
+#:
+#: **Empty since #1808 was fixed.** It held every attenuation-law shape
+#: parameter on the single_component path -- dust_slope, dust_delta and
+#: dust_bump_strength across six laws -- unreachable because the screen called
+#: each law with no arguments and preferred a k(lambda) cached before any
+#: parameter value existed. Measured after the fix: dust_slope rel 0.173,
+#: dust_delta rel 0.152, beside dust_tau_v rel 1.43 on the same build, with the
+#: two_component control unchanged to every digit.
+#:
+#: The fix passes a shape parameter only when spec provenance says a caller
+#: asked for it, so each law's published default still stands when nobody did.
+#: A first attempt passed them unconditionally and collapsed kriek_conroy,
+#: narayanan_z and salim onto one curve; the guard against that lives in
+#: tests/regression/bug/test_single_component_law_shape_params.py.
+#:
+#: Kept (empty) rather than deleted: a genuinely unfittable free parameter is a
+#: real defect class, and the next one should land here rather than re-deriving
+#: the mechanism.
+KNOWN_DEAD_PARAMS: dict[tuple[str, str], str] = {}
 
 # two_component builds carry no ledger entries on purpose: they are the
 # control. If one ever acquires a dead parameter, the census should say so

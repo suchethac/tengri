@@ -67,6 +67,25 @@ class DustAttenuationSEDComponentConfig(SEDComponentConfig):
 
     name: str = "dust_attenuation"
     law: str = "calzetti"
+    live_shape_params: frozenset[str] = frozenset()
+    r"""Shape parameters somebody actually asked for, resolved at build time.
+
+    The screen used to call its law with no arguments at all, so every law
+    shape parameter was unreachable and unfittable (#1808). Passing the spec's
+    values unconditionally is not the fix: the spec declares ONE shared
+    ``dust_delta`` / ``dust_bump_strength``, both ``Fixed(0.0)``, while each law
+    carries its paper's value in its own signature — ``kriek_conroy``
+    ``dust_bump_strength = 1.0``, ``narayanan_z`` ``dust_delta = -0.2``.
+    Overriding those collapses three distinct published laws onto one curve
+    (measured).
+
+    So only parameters with a provenance of ``user_fixed`` / ``user_prior`` /
+    ``user_free`` / ``wildcard_free`` land here; ``registry_default`` and
+    ``wildcard_fixed`` do not, and for those the law's own default stands.
+    ``SEDModel._build_component_chain`` computes the set — it has the spec, and
+    deciding once at build time keeps this a static Python branch rather than a
+    comparison against a traced value inside ``apply()``.
+    """
 
 
 @dataclass(frozen=True)
@@ -171,6 +190,42 @@ class DustAttenuationSEDComponent(TemplateThreading):
             ),
         )
 
+    def _curve(self, params: Mapping[str, jnp.ndarray]):
+        r"""``k(lambda)`` for the selected law, with requested shape parameters.
+
+        Returns ONE bound callable for the whole of :meth:`apply`. The screen
+        evaluates its curve at six places — the SED, the filter LUT, that LUT's
+        finite-difference slope, the sub-band quadrature, the rest band and the
+        spectroscopy pixels — and every one must use the same curve with the
+        same parameters. Six independent call sites are six chances for one to
+        keep the old behaviour and put two different screens in one model.
+        """
+        from tengri.components.dust._apply import _TWO_COMPONENT_LAW_PARAMS
+
+        law_fn = calzetti if self.config.law == "calzetti" else resolve_dust_law(self.config.law)
+        live = self.config.live_shape_params
+        if not live:
+            return law_fn
+
+        tabled = {flat for _, flat, _ in _TWO_COMPONENT_LAW_PARAMS}
+        kwargs: dict[str, jnp.ndarray] = {
+            law_kw: jnp.asarray(params[flat])
+            for law_kw, flat, _ in _TWO_COMPONENT_LAW_PARAMS
+            if flat in live and flat in params
+        }
+        # Shape parameters a law names directly rather than through the shared
+        # table (``dust_bump_x0`` and friends).
+        for flat in live - tabled:
+            if flat in params:
+                kwargs[flat] = jnp.asarray(params[flat])
+        if not kwargs:
+            return law_fn
+
+        def _bound(wave: jnp.ndarray) -> jnp.ndarray:
+            return law_fn(wave, **kwargs)
+
+        return _bound
+
     def precompute(
         self,
         ssp_data: Any | None = None,
@@ -198,6 +253,15 @@ class DustAttenuationSEDComponent(TemplateThreading):
             # Permissive path: contract tests call precompute() with no
             # args. Return an unprimed state; apply() will compute
             # k(λ) lazily on first call.
+            return DustAttenuationSEDComponentState(name=self.name, k_lambda=None)
+        if self.config.live_shape_params:
+            # A curve cached here is frozen before any parameter value exists,
+            # and apply() prefers the cached array — which is what made the
+            # requested shape parameters unreachable (#1808). When somebody has
+            # asked for one, leave the state unprimed and let apply() build the
+            # curve from params. Laws with nothing requested (calzetti and the
+            # parameter-free curves — the default and common case) keep the
+            # cache and the fast path unchanged.
             return DustAttenuationSEDComponentState(name=self.name, k_lambda=None)
         if self.config.law == "calzetti":
             # Avoid a registry lookup on the most common path.
@@ -240,13 +304,12 @@ class DustAttenuationSEDComponent(TemplateThreading):
         if state.sed_intrinsic is None:
             return state
 
+        # One curve for the whole method — see :meth:`_curve`.
+        curve = self._curve(params)
         if self._state is not None and self._state.k_lambda is not None:
             k = self._state.k_lambda
-        elif self.config.law == "calzetti":
-            k = calzetti(state.wave)
         else:
-            law_fn = resolve_dust_law(self.config.law)
-            k = law_fn(state.wave)
+            k = curve(state.wave)
 
         tau_v = jnp.asarray(params["dust_tau_v"])
         attenuation = jnp.exp(-tau_v * k)
@@ -287,23 +350,14 @@ class DustAttenuationSEDComponent(TemplateThreading):
         if filter_eff is not None:
             # Evaluate the attenuation law at the filter pivots and at a
             # finite-difference offset to compute the slope analytically.
-            if self.config.law == "calzetti":
-                k_at = calzetti(filter_eff)
-            else:
-                law_fn = resolve_dust_law(self.config.law)
-                k_at = law_fn(filter_eff)
+            k_at = curve(filter_eff)
             a_lut = jnp.exp(-tau_v * k_at)
             # k'(λ) via central finite difference. δλ = 1 Å is small
             # compared with filter widths (~100–10000 Å) and gives an
             # accurate slope for smooth analytic dust laws.
             d_lambda = jnp.asarray(1.0)
-            if self.config.law == "calzetti":
-                k_plus = calzetti(filter_eff + d_lambda)
-                k_minus = calzetti(filter_eff - d_lambda)
-            else:
-                law_fn = resolve_dust_law(self.config.law)
-                k_plus = law_fn(filter_eff + d_lambda)
-                k_minus = law_fn(filter_eff - d_lambda)
+            k_plus = curve(filter_eff + d_lambda)
+            k_minus = curve(filter_eff - d_lambda)
             k_slope = (k_plus - k_minus) / (2.0 * d_lambda)
             # A'(λ) = d/dλ exp(-τ·k(λ)) = -τ · k'(λ) · A(λ).
             a_slope_lut = -tau_v * k_slope * a_lut
@@ -318,16 +372,13 @@ class DustAttenuationSEDComponent(TemplateThreading):
             # ``A(λ_eff)·Φ`` form and be *worse* than before.
             sub_waves = state.derived.get("stellar_subband_waves_rest_precomp")
             if sub_waves is not None:
-                if self.config.law == "calzetti":
-                    k_sub = calzetti(sub_waves)
-                else:
-                    k_sub = resolve_dust_law(self.config.law)(sub_waves)
+                k_sub = curve(sub_waves)
                 derived_overrides["dust_attenuation_subband_precomp"] = jnp.exp(-tau_v * k_sub)
 
             # The same screen on the REST band (#1148). ``phot_rest_fnu`` projects at
             # z=0, so its filter samples rest λ_pivot, not rest λ_pivot/(1+z) — a
             # different set of wavelengths, and the galaxy's own dust belongs THERE.
-            _law = calzetti if self.config.law == "calzetti" else resolve_dust_law(self.config.law)
+            _law = curve
             rb_eff = state.derived.get("filter_restband_eff_waves")
             if rb_eff is not None:
                 derived_overrides["dust_restband_attenuation_precomp"] = jnp.exp(
@@ -344,11 +395,7 @@ class DustAttenuationSEDComponent(TemplateThreading):
         # no Taylor slope needed (contrast the filter branch above).
         spec_eff = state.derived.get("spec_eff_waves")
         if spec_eff is not None:
-            if self.config.law == "calzetti":
-                k_pix = calzetti(spec_eff)
-            else:
-                law_fn = resolve_dust_law(self.config.law)
-                k_pix = law_fn(spec_eff)
+            k_pix = curve(spec_eff)
             derived_overrides["dust_spec_transmission_precomp"] = jnp.exp(-tau_v * k_pix)
 
         return state.with_(

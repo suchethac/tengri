@@ -283,6 +283,12 @@ def build_components(
     # ``DustAttenuationSEDComponent`` instead of the two-component
     # ``DustSEDComponent``. ``dust_law_diff`` is reused as the screen law.
     dust_model: str = "two_component",
+    # Shape parameters of the selected attenuation law that somebody actually
+    # asked for (user-set or freed), resolved from spec provenance by
+    # SEDModel._build_component_chain. Empty means "nobody asked", and each
+    # law's own published default then stands — see
+    # DustAttenuationSEDComponentConfig.live_shape_params (#1808).
+    dust_live_shape_params: frozenset[str] = frozenset(),
     # Witt & Gordon (2000) screen (dust_model="wg00", FSPS dust_type=3).
     # Static structural selectors threaded into the WG00 screen component.
     wg00_dust_curve: str = "mw",
@@ -421,7 +427,10 @@ def build_components(
             )
         elif dust_model == "single_component":
             atten_type = "single_component"
-            atten_config = DustAttenuationSEDComponentConfig(law=dust_law_diff)
+            atten_config = DustAttenuationSEDComponentConfig(
+                law=dust_law_diff,
+                live_shape_params=frozenset(dust_live_shape_params),
+            )
         else:
             atten_type = "two_component"
             _overrides = dust_law_overrides or {}
