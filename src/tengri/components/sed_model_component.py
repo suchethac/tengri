@@ -286,6 +286,27 @@ class SEDModelComponent(TemplateThreading):
     #: the whole static union, which is #1482.
     declares_no_parameters: ClassVar[bool] = False
 
+    #: Domain to publish precompute keys under, when it differs from ``name``.
+    #:
+    #: ``name`` is the registry key, and the precompute keys are derived from it
+    #: (``{name}_phot_lnu_precomp`` and siblings). Those keys are typed fields on
+    #: ``DerivedState``, so a component whose registry key is not itself a
+    #: declared domain spills into ``_extras`` and trips the ADR-0007 guard.
+    #:
+    #: Several components share one domain by construction -- only one X-ray
+    #: component is ever built, so ``xray_aird`` and the shared ``xray``
+    #: component publish the same ``xray_*`` fields and are never in a state
+    #: together. Setting this lets the registry key and the published domain
+    #: differ, instead of adding a parallel set of ``DerivedState`` fields per
+    #: registry name (which would also leave each new name outside the
+    #: ``sed_xray`` accounting until someone remembered to add it).
+    publish_name: ClassVar[str] = ""
+
+    @property
+    def _derived_prefix(self) -> str:
+        """Prefix for this component's published derived keys."""
+        return self.publish_name or self.name
+
     # Instance attributes (set by subclass, but with class defaults)
     name: str = "component"
     parameter_prefix: str = "component_"
@@ -771,7 +792,7 @@ class SEDModelComponent(TemplateThreading):
         # Compute zeroth-order LUT
         phot_lnu_precomp, _ = self.predict_precomp(p, filter_eff_waves, **inputs)
 
-        published = {f"{self.name}_phot_lnu_precomp": phot_lnu_precomp}
+        published = {f"{self._derived_prefix}_phot_lnu_precomp": phot_lnu_precomp}
 
         # Optionally compute first-order Taylor slope
         if self.taylor_order >= 1:
@@ -783,7 +804,7 @@ class SEDModelComponent(TemplateThreading):
 
             # Element-wise gradient using vmap
             slope = jax.vmap(jax.grad(predict_precomp_scalar))(filter_eff_waves)
-            published[f"{self.name}_phot_lnu_slope_precomp"] = slope
+            published[f"{self._derived_prefix}_phot_lnu_slope_precomp"] = slope
 
         return published
 
@@ -832,7 +853,7 @@ class SEDModelComponent(TemplateThreading):
         )
 
         out = dict(published)
-        out[f"{self.name}_spec_lnu_precomp"] = spec_lnu_precomp
+        out[f"{self._derived_prefix}_spec_lnu_precomp"] = spec_lnu_precomp
         return out
 
     def predict_precomp(
