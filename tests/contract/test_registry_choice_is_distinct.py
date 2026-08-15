@@ -334,24 +334,22 @@ DECLARED_COINCIDENT: list[dict] = [
 KNOWN_UNDISTINCT: list[dict] = [
     {
         "group": "xray",
-        "names": {"simple", "yang20", "agn_xray_corona"},
+        "names": {"simple", "yang20"},
         "reason": (
-            "#1684, the remaining half. 'simple' == 'yang20' is a declared "
-            "alias (groups.py:1663) and stays. 'agn_xray_corona' is not: it "
-            "ships its own component class, and component_factory now routes a "
-            "name to its own class -- but only when that class's "
-            "parameter_prefix matches what the group supplies. This one "
-            "declares gamma / e_cut / delta_alpha_ox under 'agn_xray_', which "
-            "no group provides, so routing it raises KeyError: 'gamma' inside "
-            "predict. Wiring it is a public parameter-surface change, not a "
-            "factory one. See "
-            "tests/regression/bug/test_xray_names_build_their_own_component.py\n\n"
-            "'xray_aird' was in this class and is now fixed -- it declares its "
-            "parameters under 'xray_' and builds its own component.\n\n"
-            "lopez24 is deliberately NOT in this class. It separates at max "
-            "rel 8.0e-06 once a disc is present -- its alpha_ox branch needs "
-            "an L_2500 to act on. An earlier revision of this file omitted the "
-            "AGN scaffold and recorded it here wrongly; see _LUMINOUS_AGN."
+            "A declared alias, not a defect: groups.py:1663 states that "
+            "'simple' is 'yang20' physics, and both resolve to the same branch "
+            "of the shared XRaySEDComponent. One model under two names by "
+            "intent, so no knob can separate them -- which is why this is not "
+            "a DECLARED_COINCIDENT entry.\n\n"
+            "#1684 is otherwise closed. 'xray_aird' and 'agn_xray_corona' were "
+            "both in this class; each now builds its own registered component "
+            "and separates from yang20. That issue was the unfinished half of "
+            "#1120, which closed after adding the names to the grammar "
+            "allowlist but not to component_factory.\n\n"
+            "'lopez24' was never a member. It separates once a disc is present "
+            "-- its alpha_ox branch needs an L_2500 to act on -- and an early "
+            "revision of this file recorded it here only because the fixture "
+            "had no AGN. See _LUMINOUS_AGN."
         ),
     },
     # No radio entry. An earlier revision recorded {condon92, radio_powerlaw,
