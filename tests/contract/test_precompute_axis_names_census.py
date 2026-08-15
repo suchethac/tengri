@@ -54,7 +54,7 @@ pytestmark = pytest.mark.contract
 #: ``log_age`` in the two CLOUDY-family adapters, and qsogen's pair have no
 #: live counterpart to point at — the parameter genuinely does not exist, so
 #: closing these means either declaring the parameter or declaring the axis
-#: internal and not user-collapsible.
+#: internal and not user-collapsible. Tracked as #1827.
 #:
 #: ``cb19`` needs more than that again: it also carries seven axes over a
 #: photometry array with six grid dimensions, so repairing the names alone would
