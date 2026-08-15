@@ -159,4 +159,4 @@ class TestEVIRuns:
 # TestGeoVIMGVIRouting removed: tested the `native_geovi`/`native_mgvi`
 # deprecated aliases, which were hard-deleted pre-v1.0. Coverage of the
 # canonical names lives in TestEVIRuns above (``native_vi_linear``) and
-# in tests/unit/test_geovi_jit.py (``native_vi_nonlinear``).
+# in tests/inference/test_geovi_jit.py (``native_vi_nonlinear``).
