@@ -128,17 +128,19 @@ class TestRadioPrecomputeAxisCollapse:
 class TestXrayPrecomputeAxisCollapse:
     """Test axis collapse for X-ray models (2 free axes each)."""
 
-    @pytest.mark.parametrize(
-        "model,params",
-        [
-            ("xray_xrb", ("xray_gamma_hmxb", "xray_gamma_lmxb")),
-            ("xray_corona", ("xray_gamma", "xray_delta_alpha_ox")),
-            ("xray_corona_lopez24", ("xray_gamma", "xray_alpha_irx")),
-        ],
-    )
+    @pytest.mark.parametrize("model", ["xray_xrb", "xray_corona", "xray_corona_lopez24"])
     @pytest.mark.parametrize("fixed_axis_idx", [0, 1])
-    def test_xray_collapse_axis(self, model, params, fixed_axis_idx, filter_set_xray):
+    def test_xray_collapse_axis(self, model, fixed_axis_idx, filter_set_xray):
         from tengri.components.xray import xray_precompute as adapter
+
+        # Read the axis names off the adapter rather than restating them here.
+        # A copy in the test cannot disagree with the declaration it copies, so
+        # it cannot catch a name that drifted away from the live parameter — and
+        # the mock below answers to whatever name it is handed, so a wrong one
+        # still collapses and still passes. Both X-ray coronae declared
+        # ``xray_gamma`` against a parameter named ``xray_gamma_agn`` and this
+        # suite stayed green throughout (#1738).
+        params = adapter.AXIS_PARAMS[model]
 
         waves, trans = filter_set_xray
         redshift = 0.5

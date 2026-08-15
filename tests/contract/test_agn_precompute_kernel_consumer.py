@@ -61,7 +61,7 @@ class TestPowerlawDiscPrecomputeConsumer:
 
         # Test JIT compilation
         jitted_lookup = jax.jit(lookup)
-        # powerlaw_disc has 1 axis: agn_alpha_pl (power-law index)
+        # powerlaw_disc has 1 axis: agn_alpha (power-law index)
         phot = jitted_lookup(jnp.float64(10.5), jnp.float64(-1.0))
 
         assert phot.shape == (len(waves),), f"Expected shape ({len(waves)},), got {phot.shape}"
