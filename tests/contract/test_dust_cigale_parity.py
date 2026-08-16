@@ -20,12 +20,15 @@ References
 
 from __future__ import annotations
 
+import functools
 import os
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
+
+from tests._grad_parity import assert_grad_matches_fd
 
 pytestmark = pytest.mark.contract
 
@@ -46,6 +49,50 @@ def _require(path):
     return path
 
 
+# ── shared template loaders ───────────────────────────────────────
+#
+# Each test used to rebuild its own loader. The loaders are pure functions of a
+# path, so one entry serves the module -- which matters most for the
+# parametrized gradient test below, where six cases would otherwise open the
+# same three HDF5 grids six times.
+#
+# This is a redundancy fix, not a speed fix, and the distinction is worth
+# recording because the first measurement suggested otherwise. The file was
+# timed at 54 s before the change and 4.4 s after, but re-running the *original*
+# under the same conditions also gives 4.4 s: the 54 s was a cold JAX compile
+# cache, not repeated loading. Measured 2026-08-16, serial, warm cache: old
+# 4.45 s, new 4.41 s. No speedup is claimed.
+#
+# ``pytest.skip`` raises, and ``lru_cache`` does not cache exceptions, so a
+# missing grid still skips every test that needs it rather than being memoized
+# into a false pass.
+
+
+@functools.lru_cache(maxsize=1)
+def _themis_engine():
+    from tengri.components.dust.emission_templates import create_themis_from_grid
+
+    return create_themis_from_grid(_require("data/themis_templates.h5"))
+
+
+@functools.lru_cache(maxsize=1)
+def _dale2014_engine():
+    from tengri.components.dust.emission_templates import create_dale2014_from_grid
+
+    return create_dale2014_from_grid(_require("data/dale2014_templates_cigale.h5"))
+
+
+@functools.lru_cache(maxsize=1)
+def _schreiber2016_component():
+    from tengri.components.dust.emission_templates import load_schreiber2016_templates
+    from tengri.components.dust.schreiber2016_ir import Schreiber2016IRSEDComponent
+
+    comp = Schreiber2016IRSEDComponent()
+    data = load_schreiber2016_templates(_require("data/schreiber2016_templates.h5"))
+    object.__setattr__(comp, "data", data)
+    return comp
+
+
 # ── THEMIS: radiation-field slope alpha (FSPS-anchored hybrid grid) ──
 
 
@@ -58,33 +105,17 @@ class TestTHEMISAlphaAxis:
     """
 
     def _fn(self):
-        from tengri.components.dust.emission_templates import create_themis_from_grid
-
-        return create_themis_from_grid(_require("data/themis_templates.h5"))
+        return _themis_engine()
 
     def _sed(self, fn, alpha):
         return fn(WAVE, 1.0, dust_qhac=0.17, dust_umin=2.0, dust_gamma_dl=0.1, dust_alpha=alpha)
 
-    def test_default_alpha_finite_positive(self):
-        sed = self._sed(self._fn(), 2.0)
-        assert jnp.all(jnp.isfinite(sed))
-        assert jnp.any(sed > 0)
-
     def test_alpha_changes_fir_shape(self):
         fn = self._fn()
         s1, s3 = self._sed(fn, 1.0), self._sed(fn, 3.0)
+        assert jnp.all(jnp.isfinite(s1)) and jnp.any(s1 > 0)
         rel = float(jnp.max(jnp.abs(s1 - s3)) / (jnp.max(jnp.abs(s1)) + 1e-300))
         assert rel > 1e-2, f"dust_alpha is a no-op (max frac change {rel:.2e})"
-
-    def test_alpha_jit_and_grad(self):
-        fn = self._fn()
-
-        @jax.jit
-        def total(alpha):
-            return jnp.sum(self._sed(fn, alpha))
-
-        assert jnp.isfinite(total(2.0))
-        assert jnp.isfinite(jax.grad(total)(2.0))
 
 
 # ── Dale2014: AGN fraction (additive AGN power source) ────────────
@@ -94,32 +125,16 @@ class TestDale2014FracAGN:
     """Dale2014 SF + quasar mixing: SED = L*SF + L*f/(1-f)*QSO."""
 
     def _fn(self):
-        from tengri.components.dust.emission_templates import create_dale2014_from_grid
-
-        return create_dale2014_from_grid(_require("data/dale2014_templates_cigale.h5"))
-
-    def test_default_fracagn_zero_is_sf_only(self):
-        fn = self._fn()
-        sf = fn(WAVE, 1.0, dust_alpha_dale=2.0, dust_frac_agn=0.0)
-        assert jnp.all(jnp.isfinite(sf))
-        assert jnp.any(sf > 0)
+        return _dale2014_engine()
 
     def test_fracagn_additive_increases_total_ir(self):
         """AGN is a separate power source: total IR grows with frac_agn."""
         fn = self._fn()
-        l0 = _bolometric(fn(WAVE, 1.0, dust_alpha_dale=2.0, dust_frac_agn=0.0))
+        sf = fn(WAVE, 1.0, dust_alpha_dale=2.0, dust_frac_agn=0.0)
+        assert jnp.all(jnp.isfinite(sf)) and jnp.any(sf > 0)
+        l0 = _bolometric(sf)
         l5 = _bolometric(fn(WAVE, 1.0, dust_alpha_dale=2.0, dust_frac_agn=0.5))
         assert l5 > l0 * 1.2, "frac_agn does not add AGN dust power"
-
-    def test_fracagn_jit_and_grad(self):
-        fn = self._fn()
-
-        @jax.jit
-        def total(f):
-            return jnp.sum(fn(WAVE, 1.0, dust_alpha_dale=2.0, dust_frac_agn=f))
-
-        assert jnp.isfinite(total(0.3))
-        assert jnp.isfinite(jax.grad(total)(0.3))
 
     def test_qso_template_keeps_cigale_full_grid_norm(self):
         """Regression (#717): the QSO template carries CIGALE's *full-grid*
@@ -174,13 +189,7 @@ class TestSchreiber2016Tabulated:
     """Tabulated Schreiber+2016 templates (tdust, fpah), matching CIGALE."""
 
     def _component(self):
-        from tengri.components.dust.emission_templates import load_schreiber2016_templates
-        from tengri.components.dust.schreiber2016_ir import Schreiber2016IRSEDComponent
-
-        comp = Schreiber2016IRSEDComponent()
-        data = load_schreiber2016_templates(_require("data/schreiber2016_templates.h5"))
-        object.__setattr__(comp, "data", data)
-        return comp
+        return _schreiber2016_component()
 
     def _sed(self, comp, tdust, fpah):
         # Canonical stripped param names (#849): T / f_pah.
@@ -189,15 +198,11 @@ class TestSchreiber2016Tabulated:
         )
         return sed_out
 
-    def test_default_finite_positive(self):
-        sed = self._sed(self._component(), 25.0, 0.05)
-        assert jnp.all(jnp.isfinite(sed))
-        assert jnp.any(sed > 0)
-
     def test_tdust_shifts_peak(self):
         comp = self._component()
         cold = self._sed(comp, 20.0, 0.05)
         hot = self._sed(comp, 50.0, 0.05)
+        assert jnp.all(jnp.isfinite(cold)) and jnp.any(cold > 0)
         # Hotter dust peaks at shorter wavelength.
         lam_cold = float(WAVE[jnp.argmax(cold)])
         lam_hot = float(WAVE[jnp.argmax(hot)])
@@ -211,16 +216,6 @@ class TestSchreiber2016Tabulated:
         # allclose (atol=1e-8) would falsely call them equal.
         rel = float(jnp.max(jnp.abs(s0 - s5)) / (jnp.max(jnp.abs(s0)) + 1e-300))
         assert rel > 1e-2, f"fpah is a no-op (max frac change {rel:.2e})"
-
-    def test_fpah_jit_and_grad(self):
-        comp = self._component()
-
-        @jax.jit
-        def total(fpah):
-            return jnp.sum(self._sed(comp, 30.0, fpah))
-
-        assert jnp.isfinite(total(0.1))
-        assert jnp.isfinite(jax.grad(total)(0.1))
 
 
 # ── Schreiber+2018: T / f_pah knobs are wired (no silent drop) ────
@@ -288,20 +283,171 @@ class TestModifiedBlackbodyEpsilon:
             dust_epsilon_mbb=epsilon,
         )
 
-    def test_epsilon_default_one_full_luminosity(self):
-        sed = self._sed(1.0)
-        assert jnp.all(jnp.isfinite(sed))
-        assert jnp.any(sed > 0)
-
     def test_epsilon_scales_luminosity_linearly(self):
-        full = _bolometric(self._sed(1.0))
+        sed = self._sed(1.0)
+        assert jnp.all(jnp.isfinite(sed)) and jnp.any(sed > 0)
+        full = _bolometric(sed)
         half = _bolometric(self._sed(0.5))
         assert np.isclose(half, 0.5 * full, rtol=1e-3)
 
-    def test_epsilon_jit_and_grad(self):
-        @jax.jit
-        def total(eps):
-            return jnp.sum(self._sed(eps))
 
-        assert jnp.isfinite(total(0.5))
-        assert jnp.isfinite(jax.grad(total)(0.5))
+# ── every knob is *differentiable*, not merely finite ─────────────
+#
+# This replaces four near-identical ``test_*_jit_and_grad`` tests that each
+# asserted only::
+#
+#     assert jnp.isfinite(jax.grad(total)(x))
+#
+# Zero is finite. Every axis below is a template-grid axis or a mixing
+# fraction, and the ordinary way each of them breaks -- a nearest-neighbour
+# lookup instead of an interpolation, an integer cast, a stray
+# ``stop_gradient`` -- leaves the forward value moving (so the no-op tests
+# above still pass) and the gradient exactly 0.0 (so the finiteness assertion
+# still passes) while the knob is unfittable by every sampler in the package.
+#
+# Measured 2026-08-16: all six axes are live, and off-node the analytic
+# gradient matches a central difference to <= 4e-6 relative.
+
+
+def _obj_themis_alpha():
+    fn = _themis_engine()
+    return lambda alpha: jnp.sum(
+        fn(WAVE, 1.0, dust_qhac=0.17, dust_umin=2.0, dust_gamma_dl=0.1, dust_alpha=alpha)
+    )
+
+
+def _obj_dale_alpha():
+    fn = _dale2014_engine()
+    return lambda alpha: jnp.sum(fn(WAVE, 1.0, dust_alpha_dale=alpha, dust_frac_agn=0.3))
+
+
+def _obj_dale_frac_agn():
+    fn = _dale2014_engine()
+    return lambda frac: jnp.sum(fn(WAVE, 1.0, dust_alpha_dale=2.0, dust_frac_agn=frac))
+
+
+def _obj_schreiber2016_fpah():
+    comp = _schreiber2016_component()
+
+    def total(f_pah):
+        sed, _ = comp.predict({"T": 30.0, "f_pah": f_pah}, jnp.zeros_like(WAVE), WAVE, L_ir=1.0)
+        return jnp.sum(sed)
+
+    return total
+
+
+def _obj_schreiber2016_tdust():
+    comp = _schreiber2016_component()
+
+    def total(tdust):
+        sed, _ = comp.predict({"T": tdust, "f_pah": 0.05}, jnp.zeros_like(WAVE), WAVE, L_ir=1.0)
+        return jnp.sum(sed)
+
+    return total
+
+
+def _obj_mbb_epsilon():
+    from tengri.components.dust.emission.emission import DUST_EMISSION_MODELS
+
+    return lambda eps: jnp.sum(
+        DUST_EMISSION_MODELS["modified_blackbody"](
+            WAVE, 1.0, dust_T=35.0, dust_beta_ir=1.8, dust_epsilon_mbb=eps
+        )
+    )
+
+
+#: axis -> (objective builder, evaluation point).
+#:
+#: The points sit *strictly inside* a template cell, and that is not a detail.
+#: THEMIS interpolates on an alpha grid of pitch 0.1 and Dale2014 on one of
+#: pitch 0.0625, so the round numbers an author reaches for first -- 1.0, 1.5,
+#: 2.0, 2.5, 3.0 -- are all exactly nodes. At a node a piecewise interpolant
+#: has two different one-sided slopes, ``jax.grad`` returns one of them and a
+#: central difference returns their average, and the two disagree by up to 41%
+#: for reasons that have nothing to do with correctness. Sampling 0.03 off-node
+#: drops that disagreement to 1e-6.
+_GRAD_AXES = {
+    "dale2014_dust_alpha_dale": (_obj_dale_alpha, 1.53),
+    "dale2014_dust_frac_agn": (_obj_dale_frac_agn, 0.41),
+    "mbb_dust_epsilon_mbb": (_obj_mbb_epsilon, 0.37),
+    "schreiber2016_f_pah": (_obj_schreiber2016_fpah, 0.23),
+    "schreiber2016_tdust": (_obj_schreiber2016_tdust, 31.3),
+    "themis_dust_alpha": (_obj_themis_alpha, 1.77),
+}
+
+
+@pytest.mark.parametrize("axis", sorted(_GRAD_AXES))
+def test_knob_is_differentiable_not_merely_finite(axis):
+    """The gradient is finite, non-zero, and equal to a finite difference."""
+    build, x = _GRAD_AXES[axis]
+    total = jax.jit(build())
+
+    value = float(total(x))
+    assert np.isfinite(value) and value != 0.0
+
+    # atol=0.0 deliberately. These objectives sum an SED in erg/s/Hz and land
+    # near 1e-11, so the helper's default absolute floor of 1e-8 sits three
+    # orders of magnitude *above* every gradient here and would accept a
+    # zeroed one. Its computed finite-difference noise floor (~1e-22 at this
+    # scale) is the honest floor and still applies.
+    grad = float(assert_grad_matches_fd(total, x, rtol=1e-3, atol=0.0))
+
+    # Dimensionless logarithmic sensitivity: the fractional change in the
+    # summed SED per fractional change in the knob. Measured range across
+    # these six axes is 0.07 to 5.9, so 1e-3 is a floor against a dead
+    # gradient rather than a claim about how sensitive the model ought to be.
+    sensitivity = abs(x * grad / value)
+    assert sensitivity > 1e-3, (
+        f"{axis} has a finite but effectively dead gradient at x={x}: "
+        f"d ln(sum SED) / d ln x = {sensitivity:.3e}. A knob that moves the "
+        f"SED but cannot be differentiated is unfittable by MAP, VI and NUTS "
+        f"alike."
+    )
+
+
+#: knob -> (objective builder, lower bound, upper bound). Both of these are
+#: fractions of a luminosity, and both are clamped to [0, 1].
+_CLAMPED_FRACTIONS = {
+    "mbb_dust_epsilon_mbb": (_obj_mbb_epsilon, 0.0, 1.0),
+    "schreiber2016_f_pah": (_obj_schreiber2016_fpah, 0.0, 1.0),
+}
+
+
+@pytest.mark.parametrize("knob", sorted(_CLAMPED_FRACTIONS))
+def test_bounded_fraction_is_hard_clamped_and_its_gradient_dies_at_the_bound(knob):
+    """Outside [0, 1] these knobs are frozen and carry no gradient at all.
+
+    Nothing else in the suite can see this: every existing test evaluates
+    strictly inside the interval. The behaviour matters because a sampler
+    working in an unconstrained space can and does propose values outside the
+    bound, and there it receives a bit-identical likelihood and an exactly
+    zero gradient -- no signal pointing back into the valid range.
+
+    Measured 2026-08-16: the value outside is bit-identical to the value at
+    the bound, the gradient outside is exactly +/-0.0, and the gradient *at*
+    the bound is exactly half the interior slope. That last number is not a
+    coincidence: ``jnp.where``-style clamping differentiates to the average of
+    the live one-sided slope and the dead one.
+    """
+    build, lo, hi = _CLAMPED_FRACTIONS[knob]
+    total = jax.jit(build())
+    grad = jax.jit(jax.grad(total))
+
+    interior = float(grad(0.5))
+    assert interior != 0.0, f"{knob} is dead in the middle of its own range"
+
+    for bound, outside in ((lo, lo - 0.1), (hi, hi + 0.1)):
+        assert float(total(outside)) == float(total(bound)), (
+            f"{knob} is not hard-clamped at {bound}: the model extrapolates "
+            f"past the bound instead of freezing there."
+        )
+        assert float(grad(outside)) == 0.0, (
+            f"{knob} carries a non-zero gradient at {outside}, outside its "
+            f"clamped range -- the forward value is frozen there, so any "
+            f"gradient is spurious."
+        )
+        assert float(grad(bound)) == pytest.approx(0.5 * interior, rel=1e-2), (
+            f"{knob} gradient at the bound {bound} is {float(grad(bound)):.6e}, "
+            f"not half the interior slope {interior:.6e}. The clamp's "
+            f"differentiation convention changed."
+        )
