@@ -216,7 +216,7 @@ _CUSTOM_LIKELIHOOD = _Tutorial(
         # Pass it to the Fitter via:
         #     Fitter(model, data, noise=..., likelihood=my_likelihood)
         #
-        # See src/tengri/core/likelihood.py for the contract and
+        # See src/tengri/inference/likelihood.py for the contract and
         # src/tengri/inference/likelihoods/ for the in-tree examples
         # (PhotometryLikelihood, SpectroscopyLikelihood, JointLikelihood,
         # CalibrationMarginalizedLikelihood).

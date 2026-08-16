@@ -296,7 +296,7 @@ else:
 #
 # - **The how-to**: `docs/dev/sed-model-components.md` — full contract,
 #   conventions, what's optional.
-# - **The architecture**: `docs/dev/forward-model-architecture.md` — how
+# - **The architecture**: `docs/dev/archive/forward-model-architecture.md` — how
 #   your component fits into the wider pipeline, the cross-component
 #   contract, WavePrecomp, the build resolver.
 # - **The decision**: `docs/adr/0011-sed-model-component-base.md` — why

@@ -8,7 +8,7 @@ default, ``approx=None`` opts out, an explicit config overrides, a build-time
 ``with_approx`` clone (bit-identical to a directly-built precomp model) and the
 ``prewarm`` recursion guard.
 
-Design: docs/superpowers/specs/2026-07-15-fit-precomp-default-design.md
+Design: docs/internal/specs/2026-07-15-fit-precomp-default-design.md
 """
 
 import chex

@@ -54,14 +54,15 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_ROOTS = ("src", "tests", "docs", "examples", "notebooks", "README.md", "CONTRIBUTING.md")
 SUFFIXES = (".py", ".md", ".rst")
 # Excluded path fragments: generated output and archived notebook trees.
+# Matching is exact-on-path-part (see the `path.parts` test below), so each archived
+# tree needed its own entry while they sat side by side under `notebooks/`. They are
+# now all under `notebooks/archive/`, so the single "archive" part covers every one —
+# `archive_2`, `_migrated_galleries`, `_retired`, and `_old_notebooks` were dropped
+# rather than left behind as parts no path can match.
 EXCLUDE_PARTS = (
     "auto_examples",  # sphinx-gallery generated from examples/
     "_build",  # local sphinx build output under docs/
     "archive",
-    "archive_2",
-    "_migrated_galleries",
-    "_retired",
-    "_old_notebooks",
 )
 
 # Rename-ledger docs: they intentionally cite the *old* British names in

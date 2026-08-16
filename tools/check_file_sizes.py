@@ -91,20 +91,29 @@ DATA_PREFIXES = ("data/",)
 #: no toctree references ``notebooks/archive*`` or ``explore/``. Clearing their
 #: outputs, or rebuilding them from their jupytext mirrors, would return several
 #: MiB each.
+# Paths here are exact matches, so a directory move strands every entry it
+# names -- the guard then reports the same files as new and unrecorded, which
+# reads as a regression rather than as a rename. That happened immediately: the
+# five notebook archives were consolidated under notebooks/archive/ in the same
+# window this guard landed, stranding nine of these twelve lines. The sizes are
+# unchanged; only the paths moved.
+#
+# `explore/02_stochastic_performance.ipynb` is gone from this list rather than
+# renamed: `/explore/` is now gitignored, and the guard only reads tracked
+# files, so the entry could never match again.
 INVENTORY: dict[str, float] = {
-    "explore/02_stochastic_performance.ipynb": 8.7,
-    "notebooks/archive_2/fitting/06_advanced_inference.ipynb": 7.1,
-    "notebooks/archive_2/demonstrations/06_advanced_inference.ipynb": 7.1,
-    "notebooks/archive_2/demonstrations/12_advanced_inference.ipynb": 6.9,
-    "notebooks/archive_2/fitting/01_fitting_spectra.ipynb": 5.3,
-    "notebooks/archive/000_quickstart_executed.ipynb": 5.1,
+    "notebooks/archive/2026-04/fitting/06_advanced_inference.ipynb": 7.1,
+    "notebooks/archive/2026-04/demonstrations/06_advanced_inference.ipynb": 7.1,
+    "notebooks/archive/2026-04/demonstrations/12_advanced_inference.ipynb": 6.9,
+    "notebooks/archive/2026-04/fitting/01_fitting_spectra.ipynb": 5.3,
+    "notebooks/archive/v1/000_quickstart_executed.ipynb": 5.1,
     # The site logo, at 5 MiB. A PNG this size is a rendering artifact rather
     # than a design decision; every page that shows it pays for it.
     "docs/_static/tengri-logo.png": 5.1,
-    "notebooks/_migrated_galleries/02_sfh_gallery.ipynb": 5.1,
-    "notebooks/archive_2/quickstart/03_bursty_sfh_recovery.ipynb": 5.0,
-    "notebooks/archive_2/demonstrations/01_spectroscopic_fitting.ipynb": 4.6,
-    "notebooks/archive_2/demonstrations/05_inference_methods.ipynb": 4.2,
+    "notebooks/archive/migrated_galleries/02_sfh_gallery.ipynb": 5.1,
+    "notebooks/archive/2026-04/quickstart/03_bursty_sfh_recovery.ipynb": 5.0,
+    "notebooks/archive/2026-04/demonstrations/01_spectroscopic_fitting.ipynb": 4.6,
+    "notebooks/archive/2026-04/demonstrations/05_inference_methods.ipynb": 4.2,
 }
 
 

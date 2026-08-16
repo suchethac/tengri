@@ -180,6 +180,13 @@ def execute(slug: str, timeout: int) -> tuple[bool, float, int, int]:
         client.execute()
     except Exception as exc:  # kernel death is not a cell error, so catch broadly
         print(f"  kernel failure: {type(exc).__name__}: {exc}", file=sys.stderr)
+        # Scrub here too. This path writes no *render*, but it does write
+        # ``notebooks/<slug>.ipynb``, and for the numbered spine that file is
+        # tracked -- the 29 paths this guard caught included four of them. A
+        # failed run is also the case most likely to leak: a traceback names an
+        # absolute source path on every frame, not just the one line a warning
+        # emits.
+        strip_local_paths(nb)
         nbformat.write(nb, out)
         return False, time.perf_counter() - t0, 0, -1
     dt = time.perf_counter() - t0

@@ -143,5 +143,5 @@ suite's equivalence assertions.
 - `scripts/benchmark_forward_model.py` — the harness.
 - `tests/unit/components/test_precompute_runtime_equivalence.py` —
   unit-level rel-tol-1e-3 equivalence assertions per emitter.
-- `docs/inference/scaling.md` — population-level VI scaling (orthogonal to
+- `docs/internal/inference/scaling.md` — population-level VI scaling (orthogonal to
   this benchmark; both feed into the user-facing performance expectations).
