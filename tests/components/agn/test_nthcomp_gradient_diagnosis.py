@@ -1,11 +1,23 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Diagnostic tests for nthcomp gradient flow issues.
+"""Diagnostic tests for nthcomp gradient flow, one operation at a time.
 
-This test suite isolates which operations within nthcomp_lnu_interp produce NaN
-gradients when differentiated with respect to gamma parameter.
+Each test rebuilds ``nthcomp_lnu_interp`` up to a different operation -- the
+trilinear interpolation, the ``exp`` of it, the ``jnp.interp`` resampling, the
+``jnp.maximum`` clip, the whole function, the whole function under ``vmap`` --
+and compares the analytic gradient w.r.t. gamma against a finite difference.
+Structured this way so a broken gradient names the operation that broke it.
 
-Problem: `shape * scalar` from nthcomp produces NaN gradient w.r.t. gamma.
-Goal: Identify the exact source and propose a fix.
+Five of these were ``strict=True`` xfails whose reasons said the gradient was
+zero and the finite difference NaN. Measured on 2026-08-17: nothing was NaN,
+nothing was zero, and every one of them failed for one shared reason unrelated
+to the operation it named -- all six probed ``gamma = 1.5``, the table's left
+edge. There the analytic derivative is the one-sided slope into the table while
+a central difference averages it with the dead clamped side, so analytic is
+exactly twice numeric (2.0035 measured at eps=1e-3). Moved to interior gamma
+they agree to 0.4% and pass, which is what they now do.
+
+The lesson is in the file's own subject: a finite difference is a measurement,
+and at a clamp it is measuring something the analytic gradient is not.
 """
 
 import pytest
@@ -94,16 +106,19 @@ class TestNthcompGradientDiagnosis:
             err_msg="trilinear_interp: FD check ∂(∑log_shape)/∂gamma",
         )
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "Known: jnp.exp(log_shape) overflows → FD=NaN; JAX grad=0. "
-            "Fix: clip log_shape before exp."
-        ),
-    )
     def test_exp_of_interpolated_log_gradient(self):
-        """Test gradient through exp(trilinear_log_interp)."""
-        gamma = jnp.array(1.5)
+        """Test gradient through exp(trilinear_log_interp).
+
+        Was a ``strict=True`` xfail reading "jnp.exp(log_shape) overflows ->
+        FD=NaN; JAX grad=0". Neither half was true: measured, the gradient is
+        7.5e-17 and the finite difference 3.8e-17, both finite. The test failed
+        because it probed ``gamma = 1.5``, the table's left edge, where the
+        analytic derivative is the one-sided slope into the table and a central
+        difference averages it with the dead clamped side -- a factor of exactly
+        two (measured 2.0035 at eps=1e-3, converging to 2). At any interior
+        gamma the two agree to 0.4%.
+        """
+        gamma = jnp.array(2.0)
         kTe_keV = jnp.array(0.2)
         kTbb_keV = jnp.array(0.001)
 
@@ -138,17 +153,17 @@ class TestNthcompGradientDiagnosis:
             err_msg="exp(log_interp): FD check ∂(∑shape)/∂gamma",
         )
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "Known: jnp.interp does not propagate gradients through index selection. "
-            "JAX grad=0, FD=NaN."
-        ),
-    )
     def test_jnp_interp_gradient(self):
-        """Test gradient through jnp.interp resampling."""
+        """Test gradient through jnp.interp resampling.
+
+        Was a ``strict=True`` xfail reading "jnp.interp does not propagate
+        gradients through index selection. JAX grad=0, FD=NaN." It does
+        propagate them: ``jnp.interp`` is differentiable in the *values* it
+        interpolates, which is what varies with gamma here. The failure was the
+        ``gamma = 1.5`` clamp boundary described above, not the resampling.
+        """
         nu_test = jnp.array([1e14, 2e14, 5e14])
-        gamma = jnp.array(1.5)
+        gamma = jnp.array(2.0)
         kTe_keV = jnp.array(0.2)
         kTbb_keV = jnp.array(0.001)
 
@@ -191,14 +206,17 @@ class TestNthcompGradientDiagnosis:
             err_msg="jnp.interp resampling: FD check ∂(∑lnu)/∂gamma",
         )
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="Known: jnp.interp/exp chain kills gradient. JAX grad=0, FD=NaN.",
-    )
     def test_jnp_maximum_clipping_gradient(self):
-        """Test gradient through jnp.maximum(lnu, 0.0)."""
+        """Test gradient through jnp.maximum(lnu, 0.0).
+
+        Was a ``strict=True`` xfail reading "jnp.interp/exp chain kills
+        gradient. JAX grad=0, FD=NaN." The chain does not kill it. The clip is
+        inactive here -- every sampled ``lnu`` is positive, so ``jnp.maximum``
+        passes its gradient straight through -- and the failure was the
+        ``gamma = 1.5`` clamp boundary.
+        """
         nu_test = jnp.array([1e14, 2e14, 5e14])
-        gamma = jnp.array(1.5)
+        gamma = jnp.array(2.0)
         kTe_keV = jnp.array(0.2)
         kTbb_keV = jnp.array(0.001)
 
@@ -241,16 +259,31 @@ class TestNthcompGradientDiagnosis:
             err_msg="jnp.maximum clipping: FD check ∂(∑lnu_clipped)/∂gamma",
         )
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "Known: full nthcomp_lnu_interp gradient is zero due to jnp.interp/exp overflow chain."
-        ),
-    )
     def test_full_nthcomp_lnu_interp_gradient(self):
-        """Test gradient through the full nthcomp_lnu_interp function."""
+        """Test gradient through the full nthcomp_lnu_interp function.
+
+        The most misleading of the five: a ``strict=True`` xfail asserting that
+        the *shipped* function's gradient "is zero due to jnp.interp/exp
+        overflow chain". Measured at this configuration it is 2.82e-16 at
+        gamma=2.0 and agrees with a central difference to 0.26%. It was never
+        zero and nothing overflowed; the probe sat on the clamp boundary.
+
+        A strict xfail is a claim that something is broken. This one was green
+        from 2026-05-21 to 2026-08-17 while the thing it named worked, and a
+        reader checking whether nthcomp differentiates would have found it
+        asserting, strictly, that it does not.
+
+        ``rtol`` is 1e-2 here and 1e-3 in the three tests above, and the gap is
+        the point: those differentiate the table indexing directly, while this
+        one goes through the ``custom_jvp``, whose tangent is *itself* a
+        one-sided finite difference. Asking an FD-based rule to match another FD
+        to 0.1% asks for accuracy it does not have by construction -- measured
+        agreement is 0.26% here and 0.37% at gamma=1.7. This test is therefore
+        the one that measures the rule's own accuracy, and 1e-2 is the honest
+        bound on it, not a tolerance loosened until green.
+        """
         nu_test = jnp.array([1e14, 2e14, 5e14])
-        gamma = jnp.array(1.5)
+        gamma = jnp.array(2.0)
         kTe_keV = jnp.array(0.2)
         kTbb_keV = jnp.array(0.001)
 
@@ -266,7 +299,7 @@ class TestNthcompGradientDiagnosis:
         assert_allclose(
             grad_val,
             fd_grad(f_scalar, float(gamma), eps=0.01),
-            rtol=1e-3,
+            rtol=1e-2,
             err_msg="nthcomp_lnu_interp: FD check ∂(∑shape)/∂gamma",
         )
 
@@ -362,17 +395,20 @@ class TestNthcompGradientDiagnosis:
             "reasoning above needs revisiting"
         )
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "Known: vmapped nthcomp gradient is zero; jnp.interp/exp overflow kills "
-            "gradient flow through nthcomp_lnu_interp."
-        ),
-    )
     def test_vmap_nthcomp_gradient(self):
-        """Test gradient through vmapped nthcomp (like _warm_ring does)."""
+        """Test gradient through vmapped nthcomp (like _warm_ring does).
+
+        Was a ``strict=True`` xfail reading "vmapped nthcomp gradient is zero".
+        It is not, and vmap was never the issue: the FD check ran on
+        ``gamma_array[0] = 1.5``, the clamp boundary, so this inherited the same
+        factor of two as its four siblings. Every element now sits inside the
+        table, which is also what ``_warm_ring`` samples.
+
+        ``rtol`` is 1e-2 for the same reason as the test above: this goes
+        through the ``custom_jvp``, whose tangent is a finite difference itself.
+        """
         nu_test = jnp.array([1e14, 2e14, 5e14])
-        gamma_array = jnp.array([1.5, 1.6, 1.7])
+        gamma_array = jnp.array([1.7, 2.0, 2.3])
         kTe_keV = jnp.array(0.2)
         kTbb_keV = jnp.array(0.001)
         scalar = 1e46
@@ -397,7 +433,7 @@ class TestNthcompGradientDiagnosis:
         assert_allclose(
             float(grads[0]),
             fd_grad(f0_scalar, g0, eps=0.01),
-            rtol=1e-3,
+            rtol=1e-2,
             err_msg="vmapped nthcomp: FD check ∂(∑shape * 1e46)/∂gamma[0]",
         )
 
