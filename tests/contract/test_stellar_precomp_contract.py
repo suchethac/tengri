@@ -29,7 +29,7 @@ def stellar_only_model(ssp, synthetic_tophat_obs):
     """Stellar-only SED model for contract tests."""
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
-        sfh_tsnorm_log_total_mass=Uniform(-1, 3),
+        sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
@@ -51,7 +51,7 @@ def stellar_only_free_z_model(ssp, synthetic_tophat_obs):
     """Free-redshift variant of stellar_only_model for contract tests."""
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
-        sfh_tsnorm_log_total_mass=Uniform(-1, 3),
+        sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
@@ -84,7 +84,7 @@ def test_lut_only_published_when_wave_precomp_on(ssp, synthetic_tophat_obs):
     """state.derived has no stellar_phot_lnu_precomp when wave_precomp=False (default)."""
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
-        sfh_tsnorm_log_total_mass=Uniform(-1, 3),
+        sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
@@ -121,7 +121,7 @@ def test_dust_attenuation_precomps_published(ssp, synthetic_tophat_obs):
     """
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
-        sfh_tsnorm_log_total_mass=Uniform(-1, 3),
+        sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
@@ -158,7 +158,7 @@ def test_two_component_dust_publishes_bc_diff_precomp(ssp, synthetic_tophat_obs)
     """
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
-        sfh_tsnorm_log_total_mass=Uniform(-1, 3),
+        sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
@@ -200,7 +200,7 @@ def test_agn_phot_lnu_precomp_published(ssp, synthetic_tophat_obs):
     """AGN component publishes agn_phot_lnu_precomp when wave_precomp is on."""
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
-        sfh_tsnorm_log_total_mass=Uniform(-1, 3),
+        sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),
@@ -227,7 +227,7 @@ def test_dust_luts_absent_without_wave_precomp(ssp, synthetic_tophat_obs):
     """No filter_eff_waves publish when wave_precomp=False."""
     spec = Parameters(
         mean_sfh_type=["tsnorm"],
-        sfh_tsnorm_log_total_mass=Uniform(-1, 3),
+        sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5),
         sfh_tsnorm_skew=Uniform(-1, 1),

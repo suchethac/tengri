@@ -43,7 +43,7 @@
 #    and scales the spectrum by that fraction. The photometry is
 #    untouched (it's already total flux).
 #
-# The architecture is in `docs/dev/forward-model-architecture.md` §3.3.
+# The architecture is in `docs/dev/archive/forward-model-architecture.md` §3.3.
 # The aperture-fraction math is in `tengri.observation.fiber_aperture`.
 
 # %%
@@ -197,7 +197,7 @@ print(
 # %% [markdown]
 # ## Further reading
 #
-# - Architecture spec: `docs/dev/forward-model-architecture.md` §2 (the
+# - Architecture spec: `docs/dev/archive/forward-model-architecture.md` §2 (the
 #   motivating story), §3.3 (B-path keys reserved for color gradients).
 # - Spatial profiles: `tengri.components.spatial.{Sersic, Exponential, FlatSlab}`.
 # - Aperture math: `tengri.observation.fiber_aperture`.

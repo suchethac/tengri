@@ -10,7 +10,7 @@ preset to the monolithic SED it claims to reproduce.
 
 Why this gate exists
 --------------------
-The retired ``tests/unit/agn/test_monolithic_to_composable_equivalence.py``
+The retired ``tests/regression/agn/test_monolithic_composable_equivalence.py``
 compared ``resolve_agn_model(name)`` against a *hand-written* composable call —
 composable on **both** sides — so it verified nothing about the monolithic
 physics and passed as a tautology. That tautology is exactly why the #941

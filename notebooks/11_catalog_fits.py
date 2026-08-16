@@ -483,4 +483,4 @@ plt.show()
 #   `bench/scripts/benchmark_catalog_throughput.py`; for cluster-scale catalogs
 #   (one GPU per slice, array jobs) see `scripts/slurm/`; and to shard *one* very
 #   high-dimensional hierarchical fit across devices, see
-#   `docs/advanced/hierarchical.md` (VI, the other track).
+#   `docs/internal/advanced/hierarchical.md` (VI, the other track).

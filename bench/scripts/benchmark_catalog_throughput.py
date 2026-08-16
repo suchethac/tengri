@@ -87,7 +87,7 @@ def build_model(ssp, ssp_tag):
     obs = Observation(photometry=phot)
     met = Fixed(1.0) if ssp_tag == "synthetic" else Uniform(-1.5, 0.2)
     spec = Parameters(
-        sfh_dpl_log_total_mass=Uniform(-1.0, 3.0),
+        sfh_dpl_log_total_mass=Uniform(7.0, 12.5),
         sfh_dpl_alpha=Uniform(0.5, 5.0),
         sfh_dpl_age_gyr=Fixed(5.0),
         sfh_dpl_beta=Fixed(2.0),

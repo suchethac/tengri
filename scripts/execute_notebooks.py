@@ -48,6 +48,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -75,6 +76,70 @@ def docs_render_path(slug: str) -> Path:
     if slug in EXPERIMENTAL_SLUGS:
         return spine / EXPERIMENTAL_SUBDIR / f"{slug}.ipynb"
     return spine / f"{slug}.ipynb"
+
+
+#: A machine-specific home directory, matching ``tools/check_no_local_paths.py``.
+_HOME_PATH = re.compile(r"(?:/Users|/home)/[A-Za-z0-9][A-Za-z0-9_.-]*/")
+
+#: A worktree root -- a home directory followed by any path ending in
+#: ``.claude/worktrees/<name>/``. Stripped whole, so a path rendered from a
+#: worktree comes out repo-relative and identical to one rendered from the main
+#: checkout. (Spelled as a pattern rather than an example on purpose: a literal
+#: one in this file would itself trip ``check_no_local_paths.py``.)
+_WORKTREE_ROOT = re.compile(r"(?:/Users|/home)/[^/\s\"']+?/\.claude/worktrees/[^/\s\"']+/")
+
+
+def strip_local_paths(nb) -> int:
+    """Rewrite machine-specific absolute paths in cell outputs. Returns the count.
+
+    Executing a notebook bakes the *absolute* source path into every warning and
+    traceback it captures -- ``/Users/<someone>/.../src/tengri/forward/sed_model.py:7796:
+    WildcardPartialFreeWarning`` and the like. Those strings ship to the public
+    repository inside the committed render and describe the machine that produced
+    it, which ``tools/check_no_local_paths.py`` rejects (#1816).
+
+    This runs at the write, not as a cleanup pass over the repository, because the
+    executor is where the paths enter a published artifact. A repository-wide
+    scrub would fix today's renders and let the next execution reintroduce them --
+    which is exactly what happened when #1749 merged three minutes after #1816
+    landed the guard, taking `main` red on a class that had just been repaired.
+
+    Rewrites, in order:
+
+    1. this checkout's root, and any ``.claude/worktrees/<name>/`` root, to
+       repo-relative -- so a render is byte-identical whether it was produced from
+       the main checkout or a worktree;
+    2. any surviving home directory to ``~/``, which keeps the text readable
+       without naming a user.
+    """
+    root = f"{ROOT}/"
+    n = 0
+
+    def _clean(text: str) -> str:
+        nonlocal n
+        before = text
+        text = text.replace(root, "")
+        text = _WORKTREE_ROOT.sub("", text)
+        text = _HOME_PATH.sub("~/", text)
+        if text != before:
+            n += 1
+        return text
+
+    for cell in nb.cells:
+        for output in cell.get("outputs") or []:
+            if "text" in output:
+                t = output["text"]
+                output["text"] = (
+                    [_clean(x) for x in t] if isinstance(t, list) else _clean(t)
+                )
+            if "traceback" in output:
+                output["traceback"] = [_clean(x) for x in output["traceback"]]
+            data = output.get("data") or {}
+            for key in ("text/plain", "text/html"):
+                if key in data:
+                    v = data[key]
+                    data[key] = [_clean(x) for x in v] if isinstance(v, list) else _clean(v)
+    return n
 
 
 def execute(slug: str, timeout: int) -> tuple[bool, float, int, int]:
@@ -115,9 +180,17 @@ def execute(slug: str, timeout: int) -> tuple[bool, float, int, int]:
         client.execute()
     except Exception as exc:  # kernel death is not a cell error, so catch broadly
         print(f"  kernel failure: {type(exc).__name__}: {exc}", file=sys.stderr)
+        # Scrub here too. This path writes no *render*, but it does write
+        # ``notebooks/<slug>.ipynb``, and for the numbered spine that file is
+        # tracked -- the 29 paths this guard caught included four of them. A
+        # failed run is also the case most likely to leak: a traceback names an
+        # absolute source path on every frame, not just the one line a warning
+        # emits.
+        strip_local_paths(nb)
         nbformat.write(nb, out)
         return False, time.perf_counter() - t0, 0, -1
     dt = time.perf_counter() - t0
+    strip_local_paths(nb)
     nbformat.write(nb, out)
 
     figs = sum(

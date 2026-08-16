@@ -182,4 +182,4 @@ Alternatives considered:
   on every population's state and sums the resulting channel dicts in
   linear flux; `tools/check_param_prefixes.py` strips the namespace
   before applying the prefix discipline.
-- Implementation plan: `docs/superpowers/plans/2026-05-22-multi-population-namespacing.md`.
+- Implementation plan: `docs/internal/plans/2026-05-22-multi-population-namespacing.md`.

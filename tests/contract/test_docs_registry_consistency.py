@@ -45,6 +45,27 @@ def _page_text(rel: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def test_every_named_page_exists() -> None:
+    """Every page this module names must be on disk.
+
+    ``_page_text`` skips a missing file, which is right for a partial checkout
+    and wrong for a typo or a rename: the case reports "skipped" and the suite
+    stays green while checking nothing. ``docs/inference/index.md`` sat in
+    ``_METHOD_PAGES`` in exactly that state, which is where this module's one
+    persistent skip was coming from.
+
+    Kept separate from the parametrized tests on purpose -- those consume
+    ``_page_text`` and would themselves skip.
+    """
+    named = dict.fromkeys((*_PUBLISHED_PAGES, *_METHOD_PAGES))
+    missing = [rel for rel in named if not (_REPO_ROOT / rel).is_file()]
+    assert not missing, (
+        f"These pages are named here but do not exist: {missing}. Every test "
+        f"parametrized over them skips silently, so the suite reports success "
+        f"without reading them. Fix the paths or drop the entries."
+    )
+
+
 @pytest.mark.parametrize("rel", _PUBLISHED_PAGES)
 @pytest.mark.parametrize("stale", sorted(_NEBULAR_TYPE_HINTS))
 def test_published_pages_do_not_advertise_stale_nebular_names(rel: str, stale: str) -> None:
@@ -128,13 +149,20 @@ def test_hint_map_does_not_shadow_a_real_backend() -> None:
 # crash. `vi` is the working NIFTy geoVI path and is what the name meant.
 _STALE_INFERENCE_NAMES = {"vi_native": "vi"}
 
+# ``docs/inference/index.md`` sat in this tuple but does not exist, and
+# ``_page_text`` skips a missing file rather than failing — so that case reported
+# "skipped" instead of checking anything. Replaced with the three inference pages
+# that are really there. The contributor-only pages moved under ``internal/``;
+# they are still worth checking because they remain readable on GitHub.
 _METHOD_PAGES = (
     *_PUBLISHED_PAGES,
     "docs/performance/index.md",
     "docs/performance/memory.md",
     "docs/method_selection.md",
-    "docs/advanced/convergence.md",
-    "docs/inference/index.md",
+    "docs/internal/advanced/convergence.md",
+    "docs/internal/inference/scaling.md",
+    "docs/internal/inference/jit_compile.md",
+    "docs/internal/inference/joint_information_content.md",
 )
 
 
