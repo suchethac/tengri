@@ -672,9 +672,7 @@ if _ratios.size:
 # the same knob via `logzsol = log10(Z / Z☉)`. Both support time-varying Z
 # (BAGPIPES `metallicity_bins`, tengri `chemical_enrichment_history`), but the
 # single-Z response is the reproducible test: sweep `Z ∈ {0.2, 1.0, 2.5} Z☉` at
-# the fiducial 5 Gyr delayed-τ SFH and overlay the optical-NIR continuum. Both
-# track the age-metallicity degeneracy the same way — high Z is redder, with
-# deeper absorption features.
+# the fiducial 5 Gyr delayed-τ SFH and overlay the optical-NIR continuum.
 #
 
 # %%
