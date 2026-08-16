@@ -125,18 +125,30 @@ class TestXRBNormalization:
     def test_combined_ranalli2003(self):
         """Combined XRB at SFR=1, M*=1e10, age=10 Gyr sits inside Ranalli+2003.
 
-        HMXB (Lehmer+19, Z=0.02) ~ 1.78e39 + LMXB (Lehmer+14, 10 Gyr) ~ 8.15e38
-        sums to ~2.6e39 erg/s, against Ranalli+2003's 3.7e39.
-
-        The docstring used to call that "well inside" the 30% scatter band. It
-        is not: measured 2.5972e39 against 3.7e39 is a 29.81% error, which uses
-        99.4% of the band and leaves 0.19 percentage points of headroom. Any
-        change moving the XRB normalization by more than ~0.7% the wrong way
-        flipped this red, and the failure read as a physics regression rather
-        than a fixture sitting on its limit.
+        HMXB (Lehmer+19) + LMXB (Lehmer+14, 10 Gyr) ~ 8.15e38, against
+        Ranalli+2003's 3.7e39.
 
         One assertion was doing two incompatible jobs — a literature
-        consistency bound and a drift detector — so they are now separate.
+        consistency bound and a drift detector — so they are separate. That
+        split earned itself immediately: the pin moved once and the bound did
+        not, which is only legible because the two are apart.
+
+        **The pin moved 2.5972e39 -> 4.032409e39 (x1.5526) in #1845**, which
+        made the galaxy's metallicity reach the HMXB term (#1755). Before that
+        the term ran at a hardcoded Z=0.02; it now uses the caller's value,
+        defaulting to ``metallicity_z=Z_SUN=0.0142`` (Asplund 2009). Lehmer+2019
+        anticorrelates HMXB emissivity with metallicity, so the lower Z raises
+        L_HMXB — the direction the physics requires.
+
+        Agreement with the observed relation improved threefold rather than
+        degrading:
+
+            old  2.5972e39   29.81% from 3.7e39   99.4% of the 30% band
+            new  4.0324e39    8.98% from 3.7e39   29.9% of the band
+
+        So the Ranalli bound not only still holds, it holds with far more room:
+        the fixture is no longer sitting on its limit, where any 0.7% move the
+        wrong way flipped it red and read as a physics regression.
         """
         L_band = float(
             jnp.trapezoid(
@@ -159,13 +171,13 @@ class TestXRBNormalization:
         # in our number rather than as a brush with the literature band.
         np.testing.assert_allclose(
             L_band,
-            2.5972e39,
+            4.032409e39,
             rtol=1e-3,
             err_msg=(
                 "combined XRB luminosity moved. This is the implementation's own "
                 "value, not a literature number — if the change is intended, "
                 "update it here and check the Ranalli bound above still holds "
-                "(it had only 0.19 percentage points of margin)."
+                "(it now has 20 percentage points of margin, up from 0.19)."
             ),
         )
 
