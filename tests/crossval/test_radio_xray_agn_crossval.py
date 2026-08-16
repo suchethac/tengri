@@ -154,13 +154,19 @@ class TestXrayCrossval:
             \log(L_X/\mathrm{SFR}) = 40.28 - 62.12 Z + 569.44 Z^2
                                      - 1833.80 Z^3 + 1968.33 Z^4
 
-        At the module default ``metallicity_z=0.02`` that is 1.78e39, not the
-        2.6e39 this test used to assert. The 2.6e39 comes from
-        Grimm+2003/Mineo+2012, which genuinely differ from Lehmer+2016 by
-        ~30-45% in this band — the `xray.py` docstring claims the two agree,
-        which is arithmetically false (#1755).
+        At the module default that is 3.22e39, not the 2.6e39 this test used to
+        assert. The 2.6e39 comes from Grimm+2003/Mineo+2012, which genuinely
+        differ from Lehmer+2016 by ~30-45% in this band — the `xray.py`
+        docstring claimed the two agree, which is arithmetically false (#1755).
+
+        The default is ``Z_SUN`` = 0.0142 (Asplund 2009), the project-wide
+        solar, not the 0.02 this asserted until #1755 — one module quietly
+        using a second definition of "solar" is what that issue was about.
+        Read it off the constant rather than restating it: a literal here is
+        exactly the drift the fix removes.
         """
         from tengri.components.xray import xray_xrb
+        from tengri.utils.physics_constants import Z_SUN
 
         # 2-10 keV in Angstrom: E=hc/λ → λ = 12398.4/E(eV)
         # 2 keV → 6.199 A, 10 keV → 1.240 A
@@ -172,7 +178,7 @@ class TestXrayCrossval:
         nu = c_aa / np.asarray(wave)
         l_band = abs(np.trapezoid(l_nu[::-1], nu[::-1]))
 
-        z_default = 0.02
+        z_default = Z_SUN
         log_l = (
             40.28
             - 62.12 * z_default
@@ -180,14 +186,14 @@ class TestXrayCrossval:
             - 1833.80 * z_default**3
             + 1968.33 * z_default**4
         )
-        expected = 10.0**log_l  # 1.7825e39
+        expected = 10.0**log_l  # 3.2177e39 at Z_SUN = 0.0142
 
         np.testing.assert_allclose(
             l_band,
             expected,
             rtol=0.10,
             err_msg=(
-                f"HMXB 2-10 keV L_X = {l_band:.3e}; Lehmer+2016 at Z=0.02 gives "
+                f"HMXB 2-10 keV L_X = {l_band:.3e}; Lehmer+2016 at Z={z_default} gives "
                 f"{expected:.3e} erg/s per Msun/yr"
             ),
         )
