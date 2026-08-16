@@ -164,7 +164,9 @@ def nifty_likelihood(fitter, model_and_data):
         return model.predict_photometry(params)
 
     domain = {name: jft.ShapeWithDtype(()) for name in free_names}
-    nifty_model = jft.SEDModel(jax.jit(signal_response), domain=domain)
+    # jft.Model is NIFTy's, not ours. It must not follow tengri's
+    # Model -> SEDModel rename (NAMING_CONTRACT); nifty8.re has no SEDModel.
+    nifty_model = jft.Model(jax.jit(signal_response), domain=domain)
 
     noise_cov_inv = 1.0 / noise**2
     return jft.Gaussian(data, noise_cov_inv).amend(nifty_model)
