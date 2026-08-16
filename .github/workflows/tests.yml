@@ -108,6 +108,17 @@ jobs:
       # HDF5 attribute leaves the old string in the file's freed space, where
       # any check going through h5py reports clean. Stdlib-only.
       - run: python tools/check_no_local_paths.py
+      # A ratchet on repository growth. #1817 declined the history rewrite --
+      # public since 2026-03-21 with two third-party forks, so renumbering every
+      # commit SHA buys clone size and nothing else -- which leaves the
+      # accumulation rate as the part that compounds (~80 MB in four days).
+      # Measured growth vector: excluding data/, the ten largest tracked files
+      # are all .ipynb between 4 and 9 MiB, almost entirely base64 PNG.
+      # Rebuilding five of them from their jupytext mirrors in #1820 removed
+      # 4.9 MiB without touching a line of code. Existing offenders are
+      # inventoried and may stay but not grow; data/ gets its own higher limit
+      # for the SSP grids. Stdlib-only.
+      - run: python tools/check_file_sizes.py
       # tengri implements published models and validates against the reference
       # codes; it does not port or copy their source. The wording drifted back
       # twice after being swept by hand, so it is pinned here. Stdlib-only.
@@ -183,14 +194,18 @@ jobs:
       # plt.show() a no-op so the page renders with no plots. Stdlib-only, same
       # as the guards above.
       - run: python tools/check_notebook_renders.py
-      # Executed notebooks are 40% of this repo's history (1451 MB across all
-      # revisions, more than every HDF5 grid combined) because base64-embedded
-      # figures cannot be delta-compressed, so each revision stores the whole
-      # file again. docs/reproduction/cigale.ipynb alone is 126.6 MB over 51
-      # revisions, and it is committed twice. nbstripout is not the fix — those
-      # outputs are the published figures — so this caps how large they may get.
-      # Stdlib-only, same as the guards above. See docs/dev/git-history-bloat.md.
-      - run: python tools/check_notebook_size.py
+      # Five notebooks stored 73 code cells as one run-on line with every
+      # newline deleted ('import osimport sysimport time'), unreadable and
+      # unrunnable, for months (#1820). The JSON stayed valid, so every
+      # notebook-aware tool loaded them happily; the guard above covers
+      # docs/spine/ only and ruff never reaches notebooks/archive_2. Flags on
+      # length, NOT on failing to parse: a collapsed cell whose first line ends
+      # in a comment swallows the rest of the cell and parses fine — 34 of the
+      # 73, and the dangerous half, since the ones that fail to parse at least
+      # announce themselves. Threshold 120 chars sits between the longest
+      # healthy single-line cell (90) and the shortest damaged one (148).
+      # Stdlib-only.
+      - run: python tools/check_notebook_cells.py
       # NOTE: `gen_property_table.py --check` cannot live here. This job installs
       # ruff and nothing else, and the generator imports tengri (hence jax) to read
       # the property registry. It runs in `smoke`, which does `pip install -e`.
@@ -384,6 +399,19 @@ jobs:
       - run: pip install -e ".[dev]"
       - run: python tools/check_param_prefixes.py
       - run: python tools/check_param_defaults.py
+      # The same rule as check_param_defaults, one step later: that guard checks
+      # a signature *default* is inside the declared support; this one checks a
+      # *call-site prior* still overlaps it. #369 renamed sfh_*_log_peak_sfr to
+      # log_total_mass — log10(SFR) became log10(M*) — and carried the ranges
+      # across unconverted, so 150 sites declared priors like Uniform(-1.0, 2.5)
+      # on a stellar mass: 0.1–316 Msun, a prior for a small open cluster. Every
+      # affected fit converged and nothing raised, so the tests kept passing
+      # while testing a regime no galaxy occupies (#1819). Overlap, not
+      # containment: narrowing or widening a prior is ordinary, but a range
+      # sharing no point with the declaration is always a units error. Pinned
+      # Fixed() scalars are deliberately out of scope — Fixed(0.0) on a
+      # log_total_mass is a unit-mass normalization, not a bug.
+      - run: python tools/check_param_ranges.py
       # #887's guarantee — every parameter is either freeable by
       # `all_params: FREE` or refused on the record with one of four reasons —
       # shipped in #1638 with a guard that promises "adding a new one fails the

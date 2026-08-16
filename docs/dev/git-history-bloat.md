@@ -111,10 +111,21 @@ rendering. Every committed notebook in this repository carries outputs on purpos
 
 ### What actually applies
 
-1. **A size ceiling, enforced.** `tools/check_notebook_size.py` runs in the `lint` job and
-   fails any committed notebook over 4 MB (largest today: 3.00 MB). This does not shrink
-   history — nothing does, short of the rewrite this page argues against — but it turns the
-   next 3 MB notebook into a decision instead of a surprise.
+1. **A size ceiling, enforced.** `tools/check_file_sizes.py` runs in the `lint` job and
+   fails any tracked file over its limit — 4 MiB outside `data/` — unless it is recorded in
+   that file's `INVENTORY` with the size it had when recorded. This does not shrink history
+   — nothing does, short of the rewrite this page argues against — but it turns the next
+   large notebook into a decision instead of a surprise, and the inventory makes it a
+   ratchet: a recorded file may stay, but it may not grow.
+
+   This page previously described a `tools/check_notebook_size.py` added alongside it.
+   That guard was narrower — notebooks only, and it excluded `notebooks/archive/` wholesale
+   rather than recording each large file — so it was removed in favor of this one. Two
+   size guards with different limits is a question with two answers.
+
+   Note the failure mode the inventory has: its keys are exact paths, so a directory move
+   strands every entry it names and the guard reports the moved files as new. Consolidating
+   the notebook archives stranded nine of its twelve lines on the first try.
 2. **Split `src/tengri/forward/sed_model.py`.** 8823 lines is the reviewability problem;
    the history cost is a bonus.
 3. **Keep `.nb_home/` and `data/*.h5` gitignored.** Both rules exist and work. The caches

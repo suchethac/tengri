@@ -211,7 +211,7 @@ def profile_model_components(model, param_dict):
     # Variant 1: No dust emission (set dust_emission=None)
     params_no_dust_em = Parameters(
         mean_sfh_type="tsnorm",
-        sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
+        sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
         sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -254,7 +254,7 @@ def profile_model_components(model, param_dict):
     # Variant 2: No nebular
     params_no_neb = Parameters(
         mean_sfh_type="tsnorm",
-        sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
+        sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
         sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -277,7 +277,7 @@ def profile_model_components(model, param_dict):
     # Variant 3: No IGM
     params_no_igm = Parameters(
         mean_sfh_type="tsnorm",
-        sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
+        sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
         sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -405,7 +405,7 @@ def main():
     # Create test model (same as test_a2)
     params = Parameters(
         mean_sfh_type="tsnorm",
-        sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
+        sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
         sfh_tsnorm_skew=Uniform(-1.0, 1.0),

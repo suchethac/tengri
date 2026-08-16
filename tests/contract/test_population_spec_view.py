@@ -34,7 +34,7 @@ def _template() -> Parameters:
     return Parameters(
         mean_sfh_type="dpl",
         sfh_dpl_alpha=Uniform(0.5, 5.0),
-        sfh_dpl_log_total_mass=Uniform(-1.0, 3.0),
+        sfh_dpl_log_total_mass=Uniform(7.0, 12.5),
         sfh_field_psd_sigma=Uniform(0.1, 4.0),
         sfh_field_psd_tau_myr=Uniform(1.0, 300.0),
         met_logzsol=Uniform(-2.0, 0.5),
