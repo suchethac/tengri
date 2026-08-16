@@ -47,11 +47,20 @@ integrated to 2.2489x (triweight), 1.5711x (Gaussian σ=2 Å) and 1.0000x (delta
 so broadband photometry differed *between duplicate implementations of the same
 physics* by up to 3.04x (GALEX NUV at z=0.5).
 
-The fix is two shared helpers rather than three separate arguments: floor the
-profile width at the **local** grid spacing (the old floor used
-``0.5*median(diff(grid))``, which the 4423 MILES points pin at 0.9 Å, so it never
-fired where the grid was coarse), then rescale each profile by its own discrete
-trapezoid area in ν. All three modes now route through both.
+The fix is shared helpers rather than three separate arguments:
+
+1. Floor the profile width at half the **local** grid spacing. The old floor used
+   ``0.5*median(diff(grid))`` — a *global* statistic answering a *local* question,
+   and the 4423 MILES points pin that median at 0.9 Å, so it never fired where the
+   grid was coarse. Half, not the full spacing: the full width doubles the support
+   and lights two pixels per line where one is right.
+2. Rescale each profile by its own discrete trapezoid area in ν.
+3. Scatter into the nearest pixel the lines that still vanish — a sub-pixel line
+   centered exactly between two nodes puts both at ``|u| = 1``, where the
+   compact-support triweight is exactly zero. The grid cannot represent a width
+   there, but it must not lose the light.
+
+All three placement modes now route through the same rendering.
 """
 
 from __future__ import annotations
@@ -99,9 +108,7 @@ def test_every_line_individually_conserves(sigma_kms):
     from tengri.components.nebular._shared import place_line_profiles_velocity
 
     for w, lum in zip(_LINES, _LUMS):
-        sed = place_line_profiles_velocity(
-            np.array([w]), np.array([lum]), _GRID, sigma_kms
-        )
+        sed = place_line_profiles_velocity(np.array([w]), np.array([lum]), _GRID, sigma_kms)
         assert _integral_dnu(sed, _GRID) == pytest.approx(lum, rel=1e-6), (
             f"line {w} A lost/invented flux at sigma_v={sigma_kms}"
         )
@@ -153,6 +160,42 @@ def test_width_still_changes_the_profile_shape():
     # Same flux, but the wide line is lower and broader.
     assert narrow.max() > 3.0 * wide.max()
     assert int(np.sum(wide > wide.max() / 2)) > 3 * int(np.sum(narrow > narrow.max() / 2))
+
+
+def test_a_sub_pixel_line_occupies_one_pixel_not_two():
+    """sigma_v -> 0 must still render the NARROWEST line the grid can hold.
+
+    The width floor is what decides this. Flooring at the full local spacing
+    doubles the support and lights two pixels per line, which is a real behaviour
+    regression even though flux is still conserved --
+    ``tests/components/nebular/test_shock_emission.py`` asserts one pixel per
+    line and caught exactly that.
+    """
+    from tengri.components.nebular._shared import place_line_profiles_velocity
+
+    grid = np.linspace(3000.0, 8000.0, 5000)  # uniform, ~1.0 A
+    lines = np.array([4000.0, 5000.5, 6123.7])
+    lums = np.array([1.0e40, 2.0e40, 3.0e40])
+    sed = np.asarray(place_line_profiles_velocity(lines, lums, grid, 0.0))
+    assert int(np.sum(sed > 0)) <= lines.shape[0]
+    assert _integral_dnu(sed, grid) == pytest.approx(lums.sum(), rel=1e-6)
+
+
+def test_a_line_exactly_between_two_nodes_is_not_lost():
+    """The degenerate case the nearest-pixel fallback exists for.
+
+    A sub-pixel line centered exactly midway puts both neighbours at ``|u| = 1``,
+    where the compact-support triweight is *exactly* zero — the profile vanishes
+    and the rescale cannot recover it. Pre-#1836 that line was dropped silently.
+    """
+    from tengri.components.nebular._shared import place_line_profiles_velocity
+
+    grid = np.linspace(3000.0, 8000.0, 5001)  # spacing exactly 1.0 A
+    midpoint = np.array([(grid[100] + grid[101]) / 2.0])
+    lum = np.array([5.0e40])
+    sed = np.asarray(place_line_profiles_velocity(midpoint, lum, grid, 0.0))
+    assert np.all(np.isfinite(sed))
+    assert _integral_dnu(sed, grid) == pytest.approx(float(lum[0]), rel=1e-6)
 
 
 def test_line_outside_the_grid_contributes_nothing_and_is_not_nan():

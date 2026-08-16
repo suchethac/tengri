@@ -91,15 +91,27 @@ def _local_grid_spacing(
     return obs_wavelengths[idx] - obs_wavelengths[idx - 1]
 
 
-def _rescale_to_discrete_area(profiles: jnp.ndarray, obs_wavelengths: jnp.ndarray) -> jnp.ndarray:
-    r"""Rescale each line profile to unit *discrete* area in frequency (#1836).
+def _render_conserving(
+    profiles: jnp.ndarray,
+    obs_wavelengths: jnp.ndarray,
+    line_wavelengths: jnp.ndarray,
+    line_luminosities: jnp.ndarray,
+) -> jnp.ndarray:
+    r"""Sum analytically-normalized line profiles, conserving flux exactly (#1836).
 
-    Both analytic profiles here (triweight, Gaussian) are normalized so that
+    Both profile shapes here (triweight, Gaussian) are normalized so that
     :math:`\int \phi\,d\nu = 1` in the continuum limit. The caller integrates on
     a discrete grid, where that holds only if the grid resolves the profile —
-    and the SSP grids in use do not, outside their high-resolution window. This
-    divides out the profile's actual trapezoid area so the flux is exact on
-    whatever grid it was handed.
+    and the SSP grids in use do not, outside their high-resolution window. Each
+    profile is therefore divided by its own trapezoid area, making the rendered
+    flux exact on whatever grid it was handed.
+
+    A profile can still vanish on the grid: a sub-pixel line centered between two
+    nodes puts both at :math:`|u| = 1`, where the compact-support triweight is
+    *exactly* zero. Those lines are scattered into their nearest pixel instead —
+    the grid cannot represent a width, but it must not lose the light. This is
+    the one case the pre-#1836 code got wrong in the *quiet* direction, dropping
+    the line with nothing raised.
 
     Parameters
     ----------
@@ -107,21 +119,42 @@ def _rescale_to_discrete_area(profiles: jnp.ndarray, obs_wavelengths: jnp.ndarra
         Analytically normalized profiles [1/Hz].
     obs_wavelengths : ndarray, shape (n_wave,)
         Wavelength grid the profiles were rendered on, increasing. [Å]
+    line_wavelengths : ndarray, shape (n_lines,)
+        Line centers. [Å]
+    line_luminosities : ndarray, shape (n_lines,)
+        Integrated line luminosities. [erg/s] or [erg/s/Msun]
 
     Returns
     -------
-    ndarray, shape (n_wave, n_lines)
-        ``profiles`` scaled so each column has unit trapezoid area in ν.
-        A column that is identically zero (line off the grid) is left at zero
-        rather than turned into NaN.
+    ndarray, shape (n_wave,)
+        Spectral luminosity density with ``|∫ sed dν| == sum(line_luminosities)``
+        to rounding. [erg/s/Hz] or [erg/s/Hz/Msun]
 
     Notes
     -----
     **JIT-compatible**: yes. **Gradient-safe**: yes — the guarded divisor is
     never zero, so no NaN reaches the tape.
     """
-    area = _nu_quadrature_weights(obs_wavelengths) @ profiles  # (n_lines,)
-    return profiles / jnp.where(area > 0.0, area, 1.0)[None, :]
+    quad_w = _nu_quadrature_weights(obs_wavelengths)  # (n_wave,) [Hz]
+    area = quad_w @ profiles  # (n_lines,)
+    representable = area > 0.0
+    scaled = profiles / jnp.where(representable, area, 1.0)[None, :]
+    sed = scaled @ jnp.where(representable, line_luminosities, 0.0)
+
+    # Nearest-pixel placement for the lines the grid could not represent.
+    # ``L / quad_w`` is the density whose trapezoid integral is exactly ``L``,
+    # so this conserves flux by the same rule the rescale above uses.
+    #
+    # Restricted to lines that are actually *inside* the grid. A line outside it
+    # also has zero area, but it must stay at zero — dragging it to the nearest
+    # node would invent flux at the grid edge, which is a worse failure than the
+    # one being fixed (it is how #1673 put emission where there was none).
+    in_range = (line_wavelengths >= obs_wavelengths[0]) & (line_wavelengths <= obs_wavelengths[-1])
+    nearest = jnp.argmin(
+        jnp.abs(obs_wavelengths[:, None] - line_wavelengths[None, :]), axis=0
+    )  # (n_lines,)
+    dropped = jnp.where(representable | ~in_range, 0.0, line_luminosities)
+    return sed.at[nearest].add(dropped / quad_w[nearest])
 
 
 def place_line_profiles(
@@ -231,17 +264,17 @@ def place_line_profiles(
         # renders as all zeros, and the line is lost outright.
         sigma_eff = jnp.maximum(
             jnp.asarray(line_sigma_aa),
-            _local_grid_spacing(obs_wavelengths, line_wavelengths),
+            0.5 * _local_grid_spacing(obs_wavelengths, line_wavelengths),
         )  # (n_lines,) [Å]
         sigma_nu = sigma_eff * 1e-8 * _C_CGS / (line_wavelengths * 1e-8) ** 2  # (n_lines,)
         dwave = obs_wavelengths[:, None] - line_wavelengths[None, :]  # (n_wave, n_lines)
         profiles = jnp.exp(-0.5 * (dwave / sigma_eff[None, :]) ** 2)
         profiles = profiles / (jnp.sqrt(2.0 * jnp.pi) * sigma_nu[None, :])
-        # Same discrete rescale as the triweight path, so the two modes agree on
+        # Same conserving render as the triweight path, so the two modes agree on
         # flux and differ only in profile shape (#1836). Unrescaled, this mode
-        # recovered 1.5711x of the true total at sigma=2 Å.
-        profiles = _rescale_to_discrete_area(profiles, obs_wavelengths)
-        sed = jnp.sum(line_luminosities[None, :] * profiles, axis=1)  # (n_wave,)
+        # recovered 1.5711x of the true total at sigma=2 Å, and lost the far-IR
+        # lines outright where a 2 Å Gaussian underflowed on a 3100 Å grid.
+        sed = _render_conserving(profiles, obs_wavelengths, line_wavelengths, line_luminosities)
     else:
         # Vectorized delta functions: nearest-pixel placement via scatter-add.
         # (n_wave, n_lines) distance matrix → argmin per line
@@ -344,7 +377,7 @@ def place_line_profiles_velocity(
     # ``obs_wavelengths.shape`` is static, so the size guard is JIT-safe.
     if obs_wavelengths.shape[0] > 1:
         h = jnp.maximum(
-            h_raw, _local_grid_spacing(obs_wavelengths, line_wavelengths)
+            h_raw, 0.5 * _local_grid_spacing(obs_wavelengths, line_wavelengths)
         )  # (n_lines,) [Å]
     else:
         h = jnp.maximum(h_raw, line_wavelengths * 1e-6)  # degenerate grid: tiny floor
@@ -358,8 +391,7 @@ def place_line_profiles_velocity(
     # exact (#1836). Before this, recovered flux ran from 0.0026x (line silently
     # lost) to 3.04x (Lyα), and it was a function of ``line_sigma_kms``, so
     # fitting a width was partly fitting a flux.
-    profiles = _rescale_to_discrete_area(profiles, obs_wavelengths)
-    return jnp.sum(line_luminosities[None, :] * profiles, axis=1)
+    return _render_conserving(profiles, obs_wavelengths, line_wavelengths, line_luminosities)
 
 
 def render_nebular_lines(
