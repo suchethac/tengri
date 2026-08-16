@@ -895,15 +895,63 @@ class TestPolarDustCrossval:
             f"optical attenuation ({opt_attenuation:.3f})"
         )
 
+    @staticmethod
+    def _frequency_weights(wavelength):
+        """Trapezoid weights in frequency for a wavelength grid.
+
+        The same construction ``polar_dust_emission`` normalizes with, so the
+        comparison below is against the module's own quadrature rather than a
+        second opinion about it.
+        """
+        nu = 2.99792458e18 / wavelength
+        delta_nu = jnp.abs(jnp.diff(nu))
+        return jnp.concatenate([delta_nu[:1], 0.5 * (delta_nu[:-1] + delta_nu[1:]), delta_nu[-1:]])
+
     def test_energy_conservation(self):
-        """For a flat input spectrum, absorbed energy should equal reemitted."""
-        from tengri.components.agn.polar_dust import polar_dust_total
+        """Re-emission carries exactly the luminosity the dust intercepted.
+
+        This test used to compare the graybody against ``l_nu - l_att`` and
+        allow 5%. It failed at 1.069, and none of that was lost energy:
+
+        * not quadrature -- the ratio converges to 1.0686 from 5e3 to 2e5 grid
+          points, and extending the grid from 5e6 to 1e8 Angstrom moves nothing;
+        * not leakage -- against the quantity the module publishes as absorbed,
+          the balance is 1.000000 exactly, because ``polar_dust_emission``
+          normalizes on this same grid with these same weights.
+
+        The gap was the Type-1 mask, to six decimals. ``polar_dust_extinction``
+        returns two quantities that are deliberately *not* complementary and
+        says so: ``l_absorbed`` is geometry-independent, because the bi-conical
+        dust intercepts the same disc-photon fraction at any viewing angle and
+        re-radiates it isotropically, while the *attenuation* of the disc is
+        gated to face-on sightlines. So ``l_nu - l_att = mask * l_absorbed``,
+        and the old assertion was really asserting ``1 / mask == 1``.
+
+        It failed on an arbitrary geometry choice rather than on physics: at
+        ``opening_angle_deg=60`` the sigmoid sits at 0.9358, but at 30 degrees
+        it is 0.999955 and the identical wrong claim would have passed.
+
+        Asserted here against the invariant the module actually guarantees,
+        which is exact by construction -- so the tolerance is 1e-6, not 5%.
+        Anything looser hides a real regression.
+        """
+        from tengri.components.agn.polar_dust import (
+            polar_dust_extinction,
+            polar_dust_total,
+        )
 
         # Use a wide wavelength grid spanning UV to FIR
         wavelength = jnp.geomspace(500.0, 5e6, 5000)
         l_nu_flat = jnp.ones_like(wavelength) * 1e-10  # small flat spectrum
 
-        l_att, l_reemit = polar_dust_total(
+        _l_att, l_absorbed = polar_dust_extinction(
+            l_nu_flat,
+            wavelength,
+            cos_inc=1.0,
+            opening_angle_deg=60.0,
+            ebv=0.3,
+        )
+        _, l_reemit = polar_dust_total(
             l_nu_flat,
             wavelength,
             cos_inc=1.0,
@@ -912,28 +960,95 @@ class TestPolarDustCrossval:
             temperature=100.0,
         )
 
-        # Integrate absorbed and reemitted over frequency
-        nu = 2.99792458e18 / wavelength
-        delta_nu = jnp.abs(jnp.diff(nu))
-        delta_nu = jnp.concatenate(
-            [delta_nu[:1], 0.5 * (delta_nu[:-1] + delta_nu[1:]), delta_nu[-1:]]
-        )
-
-        l_absorbed_total = float(jnp.sum((l_nu_flat - l_att) * delta_nu))
+        delta_nu = self._frequency_weights(wavelength)
+        l_absorbed_total = float(jnp.sum(l_absorbed * delta_nu))
         l_reemit_total = float(jnp.sum(l_reemit * delta_nu))
 
-        # Energy conservation: reemitted should equal absorbed
-        if l_absorbed_total > 0:
-            ratio = l_reemit_total / l_absorbed_total
+        # Assert, do not skip. The old `if l_absorbed_total > 0:` meant a
+        # configuration that absorbed nothing ran zero assertions and reported
+        # green -- an absent result reading as a passing one.
+        assert l_absorbed_total > 0.0, (
+            f"nothing absorbed (total={l_absorbed_total:.3e}); the fixture no "
+            "longer exercises the energy balance it claims to"
+        )
+        np.testing.assert_allclose(
+            l_reemit_total / l_absorbed_total,
+            1.0,
+            rtol=1e-6,
+            err_msg=(
+                f"Energy not conserved: absorbed={l_absorbed_total:.6e}, "
+                f"reemitted={l_reemit_total:.6e}"
+            ),
+        )
+
+    def test_attenuation_is_masked_absorption(self):
+        """``l_nu - l_att`` is ``mask * l_absorbed`` -- pin the contract.
+
+        The relation the previous test tripped over is intentional and
+        documented, but nothing asserted it, so it read as a bug. Pinning it
+        here means the next person meets the design instead of rediscovering it
+        from a 6.9% discrepancy.
+        """
+        from tengri.components.agn.polar_dust import _type1_mask, polar_dust_extinction
+
+        wavelength = jnp.geomspace(500.0, 5e6, 2000)
+        l_nu_flat = jnp.ones_like(wavelength) * 1e-10
+
+        for opening_angle_deg in (30.0, 45.0, 60.0, 75.0):
+            l_att, l_absorbed = polar_dust_extinction(
+                l_nu_flat,
+                wavelength,
+                cos_inc=1.0,
+                opening_angle_deg=opening_angle_deg,
+                ebv=0.3,
+            )
+            mask = float(_type1_mask(1.0, opening_angle_deg))
             np.testing.assert_allclose(
-                ratio,
-                1.0,
-                rtol=0.05,
+                np.asarray(l_nu_flat - l_att),
+                mask * np.asarray(l_absorbed),
+                rtol=1e-10,
+                atol=0.0,
                 err_msg=(
-                    f"Energy not conserved: absorbed={l_absorbed_total:.3e}, "
-                    f"reemitted={l_reemit_total:.3e}, ratio={ratio:.3f}"
+                    f"at opening={opening_angle_deg} deg the disc's loss is not "
+                    f"mask={mask:.6f} times the intercepted luminosity"
                 ),
             )
+
+    def test_reemission_is_isotropic_in_inclination(self):
+        """The FIR bump is the same for every observer.
+
+        This is the physical content the old energy test was reaching for and
+        the reason ``l_absorbed`` carries no mask: the dust re-radiates what it
+        intercepted in all directions, so a Type 2 observer sees the same
+        infrared luminosity as a Type 1. Nothing checked it.
+        """
+        from tengri.components.agn.polar_dust import polar_dust_total
+
+        wavelength = jnp.geomspace(500.0, 5e6, 2000)
+        l_nu_flat = jnp.ones_like(wavelength) * 1e-10
+        delta_nu = self._frequency_weights(wavelength)
+
+        totals = []
+        for cos_inc in (0.0, 0.3, 0.7, 1.0):
+            _, l_reemit = polar_dust_total(
+                l_nu_flat,
+                wavelength,
+                cos_inc=cos_inc,
+                opening_angle_deg=60.0,
+                ebv=0.3,
+                temperature=100.0,
+            )
+            totals.append(float(jnp.sum(l_reemit * delta_nu)))
+
+        np.testing.assert_allclose(
+            totals,
+            totals[0],
+            rtol=1e-12,
+            err_msg=(
+                "polar-dust re-emission must not depend on viewing angle; "
+                f"got {totals} for cos_inc = 0.0, 0.3, 0.7, 1.0"
+            ),
+        )
 
     def test_graybody_peak_wavelength(self):
         """At T=100K, graybody peak should be near Wien peak ~ 29 um."""
