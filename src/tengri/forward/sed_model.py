@@ -808,18 +808,22 @@ def _warn_grid_warm_failed(label: str, exc: Exception) -> None:
 #: rule does not differentiate them, so every gradient backend sees exactly
 #: zero. Maps parameter name -> the reason, for the warning below.
 #:
-#: ``agn_kt_warm`` (`kd18_disc_model.py`, ``Uniform(0.1, 0.5)``) reaches the SED
-#: solely via ``_nthcomp_lnu_interp`` (`disc.py:1263`), whose ``custom_jvp``
-#: supplies a ``gamma`` tangent only — the ``kTe`` tangent is discarded, as a
-#: deliberate cost trade-off (a second kernel evaluation per JVP). Measured: the
-#: rule returns exactly ``0.0`` where a central difference gives
-#: ``d ln f / d ln kTe`` ~ -0.24, so the sensitivity is real and order-unity.
-_DEAD_GRADIENT_PARAMS: dict[str, str] = {
-    "agn_kt_warm": (
-        "it reaches the SED only through the nthcomp interpolation kernel, whose "
-        "derivative rule supplies a gamma tangent but no kTe tangent"
-    ),
-}
+#: Empty since #1822, and kept rather than deleted: the check costs nothing and
+#: the class of bug recurs (``met_alpha_fe`` raises the same warning from its own
+#: site, and #1206/#1764 are the earlier instances).
+#:
+#: ``agn_kt_warm`` was the sole entry. It reached the SED only via
+#: ``_nthcomp_lnu_interp``, whose ``custom_jvp`` supplied a ``gamma`` tangent and
+#: discarded the ``kTe`` one, so the rule returned exactly ``0.0`` against a
+#: central difference of ~7e41. #1822 added the kTe tangent, and the same
+#: measurement now agrees with a converged central difference to 0.6%.
+#:
+#: The audit that produced #1822 also found the *other* half was worse than
+#: documented: reverse-mode ``d/d(agn_gamma_warm)`` — the tangent believed to be
+#: working — returned **NaN**, not a number, because the kernel forced a float32
+#: output and the cotangent from a realistic ring luminosity (~1e66) overflows
+#: float32. That one never appeared here, since a NaN gradient is not a dead one.
+_DEAD_GRADIENT_PARAMS: dict[str, str] = {}
 
 
 def _warn_dead_gradient_params(spec) -> None:

@@ -13,6 +13,7 @@ import pytest
 pytestmark = pytest.mark.gradient
 import jax
 import jax.numpy as jnp
+import numpy as np
 from numpy.testing import assert_allclose
 
 jax.config.update("jax_enable_x64", True)
@@ -274,18 +275,32 @@ class TestNthcompGradientDiagnosis:
     def test_nthcomp_multiplied_by_scalar_gradient(self):
         """Test gradient: (nthcomp_shape * scalar) w.r.t. gamma.
 
-        This is the actual failing case from _warm_ring, and it **passes** since
-        the custom_jvp conversion (#1206). It was a strict xfail before, reasoned
-        as "scalar multiplication cannot recover lost gradient" — but the loss was
-        not in the ``jnp.interp``/``exp`` chain at all. The old reverse rule
-        divided the incoming cotangent by ``max|fd_grad|`` ~1e-17, so the ``1e46``
-        scalar here became ~1e63, overflowed, and a trailing
-        ``where(isfinite, ..., 0.0)`` returned zero. The cotangent is exactly what
-        the rescaling could not survive, which is why *this* case failed while the
-        unscaled one above passed.
+        This is the actual failing case from _warm_ring. It was a strict xfail
+        before, reasoned as "scalar multiplication cannot recover lost gradient" —
+        but the loss was not in the ``jnp.interp``/``exp`` chain at all. The old
+        reverse rule divided the incoming cotangent by ``max|fd_grad|`` ~1e-17, so
+        the ``1e46`` scalar here became ~1e63, overflowed, and a trailing
+        ``where(isfinite, ..., 0.0)`` returned zero.
+
+        **This test then passed for the wrong reason, from #1206 to #1822.** The
+        kernel returned float32 regardless of the caller, so a 1e46 cotangent
+        overflowed float32's 3.4e38 ceiling and *every* quantity here was NaN —
+        the autodiff gradient and the finite-difference reference alike.
+        ``np.testing.assert_allclose`` defaults to ``equal_nan=True``, so it
+        compared NaN to NaN and reported success. #1822 widened the kernel's
+        output to the caller's precision, which is the only reason the comparison
+        below now actually runs.
+
+        Two guards follow from that. ``isfinite`` is asserted *before* the
+        closeness check, so a return to NaN fails loudly instead of silently
+        matching. And the probe moved off ``gamma = 1.5``: that is the table's
+        exact left edge, where a symmetric difference straddles the clamp — one
+        side is flat, so the reference came out at exactly half the true slope
+        (measured ratio 0.5000). The boundary itself is covered separately below
+        with a one-sided reference.
         """
         nu_test = jnp.array([1e14, 2e14, 5e14])
-        gamma = jnp.array(1.5)
+        gamma = jnp.array(2.0)  # interior; 1.5 is the clamp boundary
         kTe_keV = jnp.array(0.2)
         kTbb_keV = jnp.array(0.001)
         scalar = 1e46
@@ -296,14 +311,57 @@ class TestNthcompGradientDiagnosis:
 
         grad_val = float(jax.grad(f)(gamma))
 
+        assert np.isfinite(grad_val), (
+            f"gradient is {grad_val} — the kernel is forcing float32 again, so the "
+            "1e46 cotangent overflows. Note assert_allclose would ACCEPT this "
+            "against a NaN reference (equal_nan=True), which is how it hid (#1822)."
+        )
+
         def f_scalar(g):
             return float(f(jnp.array(g)))
 
+        reference = fd_grad(f_scalar, float(gamma), eps=0.01)
+        assert np.isfinite(reference), "the FD reference is NaN and cannot judge anything"
+
         assert_allclose(
             grad_val,
-            fd_grad(f_scalar, float(gamma), eps=0.01),
-            rtol=1e-3,
+            reference,
+            rtol=5e-3,
             err_msg="nthcomp * scalar: FD check ∂(∑shape * 1e46)/∂gamma",
+        )
+
+    def test_gradient_at_the_clamp_boundary_is_one_sided(self):
+        """At gamma = 1.5 the derivative is one-sided, and the rule reports it.
+
+        Split out of the test above (#1822). Below 1.5 the table clamps, so the
+        function is flat there and a symmetric difference reports half the true
+        slope — which is a property of the reference, not of the gradient. The
+        one-sided difference is the right comparison at a boundary.
+        """
+        nu_test = jnp.array([1e14, 2e14, 5e14])
+        kTe_keV = jnp.array(0.2)
+        kTbb_keV = jnp.array(0.001)
+        scalar = 1e46
+
+        def f(g):
+            return jnp.sum(nthcomp_lnu_interp(nu_test, g, kTe_keV, kTbb_keV) * scalar)
+
+        def fs(g):
+            return float(f(jnp.array(g)))
+
+        edge = 1.5
+        grad_val = float(jax.grad(f)(jnp.array(edge)))
+        assert np.isfinite(grad_val), f"gradient at the boundary is {grad_val}"
+
+        eps = 0.01
+        one_sided = (fs(edge + eps) - fs(edge)) / eps
+        assert_allclose(grad_val, one_sided, rtol=0.05)
+
+        # And the clamp itself: the function really is flat below the edge, which
+        # is what makes a symmetric reference wrong here rather than merely noisy.
+        assert fs(edge - eps) == fs(edge), (
+            "gamma below the table's left edge is no longer clamped; the one-sided "
+            "reasoning above needs revisiting"
         )
 
     @pytest.mark.xfail(

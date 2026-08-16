@@ -56,26 +56,55 @@ class TestNthcompGradientStability:
         assert jnp.isfinite(grad_in_middle), f"Gradient in middle not finite: {grad_in_middle}"
 
     def test_nthcomp_lnu_interp_gradient_at_grid_edges(self):
-        """Verify finite gradients when interpolating near grid boundaries."""
+        """Finite *and* live inside the table; identically zero outside it (#1822).
+
+        The gamma axis spans [1.5, 3.5] and kTe [0.05, 0.5]. This test used to
+        evaluate at gamma=1.3 with kTe=5.0 — both outside — and assert only
+        ``isfinite``. Every probe therefore sat in the clamped region where the
+        gradient is exactly 0.0, which ``isfinite`` accepts, so a test named for
+        the grid edges never reached a live one.
+        """
         if not _is_table_available():
             pytest.skip("nthcomp templates not loaded")
-        # Use reasonable parameter values close to the grid boundaries
         nu = jnp.linspace(1e12, 1e19, 50, dtype=jnp.float32)
 
         def loss(gamma):
             lnu = nthcomp_lnu_interp(
-                nu, gamma, jnp.array(5.0, dtype=jnp.float32), jnp.array(0.1, dtype=jnp.float32)
+                nu, gamma, jnp.array(0.25, dtype=jnp.float32), jnp.array(0.1, dtype=jnp.float32)
             )
             return jnp.sum(lnu)
 
-        # Test at various gamma values
-        for gamma_val in [1.3, 1.5, 2.0, 2.5]:
+        # Inside the table: finite AND non-zero, including hard against both ends.
+        for gamma_val in [1.51, 2.0, 2.5, 3.49]:
             gamma = jnp.array(gamma_val, dtype=jnp.float32)
             grad = jax.grad(loss)(gamma)
             assert jnp.isfinite(grad), f"Gradient not finite at gamma={gamma_val}: {grad}"
+            assert grad != 0.0, (
+                f"Gradient is exactly zero at gamma={gamma_val}, which is inside the "
+                "table — the rule has stopped differentiating gamma"
+            )
+
+        # Outside: clamped, so exactly zero. Asserted rather than tolerated, so
+        # that a fit initialized out here is a known-dead configuration and not a
+        # surprise (#1521, #1684 are the same silent-clamp shape).
+        for gamma_val in [1.0, 1.45, 3.6, 4.0]:
+            gamma = jnp.array(gamma_val, dtype=jnp.float32)
+            grad = jax.grad(loss)(gamma)
+            assert grad == 0.0, (
+                f"gamma={gamma_val} is outside the table's [1.5, 3.5] and should clamp "
+                f"to a zero gradient, got {grad}"
+            )
 
     def test_nthcomp_lnu_interp_gradient_near_zero_kTbb(self):
-        """Verify stable gradients with very small seed temperature."""
+        """The kTe gradient is live at small seed temperature (#1822).
+
+        This swept kTe = 1, 2, 5 keV — all above the table's 0.5 keV ceiling, so
+        all clamped — and asserted only ``isfinite``. Zero is finite, so it was
+        green on a derivative that was identically zero, which is precisely the
+        failure this file's docstring says it exists to catch. Probes are now
+        inside the grid, and agreement with a central difference is asserted:
+        "non-zero" alone would pass on any wrong constant.
+        """
         if not _is_table_available():
             pytest.skip("nthcomp templates not loaded")
         nu = jnp.linspace(1e12, 1e19, 50, dtype=jnp.float32)
@@ -83,39 +112,71 @@ class TestNthcompGradientStability:
         def loss(kte):
             lnu = nthcomp_lnu_interp(
                 nu,
-                jnp.array(1.8, dtype=jnp.float32),
+                jnp.array(2.5, dtype=jnp.float32),
                 kte,
                 jnp.array(0.01, dtype=jnp.float32),  # Very small kTbb
             )
             return jnp.sum(lnu)
 
-        # This should remain finite even at small electron temperatures
-        for kte_val in [1.0, 2.0, 5.0]:
+        for kte_val in [0.12, 0.25, 0.45]:
             kte = jnp.array(kte_val, dtype=jnp.float32)
             grad = jax.grad(loss)(kte)
             assert jnp.isfinite(grad), f"Gradient not finite at kTe={kte_val}: {grad}"
+            assert grad != 0.0, (
+                f"d/d(kTe) is exactly zero at kTe={kte_val}, inside the table — the "
+                "custom_jvp has stopped supplying the kTe tangent (#1822)"
+            )
+            h = 1e-4
+            central = float((loss(kte + h) - loss(kte - h)) / (2 * h))
+            assert central != 0.0, "setup: reference is zero and cannot judge the tangent"
+            rel = abs(float(grad) - central) / abs(central)
+            assert rel < 0.10, (
+                f"d/d(kTe) = {float(grad):.5e} disagrees with the central difference "
+                f"{central:.5e} by {rel:.1%} at kTe={kte_val}"
+            )
 
     def test_nthcomp_lnu_interp_loss_gradient_finite(self):
-        """Integration test: gradient of a mock likelihood is finite."""
+        """A mock likelihood that is actually a function of gamma (#1822).
+
+        The previous version compared a model of ~1e-18 against ``observed=1.0``
+        with ``sigma=0.1``, so ``chi2 = sum((0 - 1)/0.1)**2 = 1.0000e+04``
+        *exactly*, at every gamma — verified identical at 1.2 and 2.2. It
+        differentiated a constant, and its analytic gradient (~1e-16) was
+        numerical dust that ``isfinite`` happily accepted.
+
+        The data are now generated from the model itself at a reference gamma,
+        so chi2 has a genuine minimum there and a real slope away from it.
+        """
         if not _is_table_available():
             pytest.skip("nthcomp templates not loaded")
         nu = jnp.linspace(1e12, 1e19, 100, dtype=jnp.float32)
-        observed_lnu = jnp.ones_like(nu)
-        uncertainty = jnp.ones_like(nu) * 0.1
+        kte = jnp.array(0.25, dtype=jnp.float32)
+        ktbb = jnp.array(0.1, dtype=jnp.float32)
+
+        observed_lnu = nthcomp_lnu_interp(nu, jnp.array(2.0, dtype=jnp.float32), kte, ktbb)
+        uncertainty = jnp.maximum(0.05 * observed_lnu, 1e-30)
 
         def mock_likelihood(gamma):
-            model_lnu = nthcomp_lnu_interp(
-                nu, gamma, jnp.array(5.0, dtype=jnp.float32), jnp.array(0.1, dtype=jnp.float32)
-            )
-            chi2 = jnp.sum(((model_lnu - observed_lnu) / uncertainty) ** 2)
-            return chi2
+            model_lnu = nthcomp_lnu_interp(nu, gamma, kte, ktbb)
+            return jnp.sum(((model_lnu - observed_lnu) / uncertainty) ** 2)
 
-        # Test gradient at various points in parameter space
-        for gamma_val in [1.2, 1.5, 1.8, 2.2]:
+        # The objective must actually vary, or the gradient assertions below are
+        # vacuous — this is the check whose absence let a constant through.
+        chi2_at = [float(mock_likelihood(jnp.array(g, jnp.float32))) for g in (1.7, 2.0, 2.4)]
+        assert chi2_at[1] < chi2_at[0] and chi2_at[1] < chi2_at[2], (
+            f"chi2 has no minimum at the generating gamma: {chi2_at} — the mock "
+            "likelihood is not a function of gamma"
+        )
+
+        for gamma_val in [1.7, 1.9, 2.2, 2.4]:
             gamma = jnp.array(gamma_val, dtype=jnp.float32)
             grad = jax.grad(mock_likelihood)(gamma)
             assert jnp.isfinite(grad), (
                 f"Mock likelihood gradient not finite at gamma={gamma_val}: {grad}"
+            )
+            assert grad != 0.0, (
+                f"Mock likelihood gradient is exactly zero at gamma={gamma_val} — "
+                "the objective is not seeing gamma"
             )
 
 
@@ -175,6 +236,31 @@ class TestNthcompJVPRule:
         assert scaled != 0.0, "large cotangent collapsed to a silent zero gradient"
         assert jnp.isfinite(scaled)
         assert scaled / unit == pytest.approx(1e30, rel=1e-5)
+
+    def test_cotangent_at_the_scale_disc_py_actually_produces(self):
+        """1e30 was not large enough to catch the real failure (#1822).
+
+        ``disc.py`` multiplies this kernel's ~1e-19 shape by a ring luminosity,
+        so the cotangent reverse mode hands back is ~1e66 — six orders past where
+        the test above stops. While the kernel returned float32 regardless of the
+        caller's dtype, that cotangent overflowed float32's 3.4e38 ceiling and
+        ``jax.grad`` through ``kubota_done_disc`` returned **NaN** for
+        ``agn_gamma_warm`` while ``jax.jvp`` returned 5.2e30.
+
+        The sibling test passing at 1e30 is exactly why this went unnoticed: a
+        magnitude sweep that stops short of the caller's real scale reports a
+        healthy kernel.
+        """
+        unit = self._grad_gamma(1.0)
+        assert unit != 0.0, "baseline gradient is zero — test cannot detect the overflow"
+
+        for exponent in (40, 50, 66):
+            scaled = self._grad_gamma(10.0**exponent)
+            assert jnp.isfinite(scaled), (
+                f"cotangent 1e{exponent} produced {scaled} — the kernel is forcing a "
+                "float32 output again, so a realistic ring luminosity overflows"
+            )
+            assert scaled / unit == pytest.approx(10.0**exponent, rel=1e-5)
 
     def test_float32_grid_with_float64_gamma_is_accepted(self):
         """A float32 SED grid with a float64 ``gamma`` must still differentiate.
