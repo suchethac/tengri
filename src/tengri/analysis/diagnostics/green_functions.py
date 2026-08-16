@@ -27,6 +27,7 @@ import jax
 import jax.numpy as jnp
 
 from tengri.utils.filter_convention import FilterConvention, filter_weight as _filter_weight
+from tengri.utils.scale import representable_denominator
 
 
 def compute_green_function(
@@ -80,7 +81,9 @@ def compute_green_function(
         for i in range(n_age):
             ssp_on_filt = jnp.interp(filter_wave, ssp_wave, ssp_flux_at_z[i], left=0.0, right=0.0)
             num = jnp.trapezoid(ssp_on_filt * weight, filter_wave)
-            greens = greens.at[i].set(num / jnp.maximum(denom, 1e-30))
+            # Derivative-sized floor: this is a denominator, so its VJP needs
+            # 1/floor**2 representable, not just floor (#1860).
+            greens = greens.at[i].set(num / jnp.maximum(denom, representable_denominator(1e-30)))
         return greens
 
     elif wave_target is not None:

@@ -24,6 +24,7 @@ from tengri.utils.filter_convention import (
     filter_weight as _filter_weight,
     list_filter_conventions,
 )
+from tengri.utils.scale import representable_denominator
 
 __all__ = [
     "FilterConvention",
@@ -108,6 +109,17 @@ def _filter_integral_union(
 
     Both node arrays must be ascending; padded filter rows must be made
     ascending first (:func:`_ascending_padded_filter_wave`).
+
+    The denominator floor is sized for the **derivative**, not the value
+    (#1860). ``pad_filters_to_bucket`` pads the filter-count axis with all-zero
+    rows, so a padded row arrives here with ``num == den == 0``. Forward that is
+    safe at any floor, but the quotient's VJP carries ``-num/den**2``, and the
+    former literal ``1e-30`` squares to exactly ``0.0`` in float32 — the reverse
+    pass then divided by zero and returned a **NaN redshift gradient**. Only
+    redshift saw it: ``den`` integrates over ``grid``, which scales with
+    ``(1+z)``, so z is the one parameter that reaches the denominator at all.
+    ``representable_floor`` does not catch this — ``1e-30`` is above float32's
+    ``tiny`` and passes through untouched. float64 is bit-identical.
     """
     grid = jnp.sort(jnp.concatenate([wave_obs, filter_wave]))
     L_on_grid = jnp.interp(grid, wave_obs, L_nu, left=0.0, right=0.0)
@@ -115,7 +127,7 @@ def _filter_integral_union(
     weight = trans_on_grid * _filter_weight(grid, convention)
     num = jnp.trapezoid(L_on_grid * weight, grid)
     den = jnp.trapezoid(weight, grid)
-    return num / jnp.maximum(den, 1e-30)
+    return num / jnp.maximum(den, representable_denominator(1e-30))
 
 
 def _ascending_padded_filter_wave(fw_padded: jnp.ndarray) -> jnp.ndarray:
@@ -419,8 +431,17 @@ def pad_filters_to_bucket(filter_waves: list, filter_trans: list):
     of filters) up to the next entry of :data:`FILTER_COUNT_BUCKETS`. The
     extra rows are all-zero, which contribute zero to ``compute_flux_density``
     (the integrand is ``trans × wave × SED`` and the denominator divides
-    out — :func:`_compute_flux_density_padded` already maxes the denominator
-    against ``1e-30``).
+    out — :func:`_filter_integral_union` floors the denominator).
+
+    That floor makes the all-zero rows harmless in the **forward** pass only.
+    This docstring previously cited the literal ``1e-30`` as the reason they are
+    safe; in float32 it was the reason they were not (#1860). An all-zero row
+    gives ``num == den == 0``, and the quotient's VJP carries ``-num/den**2``,
+    which needs ``1/floor**2`` representable — a strictly stronger condition than
+    the forward pass imposes. The floor is now sized with
+    :func:`~tengri.utils.scale.representable_denominator`. Padding the count axis
+    is therefore not free: it is safe *because* the floor is derivative-sized,
+    and a future change to either must keep that pairing.
 
     This collapses what would otherwise be N separate XLA compiles (one per
     distinct (n_filters, max_len) shape encountered across a project) down
