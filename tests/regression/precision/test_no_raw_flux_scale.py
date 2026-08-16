@@ -5,19 +5,29 @@ This test walks the src/tengri/ tree and enforces that the RUNTIME use of the
 (1+z)/(4π d_L²) or 4π d_L² patterns appears ONLY in the documented allow-list,
 and that all allow-listed files still contain their expected patterns.
 
-Allowed exceptions (Tier B deferred — stored-scale/table sites):
-- utils/grid_interp.py — stores flux_scale into PreintegratedGrid
-- components/stellar/sps/precompute.py — numpy host build-time table sites
-- measure.py — returns 4π d_L² as a scalar (caller-side fix)
-- components/nebular/line_precompute.py — precompute site
-- forward/sed_model.py — immediate-application property/flux projection
-- observation/observation.py — immediate-application observation flux projection
+**The allow-list is now empty, and that is the point.** It carried five entries
+from Tier A (#1186), each deferring a site that *stored* or *passed* the scale as
+a standalone scalar rather than applying it immediately — ``PreintegratedGrid``,
+the spectroscopic and photometric z-tables, and the three producers of the line
+divisor. #1859 measured what the deferral cost in float32 and converted them:
+
+- the line path was ``nan`` at every redshift (``inf/inf``: the erg/s line
+  luminosity ~1.4e40 over ``4 pi d_L^2`` ~1.0e57, both outside float32);
+- the stored photometry scales were exactly ``0.0``, which is the dangerous
+  half — finite, sign-correct, and wrong by every order of magnitude at once.
+
+Every site now goes through :func:`tengri.utils.scale.log10_flux_scale` or
+:func:`~tengri.utils.scale.log10_four_pi_dl2` and is applied with
+:func:`~tengri.utils.scale.apply_log10_scale`, so this guard's job from here is
+purely to stop a thirteenth hand-written copy appearing. Twelve existed before
+(seven correct, five not); one named helper replaced all of them.
 
 The test is a two-way gate: NEW unauthorized sites are rejected, and STALE
 allow-list entries (files that no longer contain the pattern) are flagged as
-needing removal.
+needing removal. An empty ALLOW makes the second half vacuous and the first half
+absolute — which is the intended end state, not an oversight.
 
-See issue #1186.
+See issues #1186 and #1859.
 """
 
 import pathlib
@@ -30,25 +40,14 @@ pytestmark = pytest.mark.contract
 SRC = pathlib.Path("src/tengri")
 
 # Controller-authorized allow-list: each file mapped to its rationale.
-# When a file is converted (Task 6), remove its entry and its rationale.
-ALLOW = {
-    "utils/grid_interp.py": (
-        "Tier B — stores flux_scale scalar into PreintegratedGrid, applied elsewhere; "
-        "needs log-table threading"
-    ),
-    "components/stellar/sps/precompute.py": (
-        "Tier B — stores flux_scale into ztable, applied at multiply sites; "
-        "needs log-table threading"
-    ),
-    "measure.py": (
-        "Tier B — returns 4pi dL^2 (~1e57), f32-unrepresentable as a scalar; caller-side fix"
-    ),
-    "components/nebular/line_precompute.py": "Tier B — returns 4pi dL^2 scalar; caller-side fix",
-    "forward/sed_model.py": (
-        "Tier B — line 4536 returns 4pi dL^2 scalar (f32-unrepresentable); "
-        "immediate-application sites converted in Task 6"
-    ),
-}
+#
+# EMPTY BY DESIGN (#1859). The five Tier-B deferrals it used to hold were all
+# converted together; leaving any of them here after the conversion would be a
+# lie the two-way gate is specifically built to catch. Add an entry only with a
+# rationale that says why the scale cannot be carried as a log10 offset — and
+# note that "I need the linear value" is not such a reason, because there is no
+# distance at which the linear value is representable in float32.
+ALLOW: dict[str, str] = {}
 
 # Match raw flux-scale patterns: dl_cm**2 or 4.0 * jnp.pi * dl_cm (with optional asarray wrapper)
 PATTERN = re.compile(

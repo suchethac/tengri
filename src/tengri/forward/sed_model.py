@@ -102,7 +102,7 @@ from tengri.utils.grid import (
     log_age_to_age_yr,
     make_log_age_grid,
 )
-from tengri.utils.scale import LOG10_4PI, apply_log10_scale
+from tengri.utils.scale import apply_log10_scale, log10_four_pi_dl2
 
 #: Second probe luminosity [erg/s] for the additive-emitter homogeneity check in
 #: :meth:`SEDModel._dust_emission_band_response`. A physically plausible L_IR
@@ -4894,7 +4894,7 @@ class SEDModel:
         # NebularSEDComponent) — no L_sun conversion here. Multiplying by
         # L_SUN was a 33.6-dex unit error that made every joint
         # photometry+line-flux fit unusable against real data.
-        log10_scale = -LOG10_4PI - 2.0 * jnp.log10(dl_cm)
+        log10_scale = -log10_four_pi_dl2(dl_cm)
         flux = apply_log10_scale(selected_lums, log10_scale)
         return flux
 
@@ -5108,7 +5108,7 @@ class SEDModel:
         # ``line_lums`` are erg/s (DerivedKey contract) — same fix as
         # ``predict_line_fluxes``. The scale cancels in every ratio, so
         # this is unit hygiene, not a behavior change.
-        log10_scale = -LOG10_4PI - 2.0 * jnp.log10(dl_cm)
+        log10_scale = -log10_four_pi_dl2(dl_cm)
 
         def _match(targets):
             targets = jnp.asarray(targets)
@@ -5455,7 +5455,10 @@ class SEDModel:
         # fixed one, and raises if the model has neither.
         z = jnp.asarray(self._get_redshift(params))
         dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
-        four_pi_dl2 = 4.0 * jnp.pi * dl_cm**2
+        # log10, never the linear divisor: 4 pi d_L^2 is ~1e57 (and ~1.2e40 even
+        # at the 10-pc z=0 convention) against a float32 ceiling of 3.4e38, so the
+        # linear form is ``inf`` at every distance and the flux ``nan`` (#1859).
+        log10_4pi_dl2 = log10_four_pi_dl2(dl_cm)
 
         if fast:
             from tengri.components.dust.two_component import DustSEDComponent
@@ -5472,7 +5475,7 @@ class SEDModel:
             else:
                 transmission = dust.compute_transmission(params, pc.window_centers, ssp_ages_yr)
             return measure_line_fluxes_from_window_lut(
-                joint_weights, scale, transmission, pc, four_pi_dl2
+                joint_weights, scale, transmission, pc, log10_4pi_dl2
             )
 
         if state is None:
@@ -5480,7 +5483,10 @@ class SEDModel:
         else:
             rest = SEDResult(wavelength=state.wave, sed=state.sed_intrinsic)
         return jnp.stack(
-            [measure_line_flux_jax(rest.wavelength, rest.sed, ld, four_pi_dl2) for ld in line_defs]
+            [
+                measure_line_flux_jax(rest.wavelength, rest.sed, ld, log10_4pi_dl2)
+                for ld in line_defs
+            ]
         )
 
     def predict_hbeta(self, params: dict) -> float:
