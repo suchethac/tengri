@@ -71,6 +71,7 @@ listing each hit with its file and line (or byte offset, for binaries).
 
 from __future__ import annotations
 
+import argparse
 import re
 import subprocess
 import sys
@@ -102,6 +103,64 @@ _OVERLAP = 64
 
 #: How much of the offending text to echo back.
 _ECHO = 100
+
+#: An absolute path that points *into this repository* and can therefore be
+#: rewritten as a repository-relative one without losing information. Anchoring
+#: on a ``/tengri`` segment is what makes the rewrite safe: a home path that
+#: does not name this repo (someone's ``/Users/<user>/data/grid.h5``) carries
+#: information the repo cannot reconstruct, so it is reported and never
+#: rewritten. The optional worktree tail matches a path produced inside
+#: ``.claude/worktrees/<name>``, which resolves to the same tree.
+#:
+#: The leading segment walk is lazy, so ``/Users/<user>/Projects/tengri`` +
+#: ``/src/tengri/...`` anchors on the FIRST ``tengri`` -- the checkout -- and
+#: leaves the ``src/tengri`` that follows intact.
+#:
+#: Examples here spell the user segment ``<user>`` on purpose: this file is
+#: itself scanned, and ``_HOME_PATH`` requires an alphanumeric first character,
+#: so a literal example would make the guard fail on its own documentation.
+#: (It did. ``--fix`` then rewrote the example in place and destroyed the
+#: sentence explaining it.)
+_FIXABLE = re.compile(
+    r"(?:/Users|/home)/[A-Za-z0-9][A-Za-z0-9_.-]*"
+    r"(?:/[A-Za-z0-9_.-]+)*?"
+    r"/tengri"
+    r"(?:/\.claude/worktrees/[A-Za-z0-9_.-]+)?"
+    # A path boundary, NOT ``\b``: ``\b`` matches between ``i`` and ``-``, so it
+    # accepted ``/Users/<user>/tengri-data/grid.h5`` -- a sibling directory that
+    # merely starts with the repo name -- and rewrote it to ``.-data/grid.h5``.
+    # The segment must end here or continue with ``/``.
+    r"(/|(?![A-Za-z0-9_.-]))"
+)
+
+
+def scrub_text(text: str) -> str:
+    """Rewrite absolute paths into this repo as repository-relative ones.
+
+    ``<checkout>/src/tengri/forward/sed_model.py`` becomes
+    ``src/tengri/forward/sed_model.py``; a bare ``<checkout>`` becomes ``.``.
+
+    Used two ways: by ``--fix`` to clean files that already leaked, and by
+    ``scripts/execute_notebooks.py`` to scrub freshly captured notebook output
+    *before* it is written, which is the only point where the leak can be
+    stopped rather than detected. Python's warning format prints the absolute
+    source path, so every execution that emits a warning re-leaks; #1749 put 26
+    such paths into the published notebooks one commit after #1816 added the
+    guard against them.
+
+    Paths that do not name this repository are left alone -- see ``_FIXABLE``.
+    CI runner homes are left alone too, reusing the scanner's own allowlist
+    rather than a second copy: ``/home/runner/work/tengri/tengri`` is the
+    checkout path every GitHub Actions run has, it is documented on purpose, and
+    an earlier version of this function rewrote it to a bare ``tengri``.
+    """
+
+    def _sub(match: re.Match[str]) -> str:
+        if any(match.group(0).startswith(prefix) for prefix in _ALLOWED_PREFIXES):
+            return match.group(0)
+        return "" if match.group(1) == "/" else "."
+
+    return _FIXABLE.sub(_sub, text)
 
 
 def _tracked_files() -> list[Path]:
@@ -160,18 +219,52 @@ def _scan_binary(path: Path) -> list[tuple[str, str]]:
     return hits
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap.add_argument(
+        "--fix",
+        action="store_true",
+        help="rewrite repo-relative paths in text files in place; binaries are "
+        "reported, never rewritten (see the h5repack note above)",
+    )
+    args = ap.parse_args(argv)
+
     violations: list[tuple[str, str, str]] = []
     scanned = 0
+    fixed_files = 0
+    fixed_hits = 0
 
     for path in _tracked_files():
         if not path.is_file():
             continue  # submodule or broken symlink
         scanned += 1
-        scan = _scan_binary if path.suffix.lower() in _BINARY_SUFFIXES else _scan_text
+        binary = path.suffix.lower() in _BINARY_SUFFIXES
+        scan = _scan_binary if binary else _scan_text
         rel = path.relative_to(REPO_ROOT).as_posix()
-        for location, excerpt in scan(path):
+        hits = scan(path)
+
+        # Binaries are never rewritten here. Editing the string in place leaves
+        # the old one in the file's freed space, so the file would read clean
+        # while still leaking -- the exact trap this guard's byte scan exists to
+        # catch. h5repack is the fix.
+        if hits and args.fix and not binary:
+            before = path.read_text(encoding="utf-8")
+            after = scrub_text(before)
+            if after != before:
+                path.write_text(after, encoding="utf-8")
+                remaining = _scan_text(path)
+                fixed_files += 1
+                fixed_hits += len(hits) - len(remaining)
+                # Anything still listed names a path outside this repo, which
+                # cannot be rewritten without inventing information. It stays a
+                # violation so --fix never reports success on a file that leaks.
+                hits = remaining
+
+        for location, excerpt in hits:
             violations.append((rel, location, excerpt))
+
+    if args.fix and fixed_files:
+        print(f"fixed {fixed_hits} path(s) in {fixed_files} file(s)", file=sys.stderr)
 
     if violations:
         print(

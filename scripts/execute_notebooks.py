@@ -54,12 +54,60 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
+sys.path.insert(0, str(ROOT / "tools"))
 
+from check_no_local_paths import scrub_text
 from sync_spine_notebooks_for_docs import (
     EXPERIMENTAL_SLUGS,
     EXPERIMENTAL_SUBDIR,
     SPINE_SLUGS,
 )
+
+#: Output fields that carry captured console text. ``text`` is stream output,
+#: ``traceback`` is an error, and the ``data`` MIME bundle holds rich reprs.
+_TEXT_MIMES = ("text/plain", "text/html", "text/markdown", "text/latex")
+
+
+def _scrub(value):
+    """Scrub a notebook text field, which nbformat gives as ``str`` or ``list``."""
+    if isinstance(value, str):
+        return scrub_text(value)
+    if isinstance(value, list):
+        return [scrub_text(v) if isinstance(v, str) else v for v in value]
+    return value
+
+
+def scrub_outputs(nb) -> int:
+    """Rewrite absolute repo paths captured in cell outputs. Returns the count.
+
+    This is where the leak is stopped rather than detected. Python's warning
+    format prints the absolute source path, so any notebook that emits a warning
+    captures the executing machine's filesystem into output that is then
+    committed and published. #1749 shipped 26 such paths one commit after #1816
+    added the guard that rejects them, and a diagnostic cell printing a resolved
+    ``REPO_ROOT`` added three more -- a form no warning-format fix would catch,
+    which is why the scrub is applied to captured output rather than to
+    warnings.
+
+    Only outputs are touched. Cell ``source`` comes from ``notebooks/<slug>.py``
+    and is never rewritten: a scrub that reaches source has stopped redacting a
+    machine path and started editing code.
+    """
+    n = 0
+    for cell in nb.cells:
+        for out in cell.get("outputs") or []:
+            for key in ("text", "traceback"):
+                if key in out:
+                    before = out[key]
+                    out[key] = _scrub(before)
+                    n += out[key] != before
+            data = out.get("data") or {}
+            for mime in _TEXT_MIMES:
+                if mime in data:
+                    before = data[mime]
+                    data[mime] = _scrub(before)
+                    n += data[mime] != before
+    return n
 
 ALL_SLUGS = list(SPINE_SLUGS) + list(EXPERIMENTAL_SLUGS)
 
@@ -115,9 +163,16 @@ def execute(slug: str, timeout: int) -> tuple[bool, float, int, int]:
         client.execute()
     except Exception as exc:  # kernel death is not a cell error, so catch broadly
         print(f"  kernel failure: {type(exc).__name__}: {exc}", file=sys.stderr)
+        scrub_outputs(nb)
         nbformat.write(nb, out)
         return False, time.perf_counter() - t0, 0, -1
     dt = time.perf_counter() - t0
+    # Before any write, so all three -- the failure path above, notebooks/, and
+    # the published render -- are scrubbed by one call. A traceback captured
+    # from a failed run carries absolute paths too, which is why the failure
+    # path scrubs as well.
+    if scrubbed := scrub_outputs(nb):
+        print(f"  scrubbed {scrubbed} absolute path(s) from captured output")
     nbformat.write(nb, out)
 
     figs = sum(
