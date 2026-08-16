@@ -1945,9 +1945,12 @@ def compute_lgmet_weights(log_z, ssp_lgmet, lgmet_scatter=0.1):
     # because _tw_cuml_kern returns CDF of the flipped kernel.
     # DSPS convention: _tw_cuml_kern(x, lo, sig) - _tw_cuml_kern(x, hi, sig)
     # where x is the galaxy metallicity, lo/hi are bin edges.
-    cdf_lo = _tw_cuml_kern(log_z, edges[:-1], lgmet_scatter)
-    cdf_hi = _tw_cuml_kern(log_z, edges[1:], lgmet_scatter)
-    raw = cdf_lo - cdf_hi
+    #
+    # Evaluated once per edge, not once per (bin, side): bin k's upper edge is
+    # bin k+1's lower edge, so slicing the CDF at `edges[:-1]` and `edges[1:]`
+    # separately would compute every interior edge twice for the same operands.
+    cdf = _tw_cuml_kern(log_z, edges, lgmet_scatter)
+    raw = cdf[:-1] - cdf[1:]
 
     total = jnp.sum(raw)
     nearest = jnp.argmin(jnp.abs(ssp_lgmet - log_z))

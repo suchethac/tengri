@@ -134,7 +134,13 @@ def compute_grid_weights(
         edges = edges_for_grid(grid)
     else:
         edges = jnp.asarray(edges, dtype=dt)
-    raw = tw_cuml_kern(x, edges[:-1], scatter) - tw_cuml_kern(x, edges[1:], scatter)
+    # One CDF evaluation per edge, not two. Bin k's upper edge is bin k+1's
+    # lower edge, so evaluating `edges[:-1]` and `edges[1:]` as separate calls
+    # computes every interior edge twice, from the same expression and the same
+    # operands — 2n calls for n+1 distinct edges. Differencing adjacent entries
+    # of a single evaluation feeds the subtraction exactly the same pair.
+    cuml = tw_cuml_kern(x, edges, scatter)
+    raw = cuml[:-1] - cuml[1:]
     total = jnp.sum(raw)
     # Fallback: place all weight on the nearest bin if kernel misses the grid
     nearest = jnp.argmin(jnp.abs(grid - x))
