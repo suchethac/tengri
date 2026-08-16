@@ -38,6 +38,7 @@ from tengri.forward import (
     state_to_xray_quantities,
 )
 from tengri.protocols.component import ForwardState
+from tests._component_params import component_params
 
 # Bare-stellar SSP — required by Cue (wNE SSPs now raise CueWNESSPError).
 _SSP_PATH = pathlib.Path("data/fsps_prsc_miles_chabrier.h5").resolve()
@@ -60,6 +61,10 @@ def state(ssp):
     ]
     state0 = ForwardState(wave=ssp.ssp_wave, sed_observed=jnp.ones(len(ssp.ssp_wave)))
     params = {
+        # Radio/X-ray declared defaults first; the explicit values below
+        # override them, so this pinned set stays complete when a component
+        # declares a new parameter (#1832).
+        **component_params(RadioSEDComponent(), XRaySEDComponent()),
         # tsnorm SFH
         "sfh_tsnorm_log_total_mass": jnp.asarray(10.0),  # 1e10 Msun galaxy (#673)
         "sfh_tsnorm_peak_lbt_gyr": jnp.asarray(2.0),

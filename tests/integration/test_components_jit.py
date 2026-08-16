@@ -29,6 +29,7 @@ from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.components.xray.component import XRaySEDComponent
 from tengri.forward.orchestrator import run_components
 from tengri.protocols.component import ForwardState
+from tests._component_params import component_params
 
 _SSP_PATH = pathlib.Path("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5").resolve()
 
@@ -43,6 +44,10 @@ def ssp():
 @pytest.fixture(scope="module")
 def base_params():
     return {
+        # Radio/X-ray/IGM declared defaults first; the explicit values below
+        # override them. Keeps this fixture from going stale when a component
+        # declares a new parameter (#1832).
+        **component_params(RadioSEDComponent(), XRaySEDComponent(), IGMSEDComponent()),
         # tsnorm SFH
         "sfh_tsnorm_log_total_mass": jnp.asarray(1.0),
         "sfh_tsnorm_peak_lbt_gyr": jnp.asarray(2.0),

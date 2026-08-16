@@ -25,6 +25,7 @@ from tengri.components.dust.component import (
 )
 from tengri.forward.orchestrator import run_components
 from tengri.protocols import ForwardState
+from tests._component_params import component_params
 
 REL_TOL = 1e-10
 
@@ -126,7 +127,18 @@ def test_four_adapter_chain_runs_end_to_end():
         },
     )
 
+    chain = [
+        RadioSEDComponent(),
+        DustAttenuationSEDComponent(),
+        XRaySEDComponent(),
+        IGMSEDComponent(),
+    ]
+
+    # Seed from the chain's own declarations, then pin what the assertions
+    # below depend on. A fully hand-rolled dict is what broke here when the
+    # X-ray offsets were wired (#1832).
     params = {
+        **component_params(*chain),
         "redshift": 8.0,
         # radio
         "radio_q_ir": 2.64,
@@ -150,16 +162,7 @@ def test_four_adapter_chain_runs_end_to_end():
         "igm_log_nhi": 20.0,
     }
 
-    final = run_components(
-        [
-            RadioSEDComponent(),
-            DustAttenuationSEDComponent(),
-            XRaySEDComponent(),
-            IGMSEDComponent(),
-        ],
-        state,
-        params,
-    )
+    final = run_components(chain, state, params)
 
     assert final.sed_intrinsic is not None
     assert final.sed_attenuated is not None

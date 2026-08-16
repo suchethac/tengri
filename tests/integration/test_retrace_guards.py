@@ -28,6 +28,7 @@ from tengri.components.igm.component import IGMSEDComponent
 from tengri.components.radio.component import RadioSEDComponent
 from tengri.components.xray.component import XRaySEDComponent
 from tengri.protocols.component import ForwardState
+from tests._component_params import component_params
 
 
 def _build_model(synthetic_ssp, simple_observation, *, redshift=0.1):
@@ -121,34 +122,26 @@ def synth_wave():
     return jnp.logspace(0.0, 8.0, 64)  # 1 Å to 10⁸ Å
 
 
-def _component_default_params(component, **bare):
-    """Build a full param dict from a component's ``declared_parameters()``
-    defaults, plus any bare (non-prefixed) params supplied explicitly.
-
-    Deriving from the declared set — rather than a hand-maintained dict — keeps
-    the guard from drifting when a component adds a parameter: the earlier
-    hand-written ``xray_params`` was missing the declared ``xray_log_nh``, so
-    ``apply`` KeyError'd (#870, #768). Any newly declared param is now picked up
-    automatically at its physically-motivated default.
-    """
-    params = {d.name: jnp.asarray(d.prior.default) for d in component.declared_parameters()}
-    params.update({k: jnp.asarray(v) for k, v in bare.items()})
-    return params
+# The local ``_component_default_params`` that used to live here is now
+# ``tests._component_params.component_params``, shared with the six integration
+# files that had kept hand-rolling and broke when the X-ray offsets were wired
+# (#1832). Its rationale — and the #870/#768 breakage that prompted deriving in
+# the first place — is recorded in that module's docstring.
 
 
 @pytest.fixture(scope="module")
 def radio_params():
-    return _component_default_params(RadioSEDComponent(), redshift=0.1)
+    return component_params(RadioSEDComponent(), redshift=0.1)
 
 
 @pytest.fixture(scope="module")
 def xray_params():
-    return _component_default_params(XRaySEDComponent(), redshift=0.1)
+    return component_params(XRaySEDComponent(), redshift=0.1)
 
 
 @pytest.fixture(scope="module")
 def igm_params():
-    return _component_default_params(IGMSEDComponent(), redshift=3.0)
+    return component_params(IGMSEDComponent(), redshift=3.0)
 
 
 COMPONENT_CASES = [

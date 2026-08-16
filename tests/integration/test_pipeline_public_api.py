@@ -14,6 +14,7 @@ import jax.numpy as jnp
 import pytest
 
 import tengri.pipeline as pipeline
+from tests._component_params import component_params
 
 
 @pytest.mark.unit
@@ -67,7 +68,11 @@ def test_full_five_adapter_chain_via_public_api():
         ), name
 
     # Concrete parameter values for a single forward pass.
+    # Seed from the chain's own declarations — the same set ``merged`` above is
+    # asserted against — then pin the values this pass depends on. Hand-rolling
+    # the whole dict is what broke when the X-ray offsets were wired (#1832).
     params = {
+        **component_params(*chain),
         "redshift": 1.5,
         # radio
         "radio_q_ir": 2.64,

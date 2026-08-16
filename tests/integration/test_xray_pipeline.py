@@ -21,6 +21,7 @@ from tengri.components.xray.component import XRaySEDComponent
 from tengri.components.xray.xray import xray_total
 from tengri.forward.orchestrator import run_components
 from tengri.protocols import ForwardState
+from tests._component_params import component_params
 
 REL_TOL = 1e-10
 
@@ -45,7 +46,11 @@ def test_orchestrator_matches_direct_call(z, sfr, stellar_mass, L_agn_bol):
         derived={"sfr": sfr, "log_mstar": jnp.log10(stellar_mass), "L_agn_bol": L_agn_bol},
     )
 
+    # Declared defaults first, then the values this test's ``expected`` call
+    # pins explicitly. A parameter added to the component later arrives here at
+    # its default instead of as a KeyError (#1832).
     params = {
+        **component_params(XRaySEDComponent()),
         "redshift": z,
         "xray_gamma_hmxb": 2.0,
         "xray_gamma_lmxb": 1.6,
@@ -88,6 +93,7 @@ def test_xray_no_agn_upstream_falls_back_to_zero():
     xray = XRaySEDComponent()
 
     params = {
+        **component_params(XRaySEDComponent()),
         "redshift": 0.0,
         "xray_gamma_hmxb": 2.0,
         "xray_gamma_lmxb": 1.6,
@@ -127,6 +133,7 @@ def test_xray_pipeline_preserves_input_state_immutability():
         [XRaySEDComponent()],
         initial,
         {
+            **component_params(XRaySEDComponent()),
             "redshift": 1.0,
             "xray_gamma_hmxb": 2.0,
             "xray_gamma_lmxb": 1.6,
@@ -175,6 +182,7 @@ def test_three_adapter_chain_runs_end_to_end():
     # (reionization midpoint igm_z_mid=7.0 → galaxies AT z=8 see real
     # transmission < 1).
     params = {
+        **component_params(RadioSEDComponent(), XRaySEDComponent(), IGMSEDComponent()),
         "redshift": 8.0,
         # radio
         "radio_q_ir": 2.64,

@@ -299,6 +299,13 @@ class TestRadioXrayIntegration:
             dust_emission="modified_blackbody",
             radio=True,
             xray=True,
+            # The Lehmer+2016 XRB offsets are declared free (Uniform(-2, 2)), so
+            # they are this model's only free parameters and every params dict
+            # below would have to name them. These tests assert the mean scaling
+            # relation, not scatter about it, so pin both at the neutral 0.0 —
+            # the value the physics used before #1706 wired them (#1832).
+            xray_det_hmxb=Fixed(0.0),
+            xray_det_lmxb=Fixed(0.0),
             redshift=0.01,  # nearby so fluxes are large
         )
         return SEDModel(spec, ssp, precompute=False)
