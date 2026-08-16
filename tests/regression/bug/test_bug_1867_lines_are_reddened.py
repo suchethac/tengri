@@ -92,7 +92,22 @@ def model(ssp_bare, observation):
     return SEDModel.build(
         ssp_data=ssp_bare,
         observation=observation,
-        sfh={"type": "dpl", "all_params": FIXED},
+        # Constant SFH at z=0.05. A `dpl` at z=0.5 tripped
+        # SFHBeforeBigBangWarning -- 54% of the stellar mass formed before the
+        # Big Bang and was silently truncated, so the model under test was not
+        # the one the fixture asked for. Ratios would still have moved, which
+        # is what makes that class of warning easy to wave through.
+        #
+        # `start_gyr` is pinned inside cosmic time rather than left at its
+        # Fixed(14.0) default, which is a lookback older than the universe at
+        # this redshift and re-triggers the same truncation.
+        sfh={
+            "type": "const",
+            "all_params": FIXED,
+            "log_total_mass": 10.0,
+            "start_gyr": 10.0,
+            "end_gyr": 0.0,
+        },
         dust={
             "type": "two_component",
             "law_bc": "calzetti",
@@ -101,7 +116,7 @@ def model(ssp_bare, observation):
             "tau_diff": Uniform(0.1, 3.0),
         },
         neb={"type": "cue", "all_params": FIXED},
-        redshift=Fixed(0.5),
+        redshift=Fixed(0.05),
     )
 
 

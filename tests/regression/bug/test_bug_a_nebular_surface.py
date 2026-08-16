@@ -121,7 +121,13 @@ def test_balmer_decrement_rises_under_dust_sweep(ssp_bare):
     for tau_diff in [0.0, 1.0, 2.0]:
         m = tengri.SEDModel.build(
             ssp_bare,
-            sfh={"type": "const", "*": FIXED, "log_sfr": 0.0},
+            sfh={
+                "type": "const",
+                "*": FIXED,
+                "log_total_mass": 10.0,
+                "start_gyr": 10.0,
+                "end_gyr": 0.0,
+            },
             dust={
                 "type": "two_component",
                 "*": FIXED,
@@ -149,7 +155,13 @@ def test_cue_exposes_more_than_thirteen_species(ssp_bare):
     """#303: Cue's all_waves should expose ≫13 lines (full catalog)."""
     m = tengri.SEDModel.build(
         ssp_bare,
-        sfh={"type": "const", "*": FIXED, "log_sfr": 0.0},
+        sfh={
+            "type": "const",
+            "*": FIXED,
+            "log_total_mass": 10.0,
+            "start_gyr": 10.0,
+            "end_gyr": 0.0,
+        },
         dust={"type": "two_component", "*": FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
         neb={"type": "cue", "*": FIXED},
         redshift=Fixed(0.05),
@@ -170,7 +182,13 @@ def test_stellar_lyc_attenuated_by_fesc(ssp_bare):
     for fesc in [0.0, 0.5, 1.0]:
         m = tengri.SEDModel.build(
             ssp_bare,
-            sfh={"type": "const", "*": FIXED, "log_sfr": 0.0},
+            sfh={
+                "type": "const",
+                "*": FIXED,
+                "log_total_mass": 10.0,
+                "start_gyr": 10.0,
+                "end_gyr": 0.0,
+            },
             neb={"type": "cue", "*": FIXED, "fesc": fesc},
             dust={"type": "two_component", "*": FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
             redshift=Fixed(0.05),
@@ -197,7 +215,13 @@ def test_bakedin_predict_lines_still_raises(ssp_bare):
     ssp = ssp_bare
     m = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "const", "*": FIXED, "log_sfr": 0.0},
+        sfh={
+            "type": "const",
+            "*": FIXED,
+            "log_total_mass": 10.0,
+            "start_gyr": 10.0,
+            "end_gyr": 0.0,
+        },
         dust={"type": "two_component", "*": FIXED},
     )
     p = dict(m.spec.sample(jax.random.PRNGKey(0)))

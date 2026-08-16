@@ -346,6 +346,23 @@ class DustAttenuationSEDComponent(TemplateThreading):
             log_L_ir=log_l_ir,
             sed_dust_attenuated=attenuated,
         )
+
+        # Discrete emission-line catalog, reddened with this component's single
+        # screen (#1867). The two-component component does the same in its §2c;
+        # omitting it here would leave every single-screen model reading
+        # INTRINSIC line luminosities from `pred.lines.*` and
+        # `predict_properties`, which is the half-fix #1867 warns about.
+        #
+        # `curve(line_wave)`, never the cached `k_lambda`: that array is bound
+        # to `state.wave` and means nothing at line wavelengths.
+        _line_waves = state.derived.get("line_waves")
+        _line_lums = state.derived.get("line_lums")
+        if _line_waves is not None and _line_lums is not None:
+            line_wave = jnp.asarray(_line_waves)
+            derived_overrides["line_lums_attenuated"] = jnp.asarray(_line_lums) * jnp.exp(
+                -tau_v * curve(line_wave)
+            )
+
         filter_eff = state.derived.get("filter_eff_waves")
         if filter_eff is not None:
             # Evaluate the attenuation law at the filter pivots and at a

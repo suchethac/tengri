@@ -1073,7 +1073,20 @@ def _line_lums_for_ratios(derived):
 
 
 def _line_luminosity_helper(state, params, line_key):
-    """Helper to extract a single line luminosity from the line catalog."""
+    """Extract one line luminosity from the catalog, dust-reddened if available.
+
+    Prefers ``line_lums_attenuated`` — published by the dust component, which
+    reddens the catalog with the same screen it applies to the nebular
+    continuum (#1867). Falls back to the intrinsic ``line_lums`` when no dust
+    component ran, which is the correct answer there.
+
+    This one lookup is what makes BOTH public line surfaces observed:
+    ``pred.lines.*`` and ``predict_properties(names=("halpha", ...))`` route
+    through these property functions. Before #1867 they read the intrinsic
+    catalog while documented as observed, so the Balmer decrement sat at 2.7886
+    however hard dust was varied. Reddening in the accessor instead would have
+    fixed only the interactive path and left the fit surface wrong.
+    """
     from tengri.utils.sed_quantities import KEY_LINES, extract_line_luminosity
 
     derived = state.derived
@@ -1083,7 +1096,8 @@ def _line_luminosity_helper(state, params, line_key):
         return nan_scalar
 
     line_waves = jnp.asarray(derived["line_waves"])
-    line_lums = jnp.asarray(derived["line_lums"])
+    lums_key = "line_lums_attenuated" if "line_lums_attenuated" in derived else "line_lums"
+    line_lums = jnp.asarray(derived[lums_key])
     return extract_line_luminosity(line_waves, line_lums, KEY_LINES[line_key])
 
 
