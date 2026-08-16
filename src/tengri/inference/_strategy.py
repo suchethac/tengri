@@ -23,6 +23,7 @@ backends carry richer :attr:`BackendEntry.is_compatible` predicates.
 from __future__ import annotations
 
 import importlib
+import importlib.util
 from enum import StrEnum
 from typing import Any
 
@@ -54,10 +55,29 @@ class BackendStatus(StrEnum):
 
 
 def _check_deps_importable(entry: BackendEntry) -> bool:
+    """Whether every optional dependency of ``entry`` is installed.
+
+    Resolves the spec instead of executing the module. Asking "is nifty8
+    installed" by *importing* nifty8 runs its whole package body -- and
+    ``tengri.list_all()``, which asks that question for twenty backends, died
+    cold with ``NameError: name 'base_events' is not defined`` out of a
+    half-initialized ``asyncio``: a heavy optional package pulled asyncio back
+    in while it was already mid-import. The same call succeeds once anything
+    has imported those packages first, which is why it survived interactive use
+    and only bit a fresh process.
+
+    ``find_spec`` answers the question that was actually being asked. It also
+    keeps a menu call from importing NIFTy, blackjax and optax as a side
+    effect, which is the reason a registry listing took seconds.
+
+    ``ModuleNotFoundError`` subclasses ``ImportError``; ``ValueError`` is what
+    ``find_spec`` raises for a package whose ``__spec__`` is None.
+    """
     for pkg in entry.requires:
         try:
-            importlib.import_module(pkg)
-        except ImportError:
+            if importlib.util.find_spec(pkg) is None:
+                return False
+        except (ImportError, ValueError):
             return False
     return True
 

@@ -139,7 +139,8 @@ ssp = load_ssp_data(str(_grid_h5))
 print(
     f"Synthesizer test_grid (repackaged): {ssp.ssp_wave.shape[0]} wavelengths, "
     f"{ssp.ssp_lgmet.shape[0]} metallicities, {ssp.ssp_lg_age_gyr.shape[0]} age bins; "
-    f"λ up to {ssp.ssp_wave.max():.1e} Å."
+    f"λ up to {ssp.ssp_wave.max():.1e} Å.\n"
+    f"grids from cosmos-synthesizer {S.synthesizer_version()}"
 )
 
 
