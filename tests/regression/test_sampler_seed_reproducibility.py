@@ -189,7 +189,10 @@ def test_n_warmup_is_not_ignored_on_a_reused_model(ssp_data_fsps, target):
     _, forward = _build(ssp_data_fsps)
     key = jax.random.PRNGKey(3)
     base = dict(
-        method="mcmc_nuts", n_samples=60, n_chains=2, n_burnin=0,
+        method="mcmc_nuts",
+        n_samples=60,
+        n_chains=2,
+        n_burnin=0,
         dense_mass_matrix=False,
     )
 
