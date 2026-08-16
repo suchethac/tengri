@@ -309,7 +309,10 @@ class XRaySEDComponent(TemplateThreading):
             "sfr": 1.0,
             "stellar_mass": 1.0e10,
             "stellar_age_gyr": 1.0,
-            "metallicity_z": 0.0142,
+            # Not Z_SUN, deliberately: these are probe draws, not a solar
+            # anchor, and writing the constant here would invite someone to
+            # import it and couple the probe to a value it has no stake in.
+            "metallicity_z": 0.0150,
             "l_2500": 1.0e29,
             "cos_inc": 0.9,
             "l_12um": 1.0e28,
