@@ -909,8 +909,8 @@ def _reassert_x64_preference() -> None:
     That is upstream behavior this package cannot intercept; the supported
     route for a float32 session remains
     ``jax.config.update("jax_enable_x64", False)`` immediately before the work,
-    which is what :func:`tengri.setup_jax` does and what the float32 tests use
-    via the ``jax.enable_x64(False)`` context manager.
+    which is what :func:`tengri.utils.devices.setup_jax` does, and what the
+    float32 tests use via the ``jax.enable_x64(False)`` context manager.
     """
     request = _os.environ.get("JAX_ENABLE_X64")
     if request is None or request.strip().lower() not in {"0", "false", "no", "off"}:
