@@ -69,7 +69,7 @@ from reproduction.cigale._drivers import cigale_driver as C, units as U
 import tengri
 from tengri import FIXED, Fixed, SEDModel, load_ssp_data
 from tengri.dust import register_dale2014_tabulated
-from tengri.utils.physics_constants import L_SUN
+from tengri.utils.physics_constants import C_AA, L_SUN, LOG10_ZSUN
 
 # Force the inline backend so figures embed on (re-)render regardless of the
 # ambient MPLBACKEND. A non-inline backend (e.g. Agg) drops the save_fig()
@@ -124,7 +124,6 @@ TAU_BC_FIDUCIAL = 0.0  # CIGALE modified_starburst = single continuum screen
 # tengri's met_logzsol = log10(Z/Z_⊙) with Z_⊙ = 10**LOG10_ZSUN ≈ 0.0142
 # (Asplund+2009). Pin explicitly so the comparison is bit-aligned regardless
 # of registry-default convention.
-LOG10_ZSUN = -1.848  # docs-const: intentional — rounded; exact value needs a pcigale re-run
 MET_LOGZSOL = float(np.log10(0.02) - LOG10_ZSUN)  # ≈ +0.149
 MET_FIDUCIAL = {"logzsol": Fixed(MET_LOGZSOL), "all_params": FIXED}
 
@@ -171,7 +170,8 @@ ssp = load_ssp_data(str(ssp_file.resolve()))
 print(
     f"BC03 Chabrier SSP: {ssp.ssp_wave.shape[0]} wavelengths, "
     f"{ssp.ssp_lgmet.shape[0]} metallicities, "
-    f"{ssp.ssp_lg_age_gyr.shape[0]} age bins."
+    f"{ssp.ssp_lg_age_gyr.shape[0]} age bins.\n"
+    f"repackaged from pcigale {C.cigale_version()}"
 )
 
 
@@ -246,13 +246,12 @@ import pickle as _pickle
 from pathlib import Path as _P
 
 ages_yr = [1e6, 1e7, 1e8, 1e9, 1e10]
-# `_C_AA` is CIGALE's rounded c, not tengri's `C_AA` (2.99792458e18): a 2.5e-5
-# relative difference. It stays rounded because the committed numbers below were
-# produced with it and `pcigale` is not installable from PyPI, so the notebook
-# cannot be re-executed here to confirm the change is invisible at the three
-# significant figures reported. Import `C_AA` and re-run when pcigale is
-# available; do not swap it blind.
-_C_AA = 2.998e18  # docs-const: intentional — CIGALE's rounded c; see note above
+# Both sides use tengri's `C_AA`. This notebook used to carry a rounded
+# 2.998e18 of its own, 2.5e-5 low. Re-executed against pcigale 2025.1 the swap
+# moves one printed digit — §11's synchrotron ratio goes 1.0045–1.0046 to
+# 1.0046–1.0047 — because that section divides c by wavelength to get a
+# frequency, so the offset lands directly on the axis. Everything else is
+# unchanged. Worth knowing before reading a fourth decimal as physics.
 
 # CIGALE side: raw BC03 Chabrier Z=0.02 pickle, converted W/nm/Msun →
 # Lsun/Hz/Msun (the exact conversion used by _drivers/cigale_ssp_to_dsps.py).
@@ -279,7 +278,7 @@ _wl_aa = np.asarray(_raw.wl) * 10.0  # nm → Å
 cigale_ssp = []
 for age_yr in ages_yr:
     ia = int(np.argmin(np.abs(np.asarray(_raw.t) - age_yr / 1e6)))  # raw.t in Myr
-    lnu = np.asarray(_raw.spec[:, ia]) * 1e6 * _wl_aa**2 / _C_AA / L_SUN  # Lsun/Hz/Msun
+    lnu = np.asarray(_raw.spec[:, ia]) * 1e6 * _wl_aa**2 / C_AA / L_SUN  # Lsun/Hz/Msun
     cigale_ssp.append((_wl_aa, lnu * L_SUN))  # → erg/s/Hz/Msun for plotting
 
 i_zsun = int(np.argmin(np.abs(ssp.ssp_lgmet - np.log10(0.02))))
@@ -896,7 +895,7 @@ plt.show()
 import jax
 import jax.numpy as jnp
 
-_c_aa_dust = 2.998e18  # docs-const: intentional — CIGALE's rounded c
+_c_aa_dust = C_AA
 
 # Matched fiducial chain (mirrors the §6 dale2014 cell): same SFH + BC03 +
 # Calzetti attenuation on both sides, so the absorbed luminosity that feeds
@@ -1962,7 +1961,7 @@ fig, ax, ax_r, ratio = U.overlay_ratio_fig(
     L_r,
     w_t,
     sed_t,
-    x_of_wave=lambda w: 2.998e18 / w / 1e9,
+    x_of_wave=lambda w: C_AA / w / 1e9,
     xlabel=r"$\nu$ [GHz]",
     title="§11 SF radio — CIGALE synchrotron vs tengri synchrotron + free-free",
     label_c="CIGALE  radio.sf_nonthermal (synchrotron only)",
@@ -1987,7 +1986,7 @@ _syn_only = np.asarray(
     _bell03(w_t, float(np.asarray(state_r.derived["L_ir"])), q_ir=2.5, alpha_sf=0.8)
 )
 ax.plot(
-    2.998e18 / w_t / 1e9,
+    C_AA / w_t / 1e9,
     _syn_only,
     color="0.25",
     ls=":",
@@ -1995,7 +1994,7 @@ ax.plot(
     label="tengri  synchrotron only (Bell 2003)",
 )
 ax.legend(fontsize=8, frameon=False)
-_nu_r = 2.998e18 / w_r / 1e9
+_nu_r = C_AA / w_r / 1e9
 _g14 = (_nu_r >= 1.0) & (_nu_r <= 1.5) & (L_r > 0)
 print(f"§11 radio tengri/CIGALE median (1.0–1.5 GHz): {float(np.median(ratio[_g14])):.3f}×")
 
@@ -2225,7 +2224,7 @@ def _ratio_at(target_aa: float) -> float:
     return float(L_t_on_ext[j] / L_ext[j]) if L_ext[j] > 0 else float("nan")
 
 
-_C_AA_HZ = 2.998e18  # docs-const: intentional — CIGALE's rounded c
+_C_AA_HZ = C_AA
 print(
     "  X-ray  1 keV = {:.2f}×, 5 keV = {:.2f}×  (XRB + hot gas; no AGN corona)".format(
         _ratio_at(12.398 / 1.0), _ratio_at(12.398 / 5.0)
