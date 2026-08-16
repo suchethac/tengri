@@ -8037,7 +8037,7 @@ class SEDModel:
 
     # ── Batch operations ──────────────────────────────────────────────
 
-    def predict_photometry_batch(self, params_batch):
+    def predict_photometry_batch(self, params_batch, *, ssp_data=None, template_data=None):
         """Compute photometry for a batch of parameter sets via jax.vmap.
 
         **Use this method for** posterior chains / mock catalogs (batched
@@ -8071,9 +8071,9 @@ class SEDModel:
         """
         from tengri.forward.convenience import predict_photometry_batch as _fn
 
-        return _fn(self, params_batch)
+        return _fn(self, params_batch, ssp_data=ssp_data, template_data=template_data)
 
-    def predict_spectrum_batch(self, params_batch):
+    def predict_spectrum_batch(self, params_batch, *, ssp_data=None, template_data=None):
         """Compute spectra for a batch of parameter sets via jax.vmap.
 
         **Use this method for** batched spectra over posterior chains.
@@ -8107,7 +8107,7 @@ class SEDModel:
         """
         from tengri.forward.convenience import predict_spectrum_batch as _fn
 
-        return _fn(self, params_batch)
+        return _fn(self, params_batch, ssp_data=ssp_data, template_data=template_data)
 
     @classmethod
     def from_config(
