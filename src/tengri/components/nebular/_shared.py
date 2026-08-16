@@ -58,14 +58,25 @@ def _nu_quadrature_weights(obs_wavelengths: jnp.ndarray) -> jnp.ndarray:
     return jnp.zeros_like(nu).at[:-1].add(0.5 * dnu).at[1:].add(0.5 * dnu)
 
 
-def _local_grid_spacing(
+def _grid_bracket(
     obs_wavelengths: jnp.ndarray, line_wavelengths: jnp.ndarray
-) -> jnp.ndarray:
-    r"""Grid spacing local to each line center (#1836).
+) -> tuple[jnp.ndarray, jnp.ndarray]:
+    r"""Local grid spacing and nearest-node index for each line, from one search.
 
-    A profile-width floor decides whether the grid samples the profile at all,
-    which is a *local* question: the MILES SSP grid runs 0.9 Å inside
-    3500–7500 Å and 10 Å at Lyα, so any global statistic answers it wrongly.
+    Both facts come from the same bracketing interval, and both are needed on
+    every render (#1836): the spacing floors the profile width — a *local*
+    question, since the MILES SSP grid runs 0.9 Å inside 3500–7500 Å and 10 Å at
+    Lyα, so a global statistic answers it wrongly — and the nearest node is where
+    a line the grid cannot resolve gets placed.
+
+    Returned together because they share the search, not because the search is
+    expensive — measured, it is not: an ablation on an isolated (6185, 128) block
+    put the whole of ``searchsorted`` + containment mask + scatter at **768**
+    gradient FLOPs against 38,006,660 for the render. What costs is the discrete
+    area itself (``quad_w @ profiles``, +41 % over the un-rescaled form), and
+    that is the fix, not an accident of how it is written. Do not go looking for
+    savings here; an earlier draft of this docstring blamed a second
+    ``searchsorted`` call and the ablation refuted it.
 
     Parameters
     ----------
@@ -76,19 +87,22 @@ def _local_grid_spacing(
 
     Returns
     -------
-    ndarray, shape (n_lines,)
+    spacing : ndarray, shape (n_lines,)
         Width of the grid interval containing each line. [Å]
+    nearest : ndarray, shape (n_lines,)
+        Index of the closest grid node.
 
     Notes
     -----
     **JIT-compatible**: yes — ``searchsorted`` accepts traced operands.
     """
-    idx = jnp.clip(
-        jnp.searchsorted(obs_wavelengths, line_wavelengths),
-        1,
-        obs_wavelengths.shape[0] - 1,
+    hi = jnp.clip(
+        jnp.searchsorted(obs_wavelengths, line_wavelengths), 1, obs_wavelengths.shape[0] - 1
     )
-    return obs_wavelengths[idx] - obs_wavelengths[idx - 1]
+    lo = hi - 1
+    left, right = obs_wavelengths[lo], obs_wavelengths[hi]
+    nearest = jnp.where((line_wavelengths - left) <= (right - line_wavelengths), lo, hi)
+    return right - left, nearest
 
 
 def _render_conserving(
@@ -96,6 +110,8 @@ def _render_conserving(
     obs_wavelengths: jnp.ndarray,
     line_wavelengths: jnp.ndarray,
     line_luminosities: jnp.ndarray,
+    support_half_width: jnp.ndarray,
+    nearest: jnp.ndarray,
 ) -> jnp.ndarray:
     r"""Sum analytically-normalized line profiles, conserving flux exactly (#1836).
 
@@ -123,12 +139,18 @@ def _render_conserving(
         Line centers. [Å]
     line_luminosities : ndarray, shape (n_lines,)
         Integrated line luminosities. [erg/s] or [erg/s/Msun]
+    support_half_width : ndarray, shape (n_lines,)
+        Half-width beyond which each profile is negligible — exact for the
+        compact-support triweight, a 4-sigma convention for the Gaussian. Used
+        only to decide containment, never to shape the profile. [Å]
 
     Returns
     -------
     ndarray, shape (n_wave,)
-        Spectral luminosity density with ``|∫ sed dν| == sum(line_luminosities)``
-        to rounding. [erg/s/Hz] or [erg/s/Hz/Msun]
+        Spectral luminosity density. For lines the grid fully contains,
+        ``|∫ sed dν| == sum(line_luminosities)`` to rounding; a line straddling
+        the grid edge keeps only the fraction that falls in range.
+        [erg/s/Hz] or [erg/s/Hz/Msun]
 
     Notes
     -----
@@ -137,23 +159,33 @@ def _render_conserving(
     """
     quad_w = _nu_quadrature_weights(obs_wavelengths)  # (n_wave,) [Hz]
     area = quad_w @ profiles  # (n_lines,)
-    representable = area > 0.0
-    scaled = profiles / jnp.where(representable, area, 1.0)[None, :]
-    sed = scaled @ jnp.where(representable, line_luminosities, 0.0)
 
-    # Nearest-pixel placement for the lines the grid could not represent.
-    # ``L / quad_w`` is the density whose trapezoid integral is exactly ``L``,
-    # so this conserves flux by the same rule the rescale above uses.
+    # Rescale ONLY the profiles the grid fully contains. The rescale corrects
+    # *quadrature* error — too few nodes under the profile — and a truncated
+    # profile is a different thing that must not be corrected: a line near or
+    # past the grid edge legitimately contributes only the part that lands in
+    # range. Dividing its visible sliver by that sliver's own area would inflate
+    # it to carry the line's entire luminosity, inventing flux at the boundary.
+    # Measured when this guard was missing: [NII] 6583 A, outside a
+    # 6550-6580 A grid, had its in-grid tail boosted until it out-peaked Halpha
+    # and the rendered Halpha FWHM read 0.84 A instead of 4.71 A.
     #
-    # Restricted to lines that are actually *inside* the grid. A line outside it
-    # also has zero area, but it must stay at zero — dragging it to the nearest
-    # node would invent flux at the grid edge, which is a worse failure than the
-    # one being fixed (it is how #1673 put emission where there was none).
-    in_range = (line_wavelengths >= obs_wavelengths[0]) & (line_wavelengths <= obs_wavelengths[-1])
-    nearest = jnp.argmin(
-        jnp.abs(obs_wavelengths[:, None] - line_wavelengths[None, :]), axis=0
-    )  # (n_lines,)
-    dropped = jnp.where(representable | ~in_range, 0.0, line_luminosities)
+    # Containment is exact for the compact-support triweight and a 4-sigma
+    # convention for the Gaussian; ``support_half_width`` carries whichever.
+    contained = (line_wavelengths - support_half_width >= obs_wavelengths[0]) & (
+        line_wavelengths + support_half_width <= obs_wavelengths[-1]
+    )
+    rescale = contained & (area > 0.0)
+    scaled = profiles / jnp.where(rescale, area, 1.0)[None, :]
+    sed = scaled @ line_luminosities
+
+    # Nearest-pixel placement for a contained line the grid still could not
+    # represent: a sub-pixel profile centered between two nodes puts both at
+    # |u| = 1, where the triweight is exactly zero. ``L / quad_w`` is the
+    # density whose trapezoid integral is exactly ``L``, so this conserves flux
+    # by the same rule the rescale uses. Its ``scaled`` column is all-zero, so
+    # there is nothing to double-count.
+    dropped = jnp.where(contained & (area <= 0.0), line_luminosities, 0.0)
     return sed.at[nearest].add(dropped / quad_w[nearest])
 
 
@@ -262,10 +294,8 @@ def place_line_profiles(
         # between nodes, for the same reason the triweight path does (#1836):
         # a 2 Å Gaussian on the 3100 Å-spaced far-IR section of the MILES grid
         # renders as all zeros, and the line is lost outright.
-        sigma_eff = jnp.maximum(
-            jnp.asarray(line_sigma_aa),
-            0.5 * _local_grid_spacing(obs_wavelengths, line_wavelengths),
-        )  # (n_lines,) [Å]
+        dwave_local, nearest = _grid_bracket(obs_wavelengths, line_wavelengths)
+        sigma_eff = jnp.maximum(jnp.asarray(line_sigma_aa), 0.5 * dwave_local)  # (n_lines,) [Å]
         sigma_nu = sigma_eff * 1e-8 * _C_CGS / (line_wavelengths * 1e-8) ** 2  # (n_lines,)
         dwave = obs_wavelengths[:, None] - line_wavelengths[None, :]  # (n_wave, n_lines)
         profiles = jnp.exp(-0.5 * (dwave / sigma_eff[None, :]) ** 2)
@@ -274,14 +304,23 @@ def place_line_profiles(
         # flux and differ only in profile shape (#1836). Unrescaled, this mode
         # recovered 1.5711x of the true total at sigma=2 Å, and lost the far-IR
         # lines outright where a 2 Å Gaussian underflowed on a 3100 Å grid.
-        sed = _render_conserving(profiles, obs_wavelengths, line_wavelengths, line_luminosities)
+        # 4 sigma: the Gaussian has no compact support, so containment is a
+        # convention. Beyond 4 sigma it carries 6e-5 of its area.
+        sed = _render_conserving(
+            profiles,
+            obs_wavelengths,
+            line_wavelengths,
+            line_luminosities,
+            4.0 * sigma_eff,
+            nearest,
+        )
     else:
         # Vectorized delta functions: nearest-pixel placement via scatter-add.
-        # (n_wave, n_lines) distance matrix → argmin per line
-        indices = jnp.argmin(
-            jnp.abs(obs_wavelengths[:, None] - line_wavelengths[None, :]), axis=0
+        # Via searchsorted, not an (n_wave, n_lines) argmin — see
+        # :func:`_grid_bracket` for why that matrix is worth avoiding.
+        indices = jnp.clip(
+            _grid_bracket(obs_wavelengths, line_wavelengths)[1], 1, n_wave - 2
         )  # (n_lines,)
-        indices = jnp.clip(indices, 1, n_wave - 2)
         # Divide by the SAME quadrature weight the caller will integrate with,
         # rather than a separately-derived Δν, so ``sum(w*sed) == sum(L)`` to
         # rounding instead of to the ~1e-4 the two spellings used to differ by
@@ -376,11 +415,11 @@ def place_line_profiles_velocity(
     # which is what makes the discrete renormalization below well-posed.
     # ``obs_wavelengths.shape`` is static, so the size guard is JIT-safe.
     if obs_wavelengths.shape[0] > 1:
-        h = jnp.maximum(
-            h_raw, 0.5 * _local_grid_spacing(obs_wavelengths, line_wavelengths)
-        )  # (n_lines,) [Å]
+        dwave_local, nearest = _grid_bracket(obs_wavelengths, line_wavelengths)
+        h = jnp.maximum(h_raw, 0.5 * dwave_local)  # (n_lines,) [Å]
     else:
         h = jnp.maximum(h_raw, line_wavelengths * 1e-6)  # degenerate grid: tiny floor
+        nearest = jnp.zeros(line_wavelengths.shape, dtype=jnp.int32)
     u = (obs_wavelengths[:, None] - line_wavelengths[None, :]) / h[None, :]
     kernel = jnp.where(jnp.abs(u) < 1.0, (35.0 / 32.0) * (1.0 - u**2) ** 3, 0.0)
     # Unit area in λ is K(u)/h; the λ²/c Jacobian converts to unit area in ν.
@@ -391,7 +430,9 @@ def place_line_profiles_velocity(
     # exact (#1836). Before this, recovered flux ran from 0.0026x (line silently
     # lost) to 3.04x (Lyα), and it was a function of ``line_sigma_kms``, so
     # fitting a width was partly fitting a flux.
-    return _render_conserving(profiles, obs_wavelengths, line_wavelengths, line_luminosities)
+    return _render_conserving(
+        profiles, obs_wavelengths, line_wavelengths, line_luminosities, h, nearest
+    )
 
 
 def render_nebular_lines(
