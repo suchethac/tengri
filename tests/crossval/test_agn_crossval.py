@@ -180,10 +180,44 @@ class TestMulticolorDiscPeak:
 
 
 class TestBLRBalmerDecrement:
-    """Verify BLR Halpha/Hbeta ~ 2.86 (Vanden Berk+2001 calibrated)."""
+    """The BLR Balmer decrement is Vanden Berk+2001's, not Case B's."""
+
+    #: Vanden Berk et al. 2001, AJ 122, 549, Table 2 ("Composite Quasar Emission
+    #: Line Features"), ``Rel. Flux`` column (100 x F/F_Lya). Read off the paper
+    #: itself, not off a secondary source:
+    #:
+    #:     Halpha  lab 6564.61 A   30.832 +/- 0.098
+    #:     Hbeta   lab 4862.68 A    8.649 +/- 0.030
+    VB01_HALPHA_REL_FLUX = 30.832
+    VB01_HBETA_REL_FLUX = 8.649
+
+    #: 1 sigma on the ratio, propagated from the two quoted errors:
+    #: sqrt((0.098/30.832)^2 + (0.030/8.649)^2) = 0.47%. The tolerance is the
+    #: paper's own precision, so a template that agrees with VB01 as well as
+    #: VB01 knows its own numbers passes, and nothing tighter is meaningful.
+    VB01_RATIO_RTOL = 0.005
 
     def test_halpha_hbeta_ratio(self):
-        """Ratio of line strengths should match Vanden Berk+2001."""
+        """The template reproduces VB01's measured flux ratio, not Case B.
+
+        This test used to assert 2.86 -- Case B recombination -- against a
+        comment reading "Vanden Berk+2001: Ha/Hb ~ 1.43/0.50 = 2.86". Neither
+        1.43 nor 0.50 is a Balmer entry anywhere in VB01 Table 2; the quotient
+        was reverse-engineered to land on the Case B value. The measured ratio
+        is 30.832/8.649 = 3.565, so the assertion failed by 20%.
+
+        Case B is the wrong physics for this component. It describes a
+        low-density, optically-thin nebula, where every Balmer photon escapes
+        after one emission. The BLR is neither: at n_e ~ 1e9-1e11 cm^-3 it is
+        optically thick in the Balmer lines, so Hbeta is preferentially
+        destroyed and re-radiated and collisional excitation adds to Halpha.
+        Both push the decrement above 2.86, which is why observed quasar
+        decrements cluster near 3-3.5 and why VB01's composite reads 3.565.
+
+        The template is right and the target was wrong -- the opposite of the
+        conclusion #1752 reached when a published ratio disagreed with an
+        atomic-physics argument, and the published data got "corrected".
+        """
         from tengri.components.agn.blr import _BLR_LINES
 
         lines = np.array(_BLR_LINES)
@@ -198,13 +232,37 @@ class TestBLRBalmerDecrement:
         hb_strength = float(lines[hb_mask, 1][0])
         ratio = ha_strength / hb_strength
 
-        # Vanden Berk+2001: Ha/Hb ~ 1.43/0.50 = 2.86
-        # This is close to Case B recombination (2.86 at T=10^4 K)
+        expected = self.VB01_HALPHA_REL_FLUX / self.VB01_HBETA_REL_FLUX
         np.testing.assert_allclose(
             ratio,
-            2.86,
-            rtol=0.05,
-            err_msg="BLR Ha/Hb ratio deviates from Case B recombination value",
+            expected,
+            rtol=self.VB01_RATIO_RTOL,
+            err_msg=(
+                "BLR Ha/Hb departs from the Vanden Berk+2001 composite by more "
+                "than the paper's own 1 sigma. The template is normalized to "
+                "Hbeta = 1 by dividing VB01's Rel. Flux column by 8.649, so "
+                "this ratio is that column's quotient and nothing else."
+            ),
+        )
+
+    def test_equivalent_width_ratio_is_not_the_flux_ratio(self):
+        """Guard the confusion that produced the fabricated 1.43/0.50.
+
+        VB01 Table 2 reports both a ``Rel. Flux`` and an equivalent width ``W``
+        per feature, and they give different Balmer decrements: 3.565 in flux,
+        194.52/46.21 = 4.209 in EW, because Halpha sits on a fainter continuum
+        than Hbeta. The template stores *flux* ratios, so quoting an EW ratio
+        beside it -- as a neighboring test's docstring did with "~260/46" --
+        compares two different quantities.
+        """
+        ew_ratio = 194.52 / 46.21
+        flux_ratio = self.VB01_HALPHA_REL_FLUX / self.VB01_HBETA_REL_FLUX
+        assert not np.isclose(ew_ratio, flux_ratio, rtol=0.1), (
+            "EW and flux decrements must stay distinguishable in this test"
+        )
+        assert ew_ratio > flux_ratio > 2.86, (
+            "VB01 orders these as Case B < flux < EW; if that changed, the "
+            "numbers above were mistranscribed"
         )
 
     def test_blr_emission_produces_flux(self):
