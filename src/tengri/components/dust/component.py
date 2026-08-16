@@ -162,6 +162,12 @@ class DustAttenuationSEDComponent(TemplateThreading):
                 "exp(-tau_v * k(lambda)) on pipeline wave grid",
             ),
             DerivedKey("sed_dust_attenuated", "erg/s/Hz", "Attenuated stellar SED"),
+            DerivedKey(
+                "line_lums_attenuated",
+                "erg/s",
+                "Discrete line catalog after this screen; absent when no "
+                "photoionized backend published one (#1867)",
+            ),
         )
 
     def optional_inputs(self) -> tuple[DerivedKey, ...]:
@@ -179,14 +185,31 @@ class DustAttenuationSEDComponent(TemplateThreading):
 
         BakedIn backends publish ``sed_nebular`` as zeros (emission is
         already in the SSP grid), so this is a no-op there. The screen does
-        not read the key directly — it acts on the already-summed
-        ``sed_intrinsic`` — so this is purely an ordering edge.
+        not read that key directly — it acts on the already-summed
+        ``sed_intrinsic`` — so it is purely an ordering edge.
+
+        ``line_waves`` / ``line_lums`` ARE read directly: :meth:`apply`
+        reddens the discrete catalog and publishes ``line_lums_attenuated``
+        (#1867). The ``sed_nebular`` edge already sequences nebular first, so
+        declaring them adds no new constraint — they are declared because
+        ADR-0009 says a component states what it reads. An undeclared read
+        works until someone reorders the pipeline, and then fails silently.
         """
         return (
             DerivedKey(
                 "sed_nebular",
                 "erg/s/Hz",
                 "Nebular continuum folded into sed_intrinsic before the screen",
+            ),
+            DerivedKey(
+                "line_waves",
+                "Angstrom",
+                "Discrete nebular line wavelengths (Cue/CloudyGrid); absent for BakedIn",
+            ),
+            DerivedKey(
+                "line_lums",
+                "erg/s",
+                "INTRINSIC discrete line luminosities to redden (#1867); absent for BakedIn",
             ),
         )
 
