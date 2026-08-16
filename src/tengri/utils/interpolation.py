@@ -12,7 +12,7 @@ and should not be replaced.
 References
 ----------
 
-- Hearin et al. 2023, Open J. Astrophysics, 6, 1 (DSPS)
+- Hearin et al. 2023, MNRAS, 521, 1741 (DSPS)
 
 """
 
@@ -252,9 +252,9 @@ def compute_grid_window(
 
     References
     ----------
-    .. [1] Hearin, A. P., Chaves-Montero, J., Becker, M. R., Alarcon, A. 2023,
-       "DSPS: Differentiable stellar population synthesis", The Open Journal of
-       Astrophysics, 6, 1. arXiv:2112.06830. DOI: 10.21105/astro.2112.06830
+    .. [1] Hearin, A. P., Chaves-Montero, J., Alarcon, A., Becker, M. R.,
+       Benson, A. 2023, "DSPS: Differentiable stellar population synthesis",
+       MNRAS, 521, 1741. arXiv:2112.06830. DOI: 10.1093/mnras/stad456
 
     Examples
     --------
