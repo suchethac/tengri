@@ -187,7 +187,7 @@ def precompute(
         edges=tuple(edges_for_grid(np.asarray(ax)) for ax in axes_np),
         effective_wavelengths=jnp.zeros(n_filt),
         effective_wavelengths_rest=jnp.zeros(n_filt),
-        flux_scale=1.0,
+        log10_flux_scale=0.0,  # unit scale; the caller applies the cosmology
         n_filters=n_filt,
     )
 
