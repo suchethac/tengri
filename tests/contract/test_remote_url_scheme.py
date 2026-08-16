@@ -3,7 +3,7 @@
 
 ``urllib.request.urlopen`` accepts ``file://``, and on most builds ``ftp://``
 and other handlers too, so a download helper that forwards an unchecked string
-doubles as a local-file reader: a catalogue entry naming
+doubles as a local-file reader: a catalog entry naming
 ``file:///etc/passwd`` would be opened and written to the destination path as
 though it had been fetched over the network.
 
@@ -49,7 +49,7 @@ def test_http_urls_pass_through_unchanged(url):
 def test_the_error_names_the_offending_url():
     """The message has to identify which URL was refused.
 
-    A download helper may be called in a loop over a catalogue; "refused a
+    A download helper may be called in a loop over a catalog; "refused a
     URL" without saying which one leaves the caller to guess.
     """
     with pytest.raises(ValueError, match=r"grid\.h5"):

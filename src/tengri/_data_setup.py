@@ -740,7 +740,7 @@ def require_remote_url(url: str) -> str:
     ``urllib.request.urlopen`` accepts ``file://``, and on most builds
     ``ftp://`` and other handlers too. A download helper that forwards an
     unchecked string therefore doubles as a local-file reader: a config or
-    catalogue entry naming ``file:///etc/passwd`` gets opened and written to
+    catalog entry naming ``file:///etc/passwd`` gets opened and written to
     the destination path as though it had been fetched.
 
     Every URL tengri fetches is an https one from the public data mirror, so
