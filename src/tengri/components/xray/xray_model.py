@@ -104,9 +104,19 @@ class XRayAirdSEDComponent(SEDModelComponent):
     -----
     **JIT-compatible**: yes.
 
-    **Optional inputs**: reads sfr, log_mstar, log_metallicity_history,
-    stellar_age_gyr, L_2500_30deg with sensible defaults. Component gracefully
-    handles missing AGN/stellar inputs and defaults to XRB + hot gas only.
+    **Optional inputs**: reads ``log_metallicity_history``, the only
+    cross-component key this class declares.
+
+    ``predict`` also *looks up* ``sfr``, ``log_mstar``, ``stellar_age_gyr`` and
+    ``L_2500_30deg``, but none of them is declared, and the base ``apply``
+    builds its keyword arguments purely from the declared sets — so all four
+    take their literal fallbacks on every call regardless of what the rest of
+    the model computed, and the corona term is identically zero. That is a live
+    defect, tracked separately, not a description of intended behaviour; the
+    prose here used to claim the reads happen, which is how #1755 survived as
+    long as it did. Prefer the default ``yang20``
+    (:class:`tengri.components.xray.component.XRaySEDComponent`), which wires
+    all of them.
 
     **Models**:
 
@@ -244,12 +254,17 @@ class XRayAirdSEDComponent(SEDModelComponent):
         **inputs : ndarray
             Opportunistic cross-component reads:
 
-            - sfr [Msun/yr] (default: 1.0)
-            - log_mstar [log10(Msun)] (default: 10.0)
-            - log_metallicity_history [dex, absolute log10(Z)] — present-day
-              bin drives the HMXB term (default: Z_SUN = 0.0142)
-            - stellar_age_gyr [Gyr] (default: 1.0)
-            - L_2500_30deg [erg/s/Hz] (default: 0.0 = no AGN)
+            - log_metallicity_history [dex, absolute log10(Z)] — declared, so
+              genuinely read when stellar publishes it; its present-day bin
+              drives the HMXB term (absent: Z_SUN = 0.0142)
+
+            The four below are looked up but **not declared**, so they are
+            always the value in brackets — see the class docstring:
+
+            - sfr [Msun/yr] — always 1.0
+            - log_mstar [log10(Msun)] — always 10.0
+            - stellar_age_gyr [Gyr] — always 1.0
+            - L_2500_30deg [erg/s/Hz] — always 0.0, i.e. no AGN corona
 
         Returns
         -------
