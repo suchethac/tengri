@@ -80,6 +80,7 @@ from tengri import (
     plot,
     recipes,
 )
+from tengri.utils.physics_constants import C_AA, L_SUN
 
 plot.setup_style()
 
@@ -185,7 +186,7 @@ params = model.spec.sample(jax.random.PRNGKey(0))
 state = model.predict_state(params)
 
 wave_rest = np.asarray(state.wave)  # Å
-nu = 2.998e18 / wave_rest  # Hz
+nu = C_AA / wave_rest  # Hz
 total = np.asarray(state.sed_intrinsic)  # erg/s/Hz, post-dust-attenuation + emission
 
 
@@ -315,7 +316,7 @@ for label, sfh_dict, color in [
     m = SEDModel.build(ssp_data=ssp, observation=obs, **cfg)
     p = m.spec.sample(jax.random.PRNGKey(0))
     w, sed = predict_rest(m, p)
-    ax.plot(w / 1e4, 2.998e18 / w * sed, label=label, color=color, lw=1.3)
+    ax.plot(w / 1e4, C_AA / w * sed, label=label, color=color, lw=1.3)
 ax.set_xscale("log")
 ax.set_yscale("log")
 ax.set_xlim(0.05, 30)
@@ -334,7 +335,7 @@ for tau, col in zip(tau_grid, cmap(np.linspace(0.15, 0.85, len(tau_grid)))):
     m = SEDModel.build(ssp_data=ssp, observation=obs, **cfg)
     p = m.spec.sample(jax.random.PRNGKey(0))
     w, sed = predict_rest(m, p)
-    ax.plot(w / 1e4, 2.998e18 / w * sed, color=col, lw=1.2, label=rf"$\tau_{{\rm BC}}={tau:g}$")
+    ax.plot(w / 1e4, C_AA / w * sed, color=col, lw=1.2, label=rf"$\tau_{{\rm BC}}={tau:g}$")
 ax.set_xscale("log")
 ax.set_yscale("log")
 ax.set_xlim(0.05, 30)
@@ -362,7 +363,7 @@ for log_lbol, col in zip(log_lbol_grid, cmap(np.linspace(0.15, 0.85, len(log_lbo
     p = m.spec.sample(jax.random.PRNGKey(0))
     w, sed = predict_rest(m, p)
     ax.plot(
-        w / 1e4, 2.998e18 / w * sed, color=col, lw=1.2, label=rf"$\log L_{{\rm AGN}}={log_lbol:g}$"
+        w / 1e4, C_AA / w * sed, color=col, lw=1.2, label=rf"$\log L_{{\rm AGN}}={log_lbol:g}$"
     )
     del m
 ax.set_xscale("log")
@@ -384,7 +385,7 @@ for z, col in zip(z_grid, cmap(np.linspace(0.15, 0.85, len(z_grid)))):
     m = SEDModel.build(ssp_data=ssp, observation=obs, **cfg)
     p = m.spec.sample(jax.random.PRNGKey(0))
     w, sed = predict_rest(m, p)
-    ax.plot(w * (1 + z) / 1e4, 2.998e18 / w * sed, color=col, lw=1.2, label=rf"$z={z:g}$")
+    ax.plot(w * (1 + z) / 1e4, C_AA / w * sed, color=col, lw=1.2, label=rf"$z={z:g}$")
 ax.set_xscale("log")
 ax.set_yscale("log")
 ax.set_xlim(0.05, 30)
@@ -433,9 +434,7 @@ print(model_edited.summary())
 # punch straight through.
 
 # %%
-L_SUN = 3.828e33  # erg/s — IAU 2015 nominal solar luminosity
-C_AA = 2.998e18  # Å/s
-C_UM = 2.998e14  # speed of light in [µm Hz], for the λ → ν twin axis
+C_UM = C_AA / 1e4  # speed of light in [µm Hz], for the λ → ν twin axis
 
 money_shot = dict(
     # tau ≈ cosmic age at z = 0.1 puts the DPL on its rising shoulder, so
