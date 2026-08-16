@@ -53,7 +53,7 @@ def test_parameters_accepts_grahsp_params():
     """Parameters(agn_model='grahsp', ...) must accept all 18 GRAHSP params."""
     p = Parameters(
         agn_model="grahsp",
-        agn_log_lbol=Uniform(43.0, 48.0),
+        agn_log_lbol=Uniform(9.42, 14.42),
         agn_grahsp_l5100=LogUniform(1.0e42, 1.0e47),
         agn_grahsp_plslope=Uniform(-2.5, -1.0),
         agn_grahsp_uvslope=Fixed(0.0),

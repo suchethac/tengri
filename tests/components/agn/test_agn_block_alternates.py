@@ -294,7 +294,7 @@ def test_parameters_clean_composable_recipe_constructs():
         agn_disc_block="multicolor",
         agn_torus_block="skirtor",
         agn_attenuation_block="none",
-        agn_log_lbol=Uniform(43, 47),
+        agn_log_lbol=Uniform(9.42, 13.42),
         agn_log_mbh=Fixed(8.0),
         agn_log_ledd=Fixed(-1.0),
         agn_tau_skirtor=Fixed(7.0),

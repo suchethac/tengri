@@ -403,7 +403,7 @@ class TestParameterMirroringPhysics:
             sfh_dpl_alpha=Uniform(0.1, 5.0),
             sfh_dpl_beta=Uniform(0.1, 3.0),
             sfh_dpl_tau_gyr=Uniform(0.1, 12.0),
-            sfh_dpl_log_total_mass=Uniform(-1.0, 3.0),
+            sfh_dpl_log_total_mass=Uniform(7.0, 12.5),
             dust_tau_diff="sfh_dpl_log_total_mass",
         )
 
@@ -430,7 +430,7 @@ class TestParameterMirroringPhysics:
             sfh_dpl_alpha=Uniform(0.1, 5.0),
             sfh_dpl_beta=Uniform(0.1, 3.0),
             sfh_dpl_tau_gyr=Uniform(0.1, 12.0),
-            sfh_dpl_log_total_mass=Uniform(-1.0, 3.0),
+            sfh_dpl_log_total_mass=Uniform(7.0, 12.5),
             dust_tau_diff=Uniform(0.0, 3.0),
         )
         spec_mirror = Parameters(
@@ -439,7 +439,7 @@ class TestParameterMirroringPhysics:
             sfh_dpl_alpha=Uniform(0.1, 5.0),
             sfh_dpl_beta=Uniform(0.1, 3.0),
             sfh_dpl_tau_gyr=Uniform(0.1, 12.0),
-            sfh_dpl_log_total_mass=Uniform(-1.0, 3.0),
+            sfh_dpl_log_total_mass=Uniform(7.0, 12.5),
             dust_tau_diff="sfh_dpl_log_total_mass",
         )
 

@@ -163,7 +163,7 @@ class TestSummaryRendering:
         """Flat-kwarg specs render the existing summary without a Source column."""
         spec = Parameters(
             mean_sfh_type="dpl",
-            sfh_dpl_log_total_mass=Uniform(-1, 2),
+            sfh_dpl_log_total_mass=Uniform(7.0, 12.5),
             sfh_dpl_alpha=Uniform(0.5, 3),
             redshift=Fixed(0.1),
         )

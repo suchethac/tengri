@@ -120,7 +120,7 @@ def run_sfh_test(sfh_name: str, spec: Parameters, true_params: dict) -> bool:
 # Test 1: exp (single exponential — fully analytic, no matrix solve)
 # ---------------------------------------------------------------------------
 spec_exp = Parameters(
-    sfh_tsnorm_log_total_mass=Uniform(-1, 3),
+    sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
     sfh_exp_tau_gyr=Uniform(0.5, 8.0),
     met_logzsol=Uniform(-2.0, 0.2),
     dust_tau_bc=Uniform(0.0, 2.0),
@@ -145,7 +145,7 @@ ok_exp = run_sfh_test("exp (single exponential)", spec_exp, true_exp)
 # Test 2: dpl (double power-law — fully analytic, no matrix solve)
 # ---------------------------------------------------------------------------
 spec_dpl = Parameters(
-    sfh_tsnorm_log_total_mass=Uniform(-1, 3),
+    sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
     sfh_dpl_alpha=Uniform(0.5, 5.0),
     sfh_dpl_beta=Uniform(0.5, 5.0),
     sfh_dpl_tau_gyr=Uniform(0.1, 5.0),
