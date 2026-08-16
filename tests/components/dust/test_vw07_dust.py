@@ -14,7 +14,6 @@ import chex
 import pytest
 
 pytestmark = pytest.mark.bounds
-import jax
 import jax.numpy as jnp
 from numpy.testing import assert_allclose
 
@@ -25,8 +24,8 @@ from tengri.components.dust.attenuation import (
     vw07_bc,
     vw07_diff,
 )
-
-jax.config.update("jax_enable_x64", True)
+from tests._bounds import assert_non_negative
+from tests._jit_parity import assert_jit_matches_eager
 
 
 @pytest.fixture
@@ -100,7 +99,7 @@ class TestTwoComponentIntegration:
         )
         chex.assert_shape(trans, (6, 200))
         chex.assert_tree_all_finite(trans)
-        assert jnp.all(trans >= 0.0)
+        assert_non_negative(trans, name="trans")
         assert jnp.all(trans <= 1.0)
 
     def test_young_stars_more_attenuated(self):
@@ -120,13 +119,11 @@ class TestTwoComponentIntegration:
 
 class TestJITAndGradients:
     def test_jit_vw07_bc(self, wavelengths):
-        jit_fn = jax.jit(vw07_bc)
-        k = jit_fn(wavelengths)
+        k = assert_jit_matches_eager(vw07_bc, wavelengths)
         chex.assert_tree_all_finite(k)
 
     def test_jit_vw07_diff(self, wavelengths):
-        jit_fn = jax.jit(vw07_diff)
-        k = jit_fn(wavelengths)
+        k = assert_jit_matches_eager(vw07_diff, wavelengths)
         chex.assert_tree_all_finite(k)
 
     def test_extra_kwargs_ignored(self, wavelengths):

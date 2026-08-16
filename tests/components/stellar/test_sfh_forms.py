@@ -10,6 +10,8 @@ import chex
 import numpy as np
 import pytest
 
+from tests._bounds import assert_non_negative
+
 pytestmark = pytest.mark.bounds
 
 
@@ -80,7 +82,7 @@ class TestSFHForms:
         sfr = np.array(sfh["sfr_mean"])
         t = np.array(sfh["t_gyr"])
         chex.assert_equal_shape([sfr, t])
-        assert np.all(sfr >= 0.0), f"{sfh_type}: negative SFR"
+        assert_non_negative(sfr, name="sfr", msg=f"{sfh_type}: negative SFR")
         chex.assert_tree_all_finite(sfr)
         dt_yr = np.abs(np.diff(t)) * 1e9
         mass = float(np.sum(sfr[:-1] * dt_yr))

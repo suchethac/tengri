@@ -411,12 +411,26 @@ for width in (64, 256, MAX_WIDTH):
     print(f"{width:7d}{now:10.2f}{marginal:21.2f}{1e3 * dt / width:11.3f}")
     prev_w, prev_rss = width, now
 
+
 # Peak RSS is a high-water mark, so a width that fits inside memory the process
-# has already claimed reports no growth at all. The slope has to come from the
-# widths that actually push the mark up; the largest is the usable estimate.
-mb_per_galaxy = marginals[-1] if marginals else float("nan")
-print(f"\n  -> {mb_per_galaxy:.2f} MB/galaxy on this configuration")
-print("     (a 0.00 row means that width fit under memory already claimed)")
+# has already claimed reports no growth at all — and on a loaded machine every
+# width can, which leaves nothing to take a slope from. Ask the compiled program
+# instead: XLA reports the scratch it will allocate, exactly, and that number
+# does not move when the machine is busy.
+def scratch_mb_per_galaxy(fn, columns, k=64):
+    """Scratch memory one vmapped galaxy costs [MB], from the executable."""
+    batch = {key: v[:k] for key, v in columns.items()}
+    exe = fn.lower(batch).compile()
+    return exe.memory_analysis().temp_size_in_bytes / k / 1024**2
+
+
+mb_per_galaxy = scratch_mb_per_galaxy(f_jitvmap, wide_cols)
+print(f"\n  -> {mb_per_galaxy:.3f} MB/galaxy   (memory_analysis, exact)")
+if marginals:
+    print(f"     RSS-derived estimate, for comparison: {marginals[-1]:.2f} MB/galaxy")
+else:
+    print("     RSS showed no growth at any width — it all fit under memory the")
+    print("     process had already claimed. That is why the exact number wins.")
 for budget in (2, 8, 32):
     print(
         f"     {budget:2d} GB of headroom  ->  batch up to ~{int(1024 * budget / mb_per_galaxy):,}"
@@ -590,6 +604,24 @@ for n in (256, 1024, 4096):
 # memory on the laptop this was written on. If a run dies with no Python
 # traceback, turn it down first.
 #
+# "Turn it down first" is unsatisfying advice when section 4 already computed
+# the ceiling exactly: `scratch_mb_per_galaxy` reads it off the compiled
+# program, so you can pick a chunk from your memory budget instead of bisecting
+# until something dies.
+#
+# **What that ceiling deliberately does not tell you is where throughput peaks.**
+# Measured on a quiet machine, per-galaxy wall clock here falls to about
+# 180 microseconds at *N* = 1024 and then rises again at 4096. Measured while
+# three other test suites were running on the same laptop, the same sweep put
+# the optimum somewhere else entirely and disagreed with itself between
+# repeats — while the per-galaxy *work* stayed flat to 0.3 % across the whole
+# range (1.917 to 1.923 MFLOP/galaxy from *N* = 256 to 8192). The work is a
+# property of your model; the optimum is a property of your machine on the day.
+#
+# So: size the batch from `memory_analysis`, confirm the work is flat with
+# `cost_analysis`, and only then tune wall clock — with the A/A control from
+# section 5d, on a machine you are not sharing.
+#
 # ### 5d. `float32`
 #
 # The last lever is precision, and it is the one whose payoff is most often
@@ -603,6 +635,18 @@ for n in (256, 1024, 4096):
 # The switch is global, and it only affects arrays created after it — so it has
 # to come **before** the build. A model built under float64 keeps its float64
 # tables no matter what you set afterwards.
+#
+# There are two routes to it, and until recently only one of them worked.
+# `JAX_ENABLE_X64=0` in the environment — the documented JAX way — was silently
+# discarded by `import tengri`, so a float32 run started that way quietly ran in
+# float64 and reported float32 as healthy. That is fixed: the variable is now
+# honored, and choosing float32 warns once, naming the `d_L^2` hazard above. In
+# a notebook, where the import has already happened, the route is still the
+# `jax.config.update` below.
+#
+# Either way, **check the dtype you got rather than the dtype you asked for** —
+# the cell prints it. A precision measurement that cannot fail is not a
+# measurement, and this one could fail silently for two years.
 #
 # Rebuilding then emits a `UserWarning` per table — *"Explicitly requested dtype
 # float64 ... will be truncated to float32"*. That is JAX reporting the thing you

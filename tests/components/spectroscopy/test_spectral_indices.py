@@ -12,7 +12,6 @@ import numpy as np
 import pytest
 
 pytestmark = pytest.mark.bounds
-jax.config.update("jax_enable_x64", True)
 
 from tengri.observation.photometry import FilterCurve
 from tengri.observation.photometry_config import Photometry
@@ -22,6 +21,7 @@ from tengri.observation.spectral_indices import (
     SpectralIndexDef,
     measure_index_jax,
 )
+from tests._grad_parity import assert_grad_matches_fd
 
 # ── Helpers ───────────────────────────────────────────────────────
 
@@ -177,7 +177,7 @@ class TestSpectralIndexData:
             values=[1.8],
             errors=[0.05],
         )
-        grad = jax.grad(sid.chi2)(jnp.array([1.9]))
+        grad = assert_grad_matches_fd(sid.chi2, jnp.array([1.9]))
         assert jnp.isfinite(grad).all()
         assert grad[0] != 0.0
 
@@ -207,7 +207,7 @@ class TestSpectralIndexData:
             values=[1.8],
             errors=[0.05],
         )
-        grad = jax.grad(sid.log_likelihood)(jnp.array([1.9]))
+        grad = assert_grad_matches_fd(sid.log_likelihood, jnp.array([1.9]))
         assert jnp.isfinite(grad).all()
 
 
@@ -289,7 +289,7 @@ class TestMeasureIndex:
             return measure_index_jax(wave, flux, dn4000)
 
         flux = jnp.ones(500)
-        grad = jax.grad(measure_fn)(flux)
+        grad = assert_grad_matches_fd(measure_fn, flux)
         assert jnp.isfinite(grad).all()
 
     def test_jit_compatible(self):
@@ -314,7 +314,7 @@ class TestMeasureIndex:
             return measure_index_jax(wave, flux, dn4000)
 
         flux = 1.0 + 0.1 * jnp.sin(wave / 50.0)
-        grad = jax.grad(measure_fn)(flux)
+        grad = assert_grad_matches_fd(measure_fn, flux)
         assert jnp.isfinite(grad).all()
         assert not jnp.all(grad == 0.0)
 
@@ -327,7 +327,7 @@ class TestMeasureIndex:
             return measure_index_jax(wave, flux, hda)
 
         flux = jnp.ones(500)
-        hess_diag = jax.grad(lambda f: jnp.sum(jax.grad(measure_fn)(f)))(flux)
+        hess_diag = assert_grad_matches_fd(lambda f: jnp.sum(jax.grad(measure_fn)(f)), flux)
         assert jnp.isfinite(hess_diag).all()
 
 

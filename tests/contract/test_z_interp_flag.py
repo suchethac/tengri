@@ -9,12 +9,9 @@ Covers only the wiring — the numerical correctness of
 
 from __future__ import annotations
 
-import jax
 import pytest
 
 pytestmark = pytest.mark.contract
-
-jax.config.update("jax_enable_x64", True)
 
 from tengri.forward.sed_model import SEDModel
 from tengri.parameters.parameters import Parameters

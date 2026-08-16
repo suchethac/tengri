@@ -19,8 +19,6 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-jax.config.update("jax_enable_x64", True)
-
 if jax.device_count() < 2:
     print("SKIP_NO_DEVICES")
     raise SystemExit(0)

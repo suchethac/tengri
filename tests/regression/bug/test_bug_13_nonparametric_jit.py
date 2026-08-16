@@ -5,11 +5,10 @@ See ADR / docs/known_bugs.md for full context.
 """
 
 import chex
-import jax
 import jax.numpy as jnp
 import pytest
 
-jax.config.update("jax_enable_x64", True)
+from tests._jit_parity import assert_jit_matches_eager
 
 pytestmark = pytest.mark.regression_bug
 
@@ -33,6 +32,5 @@ class TestBug13NonparametricJit:
         age_grid = jnp.linspace(0.01, 13.0, 100)
 
         # This should work but currently raises ConcretizationTypeError
-        jitted = jax.jit(continuity)
-        result = jitted(log_ratios, age_grid, bin_edges)
+        result = assert_jit_matches_eager(continuity, log_ratios, age_grid, bin_edges)
         chex.assert_tree_all_finite(result)

@@ -12,7 +12,6 @@ Runs on the synthetic wide SSP (no ``data/ssp_*.h5`` needed).
 
 from __future__ import annotations
 
-import jax
 import jax.numpy as jnp
 import pytest
 
@@ -28,8 +27,6 @@ from tengri import (
 )
 from tengri.observation.photometry import FilterCurve
 from tengri.observation.spectroscopy import Spectroscopy
-
-jax.config.update("jax_enable_x64", True)
 
 pytestmark = pytest.mark.contract
 

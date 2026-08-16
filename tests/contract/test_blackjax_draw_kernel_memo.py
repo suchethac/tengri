@@ -42,8 +42,6 @@ from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, Uniform
 from tengri.inference.fitter import Fitter
 from tengri.observation.photometry import FilterCurve
 
-jax.config.update("jax_enable_x64", True)
-
 pytestmark = pytest.mark.contract
 
 _CACHE = "_blackjax_draw_kernel_cache"

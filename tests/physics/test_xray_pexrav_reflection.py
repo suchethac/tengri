@@ -18,7 +18,6 @@ Verifies the Magdziarz & Zdziarski (1995) reflection approximation in
 from __future__ import annotations
 
 import chex
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -27,8 +26,7 @@ from tengri.components.xray.xray import (
     pexrav_reflection,
     xray_agn_corona,
 )
-
-jax.config.update("jax_enable_x64", True)
+from tests._grad_parity import assert_grad_matches_fd
 
 
 @pytest.mark.regression_paper
@@ -131,7 +129,7 @@ def test_dl_refl_dR_finite_and_positive() -> None:
     def total_L(R):
         return pexrav_reflection(wave, l_primary, R=R)[0]
 
-    grad = jax.grad(total_L)(jnp.array(0.5))
+    grad = assert_grad_matches_fd(total_L, jnp.array(0.5))
     assert jnp.isfinite(grad)
     assert float(grad) > 0.0
 

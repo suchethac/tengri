@@ -2,11 +2,8 @@
 """Tests for simulate.photometry_from_sfh filter handling."""
 
 import chex
-import jax
 import jax.numpy as jnp
 import pytest
-
-jax.config.update("jax_enable_x64", True)
 
 from tengri import load_filter_set
 from tengri.analysis.simulate import photometry_from_sfh, sed_from_sfh

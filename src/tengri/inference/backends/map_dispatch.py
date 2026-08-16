@@ -9,6 +9,7 @@ See ADR-0010.
 
 from __future__ import annotations
 
+import logging
 import time
 
 import jax
@@ -20,6 +21,8 @@ from tengri.inference._model_cache import _default_owner as _model_cache_owner
 from tengri.inference.context import InferenceContext
 from tengri.inference.likelihoods.gaussian import inv_noise_std
 
+logger = logging.getLogger(__name__)
+
 _OPTAX_OPTIMIZERS = {"adam", "adamw", "sgd"}
 _SCIPY_OPTIMIZERS = {"lbfgs", "lbfgs_scipy"}
 _ALL_OPTIMIZERS = _OPTAX_OPTIMIZERS | _SCIPY_OPTIMIZERS
@@ -27,6 +30,43 @@ _ALL_OPTIMIZERS = _OPTAX_OPTIMIZERS | _SCIPY_OPTIMIZERS
 # Short-form name aliases used in fitter and tests
 _JAXOPT_SOLVERS = _SCIPY_OPTIMIZERS
 _QUASI_NEWTON = _SCIPY_OPTIMIZERS
+
+
+def _publish_map_init_cache(context, posterior):
+    """Share an explicit MAP result with the sampler's MAP-init cache.
+
+    ``_maybe_map_init`` seeds HMC/NUTS/VI from a cached MAP point, but only ever
+    saw the short MAP *it* ran itself. An explicit ``fit(method='map')`` wrote
+    nothing there, so the ordinary two-step workflow — optimize, then sample —
+    silently paid for a **second** MAP: a full user-configured run, followed by
+    another 1000-step one inside the sampler, on the same model and the same
+    data.
+
+    Publishing here closes that. The entry is stamped with
+    :func:`~tengri.inference._sample_utils._data_fingerprint`, the same guard
+    the sampler's own writes use, so it can never seed a different target
+    (issue #1529) — and a user's MAP is typically the better starting point
+    anyway, being run at their chosen ``n_steps`` / ``n_restarts`` rather than
+    the init default.
+
+    Returns ``posterior`` unchanged so call sites can wrap a return directly.
+    """
+    from tengri.inference._sample_utils import _data_fingerprint
+
+    params = getattr(posterior, "params", None)
+    if not params:
+        return posterior
+    try:
+        mc = _model_cache_owner.get_or_compile_model(context.model)
+        mc["map_params_physical"] = {k: jnp.asarray(v) for k, v in params.items()}
+        mc["map_data_fingerprint"] = _data_fingerprint(context.fitter)
+    except (AttributeError, TypeError, ValueError) as exc:
+        # A cache is an optimization and must not fail a completed fit -- but it
+        # says so out loud. A blanket ``except Exception: pass`` here is the
+        # shape that hid an UnboundLocalError in the hybrid-photometry builder
+        # for weeks, silently costing a 107x larger compiled graph.
+        logger.debug("MAP-init cache not published: %s: %s", type(exc).__name__, exc)
+    return posterior
 
 
 def _reject_nonfinite_map(params: dict) -> None:
@@ -527,32 +567,38 @@ def run_map(
         and isinstance(optimizer, str)
         and optimizer not in _SCIPY_OPTIMIZERS
     ):
-        return _run_map_multistart(
+        return _publish_map_init_cache(
             context,
-            key=key,
-            n_restarts=n_restarts,
-            n_steps=n_steps,
-            learning_rate=learning_rate,
-            optimizer=optimizer,
-            verbose=verbose,
+            _run_map_multistart(
+                context,
+                key=key,
+                n_restarts=n_restarts,
+                n_steps=n_steps,
+                learning_rate=learning_rate,
+                optimizer=optimizer,
+                verbose=verbose,
+            ),
         )
 
     init_params = context.initial_params(key, init_from=init_from)
 
     # ── scipy quasi-Newton path (optimizer="lbfgs_scipy") ──
     if isinstance(optimizer, str) and optimizer in _SCIPY_OPTIMIZERS:
-        return _run_map_scipy(
+        return _publish_map_init_cache(
             context,
-            init_params=init_params,
-            grad_fn=context.grad_fn,
-            loss_fn=loss_fn,
-            data_args=data_args,
-            optimizer=optimizer,
-            n_steps=n_steps,
-            tol=tol,
-            verbose=verbose,
-            verbose_steps=verbose_steps,
-            print_every=print_every,
+            _run_map_scipy(
+                context,
+                init_params=init_params,
+                grad_fn=context.grad_fn,
+                loss_fn=loss_fn,
+                data_args=data_args,
+                optimizer=optimizer,
+                n_steps=n_steps,
+                tol=tol,
+                verbose=verbose,
+                verbose_steps=verbose_steps,
+                print_every=print_every,
+            ),
         )
 
     # ── optax iterative path (adam / adamw / sgd / custom) ──
@@ -638,18 +684,21 @@ def run_map(
             f"{n_actual} steps{es_msg}, loss={final_loss:.4f}"
         )
 
-    return Posterior(
-        samples=None,
-        params=best_params_physical,
-        method=f"MAP ({opt_name})",
-        wall_time_s=wall_time,
-        diagnostics={
-            "n_steps": n_actual,
-            "final_loss": final_loss,
-            "optimizer": opt_name,
-        },
-        loss_history=jnp.asarray(losses),
-        _model=context.model,
+    return _publish_map_init_cache(
+        context,
+        Posterior(
+            samples=None,
+            params=best_params_physical,
+            method=f"MAP ({opt_name})",
+            wall_time_s=wall_time,
+            diagnostics={
+                "n_steps": n_actual,
+                "final_loss": final_loss,
+                "optimizer": opt_name,
+            },
+            loss_history=jnp.asarray(losses),
+            _model=context.model,
+        ),
     )
 
 

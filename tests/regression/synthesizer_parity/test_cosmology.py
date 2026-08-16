@@ -17,8 +17,6 @@ pytestmark = pytest.mark.regression_paper
 import jax
 import jax.numpy as jnp
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri.utils.cosmology import (
     angular_diameter_distance_mpc,
     luminosity_distance_mpc,

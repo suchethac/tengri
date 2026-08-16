@@ -30,8 +30,6 @@ from tengri.components.stellar.sfh.mean_sfh import delayed_exponential
 
 pytestmark = pytest.mark.regression_bug
 
-jax.config.update("jax_enable_x64", True)
-
 
 @pytest.fixture(scope="module")
 def bc03_like_ages():

@@ -18,9 +18,10 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-pytestmark = pytest.mark.contract
+from tests._bounds import assert_non_negative
+from tests._grad_parity import assert_grad_matches_fd
 
-jax.config.update("jax_enable_x64", True)
+pytestmark = pytest.mark.contract
 
 
 @pytest.fixture(scope="module")
@@ -164,7 +165,7 @@ class TestDeltaParameterEffect:
 
         for s in (spec_adaf, spec_mid, spec_disc):
             chex.assert_tree_all_finite(s)
-            assert jnp.all(s >= 0)
+            assert_non_negative(s, name="s")
 
         # delta blends ADAF -> disc, so the endpoints differ and the midpoint
         # is a genuine mixture (not equal to either endpoint).
@@ -321,5 +322,5 @@ class TestDiscReshapeAffectsPredict:
             sed, _ = comp.predict(self._params(delta), jnp.zeros_like(wave), wave)
             return jnp.sum(sed)
 
-        g = jax.grad(scalar)(0.2)
+        g = assert_grad_matches_fd(scalar, 0.2)
         assert jnp.isfinite(g)

@@ -13,8 +13,8 @@ from tengri.components.stellar.sfh.gp_sfh import (
     gp_from_xi,
 )
 from tengri.components.stellar.sfh.psd_models import psd_to_sqrt_power
-
-jax.config.update("jax_enable_x64", True)
+from tests._bounds import assert_non_negative
+from tests._jit_parity import assert_jit_matches_eager
 
 N_GRID = 256
 
@@ -48,9 +48,8 @@ class TestGPFromXi:
 
     def test_is_jittable(self, sqrt_power):
         """gp_from_xi can be JIT-compiled."""
-        fn = jax.jit(lambda xi: gp_from_xi(xi, sqrt_power, N_GRID))
         xi = jax.random.normal(jax.random.PRNGKey(0), shape=(N_GRID,))
-        x = fn(xi)
+        x = assert_jit_matches_eager(lambda xi: gp_from_xi(xi, sqrt_power, N_GRID), xi)
         chex.assert_shape(x, (N_GRID,))
 
     def test_has_gradients(self, sqrt_power):
@@ -189,7 +188,7 @@ class TestDRWJacobianCorrection:
         d = (10.14 - 6.0) / (N_GRID - 1)
         sqrt_power = compute_sqrt_power_drw(N_GRID, d, 1.0, 50e6)
         chex.assert_tree_all_finite(sqrt_power)
-        assert jnp.all(sqrt_power >= 0)
+        assert_non_negative(sqrt_power, name="sqrt_power")
 
     def test_sqrt_power_reasonable_gp_variance(self):
         """GP variance from Jacobian-corrected DRW is finite and positive."""

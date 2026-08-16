@@ -15,7 +15,6 @@ the amplitude knob, not the integrated mass. After the refactor the integral
 *is* the parameter.
 """
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -37,8 +36,6 @@ from tengri.components.stellar.sfh.mean_sfh import (
 from tengri.cosmology import age_at_z0 as _age_at_z0
 
 _AGE_UNIV_YR = float(_age_at_z0()) * 1e9
-
-jax.config.update("jax_enable_x64", True)
 
 # Common time grid: 1 Myr to 13 Gyr in 5000 steps
 T_MIN = 1e6

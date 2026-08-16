@@ -25,12 +25,10 @@ Physics references
 """
 
 import chex
-import jax
 import numpy as np
 import pytest
 
 pytestmark = pytest.mark.regression_paper
-jax.config.update("jax_enable_x64", True)
 
 import jax.numpy as jnp
 

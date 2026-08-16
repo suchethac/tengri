@@ -20,7 +20,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-jax.config.update("jax_enable_x64", True)
+from tests._grad_parity import assert_grad_matches_fd
 
 pytestmark = pytest.mark.crossval
 
@@ -324,7 +324,7 @@ class TestPSBSFHPhysics:
             )
             return jnp.trapezoid(sfr, t)
 
-        grad_val = jax.grad(total_mass)(1.0)
+        grad_val = assert_grad_matches_fd(total_mass, 1.0)
         assert jnp.isfinite(grad_val)
 
 

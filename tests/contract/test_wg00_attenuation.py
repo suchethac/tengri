@@ -19,6 +19,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tests._grad_parity import assert_grad_matches_fd
+
 pytestmark = pytest.mark.contract
 
 # Skip cleanly if the vendored grid is absent (e.g. partial checkout).
@@ -90,7 +92,7 @@ def test_attenuation_monotonic_in_tau():
 def test_curve_gradient_safe_in_tau():
     """A(λ; τ_V) is differentiable and JIT-able in τ_V (fitted-param requirement)."""
     fn = wg00.create_wg00_from_grid(_GRID)
-    g = jax.grad(lambda t: fn(jnp.array([2000.0]), t)[0])(3.0)
+    g = assert_grad_matches_fd(lambda t: fn(jnp.array([2000.0]), t)[0], 3.0)
     assert np.isfinite(g) and g > 0.0
     out = jax.jit(lambda t: fn(jnp.array([2000.0, 6000.0]), t))(1.5)
     assert np.all(np.isfinite(np.asarray(out)))
@@ -187,5 +189,5 @@ def test_wg00_forward_gradient_in_tau_v(synthetic_ssp_wide):
         p = {**base, "dust_tau_v": tau}
         return jnp.sum(model.predict(p).sed._sed())
 
-    g = jax.grad(loss)(3.0)
+    g = assert_grad_matches_fd(loss, 3.0)
     assert np.isfinite(g) and abs(float(g)) > 0.0

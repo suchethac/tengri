@@ -15,8 +15,6 @@ import jax
 import jax.numpy as jnp
 from numpy.testing import assert_allclose
 
-jax.config.update("jax_enable_x64", True)
-
 
 def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     """Central finite-difference gradient. O(eps^2) accurate."""

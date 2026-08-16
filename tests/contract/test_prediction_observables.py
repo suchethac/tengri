@@ -29,7 +29,6 @@ from __future__ import annotations
 
 import warnings
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -38,8 +37,6 @@ import tengri
 from tengri import FIXED, Fixed, Observation, SEDModel, Spectroscopy, WavePrecomp
 from tengri.observation.photometry_config import Photometry
 from tengri.utils.magnitudes import fnu_to_ab_mag
-
-jax.config.update("jax_enable_x64", True)
 
 pytestmark = pytest.mark.contract
 

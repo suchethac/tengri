@@ -22,9 +22,6 @@ import pytest
 
 from tengri.inference.catalog_fitter import CatalogFitter, CatalogPosterior
 
-jax.config.update("jax_enable_x64", True)
-
-
 # ---------------------------------------------------------------------------
 # Minimal stubs
 # ---------------------------------------------------------------------------

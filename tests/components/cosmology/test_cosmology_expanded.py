@@ -8,12 +8,10 @@ consistency checks, and numerical accuracy.
 from __future__ import annotations
 
 import chex
-import jax
 import jax.numpy as jnp
 import pytest
 
 pytestmark = pytest.mark.bounds
-jax.config.update("jax_enable_x64", True)
 
 from dsps.cosmology import CosmoParams
 from numpy.testing import assert_allclose

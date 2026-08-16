@@ -20,7 +20,6 @@ import pytest
 from tengri.parameters.priors import Fixed, Gaussian, LogUniform, Uniform
 
 pytestmark = pytest.mark.contract
-jax.config.update("jax_enable_x64", True)
 
 N_SAMPLES = 20_000
 RTOL_MEAN = 0.05

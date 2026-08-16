@@ -18,9 +18,8 @@ from tengri.components.xray import (
     xray_anisotropy,
     xray_xrb,
 )
-
-# Enable 64-bit for precise comparisons
-jax.config.update("jax_enable_x64", True)
+from tests._bounds import assert_non_negative
+from tests._jit_parity import assert_jit_matches_eager
 
 
 def fd_grad(f, x: float, eps: float = 1e-4) -> float:
@@ -155,7 +154,7 @@ class TestXrayAgnCoronaFromDisc:
     def test_positive_luminosity(self):
         """Output should be non-negative everywhere."""
         result = xray_agn_corona_from_disc(WAVE_XRAY, l_2500_erg_hz=1e30)
-        assert jnp.all(result >= 0.0)
+        assert_non_negative(result, name="result")
 
     def test_zero_outside_xray(self):
         """L_nu should be zero at wavelengths > 124 A (outside X-ray)."""
@@ -209,8 +208,9 @@ class TestXrayAgnCoronaFromDisc:
 
     def test_jit_compilation(self):
         """Function should be JIT-compilable."""
-        jitted = jax.jit(lambda w, l: xray_agn_corona_from_disc(w, l, apply_anisotropy=True))
-        result = jitted(WAVE_XRAY, 1e30)
+        result = assert_jit_matches_eager(
+            lambda w, l: xray_agn_corona_from_disc(w, l, apply_anisotropy=True), WAVE_XRAY, 1e30
+        )
         chex.assert_equal_shape([result, WAVE_XRAY])
         chex.assert_tree_all_finite(result)
 

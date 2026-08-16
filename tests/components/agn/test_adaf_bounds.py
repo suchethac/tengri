@@ -2,11 +2,10 @@
 """Tests for ADAF bounds and physical correctness."""
 
 import chex
-import jax
 import jax.numpy as jnp
 import pytest
 
-jax.config.update("jax_enable_x64", True)
+from tests._bounds import assert_non_negative
 
 pytestmark = pytest.mark.bounds
 
@@ -64,7 +63,7 @@ class TestAdafDiscBounds:
             agn_log_mbh=8.0,
             agn_log_ledd=-3.0,
         )
-        assert jnp.all(l_nu >= 0.0)
+        assert_non_negative(l_nu, name="l_nu")
 
     def test_peaks_at_longer_wavelengths_than_standard_disc(self, wavelength):
         """ADAF SED peaks at longer wavelengths than a standard thin disc.

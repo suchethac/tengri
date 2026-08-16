@@ -24,8 +24,6 @@ import pytest
 
 pytestmark = pytest.mark.contract
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri.inference._backend_registry import (
     _BACKENDS,
     BackendEntry,

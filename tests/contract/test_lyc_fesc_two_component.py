@@ -25,6 +25,7 @@ import pytest
 
 from tengri.components.dust.two_component import DustSEDComponent, DustSEDComponentConfig
 from tengri.protocols.component import ForwardState
+from tests._bounds import assert_non_negative
 
 pytestmark = [pytest.mark.contract, pytest.mark.regression_bug]
 
@@ -71,7 +72,7 @@ def test_no_negative_flux_below_912():
     for absorb_all in (False, True):
         for fesc in (0.0, 0.5):
             out = _apply(_state(fesc, young=1e29, old=1e29), absorb_all=absorb_all)
-            assert np.all(np.asarray(out.sed_intrinsic) >= 0.0)
+            assert_non_negative(np.asarray(out.sed_intrinsic), name="output")
 
 
 def test_default_keeps_old_lyc_absorbs_young():
