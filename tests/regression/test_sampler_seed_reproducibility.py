@@ -14,13 +14,11 @@ a reused model silently steered a fit whose seed the caller had pinned.
    catalog loop reusing one model handed every galaxy the first galaxy's step
    size and mass matrix. This is the defect ``_data_fingerprint`` was written
    for on the MAP cache (#1529); its sibling never got the guard.
-4. NUTS fused warmup into the sampling scan, so a first fit and a cached one
-   ran *different computations* whatever the key. ``_nuts_warmup_only`` splits
-   them, mirroring ``_hmc_warmup_only`` -- which is why HMC was already
-   reproducible and NUTS was not.
-
-``mcmc_dynamic_hmc`` still fuses warmup and sampling and is knowingly absent
-from ``REPRODUCIBLE_SAMPLERS``; it needs the same split.
+4. NUTS and dynamic HMC fused warmup into the sampling scan, so a first fit
+   and a cached one ran *different computations* whatever the key. NUTS gets
+   ``_nuts_warmup_only``; dynamic HMC reuses ``_hmc_warmup_only``, since its
+   adaptation was always plain HMC window adaptation. Both mirror the split
+   HMC already had -- which is why HMC alone was reproducible to begin with.
 """
 
 from __future__ import annotations
@@ -64,10 +62,17 @@ NUTS = dict(
     dense_mass_matrix=False,
 )
 
+DYNAMIC_HMC = dict(
+    method="mcmc_dynamic_hmc",
+    n_warmup=60,
+    n_samples=60,
+    n_chains=2,
+    n_burnin=0,
+)
+
 #: Backends whose warmup is separated from sampling, so a fresh call and a
-#: cached-adaptation call run the same scan. ``mcmc_dynamic_hmc`` still fuses
-#: the two and is knowingly absent.
-REPRODUCIBLE_SAMPLERS = {"hmc": HMC, "nuts": NUTS}
+#: cached-adaptation call run the same scan.
+REPRODUCIBLE_SAMPLERS = {"hmc": HMC, "nuts": NUTS, "dynamic_hmc": DYNAMIC_HMC}
 
 
 def _build(ssp_data):
