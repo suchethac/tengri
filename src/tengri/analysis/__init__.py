@@ -40,5 +40,12 @@ def __getattr__(name: str) -> ModuleType:
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-def __dir__() -> list[str]:
-    return sorted(set(globals()) | _LAZY_SUBMODULES)
+# No ``__dir__`` here, deliberately. #1431 consolidated fourteen hand-rolled
+# copies onto :func:`tengri._completion.curated_dir` and guards the result, so a
+# new one would have to curate through that helper and join the census in
+# ``tests/contract/test_curated_dir_mechanism.py``. Curating this namespace
+# would also be wrong: ``_CURATED_DIR`` has to equal ``dir()`` exactly, so a
+# tuple naming ``plotting`` would *hide* the six real siblings beside it
+# (diagnostics, mock, simulate, sbc, feature_strengths, population_mocks).
+# Restoring the attribute never needed a completion menu — ``plotting`` simply
+# appears in ``dir()`` once something has touched it, as for any lazy submodule.
