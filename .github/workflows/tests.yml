@@ -3,8 +3,25 @@ name: Tests
 on:
   push:
     branches: [main]
+  # No `branches:` filter — this workflow fires for a PR against ANY base.
+  #
+  # It used to read `branches: [main]`, so a PR stacked on another branch ran
+  # none of this. Not hypothetical: #1806 (the nebular band integration) and
+  # #1810 (its correction, which added
+  # `tests/contract/test_precomp_channel_drift.py` and the bound pinning the
+  # known `single_component` defect) both merged into
+  # `worktree-fix-1738-precompute-state` having run exactly ONE check — `build`,
+  # from docs-preview.yml, which is the only workflow here with no branch
+  # filter. A comparable PR against `main` ran twenty. So the tests written to
+  # pin an acknowledged defect were themselves never executed, and the stack's
+  # first real verdict arrived only when it retargeted to `main` — bundled, and
+  # long after the commit anyone would have to bisect to.
+  #
+  # Firing is not the same as running everything: the `tier` job below decides
+  # how much of the suite a given base earns, and says so when it withholds.
+  # `tools/check_ci_pr_coverage.py` (lint job) fails the build if this filter
+  # comes back.
   pull_request:
-    branches: [main]
     types: [opened, synchronize, reopened, labeled]
   schedule:
     # Nightly slow-tier run at 04:00 UTC (mid-afternoon Tokyo).
@@ -66,6 +83,58 @@ env:
 # Only the `slow` job cares about labels (`run-slow-tests`); everything else
 # should run on push / opened / synchronize / reopened, not on label adds.
 jobs:
+  # Announces what this run does NOT cover. The #1806/#1810 failure was not that
+  # a stacked PR ran less — it was that a green tick on a stacked PR looked
+  # exactly like a green tick on a full run. A run that covers less must say so.
+  #
+  # NOTHING DEPENDS ON THIS JOB, deliberately. An earlier revision had it publish
+  # a `full` output that `test` and `gallery-changes` consumed via `needs:`. That
+  # put an extra runner acquisition on the critical path of the 19-minute test
+  # matrix in order to compute a boolean that `if:` can evaluate for free, and
+  # this repo routinely has 40+ workflow runs in flight — the first run of that
+  # revision sat with `tier` queued while `smoke`, `lint` and `security` had all
+  # finished, holding back the entire matrix behind a two-minute job that could
+  # not get a runner. The heavy jobs now test `github.base_ref` inline and start
+  # the moment `smoke` clears; this job just narrates, in parallel, blocking
+  # nothing.
+  #
+  # The condition is therefore written in three places, which is exactly the
+  # duplication that let the old branch filter drift out of view — so
+  # `tools/check_ci_pr_coverage.py` asserts every full-tier job actually carries
+  # it, rather than trusting anyone to keep them in step.
+  tier:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    if: ${{ github.event_name != 'pull_request' || github.event.action != 'labeled' }}
+    steps:
+      - name: Say what this run covers
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if [ "$EVENT_NAME" != "pull_request" ] || [ "$BASE_REF" = "main" ]; then
+            {
+              echo "## Full CI tier"
+              echo
+              echo "Everything this workflow gates on is running."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          {
+            echo "## Partial CI tier"
+            echo
+            echo "This PR targets \`$BASE_REF\`, not \`main\`."
+            echo
+            echo "**Ran:** lint, security, smoke."
+            echo
+            echo "**Did NOT run:** the eight \`test\` shards (including"
+            echo "\`contract\`, which holds the precompute drift guard) or the gallery."
+            echo
+            echo "A green result here is therefore **not** a full verdict. The full"
+            echo "suite runs when this PR is retargeted to \`main\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice title=Partial CI tier::Base is $BASE_REF, not main. The test shards and gallery did not run; a green result here is not a full verdict."
+
   lint:
     runs-on: ubuntu-latest
     if: ${{ github.event_name != 'pull_request' || github.event.action != 'labeled' }}
@@ -167,6 +236,14 @@ jobs:
       # which is what happened to `tests/unit`. Stdlib-only by design: this job
       # installs ruff and nothing else.
       - run: python tools/check_test_paths_covered.py
+      # The guard above asks whether a test tree reaches a job. This one asks
+      # the same question one level up: whether a pull request reaches this
+      # workflow at all. It used to filter `pull_request` to base `main`, so
+      # #1806 and #1810 merged into a stack having run one check each while a
+      # comparable PR against `main` ran twenty — the tests pinning a known
+      # defect among the ones that never executed. Also fails if a job is added
+      # without declaring its tier. Stdlib-only, same as the guards around it.
+      - run: python tools/check_ci_pr_coverage.py
       # `x / jnp.maximum(d, floor)` returns a plausible finite zero when the
       # numerator is also zero — #1395 shipped that way. The class cannot be
       # swept mechanically (some of these floors are legitimate), so this pins
@@ -267,7 +344,10 @@ jobs:
   gallery-changes:
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    if: ${{ github.event_name != 'pull_request' || github.event.action != 'labeled' }}
+    # `gallery` needs this job's output, so gating here cascades to it.
+    if: >-
+      ${{ (github.event_name != 'pull_request' || github.event.action != 'labeled')
+      && (github.event_name != 'pull_request' || github.base_ref == 'main') }}
     permissions:
       contents: read
       pull-requests: read
@@ -490,7 +570,9 @@ jobs:
   test:
     runs-on: ubuntu-latest
     needs: smoke
-    if: ${{ github.event_name != 'pull_request' || github.event.action != 'labeled' }}
+    if: >-
+      ${{ (github.event_name != 'pull_request' || github.event.action != 'labeled')
+      && (github.event_name != 'pull_request' || github.base_ref == 'main') }}
     # Sharded across runners, one tree per shard. The suite had grown to 22-24 min
     # against a 25 min cap — it was about to start failing on timeout rather than on
     # any test. More workers per runner is NOT the lever (that is exactly what OOM-
