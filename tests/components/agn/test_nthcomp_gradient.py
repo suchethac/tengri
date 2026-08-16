@@ -113,9 +113,23 @@ class TestNthcompGradientStability:
         ``gamma = 1.3`` -- which is *below* the table, where the gradient is
         exactly zero. It was named for the grid edges and never reached a live
         one, so it could not have failed for a frozen gamma axis.
+
+        The step and tolerance are explicit because nthcomp reads a **float32**
+        lookup table -- and does so whatever dtype it is handed, so promoting
+        the inputs to float64 does not help. Summing 50 float32 samples of a
+        ~1e-18 spectrum leaves the central difference with about three good
+        digits, and no step recovers more: measured relative agreement is
+        9e-4 at h/x = 1e-3, degrading to 5e-2 by h/x = 1e-5 as cancellation
+        takes over. 1e-3 is the optimum, so it is named rather than left to the
+        helper's default of 1e-5.
+
+        Before ``atol`` defaulted to 0.0 this comparison was inert: the
+        gradients here are ~1e-18 against the old fixed floor of 1e-8, so
+        substituting zero for the analytic gradient still passed. The
+        ``!= 0.0`` assertion below was carrying the whole test.
         """
         gamma = jnp.array(gamma_val, dtype=jnp.float32)
-        grad = assert_grad_matches_fd(self._sum_lnu, gamma)
+        grad = assert_grad_matches_fd(self._sum_lnu, gamma, rtol=3e-2, eps=1e-3 * gamma_val)
         assert float(grad) != 0.0, (
             f"gamma={gamma_val} is inside the table but its gradient is exactly "
             f"zero, so a fit cannot move here"

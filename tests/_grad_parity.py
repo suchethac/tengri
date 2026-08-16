@@ -36,6 +36,39 @@ there is a regression test asserting they stay that way. At a bin boundary the
 analytic derivative and the finite difference legitimately disagree, and a
 failure there means this check is the wrong tool, not that the gradient is
 wrong. Keep a finiteness assertion at those sites and say so in a comment.
+
+Why ``atol`` defaults to zero
+-----------------------------
+It defaulted to ``1e-8``, and that number is unrelated to any scale in this
+codebase. Gradients here are taken through SEDs carried in erg/s/Hz and fluxes
+in erg/s/cm2/Hz; a summed-SED objective lands near ``1e-11`` and a summed-flux
+one near ``1e-25``. Against a fixed absolute floor of ``1e-8`` those comparisons
+reduce to ``assert 0 == 0``.
+
+Instrumenting every call in the fast tier on 2026-08-16 found **14 of 84 calls
+where substituting ``analytic = 0`` still passed** — the check was inert for
+the exact defect this module exists to catch. The worst three compared
+gradients of 3e-59, 5e-58 and 2e-52 against the 1e-8 floor, margins of 1e-51
+and below. Files affected included ``test_filter_vectorization.py``,
+``test_spectrum_lut.py`` and ``synthesizer_parity/test_photometry.py``.
+
+The scale-aware floor the fixed one was reaching for already exists:
+``_fd_noise_floor`` derives it from the function's own rounding at the step
+actually used. With ``atol=0.0`` that floor takes over, and the genuinely-zero
+gradients keep passing on it — ``test_met_table_grad_wrt_lgmet`` (analytic
+exactly 0, numeric −2.4e-2 of pure float32 noise) still passes on a computed
+floor of 0.176, exactly as the docstring below describes.
+
+Measured blast radius of the change across the 59 files that call this helper:
+787 passed, 2 failed. Both failures were real and neither was a wrong gradient
+— one differentiated at a knife edge in its own fixture, the other compares
+against a float32 lookup table where no step gives better than 1e-3. Both are
+fixed at their call sites.
+
+One caveat on ``_fd_noise_floor`` learnt the same day: its factor of 2 assumes
+two roundings, and it is optimistic for an objective that sums many float32
+terms. Against a 50-point sum through a float32 table it under-predicts the
+observed noise by ~4x. Treat it as an order of magnitude, not a bound.
 """
 
 from __future__ import annotations
@@ -128,7 +161,7 @@ def assert_grad_matches_fd(
     x: Any,
     *,
     rtol: float = 1e-4,
-    atol: float = 1e-8,
+    atol: float = 0.0,
     eps: float | None = None,
 ) -> Any:
     """Assert ``jax.grad(f)(x)`` agrees with a central finite difference.
@@ -145,8 +178,12 @@ def assert_grad_matches_fd(
             difference is only ~1e-10 accurate in the best case, and the errors
             worth catching (sign flips, missing chain-rule factors, gradients
             silently zeroed) are O(1) relative.
-        atol: absolute floor, for points where the true derivative is ~0 and a
-            relative comparison is meaningless.
+        atol: absolute floor. Defaults to 0.0, which leaves ``_fd_noise_floor``
+            as the only absolute floor — it is derived from the function's own
+            rounding at the step actually used, so it scales with the problem
+            instead of assuming one. Pass a value only where you can say what
+            scale it belongs to; see "Why ``atol`` defaults to zero" above for
+            what the old fixed 1e-8 did to a summed-flux objective.
         eps: override the step. Supply this where the function has structure on
             a scale finer than ``1e-5 * |x|``.
 

@@ -76,7 +76,16 @@ def test_calc_obs_mag_parity(fiducial_sed):
 
 def test_kernel_is_jittable_and_grad_safe(fiducial_sed):
     """Both JIT and grad through z must work end-to-end. Locking this
-    prevents silent regressions to any free-redshift fit path."""
+    prevents silent regressions to any free-redshift fit path.
+
+    The gradient is taken at z = 0.55, not at z = 0.5. This fixture's reddest
+    observed wavelength is 30000 A and its rest grid ends at 20000 A, so
+    30000 / (1 + z) crosses the last rest-grid point at *exactly* z = 0.5 --
+    the value this test used to differentiate at, and a discontinuity in its
+    own objective (see the test below). The gradient there was fine; the
+    reference was not. Measured off the edge, the analytic gradient matches a
+    central difference to 1e-7 at z = 0.30, 0.55 and 0.70.
+    """
     wave_rest, L_nu = fiducial_sed
     wave_obs = jnp.linspace(2000.0, 30000.0, 200)
 
@@ -88,9 +97,54 @@ def test_kernel_is_jittable_and_grad_safe(fiducial_sed):
 
     g = assert_grad_matches_fd(
         lambda z: jnp.sum(shift_to_obs_frame(wave_rest, L_nu, wave_obs, z, PLANCK18)),
-        jnp.asarray(0.5),
+        jnp.asarray(0.55),
     )
-    assert jnp.isfinite(g)
+    assert jnp.isfinite(g) and float(g) != 0.0
+
+
+def test_flux_steps_when_a_band_leaves_the_rest_grid(fiducial_sed):
+    """Observed wavelengths that fall off the red end contribute zero, not the
+    edge value -- so the summed flux steps as z sweeps a band across the end.
+
+    This is the hazard that made the gradient check above look broken, and
+    nothing else in the suite states it. It matters for free-redshift fitting:
+    where a filter's red edge crosses the end of the rest-frame template grid,
+    the likelihood has a genuine step, and any sampler walking across it sees a
+    discontinuity rather than a slope. With a template grid that extends well
+    past every filter -- the normal case -- z never reaches the edge and the
+    question does not arise.
+
+    Measured 2026-08-16: crossing the edge moves the summed flux by 8.0e-4
+    relative, in one step, at the z where the last point rejoins the grid.
+    """
+    wave_rest, L_nu = fiducial_sed
+    wave_obs = jnp.linspace(2000.0, 30000.0, 200)
+
+    def total(z):
+        f_nu = shift_to_obs_frame(wave_rest, L_nu, wave_obs, jnp.asarray(z), PLANCK18)
+        return float(jnp.sum(f_nu))
+
+    # 30000 / (1 + z) == 20000 == wave_rest[-1] exactly at z = 0.5.
+    edge = 30000.0 / float(wave_rest[-1]) - 1.0
+    assert edge == pytest.approx(0.5, abs=1e-12)
+
+    just_below, just_above = total(edge - 1e-7), total(edge + 1e-7)
+    at_edge = total(edge)
+
+    n_off_below = int(jnp.sum(wave_obs / (1 + (edge - 1e-7)) > wave_rest[-1]))
+    assert n_off_below == 1, "the fixture no longer straddles the grid edge here"
+    assert int(jnp.sum(wave_obs / (1 + edge) > wave_rest[-1])) == 0
+
+    step = (at_edge - just_below) / at_edge
+    assert step == pytest.approx(8.0e-4, rel=0.1), (
+        f"the off-grid convention changed: crossing the rest-grid red edge now "
+        f"moves the summed flux by {step:.2e} relative, not 8.0e-4. A value of "
+        f"~0 would mean off-grid points are clamped to the edge value instead "
+        f"of dropped, which would make the likelihood continuous here."
+    )
+    # Away from the edge the function is smooth: the step above is the whole
+    # discontinuity, not part of a general roughness.
+    assert (just_above - at_edge) / at_edge == pytest.approx(-3.1e-7, rel=0.2)
 
 
 def test_vmap_recipe_for_z_table(fiducial_sed):
