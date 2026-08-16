@@ -138,27 +138,6 @@ def test_affine_models_really_are_affine(synthetic_ssp_wide, model_name):
     np.testing.assert_allclose(ratio, 1.5, rtol=1e-9)
 
 
-#: Names ``emission_builders.available()`` advertises that the forward pass
-#: rejects. ``SEDModel.build`` accepts them; ``predict_state`` is where they
-#: raise. The builders menu is what a user reads to choose a model, so a name
-#: on it that cannot be evaluated is a broken promise, not an environment quirk.
-UNEVALUABLE = {"dh02_ce01"}
-
-
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "emission_builders.available() advertises 'dh02_ce01', but "
-        "evaluating it raises ValueError: dust_emission component 'dh02_ce01' "
-        "(resolved from grammar type 'dh02_ce01') not found in registry. Note "
-        "the failure is at evaluation, not construction — SEDModel.build "
-        "accepts the name and only predict_state rejects it, so the menu and "
-        "the builder agree while the forward pass does not. Every other "
-        "advertised name works, several through deprecated aliases "
-        "(dl07_tabulated -> draine_li2007). Either register the component or "
-        "drop it from the menu; this xfail turns red when that happens."
-    ),
-)
 def test_every_advertised_emission_model_can_be_evaluated(synthetic_ssp_wide):
     """The builders menu must not name a model the forward pass rejects.
 
@@ -168,6 +147,15 @@ def test_every_advertised_emission_model_can_be_evaluated(synthetic_ssp_wide):
 
     Evaluation, not construction: ``SEDModel.build`` accepts every advertised
     name, so a build-only check passes and proves nothing.
+
+    This carried an ``xfail(strict=True)`` exempting ``dh02_ce01``, which
+    ``emission_builders.available()`` advertised while ``predict_state``
+    raised ``ValueError: ... not found in registry``. The ratchet fired on
+    2026-08-16: the marker went XPASS after #1807 landed on main, with the
+    companion check confirming the name was still advertised — so it was
+    registered rather than quietly dropped from the menu, which is the outcome
+    the exemption was written to wait for. Marker and exemption both removed;
+    the sweep now covers every advertised name with no holes.
     """
     broken = {}
     for name in sorted(emission_builders.available()):
@@ -178,15 +166,17 @@ def test_every_advertised_emission_model_can_be_evaluated(synthetic_ssp_wide):
     assert not broken, f"advertised but not evaluable: {sorted(broken)}"
 
 
-def test_the_unevaluable_list_still_describes_reality():
-    """A stale exemption is a claim nobody rechecks.
+def test_the_menu_is_not_empty():
+    """The sweep above is vacuous if the menu it reads is empty.
 
-    Pins that the one known-bad name is still advertised by the menu. If it
-    were simply dropped from the menu, the xfail above would start passing for
-    a different reason than the component being registered, and this says which.
+    This replaces ``test_the_unevaluable_list_still_describes_reality``, which
+    existed only to say *which way* the exemption above had been resolved. With
+    the exemption gone that question is answered, but the sweep is parametrized
+    off ``available()`` and would pass trivially on an empty menu, so the one
+    thing still worth pinning is that the menu has entries.
     """
     advertised = set(emission_builders.available())
-    assert advertised >= UNEVALUABLE, (
-        f"{sorted(UNEVALUABLE - advertised)} left the builders menu — "
-        f"the exemption above no longer applies"
+    assert len(advertised) >= 5, (
+        f"the dust-emission builders menu advertises only {sorted(advertised)}; "
+        f"the sweep above is parametrized off it and proves nothing if it is empty"
     )

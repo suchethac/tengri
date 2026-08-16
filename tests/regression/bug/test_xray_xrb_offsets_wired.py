@@ -29,8 +29,6 @@ from tengri.observation.photometry import FilterCurve
 
 pytestmark = pytest.mark.regression_bug
 
-jax.config.update("jax_enable_x64", True)
-
 #: The synthetic SSP grid stores absolute log10(Z) = [-1.5, -0.5, 0.0], which is
 #: log10(Z/Zsun) = [0.348, 1.348, 1.848] once LOG10_ZSUN is removed. Sit in the
 #: middle of that rather than tripping the out-of-grid clip warning (#442).
