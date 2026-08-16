@@ -913,7 +913,11 @@ def state_to_radio_quantities(state: Any) -> RadioQuantities:
     Returns ``NaN`` fields when the chain did not include
     :class:`RadioSEDComponent` (no ``L_radio`` published).
     """
-    from tengri.utils.sed_quantities import compute_l_radio_thermal_from_log_qh, compute_q_ir
+    from tengri.utils.sed_quantities import (
+        compute_l_radio_thermal_from_log_qh,
+        compute_q_ir,
+        derived_luminosity_lsun,
+    )
 
     derived = state.derived
     nan_scalar = jnp.asarray(jnp.nan)
@@ -936,8 +940,6 @@ def state_to_radio_quantities(state: Any) -> RadioQuantities:
 
     # Same seam as ``l_dust_absorbed``: the linear ``L_ir`` is ~3.6e43 erg/s and
     # is ``inf`` in float32, while q_IR is a dex ratio of order 2 (#1837).
-    from tengri.utils.sed_quantities import derived_luminosity_lsun
-
     l_tir_lsun = derived_luminosity_lsun(derived, "L_ir", "log_L_ir")
     q_ir = compute_q_ir(l_tir_lsun, l_1p4ghz)
 
