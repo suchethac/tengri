@@ -64,14 +64,14 @@ DEFAULT_ROOTS = (
 #: changelog and migration guide must be free to name what they replaced.
 SUFFIXES = (".py", ".ipynb")
 
+# Exact-match on path parts, so a renamed directory stops being excluded
+# without any error. The notebook archives now share one ``archive`` parent, and
+# ``docs/superpowers/`` became ``docs/internal/``.
 EXCLUDE_PARTS = (
     "auto_examples",
     "_build",
     "archive",
-    "archive_2",
-    "_retired",
-    "_old_notebooks",
-    "superpowers",
+    "internal",
 )
 
 #: Files that must call the removed spelling: they are the guards asserting it
@@ -80,7 +80,6 @@ EXCLUDE_PARTS = (
 EXCLUDE_FILES = frozenset(
     {
         "tools/check_removed_apis.py",
-        "tests/unit/test_check_removed_apis.py",
         "tests/contract/test_met_group_grammar.py",
         "tests/contract/test_build_routes_unknown_kwargs_to_grammar.py",
         "tests/regression/bug/test_catalog_met_table_advice.py",

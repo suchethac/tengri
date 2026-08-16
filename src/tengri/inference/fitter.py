@@ -1256,7 +1256,7 @@ class Fitter:
         # user's original model is untouched and the returned posterior
         # references this fit model. ``approx=None`` forces the exact
         # wave-grid path; an explicit config (or tuple) overrides. Spec:
-        # docs/superpowers/specs/2026-07-15-fit-precomp-default-design.md.
+        # docs/internal/specs/2026-07-15-fit-precomp-default-design.md.
         self.model = self._resolve_fit_approx(model, approx)
         # For the #1671 bias advisory in run(): when resolution produced a LUT
         # clone, the caller's un-resolved object is the exact reference. When

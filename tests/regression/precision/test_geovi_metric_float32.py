@@ -24,7 +24,7 @@ geoVI/MGVI sqrt-metric primitive reads it: ``transformation_flat``,
 remedy: it reads ``noise_inv`` directly, and :math:`1/\sigma^2` is genuinely
 outside float32 however it is spelled. It has to be restructured as
 :math:`(J/\sigma)^\mathsf{T}(J/\sigma)` — the same measure already proven in
-``analysis/diagnostics/fisher.py`` (#1542). Fixing only the spelling leaves
+``src/tengri/analysis/diagnostics/fisher.py`` (#1542). Fixing only the spelling leaves
 ``metric_vec`` NaN; that is asserted below, so the two fixes cannot be
 conflated.
 

@@ -81,26 +81,27 @@ DATA_LIMIT_MIB = 96.0
 #: Prefixes measured against :data:`DATA_LIMIT_MIB`.
 DATA_PREFIXES = ("data/",)
 
-#: Files already over their limit when this guard was written, with the size
-#: each had at that moment (MiB, rounded up to 0.1). They may stay; they may
-#: not grow. Removing an entry once the file shrinks below the limit is the
-#: intended direction of travel.
+#: **Empty, and that is the finished state.**
 #:
-#: Every entry but the logo is a notebook carrying embedded PNG output. None is
-#: published: ``docs/conf.py`` points sphinx-gallery at ``examples/`` only, and
-#: no toctree references ``notebooks/archive*`` or ``explore/``. Clearing their
-#: outputs, or rebuilding them from their jupytext mirrors, would return several
-#: MiB each.
-#: **Empty, and that is the finished state.** It held eleven entries when this
-#: guard landed: ten unpublished notebooks carrying embedded PNG, and a 5 MiB
-#: site logo. All eleven were dealt with rather than tolerated --
-#: `docs/_static/tengri-logo.png` was 3998x3766 for a favicon and a ~400 px
-#: hero, and 93 archived notebooks were carrying 164 MB of stored output that
-#: nothing renders.
+#: It held twelve entries when this guard landed: eleven unpublished notebooks
+#: carrying embedded PNG, and a 5 MiB site logo. All twelve were dealt with
+#: rather than tolerated. The notebooks -- 93 of them across the archive trees
+#: -- were carrying 164 MB of stored output that nothing renders (`docs/conf.py`
+#: sets ``nbsphinx_execute = "never"``, so only the *published* renders need
+#: their outputs, and those are protected); stripping it took 167.4 MB of files
+#: to 3.2 MB. The logo was 3998x3766 serving a favicon and a ~400 px hero, and
+#: is now 1024x965: 5135 KB -> 591 KB.
 #:
 #: An empty inventory means the limits above are a real line rather than a
 #: description of the status quo. Adding an entry is a deliberate act that has
 #: to be argued for in a comment beside it.
+#:
+#: One property to keep in mind if entries ever return: paths here are **exact
+#: matches**, so a directory move strands every entry it names, and the guard
+#: then reports those files as new and unrecorded -- which reads as a regression
+#: rather than as a rename. That happened within days of this guard landing,
+#: when the five notebook archives were consolidated under ``notebooks/archive/``
+#: and nine of the twelve entries had to be re-pointed at unchanged files.
 INVENTORY: dict[str, float] = {}
 
 

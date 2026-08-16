@@ -133,6 +133,10 @@ analysis/figures/
 /profiling/
 notebook_execution.log
 notebook_metrics.json
+# Per-notebook nbconvert transcripts (`=== Running NN (timeout 1800s) ===` plus
+# XLA warnings). `notebook_execution.log` above covers the single combined log;
+# these are the per-notebook ones the orchestrator writes alongside it.
+notebooks/logs/
 
 # Sphinx docs build artifacts
 docs/_build/
@@ -166,8 +170,29 @@ _galrun/
 /*_audit.py
 /quick_test*.py
 /final_audit*.py
+# Diagnostic scripts belong in scripts/diagnose/. Eight `diagnose_*.py` sat at the
+# repo root until #1783 moved them; this rule is what stops the next one landing
+# there, the same way the audit rules above do.
+/diagnose_*.py
+/_scratch*
+
+# Stray output directories at the repo root.
+#
+# The spine notebooks in `notebooks/` savefig to a *relative* `_figs/`, so running
+# one from the repo root writes a second, divergent copy of the same figures to
+# `/_figs/` instead of `notebooks/_figs/`. That copy was tracked and had drifted a
+# month stale before anyone noticed, because nothing resolves to it — the notebooks
+# read `notebooks/_figs/` and the published docs read `docs/spine/_figs/`.
+# `/results/` and `/figures/` accumulated single files the same way.
+/_figs/
+/results/
+/figures/
 !data/grahsp/grahsp_templates.h5
-!data/qsogen_emline_template.h5
+# `!data/qsogen_emline_template.h5` was here. QSOGen loads the *.dat* template
+# (`find_data("qsogen_emline_template.dat")` in components/agn/qsogen.py); the
+# .h5 arrived in the #1029 data-gating sweep and nothing ever read it. This
+# un-ignore line was its only mention in the tree, which is what kept a 157 KB
+# binary committed for a loader that wants a different file.
 !data/qsogen_detailed_reference.npz
 !data/external_sed_reference.npz
 !data/feltre_grid.h5
