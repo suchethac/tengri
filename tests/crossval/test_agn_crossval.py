@@ -252,7 +252,7 @@ class TestBLRBalmerDecrement:
         per feature, and they give different Balmer decrements: 3.565 in flux,
         194.52/46.21 = 4.209 in EW, because Halpha sits on a fainter continuum
         than Hbeta. The template stores *flux* ratios, so quoting an EW ratio
-        beside it -- as a neighbouring test's docstring did with "~260/46" --
+        beside it -- as a neighboring test's docstring did with "~260/46" --
         compares two different quantities.
         """
         ew_ratio = 194.52 / 46.21
