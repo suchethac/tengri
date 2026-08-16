@@ -23,12 +23,18 @@ would pass no matter what the source said.
 
 from __future__ import annotations
 
+import ast
+import json
+import pathlib
 import subprocess
 import sys
+import warnings
 
 import pytest
 
 pytestmark = pytest.mark.contract
+
+REPO = pathlib.Path(__file__).resolve().parents[2]
 
 
 def _run(code: str) -> str:
@@ -98,3 +104,74 @@ def test_an_unknown_analysis_attribute_still_raises_attribute_error():
         "    print('raised')\n"
     )
     assert out == "raised"
+
+
+def _attribute_paths_used_by_examples() -> list[str]:
+    """Every ``tengri.a.b.c`` chain the shipped scripts actually evaluate.
+
+    Parsed, not grepped. A regex over the same files reports
+    ``tengri.predict_photometry`` from a sentence in a module docstring, and a
+    guard with a known false positive is one people learn to skip.
+    """
+    found: set[str] = set()
+    for root in ("examples", "notebooks"):
+        directory = REPO / root
+        if not directory.is_dir():
+            continue
+        for path in directory.rglob("*.py"):
+            try:
+                with warnings.catch_warnings():
+                    # Compiling someone else's file re-raises their lint as ours
+                    # (a stray "\A" in a docstring). Not this test's finding.
+                    warnings.simplefilter("ignore", SyntaxWarning)
+                    tree = ast.parse(path.read_text(encoding="utf-8"))
+            except (SyntaxError, UnicodeDecodeError, OSError):
+                continue
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Attribute):
+                    continue
+                parts: list[str] = []
+                cur: ast.expr = node
+                while isinstance(cur, ast.Attribute):
+                    parts.append(cur.attr)
+                    cur = cur.value
+                if isinstance(cur, ast.Name) and cur.id == "tengri":
+                    found.add(".".join(reversed(parts)))
+    return sorted(found)
+
+
+def test_every_attribute_the_examples_use_resolves_after_a_bare_import():
+    """Generalize the regression: no shipped script may need a warm-up import.
+
+    ``tengri.analysis.plotting`` broke because it was bound as a side effect of
+    an unrelated import. Nothing said which *other* attributes rested on the
+    same accident, and the gallery cannot answer it -- one process, so the first
+    example to import something binds it for all the rest.
+
+    A fresh interpreter that has done nothing but ``import tengri`` can answer
+    it. ``ast`` is imported here rather than in the child so the child's only
+    import is the one under test.
+    """
+    paths = _attribute_paths_used_by_examples()
+    assert len(paths) > 20, f"collector found only {len(paths)} paths; it has stopped working"
+
+    code = (
+        "import json, sys, tengri\n"
+        f"paths = json.loads({json.dumps(json.dumps(paths))})\n"
+        "bad = []\n"
+        "for dotted in paths:\n"
+        "    obj = tengri\n"
+        "    for part in dotted.split('.'):\n"
+        "        try:\n"
+        "            obj = getattr(obj, part)\n"
+        "        except AttributeError:\n"
+        "            bad.append(dotted)\n"
+        "            break\n"
+        "print(json.dumps(bad))\n"
+    )
+    unresolved = json.loads(_run(code))
+    assert not unresolved, (
+        "these resolve only if something imports them first, so a script using "
+        "one on its own line 1 raises AttributeError: "
+        + ", ".join("tengri." + p for p in unresolved)
+    )
