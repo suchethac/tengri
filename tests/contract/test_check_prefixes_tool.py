@@ -97,26 +97,34 @@ class TestParameterValidation:
 
         registered = collect_registered_params()
 
-        # Check all presets
+        # Derived from the registry, not retyped. The hand-written list this
+        # replaces omitted synthesizer_default, and every preset was wrapped in
+        # `except Exception: pass`, so a preset that failed to construct was
+        # skipped in silence — with all six failing, the assertion below would
+        # still have passed on an empty dict.
+        preset_names = sorted(row["name"] for row in presets.list_presets())
+        assert len(preset_names) >= 7, f"preset registry collapsed to {preset_names}"
+
         all_failures = {}
-        for preset_name in [
-            "starforming",
-            "quiescent",
-            "high_z",
-            "photoz",
-            "jwst_spec",
-            "agn_host",
-        ]:
+        for preset_name in preset_names:
             preset_fn = getattr(presets, preset_name, None)
-            if preset_fn:
-                try:
-                    params, _ = preset_fn()
-                    failures = [
-                        p for p in params.free_params if not is_valid_param_name(p, registered)
-                    ]
-                    if failures:
-                        all_failures[preset_name] = failures
-                except Exception:
-                    pass  # Skip presets that fail to construct
+            assert preset_fn is not None, (
+                f"{preset_name} is registered but not exposed on tengri.presets"
+            )
+            returned = preset_fn()
+
+            # Presets do not agree on tuple order: most return
+            # (Parameters, ...), synthesizer_default returns (config,
+            # Parameters). Unpacking positionally is what made the latter raise
+            # AttributeError, which the swallow then hid. Pick by contract.
+            params = next((r for r in returned if hasattr(r, "free_params")), None)
+            assert params is not None, (
+                f"{preset_name} returned no object exposing free_params: "
+                f"{[type(r).__name__ for r in returned]}"
+            )
+
+            failures = [p for p in params.free_params if not is_valid_param_name(p, registered)]
+            if failures:
+                all_failures[preset_name] = failures
 
         assert not all_failures, f"Preset free params fail validation: {all_failures}"

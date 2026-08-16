@@ -17,9 +17,6 @@ import pytest
 
 from tengri import Fitter, Fixed, Parameters, SEDModel, Uniform
 
-jax.config.update("jax_enable_x64", True)
-
-
 pytestmark = pytest.mark.contract
 
 # ── Fixtures ──────────────────────────────────────────────────────

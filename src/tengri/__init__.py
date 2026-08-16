@@ -93,11 +93,43 @@ if not _os.environ.get("TENGRI_VERBOSE_JAX"):
     _os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
     _os.environ.setdefault("ABSL_LOG_LEVEL", "ERROR")
 
-# Enable float64 — required for cosmological distance calculations
-# (dL^2 at z>0.01 overflows float32)
+# Enable float64 by DEFAULT — required for cosmological distance calculations
+# (dL^2 at z>0.01 overflows float32).
+#
+# Default, not decree (#1840). This used to be an unconditional
+# ``jax.config.update("jax_enable_x64", True)``, which silently discarded
+# ``JAX_ENABLE_X64=0`` — the documented JAX way to ask for float32. The
+# environment and the live config then disagreed with no warning, so every
+# float32 probe, benchmark and bug report that selected float32 that way ran
+# in float64 and reported float32 as healthy. A measurement that cannot fail
+# is not a measurement.
+#
+# JAX has already applied the variable by the time this module is imported, so
+# honoring it is simply a matter of not overriding it. When the user has asked
+# for float32 we say so once, because losing d_L^2 to overflow is a silent,
+# catastrophic failure mode and nobody should meet it unwarned.
 import jax
 
-jax.config.update("jax_enable_x64", True)
+_X64_REQUEST = _os.environ.get("JAX_ENABLE_X64")
+
+if _X64_REQUEST is None:
+    jax.config.update("jax_enable_x64", True)
+elif _X64_REQUEST.strip().lower() in {"0", "false", "no", "off"}:
+    import warnings as _warnings
+
+    _warnings.warn(
+        f"JAX_ENABLE_X64={_X64_REQUEST}: tengri is honoring your request for "
+        "float32 and is NOT enabling 64-bit precision. Cosmological distances "
+        "are the known hazard — d_L^2 at z > 0.01 overflows float32 — so any "
+        "code that forms d_L^2 directly will produce inf. tengri's own "
+        "projection avoids it by applying (1+z)/(4*pi*d_L^2) as a log10 "
+        "offset, but third-party code may not. Unset JAX_ENABLE_X64 to "
+        "restore the float64 default.",
+        UserWarning,
+        stacklevel=2,
+    )
+else:
+    jax.config.update("jax_enable_x64", True)
 
 if not _os.environ.get("TENGRI_VERBOSE_JAX"):
     try:
@@ -886,3 +918,38 @@ def __getattr__(name: str) -> object:
         )
         return getattr(_settings, name)
     raise AttributeError(f"module 'tengri' has no attribute {name!r}")
+
+
+def _reassert_x64_preference() -> None:
+    """Restore an explicit ``JAX_ENABLE_X64=0`` that an import clobbered (#1840).
+
+    Six DSPS modules run a bare ``jax.config.update("jax_enable_x64", True)`` at
+    import time (``dsps.sed.__init__``, ``ssp_weights``, ``stellar_sed``,
+    ``stellar_age_weights``, ``metallicity_weights``, ``dust.blackbody``). They
+    are pulled in transitively by tengri's own imports, so declining to force
+    x64 at the top of this module is necessary but not sufficient: by the time
+    the package finishes importing, the flag is on again regardless.
+
+    This runs last, after every transitive import has had its say, and puts the
+    flag back where the user asked for it. Measured before the fix:
+    ``JAX_ENABLE_X64=0 python -c "import tengri; ..."`` reported
+    ``jax_enable_x64 = True`` and a ``float64`` default dtype.
+
+    A DSPS module imported *lazily* later — several tengri functions import
+    from ``dsps`` inside the function body — can still flip the flag mid-run.
+    That is upstream behavior this package cannot intercept; the supported
+    route for a float32 session remains
+    ``jax.config.update("jax_enable_x64", False)`` immediately before the work,
+    which is what :func:`tengri.utils.devices.setup_jax` does, and what the
+    float32 tests use via the ``jax.enable_x64(False)`` context manager.
+    """
+    request = _os.environ.get("JAX_ENABLE_X64")
+    if request is None or request.strip().lower() not in {"0", "false", "no", "off"}:
+        return
+    import jax as _jax
+
+    if _jax.config.jax_enable_x64:
+        _jax.config.update("jax_enable_x64", False)
+
+
+_reassert_x64_preference()

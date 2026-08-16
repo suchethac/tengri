@@ -18,12 +18,9 @@ References
 - Just+2007, ApJ, 665, 1004 — alpha_ox relation
 """
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
-
-jax.config.update("jax_enable_x64", True)
 
 pytestmark = pytest.mark.crossval
 
@@ -223,21 +220,24 @@ class TestXrayAbsoluteValues:
             \log(L_X/\mathrm{SFR}) = 40.28 - 62.12 Z + 569.44 Z^2
                                      - 1833.80 Z^3 + 1968.33 Z^4
 
-        At the module's default ``metallicity_z=0.02`` that is 10**39.251 =
-        1.78e39, and the implementation reproduces it.
+        At the module's default — ``Z_SUN`` = 0.0142 — that is 10**39.508 =
+        3.22e39, and the implementation reproduces it.
 
         This test used to assert **2.6e39**, taken from the docstring's
         parenthetical claim that the equation "yields ~2.6e39 at Z=0.02,
         consistent with Grimm et al. 2003". That claim is arithmetically false —
-        the polynomial gives 1.78e39, a factor of 1.46 — and Lehmer+2016 and
-        Grimm+2003/Mineo+2012 genuinely differ by ~30-45% in this band rather
-        than agreeing (#1755). Asserting the equation rather than the prose.
+        the polynomial gives 1.78e39 there, a factor of 1.46 — and Lehmer+2016
+        and Grimm+2003/Mineo+2012 genuinely differ by ~30-45% in this band
+        rather than agreeing (#1755). Asserting the equation, not the prose.
 
-        #1755 also covers the separate question of whether this module should
-        keep Z=0.02 when the project's canonical solar is 0.0142 (Asplund 2009);
-        the relation is steep enough that the choice is worth 1.8x here.
+        The default then moved from 0.02 to the project's canonical solar
+        (Asplund 2009), which is the other half of #1755: one module carrying a
+        second definition of "solar" put its HMXB baseline 1.8x off from what
+        the rest of the code means by the same word. Taken from the constant,
+        never restated as a literal.
         """
         from tengri.components.xray import xray_xrb
+        from tengri.utils.physics_constants import Z_SUN
 
         wave = jnp.linspace(1.24, 6.2, 500)  # 2-10 keV
         l_nu = xray_xrb(wave, sfr=1.0, stellar_mass=0.0)
@@ -245,7 +245,7 @@ class TestXrayAbsoluteValues:
         nu = _C_AA / wave
         l_band = abs(float(jnp.trapezoid(l_nu[::-1], nu[::-1])))
 
-        z_default = 0.02
+        z_default = Z_SUN
         log_l = (
             40.28
             - 62.12 * z_default
@@ -253,13 +253,13 @@ class TestXrayAbsoluteValues:
             - 1833.80 * z_default**3
             + 1968.33 * z_default**4
         )
-        expected = 10.0**log_l  # 1.7825e39
+        expected = 10.0**log_l  # 3.2177e39 at Z_SUN = 0.0142
 
         np.testing.assert_allclose(
             l_band,
             expected,
             rtol=0.10,
-            err_msg=f"HMXB L_X = {l_band:.3e}, Lehmer+2016 at Z=0.02 gives {expected:.3e}",
+            err_msg=f"HMXB L_X = {l_band:.3e}, Lehmer+2016 at Z={z_default} gives {expected:.3e}",
         )
 
     def test_lmxb_matches_gilfanov_for_an_old_population(self):

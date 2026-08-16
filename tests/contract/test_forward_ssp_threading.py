@@ -54,8 +54,6 @@ import pytest
 from tengri import FIXED, Fixed, ForwardModel, Observation, SEDModel, Uniform
 from tengri.observation.spectroscopy import Spectroscopy
 
-jax.config.update("jax_enable_x64", True)
-
 pytestmark = pytest.mark.contract
 
 _SPEC_WAVE = jnp.linspace(3500.0, 9000.0, 120)

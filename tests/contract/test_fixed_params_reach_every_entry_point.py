@@ -72,6 +72,26 @@ ENTRY_POINTS = _params_entry_points()
 # reviewable exemption rather than a silent skip.
 NEEDS_EXTRA_ARGS = {"predict_line_ratios", "predict_state"}
 
+# Entry points that raise when handed a bare params dict *today*, with the
+# exception each one actually raises. Same policy as NEEDS_EXTRA_ARGS: named
+# and reviewable.
+#
+# This list replaces a bare ``except Exception: pytest.skip(...)`` around the
+# call below, which silently exempted these six from the very contract the
+# module exists to enforce — and would have exempted any future entry point
+# that started raising, including one that raises *because* it mishandles the
+# fixed redshift. The docstring above records that this bug shipped twice and
+# that patching boundaries one at a time does not converge; a skip-on-exception
+# is how the seventh instance would get in unnoticed.
+RAISES_ON_BARE_PARAMS = {
+    "mock_spectrum": TypeError,
+    "predict_emission_lines": NotImplementedError,
+    "predict_line_fluxes": ValueError,
+    "predict_spectral_indices": TypeError,
+    "predict_spectrum": ValueError,
+    "predict_spectrum_components": ValueError,
+}
+
 # ``predict`` returns a lazy ``Prediction``, not numbers. Compare the observables
 # it exposes instead — that is the surface the bug actually corrupted.
 RETURNS_PREDICTION = {"predict"}
@@ -120,7 +140,18 @@ def test_entry_point_honors_a_fixed_redshift(model, name):
     try:
         got = fn(omitted)
     except Exception as exc:
-        pytest.skip(f"{name} not callable with a bare params dict: {type(exc).__name__}")
+        allowed = RAISES_ON_BARE_PARAMS.get(name)
+        assert allowed is not None, (
+            f"{name} raised {type(exc).__name__} on a bare params dict, so the "
+            f"fixed-redshift contract is unverified for it. If that call really "
+            f"cannot take bare params, add it to RAISES_ON_BARE_PARAMS; do not "
+            f"let it exempt itself by raising. ({exc})"
+        )
+        assert isinstance(exc, allowed), (
+            f"{name} now raises {type(exc).__name__}, not the recorded "
+            f"{allowed.__name__} — the exemption no longer describes reality"
+        )
+        pytest.skip(f"{name}: listed in RAISES_ON_BARE_PARAMS ({allowed.__name__})")
 
     expected = fn(explicit)
 
@@ -209,3 +240,23 @@ def test_the_sweep_is_not_vacuous(model):
         "z=0 and z=0.5 give comparable fluxes on this model, so the sweep cannot "
         "detect a dropped redshift"
     )
+
+
+def test_every_exemption_names_a_real_entry_point():
+    """A stale name in either list exempts nothing and hides that it does."""
+    for name in NEEDS_EXTRA_ARGS | set(RAISES_ON_BARE_PARAMS):
+        assert name in ENTRY_POINTS, (
+            f"{name} is exempted but no longer discovered — drop it from the list"
+        )
+
+
+@pytest.mark.parametrize("name", sorted(RAISES_ON_BARE_PARAMS))
+def test_the_bare_params_exemptions_are_still_needed(model, name):
+    """The exemption list must shrink on purpose, not drift.
+
+    If one of these starts accepting a bare params dict, it becomes coverable
+    and should be covered — this turns red so the name is removed rather than
+    sitting there quietly exempting a surface that no longer needs it.
+    """
+    with pytest.raises(RAISES_ON_BARE_PARAMS[name]):
+        getattr(model, name)(dict(FREE_PARAMS))

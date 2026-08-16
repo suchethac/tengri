@@ -29,7 +29,6 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
-jax.config.update("jax_enable_x64", True)
 # 2-10 keV wavelength/frequency grid for band integration
 _E_GRID = jnp.linspace(2.0, 10.0, 500)  # keV
 _NU_GRID = _E_GRID * _KEV_TO_HZ  # Hz
@@ -70,20 +69,34 @@ class TestXRBNormalization:
         )
 
     def test_hmxb_band_luminosity(self):
-        """HMXB 2-10 keV luminosity at SFR=1 Msun/yr, Z=Z_sun matches Lehmer+19.
+        """HMXB 2-10 keV luminosity at SFR=1 Msun/yr and the default Z.
 
         Yang+22 / Lehmer+19 quartic in Z:
             log L_HMXB(2-10 keV) [W] = 33.28 - 62.12 Z + 569.44 Z² - 1833.8 Z³
                                       + 1968.33 Z⁴
-        At Z = 0.02: log L = 32.25 W → 1.78e39 erg/s. Compatible with Grimm+2003
-        within the ~30% scatter between linear and polynomial calibrations.
+
+        The default is ``Z_SUN`` = 0.0142 (Asplund 2009), giving 3.22e39 erg/s.
+
+        This asserted 1.78e39 while its own message called that value "Z_sun",
+        which is the confusion #1755 was about: 1.78e39 is the quartic at
+        **Z = 0.02**, a solar convention the rest of the codebase does not use.
+        Evaluate the polynomial at the constant rather than restating a
+        precomputed magnitude, so the two cannot drift apart again.
         """
+        from tengri.utils.physics_constants import Z_SUN
+
+        expected = 10.0 ** (
+            40.28 - 62.12 * Z_SUN + 569.44 * Z_SUN**2 - 1833.80 * Z_SUN**3 + 1968.33 * Z_SUN**4
+        )
         L_band = float(jnp.trapezoid(xray_xrb(_WAVE_GRID, sfr=1.0, stellar_mass=0.0), _NU_GRID))
         np.testing.assert_allclose(
             L_band,
-            10**32.25 * 1e7,  # W -> erg/s, ~ 1.78e39
+            expected,  # ~3.22e39 at Z_SUN = 0.0142
             rtol=0.05,
-            err_msg="Lehmer+19 (yang20.py:207-214): HMXB L_2-10keV ≈ 1.78e39 erg/s at Z_sun",
+            err_msg=(
+                f"Lehmer+19 (yang20.py:207-214): HMXB L_2-10keV should be "
+                f"{expected:.3e} erg/s at the default Z={Z_SUN}"
+            ),
         )
 
     def test_lmxb_band_luminosity(self):
@@ -110,11 +123,20 @@ class TestXRBNormalization:
         )
 
     def test_combined_ranalli2003(self):
-        """Combined XRB at SFR=1, M*=1e10, age=10 Gyr within 30% of Ranalli+2003.
+        """Combined XRB at SFR=1, M*=1e10, age=10 Gyr sits inside Ranalli+2003.
 
-        HMXB (Lehmer+19, Z=0.02) ≈ 1.78e39 + LMXB (Lehmer+14, 10 Gyr) ≈ 8.15e38
-        sums to ≈ 2.6e39 erg/s — well inside Ranalli+2003's 30% scatter band
-        around 3.7e39 erg/s.
+        HMXB (Lehmer+19, Z=0.02) ~ 1.78e39 + LMXB (Lehmer+14, 10 Gyr) ~ 8.15e38
+        sums to ~2.6e39 erg/s, against Ranalli+2003's 3.7e39.
+
+        The docstring used to call that "well inside" the 30% scatter band. It
+        is not: measured 2.5972e39 against 3.7e39 is a 29.81% error, which uses
+        99.4% of the band and leaves 0.19 percentage points of headroom. Any
+        change moving the XRB normalization by more than ~0.7% the wrong way
+        flipped this red, and the failure read as a physics regression rather
+        than a fixture sitting on its limit.
+
+        One assertion was doing two incompatible jobs — a literature
+        consistency bound and a drift detector — so they are now separate.
         """
         L_band = float(
             jnp.trapezoid(
@@ -122,11 +144,29 @@ class TestXRBNormalization:
                 _NU_GRID,
             )
         )
+
+        # The science claim: consistent with the observed relation, whose own
+        # scatter is ~30%. Kept as a bound, not as the drift signal.
         np.testing.assert_allclose(
             L_band,
             3.7e39,
             rtol=0.30,
-            err_msg="Ranalli+2003 A&A 399 Eq. 3: L_2-10keV ≈ 3.7e39 erg/s at SFR=1, M*=1e10",
+            err_msg="Ranalli+2003 A&A 399 Eq. 3: L_2-10keV ~ 3.7e39 erg/s at SFR=1, M*=1e10",
+        )
+
+        # The drift detector: what this implementation actually produces today.
+        # Tight, so a real change is caught precisely and reported as a change
+        # in our number rather than as a brush with the literature band.
+        np.testing.assert_allclose(
+            L_band,
+            2.5972e39,
+            rtol=1e-3,
+            err_msg=(
+                "combined XRB luminosity moved. This is the implementation's own "
+                "value, not a literature number — if the change is intended, "
+                "update it here and check the Ranalli bound above still holds "
+                "(it had only 0.19 percentage points of margin)."
+            ),
         )
 
     def test_xray_only_mask(self):

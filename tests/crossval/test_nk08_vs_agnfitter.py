@@ -33,12 +33,11 @@ from __future__ import annotations
 from pathlib import Path
 
 import h5py
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
 
-jax.config.update("jax_enable_x64", True)
+from tests._grad_parity import assert_grad_matches_fd
 
 pytestmark = pytest.mark.crossval
 
@@ -205,20 +204,67 @@ def test_lbol_scales_linearly():
     assert error < 0.01, f"Expected L_bol ratio {expected_ratio}, got {actual_ratio:.2f}"
 
 
-def test_gradient_flows():
-    """Verify gradients flow through agn_cos_inc."""
+_WAVE_GRID = jnp.logspace(1.0, 5.0, 256)
+
+
+def _torus_sed(cos_inc, log_lbol=0.0):
     from tengri.components.agn.nenkova_agnfitter import nenkova_agnfitter_sed
 
-    def sed_total_power(cos_inc):
-        wavelength = jnp.logspace(1.0, 5.0, 256)
-        sed = nenkova_agnfitter_sed(
-            wavelength, agn_log_lbol=0.0, agn_cos_inc=cos_inc, agn_torus_frac=1.0
-        )
-        # Integrate in frequency space
-        nu = 2.99792458e8 / (wavelength * 1e-8)
-        power = jnp.trapezoid(sed, nu)
-        return power
+    return nenkova_agnfitter_sed(
+        _WAVE_GRID, agn_log_lbol=log_lbol, agn_cos_inc=cos_inc, agn_torus_frac=1.0
+    )
 
-    cos_inc_val = 0.5
-    grad = jax.grad(sed_total_power)(jnp.asarray(cos_inc_val))
+
+def _integrated_power(cos_inc):
+    nu = 2.99792458e8 / (_WAVE_GRID * 1e-8)
+    return jnp.trapezoid(_torus_sed(cos_inc), nu)
+
+
+def test_integrated_power_is_independent_of_inclination():
+    """The torus redistributes the AGN's energy; it does not create or destroy it.
+
+    Nothing asserted this, and the omission mattered: the gradient test below
+    used to differentiate exactly this quantity and assert the result was
+    non-zero. Measured across cos_inc = 0.1 to 0.9 the frequency-integrated
+    power is -3.828e31 to ten significant figures -- the *correct* answer, and
+    the reason a derivative of it is meaningless. What that test was asserting
+    to be non-zero was float64 rounding noise at the 1e-16 relative level.
+    """
+    powers = [float(_integrated_power(jnp.asarray(c))) for c in (0.1, 0.3, 0.5, 0.7, 0.9)]
+    spread = (max(powers) - min(powers)) / abs(np.mean(powers))
+    assert spread < 1e-12, (
+        f"integrated torus power varies by {spread:.2e} across inclination; "
+        f"an inclination-averaged template set must conserve it."
+    )
+
+
+@pytest.mark.parametrize("cos_inc_val", [0.2, 0.8])
+def test_gradient_flows_through_cos_inc(cos_inc_val):
+    """Gradients flow through agn_cos_inc, checked on an observable that responds.
+
+    The mid-IR is where inclination is visible: at 10 um the SED moves 30%
+    between cos_inc = 0.1 and 0.9, giving a logarithmic sensitivity of 0.1-0.3.
+    The bolometric integral moves by 1e-16 (see above), so the version of this
+    test that differentiated it could only ever have measured noise -- and did,
+    passing on a gradient of 8.2e12 against a value of 3.8e31.
+
+    cos_inc = 0.5 is avoided deliberately: the AGNfitter grid samples
+    inclination every 10 degrees, so 0.5 is exactly cos(60 deg), a PCHIP node.
+    Finite-difference agreement there is 1.4e-3 against 1.5e-5 off-node -- not
+    a defect, just the wrong place to reference a derivative.
+    """
+    i_10um = int(jnp.argmin(jnp.abs(_WAVE_GRID - 1.0e5)))
+
+    def sed_at_10um(cos_inc):
+        return _torus_sed(cos_inc)[i_10um]
+
+    value = float(sed_at_10um(jnp.asarray(cos_inc_val)))
+    grad = float(assert_grad_matches_fd(sed_at_10um, jnp.asarray(cos_inc_val), rtol=1e-3))
+
     assert np.isfinite(grad) and grad != 0.0, "Gradient should be finite and non-zero"
+    sensitivity = abs(cos_inc_val * grad / value)
+    assert sensitivity > 1e-2, (
+        f"the 10 um flux barely responds to inclination "
+        f"(d ln F / d ln cos_inc = {sensitivity:.2e}); the torus anisotropy is "
+        f"not reaching the SED."
+    )

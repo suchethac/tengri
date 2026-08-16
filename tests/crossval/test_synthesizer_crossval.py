@@ -23,11 +23,11 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-jax.config.update("jax_enable_x64", True)
-
 synthesizer = pytest.importorskip("synthesizer", reason="synthesizer not installed")
 unyt = pytest.importorskip("unyt", reason="unyt not installed")
 from unyt import unyt_array, unyt_quantity
+
+from tests._bounds import assert_non_negative
 
 pytestmark = pytest.mark.crossval
 
@@ -417,7 +417,7 @@ class TestDustAttenuationVsSynthesizer:
         wave = jnp.linspace(1000.0, 30000.0, 200)
         k = jax.jit(wd01_smcbar)(wave)
         chex.assert_tree_all_finite(k)
-        assert jnp.all(k >= 0.0)
+        assert_non_negative(k, name="k")
 
     def test_wd01_smcbar_no_2175_bump(self):
         """SMC Bar curve should not have a 2175Å bump (k_2175 < k_1500)."""

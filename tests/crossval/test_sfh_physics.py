@@ -15,7 +15,6 @@ References
 """
 
 import chex
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -23,10 +22,9 @@ import pytest
 # Age of the universe today [yr], from the default cosmology — never a
 # literal. SFH formation anchor (age_gyr) for dpl/lnorm shape tests.
 from tengri.cosmology import age_at_z0 as _age_at_z0
+from tests._bounds import assert_non_negative
 
 _AGE_UNIV_YR = float(_age_at_z0()) * 1e9
-
-jax.config.update("jax_enable_x64", True)
 
 pytestmark = pytest.mark.crossval
 
@@ -140,7 +138,7 @@ class TestDelayedExponentialPhysics:
         # Peak should be near tau in lookback time
         assert 0.5e9 < peak_lbt < 10e9, f"Delayed exp peak at {peak_lbt / 1e9:.1f} Gyr"
         # SFR should be non-negative and finite
-        assert jnp.all(sfr >= 0)
+        assert_non_negative(sfr, name="sfr")
         chex.assert_tree_all_finite(sfr)
 
 
@@ -331,7 +329,7 @@ class TestTriweightBurstPhysics:
         sfr = triweight_burst(T_LOOKBACK, log_tpeak_myr=2.0, log_tmax_myr=2.5)
         # SFR should be non-zero near 100 Myr and zero far away
         chex.assert_tree_all_finite(sfr)
-        assert jnp.all(sfr >= 0)
+        assert_non_negative(sfr, name="sfr")
         # Peak should be near 100 Myr lookback
         peak_lbt = float(T_LOOKBACK[jnp.argmax(sfr)])
         assert 5e7 < peak_lbt < 5e8, (
@@ -452,7 +450,9 @@ class TestDirichletSFHPhysics:
                 z_frac_4=z_val,
                 z_frac_5=z_val,
             )
-            assert jnp.all(sfr >= 0), f"Dirichlet SFR should be non-negative at z={z_val}"
+            assert_non_negative(
+                sfr, name="sfr", msg=f"Dirichlet SFR should be non-negative at z={z_val}"
+            )
 
     def test_extreme_z_concentrates_mass(self):
         """z_frac_0 near 1 concentrates mass in youngest bin."""

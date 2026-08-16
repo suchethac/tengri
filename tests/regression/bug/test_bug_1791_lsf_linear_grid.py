@@ -46,8 +46,6 @@ from tengri.observation.spectrum import apply_lsf
 
 pytestmark = pytest.mark.regression_bug
 
-jax.config.update("jax_enable_x64", True)
-
 _C_KM_S = 299792.458
 _LAM0 = 5000.0
 _SIGMA_V = 200.0

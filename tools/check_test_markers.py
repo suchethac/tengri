@@ -19,7 +19,7 @@ Exit code 0 on success; non-zero with violations listed otherwise.
 
 from __future__ import annotations
 
-import re
+import ast
 import sys
 from pathlib import Path
 
@@ -48,43 +48,82 @@ APPROVED_MARKERS: frozenset[str] = frozenset(
     }
 )
 
-# Matches `pytestmark = pytest.mark.<name>` or
-# `pytestmark = [pytest.mark.<name>, ...]`.
-PYTESTMARK_RE = re.compile(
-    r"^pytestmark\s*=\s*\[?\s*pytest\.mark\.(\w+)",
-    re.MULTILINE,
-)
-# Matches `@pytest.mark.<name>` decorators.
-DECORATOR_RE = re.compile(r"@pytest\.mark\.(\w+)")
-# Matches `def test_...(` function definitions.
-TEST_DEF_RE = re.compile(r"^def\s+(test_\w+)\s*\(", re.MULTILINE)
+# Parsed, not pattern-matched. The regex version this replaces had two defects,
+# both found on 2026-08-16 by diffing it against this implementation over the
+# enforced trees:
+#
+#   * ``TEST_DEF_RE`` was anchored at column 0 (``^def\s+test_``), so **every
+#     test inside a class was invisible to the guard**. 57 unmarked tests
+#     across 7 files were passing CI that way -- 14 in one file alone. That is
+#     the guard failing open, which is the worse direction.
+#   * the decorator scan walked upward from the ``def`` while each line started
+#     with ``@``, so a *multi-line* decorator block terminated the walk at its
+#     closing paren and hid every marker above it. A test carrying
+#     ``@pytest.mark.gradient`` above a wrapped ``@pytest.mark.xfail(...)`` was
+#     reported as unmarked.
+#
+# ``ast`` answers both correctly and also picks up markers inherited from a
+# decorated class or a class-body ``pytestmark``, which pytest honours and the
+# regex could not see.
+
+
+def _marker_names(nodes: list[ast.expr]) -> set[str]:
+    """Marker names in ``pytest.mark.<name>`` / ``pytest.mark.<name>(...)`` nodes."""
+    found: set[str] = set()
+    for node in nodes:
+        target = node.func if isinstance(node, ast.Call) else node
+        if (
+            isinstance(target, ast.Attribute)
+            and isinstance(target.value, ast.Attribute)
+            and target.value.attr == "mark"
+        ):
+            found.add(target.attr)
+    return found
+
+
+def _pytestmark_names(body: list[ast.stmt]) -> set[str]:
+    """Markers assigned to ``pytestmark`` anywhere in this block's own body."""
+    found: set[str] = set()
+    for node in body:
+        if not isinstance(node, ast.Assign):
+            continue
+        if not any(isinstance(t, ast.Name) and t.id == "pytestmark" for t in node.targets):
+            continue
+        value = node.value
+        items = list(value.elts) if isinstance(value, (ast.List, ast.Tuple)) else [value]
+        found |= _marker_names(items)
+    return found
 
 
 def collect_file_markers(source: str) -> set[str]:
     """Return all markers declared at module level via `pytestmark = ...`."""
-    return set(PYTESTMARK_RE.findall(source))
+    return _pytestmark_names(ast.parse(source).body)
 
 
 def collect_function_violations(source: str) -> list[str]:
-    """Return names of test functions without an approved marker decorator."""
-    lines = source.splitlines()
+    """Return names of test functions without an approved marker.
+
+    Recurses into classes, so a test method is held to the same contract as a
+    module-level one, and honours markers inherited from a decorated class or a
+    class-body ``pytestmark``.
+    """
     violations: list[str] = []
-    for match in TEST_DEF_RE.finditer(source):
-        name = match.group(1)
-        # Look at the decorator block above this def.
-        line_no = source[: match.start()].count("\n")
-        decorators: list[str] = []
-        i = line_no - 1
-        while i >= 0 and lines[i].lstrip().startswith("@"):
-            decorators.append(lines[i].strip())
-            i -= 1
-        has_approved = any(
-            DECORATOR_RE.search(d).group(1) in APPROVED_MARKERS  # type: ignore[union-attr]
-            for d in decorators
-            if DECORATOR_RE.search(d)
-        )
-        if not has_approved:
-            violations.append(name)
+
+    def walk(block: list[ast.stmt], inherited: set[str]) -> None:
+        for node in block:
+            if isinstance(node, ast.ClassDef):
+                scope = (
+                    inherited | _marker_names(node.decorator_list) | _pytestmark_names(node.body)
+                )
+                walk(node.body, scope)
+            elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                if not node.name.startswith("test"):
+                    continue
+                declared = inherited | _marker_names(node.decorator_list)
+                if not declared & APPROVED_MARKERS:
+                    violations.append(node.name)
+
+    walk(ast.parse(source).body, set())
     return violations
 
 

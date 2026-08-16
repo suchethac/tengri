@@ -25,9 +25,8 @@ import pytest
 
 pytestmark = pytest.mark.regression_paper
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri.components.dust.emission import casey2012, cmb_corrected_temperature
+from tests._jit_parity import assert_jit_matches_eager
 
 # Physical constants
 _C_AA_S = 2.99792458e18  # c in Angstrom/s
@@ -179,10 +178,12 @@ class TestCasey2012Differentiability:
     """Casey2012 must be JIT-compilable and fully differentiable."""
 
     def test_jit_compatible(self, ir_wave):
-        fn = jax.jit(
-            lambda T, b, a: casey2012(ir_wave, 1e10, dust_T=T, dust_beta_ir=b, dust_alpha_mir=a)
+        sed = assert_jit_matches_eager(
+            lambda T, b, a: casey2012(ir_wave, 1e10, dust_T=T, dust_beta_ir=b, dust_alpha_mir=a),
+            35.0,
+            1.8,
+            2.0,
         )
-        sed = fn(35.0, 1.8, 2.0)
         chex.assert_equal_shape([sed, ir_wave])
         chex.assert_tree_all_finite(sed)
 
@@ -309,7 +310,8 @@ class TestCasey2012OpticallyThin:
 
     def test_optically_thin_jit(self, ir_wave):
         """JIT-compatible with optically_thin flag."""
-        fn = jax.jit(lambda T: casey2012(ir_wave, 1e10, dust_T=T, optically_thin=True))
-        sed = fn(35.0)
+        sed = assert_jit_matches_eager(
+            lambda T: casey2012(ir_wave, 1e10, dust_T=T, optically_thin=True), 35.0
+        )
         chex.assert_equal_shape([sed, ir_wave])
         chex.assert_tree_all_finite(sed)

@@ -14,8 +14,6 @@ import jax
 import jax.numpy as jnp
 import numpy.testing as npt
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri.observation.noise import (
     DETECTED,
     LOWER_LIMIT,
@@ -23,6 +21,7 @@ from tengri.observation.noise import (
     censored_neg_log_likelihood,
     variable_noise_hamiltonian,
 )
+from tests._jit_parity import assert_jit_matches_eager
 
 
 def fd_grad(f, x: float, eps: float = 1e-5) -> float:
@@ -339,8 +338,9 @@ class TestCensoredJIT:
         predicted = jnp.array([0.95, 3.0])
         mask = jnp.array([DETECTED, UPPER_LIMIT])
 
-        fn = jax.jit(censored_neg_log_likelihood)
-        result = fn(data, noise, predicted, mask)
+        result = assert_jit_matches_eager(
+            censored_neg_log_likelihood, data, noise, predicted, mask
+        )
         assert jnp.isfinite(result)
 
     def test_jit_with_fcal(self):
@@ -349,8 +349,13 @@ class TestCensoredJIT:
         predicted = jnp.array([0.95, 3.0, 5.0])
         mask = jnp.array([DETECTED, UPPER_LIMIT, LOWER_LIMIT])
 
-        fn = jax.jit(lambda d, n, p, m: censored_neg_log_likelihood(d, n, p, m, f_cal=0.05))
-        result = fn(data, noise, predicted, mask)
+        result = assert_jit_matches_eager(
+            lambda d, n, p, m: censored_neg_log_likelihood(d, n, p, m, f_cal=0.05),
+            data,
+            noise,
+            predicted,
+            mask,
+        )
         assert jnp.isfinite(result)
 
 

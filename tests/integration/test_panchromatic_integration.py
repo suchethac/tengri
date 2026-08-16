@@ -29,8 +29,6 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.forward.result import SEDResult
 from tengri.forward.sed_model import SEDModel
@@ -303,9 +301,31 @@ class TestRadioXrayIntegration:
         )
         return SEDModel(spec, ssp, precompute=False)
 
-    def test_radio_extends_sed_to_long_wavelengths(self, radio_xray_model):
+    @pytest.fixture(scope="class")
+    def base_params(self, radio_xray_model):
+        """Every free parameter at its declared default, plus this class's dust knobs.
+
+        ``xray=True`` makes ``xray_det_hmxb`` / ``xray_det_lmxb`` free, and on
+        this spec they are the *only* free parameters — free parameters are the
+        caller's responsibility by design, so nothing supplies them for you. The
+        literal that stood in each test named two dust keys and predated both,
+        which is why all ten raised ``KeyError: 'xray_det_hmxb'`` the day the
+        offsets reached the physics (#1706/#1832).
+
+        Read them off the spec rather than restating them: a value written here
+        is a copy of the declaration, and a copy is what broke.
+        """
+        spec = radio_xray_model.spec
+        declared = {
+            name: spec.get_distribution(name).default
+            for name in spec.free_params
+            if spec.get_distribution(name).default is not None
+        }
+        return {**declared, "dust_T": 30.0, "dust_beta_ir": 1.8}
+
+    def test_radio_extends_sed_to_long_wavelengths(self, radio_xray_model, base_params):
         """With radio=True, the SED grid must extend to λ > 1e7 Å (>1mm)."""
-        params = {"dust_T": 30.0, "dust_beta_ir": 1.8}
+        params = base_params
         result = radio_xray_model.predict_rest_sed(params)
 
         max_wave = float(jnp.max(result.wavelength))
@@ -318,9 +338,9 @@ class TestRadioXrayIntegration:
             "Radio emission should populate many pixels above 1mm"
         )
 
-    def test_xray_extends_sed_to_short_wavelengths(self, radio_xray_model):
+    def test_xray_extends_sed_to_short_wavelengths(self, radio_xray_model, base_params):
         """With xray=True, the SED grid must extend to λ < 10 Å (>1 keV)."""
-        params = {"dust_T": 30.0, "dust_beta_ir": 1.8}
+        params = base_params
         result = radio_xray_model.predict_rest_sed(params)
 
         min_wave = float(jnp.min(result.wavelength))
@@ -333,13 +353,13 @@ class TestRadioXrayIntegration:
             "X-ray emission should populate pixels below 10 Å"
         )
 
-    def test_radio_luminosity_fir_correlation(self, radio_xray_model):
+    def test_radio_luminosity_fir_correlation(self, radio_xray_model, base_params):
         """Radio luminosity must be consistent with the FIR-radio correlation.
 
         Bell 2003: q_TIR = log10(L_TIR / (3.75e12 * L_1.4GHz)) ≈ 2.64.
         For SFR=10 Msun/yr with default q_ir, L_1.4GHz ~ 1e29 erg/s/Hz.
         """
-        params = {"dust_T": 30.0, "dust_beta_ir": 1.8}
+        params = base_params
         result = radio_xray_model.predict_rest_sed(params)
         wave = np.asarray(result.wavelength)
         sed = np.asarray(result.sed)
@@ -354,12 +374,12 @@ class TestRadioXrayIntegration:
             f"L_1.4GHz = {l_14ghz:.2e} erg/s/Hz, expected 1e26-1e32 for SFR=10"
         )
 
-    def test_xray_luminosity_sfr_scaling(self, radio_xray_model):
+    def test_xray_luminosity_sfr_scaling(self, radio_xray_model, base_params):
         """X-ray luminosity should follow Grimm+2003 scaling with SFR.
 
         At SFR=10 Msun/yr: L_X(2-10 keV) ~ 2.6e40 erg/s.
         """
-        params = {"dust_T": 30.0, "dust_beta_ir": 1.8}
+        params = base_params
         result = radio_xray_model.predict_rest_sed(params)
         wave = np.asarray(result.wavelength)
         sed = np.asarray(result.sed)
@@ -374,9 +394,9 @@ class TestRadioXrayIntegration:
                 f"L_X(2-10 keV) = {l_xray:.2e}, expected ~2.6e40 for SFR=10"
             )
 
-    def test_total_sed_is_sum_of_parts(self, radio_xray_model):
+    def test_total_sed_is_sum_of_parts(self, radio_xray_model, base_params):
         """The SED must include stellar + radio + X-ray — total > stellar alone."""
-        params = {"dust_T": 30.0, "dust_beta_ir": 1.8}
+        params = base_params
 
         # SEDModel without radio/xray for comparison
         spec_stellar = Parameters(
@@ -396,6 +416,9 @@ class TestRadioXrayIntegration:
             precompute=False,
         )
         sed_full = radio_xray_model.predict_rest_sed(params)
+        # ``m_stellar`` declares neither X-ray offset; the extra keys are inert
+        # on this surface, as the same pairing in test_radio_zero_in_optical
+        # has always relied on.
         sed_stellar = m_stellar.predict_rest_sed(params)
 
         # In the optical (4000-7000 Å), both should be similar
@@ -409,13 +432,13 @@ class TestRadioXrayIntegration:
         ratio = l_opt_full / l_opt_star
         assert 0.8 < ratio < 1.2, f"Optical SED ratio (full/stellar) = {ratio:.3f}, expected ~1.0"
 
-    def test_radio_spectral_index(self, radio_xray_model):
+    def test_radio_spectral_index(self, radio_xray_model, base_params):
         """Radio SED must follow S_nu ~ nu^{-alpha} with alpha ~ 0.7-0.8.
 
         Bell 2003 default synchrotron index alpha_sf = 0.8.
         Measure slope between 150 MHz and 1.4 GHz.
         """
-        params = {"dust_T": 30.0, "dust_beta_ir": 1.8}
+        params = base_params
         result = radio_xray_model.predict_rest_sed(params)
         wave = np.asarray(result.wavelength)
         sed = np.asarray(result.sed)
@@ -437,12 +460,12 @@ class TestRadioXrayIntegration:
                 f"Radio spectral index alpha = {alpha:.2f}, expected 0.7-0.8 (Bell 2003)"
             )
 
-    def test_radio_q_ir_value(self, radio_xray_model):
+    def test_radio_q_ir_value(self, radio_xray_model, base_params):
         """FIR-radio correlation q_TIR should be ~2.64 (Bell 2003).
 
         q_TIR = log10(L_TIR / (3.75e12 * L_1.4GHz)).
         """
-        params = {"dust_T": 30.0, "dust_beta_ir": 1.8}
+        params = base_params
         result = radio_xray_model.predict_rest_sed(params)
         wave = np.asarray(result.wavelength)
         sed = np.asarray(result.sed)
@@ -463,13 +486,13 @@ class TestRadioXrayIntegration:
                 f"q_TIR = {q_ir:.2f}, expected 2-3 range (Bell 2003 default 2.64)"
             )
 
-    def test_xray_spectrum_softer_than_hard(self, radio_xray_model):
+    def test_xray_spectrum_softer_than_hard(self, radio_xray_model, base_params):
         """X-ray spectrum should be brighter in soft (2 keV) than hard (10 keV).
 
         XRB spectrum: power law with Gamma ~ 1.7-2.0 (Grimm+2003),
         plus exponential cutoff above E_cut. So soft > hard.
         """
-        params = {"dust_T": 30.0, "dust_beta_ir": 1.8}
+        params = base_params
         result = radio_xray_model.predict_rest_sed(params)
         wave = np.asarray(result.wavelength)
         sed = np.asarray(result.sed)
@@ -488,7 +511,7 @@ class TestRadioXrayIntegration:
             # L_soft/L_hard = (nu_soft/nu_hard)^{-0.7} = (2/10)^{-0.7} ~ 3.3
             assert ratio > 1.0, f"Soft/hard X-ray ratio = {ratio:.2f}, expected > 1 (XRB spectrum)"
 
-    def test_xray_hmxb_dominates_for_sfg(self, radio_xray_model):
+    def test_xray_hmxb_dominates_for_sfg(self, radio_xray_model, base_params):
         """For SFR=10, HMXB should dominate over LMXB in X-ray.
 
         Grimm+2003: L_HMXB = 2.6e39 × SFR erg/s
@@ -497,7 +520,7 @@ class TestRadioXrayIntegration:
         For SFR=10, M*~1.3e11: L_HMXB ~ 2.6e40, L_LMXB ~ 1.2e40
         HMXB should be comparable or larger.
         """
-        params = {"dust_T": 30.0, "dust_beta_ir": 1.8}
+        params = base_params
         result = radio_xray_model.predict_rest_sed(params)
         wave = np.asarray(result.wavelength)
         sed = np.asarray(result.sed)
@@ -511,12 +534,12 @@ class TestRadioXrayIntegration:
                 f"X-ray peak L_nu = {l_xray_peak:.2e}, expected > 1e20 for SFR=10"
             )
 
-    def test_radio_zero_in_optical(self, radio_xray_model):
+    def test_radio_zero_in_optical(self, radio_xray_model, base_params):
         """Radio emission must be zero at optical/NIR wavelengths.
 
         The radio mask in radio.py only activates at λ > ~1e7 Å.
         """
-        params = {"dust_T": 30.0, "dust_beta_ir": 1.8}
+        params = base_params
         result = radio_xray_model.predict_rest_sed(params)
 
         # Build stellar-only model for comparison

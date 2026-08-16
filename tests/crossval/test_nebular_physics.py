@@ -14,12 +14,11 @@ References
 - Storey & Zeippen 2000, MNRAS, 312, 813 — forbidden line ratios
 """
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
 
-jax.config.update("jax_enable_x64", True)
+from tests._bounds import assert_non_negative
 
 pytestmark = pytest.mark.crossval
 
@@ -81,7 +80,7 @@ class TestShockEmissionSEDPhysics:
         for v in [100.0, 300.0, 700.0, 1000.0]:
             l_nu = compute_shock_sed(wave, shock_velocity=v, l_shock_halpha=1e8)
             assert jnp.all(jnp.isfinite(l_nu)), f"Shock SED at v={v} has non-finite values"
-            assert jnp.all(l_nu >= 0), f"Shock SED at v={v} has negative values"
+            assert_non_negative(l_nu, name="l_nu", msg=f"Shock SED at v={v} has negative values")
 
 
 # ── 2. SHOCK LINE RATIOS — velocity-dependent physics ─────────────

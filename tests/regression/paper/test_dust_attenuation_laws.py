@@ -21,8 +21,6 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-jax.config.update("jax_enable_x64", True)
-
 
 def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     """Central finite-difference gradient. O(eps^2) accurate."""
@@ -38,6 +36,8 @@ from tengri.components.dust.attenuation import (
     reddy15,
     salim_sbl18,
 )
+from tests._bounds import assert_non_negative
+from tests._jit_parity import assert_jit_matches_eager
 
 # Full-range wavelengths (Angstrom)
 WAVS = np.array([1000.0, 1200.0, 1500.0, 2175.0, 3000.0, 5500.0, 10000.0, 20000.0])
@@ -72,7 +72,7 @@ class TestLeitherer02:
         """Output should always be positive."""
         wavs = jnp.linspace(900.0, 25000.0, 500)
         k = leitherer02(wavs)
-        assert jnp.all(k >= 0.0)
+        assert_non_negative(k, name="k")
 
     def test_monotonic_uv(self):
         """Should be monotonically decreasing from UV to NIR."""
@@ -83,9 +83,8 @@ class TestLeitherer02:
 
     def test_jit_compatible(self):
         """Should work inside jax.jit."""
-        f = jax.jit(leitherer02)
         wavs = jnp.array([1500.0, 5500.0])
-        result = f(wavs)
+        result = assert_jit_matches_eager(leitherer02, wavs)
         chex.assert_shape(result, (2,))
 
     def test_gradient(self):
@@ -165,12 +164,13 @@ class TestNoll09:
         wavs = jnp.linspace(900.0, 25000.0, 500)
         for ampl, delta in [(0.0, 0.0), (3.0, -0.3), (5.0, -0.5)]:
             k = noll09(wavs, dust_bump_strength=ampl, dust_delta=delta)
-            assert jnp.all(k >= 0.0)
+            assert_non_negative(k, name="k")
 
     def test_jit_compatible(self):
         """Should work inside jax.jit."""
-        f = jax.jit(lambda w: noll09(w, dust_bump_strength=2.0, dust_delta=-0.1))
-        result = f(jnp.array(WAVS))
+        result = assert_jit_matches_eager(
+            lambda w: noll09(w, dust_bump_strength=2.0, dust_delta=-0.1), jnp.array(WAVS)
+        )
         chex.assert_equal_shape([result, WAVS])
 
     def test_gradient_wrt_params(self):
@@ -258,8 +258,9 @@ class TestSalimSBL18:
 
     def test_jit_compatible(self):
         """Should work inside jax.jit."""
-        f = jax.jit(lambda w: salim_sbl18(w, dust_bump_strength=2.0, dust_delta=-0.1))
-        result = f(jnp.array(WAVS))
+        result = assert_jit_matches_eager(
+            lambda w: salim_sbl18(w, dust_bump_strength=2.0, dust_delta=-0.1), jnp.array(WAVS)
+        )
         chex.assert_equal_shape([result, WAVS])
 
     def test_gradient_wrt_params(self):
@@ -390,7 +391,7 @@ class TestReddy15:
         """Output should be non-negative across the full validity range."""
         wavs = jnp.linspace(1500.0, 28500.0, 500)
         k = reddy15(wavs)
-        assert jnp.all(k >= 0.0), "reddy15 should be non-negative everywhere"
+        assert_non_negative(k, name="k", msg="reddy15 should be non-negative everywhere")
 
     def test_monotonic_behavior(self):
         """Reddy15 should generally decrease from UV to NIR (low to high wavelength).
@@ -419,9 +420,8 @@ class TestReddy15:
 
     def test_jit_compatible(self):
         """Should work inside jax.jit."""
-        f = jax.jit(reddy15)
         wavs = jnp.array([1500.0, 5500.0, 20000.0])
-        result = f(wavs)
+        result = assert_jit_matches_eager(reddy15, wavs)
         chex.assert_shape(result, (3,))
 
     def test_gradient(self):

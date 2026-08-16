@@ -19,13 +19,13 @@ References
 """
 
 import chex
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tests._grad_parity import assert_grad_matches_fd
+
 pytestmark = pytest.mark.regression_paper
-jax.config.update("jax_enable_x64", True)
 
 _C_KMS = 2.99792458e5
 
@@ -129,7 +129,7 @@ def test_compute_line_fluxes_differentiable():
     def total_flux(amps):
         return jnp.sum(compute_line_fluxes(amps, rest_waves, 0.1, 150.0, 2500.0))
 
-    grads = jax.grad(total_flux)(jnp.ones(2) * 1e-17)
+    grads = assert_grad_matches_fd(total_flux, jnp.ones(2) * 1e-17)
     chex.assert_tree_all_finite(grads)
     assert jnp.all(grads > 0.0), "Gradients must be positive"
 
@@ -180,7 +180,7 @@ def test_compute_equivalent_widths_differentiable():
     def total_ew(fluxes):
         return jnp.sum(compute_equivalent_widths(fluxes, cont, 0.3))
 
-    grads = jax.grad(total_ew)(jnp.array([1e-17, 2e-17]))
+    grads = assert_grad_matches_fd(total_ew, jnp.array([1e-17, 2e-17]))
     chex.assert_tree_all_finite(grads)
 
 

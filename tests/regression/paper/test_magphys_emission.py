@@ -14,6 +14,8 @@ import pytest
 pytestmark = pytest.mark.regression_paper
 import jax.numpy as jnp
 
+from tests._bounds import assert_non_negative
+
 pytest.skip("magphys_dc08 not implemented", allow_module_level=True)
 
 
@@ -45,7 +47,7 @@ class TestMagphysNonNegativity:
 
     def test_non_negative_default_params(self):
         result = magphys_dc08(_WAVE_AA, _L_ABSORBED)
-        assert jnp.all(result >= 0.0)
+        assert_non_negative(result, name="result")
 
     def test_non_negative_extreme_temperatures(self):
         result = magphys_dc08(
@@ -55,7 +57,7 @@ class TestMagphysNonNegativity:
             dust_T_cold=15.0,
             dust_T_hot=250.0,
         )
-        assert jnp.all(result >= 0.0)
+        assert_non_negative(result, name="result")
 
     def test_non_negative_zero_luminosity(self):
         result = magphys_dc08(_WAVE_AA, 0.0)
@@ -75,14 +77,14 @@ class TestMagphysXiFractions:
         result = magphys_dc08(
             _WAVE_AA, _L_ABSORBED, dust_xi_pah=1.0, dust_xi_mir=0.0, dust_xi_warm=0.0
         )
-        assert jnp.all(result >= 0.0)
+        assert_non_negative(result, name="result")
 
     def test_cold_only(self):
         """All luminosity in cold component."""
         result = magphys_dc08(
             _WAVE_AA, _L_ABSORBED, dust_xi_pah=0.0, dust_xi_mir=0.0, dust_xi_warm=0.0
         )
-        assert jnp.all(result >= 0.0)
+        assert_non_negative(result, name="result")
 
 
 class TestMagphysPAHFeatures:

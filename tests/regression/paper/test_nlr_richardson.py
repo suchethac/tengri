@@ -9,8 +9,8 @@ import jax
 import jax.numpy as jnp
 
 from tengri.components.agn.nlr import compute_nlr_sed_richardson2014
-
-jax.config.update("jax_enable_x64", True)
+from tests._bounds import assert_non_negative
+from tests._jit_parity import assert_jit_matches_eager
 
 
 class TestRichardsonNLR:
@@ -26,7 +26,7 @@ class TestRichardsonNLR:
         """All output values are non-negative."""
         wave = jnp.linspace(3000, 10000, 200)
         sed = compute_nlr_sed_richardson2014(wave, l_disc_bol_erg=1e44)
-        assert jnp.all(sed >= 0.0)
+        assert_non_negative(sed, name="sed")
 
     def test_finite(self):
         """All output values are finite (no NaN or Inf)."""
@@ -51,8 +51,7 @@ class TestRichardsonNLR:
     def test_jit_compatible(self):
         """Function is JIT-compilable."""
         wave = jnp.linspace(3000, 10000, 200)
-        fn = jax.jit(compute_nlr_sed_richardson2014)
-        sed = fn(wave, l_disc_bol_erg=1e44)
+        sed = assert_jit_matches_eager(compute_nlr_sed_richardson2014, wave, l_disc_bol_erg=1e44)
         chex.assert_tree_all_finite(sed)
 
     def test_scales_with_luminosity(self):

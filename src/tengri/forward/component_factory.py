@@ -781,7 +781,6 @@ def state_to_sed_quantities(state: Any):
     legacy NamedTuple convention).
     """
     from tengri.forward.prediction import SEDQuantities
-    from tengri.utils.physics_constants import L_SUN
     from tengri.utils.sed_quantities import (
         compute_balmer_break,
         compute_bolometric_luminosity,
@@ -789,11 +788,13 @@ def state_to_sed_quantities(state: Any):
         compute_fuv_flux,
         compute_irx,
         compute_l_tir,
+        compute_log_uv_luminosity_1600,
         compute_m_uv,
         compute_nuv_flux,
         compute_rest_uv_color,
-        compute_uv_luminosity_1600,
         compute_uv_slope_beta,
+        derived_luminosity_lsun,
+        derived_weights_peak_relative,
     )
 
     sed = state.sed_intrinsic
@@ -808,9 +809,12 @@ def state_to_sed_quantities(state: Any):
 
     # Dust-absorbed luminosity from the orchestrator's energy-balance
     # bookkeeping — exact match for legacy ``compute_l_dust_absorbed``.
+    # Reads the ``log_L_ir`` companion when the chain publishes it: the linear
+    # ``L_absorbed`` is ~3.6e43 erg/s and is ``inf`` in float32, while the
+    # answer here (~9.5e9 Lsun) is representable, and the attenuator computes
+    # the log form first anyway (#1837).
     derived = state.derived
-    l_absorbed = jnp.asarray(derived.get("L_absorbed", 0.0))
-    l_dust_absorbed = l_absorbed / L_SUN
+    l_dust_absorbed = derived_luminosity_lsun(derived, "L_absorbed", "log_L_ir")
     # L_TIR uses the legacy semantics (integration of the SED over the
     # 8–1000 μm window) for parity with ``predict_sed_quantities``,
     # not the orchestrator's energy-balance ``L_ir`` derived key —
@@ -830,7 +834,10 @@ def state_to_sed_quantities(state: Any):
     # too small in [A/s], inflating IRX by exactly 3 dex. ``C_AA`` was already
     # imported in this very function. See #1131; the band-averaged FUV variant is
     # published separately as ``irx_fuv``.
-    irx = compute_irx(l_tir, compute_uv_luminosity_1600(sed, wave))
+    # The UV anchor is passed in the log domain: nu*L_nu(1600 A) is ~5e42 erg/s
+    # and is not float32-representable at all, so the linear signature returned
+    # NaN there for an IRX of order -0.8 dex (#1837).
+    irx = compute_irx(l_tir, log_l_uv_erg=compute_log_uv_luminosity_1600(sed, wave))
 
     # Pre-dust stellar SED reconstructed from the per-age cube
     # ``lnu_age``, which StellarSEDComponent publishes before
@@ -854,9 +861,15 @@ def state_to_sed_quantities(state: Any):
     # log_metallicity_history evaluated at each SSP age via linear
     # interpolation — the metallicity ramp is monotonic in lookback
     # time so this is sound for the supported (delta, ramp) modes.
+    #
+    # The weights are used only inside ``sum(x*w)/sum(w)``, so any common
+    # factor cancels exactly. Normalizing by the peak bin keeps every weight in
+    # [0, 1]: raw ``L_age`` peaks at ~3.3e42 erg/s, so 85 of 93 bins were
+    # ``inf`` in float32 and ``ssp_ages_yr * L_age`` overflowed a second time on
+    # top (~1e10 x). Both weighted means are of order 1 (#1837).
     if "L_age" in derived and "ssp_ages_yr" in derived:
-        L_age = jnp.asarray(derived["L_age"])
         ssp_ages_yr = jnp.asarray(derived["ssp_ages_yr"])
+        L_age = derived_weights_peak_relative(derived, "L_age", "log_L_age")
         L_total = jnp.maximum(jnp.sum(L_age), _TINY)
         lw_age_yr = jnp.sum(ssp_ages_yr * L_age) / L_total
         lw_age_gyr = lw_age_yr / 1e9
@@ -913,8 +926,11 @@ def state_to_radio_quantities(state: Any) -> RadioQuantities:
     Returns ``NaN`` fields when the chain did not include
     :class:`RadioSEDComponent` (no ``L_radio`` published).
     """
-    from tengri.utils.physics_constants import L_SUN
-    from tengri.utils.sed_quantities import compute_l_radio_thermal_from_log_qh, compute_q_ir
+    from tengri.utils.sed_quantities import (
+        compute_l_radio_thermal_from_log_qh,
+        compute_q_ir,
+        derived_luminosity_lsun,
+    )
 
     derived = state.derived
     nan_scalar = jnp.asarray(jnp.nan)
@@ -935,8 +951,9 @@ def state_to_radio_quantities(state: Any) -> RadioQuantities:
     l_thermal = compute_l_radio_thermal_from_log_qh(log_nion)
     l_nonthermal = l_1p4ghz - l_thermal
 
-    l_ir = jnp.asarray(derived.get("L_ir", 0.0))
-    l_tir_lsun = l_ir / L_SUN
+    # Same seam as ``l_dust_absorbed``: the linear ``L_ir`` is ~3.6e43 erg/s and
+    # is ``inf`` in float32, while q_IR is a dex ratio of order 2 (#1837).
+    l_tir_lsun = derived_luminosity_lsun(derived, "L_ir", "log_L_ir")
     q_ir = compute_q_ir(l_tir_lsun, l_1p4ghz)
 
     return RadioQuantities(

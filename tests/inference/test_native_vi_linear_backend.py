@@ -4,14 +4,10 @@
 import chex
 import jax
 import jax.numpy as jnp
+import pytest
 from jax.flatten_util import ravel_pytree
 
 from tengri.inference.backends.vi.native import build_native_vi_linear_engine
-
-jax.config.update("jax_enable_x64", True)
-
-
-import pytest
 
 pytestmark = pytest.mark.contract
 
