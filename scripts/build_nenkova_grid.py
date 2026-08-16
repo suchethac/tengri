@@ -105,7 +105,10 @@ def build(input_dat: Path, output_h5: Path) -> None:
         g.create_dataset("tau_axis", data=tau_axis, compression="gzip")
         g.create_dataset("wavelength", data=wavelength_aa, compression="gzip")
         g.create_dataset("template", data=template, compression="gzip")
-        g.attrs["source_file"] = str(input_dat)
+        # Basename only: the absolute path is machine-specific and ships to the
+        # public repo inside the committed grid. The filename is the part that
+        # identifies the upstream template; the prefix only names someone's disk.
+        g.attrs["source_file"] = Path(input_dat).name
         g.attrs["n_tau"] = tau_axis.size
         g.attrs["n_wave"] = wavelength_aa.size
         g.attrs["wavelength_unit"] = "Angstrom"

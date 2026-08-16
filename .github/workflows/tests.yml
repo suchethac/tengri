@@ -96,6 +96,18 @@ jobs:
       # filenames (#1725). Resolves paths only: it cannot tell you a cited test
       # runs, which is why the protocol carries a NOT RUN status. Stdlib-only.
       - run: python tools/check_verification_protocol_paths.py
+      # The repo is public, so a committed `/Users/<someone>/...` ships. Both
+      # sources are generated output nobody re-reads: sphinx-gallery bakes the
+      # console into docs/auto_examples/*.rst, so a gallery regenerated from a
+      # worktree captures that worktree's path (#1783 replaced 792 of them, and
+      # it had happened before), and three HDF5 grids carried a home directory
+      # in a provenance attribute from the day they were built. Matches the
+      # PATH form, never the username: halos.as.arizona.edu/suchethacooray/ is
+      # the public data mirror download_ssp() needs, and scrubbing it would
+      # break installation. Reads data files as raw bytes because rewriting an
+      # HDF5 attribute leaves the old string in the file's freed space, where
+      # any check going through h5py reports clean. Stdlib-only.
+      - run: python tools/check_no_local_paths.py
       # tengri implements published models and validates against the reference
       # codes; it does not port or copy their source. The wording drifted back
       # twice after being swept by hand, so it is pinned here. Stdlib-only.
@@ -110,6 +122,16 @@ jobs:
       # right (that needs the network) but it enforces that the repo does not
       # disagree with itself, which is what actually happened. Stdlib-only.
       - run: python tools/check_citation_consistency.py
+      # The guard above compares citations to EACH OTHER, so it cannot see one
+      # that is wrong the same way everywhere: Feltre+2016 was cited three times
+      # under a DOI belonging to a planet-scattering paper, self-consistently.
+      # references.bib is the curated record and was right about Cue the whole
+      # time, but nothing bound docstrings to it -- every bib consumer is a
+      # runtime path. This compares citations to THE RECORD. It found Vanden
+      # Berk+2001 cited in `blr.py` under the correct DOI with the title of a
+      # different paper ("The SDSS Quasar Catalog"), which a coverage-only check
+      # would have shipped. Backlogs pinned and ratcheting. Stdlib-only.
+      - run: python tools/check_citation_bib_coverage.py
       # A warning that renders a computed number and discards it forces every
       # consumer to regex-parse prose for a value the format spec already
       # rounded: `{frac:.0%}` made "69%" mean anything in 0.685-0.695, and the

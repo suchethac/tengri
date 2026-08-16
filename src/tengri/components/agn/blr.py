@@ -384,8 +384,9 @@ def compute_blr_sed(
 
     References
     ----------
-    .. [1] M. A. Vanden Berk et al., "The SDSS Quasar Catalog," AJ, 122, 549
-       (2001). https://doi.org/10.1086/321167
+    .. [1] D. E. Vanden Berk et al., "Composite Quasar Spectra from the Sloan
+       Digital Sky Survey," AJ, 122, 549 (2001).
+       https://doi.org/10.1086/321167
     .. [2] H. Netzer, "Accretion Power in Astrophysics," Cambridge University
        Press (1990). Chapter 2: Broad-line region models.
     .. [3] T. A. Boroson and R. F. Green, "The Emission Line Properties of

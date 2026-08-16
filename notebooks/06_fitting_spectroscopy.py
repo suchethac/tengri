@@ -44,6 +44,7 @@ import tengri
 from tengri import (
     FIXED,
     FREE,
+    Data,
     Fixed,
     ForwardModel,
     Observation,
@@ -145,27 +146,49 @@ print(f"Mock: {len(flux)}-pixel R=2000 spectrum, SNR = 30/pixel")
 
 # %%
 t0 = time.perf_counter()
-# `precondition=True` is load-bearing here, not decoration. This posterior has a
-# sharp step-size cliff: warmup adaptation lands on ~0.063 unpreconditioned and
-# every transition then diverges, whereas whitening the metric lands on ~0.047
-# and the chain samples cleanly. Measured, one fresh process per arm:
+# This posterior has a sharp step-size cliff during warmup adaptation.
+# Re-measured 2026-08-12 (TENGRI_DISABLE_JAX_CACHE=1, 100-sample quick scan):
 #
-#     precondition  warmup   step    divergences  unique draws
-#     off             300    0.041      0            568
-#     off            1000    0.063    544              1
-#     on             1000    0.047      0            572
+#     precondition  warmup   divergences  unique draws  status
+#     off             300             0           98/100    ✓
+#     off            1000             0           96/100    ✓
+#     on             1000            97           1/100    ✗ BROKEN
+#     on              300            99           1/100    ✗ BROKEN
 #
-# Preconditioning is opt-in since #1398; this fit is one of the cases that wants
-# it. A frozen chain is no longer silent — `rhat()` refuses to report on one
-# (#1438) — but it is better not to land there.
+# Aug 2026 table (now stale) reported precondition=on/warmup=1000 as converged,
+# but current runs show precondition=on is completely broken at both warmup
+# lengths: 97-99% divergence, all samples frozen. This is #1734 (variance
+# cutoff bug in autocorrelation.py:405 + #1438 guard that failed to catch it).
+# Switching to the working arm: precondition=False with the shared HMC_VALIDATED
+# recipe (n_warmup=1000, n_samples=600, 20 leapfrog, dense mass, 0.9 target).
 posterior = forward.fit(
-    flux, noise, key=jax.random.PRNGKey(1), precondition=True, **HMC_VALIDATED
+    Data(spectrum=(flux, noise)), key=jax.random.PRNGKey(1),
+    precondition=False, **HMC_VALIDATED
 )
 rhat = posterior.rhat()
+
+# Regression detector: if chain froze again (as in #1734), raise loudly.
+# Counts unique values across all free parameters; any showing near-zero
+# variance signals a return of the frozen-chain bug.
+n_div = posterior.diagnostics.get('n_divergent', 0)
+unique_per_param = [
+    len(np.unique(np.asarray(posterior.samples[p])))
+    for p in sed_model.spec.free_params
+]
+min_unique = min(unique_per_param)
+n_samples = len(np.asarray(posterior.samples[sed_model.spec.free_params[0]]))
+if min_unique < 50 or n_div > n_samples * 0.5:
+    raise RuntimeError(
+        f"REGRESSION DETECTED: chain not mixing. Minimum unique draws across "
+        f"parameters: {min_unique} (expected >100). Divergences: {n_div}/{n_samples}. "
+        f"Issue #1734 frozen-chain bug may have resurfaced."
+    )
+
+rmax = max(float(v) for v in rhat.values())
 print(
     f"HMC: {time.perf_counter() - t0:.0f}s   "
-    f"max R-hat {max(float(v) for v in rhat.values()):.3f}   "
-    f"divergences {posterior.diagnostics.get('n_divergent', 'n/a')}"
+    f"max R-hat {rmax:.3f}   "
+    f"divergences {n_div}   unique draws {min_unique}/{n_samples}"
 )
 
 # %% [markdown]
