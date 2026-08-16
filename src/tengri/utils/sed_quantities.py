@@ -234,7 +234,7 @@ def derived_luminosity_lsun(
     **JIT/grad/vmap-compatible**: yes. The key presence test is a Python-level
     branch on a static dict, not a traced value.
     """
-    log_value = derived.get(log_key) if hasattr(derived, "get") else None
+    log_value = derived.get(log_key)
     if log_value is not None:
         return pow10(jnp.asarray(log_value) - LOG10_L_SUN)
     return jnp.asarray(derived.get(key, default)) / L_SUN
