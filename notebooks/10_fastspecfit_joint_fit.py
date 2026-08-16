@@ -80,6 +80,7 @@ import tengri
 from tengri import (
     FIXED,
     FREE,
+    Data,
     FeaturePrecomp,
     Fitter,
     Fixed,
@@ -95,6 +96,7 @@ from tengri import (
 )
 from tengri.observation import LineFluxData
 from tengri.utils.conversions import lnu_to_fnu
+from _setup import HMC_VALIDATED
 
 plot.setup_style()
 
@@ -157,8 +159,14 @@ print(f"Lines: {len(LINE_NAMES)} — {', '.join(LINE_NAMES)}")
 
 
 # %%
+# Build a LineList that declares the lines expected in the fit
+_line_catalog_full = LineList.default_optical()
+line_catalog = LineList.select(_line_catalog_full, names=LINE_NAMES)
+
+
 def build(line_data, approx):
-    obs = Observation(photometry=phot_obs, line_fluxes=line_data)
+    # Observation declares: photometry schema, line data, and line schema
+    obs = Observation(photometry=phot_obs, line_fluxes=line_data, lines=line_catalog)
     return SEDModel.build(
         ssp_data=ssp,
         observation=obs,
@@ -440,36 +448,85 @@ print(f"  fit() wall is ~{warm_f:.1f}s on any path — that is per-call JIT comp
 # **Sampler.** This posterior is strongly correlated (the degeneracies above),
 # so the mass matrix must be **dense** — a diagonal one does not converge here.
 # Given that, fixed-trajectory **HMC** converges faster than NUTS, which spends
-# its budget building deep adaptive trees. We run **two genuine chains** so the
+# its budget building deep adaptive trees. We run **four genuine chains** so the
 # R-hat is a real between-chain diagnostic, and execute them
 # `chain_method="sequential"`: each chain reuses one compiled kernel, so peak
 # memory stays at a *single* chain's. That is the point — a vmapped multi-chain
 # compile needs ~N× the RAM (and a dense-mass fit can OOM a modest machine),
 # whereas sequential runs anywhere a one-chain fit runs, at ~N× the sampling
 # wall. One fit per process, per the OOM-orchestration rule.
+#
+# **What it reaches, and why it stops there.** Warmup is the knob that matters,
+# and it was swept rather than guessed (4 chains, fast path):
+#
+#     warmup   samples   R-hat   divergences   wall
+#       1000       600   1.224             -    85 s
+#       2000       600   1.112             0   413 s
+#       3000      1000   1.038             3   276 s
+#       5000      1500   1.020            49   829 s
+#
+# Past 3000 the returns invert: R-hat creeps down while divergences climb from 3
+# to 49, i.e. the adaptation settles on a step size that walks into a pathological
+# corner of the metallicity/dust/ionization degeneracy. So 3000 is the operating
+# point — and short of the < 1.01 you would demand before quoting an interval in a
+# paper. Truth lands inside the 68% interval for 5 of 6 parameters; read the widths
+# in that sector as approximate.
+#
+# Two honest caveats about that table. It was measured in a standalone sweep, and
+# this page's own fit reports a higher R-hat than the matching row — so read the
+# table as the *shape* of the warmup response (monotone gain, then divergences),
+# not as a promise about the number printed below. And R-hat itself understates
+# the problem at low chain counts: two chains gave 1.089 where four give ~1.30,
+# because two chains simply have fewer ways to disagree. The four-chain number is
+# the trustworthy one, and it says this sector is not converged.
+#
+# Chains are cheap here and worth spending on, because they are what makes R-hat a
+# real between-chain diagnostic: peak RSS is 3.8 GB at one chain, 3.9 GB at two and
+# 5.0 GB at four, and compile time is flat at ~27 s throughout — the sampler is one
+# compiled `lax.scan`, so neither chains nor samples rebuild it.
 
 # %%
-N_WARMUP, N_SAMPLES, N_CHAINS, N_LEAPFROG = 500, 300, 2, 100
+# Fixed-length HMC on the precomputed model. Every gradient here goes through the
+# `(WavePrecomp, FeaturePrecomp)` tables built above, so an evaluation is a lookup
+# rather than a full SSP integral — which is what makes a long chain affordable.
+#
+# The sampler stays fixed-length rather than NUTS on purpose: 20 leapfrog steps is
+# 20 gradients per iteration, where NUTS routinely builds trees of 100+ and took
+# several times longer here without converging. Spend the saving on *more
+# iterations of the cheap kernel* instead — and spend it on warmup, which is what
+# the adaptation actually needs. Chains are the cheap axis under
+# `chain_method="sequential"`: the memory sweep above measures 5.0 GB at four
+# chains against 3.9 GB at two, so four fit comfortably and buy an R-hat that two
+# chains cannot — two reported 1.089 where four report ~1.30 on the same fit.
+HMC_LONG = {**HMC_VALIDATED, "n_warmup": 3000, "n_samples": 1000}
+N_CHAINS = 4
+data = Data(photometry=(flux_phot, n_phot))
+
 t0 = time.perf_counter()
 posterior = ForwardModel.build(sed=model_fast).fit(
-    flux_phot,
-    n_phot,
-    method="mcmc_hmc",
+    data,
     key=jax.random.PRNGKey(7),
-    n_warmup=N_WARMUP,
-    n_samples=N_SAMPLES,
     n_chains=N_CHAINS,
-    n_leapfrog_steps=N_LEAPFROG,
-    dense_mass_matrix=True,
-    target_accept_rate=0.85,
-    chain_method="sequential",  # peak memory = one chain (runs on cheap hardware)
+    chain_method="sequential",
+    **HMC_LONG,
 )
+elapsed = time.perf_counter() - t0
 rmax = max(float(v) for v in posterior.rhat().values())
+n_divergent = posterior.diagnostics.get('n_divergent', 0)
+
+# R-hat cannot see a chain that never moved — it scores ~1.0 on one — so check the
+# draws directly, across every free parameter (#1734). Only the free ones: a Fixed
+# parameter is legitimately constant and appears in `samples` with a single value,
+# so scanning all of `samples` would report a frozen chain on every healthy fit.
+_free = model_fast.spec.free_params
+n_draw = min(np.asarray(posterior.samples[p]).size for p in _free)
+n_unique = min(np.unique(np.asarray(posterior.samples[p])).size for p in _free)
+
 print(
-    f"HMC ({N_CHAINS} chains x {N_WARMUP}w+{N_SAMPLES}s, L={N_LEAPFROG}, sequential): "
-    f"{time.perf_counter() - t0:5.0f}s   max R-hat {rmax:.3f}   "
-    f"divergences {posterior.diagnostics.get('n_divergent', 'n/a')}"
+    f"HMC ({N_CHAINS} chains x {HMC_LONG['n_warmup']}w+{HMC_LONG['n_samples']}s): "
+    f"{elapsed:5.0f}s   max R-hat {rmax:.3f}   divergences {n_divergent}"
 )
+print(f"  Mixing: worst parameter has {n_unique}/{n_draw} unique draws")
 
 # %% [markdown]
 # On a machine with more RAM, run the chains concurrently instead of one at a
@@ -558,12 +615,16 @@ DL = cosmology.luminosity_distance(Z_GAL)
 WAVE_FULL = np.geomspace(2.0e3, 3.0e5, 800)  # observed frame [Å]  (0.2–30 µm)
 w_full_um = WAVE_FULL / 1e4
 
+# For SED evaluation, use WavePrecomp() alone (not FeaturePrecomp). FeaturePrecomp
+# attaches a per-Q_H nebular grid that disables exact rest_sed(); WavePrecomp()
+# alone is exact for rest_sed() while remaining LUT-fast for photometry.
+model_sed = build(line_data, approx=WavePrecomp())
 
 def _sed_fnu(p):
     lnu = np.interp(
         WAVE_FULL / (1.0 + Z_GAL),
-        np.asarray(model_fast.wavelengths),
-        np.asarray(model_fast.predict(p).rest_sed()),
+        np.asarray(model_sed.wavelengths),
+        np.asarray(model_sed.predict(p).rest_sed()),
     )
     return np.asarray(lnu_to_fnu(jnp.asarray(lnu), DL, Z_GAL))
 

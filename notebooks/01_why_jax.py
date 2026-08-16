@@ -93,18 +93,24 @@ flux_obs, noise = mock["flux_obs"], mock["noise"]
 # %% [markdown]
 # ## Figure 1 — the posterior gradient
 #
-# Two of the free parameters, varied on a 60×60 grid with the rest fixed
+# Two of the free parameters, varied on a 20×20 grid with the rest fixed
 # at truth: the peak SFR and the birth-cloud optical depth. Left panel:
 # the log-posterior surface, with contours at 1σ / 2σ / 3σ. Right panel:
 # `jax.grad` of the same quantity, plotted as a vector field.
+#
+# **The JIT compilation boundary:** The code below first calls `jax.jit` to
+# compile the loss and its gradient into fused XLA kernels. The first call
+# triggers compilation (~100 ms); all subsequent calls reuse the kernel.
+# This is where the speedup comes from — not in the numerics, but in the
+# compiled representation.
 #
 # A gradient-free sampler explores by trial-and-error; a gradient-based
 # sampler reads the arrows. In one or two dozen dimensions that is the
 # difference between hours and seconds.
 
 # %%
-log_sfr_grid = np.linspace(-1.5, 2.0, 30)
-tau_grid = np.linspace(0.0, 1.5, 30)
+log_sfr_grid = np.linspace(-1.5, 2.0, 20)
+tau_grid = np.linspace(0.0, 1.5, 20)
 LSFR, TAU = np.meshgrid(log_sfr_grid, tau_grid, indexing="ij")
 
 base = dict(truth)
@@ -115,14 +121,15 @@ def neg_log_post(log_sfr, tau):
     p = dict(base)
     p[free_keys[0]] = log_sfr
     p[free_keys[1]] = tau
-    flux_pred = model.predict_observables(p).phot_fnu
+    flux_pred = model.predict_photometry(p)  # canonical lean JIT/vmap-safe path
     chi2 = jnp.sum(((flux_pred - flux_obs) / noise) ** 2)
     return 0.5 * chi2  # uniform priors → χ²/2 = -ln posterior up to const
 
 
-# Sequentialize: vmap-of-vmap of the orchestrator state pytree
-# explodes memory (n_age × n_wave × n_grid). Plain JIT'd scalar
-# calls reuse one set of buffers and stay well under a GB.
+# Sequentialize: calling scalar functions in a loop, each JIT'd to its own
+# compiled kernel. Vmapping over the grid would trace the entire orchestrator
+# state pytree (n_age × n_wave × n_grid), exploding memory; scalar calls
+# reuse the same kernel and stay well under a GB.
 neg_log_post_jit = jax.jit(neg_log_post)
 grad_jit = jax.jit(jax.grad(neg_log_post, argnums=(0, 1)))
 
@@ -196,7 +203,7 @@ fig.savefig(FIG_DIR / "01_gradient_map.png", dpi=300, bbox_inches="tight")
 
 # %%
 def loss(p):
-    return 0.5 * jnp.sum(((model.predict_observables(p).phot_fnu - flux_obs) / noise) ** 2)
+    return 0.5 * jnp.sum(((model.predict_photometry(p) - flux_obs) / noise) ** 2)
 
 
 grad_at_truth = jax.grad(loss)(truth)
@@ -205,40 +212,45 @@ grad_at_truth = jax.grad(loss)(truth)
 # %% [markdown]
 # ## Figure 2 — forward-model throughput
 #
-# A single forward call (the JIT'd `predict_observables`) versus a
-# `vmap` over 10 000 parameter draws. The batched call is far below
-# 10 000× the single-call cost: cold-compile is paid once, then XLA
-# broadcasts the same compiled graph across the batch axis. This is
-# the unit of speed-up that lets gradient samplers, population fits,
+# A single forward call versus a `vmap` over 100 parameter draws.
+# The batched call is far below 100× the single-call cost: the compile
+# is paid once (the "cold" first call, ~100–200 ms), then XLA broadcasts
+# the same kernel across the batch axis (subsequent "warm" calls reuse it).
+# This is the unit of speed-up that lets gradient samplers, population fits,
 # and posterior-predictive sweeps fit on a laptop.
 
 # %%
-# Warm the JIT cache.
-_ = model.predict_observables(truth).phot_fnu.block_until_ready()
+# Trigger the first JIT compile on a single call (cold cache).
+_ = model.predict_photometry(truth).block_until_ready()
 
 t0 = perf_counter()
 for _ in range(50):
-    _ = model.predict_observables(truth).phot_fnu.block_until_ready()
+    # Warm cache: all 50 calls reuse the same compiled kernel.
+    _ = model.predict_photometry(truth).block_until_ready()
 t_single = (perf_counter() - t0) / 50
 
 tengri.clear_shared_caches()  # free graphs from the gradient figure
-n_batch = 200
+n_batch = 100
 keys = jax.random.split(jax.random.PRNGKey(5), n_batch)
 batch_params = jax.vmap(model.spec.sample)(keys)
-forward = jax.jit(jax.vmap(lambda p: model.predict_observables(p).phot_fnu))
+forward = jax.jit(jax.vmap(lambda p: model.predict_photometry(p)))
 
-_ = forward(batch_params).block_until_ready()  # cold-compile
+_ = forward(batch_params).block_until_ready()  # cold-compile: triggers JIT trace+compile
 t0 = perf_counter()
 _ = forward(batch_params).block_until_ready()
 t_batch = perf_counter() - t0
 
 t0 = perf_counter()
+# Timing demonstration (not a converged posterior).
+# A real inference run needs more samples to assess convergence (see notebook 05).
+# This is just enough to show that NUTS sampling on a 5-D model happens in seconds,
+# not hours.
 posterior = ForwardModel.build(sed=model).fit(
     flux_obs, noise,
     method="mcmc_nuts",
     key=jax.random.PRNGKey(2),
-    n_warmup=300,
-    n_samples=300,
+    n_warmup=100,
+    n_samples=100,
 )
 t_nuts = perf_counter() - t0
 

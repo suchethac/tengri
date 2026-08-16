@@ -64,6 +64,8 @@ import matplotlib.pyplot as plt
 import tengri
 from _setup import FIG_DIR
 from tengri import (
+    FIXED,
+    FREE,
     Fixed,
     Observation,
     Parameters,
@@ -75,7 +77,6 @@ from tengri import (
     recipes,
 )
 from tengri import cosmology, plot, units
-from tengri.parameters.sentinels import FIXED, FREE
 
 plot.setup_style()
 
