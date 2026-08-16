@@ -40,6 +40,9 @@ References
 
 """
 
+from collections.abc import Mapping
+from typing import Any
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -192,6 +195,92 @@ def compute_mass_weighted_metallicity(
 #: log10 of the solar luminosity [dex re erg/s]. Folded into the bolometric
 #: reductions so the erg/s value is never materialized (see _trapz_to_lsun).
 LOG10_L_SUN: float = float(np.log10(L_SUN))
+
+
+def derived_luminosity_lsun(
+    derived: Mapping[str, Any], key: str, log_key: str, default: float = 0.0
+) -> jnp.ndarray:
+    r"""Read an erg/s ``state.derived`` key in :math:`L_\odot`, log companion first.
+
+    The cross-component contract publishes its energy-balance luminosities in
+    erg/s (``L_ir``, ``L_absorbed``) alongside a ``log10`` companion
+    (``log_L_ir``). For a :math:`10^{10}\,M_\odot` galaxy the linear key is
+    ~3.6e43 and is ``inf`` in float32, while the companion is ~43.6 dex and
+    exact — and the attenuator computes the companion *first*
+    (``L_ir = pow10(log_L_ir)``), so reading it is strictly closer to the
+    source. Consumers that divided the linear key by :math:`L_\odot` returned
+    ``inf`` for a ~9.5e9 :math:`L_\odot` answer that float32 holds easily
+    (issue #1837).
+
+    Parameters
+    ----------
+    derived : Mapping
+        ``state.derived``.
+    key : str
+        Linear key name [erg/s], used only when the companion is absent.
+    log_key : str
+        ``log10`` companion key name [dex re erg/s].
+    default : float, optional
+        Value in erg/s when neither key is present. Default 0.0.
+
+    Returns
+    -------
+    ndarray, shape ()
+        The luminosity in :math:`L_\odot`. Exactly ``0.0`` when the companion
+        is ``-inf`` (the "this term is exactly zero" sentinel).
+
+    Notes
+    -----
+    **JIT/grad/vmap-compatible**: yes. The key presence test is a Python-level
+    branch on a static dict, not a traced value.
+    """
+    log_value = derived.get(log_key) if hasattr(derived, "get") else None
+    if log_value is not None:
+        return pow10(jnp.asarray(log_value) - LOG10_L_SUN)
+    return jnp.asarray(derived.get(key, default)) / L_SUN
+
+
+def derived_weights_peak_relative(
+    derived: Mapping[str, Any], key: str, log_key: str
+) -> jnp.ndarray:
+    r"""Per-bin weights from an erg/s ``state.derived`` array, rescaled by their peak.
+
+    For weights used only inside :math:`\sum x_i w_i / \sum w_i`, any factor
+    common to every bin cancels exactly, so the absolute scale is free to
+    discard — and discarding it is what makes the mean computable in float32.
+    ``L_age`` peaks at ~3.3e42 erg/s, so 85 of 93 bins are ``inf`` there and
+    ``ssp_ages_yr * L_age`` overflows a second time on top (~1e10 x), while the
+    weighted mean itself is of order 1 (issue #1837).
+
+    Parameters
+    ----------
+    derived : Mapping
+        ``state.derived``.
+    key : str
+        Linear per-bin key [erg/s], used only when the companion is absent.
+    log_key : str
+        ``log10`` companion key [dex re erg/s].
+
+    Returns
+    -------
+    ndarray, shape (n_bin,)
+        Weights in ``[0, 1]``, the brightest bin exactly ``1.0``. All-zero when
+        every bin is dark.
+
+    Notes
+    -----
+    **JIT/grad/vmap-compatible**: yes. ``-inf`` is the "this bin emits nothing"
+    sentinel and powers back to exactly ``0.0``; an all-dark array leaves the
+    peak non-finite, so the offset falls back to zero and every weight
+    underflows to ``0.0`` exactly as the linear path did.
+    """
+    log_values = derived.get(log_key)
+    if log_values is None:
+        return jnp.asarray(derived[key])
+    log_values = jnp.asarray(log_values)
+    peak = jnp.max(log_values)
+    peak = jnp.where(jnp.isfinite(peak), peak, 0.0)
+    return pow10(log_values - peak)
 
 
 def _trapz_to_lsun(integrand: jnp.ndarray, nu: jnp.ndarray) -> jnp.ndarray:

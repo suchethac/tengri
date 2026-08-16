@@ -100,7 +100,9 @@ MAG_F64_ATOL = 1e-13
 def test_lnu_to_absolute_ab_mag_float64_unchanged(lnu):
     """float64 must match the pre-fix formula to within one ulp of the log."""
     got = lnu_to_absolute_ab_mag(jnp.asarray(lnu))
-    old = -2.5 * jnp.log10(jnp.maximum(lnu / (4.0 * jnp.pi * TEN_PC_CM**2), 1e-300) / MAGGIES_ZP_CGS)
+    old = -2.5 * jnp.log10(
+        jnp.maximum(lnu / (4.0 * jnp.pi * TEN_PC_CM**2), 1e-300) / MAGGIES_ZP_CGS
+    )
     np.testing.assert_allclose(np.float64(got), np.float64(old), rtol=1e-13, atol=MAG_F64_ATOL)
 
 
@@ -205,7 +207,9 @@ def test_irx_finite_in_float32_and_matches_float64():
 
     sed, wave = _uv_test_sed()
     ref = np.float64(
-        compute_irx(compute_l_tir(sed, wave), log_l_uv_erg=compute_log_uv_luminosity_1600(sed, wave))
+        compute_irx(
+            compute_l_tir(sed, wave), log_l_uv_erg=compute_log_uv_luminosity_1600(sed, wave)
+        )
     )
     assert np.isfinite(ref)
 
@@ -233,9 +237,7 @@ def test_irx_float64_unchanged_for_the_linear_signature():
     l_tir = compute_l_tir(sed, wave)
     l_uv = compute_uv_luminosity_1600(sed, wave)
     got = np.float64(compute_irx(l_tir, l_uv))
-    old = np.float64(
-        jnp.log10(jnp.maximum(l_tir * L_SUN, _FLOOR()) / jnp.maximum(l_uv, _FLOOR()))
-    )
+    old = np.float64(jnp.log10(jnp.maximum(l_tir * L_SUN, _FLOOR()) / jnp.maximum(l_uv, _FLOOR())))
     np.testing.assert_allclose(got, old, rtol=1e-13, atol=MAG_F64_ATOL)
 
 
@@ -271,9 +273,7 @@ BROKEN_PROPERTIES = (
 )
 
 
-LINE_RATIO_PROPERTIES = frozenset(
-    {"balmer_decrement", "bpt_nii", "bpt_sii", "o32", "o3hb", "r23"}
-)
+LINE_RATIO_PROPERTIES = frozenset({"balmer_decrement", "bpt_nii", "bpt_sii", "o32", "o3hb", "r23"})
 
 PARAMS = {"sfh_delayed_log_total_mass": 10.0, "dust_tau_diff": 0.5}
 
