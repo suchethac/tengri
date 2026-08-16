@@ -3547,11 +3547,15 @@ def _l_tir_fn(state, params):
 
 
 def _l_dust_absorbed_fn(state, params):
-    """Dust-absorbed luminosity [Lsun]."""
-    from tengri.utils.physics_constants import L_SUN
+    """Dust-absorbed luminosity [Lsun].
 
-    l_absorbed = jnp.asarray(state.derived.get("L_absorbed", 0.0))
-    return l_absorbed / L_SUN
+    Prefers the ``log_L_ir`` companion: the linear ``L_absorbed`` is ~3.6e43
+    erg/s and is ``inf`` in float32, while this answer (~9.5e9 Lsun) is
+    comfortably representable there (#1837).
+    """
+    from tengri.utils.sed_quantities import derived_luminosity_lsun
+
+    return derived_luminosity_lsun(state.derived, "L_absorbed", "log_L_ir")
 
 
 def _irx_fn(state, params):
@@ -3580,13 +3584,18 @@ def _irx_fn(state, params):
        and the Ultraviolet Luminosity Density at z ~ 3 as Calibrated by Local
        Starburst Galaxies", ApJ, 521, 64. doi:10.1086/307523
     """
-    from tengri.utils.sed_quantities import compute_irx, compute_l_tir, compute_uv_luminosity_1600
+    from tengri.utils.sed_quantities import (
+        compute_irx,
+        compute_l_tir,
+        compute_log_uv_luminosity_1600,
+    )
 
     sed = state.sed_intrinsic
     wave = state.wave
     l_tir = compute_l_tir(sed, wave)
-    l_uv = compute_uv_luminosity_1600(sed, wave)
-    return compute_irx(l_tir, l_uv)
+    # Log-domain UV anchor: nu*L_nu(1600 A) is ~5e42 erg/s and is not
+    # float32-representable, so the linear route returned NaN (#1837).
+    return compute_irx(l_tir, log_l_uv_erg=compute_log_uv_luminosity_1600(sed, wave))
 
 
 def _irx_fuv_fn(state, params):
@@ -3611,14 +3620,20 @@ def _irx_fuv_fn(state, params):
     ``2.998e15`` — the speed of light 1000x too small in [A/s] — which inflated
     every reported IRX by exactly :math:`\log_{10}(1000) = 3` dex (#1131).
     """
+    import math
+
     from tengri.utils.physics_constants import C_AA
+    from tengri.utils.scale import log10_magnitude
     from tengri.utils.sed_quantities import compute_fuv_flux, compute_irx, compute_l_tir
 
     sed = state.sed_intrinsic
     wave = state.wave
     l_tir = compute_l_tir(sed, wave)
     fuv = compute_fuv_flux(sed, wave)
-    return compute_irx(l_tir, fuv * C_AA / 1500.0)
+    # The pivot frequency stays in the exponent: ``fuv * C_AA / 1500`` is
+    # ~4e42 erg/s and overflows float32, though IRX_FUV is ~-0.7 dex (#1837).
+    log_l_uv = log10_magnitude(fuv) + math.log10(C_AA / 1500.0)
+    return compute_irx(l_tir, log_l_uv_erg=log_l_uv)
 
 
 def _uv_slope_beta_fn(state, params):
@@ -3721,7 +3736,11 @@ def _luminosity_weighted_age_gyr_fn(state, params):
     nan_scalar = jnp.asarray(jnp.nan)
 
     if "L_age" in derived and "ssp_ages_yr" in derived:
-        L_age = jnp.asarray(derived["L_age"])
+        from tengri.utils.sed_quantities import derived_weights_peak_relative
+
+        # Peak-relative weights: the common factor cancels in the mean, and raw
+        # ``L_age`` is ~3.3e42 erg/s, 85 of 93 bins ``inf`` in float32 (#1837).
+        L_age = derived_weights_peak_relative(derived, "L_age", "log_L_age")
         ssp_ages_yr = jnp.asarray(derived["ssp_ages_yr"])
         L_total = jnp.maximum(jnp.sum(L_age), _TINY)
         lw_age_yr = jnp.sum(ssp_ages_yr * L_age) / L_total
@@ -3747,7 +3766,10 @@ def _luminosity_weighted_metallicity_fn(state, params):
     nan_scalar = jnp.asarray(jnp.nan)
 
     if "L_age" in derived and "ssp_ages_yr" in derived:
-        L_age = jnp.asarray(derived["L_age"])
+        from tengri.utils.sed_quantities import derived_weights_peak_relative
+
+        # See _luminosity_weighted_age_gyr_fn: scale-free weights (#1837).
+        L_age = derived_weights_peak_relative(derived, "L_age", "log_L_age")
         ssp_ages_yr = jnp.asarray(derived["ssp_ages_yr"])
         L_total = jnp.maximum(jnp.sum(L_age), _TINY)
 

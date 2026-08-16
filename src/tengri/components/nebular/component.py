@@ -1031,6 +1031,47 @@ def _line_ratio_floor() -> float:
     return representable_floor(1e-300)
 
 
+def _line_lums_for_ratios(derived):
+    """``(line_waves, line_lums)`` on a peak-relative scale, for ratio diagnostics.
+
+    Every caller uses these luminosities **only inside a ratio**, so any factor
+    common to all lines cancels exactly. Rescaling by the brightest line is
+    therefore free, and it is what makes the ratios computable in float32: the
+    published ``line_lums`` are erg/s (~1e41-1e43) and 83% of the array is
+    ``inf`` there, which turned six finite diagnostics — BPT, R23, O32, the
+    Balmer decrement — into ``NaN`` (#1837).
+
+    The scale is recovered from the ``log_line_lums`` companion, which is exact
+    in float32, rather than from the overflowed linear array. Falls back to the
+    linear key for chains that publish no companion.
+
+    Notes
+    -----
+    Ratios in the live regime are unchanged in float64 (a common factor,
+    divided out). The only values that move are the degenerate ones where a
+    line is *exactly* zero and the floor clamps: those become less extreme,
+    since the floor is absolute while the luminosities are now relative. Both
+    before and after, that number means "no emission", not a measurement.
+
+    This deliberately does not serve :func:`_line_luminosity_helper`, which
+    returns *absolute* line luminosities in erg/s — those are genuinely outside
+    float32 range and need the breaking unit change tracked in #1206 §3.
+    """
+    from tengri.utils.scale import pow10
+
+    line_waves = jnp.asarray(derived["line_waves"])
+    log_lums = derived.get("log_line_lums")
+    if log_lums is None:
+        return line_waves, jnp.asarray(derived["line_lums"])
+    log_lums = jnp.asarray(log_lums)
+    # ``-inf`` marks a genuinely dark line and powers back to exactly 0.0. An
+    # all-dark catalog leaves the peak non-finite; fall back to a zero offset so
+    # every weight underflows to 0 exactly as the linear path did.
+    peak = jnp.max(log_lums)
+    peak = jnp.where(jnp.isfinite(peak), peak, 0.0)
+    return line_waves, pow10(log_lums - peak)
+
+
 def _line_luminosity_helper(state, params, line_key):
     """Helper to extract a single line luminosity from the line catalog."""
     from tengri.utils.sed_quantities import KEY_LINES, extract_line_luminosity
@@ -1111,8 +1152,7 @@ def _bpt_nii_fn(state, params):
 
     from tengri.utils.sed_quantities import KEY_LINES, extract_line_luminosity
 
-    line_waves = jnp.asarray(derived["line_waves"])
-    line_lums = jnp.asarray(derived["line_lums"])
+    line_waves, line_lums = _line_lums_for_ratios(derived)
     nii_6584 = extract_line_luminosity(line_waves, line_lums, KEY_LINES["nii_6584"])
     halpha = extract_line_luminosity(line_waves, line_lums, KEY_LINES["halpha"])
     return jnp.log10(
@@ -1130,8 +1170,7 @@ def _bpt_sii_fn(state, params):
 
     from tengri.utils.sed_quantities import KEY_LINES, extract_line_luminosity
 
-    line_waves = jnp.asarray(derived["line_waves"])
-    line_lums = jnp.asarray(derived["line_lums"])
+    line_waves, line_lums = _line_lums_for_ratios(derived)
     sii_6717 = extract_line_luminosity(line_waves, line_lums, KEY_LINES["sii_6717"])
     sii_6731 = extract_line_luminosity(line_waves, line_lums, KEY_LINES["sii_6731"])
     halpha = extract_line_luminosity(line_waves, line_lums, KEY_LINES["halpha"])
@@ -1151,8 +1190,7 @@ def _o3hb_fn(state, params):
 
     from tengri.utils.sed_quantities import KEY_LINES, extract_line_luminosity
 
-    line_waves = jnp.asarray(derived["line_waves"])
-    line_lums = jnp.asarray(derived["line_lums"])
+    line_waves, line_lums = _line_lums_for_ratios(derived)
     oiii_5007 = extract_line_luminosity(line_waves, line_lums, KEY_LINES["oiii_5007"])
     hbeta = extract_line_luminosity(line_waves, line_lums, KEY_LINES["hbeta"])
     return jnp.log10(
@@ -1170,8 +1208,7 @@ def _r23_fn(state, params):
 
     from tengri.utils.sed_quantities import KEY_LINES, extract_line_luminosity
 
-    line_waves = jnp.asarray(derived["line_waves"])
-    line_lums = jnp.asarray(derived["line_lums"])
+    line_waves, line_lums = _line_lums_for_ratios(derived)
     oii = extract_line_luminosity(line_waves, line_lums, KEY_LINES["oii"])
     oiii_4959 = extract_line_luminosity(line_waves, line_lums, KEY_LINES["oiii_4959"])
     oiii_5007 = extract_line_luminosity(line_waves, line_lums, KEY_LINES["oiii_5007"])
@@ -1192,8 +1229,7 @@ def _o32_fn(state, params):
 
     from tengri.utils.sed_quantities import KEY_LINES, extract_line_luminosity
 
-    line_waves = jnp.asarray(derived["line_waves"])
-    line_lums = jnp.asarray(derived["line_lums"])
+    line_waves, line_lums = _line_lums_for_ratios(derived)
     oiii_5007 = extract_line_luminosity(line_waves, line_lums, KEY_LINES["oiii_5007"])
     oii = extract_line_luminosity(line_waves, line_lums, KEY_LINES["oii"])
     return jnp.log10(
@@ -1211,8 +1247,7 @@ def _balmer_decrement_fn(state, params):
 
     from tengri.utils.sed_quantities import KEY_LINES, extract_line_luminosity
 
-    line_waves = jnp.asarray(derived["line_waves"])
-    line_lums = jnp.asarray(derived["line_lums"])
+    line_waves, line_lums = _line_lums_for_ratios(derived)
     halpha = extract_line_luminosity(line_waves, line_lums, KEY_LINES["halpha"])
     hbeta = extract_line_luminosity(line_waves, line_lums, KEY_LINES["hbeta"])
     return halpha / jnp.maximum(hbeta, _line_ratio_floor())
