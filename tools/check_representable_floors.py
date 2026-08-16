@@ -53,7 +53,14 @@ _GUARD_CALLS = {"maximum", "clip", "where"}
 # deduplication, not a migration or a deletion, so the remaining site is still
 # counted and still wants ``representable_floor`` eventually. Two fewer places
 # for that fix to be applied inconsistently.
-_PINNED = 41
+# 41 -> 40: #1837 migrated ``fnu_to_ab_mag``'s ``jnp.maximum(fnu_cgs, 1e-300)``
+# to ``representable_floor(1e-300)``. That floor was not merely inert in float32
+# — it manufactured the failure it was written to prevent. Once the AB
+# zero-point division overflowed to ``inf``, ``lnu / inf`` underflowed to
+# ``0.0``, the sub-subnormal literal failed to clamp it, and ``log10(0)``
+# returned the ``-inf`` that surfaced as ``m_uv = inf``. The guard is still
+# there and still live: a migration, not a deletion.
+_PINNED = 40
 
 _SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 

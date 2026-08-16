@@ -97,7 +97,20 @@ import sys
 #: from this inventory while its clamp stayed in the code. That is the silent
 #: shrink this guard exists to catch, and it is how this entry was found — CI
 #: reported 99 -> 98 and offered the reduction as progress.
-EXPECTED_SITES = 100
+#:
+#: 100 -> 99 with #1837: ``compute_irx`` no longer divides at all. It was
+#: ``log10(max(L_TIR*L_SUN, floor) / max(L_UV, floor))``; it is now a difference
+#: of logarithms, because ``L_TIR * L_SUN`` (~7e41) and the UV anchor (~5e42)
+#: each overflow float32 on their own and produced NaN for a dex ratio of order
+#: -0.8. Both clamps survive as ``jnp.maximum(log_x, log10(floor))``, which is
+#: exactly equivalent since ``log10`` is monotone —
+#: ``log10(max(x, f)) == max(log10(x), log10(f))``.
+#:
+#: This is a genuine retirement, not the silent shrink described above: the
+#: division is gone from the source, not hoisted into a shared name with its
+#: clamp left behind. The guard scans for clamped *denominators*, and after the
+#: rewrite there is no denominator.
+EXPECTED_SITES = 99
 
 SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 
