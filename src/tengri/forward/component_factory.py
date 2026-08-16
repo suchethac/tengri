@@ -283,6 +283,12 @@ def build_components(
     # ``DustAttenuationSEDComponent`` instead of the two-component
     # ``DustSEDComponent``. ``dust_law_diff`` is reused as the screen law.
     dust_model: str = "two_component",
+    # Shape parameters of the selected attenuation law that somebody actually
+    # asked for (user-set or freed), resolved from spec provenance by
+    # SEDModel._build_component_chain. Empty means "nobody asked", and each
+    # law's own published default then stands — see
+    # DustAttenuationSEDComponentConfig.live_shape_params (#1808).
+    dust_live_shape_params: frozenset[str] = frozenset(),
     # Witt & Gordon (2000) screen (dust_model="wg00", FSPS dust_type=3).
     # Static structural selectors threaded into the WG00 screen component.
     wg00_dust_curve: str = "mw",
@@ -421,7 +427,10 @@ def build_components(
             )
         elif dust_model == "single_component":
             atten_type = "single_component"
-            atten_config = DustAttenuationSEDComponentConfig(law=dust_law_diff)
+            atten_config = DustAttenuationSEDComponentConfig(
+                law=dust_law_diff,
+                live_shape_params=frozenset(dust_live_shape_params),
+            )
         else:
             atten_type = "two_component"
             _overrides = dust_law_overrides or {}
@@ -542,13 +551,39 @@ def build_components(
     if use_xray:
         from tengri.components.xray.component import XRaySEDComponentConfig
 
-        components.append(
-            _resolve_registry_component(
-                "xray",
-                "xray",
-                config=XRaySEDComponentConfig(model=xray_model),
+        # A name that registers its own component class builds that class.
+        # ``xray_aird`` and ``agn_xray_corona`` each ship one -- with their own
+        # config and their own ``predict`` -- and this resolved the key "xray"
+        # unconditionally, passing the name as a config field instead.
+        # ``XRaySEDComponent`` branches on ``config.model`` for ``lopez24`` and
+        # falls through to the yang20 corona otherwise, so both names produced a
+        # bit-identical SED to ``yang20``: #1684, the unfinished half of #1120,
+        # which closed after adding the names to the grammar allowlist but not
+        # here, turning that issue's loud ValueError into silence.
+        #
+        # Derived from the registry rather than a hand-written list, so a corona
+        # registered later is wired by existing -- but only if the group can
+        # actually feed it. A component is routed here only when its
+        # ``parameter_prefix`` matches the prefix the ``xray`` group declares
+        # its parameters under. ``xray_aird`` uses ``xray_`` and is fed;
+        # ``agn_xray_corona`` declares ``gamma`` / ``e_cut`` /
+        # ``delta_alpha_ox`` under ``agn_xray_``, which no group supplies, so
+        # building it raises ``KeyError: 'gamma'`` inside ``predict``. Wiring it
+        # means adding those names to the parameter space -- a public-surface
+        # change, not a factory one -- so it stays on the shared component until
+        # that is decided. Left on the shared component rather than swapped for
+        # an internal KeyError; #1684 tracks the remaining half.
+        _xray_cls = _REGISTRY.get(xray_model) if xray_model != "xray" else None
+        if _xray_cls is not None and getattr(_xray_cls, "parameter_prefix", None) == "xray_":
+            components.append(_resolve_registry_component("xray", xray_model))
+        else:
+            components.append(
+                _resolve_registry_component(
+                    "xray",
+                    "xray",
+                    config=XRaySEDComponentConfig(model=xray_model),
+                )
             )
-        )
     if use_igm or use_dla:
         from tengri.components.igm.component import IGMSEDComponentConfig
 

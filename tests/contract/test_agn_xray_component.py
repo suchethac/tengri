@@ -9,7 +9,7 @@ import jax.numpy as jnp
 import pytest
 
 from tengri.components.xray.agn_xray_model import AGNXRayCoronaSEDComponent
-from tengri.protocols.component import DerivedKey, ParamDeclaration
+from tengri.protocols.component import DerivedKey
 
 pytestmark = pytest.mark.contract
 
@@ -21,46 +21,72 @@ class TestAGNXRayCoronaPort:
         """Component can be instantiated."""
         comp = AGNXRayCoronaSEDComponent()
         assert comp.name == "agn_xray_corona"
-        assert comp.parameter_prefix == "agn_xray_"
+        # The xray group's prefix, not a private one -- see the class
+        # docstring and #1684. Under "agn_xray_" the component was
+        # unbuildable: no group supplies that prefix, so its sliced
+        # parameter dict was empty and predict raised KeyError.
+        assert comp.parameter_prefix == "xray_"
 
-    def test_declared_parameters(self):
-        """declared_parameters returns a valid list."""
+    def test_declares_no_parameters_of_its_own(self):
+        """It reads the xray group's parameters rather than declaring its own.
+
+        This asserted ``>= 3`` declarations, of ``agn_xray_gamma`` /
+        ``agn_xray_delta_alpha_ox`` / ``agn_xray_e_cut``. Those were the same
+        three physical quantities the ``xray`` group already declares as
+        ``xray_gamma_agn`` / ``xray_delta_alpha_ox`` / ``xray_E_cut``, under a
+        prefix no group supplies -- which is why the component could not be
+        built at all (#1684). One name per knob; the duplicates are gone.
+        """
         comp = AGNXRayCoronaSEDComponent()
         params = comp.declared_parameters()
         assert isinstance(params, list)
-        assert len(params) >= 3  # gamma, delta_alpha_ox, e_cut
-        assert all(isinstance(p, ParamDeclaration) for p in params)
+        assert params == [], (
+            "agn_xray_corona should declare no parameters of its own; it reads "
+            f"the xray group's. Got {[p.name for p in params]}."
+        )
 
-    def test_parameter_units(self):
-        """Parameters have units declared."""
-        comp = AGNXRayCoronaSEDComponent()
-        params = comp.declared_parameters()
-        for p in params:
-            assert p.units is not None, f"{p.name} has no units"
+    def test_the_parameters_it_reads_exist_in_the_xray_group(self):
+        """The three names predict() reads must be real xray-group parameters.
 
-    def test_parameter_prefix(self):
-        """Parameters use agn_xray_ prefix."""
-        comp = AGNXRayCoronaSEDComponent()
-        params = comp.declared_parameters()
-        for p in params:
-            assert p.name.startswith("agn_xray_"), f"{p.name} does not start with agn_xray_"
+        Replaces a check that the component's own declarations used the
+        ``agn_xray_`` prefix. It no longer declares any -- so the thing worth
+        pinning is that what it *reads* exists, which is what made it
+        buildable.
+        """
+        from tengri.components.xray._params import PARAMS
+
+        declared = {d.name for d in PARAMS}
+        for name in ("xray_gamma_agn", "xray_delta_alpha_ox", "xray_E_cut"):
+            assert name in declared, (
+                f"{name} is read by AGNXRayCoronaSEDComponent.predict but is not "
+                "declared by the xray group"
+            )
 
     def test_outputs_declaration(self):
-        """outputs() returns a tuple with L_xray_agn."""
+        """outputs() publishes ``sed_xray``, a real DerivedState field.
+
+        This asserted ``L_xray_agn``, which is not a field on DerivedState, so
+        publishing it spilled into ``_extras`` and tripped the ADR-0007 guard on
+        every build -- latent only because the component was never built.
+        ``XRayAirdSEDComponent``, its sibling, publishes ``sed_xray``.
+        """
         comp = AGNXRayCoronaSEDComponent()
         outputs = comp.outputs()
         assert isinstance(outputs, tuple)
         assert all(isinstance(o, DerivedKey) for o in outputs)
-        output_names = {o.name for o in outputs}
-        assert "L_xray_agn" in output_names
+        assert {o.name for o in outputs} == {"sed_xray"}
 
-    def test_l_xray_agn_units(self):
-        """L_xray_agn has correct units."""
+    def test_published_key_is_a_derived_state_field(self):
+        """Whatever it publishes must be typed, or the guard raises at runtime."""
+        from tengri.protocols.derived_state import DerivedState
+
         comp = AGNXRayCoronaSEDComponent()
-        outputs = comp.outputs()
-        l_xray = next((o for o in outputs if o.name == "L_xray_agn"), None)
-        assert l_xray is not None
-        assert l_xray.units == "erg/s"
+        fields = set(getattr(DerivedState, "__dataclass_fields__", {}))
+        for out in comp.outputs():
+            assert out.name in fields, (
+                f"{out.name} is published but is not a DerivedState field; it "
+                "would spill into _extras and trip the ADR-0007 guard."
+            )
 
     def test_has_no_required_inputs(self):
         """AGN X-ray has no required inputs (L_agn_bol is optional with fallback)."""
@@ -89,7 +115,11 @@ class TestAGNXRayCoronaPort:
 
         comp = AGNXRayCoronaSEDComponent()
         wave = jnp.asarray(np.geomspace(0.05, 200.0, 400))
-        p = {"gamma": jnp.array(1.8), "e_cut": jnp.array(300.0), "delta_alpha_ox": jnp.array(0.0)}
+        p = {
+            "gamma_agn": jnp.array(1.8),
+            "E_cut": jnp.array(300.0),
+            "delta_alpha_ox": jnp.array(0.0),
+        }
         l_2500 = 3.79e29
         l_bol = 10.0**12 * 3.828e33
 
@@ -118,15 +148,15 @@ class TestAGNXRayCoronaPort:
         wave = jnp.logspace(0, 4, 1000)  # X-ray range, Angstrom
         sed_in = jnp.zeros_like(wave)
         p = {
-            "gamma": jnp.array(1.8),
+            "gamma_agn": jnp.array(1.8),
             "delta_alpha_ox": jnp.array(0.0),  # offset on Just+2007 (#981)
-            "e_cut": jnp.array(300.0),
+            "E_cut": jnp.array(300.0),
         }
         sed_out, published = comp.predict(p, sed_in, wave)
         assert isinstance(sed_out, jnp.ndarray)
         assert sed_out.shape == wave.shape
-        assert "L_xray_agn" in published
-        assert isinstance(published["L_xray_agn"], jnp.ndarray)
+        assert "sed_xray" in published
+        assert isinstance(published["sed_xray"], jnp.ndarray)
 
     def test_predict_with_agn_luminosity(self):
         """predict() produces non-zero output with L_agn_bol input."""
@@ -134,9 +164,9 @@ class TestAGNXRayCoronaPort:
         wave = jnp.logspace(0, 2, 500)  # X-ray range
         sed_in = jnp.zeros_like(wave)
         p = {
-            "gamma": jnp.array(1.8),
+            "gamma_agn": jnp.array(1.8),
             "delta_alpha_ox": jnp.array(0.0),  # offset on Just+2007 (#981)
-            "e_cut": jnp.array(300.0),
+            "E_cut": jnp.array(300.0),
         }
         # With AGN luminosity
         sed_out_agn, _pub_agn = comp.predict(p, sed_in, wave, L_agn_bol=jnp.array(1e46))

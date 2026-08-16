@@ -287,7 +287,24 @@ def _xray_cases():
                 "dust": {"type": "two_component", "law_bc": "calzetti", "*": FIXED},
                 "neb": {"type": "none"},
                 "xray": {"type": model, "*": FREE},
-                "agn": {"type": "composable", "*": FIXED, "log_lbol": Fixed(13.0)},
+                # The AGN needs a DISC, not just a luminosity. The corona
+                # models anchor to the disc's L_2500 through alpha_ox, and a
+                # bare ``composable`` AGN with no disc block publishes no
+                # L_2500 -- measured: it is bit-identical to no AGN at all.
+                # This went unnoticed while every xray name resolved to the
+                # shared component, whose XRB channel is driven by star
+                # formation and so emits with no AGN; once ``agn_xray_corona``
+                # began building its own component (#1684) the same fixture
+                # made it contribute nothing, and this suite's own
+                # discriminator correctly indicted the fixture rather than the
+                # scope.
+                "agn": {
+                    "type": "composable",
+                    "*": FIXED,
+                    "log_lbol": Fixed(13.0),
+                    "disc": {"type": "multicolor"},
+                    "torus": {"type": "skirtor"},
+                },
             },
             ssp="xray",
         )

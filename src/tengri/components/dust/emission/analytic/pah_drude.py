@@ -59,7 +59,15 @@ class PAHDrudeIRSEDComponent(EmissionComponent):
 
     name: str = "pah_drude"
 
-    # No free parameters for PAH Drude; just a template shape.
+    #: No free parameters for PAH Drude; just a template shape. Stating it makes
+    #: the difference between narrowing this engine's wildcard to nothing and
+    #: leaving it to free the whole static union: an empty ``_priors`` alone
+    #: cannot be told apart from ``energy_balance_split``, whose parameters are
+    #: declared in ``components/dust/_params.py`` rather than on the class, so
+    #: ``_declared_param_names`` refuses to infer it. Without the marker,
+    #: ``'all_params': FREE`` here freed 19 dimensions a sampler cannot move
+    #: (#1482).
+    declares_no_parameters: ClassVar[bool] = True
 
     _citations_tuple: ClassVar[tuple[str, ...]] = ("smith2007",)
 

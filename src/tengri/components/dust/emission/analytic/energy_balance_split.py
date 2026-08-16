@@ -71,6 +71,46 @@ class EnergyBalanceSplitIRSEDComponent(EmissionComponent):
 
     name: str = "energy_balance_split"
 
+    #: The six knobs ``predict`` reads, declared in ``components/dust/_params.py``
+    #: rather than on this class (see the class Notes: re-declaring them beside
+    #: the attenuator's shared ``dust_eta_balance`` would raise a duplicate).
+    #:
+    #: Without this, ``_declared_param_names`` cannot tell an empty ``_priors``
+    #: meaning "declared elsewhere" from one meaning "reads nothing", leaves the
+    #: sub-block unnarrowed, and ``dust.emission {'*': FREE}`` hands the sampler
+    #: the whole static union of every IR engine's parameters. Measured before
+    #: this marker: **20 freed, 6 moving the prediction, 14 inert** -- fourteen
+    #: flat directions (``dust_qpah``, ``dust_umin``, ``dust_alpha_dale``, ...)
+    #: belonging to Draine & Li, Dale and MBB engines that are not even built.
+    #: That is #1482, in the one engine #1482's own fix could not reach.
+    #:
+    #: ``dust_eta_balance`` is included even though ``predict`` never reads it
+    #: -- it is applied to ``L_ir`` upstream by the attenuator, and this
+    #: component is called with ``eta_balance=1.0``. Physically it is the
+    #: attenuator's knob, and an earlier revision of this set left it out on
+    #: exactly that reasoning. That was wrong, and measurably so: the grammar
+    #: partitions it into **dust.emission**, not ``dust``
+    #: (``dust={'eta_balance': ...}`` raises *"'eta_balance' is a 'dust.emission'
+    #: parameter, not a 'dust' one"*), so dropping it here left it freed by no
+    #: wildcard at all -- ``dust={'*': FREE}`` does not reach it either. It is
+    #: live (it scales ``L_ir``, so it moves the prediction), and orphaning a
+    #: live parameter is the opposite failure to the one this marker fixes.
+    #:
+    #: ``dust_L_agn_ir`` is present although no wildcard can free it -- it
+    #: declares no ``free_prior`` by design -- because this set states what the
+    #: component reads, not what happens to be freeable.
+    reads_parameters = frozenset(
+        {
+            "dust_T_warm",
+            "dust_T_cold",
+            "dust_f_cold",
+            "dust_beta_warm",
+            "dust_beta_cold",
+            "dust_L_agn_ir",
+            "dust_eta_balance",
+        }
+    )
+
     #: The menu row has credited Kokorev+2021 all along
     #: (``_DUST_EMISSION_METADATA``); the component itself credited nobody.
     citations = ("kokorev2021",)
