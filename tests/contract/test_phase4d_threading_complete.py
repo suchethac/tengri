@@ -236,7 +236,7 @@ class TestAGNSKIRTORTemplateThreading:
         """Model with SKIRTOR torus builds successfully."""
         spec = _base_spec(
             agn_model="skirtor",
-            agn_log_lbol=Fixed(45.0),
+            agn_log_lbol=Fixed(11.42),
             agn_cos_inc=Fixed(0.5),
             agn_torus_frac=Fixed(0.5),
         )
@@ -261,7 +261,7 @@ class TestAGNSKIRTORTemplateThreading:
         """
         spec = _base_spec(
             agn_model="skirtor",
-            agn_log_lbol=Fixed(45.0),
+            agn_log_lbol=Fixed(11.42),
             agn_cos_inc=Fixed(0.5),
             agn_torus_frac=Fixed(0.5),
         )

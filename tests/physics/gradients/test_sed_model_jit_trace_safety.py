@@ -116,7 +116,7 @@ def cat3d_spec_with_filters(synthetic_ssp):
         dust_tau_diff=Fixed(0.0),
         dust_slope=Fixed(-0.7),
         agn_model="cat3d_wind",
-        agn_log_lbol=Fixed(44.0),
+        agn_log_lbol=Fixed(10.42),
         agn_cos_inc=Fixed(0.5),
         agn_a_cat3d=Fixed(-2.0),
         agn_fwd_cat3d=Fixed(1.75),

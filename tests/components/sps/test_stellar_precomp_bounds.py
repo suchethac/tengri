@@ -573,7 +573,7 @@ def test_predict_via_precomp_agn_matches_predict(ssp, synthetic_tophat_obs):
         dust_tau_diff=Fixed(0.0),
         apply_igm=False,
         agn_model="qsogen",
-        agn_log_lbol=Fixed(45.0),
+        agn_log_lbol=Fixed(11.42),
         agn_lum_ratio=Fixed(0.5),
     )
     obs = synthetic_tophat_obs
