@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """``import tengri`` must not silently discard ``JAX_ENABLE_X64`` (#1840).
 
 tengri defaults to float64 because ``d_L^2`` at z > 0.01 overflows float32.

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """``compute_grid_weights`` must evaluate the triweight CDF once per edge.
 
 Bin ``k``'s upper edge is bin ``k+1``'s lower edge. Evaluating ``edges[:-1]``

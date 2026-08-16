@@ -906,6 +906,16 @@ def _lgmet_weights(log_z, lgmet_scatter, ssp_lgmet):
     pattern safe to apply broadly. Same treatment as
     :func:`tengri.utils.interpolation.compute_grid_weights` (#1206, #1448).
     """
+    # Refuse an array rather than silently answering for its first element:
+    # taking [0] of the batched result would return one parcel's weights and
+    # look exactly like success. Shapes are static under JIT, so this costs
+    # nothing and cannot fire on a traced value that is genuinely scalar.
+    if jnp.ndim(log_z) != 0:
+        raise ValueError(
+            f"_lgmet_weights takes a scalar log_z; got shape {jnp.shape(log_z)}. "
+            "Use _lgmet_weights_parcels for a batch — it returns "
+            "(n_parcel, n_met) instead of silently dropping all but the first."
+        )
     return _lgmet_weights_parcels(jnp.atleast_1d(log_z), lgmet_scatter, ssp_lgmet)[0]
 
 

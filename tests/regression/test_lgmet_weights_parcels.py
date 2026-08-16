@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """The batched lognormal-MDF kernel must agree with DSPS's per-bin route.
 
 ``_lgmet_weights_parcels`` duplicates DSPS's formula in order to evaluate the
@@ -65,6 +66,27 @@ def _reference(log_z, scatter, ssp_lgmet):
     from dsps.sed.metallicity_weights import calc_lgmet_weights_from_lognormal_mdf
 
     return jax.vmap(lambda g: calc_lgmet_weights_from_lognormal_mdf(g, scatter, ssp_lgmet))(log_z)
+
+
+def test_scalar_face_refuses_an_array_instead_of_truncating():
+    """Passing a batch to the scalar face must raise, not answer for element 0.
+
+    The delegation is ``_lgmet_weights_parcels(atleast_1d(log_z), ...)[0]``, so
+    an array argument would return the first parcel's weights and be
+    indistinguishable from success — a wrong answer with the right shape.
+    """
+    ssp_lgmet = jnp.linspace(LGMET_LO, LGMET_HI, 15)
+    batch = jnp.asarray([-2.4, -1.9, -3.1])
+
+    with pytest.raises(ValueError, match="takes a scalar log_z"):
+        _lgmet_weights(batch, 0.2, ssp_lgmet)
+
+    # The batched entry point is what that message points at, and it works.
+    got = _lgmet_weights_parcels(batch, 0.2, ssp_lgmet)
+    assert got.shape == (3, 15)
+    assert not np.allclose(np.asarray(got[0]), np.asarray(got[1])), (
+        "fixture too degenerate to detect truncation"
+    )
 
 
 def test_scalar_face_delegates_to_the_batched_kernel():
