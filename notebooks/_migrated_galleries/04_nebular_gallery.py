@@ -552,7 +552,7 @@ SSP_WNE_PATH = Path("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
 if SSP_WNE_PATH.exists():
     _ssp = load_ssp_data(str(SSP_WNE_PATH))
     _spec = Parameters(
-        sfh_tsnorm_log_total_mass=10.0),
+        sfh_tsnorm_log_total_mass=Fixed(10.0),
         sfh_tsnorm_peak_lbt_gyr=Fixed(0.5),
         sfh_tsnorm_width_gyr=Fixed(0.5),
         sfh_tsnorm_skew=Fixed(0.0),
