@@ -288,7 +288,13 @@ def build_components(
     # SEDModel._build_component_chain. Empty means "nobody asked", and each
     # law's own published default then stands — see
     # DustAttenuationSEDComponentConfig.live_shape_params (#1808).
-    dust_live_shape_params: frozenset[str] = frozenset(),
+    #
+    # None means "no spec was consulted" and is NOT the same as empty: the
+    # two-component screen keeps its historical pass-all in that case, since a
+    # caller with no provenance to read cannot conclude that nobody asked
+    # (#1833). The single screen treats both alike — passing nothing is its
+    # historical behavior.
+    dust_live_shape_params: frozenset[str] | None = None,
     # Witt & Gordon (2000) screen (dust_model="wg00", FSPS dust_type=3).
     # Static structural selectors threaded into the WG00 screen component.
     wg00_dust_curve: str = "mw",
@@ -429,7 +435,7 @@ def build_components(
             atten_type = "single_component"
             atten_config = DustAttenuationSEDComponentConfig(
                 law=dust_law_diff,
-                live_shape_params=frozenset(dust_live_shape_params),
+                live_shape_params=frozenset(dust_live_shape_params or ()),
             )
         else:
             atten_type = "two_component"
@@ -438,6 +444,11 @@ def build_components(
                 law_bc=dust_law_bc,
                 law_diff=dust_law_diff,
                 law_neb=dust_law_neb,
+                # #1833: without this the shared Fixed(0.0) dust_bump_strength /
+                # dust_delta overwrote each law's published default. Only reaches
+                # here from SEDModel, which is the only caller that knows who
+                # asked; a direct build leaves it None and keeps pass-all.
+                live_shape_params=dust_live_shape_params,
                 bc_law_overrides=tuple(_overrides.get("bc", {}).items()),
                 diff_law_overrides=tuple(_overrides.get("diff", {}).items()),
                 neb_law_overrides=tuple(_overrides.get("neb", {}).items()),
