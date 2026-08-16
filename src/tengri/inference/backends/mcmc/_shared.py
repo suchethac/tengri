@@ -902,21 +902,43 @@ def _get_flat_logdensity(fitter, init_params):
     return logdensity_flat, unravel_fn, init_flat, fitter._data_args
 
 
+def _adaptation_cache_key(fitter, method_key):
+    """Key an adaptation entry by engine shape, method, **and target data**.
+
+    ``_engine_cache_key`` identifies the compiled *engine shape* — data length,
+    free-parameter names, feature channels — and deliberately says nothing
+    about the data values. Two galaxies with the same band count therefore
+    share it. Without the data in the key, the ordinary catalog loop that
+    reuses one model hands every galaxy the first galaxy's step size and mass
+    matrix: adaptation tuned on another target's posterior geometry.
+
+    This is the defect :func:`~tengri.inference._sample_utils._data_fingerprint`
+    was written for (issue #1529), where the *MAP* cache seeded every fit from
+    the first galaxy's optimum and killed six of eight NUTS fits. The
+    adaptation cache is that cache's sibling and was never given the same
+    guard; ``ghmc`` and ``mclmc`` additionally keyed on nothing but a bare
+    method name. Hashing the data separates targets while keeping the intended
+    win — a genuine refit of the same target still hits, because this keys on
+    content rather than identity.
+    """
+    from tengri.inference._sample_utils import _data_fingerprint
+
+    return (fitter._engine_cache_key(), method_key, _data_fingerprint(fitter))
+
+
 def _get_cached_adaptation(fitter, method_key):
     """Retrieve cached adaptation parameters by method key, or None if not cached."""
     mc = _model_cache_owner.get_or_compile_model(fitter.model)
     cache = mc.get("adaptation")
     if cache is None:
         return None
-    engine_key = fitter._engine_cache_key()
-    return cache.get((engine_key, method_key))
+    return cache.get(_adaptation_cache_key(fitter, method_key))
 
 
 def _set_cached_adaptation(fitter, method_key, params):
     """Store adaptation parameters on the Model for cross-fitter reuse."""
     cache = _model_cache_owner.get_or_compile_model(fitter.model).setdefault("adaptation", {})
-    engine_key = fitter._engine_cache_key()
-    cache[(engine_key, method_key)] = params
+    cache[_adaptation_cache_key(fitter, method_key)] = params
 
 
 def _vmap_chains(

@@ -368,6 +368,14 @@ def run_nuts(
     adapt_key = ("nuts", not use_dense, bool(pathfinder_warmstart), problem.cache_key)
     cached = _get_cached_adaptation(fitter, adapt_key)
 
+    # Advance the key identically on both branches. Whether a cached adaptation
+    # happens to be present is invisible to the caller, so it must not steer the
+    # RNG stream: the warmup split below used to live only in the ``else``, which
+    # left the cached path one split behind and gave two identical ``fit`` calls
+    # with the same ``key`` different chains. ``warmup_key`` is simply unused
+    # when the adaptation is reused.
+    key, warmup_key = jax.random.split(key)
+
     if cached is not None:
         parameters = cached
 
@@ -428,7 +436,6 @@ def run_nuts(
             _multichain_burnin_done = False
     else:
         _multichain_burnin_done = False
-        key, warmup_key = jax.random.split(key)
         key, chain_key = jax.random.split(key)
         chain_keys = jax.random.split(chain_key, n_burnin + n_samples)
         with compile_timer("nuts_full_scan", fitter.compile_signature(), method="mcmc_nuts"):

@@ -113,6 +113,14 @@ def run_ghmc(
     adapt_key = ("ghmc", True)  # always diagonal for GHMC
     cached = _get_cached_adaptation(fitter, adapt_key)
 
+    # Both branches must advance the key identically — cache presence is
+    # invisible to the caller and must not steer the RNG stream, or two
+    # identical ``fit`` calls with one ``key`` return different chains. These
+    # two splits used to live only in the ``else``; they are unused on the
+    # cached path but keep ``chain_key`` on the same stream position.
+    key, warmup_key = jax.random.split(key)
+    key, ghmc_init_key = jax.random.split(key)
+
     if cached is not None:
         parameters = cached
 
@@ -178,8 +186,6 @@ def run_ghmc(
             _multichain_burnin_done = False
     else:
         _multichain_burnin_done = False
-        key, warmup_key = jax.random.split(key)
-        key, ghmc_init_key = jax.random.split(key)
         key, chain_key = jax.random.split(key)
         chain_keys = jax.random.split(chain_key, n_burnin + n_samples)
         positions, divergent, step_size, momentum_inv_scale = _ghmc_full_scan(

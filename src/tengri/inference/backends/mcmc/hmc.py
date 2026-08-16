@@ -212,6 +212,13 @@ def run_hmc(
     # ── Warmup: adapt (step_size, inverse_mass_matrix) once, then cache. ──
     # Split from sampling so the FIRST call honors n_chains too (previously a
     # fresh multi-chain run silently sampled a single chain and mislabelled it).
+    #
+    # The warmup split is hoisted out of the ``else`` so both branches advance
+    # the key identically. Cache presence is invisible to the caller and must
+    # not steer the RNG stream, or two identical ``fit`` calls with one ``key``
+    # return different chains. ``warmup_key`` is unused on the cached path.
+    key, warmup_key = jax.random.split(key)
+
     if cached is not None:
         parameters = cached
         if verbose:
@@ -221,7 +228,6 @@ def run_hmc(
                 float(parameters["step_size"]),
             )
     else:
-        key, warmup_key = jax.random.split(key)
         with compile_timer("hmc_warmup", fitter.compile_signature(), method="mcmc_hmc"):
             step_size, inv_mass_matrix = _hmc_warmup_only(
                 init_flat,

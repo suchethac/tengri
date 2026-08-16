@@ -160,6 +160,14 @@ def _maybe_map_init(
 
     from tengri.inference._model_cache import _default_owner as _model_cache_owner
 
+    # Advance the key before branching, so a cache hit and a cache miss hand the
+    # sampler the same stream. Previously the hit returned ``key`` untouched
+    # while the miss returned it split for the MAP run, which made the chain
+    # depend on whether a *previous* fit had happened to populate the cache —
+    # invisible to the caller, and enough to give two identical ``fit`` calls
+    # with one ``key`` different posteriors.
+    key, map_key = jax.random.split(key)
+
     mc = _model_cache_owner.get_or_compile_model(fitter.model)
     fingerprint = _data_fingerprint(fitter)
     cached_map = mc.get("map_params_physical")
@@ -187,7 +195,6 @@ def _maybe_map_init(
     _prewarm_forward(fitter)
     if verbose:
         print(f"  MAP initialization ({n_map_steps} steps)...")
-    key, map_key = jax.random.split(key)
     map_result = fitter._run_map(
         key=map_key, n_steps=n_map_steps, n_restarts=_MAP_INIT_RESTARTS, verbose=False
     )
