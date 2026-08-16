@@ -548,10 +548,18 @@ intersphinx_mapping = {
 
 exclude_patterns = [
     "_build",
+    # Everything contributor-only: agent-authored plans and specs (was
+    # `superpowers/{plans,specs}`, needing two entries of its own) plus the six
+    # narrative sections listed further down. One rule now covers them and
+    # anything else contributor-facing that lands here later.
+    #
+    # Both forms on purpose. The bare name prunes the directory during
+    # traversal; the `**` form is what `dev/**` and `adr/**` already use to keep
+    # their contents from building as orphans. The bare entry predates the
+    # directory existing, so it has never actually been exercised.
     "internal",
+    "internal/**",
     "**.ipynb_checkpoints",
-    "superpowers",
-    "specs",
     # Synthesizer reproduction notebook kept out of the published docs by
     # request (removed from the reproduction toctree). Excluded so Sphinx
     # does not warn about an orphaned document. Restore alongside the
@@ -574,13 +582,15 @@ exclude_patterns = [
     "auto_examples/**/*.codeobj.json",
     "auto_examples/**/*.zip",
     "auto_examples/**/*.ipynb",
-    # Narrative sections superseded by repo root notebooks/ spine.
-    # ``forward_model/`` and ``fitting/`` are gone: the former's one page is
-    # now published as ``forward_model.md``, the latter held only a toctree.
-    "getting_started/**",
-    "inference/**",
-    "advanced/**",
-    "developer/**",
+    # ``getting_started/``, ``inference/``, ``advanced/``, ``developer/``,
+    # ``user/`` and ``recipes/`` each had a line here. They were narrative
+    # sections superseded by the repo-root notebooks/ spine, hidden one at a
+    # time over 2026-06/07 — every call sound on its own, but the result was
+    # six rules and 19 maintained pages sitting in ``docs/`` that no reader
+    # could reach. They now live under ``internal/``, which the single
+    # ``internal`` entry near the top of this list already covers.
+    # (``forward_model/`` and ``fitting/`` are gone entirely: the former's one
+    # page is published as ``forward_model.md``, the latter held only a toctree.)
     "dev/**",
     # Architecture Decision Records are contributor-facing design history, not
     # part of the published user docs. They live on disk / GitHub but are
@@ -597,23 +607,32 @@ exclude_patterns = [
     # dropped from the index in the 2026-05 polish pass).
     "spine/08_emission_lines.ipynb",
     "spine/09_parameter_sweeps.ipynb",
-    # Orphaned leftover pages (not in any toctree, not linked from the
-    # published sidebar). Excluded so they don't build as half-accessible
-    # orphans emitting "not in any toctree" warnings. Still on disk / GitHub.
-    "spine/05_adding_a_model.ipynb",
-    "recipes/**",
-    "user/**",
+    # ``spine/05_adding_a_model.ipynb`` was listed here. Unlike the two above it
+    # was also absent from ``SPINE_SLUGS`` in
+    # ``scripts/sync_spine_notebooks_for_docs.py``, so nothing synced it and
+    # ``tools/check_notebook_renders.py`` did not guard it -- a hand-copy of
+    # ``notebooks/05_adding_a_model.py`` that no longer built, with nothing
+    # keeping it in step with its source. That is the drift #1506 added the
+    # guard to stop, and it had already started: the copy needed editing by hand
+    # alongside its source. The copy is deleted; the source is untouched. To
+    # publish this page again, add its slug to ``SPINE_SLUGS`` and re-run the
+    # sync -- which is how every other spine notebook gets here.
     # Fitting-photometry spine notebook hidden from the published sidebar
     # (2026-06): the quickstart already covers a full photometry fit +
     # posterior, so this longer treatment is redundant. Inbound prose links
     # in 04/06/07 now point at the quickstart instead.
     "spine/05_fitting_photometry.ipynb",
-    # Guides section hidden from the published sidebar (2026-06). Two of the
-    # original four are now published: ``method_selection.md`` (README points
-    # at it) and ``known_limitations.md`` (a runtime warning in
-    # ``sed_model.py`` tells users to read it). The two below stay excluded
-    # because ``spine/07_joint_photo_spec`` and ``tengri.list_recipes()``
-    # already cover them; inbound links were repointed there.
-    "recipes.md",
-    "joint_fitting.md",
+    # The Guides section was hidden from the published sidebar in 2026-06. Two
+    # of the original four are published again: ``method_selection.md`` (README
+    # points at it) and ``known_limitations.md`` (a runtime warning in
+    # ``sed_model.py`` tells users to read it). The other two -- ``recipes.md``
+    # and ``joint_fitting.md`` -- had entries here; they now live under
+    # ``internal/``, covered by the rule at the top of this list, since
+    # ``spine/07_joint_photo_spec`` and ``tengri.list_recipes()`` already serve
+    # readers and nothing outside ``docs/`` linked either page.
+    #
+    # ``known_bugs.md`` and ``changelog.md`` above stay at ``docs/`` root
+    # deliberately: 30 files cite the former, and both are named in
+    # check_british_spelling and check_doc_examples exemption lists. Moving them
+    # would be churn across three tools for no reader-visible gain.
 ]

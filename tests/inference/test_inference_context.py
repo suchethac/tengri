@@ -41,7 +41,7 @@ def _build_fitter():
     spec = Parameters(
         mean_sfh_type="dpl",
         sfh_dpl_alpha=Uniform(0.5, 5.0),
-        sfh_dpl_log_total_mass=Uniform(-1.0, 3.0),
+        sfh_dpl_log_total_mass=Uniform(7.0, 12.5),
         met_logzsol=Uniform(-2.0, 0.5),
         dust_tau_diff=Fixed(0.3),
         redshift=Fixed(0.1),

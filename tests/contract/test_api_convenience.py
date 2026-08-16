@@ -137,7 +137,7 @@ class TestResolveShortNames:
         from tengri.parameters.priors import Uniform
         from tengri.parameters.translate import resolve_short_names
 
-        expanded = resolve_short_names("tsnorm", {"sfh_tsnorm_log_total_mass": Uniform(-1, 2.5)})
+        expanded = resolve_short_names("tsnorm", {"sfh_tsnorm_log_total_mass": Uniform(7.0, 12.5)})
         assert "sfh_tsnorm_log_total_mass" in expanded
 
     def test_list_input(self):

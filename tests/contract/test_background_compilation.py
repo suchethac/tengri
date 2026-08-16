@@ -32,7 +32,7 @@ def smooth_spec():
         sfh_dpl_alpha=Uniform(0.5, 3.0),
         sfh_dpl_beta=Uniform(0.5, 3.0),
         sfh_dpl_tau_gyr=Uniform(1.0, 10.0),
-        sfh_dpl_log_total_mass=Uniform(-1.0, 2.0),
+        sfh_dpl_log_total_mass=Uniform(7.0, 12.5),
         met_logzsol=Uniform(-1.5, 0.0),
         dust_tau_bc=Fixed(0.3),
         dust_tau_diff=Fixed(0.2),

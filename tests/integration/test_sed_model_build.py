@@ -105,7 +105,7 @@ class TestFlatEquivalence:
             # varied here. Pin it at the registry default -- the value the forward model
             # silently substituted before #1015 made the omission a loud error (#1021).
             sfh_dpl_age_gyr=Fixed(13.81),
-            sfh_dpl_log_total_mass=Uniform(-1.0, 2.0),
+            sfh_dpl_log_total_mass=Uniform(7.0, 12.5),
             sfh_dpl_alpha=Uniform(0.5, 3.0),
             sfh_dpl_beta=Uniform(0.3, 2.0),
             sfh_dpl_tau_gyr=Uniform(0.5, 10.0),

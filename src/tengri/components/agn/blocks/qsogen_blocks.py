@@ -11,7 +11,7 @@ SKIRTOR torus, or pair the qsogen SMC reddening with GRAHSP's BBB.
 
 Bit-for-bit equivalence to ``compute_qsogen_sed`` holds when all 5 blocks
 are summed and the SMC factor multiplied — the regression test
-``tests/unit/components/agn/test_qsogen_decomposition.py`` pins this.
+``tests/components/agn/test_agn_qsogen_decomposition.py`` pins this.
 
 Block names registered::
 

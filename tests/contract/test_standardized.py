@@ -29,7 +29,7 @@ def _make_spec():
     return Parameters(
         mean_sfh_type="dpl",
         sfh_dpl_alpha=Uniform(0.5, 5.0),
-        sfh_dpl_log_total_mass=Uniform(-1.0, 3.0),
+        sfh_dpl_log_total_mass=Uniform(7.0, 12.5),
         met_logzsol=Uniform(-2.0, 0.5),
     )
 
@@ -154,7 +154,7 @@ class TestRoundtrip:
         spec = Parameters(
             mean_sfh_type="dpl",
             sfh_dpl_alpha=Uniform(0.5, 5.0),
-            sfh_dpl_log_total_mass=Uniform(-1.0, 3.0),
+            sfh_dpl_log_total_mass=Uniform(7.0, 12.5),
             met_logzsol=Fixed(-0.5),
         )
         model = _make_mock_model(spec)

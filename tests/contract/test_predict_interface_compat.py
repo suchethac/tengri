@@ -134,3 +134,79 @@ class TestComponentsPromotion:
         state_before = pred._cache["_state"]
         _ = pred.sed.components
         assert pred._cache["_state"] is state_before
+
+
+class TestPredictStateIsNotAdvertisedAsPublic:
+    """``predict_state`` must not contradict the prediction contract (#1736).
+
+    Two authoritative sources disagreed. ``NAMING_CONTRACT.md`` §4b names the
+    public prediction surfaces and ``predict_state`` is not among them, while
+    the method's own docstring opened with "This is the public bridge ...".
+    Docstrings *are* the API reference here — ``docs/api/*.rst`` are autodoc
+    stubs — so the two readings were equally authoritative, and two reviewers
+    auditing the published notebooks reached opposite conclusions about whether
+    to teach it to beginners. The quickstart nearly shipped a paragraph doing so.
+
+    Resolved as internal, because the pull toward it was a missing *public*
+    accessor for per-component SEDs, and that accessor exists:
+    ``pred.sed.components`` (covered by the class above). These tests pin the
+    resolution so the wording cannot drift back.
+    """
+
+    def test_docstring_does_not_claim_to_be_public(self):
+        doc = SEDModel.predict_state.__doc__ or ""
+        assert "public bridge" not in doc, (
+            "predict_state's docstring calls itself 'the public bridge' again. "
+            "NAMING_CONTRACT §4b names the public prediction surfaces and this "
+            "is not one of them; a docstring is the API reference here, so this "
+            "wording is the contract disagreeing with itself (#1736)."
+        )
+
+    def test_docstring_does_not_read_as_deprecated(self):
+        """Internal is not the same status as deprecated, and a substring decides.
+
+        ``test_predict_surface_classification.py`` derives the deprecated label
+        with ``"deprecat" in doc.lower()``, so prose in this docstring *is* the
+        classification. The first draft of this fix wrote "may change without a
+        deprecation cycle" -- accurate English, and it moved ``predict_state``
+        out of ``UNSANCTIONED_PREDICT_METHODS`` into the deprecated set and took
+        the contract shard red.
+
+        The distinction is real, not bookkeeping: deprecated means scheduled for
+        removal with a named successor, while ``predict_state`` has production
+        callers (``predict_observables_jit``, ``ForwardModel.predict_observables``)
+        and is going nowhere. It is unsanctioned, which is the bucket for "live,
+        un-deprecated, outside the sanctioned three".
+        """
+        doc = (SEDModel.predict_state.__doc__ or "").lower()
+        assert "deprecat" not in doc, (
+            "predict_state's docstring contains 'deprecat', which reclassifies it "
+            "as a deprecated method in test_predict_surface_classification.py and "
+            "fails the contract shard. It is UNSANCTIONED, not deprecated -- it has "
+            "production callers. Say 'no stability guarantee' instead."
+        )
+
+    def test_docstring_points_at_the_public_replacement(self):
+        doc = SEDModel.predict_state.__doc__ or ""
+        assert "components" in doc, (
+            "predict_state no longer names the supported alternative. Telling a "
+            "reader a surface is internal without saying what replaces it is why "
+            "the notebooks reached for it: the component-decomposition figures "
+            "had no other documented path. Name pred.sed.components (#1736)."
+        )
+
+    def test_contract_document_states_the_resolution(self):
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parents[2]
+        contract = (root / "docs" / "dev" / "NAMING_CONTRACT.md").read_text(encoding="utf-8")
+        assert "predict_state" in contract, (
+            "NAMING_CONTRACT.md does not mention predict_state. Silence is what "
+            "let the docstring and the contract disagree for as long as they did "
+            "-- a reader checking the contract found nothing either way (#1736)."
+        )
+        assert "pred.sed.components" in contract, (
+            "NAMING_CONTRACT.md marks predict_state non-public without naming the "
+            "public per-component surface, which leaves the decomposition figures "
+            "with no compliant path -- the exact gap that caused #1736."
+        )

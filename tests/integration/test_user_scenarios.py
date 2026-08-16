@@ -381,7 +381,7 @@ class TestStandardGalaxyWorkflows:
         """
         params = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
+            sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
             sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
             sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -440,7 +440,7 @@ class TestStandardGalaxyWorkflows:
         """
         params = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
+            sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
             sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
             sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -512,7 +512,7 @@ class TestKnownBugReproduction:
             sfh_dpl_alpha=Uniform(0.5, 3.0),
             sfh_dpl_beta=Uniform(0.3, 2.0),
             sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
-            sfh_dpl_log_total_mass=Uniform(-1.0, 2.5),
+            sfh_dpl_log_total_mass=Uniform(7.0, 12.5),
             met_logzsol=Uniform(-2.0, 0.2),
             dust_tau_bc=Uniform(0.0, 3.0),
             dust_tau_diff=Uniform(0.0, 2.0),
@@ -590,7 +590,7 @@ class TestMemoryAndCompilation:
         """
         params = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
+            sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
             sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
             sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -639,7 +639,7 @@ class TestAGNScience:
         """
         params = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
+            sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
             sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
             sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -648,7 +648,7 @@ class TestAGNScience:
             dust_tau_bc=Uniform(0.0, 3.0),
             dust_tau_diff=Uniform(0.0, 2.0),
             agn_model="kubota_done",  # Kubota & Done disc
-            agn_log_lbol=Uniform(43.0, 47.0),
+            agn_log_lbol=Uniform(9.42, 13.42),
             agn_lum_ratio=Uniform(0.01, 0.3),  # Fraction of L_bol in disc
             agn_torus_frac=Uniform(0.0, 1.0),  # Fraction seen by torus (enables SKIRTOR)
             agn_tau_skirtor=Uniform(3.0, 11.0),  # SKIRTOR optical depth
@@ -691,7 +691,7 @@ class TestAGNScience:
         """
         params = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
+            sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
             sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
             sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -700,7 +700,7 @@ class TestAGNScience:
             dust_tau_bc=Uniform(0.0, 3.0),
             dust_tau_diff=Uniform(0.0, 2.0),
             agn_model="qsogen",  # Fixed: no longer causes UnexpectedTracerError
-            agn_log_lbol=Uniform(43.0, 46.0),
+            agn_log_lbol=Uniform(9.42, 12.42),
             redshift=Fixed(mock_data_z1["redshift"]),
         )
 
@@ -798,7 +798,7 @@ class TestEdgeCases:
         """F1. Very low redshift (z=0.01, IGM transparent)."""
         params = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
+            sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
             sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
             sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -845,7 +845,7 @@ class TestEdgeCases:
         """F2. Very high redshift (z=8, strong Lyman forest)."""
         params = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
+            sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
             sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 1.0),  # Young universe
             sfh_tsnorm_width_gyr=Uniform(0.1, 0.5),
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -892,7 +892,7 @@ class TestEdgeCases:
         """F3. Zero dust (tau_bc=0, tau_diff=0)."""
         params = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
+            sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
             sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
             sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -924,7 +924,7 @@ class TestEdgeCases:
         """F4. Extreme metallicity (logZ = -2.0 subsolar)."""
         params = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
+            sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
             sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
             sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),

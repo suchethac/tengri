@@ -45,7 +45,7 @@ from tengri import (
     load_ssp_data,
 )
 
-import sys, os  # noqa: E401, E402
+import sys, os  # noqa: E401
 try:
     _nb_dir = os.path.dirname(os.path.abspath(__file__))
     sys.path.insert(0, os.path.join(_nb_dir, "..", ".."))
@@ -66,7 +66,7 @@ elif os.path.exists(os.path.join("..", "..", "..", "data")):
 FIGDIR = os.path.join("tutorials", "figures")
 os.makedirs(FIGDIR, exist_ok=True)
 
-from _plot_style import (  # noqa: E402
+from _plot_style import (
     COLORS,
     SPECTRAL_FEATURES,
     convergence_table,
@@ -400,7 +400,7 @@ for name, res, t in [
     ("vi", result_geovi_param, t_geovi),
     ("NUTS", result_nuts_param, t_nuts),
 ]:
-    n_samp = len(list(res.samples.values())[0]) if res.samples else 0
+    n_samp = len(next(iter(res.samples.values()))) if res.samples else 0
     print(f"  {name:<16s} | {t:>8.1f} s | {n_samp:>17d} | {n_samp / t:>7.0f}")
 
 # %% [markdown]
@@ -490,7 +490,7 @@ ax_sfh.set_xlabel("Lookback time [Gyr]")
 ax_sfh.set_ylabel(r"SFR [$M_\odot\,{\rm yr}^{-1}$]")
 ax_sfh.set_xlim(0, 13.5)
 ax_sfh.legend(fontsize=8)
-ax_sfh.set_title(f"True Bursty SFH (σ = 2.0, τ = 20 Myr)")
+ax_sfh.set_title("True Bursty SFH (σ = 2.0, τ = 20 Myr)")
 # 200 Myr inset
 inset = ax_sfh.inset_axes([0.55, 0.55, 0.4, 0.4])
 mask_200 = t_gyr < 0.2
@@ -761,7 +761,7 @@ print(f"  {'Parametric':<20s} {'7':>4s}  {'NUTS':<16s} {'':>8s} {t_nuts:>7.1f}s 
 print(f"  {'Stochastic':<20s} {'137':>4s}  {'native_geovi':<16s} {t_compile_s:>7.1f}s {t_geovi_s:>7.1f}s  Default")
 print(f"  {'Stochastic':<20s} {'137':>4s}  {'Ray Tracing':<16s} {'':>8s} {t_rt_s:>7.1f}s  Exact (Behroozi 2025)")
 print("  " + "=" * 75)
-print(f"\n  Compile is one-time (cached on disk). Runtime is per galaxy.")
+print("\n  Compile is one-time (cached on disk). Runtime is per galaxy.")
 print(f"  Headline: 137D posterior in {t_geovi_s:.0f}s runtime with native_geovi.")
 
 # %% [markdown]

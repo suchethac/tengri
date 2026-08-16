@@ -6665,10 +6665,40 @@ class SEDModel:
         keep using :meth:`predict_photometry`/:meth:`predict_spectrum`
         until the full integration adapter ships.
 
-        This is the public bridge between :class:`SEDModel`'s
-        configuration surface and the orchestrator: it lets users with
-        an existing ``SEDModel`` go through ``run_components`` without
-        re-typing the chain at every call site.
+        **Not a public surface, despite what this docstring used to say**
+        (#1736). The prediction contract — ``docs/dev/NAMING_CONTRACT.md``
+        §4b, binding on code, docs, notebooks and examples — names three:
+        :meth:`predict`, :meth:`predict_photometry` and
+        :meth:`predict_properties`. ``predict_state`` is not among them.
+        It is the internal bridge from this model's configuration surface
+        to the orchestrator, called by :meth:`predict_observables_jit` and
+        by ``ForwardModel.predict_observables``; its return type and the
+        keys on it carry no stability guarantee and may change without
+        notice.
+
+        It is **not** on the removal path either — it has production
+        callers and is classified ``UNSANCTIONED`` rather than retired
+        (``tests/contract/test_public_api_surface.py``). Do not describe
+        it with the d-word: ``test_predict_surface_classification.py``
+        derives that label by searching this docstring for the substring,
+        so the wording here *is* the classification.
+
+        **If you reached for this to get per-component SEDs, use**
+        :attr:`pred.sed.components
+        <tengri.forward.prediction.SEDProperties.components>` **instead**::
+
+            comp = model.predict(params).sed.components
+            comp["sed_intrinsic"]  # stellar, pre-dust  [erg/s/Hz]
+            comp["sed_dust_ir"]  # and sed_nebular, sed_agn, sed_total, ...
+
+        That is the supported decomposition, it reuses the prediction's
+        cached forward state (no second forward pass), and it returns a
+        plain dict of named arrays rather than a pipeline object. Reaching
+        through ``predict_state`` instead hands you a
+        :class:`~tengri.protocols.ForwardState`, whose ``derived`` dict
+        CLAUDE.md explicitly documents as internal — so the convenient
+        path out of this method leads directly into an object the
+        conventions tell readers not to touch.
 
         Parameters
         ----------
@@ -7330,8 +7360,14 @@ class SEDModel:
             and self.ssp_data is not None
         ):
             fixed = self.spec.get_fixed_values()
+            # Same narrowing as the component's own apply() (#1833) — read off
+            # the component that is actually in the chain, so the LUT cannot
+            # bake a different curve from the one the direct path evaluates.
             bc_params, diff_params = resolve_bc_diff_law_params(
-                fixed, dict(dust.config.bc_law_overrides), dict(dust.config.diff_law_overrides)
+                fixed,
+                dict(dust.config.bc_law_overrides),
+                dict(dust.config.diff_law_overrides),
+                dust.config.live_shape_params,
             )
             ssp_ages_yr = (10.0**self.ssp_data.ssp_lg_age_gyr) * 1e9
 
@@ -7600,6 +7636,66 @@ class SEDModel:
         setattr(self, cache_attr, response)
         return response
 
+    #: Provenance tags that mean a caller asked for this parameter's value.
+    #: ``registry_default`` and ``wildcard_fixed`` are deliberately absent —
+    #: neither expresses a request, and for those an attenuation law's own
+    #: published default must stand rather than the shared spec default.
+    _REQUESTED_PROVENANCE = frozenset({"user_prior", "user_fixed", "user_free", "wildcard_free"})
+
+    def _requested_law_shape_params(self, *laws: str | None) -> frozenset[str]:
+        """Shape parameters of the selected attenuation law(s) a caller asked for.
+
+        Parameters
+        ----------
+        *laws : str or None
+            Attenuation-law registry keys in play. ``None`` entries are
+            skipped. Defaults to the diffuse law alone, which is the single
+            screen's only law.
+
+        Returns
+        -------
+        frozenset of str
+            Flat names whose provenance says somebody asked. Empty for a law
+            that reads no shape parameter (the default ``calzetti`` among
+            them), which keeps the build-time cached ``k(lambda)`` and the
+            single screen's fast path unchanged.
+
+        Notes
+        -----
+        **JIT-compatible**: no — build-time provenance lookup.
+
+        The union is over every law in play, not just the diffuse one: the
+        two-component screen evaluates ``law_bc``, ``law_diff`` and ``law_neb``,
+        and a parameter read only by the birth-cloud law would otherwise be
+        dropped as unrequested while the user had plainly requested it. See
+        :attr:`DustAttenuationSEDComponentConfig.live_shape_params` (#1808) and
+        :attr:`DustSEDComponentConfig.live_shape_params` (#1833).
+        """
+        from tengri.parameters.groups import _law_shape_params
+
+        names = laws or (
+            getattr(self, "_dust_law_diff", None) or getattr(self.spec, "dust_law_diff", None),
+        )
+        reads: set[str] = set()
+        for law in names:
+            if law is None:
+                continue
+            try:
+                reads |= set(_law_shape_params(law))
+            except Exception:  # pragma: no cover - law not registered
+                continue
+        if not reads:
+            return frozenset()
+        provenance = getattr(self.spec, "_group_provenance", None) or {}
+        return frozenset(
+            name
+            for name in reads
+            # ``_grid`` suffixes mark a declared free prior intersected with a
+            # template grid; still a request, so match on the stem.
+            if str(provenance.get(name, "registry_default")).removesuffix("_grid")
+            in self._REQUESTED_PROVENANCE
+        )
+
     def _build_component_chain(self):
         """Construct the orchestrator chain from ``self``'s settings.
 
@@ -7650,8 +7746,40 @@ class SEDModel:
                 neb_backend_name = "baked_in"  # fallback
             neb_backend_instance = neb_inst
 
+        # Which attenuation-law shape parameters did somebody actually ask for?
+        #
+        # The single_component screen used to call its law with no arguments,
+        # so dust_slope / dust_delta / dust_bump_strength were unfittable
+        # (#1808). Passing the spec's values unconditionally is not the fix
+        # either: the spec declares ONE shared dust_delta / dust_bump_strength,
+        # both Fixed(0.0), while each law carries its paper's value in its own
+        # signature (kriek_conroy bump=1.0, narayanan_z delta=-0.2), and
+        # overriding those collapses three distinct published laws onto one
+        # curve — measured.
+        #
+        # Provenance separates the two cases, and it can only be read here: the
+        # component sees a plain params dict, and deciding at call time would
+        # mean branching on a traced value. registry_default and wildcard_fixed
+        # mean "nobody asked", so the law's own default stands.
+        #
+        # #1833: the two-component screen needs the same treatment and the union
+        # over the three laws it evaluates. It was passing the shared spec values
+        # unconditionally, so kriek_conroy lost its 2175 A bump and narayanan_z /
+        # tea their delta = -0.2 — the exact outcome rejected above, on the path
+        # every shipped recipe builds.
+        _dust_model = getattr(self, "_dust_model", "two_component")
+        if _dust_model == "single_component":
+            dust_live_shape_params = self._requested_law_shape_params()
+        else:
+            dust_live_shape_params = self._requested_law_shape_params(
+                getattr(self, "_dust_law_bc", None),
+                getattr(self, "_dust_law_diff", None),
+                getattr(self, "_dust_law_neb", None),
+            )
+
         chain = build_components(
             ssp_data=self.ssp_data,
+            dust_live_shape_params=dust_live_shape_params,
             sfh_model=mean_model,
             field=field_on,
             metallicity_model=getattr(self, "_met_mode", "delta"),
@@ -7954,7 +8082,7 @@ class SEDModel:
 
     # ── Batch operations ──────────────────────────────────────────────
 
-    def predict_photometry_batch(self, params_batch):
+    def predict_photometry_batch(self, params_batch, *, ssp_data=None, template_data=None):
         """Compute photometry for a batch of parameter sets via jax.vmap.
 
         **Use this method for** posterior chains / mock catalogs (batched
@@ -7988,9 +8116,9 @@ class SEDModel:
         """
         from tengri.forward.convenience import predict_photometry_batch as _fn
 
-        return _fn(self, params_batch)
+        return _fn(self, params_batch, ssp_data=ssp_data, template_data=template_data)
 
-    def predict_spectrum_batch(self, params_batch):
+    def predict_spectrum_batch(self, params_batch, *, ssp_data=None, template_data=None):
         """Compute spectra for a batch of parameter sets via jax.vmap.
 
         **Use this method for** batched spectra over posterior chains.
@@ -8024,7 +8152,7 @@ class SEDModel:
         """
         from tengri.forward.convenience import predict_spectrum_batch as _fn
 
-        return _fn(self, params_batch)
+        return _fn(self, params_batch, ssp_data=ssp_data, template_data=template_data)
 
     @classmethod
     def from_config(

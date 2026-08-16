@@ -1892,7 +1892,7 @@ class StellarSEDComponent:
             )
         # SFH models are routed through SFH_REGISTRY's internal_param_map.
         # Each model is validated against legacy DSPS path via
-        # tests/integration/test_stellar_integration.py.
+        # tests/integration/test_components_vs_legacy.py.
         _SUPPORTED_SFH = (
             "tsnorm",
             "dpl",
@@ -1957,7 +1957,7 @@ class StellarSEDComponent:
         # 13.8 Gyr). This is critical for ``field=True`` parity:
         # ``compute_field_gp`` keys on n_grid + d_log_age to build
         # the GP correlation kernel, so both paths must construct
-        # the grid identically. See tests/integration/test_stellar_integration.py.
+        # the grid identically. See tests/integration/test_components_vs_legacy.py.
         log_age_grid = make_log_age_grid(n_grid)
         sfh_lbt_grid = 10.0**log_age_grid
 

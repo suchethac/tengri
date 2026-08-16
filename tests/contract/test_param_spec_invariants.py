@@ -38,7 +38,7 @@ def dpl_spec() -> Parameters:
     return Parameters(
         mean_sfh_type="dpl",
         sfh_dpl_alpha=Uniform(0.5, 5.0),
-        sfh_dpl_log_total_mass=Uniform(-1.0, 3.0),
+        sfh_dpl_log_total_mass=Uniform(7.0, 12.5),
         met_logzsol=Uniform(-2.0, 0.5),
         dust_tau_bc=Fixed(0.1),
         dust_tau_diff=Fixed(0.3),
@@ -67,7 +67,7 @@ def stochastic_spec() -> Parameters:
         mean_sfh_type=["dpl", "field"],
         n_grid=16,
         sfh_dpl_alpha=Uniform(0.5, 5.0),
-        sfh_dpl_log_total_mass=Uniform(-1.0, 3.0),
+        sfh_dpl_log_total_mass=Uniform(7.0, 12.5),
         sfh_field_psd_sigma=Uniform(0.1, 5.0),
         sfh_field_psd_tau_myr=Uniform(10.0, 500.0),
         met_logzsol=Uniform(-2.0, 0.5),

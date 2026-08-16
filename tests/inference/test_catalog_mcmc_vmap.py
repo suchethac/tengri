@@ -46,7 +46,7 @@ def _build_model(synthetic_ssp, simple_observation):
     from tengri import Fixed, Parameters, SEDModel, Uniform
 
     spec = Parameters(
-        sfh_dpl_log_total_mass=Uniform(-1.0, 3.0),
+        sfh_dpl_log_total_mass=Uniform(7.0, 12.5),
         sfh_dpl_alpha=Fixed(2.0),  # pin shape params — else degenerate with mass (M/L)
         sfh_dpl_age_gyr=Fixed(5.0),
         sfh_dpl_beta=Fixed(2.0),

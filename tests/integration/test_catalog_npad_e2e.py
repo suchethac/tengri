@@ -45,7 +45,7 @@ def _build_catalog(n_gal: int, base_key):
     spec = Parameters(
         sfh_dpl_alpha=Uniform(0.5, 5.0),
         sfh_dpl_beta=Uniform(0.5, 5.0),
-        sfh_dpl_log_total_mass=Uniform(-1.0, 2.5),
+        sfh_dpl_log_total_mass=Uniform(7.0, 12.5),
         sfh_dpl_tau_gyr=Uniform(0.1, 12.0),
         met_logzsol=Uniform(-2.0, 0.2),
         dust_tau_bc=Uniform(0.0, 2.0),
