@@ -17,8 +17,9 @@ of the precomputed filter table.
 
 References
 ----------
-.. [1] Vanden Berk et al. 2001, "The SDSS Quasar Catalog: IV. Fifth Data
-       Release," AJ, 122, 549. arXiv:astro-ph/0105488.
+.. [1] Vanden Berk et al. 2001, "Composite Quasar Spectra from the Sloan
+       Digital Sky Survey," AJ, 122, 549. arXiv:astro-ph/0105231.
+       https://doi.org/10.1086/321167
 .. [2] Boroson & Green 1992, "The Emission-Line Properties of Low-Redshift
        Quasars," ApJS, 80, 109.
 .. [3] Tsuzuki et al. 2006, "Fe II Emission in 14 Low-Redshift Quasars.
