@@ -80,7 +80,7 @@ def _build_params_with_agn(agn_model: str | None = None) -> Parameters:
     extra: dict[str, Any] = {}
     if agn_model:
         extra.update(
-            agn_log_lbol=Uniform(40.0, 47.0),
+            agn_log_lbol=Uniform(6.42, 13.42),
         )
         if agn_model in ("kubota_done_full", "kubota_done_disc"):
             extra.update(

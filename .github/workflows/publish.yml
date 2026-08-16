@@ -49,6 +49,32 @@ jobs:
       - name: Validate distribution metadata
         run: twine check --strict dist/*
 
+      # `twine check` validates metadata and never installs anything, and
+      # `smoke` in tests.yml uses `pip install -e`, which imports straight from
+      # the source tree. So nothing anywhere exercised the built wheel: a
+      # missing package-data glob, or an import that only resolves from a
+      # checkout, would have surfaced for the first time at release — after the
+      # artifact is public and the version number is spent, and PyPI does not
+      # allow re-uploading a version (#1818).
+      #
+      # Installed into a clean venv and imported from outside the checkout, so
+      # `src/` cannot satisfy the import and mask the very failure being
+      # checked.
+      - name: Install the built wheel and import it
+        run: |
+          python -m venv /tmp/wheel-check
+          /tmp/wheel-check/bin/pip install --quiet --upgrade pip
+          /tmp/wheel-check/bin/pip install --quiet dist/*.whl
+          cd /tmp
+          /tmp/wheel-check/bin/python -c "
+          import pathlib, tengri
+          print('imported tengri', tengri.__version__, 'from', tengri.__file__)
+          root = pathlib.Path(tengri.__file__).parent
+          data = [p for p in root.rglob('*') if p.is_file() and p.suffix not in {'.py', '.pyc'}]
+          print(f'{len(data)} non-.py package data file(s) present')
+          assert data, 'no package data in the wheel - check [tool.setuptools.package-data]'
+          "
+
       - uses: actions/upload-artifact@v7
         with:
           name: dist

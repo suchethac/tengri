@@ -120,16 +120,20 @@ def resolve_bc_diff_law_params(
     params: Mapping,
     bc_overrides: Mapping | None = None,
     diff_overrides: Mapping | None = None,
+    live_shape_params: frozenset[str] | None = None,
 ) -> tuple[dict, dict]:
     """Split shared dust law parameters into birth-cloud and diffuse law dicts.
 
     For each two-component law parameter (slope, bump, delta, Rv), the value is
-    the shared ``dust_<x>`` from ``params`` (falling back to the law default),
-    unless a per-component override is supplied in ``bc_overrides`` /
-    ``diff_overrides`` (keyed by law-function kwarg, e.g. ``n_slope``). The
-    overrides are the static per-component settings carried on
-    :class:`DustSEDComponentConfig`. This is the single source of truth shared
-    by every stellar two-component attenuation path, so they cannot diverge.
+    the shared ``dust_<x>`` from ``params``, unless a per-component override is
+    supplied in ``bc_overrides`` / ``diff_overrides`` (keyed by law-function
+    kwarg, e.g. ``n_slope``). The overrides are the static per-component
+    settings carried on :class:`DustSEDComponentConfig`. This is the single
+    source of truth shared by every stellar two-component attenuation path, so
+    they cannot diverge.
+
+    A parameter nobody asked for is **omitted** rather than defaulted, so the
+    selected law's own published default stands — see ``live_shape_params``.
 
     Parameters
     ----------
@@ -137,7 +141,14 @@ def resolve_bc_diff_law_params(
         Flat ``dust_*`` parameter mapping (JAX scalars or floats).
     bc_overrides, diff_overrides : Mapping, optional
         Per-component law-kwarg overrides (e.g. ``{"n_slope": -1.0}`` for the
-        FSPS birth-cloud convention). Absent keys inherit the shared value.
+        FSPS birth-cloud convention). Always honored: an override *is* a
+        request, whatever the provenance of the shared parameter.
+    live_shape_params : frozenset of str, optional
+        Flat names a caller actually asked for, resolved from spec provenance
+        by :meth:`SEDModel._requested_law_shape_params` (#1808). Names outside
+        this set are left out of the returned dicts. ``None`` keeps the
+        historical behavior of passing all four unconditionally, for the
+        direct callers that have no spec to ask.
 
     Returns
     -------
@@ -149,15 +160,29 @@ def resolve_bc_diff_law_params(
     -----
     **JIT-compatible**: yes — only dict construction and ``Mapping.get``; the
     values pass through untouched (traced arrays stay traced).
+
+    Passing all four unconditionally was #1833. The spec declares ONE shared
+    ``dust_bump_strength`` / ``dust_delta``, both ``Fixed(0.0)``, while each law
+    carries its paper's value in its own signature (``kriek_conroy``
+    ``dust_bump_strength=1.0``; ``narayanan_z`` and ``tea``
+    ``dust_delta=-0.2``). Injecting the shared zero deleted the 2175 Å Drude
+    bump that Kriek & Conroy (2013) Eqn 3 exists to add, so ``two_component``
+    silently returned a different law from the one selected — measured at 128%
+    on the SED against ``single_component``, which had already been fixed by
+    #1808. This is that fix reaching its second caller.
     """
     bc_overrides = bc_overrides or {}
     diff_overrides = diff_overrides or {}
     bc: dict = {}
     diff: dict = {}
     for law_kw, flat_name, default in _TWO_COMPONENT_LAW_PARAMS:
-        shared = params.get(flat_name, default)
-        bc[law_kw] = bc_overrides.get(law_kw, shared)
-        diff[law_kw] = diff_overrides.get(law_kw, shared)
+        requested = live_shape_params is None or flat_name in live_shape_params
+        shared = params.get(flat_name, default) if requested else None
+        for target, overrides in ((bc, bc_overrides), (diff, diff_overrides)):
+            if law_kw in overrides:
+                target[law_kw] = overrides[law_kw]
+            elif requested:
+                target[law_kw] = shared
     return bc, diff
 
 
