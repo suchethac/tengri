@@ -543,23 +543,111 @@ def compute_uv_luminosity_1600(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarr
     return nu_1600 * l_nu_1600
 
 
-def compute_irx(l_tir_lsun: jnp.ndarray, l_uv_erg: jnp.ndarray) -> jnp.ndarray:
-    """Infrared excess IRX = log10(L_TIR / L_UV).
+#: ``log10(c / 1600 A)`` [dex re Hz] — the 1600 A pivot frequency, kept in the
+#: exponent so ``nu L_nu`` is never materialized (see
+#: :func:`compute_log_uv_luminosity_1600`).
+LOG10_NU_1600: float = float(np.log10(C_AA / 1600.0))
+
+
+def compute_log_uv_luminosity_1600(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
+    r"""``log10`` of the monochromatic UV luminosity at rest-frame 1600 A.
+
+    .. math::
+
+        \log_{10}\left(\frac{(\nu L_\nu)_{1600\,\mathrm{A}}}{\mathrm{erg/s}}\right)
+
+    The range-safe companion to :func:`compute_uv_luminosity_1600`. That
+    function returns :math:`\nu L_\nu` in erg/s, which is ~5e42 for a
+    :math:`10^{10}\,M_\odot` galaxy and therefore **not representable in
+    float32** at all — its ``inf`` then propagated into ``irx`` as ``NaN``, even
+    though IRX itself is a dex ratio of order unity (issue #1837).
 
     Parameters
     ----------
-    l_tir_lsun : float
-        Total IR luminosity in Lsun.
-    l_uv_erg : float
-        UV luminosity νL_ν(1600 Å) in erg/s.
+    sed : array_like, shape (n_wave,)
+        Rest-frame :math:`L_\nu` [erg/s/Hz].
+    wave : array_like, shape (n_wave,)
+        Rest-frame wavelength grid [Angstrom], ascending.
 
     Returns
     -------
-    float
-        IRX (dimensionless log ratio).
+    ndarray, shape ()
+        :math:`\log_{10}(\nu L_\nu)` [dex re erg/s]. ``-inf`` where the
+        interpolated :math:`L_\nu` is exactly zero, following the
+        :func:`~tengri.utils.scale.log10_magnitude` sentinel contract.
+
+    Notes
+    -----
+    **JIT/grad/vmap-compatible**: yes. Equal to
+    ``log10(compute_uv_luminosity_1600(...))`` to ~1e-15 relative in float64,
+    and finite in float32 wherever :math:`L_\nu` itself is.
     """
-    l_tir_erg = l_tir_lsun * L_SUN
-    return jnp.log10(jnp.maximum(l_tir_erg, _FLOOR()) / jnp.maximum(l_uv_erg, _FLOOR()))
+    l_nu_1600 = jnp.interp(1600.0, wave, sed)
+    return log10_magnitude(l_nu_1600) + LOG10_NU_1600
+
+
+def compute_irx(
+    l_tir_lsun: jnp.ndarray,
+    l_uv_erg: jnp.ndarray | None = None,
+    *,
+    log_l_uv_erg: jnp.ndarray | None = None,
+) -> jnp.ndarray:
+    r"""Infrared excess :math:`\mathrm{IRX} = \log_{10}(L_\mathrm{TIR}/L_\mathrm{UV})`.
+
+    .. math::
+
+        \mathrm{IRX} = \log_{10}\left(\frac{L_\mathrm{TIR}}{L_\mathrm{UV}}\right)
+                     = \log_{10} L_\mathrm{TIR}[L_\odot] + \log_{10} L_\odot
+                       - \log_{10} L_\mathrm{UV}[\mathrm{erg/s}]
+
+    Parameters
+    ----------
+    l_tir_lsun : array_like, shape ()
+        Total IR luminosity [Lsun].
+    l_uv_erg : array_like, shape (), optional
+        UV luminosity :math:`\nu L_\nu` [erg/s]. Mutually exclusive with
+        ``log_l_uv_erg``. **Not float32-representable** for a normal galaxy
+        (~5e42 against a 3.4e38 ceiling) — prefer the log form there.
+    log_l_uv_erg : array_like, shape (), optional
+        :math:`\log_{10}(\nu L_\nu / (\mathrm{erg/s}))` [dex], as returned by
+        :func:`compute_log_uv_luminosity_1600`. The float32-safe route.
+
+    Returns
+    -------
+    ndarray, shape ()
+        IRX [dex].
+
+    Raises
+    ------
+    TypeError
+        If neither or both of ``l_uv_erg`` and ``log_l_uv_erg`` are given.
+
+    Notes
+    -----
+    **JIT/grad/vmap-compatible**: yes.
+
+    Evaluated as a difference of logarithms rather than a ratio. The previous
+    form materialized ``l_tir_lsun * L_SUN`` (~7e41 erg/s), which overflows
+    float32 on its own — so IRX was ``NaN`` there even when both inputs were
+    finite, and even though IRX is a dex ratio of order unity (issue #1837).
+    Clamping in the log domain is exactly equivalent to the previous linear
+    clamp because ``log10`` is monotone:
+    ``log10(max(x, f)) == max(log10(x), log10(f))``. float64 is unchanged to
+    ~1e-15 absolute.
+    """
+    if (l_uv_erg is None) == (log_l_uv_erg is None):
+        raise TypeError(
+            "compute_irx requires exactly one of l_uv_erg (linear, erg/s) or "
+            "log_l_uv_erg (dex). Pass log_l_uv_erg from "
+            "compute_log_uv_luminosity_1600 for a float32-safe result."
+        )
+    log_floor = jnp.log10(jnp.asarray(_FLOOR()))
+    log_l_tir_erg = jnp.maximum(log10_magnitude(l_tir_lsun) + LOG10_L_SUN, log_floor)
+    if log_l_uv_erg is None:
+        log_uv = jnp.maximum(log10_magnitude(l_uv_erg), log_floor)
+    else:
+        log_uv = jnp.maximum(jnp.asarray(log_l_uv_erg), log_floor)
+    return log_l_tir_erg - log_uv
 
 
 def compute_rest_uv_color(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
