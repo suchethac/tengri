@@ -17,7 +17,9 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-jax.config.update("jax_enable_x64", True)
+from tests._bounds import assert_non_negative
+from tests._grad_parity import assert_grad_matches_fd
+from tests._jit_parity import assert_jit_matches_eager
 
 
 def fd_grad(f, x: float, eps: float = 1e-4) -> float:
@@ -188,7 +190,7 @@ class TestDL07Tabulated:
 
         dl07 = DUST_EMISSION_MODELS["draine_li2007"]
         sed = dl07(ir_wave, 1e10, dust_umin=1.0, dust_gamma_dl=0.01, dust_qpah=2.5)
-        assert jnp.all(sed >= 0), "DL07 SED should be non-negative"
+        assert_non_negative(sed, name="sed", msg="DL07 SED should be non-negative")
 
     def test_finite_output(self, ir_wave):
         """SED should be finite for all reasonable parameters."""
@@ -313,15 +315,14 @@ class TestDale2014Tabulated:
         dale = DUST_EMISSION_MODELS["dale2014"]
         for alpha in [0.5, 1.0, 2.0, 3.0, 4.0]:
             sed = dale(ir_wave, 1e10, dust_alpha_dale=alpha)
-            assert jnp.all(sed >= 0), f"Dale2014 SED negative for alpha={alpha}"
+            assert_non_negative(sed, name="sed", msg=f"Dale2014 SED negative for alpha={alpha}")
 
     def test_jit_compatible(self, ir_wave):
         """Dale2014 should work under jax.jit."""
         from tengri.components.dust.emission.emission import DUST_EMISSION_MODELS
 
         dale = DUST_EMISSION_MODELS["dale2014"]
-        dale_jit = jax.jit(dale)
-        sed = dale_jit(ir_wave, 1e10, dust_alpha_dale=2.0)
+        sed = assert_jit_matches_eager(dale, ir_wave, 1e10, dust_alpha_dale=2.0)
         chex.assert_tree_all_finite(sed)
 
     def test_differentiable(self, ir_wave):
@@ -544,8 +545,55 @@ class TestDL14ExtendedRange:
                 )
             )
 
+        # Finiteness only at alpha=2 itself: the slope genuinely jumps across
+        # the pole (one-sided derivatives 0.02706658 on the left, 0.03072682
+        # on the right, stable to 1e-6 in the step), and jax.grad returns the
+        # left branch. A central difference averages the two, so it is not a
+        # valid reference exactly here. The smooth-region discrepancy is
+        # covered by test_dl14_alpha_gradient_matches_finite_difference below.
         grad = jax.grad(total)(2.0)
         chex.assert_tree_all_finite(grad)
+
+    @pytest.mark.xfail(
+        strict=True,
+        reason=(
+            "d(SED)/d(dust_alpha_dl14) disagrees with a central finite "
+            "difference by 7-17% away from the alpha=2 pole. Not a probe "
+            "artefact: the numerical value is stable to 6 significant figures "
+            "across eps from 1e-2 to 1e-7 at alpha = 1.5, 1.7, 2.3 and 2.6, so "
+            "it is neither truncation error (which falls as eps^2) nor "
+            "cancellation (which grows as eps -> 0), and each point is in a "
+            "smooth region rather than at the kink."
+        ),
+    )
+    @pytest.mark.parametrize("alpha", [1.5, 1.7, 2.3, 2.6])
+    def test_dl14_alpha_gradient_matches_finite_difference(self, ir_wave, alpha):
+        """The alpha gradient should equal the true derivative, and does not.
+
+        Measured on 2026-08-12, analytic vs numerical (eps=1e-6):
+
+            alpha=1.5   0.008909278  vs  0.010426604   (+17.0%)
+            alpha=1.7   0.046344128  vs  0.051327080   (+10.8%)
+            alpha=2.3   0.016126882  vs  0.014962845   ( -7.2%)
+            alpha=2.6   0.003728402  vs  0.003467146   ( -7.0%)
+
+        This mattered enough to record because every fitter here (MAP, VI,
+        NUTS) descends this gradient, and a 7-17% error does not crash — it
+        biases the step direction whenever ``dust_alpha_dl14`` is freed. The
+        previous test at this site asserted only ``isfinite``, which is true
+        of a wrong gradient too, so nothing here could have caught it.
+
+        Marked ``strict`` so this turns red the moment it starts passing:
+        that is the signal the derivative was fixed and the mark should go.
+        """
+        from tengri.components.dust.emission import draine_li2014
+
+        def total(a):
+            return jnp.sum(
+                draine_li2014(ir_wave, 1e10, dust_umin=1.0, dust_gamma_dl=0.05, dust_alpha_dl14=a)
+            )
+
+        assert_grad_matches_fd(total, alpha, rtol=1e-3)
 
     def test_dl14_extended_qpah_range(self, ir_wave):
         """DL14 should handle extended q_PAH range (up to 7.32%)."""

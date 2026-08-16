@@ -30,8 +30,6 @@ import jax
 import numpy as np
 import pytest
 
-jax.config.update("jax_enable_x64", True)
-
 # Cosmic time [Gyr] for the tabulated histories, and the redshift they are
 # evaluated at. z=0.05 -> cosmic age ~13.11 Gyr, so the grid ends at 13.0.
 #

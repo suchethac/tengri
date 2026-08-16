@@ -21,6 +21,8 @@ Blanton & Roweis 2007 — Vega offsets (Table 3, 5)
 
 from __future__ import annotations
 
+import math
+
 import jax
 import jax.numpy as jnp
 
@@ -29,6 +31,20 @@ from tengri.utils.physics_constants import (
     MPC_CM,
     TEN_PC_CM,
 )
+from tengri.utils.scale import pow10, representable_floor
+
+#: ``log10`` of the AB zero-point flux [dex re erg/s/cm2/Hz] and of the 10 pc
+#: geometric factor [dex re cm2]. Both are folded into the exponent rather than
+#: applied as multiplicative constants: ``4π (10 pc)^2 = 1.196e40`` and
+#: ``f_ν / 3.631e-20`` for a UV-bright galaxy (~2e47) each exceed float32's
+#: 3.4e38 ceiling, even though the magnitudes on both sides of the conversion
+#: are of order 1-100 and perfectly representable (#1837).
+#:
+#: ``TEN_PC_CM**2 = 9.52e38`` overflows float32 *at the square*, one step before
+#: the expression it appears in — so the linear form cannot be rescued by
+#: reordering the multiplication.
+LOG10_MAGGIES_ZP_CGS: float = math.log10(MAGGIES_ZP_CGS)
+LOG10_FOUR_PI_TEN_PC_CM2: float = math.log10(4.0 * math.pi * TEN_PC_CM**2)
 
 __all__ = [
     "AB_VEGA_OFFSETS",
@@ -78,15 +94,27 @@ def fnu_to_ab_mag(fnu_cgs: jnp.ndarray) -> jnp.ndarray:
 
     Notes
     -----
-    Uses `jnp.maximum(fnu_cgs, 1e-300)` to guard the logarithm against
-    negative or zero values (which would produce NaN or -inf).
+    **JIT/grad/vmap-compatible**: yes.
+
+    Guards the logarithm against negative or zero values (which would produce
+    NaN or -inf) with :func:`~tengri.utils.scale.representable_floor`. The
+    literal floor was ``1e-300``, which is below float32's smallest subnormal
+    (1.4e-45) and therefore an exact no-op in the precision the guard exists to
+    protect (#1492).
+
+    The zero-point is subtracted in the log domain rather than divided out.
+    ``f_ν / 3.631e-20`` reaches ~2e47 for the L_ν values
+    :func:`~tengri.utils.sed_quantities.compute_rest_uv_color` passes in, which
+    overflows float32 even though the resulting magnitude is ~-118 (#1837).
+    float64 is unchanged: ``log10(a/b)`` and ``log10(a) - log10(b)`` agree to
+    ~1e-16 relative.
 
     References
     ----------
     Oke & Gunn 1983, ApJ, 266, 713 — definition of AB system
     """
-    fnu_safe = jnp.maximum(fnu_cgs, 1e-300)
-    return -2.5 * jnp.log10(fnu_safe / MAGGIES_ZP_CGS)
+    fnu_safe = jnp.maximum(fnu_cgs, representable_floor(1e-300))
+    return -2.5 * (jnp.log10(fnu_safe) - LOG10_MAGGIES_ZP_CGS)
 
 
 @jax.jit
@@ -119,11 +147,19 @@ def ab_mag_to_fnu(mag_ab: jnp.ndarray) -> jnp.ndarray:
     >>> jnp.allclose(fnu, 3.631e-20)
     True
 
+    Notes
+    -----
+    **JIT/grad/vmap-compatible**: yes. The zero-point is added in the exponent
+    rather than multiplied in: for the very negative magnitudes that arise when
+    a luminosity is passed through the flux surface, ``10**(-0.4 m)`` alone
+    overflows float32 before the ~1e-20 zero-point can bring it back into
+    range (#1837).
+
     References
     ----------
     Oke & Gunn 1983, ApJ, 266, 713
     """
-    return MAGGIES_ZP_CGS * 10.0 ** (-0.4 * mag_ab)
+    return pow10(-0.4 * mag_ab + LOG10_MAGGIES_ZP_CGS)
 
 
 @jax.jit
@@ -150,16 +186,26 @@ def lnu_to_absolute_ab_mag(lnu: jnp.ndarray) -> jnp.ndarray:
 
     Notes
     -----
+    **JIT/grad/vmap-compatible**: yes.
+
     The distance 10 pc is defined in `tengri.utils.physics_constants.TEN_PC_CM`.
+    The geometric factor is subtracted in the log domain: ``4π (10 pc)^2`` is
+    1.196e40 and its float32 evaluation is ``inf`` — already at ``TEN_PC_CM**2``
+    — so the linear form returned ``inf`` for every input, despite M_UV being
+    ~-17 (#1837). Clamping in the log domain is exactly equivalent to the
+    previous linear clamp because ``log10`` is monotone:
+    ``log10(max(x, f)) == max(log10(x), log10(f))``.
 
     References
     ----------
     Oke & Gunn 1983, ApJ, 266, 713
     """
-    # f_ν = L_ν / (4π d²)
-    distance_factor = 4.0 * jnp.pi * TEN_PC_CM**2
-    fnu_at_10pc = lnu / distance_factor
-    return fnu_to_ab_mag(fnu_at_10pc)
+    # f_ν = L_ν / (4π d²), evaluated as log10 f_ν = log10 L_ν - log10(4π d²).
+    log_fnu_at_10pc = jnp.maximum(
+        jnp.log10(jnp.maximum(lnu, 0.0)) - LOG10_FOUR_PI_TEN_PC_CM2,
+        math.log10(representable_floor(1e-300)),
+    )
+    return -2.5 * (log_fnu_at_10pc - LOG10_MAGGIES_ZP_CGS)
 
 
 @jax.jit
@@ -180,17 +226,20 @@ def absolute_ab_mag_to_lnu(mag_abs: jnp.ndarray) -> jnp.ndarray:
 
     Notes
     -----
+    **JIT/grad/vmap-compatible**: yes.
+
     The distance 10 pc is defined in `tengri.utils.physics_constants.TEN_PC_CM`.
+    The geometric factor is folded into the exponent for the reason given in
+    :func:`lnu_to_absolute_ab_mag` — ``4π (10 pc)^2`` is not representable in
+    float32, so the multiplicative form returned ``inf`` for every input (#1837).
 
     References
     ----------
     Oke & Gunn 1983, ApJ, 266, 713
     """
-    # f_ν = 10^(-0.4(M + 48.6))
-    fnu_at_10pc = ab_mag_to_fnu(mag_abs)
-    # L_ν = f_ν × 4π d²
-    distance_factor = 4.0 * jnp.pi * TEN_PC_CM**2
-    return fnu_at_10pc * distance_factor
+    # L_ν = f_ν × 4π d², with f_ν = 10^(-0.4(M + 48.6)) — one exponent, so no
+    # intermediate leaves float32 range.
+    return pow10(-0.4 * mag_abs + LOG10_MAGGIES_ZP_CGS + LOG10_FOUR_PI_TEN_PC_CM2)
 
 
 # ── Apparent ↔ Absolute Magnitude ─────────────────────────────────

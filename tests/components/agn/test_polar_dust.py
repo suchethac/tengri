@@ -9,8 +9,6 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri.components.agn.polar_dust import (
     _type1_mask,
     polar_dust_emission,
@@ -247,83 +245,22 @@ class TestSKIRTORPolarDustIntegration:
         """Test wavelength grid from 1000 Å to 1e7 Å (50 points logspaced)."""
         return jnp.logspace(jnp.log10(1000.0), jnp.log10(1e7), 50)
 
-    def test_skirtor_polar_dust_type2_reemission(self, wave_test):
-        """SKIRTOR Type 2 polar dust reemission increases with E(B-V).
-
-        Test the SKIRTORTorus SEDModelComponent with polar dust parameters
-        as free variables. Type 2 (edge-on, cos_inc=0.0) sightline should
-        show increased FIR luminosity when polar_ebv=0.3 vs 0.0, due to
-        graybody reemission of absorbed UV/optical photons.
-
-        This validates Yang+2020 §2.2.2: isotropic absorption geometry
-        for polar dust, regardless of viewing angle.
-
-        References
-        ----------
-        .. [1] Yang, A., et al. 2020, MNRAS, 491, 740.
-        """
-        pytest.importorskip("h5py")
-        from pathlib import Path
-
-        # Check for SKIRTOR template file
-        skirtor_template = (
-            Path(__file__).resolve().parent.parent.parent.parent
-            / "data"
-            / "skirtor_templates_v3.h5"
-        )
-        if not skirtor_template.is_file():
-            pytest.skip(f"SKIRTOR template not found: {skirtor_template}")
-
-        try:
-            from tengri.components.agn.skirtor import SKIRTORTorus
-        except Exception as e:
-            pytest.skip(f"Cannot load SKIRTOR: {e}")
-
-        # Create SKIRTOR torus component
-        torus = SKIRTORTorus()
-        torus.load(wave_test)
-
-        # Type 2 parameters: edge-on viewing angle, varying polar dust
-        params_ebv_0 = {
-            "torus_tau": 5.0,
-            "torus_p": 0.5,
-            "torus_q": 10.0,
-            "torus_oa": 30.0,
-            "torus_frac": 0.5,
-            "polar_ebv": 0.0,
-            "polar_temperature": 100.0,
-            "polar_beta": 1.6,
-        }
-        params_ebv_03 = params_ebv_0.copy()
-        params_ebv_03["polar_ebv"] = 0.3
-
-        # Apply at Type 2 (cos_inc=0.0)
-        sed_ebv_0, _ = torus.predict(
-            params_ebv_0, jnp.zeros_like(wave_test), wave_test, agn_cos_inc=0.0
-        )
-        sed_ebv_03, _ = torus.predict(
-            params_ebv_03, jnp.zeros_like(wave_test), wave_test, agn_cos_inc=0.0
-        )
-
-        # Integrate FIR luminosity from 10 um to 1000 um (integrate in frequency)
-        fir_mask = (wave_test >= 1e5) & (wave_test <= 1e8)  # 10 um to 1000 um
-        nu = _C_AA / wave_test
-        delta_nu = jnp.abs(jnp.diff(nu))
-        delta_nu = jnp.concatenate(
-            [delta_nu[:1], 0.5 * (delta_nu[:-1] + delta_nu[1:]), delta_nu[-1:]]
-        )
-
-        fir_lum_ebv_0 = jnp.sum(sed_ebv_0[fir_mask] * delta_nu[fir_mask])
-        fir_lum_ebv_03 = jnp.sum(sed_ebv_03[fir_mask] * delta_nu[fir_mask])
-
-        # Assert: ebv=0.3 produces more FIR than ebv=0.0 (reemission > 0)
-        ratio = fir_lum_ebv_03 / (fir_lum_ebv_0 + 1e-20)
-        assert float(ratio) > 1.05, (
-            f"FIR luminosity did not increase with polar_ebv: "
-            f"ratio={float(ratio):.3f}, expected > 1.05. "
-            f"FIR(ebv=0.0)={float(fir_lum_ebv_0):.3e}, "
-            f"FIR(ebv=0.3)={float(fir_lum_ebv_03):.3e}"
-        )
+    # test_skirtor_polar_dust_type2_reemission lived here. It called
+    # SKIRTORTorus.predict() directly and was skipped by
+    # `except Exception: pytest.skip(f"Cannot load SKIRTOR: {e}")` — the class
+    # had moved to skirtor_model.py, so the import raised and the handler
+    # turned a broken test into a green one. Fixing the import is not enough:
+    # the component returns an all-zero SED for every parameter dict that can
+    # be built from its public contract (the consumed names with the `agn_`
+    # prefix stripped, with and without log_lbol), so the direct-call premise
+    # no longer holds and reviving it would mean rewriting it against the
+    # component's current internals.
+    #
+    # The physics it asserted — Type 2 polar-dust reemission raises FIR by
+    # >5% going from polar_ebv 0.0 to 0.3, Yang+2020 section 2.2.2 — is
+    # asserted identically by test_composable_polar_dust_type2_reemission
+    # below: same wavelength grid, same threshold, same reference, through the
+    # supported composable runner. That one runs and passes.
 
     def test_composable_polar_dust_type2_reemission(self, wave_test):
         """Composable AGN runner with polar_dust block increases FIR with E(B-V).
@@ -351,10 +288,10 @@ class TestSKIRTORPolarDustIntegration:
         if not skirtor_template.is_file():
             pytest.skip(f"SKIRTOR template not found: {skirtor_template}")
 
-        try:
-            from tengri.components.agn.blocks.runner import composable_agn_l_nu
-        except Exception as e:
-            pytest.skip(f"Cannot load composable runner: {e}")
+        # Direct import: this one resolves today, and the sibling deleted above
+        # shows what `except Exception: pytest.skip(...)` costs when it stops
+        # resolving — the test goes green instead of red.
+        from tengri.components.agn.blocks.runner import composable_agn_l_nu
 
         # Call composable runner twice with different polar_ebv, both Type 2
         common_params = {

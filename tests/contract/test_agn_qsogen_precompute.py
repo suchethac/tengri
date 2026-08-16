@@ -4,14 +4,13 @@
 from __future__ import annotations
 
 import chex
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
 
-pytestmark = pytest.mark.contract
+from tests._jit_parity import assert_jit_matches_eager
 
-jax.config.update("jax_enable_x64", True)
+pytestmark = pytest.mark.contract
 
 
 @pytest.fixture(scope="module")
@@ -44,10 +43,9 @@ def test_lookup_jit(filter_set):
     waves, trans = filter_set
     result = qsogen_precompute.precompute(waves, trans, redshift=1.0, parameters=None)
     lookup = qsogen_precompute.build_lookup(result)
-    jit_lookup = jax.jit(lookup)
     n_axes = len(qsogen_precompute.AXIS_PARAMS)
     args = (jnp.float64(1.0), *tuple(jnp.float64(0.0) for _ in range(n_axes)))
-    out = jit_lookup(*args)
+    out = assert_jit_matches_eager(lookup, *args)
     chex.assert_tree_all_finite(np.asarray(out))
 
 

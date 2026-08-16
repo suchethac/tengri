@@ -15,7 +15,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-jax.config.update("jax_enable_x64", True)
+from tests._bounds import assert_non_negative
+from tests._jit_parity import assert_jit_matches_eager
 
 
 def fd_grad(f, x: float, eps: float = 1e-4) -> float:
@@ -313,7 +314,7 @@ class TestComputeQsogenSed:
         from tengri.components.agn.qsogen import compute_qsogen_sed
 
         sed = compute_qsogen_sed(broad_wave)
-        assert jnp.all(sed >= 0.0)
+        assert_non_negative(sed, name="sed")
 
     def test_agn_frac_zero_gives_zero(self, broad_wave):
         """agn_lum_ratio=0 scales the entire SED to zero."""
@@ -379,8 +380,7 @@ class TestComputeQsogenSed:
         """compute_qsogen_sed is JIT-compilable."""
         from tengri.components.agn.qsogen import compute_qsogen_sed
 
-        jitted = jax.jit(compute_qsogen_sed)
-        sed = jitted(broad_wave)
+        sed = assert_jit_matches_eager(compute_qsogen_sed, broad_wave)
         chex.assert_tree_all_finite(sed)
 
     def test_gradient_wrt_lbol(self, broad_wave):
@@ -493,7 +493,7 @@ class TestApplyDustReddening:
 
         cont = _broken_powerlaw_continuum(uv_optical_wave, -0.349, 0.593, 3880.0)
         reddened = _apply_dust_reddening(uv_optical_wave, cont, 0.5)
-        assert jnp.all(reddened >= 0.0)
+        assert_non_negative(reddened, name="reddened")
 
     def test_shape_and_non_negative_output(self, uv_optical_wave):
         """Output shape matches input, and reddened spectrum is non-negative."""
@@ -502,7 +502,9 @@ class TestApplyDustReddening:
         cont = _broken_powerlaw_continuum(uv_optical_wave, -0.349, 0.593, 3880.0)
         reddened = _apply_dust_reddening(uv_optical_wave, cont, 0.1)
         chex.assert_equal_shape([reddened, uv_optical_wave])
-        assert jnp.all(reddened >= 0.0), "Reddened spectrum must be non-negative"
+        assert_non_negative(
+            reddened, name="reddened", msg="Reddened spectrum must be non-negative"
+        )
 
 
 # ── qsogen registered wrapper ─────────────────────────────────────
@@ -626,7 +628,7 @@ class TestBrokenPowerlawEuvBranch:
             plbrk3=1200.0,
         )
         chex.assert_tree_all_finite(f)
-        assert jnp.all(f >= 0.0), "EUV branch: negative flux"
+        assert_non_negative(f, name="f", msg="EUV branch: negative flux")
 
 
 class TestLoadEmlineTemplateError:

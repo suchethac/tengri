@@ -14,10 +14,9 @@ import pytest
 
 pytestmark = pytest.mark.regression_paper
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri.components.agn.unified import unified_nlr_blr
 from tengri.utils.physics_constants import L_SUN as L_SUN_ERG
+from tests._bounds import assert_non_negative
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -111,7 +110,7 @@ def test_xray_off_radio_off_baseline_is_nonnegative(wave_uv_ir, agn_lbol_physica
         include_xray=False,
         include_radio=False,
     )
-    assert jnp.all(sed >= 0.0), "Baseline SED has negative values."
+    assert_non_negative(sed, name="sed", msg="Baseline SED has negative values.")
     chex.assert_tree_all_finite(sed)
 
 
@@ -165,7 +164,7 @@ def test_xray_is_nonnegative_and_finite(wave_uv_to_radio, agn_lbol_physical):
         include_radio=False,
     )
     chex.assert_tree_all_finite(sed)
-    assert jnp.all(sed >= 0.0), "X-ray SED has negative values."
+    assert_non_negative(sed, name="sed", msg="X-ray SED has negative values.")
 
 
 # ---------------------------------------------------------------------------
@@ -231,7 +230,7 @@ def test_radio_is_nonnegative_and_finite(wave_uv_to_radio, agn_lbol_physical):
         radio_alpha_agn=0.65,
     )
     chex.assert_tree_all_finite(sed)
-    assert jnp.all(sed >= 0.0), "Radio SED has negative values."
+    assert_non_negative(sed, name="sed", msg="Radio SED has negative values.")
 
 
 # ---------------------------------------------------------------------------

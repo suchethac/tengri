@@ -22,11 +22,28 @@ import pytest
 
 pytestmark = pytest.mark.regression_paper
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri.components.dust.attenuation import (
     DUST_LAWS,
 )
+from tests._bounds import assert_non_negative
+from tests._dust_laws import every_dust_law
+from tests._jit_parity import assert_jit_matches_eager
+
+# ---------------------------------------------------------------------------
+# The law sweep
+# ---------------------------------------------------------------------------
+# The five property tests below each carried their own copy of the same
+# hand-written list of law names. All five copies had 21 entries; ``DUST_LAWS``
+# has 22, so ``reddy15`` had no finiteness, non-negativity, V-band
+# normalization, far-IR or UV-slope coverage at all.
+#
+# The set is derived once in ``tests/_dust_laws.py`` — shared with
+# tests/components/dust/test_dust_attenuation_laws.py, which had the same
+# defect with a 20-name list — and guarded by
+# tests/contract/test_dust_law_sweep_is_complete.py.
+
+EVERY_DUST_LAW = every_dust_law()
+
 
 # ---------------------------------------------------------------------------
 # Shared fixtures
@@ -68,32 +85,7 @@ class TestDustAttenuationFiniteness:
     laws are finite (no NaN/inf) and non-negative (no negative transmission).
     """
 
-    @pytest.mark.parametrize(
-        "law_name",
-        [
-            "power_law",
-            "vw07_bc",
-            "vw07_diff",
-            "calzetti",
-            "kriek_conroy",
-            "smc",
-            "lmc",
-            "prevot_smc",
-            "cardelli",
-            "li08",
-            "salim",
-            "leitherer02",
-            "noll09",
-            "salim_sbl18",
-            "tea",
-            "narayanan_z",
-            "conroy2010",
-            "wd01_smcbar",
-            "wd01_mwrv31",
-            "d03_mwrv31",
-            "hd23_mwrv31",
-        ],
-    )
+    @pytest.mark.parametrize("law_name", EVERY_DUST_LAW)
     def test_attenuation_is_finite_everywhere(
         self, law_name, wide_wavelength_grid, tau_v_reference
     ):
@@ -111,32 +103,7 @@ class TestDustAttenuationFiniteness:
             f"finite count {jnp.sum(jnp.isfinite(k))}/{len(k)}"
         )
 
-    @pytest.mark.parametrize(
-        "law_name",
-        [
-            "power_law",
-            "vw07_bc",
-            "vw07_diff",
-            "calzetti",
-            "kriek_conroy",
-            "smc",
-            "lmc",
-            "prevot_smc",
-            "cardelli",
-            "li08",
-            "salim",
-            "leitherer02",
-            "noll09",
-            "salim_sbl18",
-            "tea",
-            "narayanan_z",
-            "conroy2010",
-            "wd01_smcbar",
-            "wd01_mwrv31",
-            "d03_mwrv31",
-            "hd23_mwrv31",
-        ],
-    )
+    @pytest.mark.parametrize("law_name", EVERY_DUST_LAW)
     def test_attenuation_is_nonnegative(self, law_name, wide_wavelength_grid, tau_v_reference):
         """Attenuation curve k(λ) ≥ 0 everywhere; transmission never exceeds 1.
 
@@ -147,37 +114,14 @@ class TestDustAttenuationFiniteness:
         law_func = DUST_LAWS[law_name].callable
         k = law_func(wide_wavelength_grid, **{})
 
-        assert jnp.all(k >= 0.0), (
-            f"Law {law_name!r} produced negative k(λ): "
-            f"min={jnp.min(k):.6e}, count={jnp.sum(k < 0)}"
+        assert_non_negative(
+            k,
+            name="k",
+            msg=f"Law {law_name!r} produced negative k(λ): "
+            f"min={jnp.min(k):.6e}, count={jnp.sum(k < 0)}",
         )
 
-    @pytest.mark.parametrize(
-        "law_name",
-        [
-            "power_law",
-            "vw07_bc",
-            "vw07_diff",
-            "calzetti",
-            "kriek_conroy",
-            "smc",
-            "lmc",
-            "prevot_smc",
-            "cardelli",
-            "li08",
-            "salim",
-            "leitherer02",
-            "noll09",
-            "salim_sbl18",
-            "tea",
-            "narayanan_z",
-            "conroy2010",
-            "wd01_smcbar",
-            "wd01_mwrv31",
-            "d03_mwrv31",
-            "hd23_mwrv31",
-        ],
-    )
+    @pytest.mark.parametrize("law_name", EVERY_DUST_LAW)
     def test_v_band_normalization(self, law_name, tau_v_reference):
         """k(5500 Å) ≈ 1 (within 10%) — locks V-band normalization.
 
@@ -200,32 +144,7 @@ class TestDustAttenuationFiniteness:
             f"got k(V)={k_v[0]:.6f} (rel error {rel_error:.1%})"
         )
 
-    @pytest.mark.parametrize(
-        "law_name",
-        [
-            "power_law",
-            "vw07_bc",
-            "vw07_diff",
-            "calzetti",
-            "kriek_conroy",
-            "smc",
-            "lmc",
-            "prevot_smc",
-            "cardelli",
-            "li08",
-            "salim",
-            "leitherer02",
-            "noll09",
-            "salim_sbl18",
-            "tea",
-            "narayanan_z",
-            "conroy2010",
-            "wd01_smcbar",
-            "wd01_mwrv31",
-            "d03_mwrv31",
-            "hd23_mwrv31",
-        ],
-    )
+    @pytest.mark.parametrize("law_name", EVERY_DUST_LAW)
     def test_far_ir_non_extrapolation(self, law_name, tau_v_reference):
         """k(λ ≥ 30 µm) ≤ 0.1 × k(V) — catches unphysical far-IR extrapolation.
 
@@ -251,32 +170,7 @@ class TestDustAttenuationFiniteness:
             f"ratio k(30µm)/k(V)={k_fir / k_v:.2f} > 0.1"
         )
 
-    @pytest.mark.parametrize(
-        "law_name",
-        [
-            "power_law",
-            "vw07_bc",
-            "vw07_diff",
-            "calzetti",
-            "kriek_conroy",
-            "smc",
-            "lmc",
-            "prevot_smc",
-            "cardelli",
-            "li08",
-            "salim",
-            "leitherer02",
-            "noll09",
-            "salim_sbl18",
-            "tea",
-            "narayanan_z",
-            "conroy2010",
-            "wd01_smcbar",
-            "wd01_mwrv31",
-            "d03_mwrv31",
-            "hd23_mwrv31",
-        ],
-    )
+    @pytest.mark.parametrize("law_name", EVERY_DUST_LAW)
     def test_uv_stronger_than_v(self, law_name):
         """k(1500 Å) > k(V) — UV attenuation exceeds V-band.
 
@@ -320,10 +214,9 @@ class TestDustAttenuationJitCompatibility:
         interp1d with mode='extrapolate'), JIT will fail.
         """
         law_func = DUST_LAWS[law_name].callable
-        jitted_law = jax.jit(law_func)
 
         # Should compile and run without error
-        k = jitted_law(wide_wavelength_grid)
+        k = assert_jit_matches_eager(law_func, wide_wavelength_grid)
         chex.assert_tree_all_finite(k)
 
     @pytest.mark.parametrize(

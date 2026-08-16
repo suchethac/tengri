@@ -29,7 +29,6 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-jax.config.update("jax_enable_x64", True)
 jax.config.update("jax_platforms", "cpu")
 
 from tengri.components.stellar.sps.dsps_wrapper import SSPData, has_alpha_grid

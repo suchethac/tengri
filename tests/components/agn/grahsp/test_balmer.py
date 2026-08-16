@@ -9,6 +9,8 @@ import chex
 import numpy as np
 import pytest
 
+from tests._jit_parity import assert_jit_matches_eager
+
 pytestmark = pytest.mark.bounds
 
 FIXTURE = Path(__file__).resolve().parents[4] / "tests" / "fixtures" / "grahsp" / "balmer.npz"
@@ -104,13 +106,12 @@ def test_balmer_zero_abc_zero(fixture):
 
 def test_jit_compatible(fixture):
     """Balmer continuum must be JIT-compilable."""
-    import jax
     import jax.numpy as jnp
 
     from tengri.components.agn.grahsp.balmer import balmer_continuum
 
-    fn = jax.jit(balmer_continuum)
-    out = fn(
+    out = assert_jit_matches_eager(
+        balmer_continuum,
         wave_nm=jnp.linspace(200.0, 400.0, 100),
         l5100=1.0e36,
         a_bc=0.5,

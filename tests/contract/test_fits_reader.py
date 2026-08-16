@@ -7,13 +7,11 @@ Uses synthetic FITS files to test round-trip I/O without requiring real data.
 from __future__ import annotations
 
 import chex
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
 
 pytestmark = pytest.mark.contract
-jax.config.update("jax_enable_x64", True)
 
 from tengri.observation.spectroscopy import Spectroscopy
 

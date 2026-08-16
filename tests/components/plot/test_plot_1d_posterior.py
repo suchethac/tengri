@@ -12,7 +12,7 @@ import pytest
 
 from tengri.analysis.plotting import plot_1d_posterior, plot_calibration
 
-pytestmark = pytest.mark.unit
+pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
 class _MockPosterior:

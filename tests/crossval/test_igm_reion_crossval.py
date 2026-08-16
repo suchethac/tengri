@@ -7,11 +7,8 @@ Verifies physical consistency of the damping wing implementation:
 - Gunn-Peterson tau at z=6: tau_GP ~ 10^5 (total Lya absorption)
 """
 
-import jax
 import jax.numpy as jnp
 import pytest
-
-jax.config.update("jax_enable_x64", True)
 
 pytestmark = pytest.mark.crossval
 

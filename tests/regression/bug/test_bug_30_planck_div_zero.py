@@ -7,6 +7,8 @@ See ADR / docs/known_bugs.md for full context.
 import jax.numpy as jnp
 import pytest
 
+from tests._bounds import assert_non_negative
+
 pytestmark = pytest.mark.regression_bug
 
 
@@ -59,4 +61,4 @@ class TestBug30PlanckDivZero:
             f"planck_bnu returned non-finite values for float32 input: {result}. "
             "Check float64 cast inside planck_bnu."
         )
-        assert jnp.all(result >= 0), "Planck function must be non-negative"
+        assert_non_negative(result, name="result", msg="Planck function must be non-negative")

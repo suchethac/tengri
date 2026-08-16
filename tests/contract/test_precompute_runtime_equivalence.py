@@ -31,8 +31,6 @@ import pytest
 
 pytestmark = pytest.mark.contract
 
-jax.config.update("jax_enable_x64", True)
-
 
 # ── Fixtures ─────────────────────────────────────────────────────────
 

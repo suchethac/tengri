@@ -10,11 +10,12 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri.components.stellar.sfh.nonparametric import (
     continuity_flex,
+    continuity_flex_prior_logp,
 )
+from tests._bounds import assert_non_negative
+from tests._grad_parity import assert_grad_matches_fd
 
 pytestmark = pytest.mark.bounds
 
@@ -48,7 +49,7 @@ class TestContinuityFlexSFH:
             flex_1=1.5,
             ratio_old=-2.0,
         )
-        assert jnp.all(sfr >= 0.0)
+        assert_non_negative(sfr, name="sfr")
 
     def test_mass_conservation(self):
         """Integrated SFR * dt should equal 10^log_total_mass."""
@@ -85,7 +86,7 @@ class TestContinuityFlexSFH:
         t = self._age_grid()
         sfr = continuity_flex(t, log_total_mass=10.0, ratio_young=0.0, ratio_old=0.0)
         chex.assert_equal_shape([sfr, t])
-        assert jnp.all(sfr >= 0.0)
+        assert_non_negative(sfr, name="sfr")
 
     def test_custom_anchor_edges(self):
         """Custom bin_edges_gyr should be accepted and yield finite SFR."""
@@ -120,7 +121,7 @@ class TestContinuityFlexSFH:
                 continuity_flex(t, 10.0, ratio_young=ratio_young, flex_0=0.0, ratio_old=0.0)
             )
 
-        g = jax.grad(total_sfr)(0.5)
+        g = assert_grad_matches_fd(total_sfr, 0.5)
         assert jnp.isfinite(g)
 
     def test_gradient_through_flex_ratio(self):
@@ -130,5 +131,18 @@ class TestContinuityFlexSFH:
         def total_sfr(flex_0):
             return jnp.sum(continuity_flex(t, 10.0, ratio_young=0.0, flex_0=flex_0, ratio_old=0.0))
 
-        g = jax.grad(total_sfr)(0.3)
+        g = assert_grad_matches_fd(total_sfr, 0.3)
         assert jnp.isfinite(g)
+
+    def test_prior_logp_zero_ratios(self):
+        """All-zero ratios should give maximum log-probability.
+
+        Moved here from ``tests/components/sfh/test_dense_basis.py``, which
+        carried a ``TestContinuityFlexSFH`` class that was otherwise a strict
+        subset of this one. This was the single test that lived only in that
+        copy — the file docstring above already promised prior-log-probability
+        coverage that was not actually here.
+        """
+        logp_zero = continuity_flex_prior_logp(0.0, jnp.array([0.0, 0.0]), 0.0)
+        logp_nonzero = continuity_flex_prior_logp(1.0, jnp.array([1.0, 1.0]), 1.0)
+        assert float(logp_zero) > float(logp_nonzero)

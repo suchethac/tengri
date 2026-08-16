@@ -12,7 +12,7 @@ from tengri.observation.spectral_indices import (
     measure_index_jax,
 )
 
-pytestmark = pytest.mark.unit
+pytestmark = [pytest.mark.unit, pytest.mark.contract]
 
 
 def _toy_lick_spectrum():

@@ -14,13 +14,13 @@ pytestmark = pytest.mark.bounds
 import jax
 import jax.numpy as jnp
 
-jax.config.update("jax_enable_x64", True)
 from tengri.components.agn._phys import (
     ANGSTROM_CM,
     C_LIGHT,
     gaussian_line_profile,
     ring_area,
 )
+from tests._grad_parity import assert_grad_matches_fd
 
 
 @pytest.fixture()
@@ -74,7 +74,7 @@ class TestGaussianLineProfile:
             profile = gaussian_line_profile(wavelength, line_center, 500.0)
             return jnp.sum(profile**2)
 
-        grad = jax.grad(loss)(5007.0)
+        grad = assert_grad_matches_fd(loss, 5007.0)
         assert jnp.isfinite(grad)
 
     def test_nlr_blr_consistency(self, wavelength):
