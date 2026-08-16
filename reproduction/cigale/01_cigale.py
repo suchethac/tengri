@@ -1041,7 +1041,7 @@ plt.show()
 # ## §8 Nebular emission
 #
 # CIGALE uses static CLOUDY grids (`pcigale.sed_modules.nebular`).
-# tengri uses **Cue** (Li et al. 2024), a neural emulator of the same
+# tengri uses **Cue** (Li et al. 2025), a neural emulator of the same
 # physics that exposes logU, gas metallicity and IMF as continuous
 # parameters. Cue requires the bare-stellar SSP this notebook loaded.
 #
@@ -2310,7 +2310,7 @@ plt.show()
 # * Dale et al. 2014, ApJ 784, 83 — IR dust templates
 # * Fritz et al. 2006, MNRAS 366, 767 — AGN torus
 # * Inoue et al. 2014, MNRAS 442, 1805 — IGM transmission
-# * Li et al. 2024 (Cue, arXiv:2405.04598) — neural CLOUDY emulator
+# * Li et al. 2025, ApJ, 986, 9 (Cue, arXiv:2405.04598) — neural CLOUDY emulator
 # * Madau 1995, ApJ 441, 18 — original IGM transmission
 # * Meiksin 2006, MNRAS 365, 807 — updated IGM transmission
 # * Noll et al. 2009, A&A 507, 1793 — modified Calzetti
