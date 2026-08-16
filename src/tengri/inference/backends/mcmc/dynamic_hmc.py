@@ -129,7 +129,16 @@ def run_dynamic_hmc(
     # dynamic_hmc.init needs random_generator_arg, incompatible with
     # window_adaptation. Use HMC warmup to tune step_size/mass matrix,
     # then initialize dynamic_hmc state separately.
-    adapt_key = ("dynamic_hmc", not use_dense, problem.cache_key)
+    # n_warmup and target_accept_rate belong in the key: they *produce* the
+    # adaptation, so leaving them out makes both knobs silently inert on a model
+    # that already holds an entry.
+    adapt_key = (
+        "dynamic_hmc",
+        not use_dense,
+        int(n_warmup),
+        float(target_accept_rate),
+        problem.cache_key,
+    )
     cached = _get_cached_adaptation(fitter, adapt_key)
 
     # Both branches must advance the key identically — cache presence is

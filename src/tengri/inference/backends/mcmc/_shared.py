@@ -983,6 +983,14 @@ def _adaptation_cache_key(fitter, method_key):
     method name. Hashing the data separates targets while keeping the intended
     win — a genuine refit of the same target still hits, because this keys on
     content rather than identity.
+
+    ``method_key`` is the backend's own tuple and must carry every setting that
+    *produces* the adaptation — warmup length and target acceptance rate as
+    well as the structural choices. Leave one out and that knob goes quiet on a
+    model that already holds an entry: measured while tuning the quickstart, a
+    500 / 1000 / 1500 warmup sweep returned byte-identical diagnostics three
+    times over, which reads as "warmup length does not matter here" rather than
+    "your knob was ignored".
     """
     from tengri.inference._sample_utils import _data_fingerprint
 

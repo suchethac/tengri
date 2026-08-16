@@ -174,6 +174,35 @@ def test_nuts_split_warmup_keeps_sampling_quality(ssp_data_fsps, target):
     assert int(n_divergent) == 0, f"NUTS diverged {n_divergent} times after the split"
 
 
+def test_n_warmup_is_not_ignored_on_a_reused_model(ssp_data_fsps, target):
+    """Raising ``n_warmup`` must actually re-adapt, not hit the cached entry.
+
+    ``adapt_key`` carried the structural choices but not the settings that
+    *produce* the adaptation, so a second fit with a longer warmup reused the
+    first one's step size. Measured while tuning the quickstart, a
+    500/1000/1500 warmup sweep on one model returned byte-identical split-R-hat
+    and divergence counts three times over — which reads as "warmup length does
+    not matter for this problem" rather than "the knob was ignored". It does
+    matter: fresh models gave 4, 1 and 0 divergences respectively.
+    """
+    flux, noise = target
+    _, forward = _build(ssp_data_fsps)
+    key = jax.random.PRNGKey(3)
+    base = dict(
+        method="mcmc_nuts", n_samples=60, n_chains=2, n_burnin=0,
+        dense_mass_matrix=False,
+    )
+
+    short = _fingerprint(forward.fit(flux, noise, key=key, n_warmup=60, **base))
+    long_ = _fingerprint(forward.fit(flux, noise, key=key, n_warmup=400, **base))
+
+    assert short != long_, (
+        "n_warmup=60 and n_warmup=400 produced identical chains on one model, "
+        "so the longer warmup was never run — the adaptation cache is not keyed "
+        "on the settings that produce it"
+    )
+
+
 def test_adaptation_cache_is_keyed_on_the_target(ssp_data_fsps, target):
     """Adaptation tuned on one galaxy must not be reused for another.
 

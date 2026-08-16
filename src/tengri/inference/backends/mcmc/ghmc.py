@@ -110,7 +110,17 @@ def run_ghmc(
     # Namespaced to this backend, not "hmc": the cache is keyed by tuple, so borrowing
     # another sampler's prefix is a collision waiting on the next field either side
     # adds. GHMC tunes a different kernel and must not inherit HMC's step size.
-    adapt_key = ("ghmc", True)  # always diagonal for GHMC
+    # Always diagonal for GHMC. n_warmup, alpha, delta and target_accept_rate
+    # belong in the key: they *produce* the adaptation, so leaving them out
+    # makes those knobs silently inert on a model that already holds an entry.
+    adapt_key = (
+        "ghmc",
+        True,
+        int(n_warmup),
+        float(alpha),
+        float(delta),
+        float(target_accept_rate),
+    )
     cached = _get_cached_adaptation(fitter, adapt_key)
 
     # Both branches must advance the key identically — cache presence is

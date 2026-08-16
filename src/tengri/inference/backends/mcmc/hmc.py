@@ -203,7 +203,17 @@ def run_hmc(
 
     t0 = time.time()
 
-    adapt_key = ("hmc", not use_dense, problem.cache_key)
+    # n_warmup, n_leapfrog_steps and target_accept_rate belong in the key: they
+    # *produce* the adaptation, so leaving them out makes those knobs silently
+    # inert on a model that already holds an entry.
+    adapt_key = (
+        "hmc",
+        not use_dense,
+        int(n_warmup),
+        int(n_leapfrog_steps),
+        float(target_accept_rate),
+        problem.cache_key,
+    )
     cached = _get_cached_adaptation(fitter, adapt_key)
 
     def ld_1arg(pos):

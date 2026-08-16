@@ -96,7 +96,10 @@ def run_mclmc(
         integrator=blackjax.mcmc.integrators.isokinetic_mclachlan,
     )
 
-    cached = _get_cached_adaptation(fitter, "mclmc")
+    # n_warmup belongs in the key: it *produces* the adaptation, so leaving it
+    # out makes the knob silently inert on a model that already holds an entry.
+    adapt_key = ("mclmc", int(n_warmup))
+    cached = _get_cached_adaptation(fitter, adapt_key)
 
     # Both branches must advance the key identically — cache presence is
     # invisible to the caller and must not steer the RNG stream, or two
@@ -125,7 +128,7 @@ def run_mclmc(
             diagonal_preconditioning=True,
         )
 
-        _set_cached_adaptation(fitter, "mclmc", params)
+        _set_cached_adaptation(fitter, adapt_key, params)
 
         if verbose:
             logger.info(
@@ -265,7 +268,9 @@ def run_adjusted_mclmc(
         integrator=blackjax.mcmc.integrators.isokinetic_mclachlan,
     )
 
-    cached = _get_cached_adaptation(fitter, "adjusted_mclmc")
+    # See run_mclmc: the settings that produce the adaptation must be in the key.
+    adapt_key = ("adjusted_mclmc", int(n_warmup), float(target_accept_rate))
+    cached = _get_cached_adaptation(fitter, adapt_key)
 
     # Both branches must advance the key identically — see run_mclmc above.
     # ``tune_key`` is unused when the adaptation is reused.
@@ -292,7 +297,7 @@ def run_adjusted_mclmc(
             diagonal_preconditioning=True,
         )
 
-        _set_cached_adaptation(fitter, "adjusted_mclmc", params)
+        _set_cached_adaptation(fitter, adapt_key, params)
 
         if verbose:
             logger.info(

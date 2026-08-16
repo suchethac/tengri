@@ -365,7 +365,17 @@ def run_nuts(
 
     # ``precondition`` changes the sampled geometry, so a cached step size and mass
     # matrix from the un-preconditioned run must not be reused.
-    adapt_key = ("nuts", not use_dense, bool(pathfinder_warmstart), problem.cache_key)
+    # n_warmup and target_accept_rate belong in the key: they *produce* the
+    # adaptation, so leaving them out makes both knobs silently inert on a model
+    # that already holds an entry.
+    adapt_key = (
+        "nuts",
+        not use_dense,
+        bool(pathfinder_warmstart),
+        int(n_warmup),
+        float(target_accept_rate),
+        problem.cache_key,
+    )
     cached = _get_cached_adaptation(fitter, adapt_key)
 
     # Advance the key identically on both branches. Whether a cached adaptation
