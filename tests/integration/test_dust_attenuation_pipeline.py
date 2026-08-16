@@ -23,7 +23,7 @@ from tengri.components.dust.component import (
     DustAttenuationSEDComponent,
     DustAttenuationSEDComponentConfig,
 )
-from tengri.forward.orchestrator import run_components
+from tengri.forward.orchestrator import default_params_dict, run_components
 from tengri.protocols import ForwardState
 
 REL_TOL = 1e-10
@@ -126,37 +126,29 @@ def test_four_adapter_chain_runs_end_to_end():
         },
     )
 
-    params = {
-        "redshift": 8.0,
-        # radio
-        "radio_q_ir": 2.64,
-        "radio_alpha_sf": 0.8,
-        "radio_loudness": 0.0,
-        "radio_alpha_agn": 0.7,
-        "radio_T_e": 1e4,
-        "radio_alpha_ff": -0.1,
-        # dust
-        "dust_tau_v": 0.5,
-        # xray
-        "xray_gamma_hmxb": 2.0,
-        "xray_gamma_lmxb": 1.6,
-        "xray_gamma_agn": 1.8,
-        "xray_E_cut": 300.0,
-        "xray_delta_alpha_ox": -1.4,
-        "xray_log_nh": 21.0,  # AGN corona photoelectric absorption (spec default)
-        # igm
-        "igm_z_mid": 7.0,
-        "igm_dz": 0.5,
-        "igm_log_nhi": 20.0,
-    }
+    chain = [
+        RadioSEDComponent(),
+        DustAttenuationSEDComponent(),
+        XRaySEDComponent(),
+        IGMSEDComponent(),
+    ]
+
+    # Declared defaults, with the departures this test chose spelled out. The
+    # literal this replaces named nineteen keys, matched the declarations on
+    # every one of them, and still went stale when xray_det_hmxb gained a
+    # reader (#1832).
+    params = default_params_dict(
+        chain,
+        overrides={
+            "redshift": 8.0,
+            "dust_tau_v": 0.5,
+            "xray_delta_alpha_ox": -1.4,
+            "xray_log_nh": 21.0,  # AGN corona photoelectric absorption
+        },
+    )
 
     final = run_components(
-        [
-            RadioSEDComponent(),
-            DustAttenuationSEDComponent(),
-            XRaySEDComponent(),
-            IGMSEDComponent(),
-        ],
+        chain,
         state,
         params,
     )

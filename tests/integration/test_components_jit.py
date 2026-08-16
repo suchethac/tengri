@@ -27,7 +27,7 @@ from tengri.components.radio.component import RadioSEDComponent
 from tengri.components.stellar import StellarSEDComponent
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.components.xray.component import XRaySEDComponent
-from tengri.forward.orchestrator import run_components
+from tengri.forward.orchestrator import default_params_dict, run_components
 from tengri.protocols.component import ForwardState
 from tests._jit_parity import assert_jit_matches_eager
 
@@ -52,20 +52,14 @@ def base_params():
         "sfh_tsnorm_trunc": jnp.asarray(3.0),
         # delta metallicity
         "met_logzsol": jnp.asarray(-0.5),
-        # Radio
-        "radio_q_ir": jnp.asarray(2.64),
-        "radio_alpha_sf": jnp.asarray(0.8),
-        "radio_loudness": jnp.asarray(0.0),
-        "radio_alpha_agn": jnp.asarray(0.7),
-        "radio_T_e": jnp.asarray(1e4),
-        "radio_alpha_ff": jnp.asarray(-0.1),
-        # X-ray
-        "xray_gamma_hmxb": jnp.asarray(2.0),
-        "xray_gamma_lmxb": jnp.asarray(1.6),
-        "xray_gamma_agn": jnp.asarray(1.8),
-        "xray_E_cut": jnp.asarray(300.0),
+        # Radio + X-ray at their declared defaults. Spelling them out was a copy
+        # of the declaration: all twelve literals matched their default exactly,
+        # and the copy was already missing thirteen of the twenty-five declared
+        # parameters when xray_det_hmxb became the first of the thirteen that a
+        # component went on to index (#1832).
+        **default_params_dict([RadioSEDComponent(), XRaySEDComponent()]),
+        # The one deliberate departure from the declared defaults.
         "xray_delta_alpha_ox": jnp.asarray(-1.4),
-        "xray_log_nh": jnp.asarray(20.0),
         # observed at z=0 to dodge the upstream-DSPS NaN edge case
         # (t_obs < ssp_lg_age_gyr.max() ⇒ DSPS triweight kernel vanishes).
         "redshift": jnp.asarray(0.0),

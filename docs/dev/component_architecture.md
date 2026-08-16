@@ -170,7 +170,7 @@ for parametrized verification.
   — the contract and the JAX-pytree registration.
 - [`src/tengri/forward/orchestrator.py`](../../src/tengri/forward/orchestrator.py)
   — `slice_params_for_component`, `merge_declared_parameters`,
-  `run_components`, `sample_params_dict`.
+  `run_components`, `sample_params_dict`, `default_params_dict`.
 - [`src/tengri/forward/component_factory.py`](../../src/tengri/forward/component_factory.py)
   — public-API factory.
 - [`src/tengri/parameters/_param_defs.py`](../../src/tengri/parameters/_param_defs.py)
