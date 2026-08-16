@@ -78,6 +78,53 @@ def default_filter_cache_dir() -> Path:
     return download_dir() / "filters"
 
 
+def find_cached_filter(filename: str) -> Path | None:
+    """Locate one already-cached curve across every filter cache, or ``None``.
+
+    Parameters
+    ----------
+    filename : str
+        Cache file name from :func:`_svo_id_to_filename`, e.g.
+        ``"GALEX_GALEX_FUV.dat"``.
+
+    Returns
+    -------
+    pathlib.Path or None
+        The first ``<data-dir>/filters/<filename>`` that is a file, searching
+        :func:`~tengri._data_setup.data_dirs` in order; ``None`` when no cache
+        holds it and it genuinely has to be fetched.
+
+    Notes
+    -----
+    This asks *where is this curve*, where :func:`default_filter_cache_dir`
+    asks *which directory shall I use*. The difference is not cosmetic. The
+    directory-level question commits to the first ancestor that merely owns a
+    ``filters/`` folder, before knowing whether that folder holds the curve
+    being requested — so a partial cache anywhere below the canonical one makes
+    the canonical one unreachable.
+
+    That is not hypothetical. ``examples/advanced/data/filters/`` held ten
+    committed curves and ``examples/inference/data/filters/`` five, beside the
+    249 in ``data/filters/``. Because the gallery runner ``chdir``s into each
+    script's directory, every example in those two directories resolved to the
+    partial copy, and any band outside it — GALEX, VISTA, 2MASS — was fetched
+    from SVO on every CI run. A miss is indistinguishable from a cold cache, so
+    it failed *open*: the network call succeeded and nothing reported that the
+    committed curves had been bypassed. It surfaced only when ``astroquery``
+    became optional and the silent fetch became an ``ImportError``.
+
+    Searching for the file rather than the directory removes the whole class:
+    a partial cache can now only ever add curves, never hide them.
+    """
+    from tengri._data_setup import data_dirs
+
+    for directory in data_dirs():
+        candidate = directory / "filters" / filename
+        if candidate.is_file():
+            return candidate
+    return None
+
+
 # Speed of light in Å/s — used for GHz ↔ Å conversion.
 from tengri.utils.physics_constants import C_AA as _C_AA_S
 
@@ -380,9 +427,9 @@ def _fetch_from_svo(svo_id: str) -> tuple[np.ndarray, np.ndarray]:
             "astroquery is required to download filters from SVO, and is an "
             "optional dependency.\n"
             "    pip install 'astro-tengri[filters]'\n"
-            "Every filter tengri ships resolves from the local registry "
-            "without it — this is only needed to fetch a curve SVO has and "
-            "tengri does not."
+            "Every filter tengri.list_filters() names ships as a cached curve "
+            "under data/filters/ and loads without it — this is only needed "
+            "to fetch a curve SVO has and tengri does not."
         ) from exc
 
     table = SvoFps.get_transmission_data(svo_id)
@@ -480,13 +527,28 @@ def download_filter(
     and ``load_filter_set`` pass ``cache_dir`` down unchanged, so ``None``
     is resolved here once rather than in each of them.
 
-    """
-    cache_path = Path(cache_dir) if cache_dir is not None else default_filter_cache_dir()
-    cache_path.mkdir(parents=True, exist_ok=True)
-    filepath = cache_path / _svo_id_to_filename(svo_id)
+    An explicit *cache_dir* is honored exactly as given — it is a caller
+    saying "use this one". Only the ``None`` default searches every cache via
+    :func:`find_cached_filter`, so a partial cache nearer the working directory
+    can no longer hide a complete one further up (see that function's Notes).
 
-    if filepath.exists():
-        return _load_filter_file(filepath)
+    The cache directory is created on the download path only. Loading a curve
+    is a read, and a read that mkdirs leaves a stray ``data/filters/`` beside
+    whatever directory the caller happened to start in.
+
+    """
+    filename = _svo_id_to_filename(svo_id)
+
+    if cache_dir is not None:
+        cache_path = Path(cache_dir)
+        cached = cache_path / filename
+        cached = cached if cached.is_file() else None
+    else:
+        cache_path = default_filter_cache_dir()
+        cached = find_cached_filter(filename)
+
+    if cached is not None:
+        return _load_filter_file(cached)
 
     wave, trans = _sanitize_filter_curve(*_fetch_from_svo(svo_id))
 
@@ -494,7 +556,8 @@ def download_filter(
     wave = wave[order]
     trans = trans[order]
 
-    _save_filter(filepath, wave, trans)
+    cache_path.mkdir(parents=True, exist_ok=True)
+    _save_filter(cache_path / filename, wave, trans)
     return wave, trans
 
 
