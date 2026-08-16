@@ -85,7 +85,19 @@ import sys
 #: same base of 98 in opposite directions and the merged tree carries BOTH
 #: sets of edits. The number below is the tool's own measured count on the
 #: merged tree, not that arithmetic — the arithmetic is only what predicted it.
-EXPECTED_SITES = 99
+#:
+#: 99 -> 100 with #1791: ``_apply_lsf_variable_r`` now averages the local
+#: ``d ln lambda`` over each bin beside the sigma it already averaged, so the
+#: existing ``jnp.maximum(sum(bin_mask), 1.0)`` divisor serves a second division.
+#: First kind — a **count floor**. ``bin_mask`` counts pixels within one bin
+#: width of a bin centre on a grid of at least three pixels, so the sum is >= 1
+#: by construction and the floor never binds; it is not a NaN guard. Written out
+#: at both divisions rather than hoisted into a shared name, deliberately: XLA
+#: eliminates the duplicate, and hoisting would have retired the *existing* site
+#: from this inventory while its clamp stayed in the code. That is the silent
+#: shrink this guard exists to catch, and it is how this entry was found — CI
+#: reported 99 -> 98 and offered the reduction as progress.
+EXPECTED_SITES = 100
 
 SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 

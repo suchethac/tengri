@@ -230,7 +230,9 @@ def gaussian_resolution_bands(wave_obs: jnp.ndarray, resolution, n_diag: int = 1
     Parameters
     ----------
     wave_obs : array_like, shape (n_pix,)
-        Observed wavelength grid [Angstrom]; assumed approximately log-uniform.
+        Observed wavelength grid [Angstrom]. Any strictly increasing grid; the
+        kernel width is set from the local ``d ln lambda`` at each pixel, so a
+        linearly-spaced grid is handled exactly rather than approximately (#1791).
     resolution : float or array_like, shape (n_pix,)
         Spectral resolution ``R`` (scalar or per-pixel), dimensionless.
     n_diag : int, optional
@@ -256,7 +258,13 @@ def gaussian_resolution_bands(wave_obs: jnp.ndarray, resolution, n_diag: int = 1
     wave = np.asarray(wave_obs, dtype=float)
     n = wave.shape[0]
     R = np.broadcast_to(np.asarray(resolution, dtype=float), (n,))
-    dlnwave = np.log(wave[1] / wave[0])
+    # Local d(ln lambda) per pixel, not the blue-end value for the whole array.
+    # An explicit banded operator can carry a position-dependent pixel scale, so
+    # unlike the FFT path it is exact on a linearly-spaced grid without any
+    # resampling; np.gradient reduces to the constant on a log-uniform one. A
+    # single global scale under-broadened by wave[0]/lambda — the #1791 defect,
+    # which reached here as well.
+    dlnwave = np.gradient(np.log(wave))  # (n,)
     sigma_pix = (_C_KM_S / (_FWHM_TO_SIGMA * R)) / _C_KM_S / dlnwave  # (n,)
     half = n_diag // 2
     offsets = np.arange(-half, half + 1)
