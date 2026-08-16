@@ -377,8 +377,12 @@ def _fetch_from_svo(svo_id: str) -> tuple[np.ndarray, np.ndarray]:
         from astroquery.svo_fps import SvoFps
     except ImportError as exc:
         raise ImportError(
-            "astroquery is required to download filters from SVO. "
-            "Install it with:  pip install astroquery"
+            "astroquery is required to download filters from SVO, and is an "
+            "optional dependency.\n"
+            "    pip install 'astro-tengri[filters]'\n"
+            "Every filter tengri ships resolves from the local registry "
+            "without it — this is only needed to fetch a curve SVO has and "
+            "tengri does not."
         ) from exc
 
     table = SvoFps.get_transmission_data(svo_id)
