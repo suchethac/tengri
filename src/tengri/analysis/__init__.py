@@ -9,8 +9,8 @@ import lazy — so ``import tengri`` no longer drags in matplotlib — removed t
 side effect along with the cost, and ``tengri.analysis.plotting.setup_style()``
 began raising ``AttributeError``.
 
-That idiom is not incidental: ``examples/_STYLE.md`` prescribes it and 45 call
-sites across the gallery use it. The break was also **order-dependent**, which is
+That idiom is not incidental: ``examples/_STYLE.md`` prescribes it and 280 of
+the gallery scripts use it. The break was also **order-dependent**, which is
 why CI did not catch it — the gallery runner executes every example in one
 process, so any earlier example that touched ``tengri.plot_sed_fit`` imported the
 submodule and bound the attribute for the rest of the run. Running the affected

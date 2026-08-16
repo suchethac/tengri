@@ -9,7 +9,7 @@ a side effect of ``tengri/__init__.py`` doing ``from tengri.analysis.plotting
 import (...)``. Importing a submodule binds it on its parent package. Drop the
 import and the attribute goes with it, so
 ``tengri.analysis.plotting.setup_style()`` -- the idiom ``examples/_STYLE.md``
-prescribes and 45 gallery examples use -- raised ``AttributeError``.
+prescribes and 280 gallery scripts use -- raised ``AttributeError``.
 
 CI could not see it. ``tools/run_gallery_examples.py`` runs every example in one
 process, so the first example to touch ``tengri.plot_sed_fit`` imported the
