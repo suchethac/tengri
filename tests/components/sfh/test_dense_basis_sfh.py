@@ -19,8 +19,6 @@ from numpy.testing import assert_allclose
 
 pytestmark = pytest.mark.bounds
 
-jax.config.update("jax_enable_x64", True)
-
 
 def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     """Central finite-difference gradient. O(eps^2) accurate."""
@@ -37,6 +35,8 @@ from tengri.components.stellar.sfh.dense_basis import (
     matern32_kernel,
 )
 from tengri.components.stellar.sfh.registry import resolve_sfh
+from tests._bounds import assert_non_negative
+from tests._jit_parity import assert_jit_matches_eager
 
 # Shared test fixtures
 AGE_YR = jnp.geomspace(1e6, 13.7e9, 200)
@@ -220,7 +220,7 @@ class TestDenseBasisSFH:
 
     def test_non_negative(self) -> None:
         sfr = dense_basis(AGE_YR, **DEFAULT_KW)
-        assert jnp.all(sfr >= 0)
+        assert_non_negative(sfr, name="sfr")
 
     def test_mass_conservation(self) -> None:
         """Integrated SFR should match 10^log_total_mass within 15%."""
@@ -373,7 +373,7 @@ class TestDenseBasisSFH:
             tx_frac_1=0.3,
             tx_frac_2=0.55,
         )
-        assert jnp.all(sfr >= 0)
+        assert_non_negative(sfr, name="sfr")
         chex.assert_equal_shape([sfr, AGE_YR])
 
 
@@ -419,7 +419,7 @@ class TestDenseBasisShapes:
         ]
         for t0, t1, t2 in shapes:
             sfr = _sfh_for_tx(t0, t1, t2)
-            assert jnp.all(sfr >= 0), f"Negative SFR for tx=({t0}, {t1}, {t2})"
+            assert_non_negative(sfr, name="sfr", msg=f"Negative SFR for tx=({t0}, {t1}, {t2})")
 
 
 # ── Registry integration tests ────────────────────────────────────
@@ -499,13 +499,13 @@ class TestDenseBasisEdgeCases:
         """Very early mass assembly (all tx near 0)."""
         sfr = _sfh_for_tx(0.05, 0.1, 0.15)
         chex.assert_tree_all_finite(sfr)
-        assert jnp.all(sfr >= 0)
+        assert_non_negative(sfr, name="sfr")
 
     def test_extreme_tx_near_one(self) -> None:
         """Very late mass assembly (all tx near 1)."""
         sfr = _sfh_for_tx(0.85, 0.9, 0.95)
         chex.assert_tree_all_finite(sfr)
-        assert jnp.all(sfr >= 0)
+        assert_non_negative(sfr, name="sfr")
 
     def test_low_mass_galaxy(self) -> None:
         """log_total_mass = 8 (dwarf galaxy)."""
@@ -545,7 +545,7 @@ class TestDenseBasisEdgeCases:
             tx_frac_2=0.8,
         )
         chex.assert_tree_all_finite(sfr)
-        assert jnp.all(sfr >= 0)
+        assert_non_negative(sfr, name="sfr")
 
 
 class TestJITNaNRegression:
@@ -562,35 +562,35 @@ class TestJITNaNRegression:
 
     def test_high_sfr_no_nan_jit(self) -> None:
         """log_sfr_inst=2.93 (near prior upper bound) must not produce NaN under JIT."""
-        jit_sfh = jax.jit(
+        sfr = assert_jit_matches_eager(
             lambda log_sfr: dense_basis(
                 AGE_YR,
                 log_total_mass=10.0,
                 log_sfr_inst=log_sfr,
                 tx_frac_0=0.408,
                 tx_frac_1=0.610,
-            )
+            ),
+            2.93,
         )
-        sfr = jit_sfh(2.93)
         chex.assert_tree_all_finite(sfr)
 
     def test_very_high_sfr_no_nan_jit(self) -> None:
         """Extreme SFR (log=3.0) must not produce NaN under JIT."""
-        jit_sfh = jax.jit(
+        sfr = assert_jit_matches_eager(
             lambda log_sfr: dense_basis(
                 AGE_YR,
                 log_total_mass=8.0,
                 log_sfr_inst=log_sfr,
                 tx_frac_0=0.3,
                 tx_frac_1=0.6,
-            )
+            ),
+            3.0,
         )
-        sfr = jit_sfh(3.0)
         chex.assert_tree_all_finite(sfr)
 
     def test_low_sfr_no_nan_jit(self) -> None:
         """log_sfr_inst=-2.0 (prior lower bound) must not produce NaN under JIT."""
-        jit_sfh = jax.jit(
+        sfr = assert_jit_matches_eager(
             lambda log_sfr: dense_basis(
                 AGE_YR,
                 log_total_mass=12.0,
@@ -598,9 +598,9 @@ class TestJITNaNRegression:
                 tx_frac_0=0.3,
                 tx_frac_1=0.6,
                 tx_frac_2=0.85,
-            )
+            ),
+            -2.0,
         )
-        sfr = jit_sfh(-2.0)
         chex.assert_tree_all_finite(sfr)
 
     def test_random_prior_samples_no_nan_jit(self) -> None:

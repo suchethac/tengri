@@ -7,12 +7,9 @@ peer-reviewed paper. If the code doesn't match the paper, the code is wrong.
 References are cited inline with each test.
 """
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
-
-jax.config.update("jax_enable_x64", True)
 
 pytestmark = pytest.mark.crossval
 
@@ -1209,7 +1206,7 @@ class TestKennicutt1998:
     single-burst BPASS/FSPS ionizing fields (not a galaxy-averaged SFR),
     and for the Salpeter→Chabrier IMF offset (~1.7×).
 
-    See also: TestKennicutt1998Halpha in tests/unit/test_cue_and_ionizing.py.
+    See also: TestKennicutt1998Halpha in tests/components/nebular/test_cue_and_ionizing.py.
     This crossval class additionally tests the linearity of the L(Hα)–Q_H
     relation and the scaling with ionizing photon rate.
     """

@@ -47,7 +47,7 @@ from tengri.sfh.gp_sfh import gp_from_xi, generate_gp_fourier
 from tengri.sfh.mean_sfh import tsnorm
 from tengri.utils.grid import make_log_age_grid, grid_spacing
 
-import sys, os  # noqa: E401, E402
+import sys, os  # noqa: E401
 try:
     _nb_dir = os.path.dirname(os.path.abspath(__file__))
     sys.path.insert(0, os.path.join(_nb_dir, "..", ".."))
@@ -68,7 +68,7 @@ elif os.path.exists(os.path.join("..", "..", "..", "data")):
 FIGDIR = os.path.join("tutorials", "figures")
 os.makedirs(FIGDIR, exist_ok=True)
 
-from _plot_style import COLORS, setup_style  # noqa: E402
+from _plot_style import COLORS, setup_style
 
 setup_style()
 
@@ -293,7 +293,7 @@ ax.plot(ages_gyr, np.array(mean_sfr), "k-", lw=2, label=r"Target: $\bar{\dot{M}}
 ax.plot(ages_gyr, mean_with, color=COLORS["sfh_gp"], lw=1.5, ls="--",
             label=f"With correction (mean of {n_draws})")
 ax.plot(ages_gyr, mean_without, color=COLORS["model"], lw=1.5, ls=":",
-            label=f"Without correction (biased high)")
+            label="Without correction (biased high)")
 ax.set_xlim(0, 13.5)
 ax.set_xlabel("Lookback time [Gyr]")
 ax.set_ylabel(r"$\langle$SFR$\rangle$ [$M_\odot$/yr]")

@@ -29,8 +29,6 @@ import pytest
 
 import tengri
 
-jax.config.update("jax_enable_x64", True)
-
 pytestmark = pytest.mark.regression_bug
 
 _SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}

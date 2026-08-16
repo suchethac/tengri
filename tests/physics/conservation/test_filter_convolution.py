@@ -5,14 +5,11 @@ Validates that integrated photometry conserves energy and is self-consistent
 across integration methods and filter domains.
 """
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
 
 from tengri.utils.grid_interp import preintegrate_grid
-
-jax.config.update("jax_enable_x64", True)
 
 pytestmark = pytest.mark.conservation
 

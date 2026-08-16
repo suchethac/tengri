@@ -43,7 +43,7 @@ from tengri import (
 )
 from tengri.sps.dsps_wrapper import compute_csp_weights
 
-import sys, os  # noqa: E401, E402
+import sys, os  # noqa: E401
 try:
     _nb_dir = os.path.dirname(os.path.abspath(__file__))
     sys.path.insert(0, os.path.join(_nb_dir, "..", ".."))
@@ -64,7 +64,7 @@ elif os.path.exists(os.path.join("..", "..", "..", "data")):
 FIGDIR = os.path.join("tutorials", "figures")
 os.makedirs(FIGDIR, exist_ok=True)
 
-from _plot_style import COLORS, SPECTRAL_FEATURES, setup_style  # noqa: E402
+from _plot_style import COLORS, SPECTRAL_FEATURES, setup_style
 
 setup_style()
 
@@ -90,7 +90,7 @@ met_idx = ssp_data.ssp_flux.shape[0] // 2  # approximately solar
 fig, ax = plt.subplots(figsize=(10, 4))
 wavelengths = np.array(ssp_data.ssp_wave)
 
-for i, (aidx, label) in enumerate(zip(ages_idx, age_labels)):
+for _i, (aidx, label) in enumerate(zip(ages_idx, age_labels)):
     if aidx < ssp_data.ssp_flux.shape[1]:
         flux = np.array(ssp_data.ssp_flux[met_idx, aidx, :])
         flux_norm = flux / np.median(flux[flux > 0]) if np.any(flux > 0) else flux

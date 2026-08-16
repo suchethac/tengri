@@ -24,6 +24,9 @@ from __future__ import annotations
 import jax.numpy as jnp
 import numpy as np
 
+#: Speed of light [Angstrom/s].
+_C_AA = 2.99792458e18
+
 #: Vacuum wavelengths [Angstrom].
 OIII_5007 = 5008.24
 OIII_4959 = 4960.30
@@ -53,9 +56,23 @@ def nlr_sed(
 def line_flux(
     wave: np.ndarray, sed: np.ndarray, center_aa: float, half_width_aa: float = 6.0
 ) -> float:
-    """Integrate one line over a window wide enough to contain it."""
+    """Integrate one line over a window wide enough to contain it.
+
+    Integration is over **frequency**, because ``sed`` is ``L_nu`` and a line's
+    strength is its energy flux. Integrating ``L_nu`` over wavelength instead
+    mixes the two axes and biases a ratio by ``(lambda_1 / lambda_2)^2`` --
+    1.94 % across the [OIII] doublet, which is most of the 2 % tolerance
+    ``test_agn_crossval.test_oiii_doublet_ratio`` allows, and a factor 1.8
+    between Halpha and Hbeta. Measured: the wavelength form put the doublet at
+    3.030 against a true 2.972 and an atomic 2.98.
+
+    ``tests/regression/agn/test_vs_richardson_nlr.py`` guards this in the
+    default test tier, which this tree is not in (#1728).
+    """
     mask = (wave > center_aa - half_width_aa) & (wave < center_aa + half_width_aa)
-    return float(np.trapezoid(sed[mask], wave[mask]))
+    nu = _C_AA / wave[mask]
+    order = np.argsort(nu)
+    return float(np.trapezoid(sed[mask][order], nu[order]))
 
 
 def doublet_ratio(bright_aa: float, faint_aa: float) -> float:

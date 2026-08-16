@@ -11,6 +11,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from tengri.components.nebular._shared import compute_analytic_nebular_continuum
+from tests._bounds import assert_non_negative
 
 
 def fd_grad(f, x: float, eps: float = 1e-4) -> float:
@@ -39,7 +40,7 @@ class TestAnalyticNebularContinuumBasic:
     def test_non_negative(self):
         """SED must be non-negative everywhere."""
         sed = compute_analytic_nebular_continuum(_WAVE_AA, _Q_H_REF, log_z_abs=-1.848)
-        assert jnp.all(sed >= 0.0), f"Minimum value: {float(jnp.min(sed))}"
+        assert_non_negative(sed, name="sed", msg=f"Minimum value: {float(jnp.min(sed))}")
 
     def test_finite(self):
         """SED must be finite everywhere."""

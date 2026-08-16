@@ -12,13 +12,12 @@ import pytest
 
 pytestmark = pytest.mark.bounds
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri.observation.photometry import (
     compute_flux_density,
     compute_flux_density_batch,
     pad_filters,
 )
+from tests._grad_parity import assert_grad_matches_fd
 
 
 @pytest.fixture
@@ -173,7 +172,7 @@ class TestComputeFluxDensityBatch:
                 )
             )
 
-        grad = jax.grad(loss)(sed)
+        grad = assert_grad_matches_fd(loss, sed)
         chex.assert_tree_all_finite(grad)
 
     def test_jit_compatible(self, flat_sed, sdss_like_filters):

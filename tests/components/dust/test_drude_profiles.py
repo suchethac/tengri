@@ -5,7 +5,6 @@ import chex
 import pytest
 
 pytestmark = pytest.mark.bounds
-import jax
 import jax.numpy as jnp
 
 from tengri.components.dust.drude_profiles import (
@@ -15,8 +14,8 @@ from tengri.components.dust.drude_profiles import (
     decompose_pah,
     drude_profile,
 )
-
-jax.config.update("jax_enable_x64", True)
+from tests._bounds import assert_non_negative
+from tests._grad_parity import assert_grad_matches_fd
 
 # Reference wavelength grid: 2–20 μm at 0.01 μm spacing.
 _WAVE_UM = jnp.linspace(2.0, 20.0, 1800)
@@ -90,7 +89,7 @@ class TestDrudeProfile:
     def test_non_negative(self):
         wave = jnp.linspace(0.1, 30.0, 3000)
         out = drude_profile(wave, 7.6, 0.044)
-        assert jnp.all(out >= 0.0)
+        assert_non_negative(out, name="out")
 
 
 class TestPAHTemplate:
@@ -100,7 +99,7 @@ class TestPAHTemplate:
 
     def test_non_negative_everywhere(self):
         out = compute_pah_template(_WAVE_UM)
-        assert jnp.all(out >= 0.0)
+        assert_non_negative(out, name="out")
 
     def test_default_and_explicit_strengths_match(self):
         s = jnp.array([f.strength for f in SMITH2007_PAH_FEATURES])
@@ -127,7 +126,7 @@ class TestPAHTemplate:
         def total(strengths):
             return jnp.sum(compute_pah_template(_WAVE_UM, strengths=strengths))
 
-        g = jax.grad(total)(s)
+        g = assert_grad_matches_fd(total, s)
         chex.assert_tree_all_finite(g)
 
     def test_major_features_are_peaks(self):
@@ -185,7 +184,7 @@ class TestDecomposePAH:
         def total_strength(sed):
             return jnp.sum(decompose_pah(_WAVE_UM, sed)["strengths"])
 
-        g = jax.grad(total_strength)(sed)
+        g = assert_grad_matches_fd(total_strength, sed)
         chex.assert_tree_all_finite(g)
 
     def test_continuum_subtraction(self):

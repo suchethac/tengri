@@ -9,13 +9,12 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.forward.sed_model import MockData, SEDModel
 from tengri.observation.filters import load_filter_set
 from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Uniform
+from tests._bounds import assert_non_negative
 
 # ── Skip if SSP data not available ────────────────────────────────
 #: The value the forward used to substitute for a free ``sfh_dpl_age_gyr`` before
@@ -136,7 +135,7 @@ class TestPredictSed:
 
     def test_positive(self, parametric_model, typical_params):
         sed = parametric_model.predict_rest_sed(typical_params).sed
-        assert jnp.all(sed >= 0)
+        assert_non_negative(sed, name="sed")
 
 
 class TestPredictPhotometry:
@@ -188,7 +187,7 @@ class TestPredictSfh:
 
     def test_positive_sfr(self, parametric_model, typical_params):
         sfh = parametric_model.predict_sfh(typical_params)
-        assert jnp.all(sfh["sfr_mean"] >= 0)
+        assert_non_negative(sfh["sfr_mean"], name="output")
 
     def test_parametric_mean_equals_full(self, parametric_model, typical_params):
         sfh = parametric_model.predict_sfh(typical_params)

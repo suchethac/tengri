@@ -109,14 +109,59 @@ def test_gaussian_chi2_is_finite_in_float32():
     assert abs(float(f32) / float(f64) - 1.0) < 1e-4, "float32 chi2 departs from float64"
 
 
-def test_gaussian_chi2_gradient_is_finite_in_float32():
-    """The data term must be differentiable in float32, not just finite."""
-    observed = jnp.full((6,), _FLUX)
-    sigma = jnp.full((6,), _SIGMA)
+@pytest.mark.parametrize("offset_sigmas", [0.0, 1.0, 3.0])
+def test_gaussian_chi2_gradient_in_float32(offset_sigmas):
+    r"""The data term must be differentiable in float32, at a real residual.
+
+    The version this replaces set the model equal to the data and asserted only
+    that the resulting gradient was finite. That is the minimum of chi2, where
+
+    .. math:: \frac{\partial}{\partial\mu_i}\sum_j\left(\frac{\mu_j-d_j}{\sigma_j}\right)^2
+              = \frac{2(\mu_i-d_i)}{\sigma_i^2}
+
+    is identically zero for *any* correct implementation -- and zero is finite.
+    Measured, the gradient it checked was exactly ``-0.0`` in all six
+    components, so the assertion could only ever have caught a literal NaN at
+    the one point where the residual is exactly zero. A data term whose
+    gradient was wrong by a factor, or by a sign, or everywhere except the
+    optimum, passed it unchanged.
+
+    It was also the only test in this file that did not compare float32 against
+    float64, though ``_both_precisions`` handed it both; it discarded the
+    float64 result.
+
+    The offsets are in units of sigma, so the expected gradient per component is
+    ``2 * offset / sigma`` in closed form. offset=0 is kept as a case in its own
+    right: at the minimum the residual really is 0/0 in float32, and the
+    contract is that it yields exactly zero rather than NaN.
+    """
 
     def run():
-        g = jax.grad(lambda mu: diag_gaussian_chi2(mu, observed, sigma))(jnp.full((6,), _FLUX))
-        return g
+        # Built inside, not outside: arrays created under the ambient x64
+        # config keep their float64 dtype, and the gradient then comes back
+        # float64 even under enable_x64(False), so the precondition below
+        # would be measuring the wrong thing.
+        observed = jnp.full((6,), _FLUX)
+        sigma = jnp.full((6,), _SIGMA)
+        mu = jnp.full((6,), _FLUX + offset_sigmas * _SIGMA)
+        return jax.grad(lambda m: diag_gaussian_chi2(m, observed, sigma))(mu)
 
-    _f64, f32 = _both_precisions(run)
+    f64, f32 = _both_precisions(run)
+    assert f32.dtype == jnp.float32, "precondition: genuinely float32"
     assert np.all(np.isfinite(f32)), "chi2 gradient is non-finite in float32"
+
+    expected = 2.0 * offset_sigmas / _SIGMA
+    if offset_sigmas == 0.0:
+        assert np.all(f32 == 0.0), (
+            f"at the minimum the standardized residual is 0/0 in float32; the "
+            f"contract is exactly zero, got {f32}"
+        )
+        return
+
+    np.testing.assert_allclose(f64, expected, rtol=1e-9, err_msg="float64 reference is off")
+    np.testing.assert_allclose(
+        f32.astype(np.float64),
+        f64,
+        rtol=1e-4,
+        err_msg="float32 chi2 gradient departs from float64",
+    )

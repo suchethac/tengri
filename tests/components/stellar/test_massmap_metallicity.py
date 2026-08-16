@@ -24,8 +24,6 @@ from tengri.parameters.priors import Fixed, Uniform
 
 pytestmark = pytest.mark.bounds
 
-jax.config.update("jax_enable_x64", True)
-
 
 def fd_grad(f, x: float, eps: float = 1e-5) -> float:
     """Central finite difference gradient: (f(x+eps) - f(x-eps)) / (2*eps)."""

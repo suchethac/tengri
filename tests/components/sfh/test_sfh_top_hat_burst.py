@@ -11,6 +11,7 @@ from tengri.components.stellar.sfh import (
     resolve_sfh,
     top_hat,
 )
+from tests._bounds import assert_non_negative
 
 
 class TestTopHat:
@@ -167,7 +168,7 @@ class TestGaussianBurst:
         """Test Gaussian burst is everywhere non-negative."""
         t = jnp.logspace(7, 10.14, 256)
         sfr = gaussian_burst(t, log_total_mass=10.0, t_peak=1e9, sigma=1e8)
-        assert jnp.all(sfr >= 0.0), "SFR is negative somewhere"
+        assert_non_negative(sfr, name="sfr", msg="SFR is negative somewhere")
 
     @pytest.mark.unit
     def test_gaussian_burst_gradient_finite(self):

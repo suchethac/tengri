@@ -39,7 +39,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-jax.config.update("jax_enable_x64", True)
+from tests._bounds import assert_non_negative
 
 #: ``np.trapz`` was removed in numpy 2.0 in favor of ``np.trapezoid``, but
 #: pyproject allows ``numpy>=1.24``, where only ``trapz`` exists. Bind once
@@ -279,7 +279,9 @@ class TestStarforming:
         sed = tengri["sed"]
         optical = (wave > 1000.0) & (wave < 30000.0)
         chex.assert_tree_all_finite(sed[optical])
-        assert np.all(sed[optical] >= 0.0), "Negative flux in tengri SED optical range"
+        assert_non_negative(
+            sed[optical], name="output", msg="Negative flux in tengri SED optical range"
+        )
 
     def test_m_formed_is_correct(self, tengri):
         """SFR=1 Msun/yr over 3 Gyr should give M_formed = 3e9 Msun."""
@@ -751,7 +753,7 @@ class TestDelayedTauSFH:
         )
         optical = (wave > 1000.0) & (wave < 30000.0)
         chex.assert_tree_all_finite(sed[optical])
-        assert np.all(sed[optical] >= 0.0), "Negative flux in dexp SED optical"
+        assert_non_negative(sed[optical], name="output", msg="Negative flux in dexp SED optical")
 
     def test_dexp_vs_fsps_vband(self, ssp_data, ref, ref_wave):
         """Delayed tau V-band per Msun within factor 2 of FSPS constant SFH reference.
@@ -848,7 +850,7 @@ class TestDPLSFH:
         )
         optical = (wave > 1000.0) & (wave < 30000.0)
         chex.assert_tree_all_finite(sed[optical])
-        assert np.all(sed[optical] >= 0.0), "Negative flux in DPL SED optical"
+        assert_non_negative(sed[optical], name="output", msg="Negative flux in DPL SED optical")
 
     def test_dpl_vs_fsps_vband_order_of_magnitude(self, ssp_data, ref, ref_wave):
         """DPL V-band within order of magnitude of FSPS constant SFH per Msun.
@@ -949,7 +951,7 @@ class TestExpSFH:
             sed = ref[key]
             optical = (ref_wave > 3000.0) & (ref_wave < 10000.0)
             assert np.all(np.isfinite(sed[optical])), f"NaN/Inf in {key}"
-            assert np.all(sed[optical] >= 0.0), f"Negative flux in {key}"
+            assert_non_negative(sed[optical], name="output", msg=f"Negative flux in {key}")
 
     def test_bagpipes_seds_finite_and_positive(self, ref, ref_wave):
         """All bagpipes expsfh SEDs must be finite and positive in the optical."""
@@ -960,7 +962,7 @@ class TestExpSFH:
             sed = ref[key]
             optical = (ref_wave > 3000.0) & (ref_wave < 10000.0)
             assert np.all(np.isfinite(sed[optical])), f"NaN/Inf in {key}"
-            assert np.all(sed[optical] >= 0.0), f"Negative flux in {key}"
+            assert_non_negative(sed[optical], name="output", msg=f"Negative flux in {key}")
 
     def test_longer_tau_is_bluer(self, ref, ref_wave):
         """tau=5 Gyr SFH should be bluer (higher UV/V) than tau=1 Gyr.
@@ -1452,7 +1454,7 @@ class TestNebularEmission:
             if key not in ref:
                 pytest.skip(f"Key {key!r} not in npz")
             assert np.all(np.isfinite(ref[key])), f"NaN/Inf in {key}"
-            assert np.all(ref[key] >= 0.0), f"Negative flux in {key}"
+            assert_non_negative(ref[key], name="output", msg=f"Negative flux in {key}")
 
     def test_bagpipes_nebular_seds_finite(self, ref, ref_wave):
         for name in self._CASES:
@@ -1460,7 +1462,7 @@ class TestNebularEmission:
             if key not in ref:
                 pytest.skip(f"Key {key!r} not in npz")
             assert np.all(np.isfinite(ref[key])), f"NaN/Inf in {key}"
-            assert np.all(ref[key] >= 0.0), f"Negative flux in {key}"
+            assert_non_negative(ref[key], name="output", msg=f"Negative flux in {key}")
 
     def test_higher_logu_means_more_uv_emission(self, ref, ref_wave):
         """Higher ionization parameter (logU=-2 vs -3.5) should produce more UV/optical emission.
@@ -1770,7 +1772,7 @@ class TestCalzettiDust:
             if key not in ref:
                 pytest.skip(f"Key {key!r} not in npz")
             assert np.all(np.isfinite(ref[key])), f"NaN/Inf in {key}"
-            assert np.all(ref[key] >= 0.0), f"Negative flux in {key}"
+            assert_non_negative(ref[key], name="output", msg=f"Negative flux in {key}")
 
     def test_higher_ebv_more_attenuated(self, ref, ref_wave):
         """Higher E(B-V) must produce lower V-band luminosity.
@@ -1905,7 +1907,7 @@ class TestDustEmission:
             if key not in ref:
                 pytest.skip(f"Key {key!r} not in npz — FSPS not available")
             assert np.all(np.isfinite(ref[key])), f"NaN/Inf in {key}"
-            assert np.all(ref[key] >= 0.0), f"Negative flux in {key}"
+            assert_non_negative(ref[key], name="output", msg=f"Negative flux in {key}")
 
     def test_warmer_umin_shifts_peak_to_shorter_wavelengths(self, ref, ref_wave_ir):
         """Higher U_min (more intense radiation field) should shift IR peak blueward.
@@ -1974,7 +1976,7 @@ class TestTabularSFH:
             if key not in ref:
                 pytest.skip(f"Key {key!r} not in npz — FSPS not available")
             assert np.all(np.isfinite(ref[key])), f"NaN/Inf in {key}"
-            assert np.all(ref[key] >= 0.0), f"Negative flux in {key}"
+            assert_non_negative(ref[key], name="output", msg=f"Negative flux in {key}")
 
     def test_rising_sfh_bluer_than_quenching(self, ref, ref_wave):
         """Rising SFH (5 Msun/yr recently) should be bluer than quenching SFH (0.2 Msun/yr).
@@ -2081,7 +2083,7 @@ class TestIGMAttenuation:
                 if key not in ref:
                     continue
                 assert np.all(np.isfinite(ref[key])), f"NaN/Inf in {key}"
-                assert np.all(ref[key] >= 0.0), f"Negative flux in {key}"
+                assert_non_negative(ref[key], name="output", msg=f"Negative flux in {key}")
 
     def test_igm_attenuates_uv(self, ref, ref_wave):
         """IGM must attenuate flux shortward of Lyman-alpha (1216 Å rest) by >50%.
@@ -2230,7 +2232,7 @@ class TestAGNTorus:
                 if key not in ref:
                     continue
                 assert np.all(np.isfinite(ref[key])), f"NaN/Inf in {key}"
-                assert np.all(ref[key] >= 0.0), f"Negative flux in {key}"
+                assert_non_negative(ref[key], name="output", msg=f"Negative flux in {key}")
 
     def test_agn_adds_ir_excess(self, ref, ref_wave):
         """AGN torus must increase mid-IR flux compared to no-AGN baseline.
@@ -2328,7 +2330,7 @@ class TestCIGALECalzetti:
             if key not in ref:
                 pytest.skip(f"{key} not in reference NPZ (cigale not installed)")
             assert np.all(np.isfinite(ref[key])), f"NaN/Inf in {key}"
-            assert np.all(ref[key] >= 0.0), f"Negative flux in {key}"
+            assert_non_negative(ref[key], name="output", msg=f"Negative flux in {key}")
 
     def test_ebv_direction(self, ref, ref_wave):
         """Higher E(B-V) must produce redder UV/V ratio (stronger dust reddening)."""
@@ -2393,7 +2395,7 @@ class TestCIGALEDustEmission:
             if key not in ref:
                 pytest.skip(f"{key} not in reference NPZ (cigale not installed)")
             assert np.all(np.isfinite(ref[key])), f"NaN/Inf in {key}"
-            assert np.all(ref[key] >= 0.0), f"Negative flux in {key}"
+            assert_non_negative(ref[key], name="output", msg=f"Negative flux in {key}")
 
     def test_umin_direction(self, ref, ref_wave_ir):
         """Higher Umin should shift FIR peak to shorter wavelength (hotter dust).
@@ -2474,7 +2476,7 @@ class TestCIGALESKIRTOR:
                 if key not in ref:
                     pytest.skip(f"{key} not in reference NPZ (cigale not installed)")
                 assert np.all(np.isfinite(ref[key])), f"NaN/Inf in {key}"
-                assert np.all(ref[key] >= 0.0), f"Negative flux in {key}"
+                assert_non_negative(ref[key], name="output", msg=f"Negative flux in {key}")
 
     def test_agn_ir_excess(self, ref, ref_wave):
         """AGN model should have more flux at 2 μm (20000 Å) than no-AGN variant.

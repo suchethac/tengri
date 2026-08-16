@@ -27,8 +27,6 @@ from tengri.observation.spectrum import velocity_broaden
 
 pytestmark = pytest.mark.regression_bug
 
-jax.config.update("jax_enable_x64", True)
-
 _C_KM_S = 299792.458
 _LAMBDA_LINE = 5000.0
 _WAVE_LO, _WAVE_HI = 4500.0, 5500.0

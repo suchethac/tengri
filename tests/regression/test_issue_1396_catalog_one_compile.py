@@ -39,8 +39,6 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-jax.config.update("jax_enable_x64", True)
-
 pytestmark = pytest.mark.regression_bug
 
 _Z_OBS = 0.05

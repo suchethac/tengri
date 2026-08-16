@@ -134,7 +134,7 @@ class TestPrediction:
             log_nH=4.0,
             log_qh=53.0,
         )
-        assert jnp.all(lum >= 0.0)
+        assert_non_negative(lum, name="lum")
 
     def test_predict_respects_escape_fraction(self, synthesizer_backend):
         """Escape fraction reduces luminosities."""
@@ -249,6 +249,8 @@ class TestJitCompatibility:
 
 import os
 
+from tests._bounds import assert_non_negative
+
 _SYN_LIB_DIR = Path(
     os.environ.get(
         "SYNTHESIZER_GRID_DIR",
@@ -299,7 +301,7 @@ class TestNebularSpectrumUnifiedAGNParity:
         )
         chex.assert_shape(l_nu, (2000,))
         assert jnp.all(jnp.isfinite(l_nu))
-        assert jnp.all(l_nu >= 0.0)
+        assert_non_negative(l_nu, name="l_nu")
 
     def test_oiii_dominates_over_lya(self, nebular_grid_path):
         """The reprocessed NLR is [O III] 5007-dominant, not Lyα-dominant.

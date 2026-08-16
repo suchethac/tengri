@@ -203,7 +203,13 @@ def run_hmc(
 
     t0 = time.time()
 
-    adapt_key = ("hmc", not use_dense, problem.cache_key)
+    # n_warmup, n_leapfrog_steps and target_accept_rate belong in the key: they
+    # *produce* the adaptation, so leaving them out makes those knobs silently
+    # inert on a model that already holds an entry. Grouped into one element and
+    # kept on a single line because the namespace guard in
+    # test_preconditioning.py reads this statement as text, per line.
+    tuning = (int(n_warmup), int(n_leapfrog_steps), float(target_accept_rate))
+    adapt_key = ("hmc", not use_dense, tuning, problem.cache_key)
     cached = _get_cached_adaptation(fitter, adapt_key)
 
     def ld_1arg(pos):
@@ -212,6 +218,13 @@ def run_hmc(
     # ── Warmup: adapt (step_size, inverse_mass_matrix) once, then cache. ──
     # Split from sampling so the FIRST call honors n_chains too (previously a
     # fresh multi-chain run silently sampled a single chain and mislabelled it).
+    #
+    # The warmup split is hoisted out of the ``else`` so both branches advance
+    # the key identically. Cache presence is invisible to the caller and must
+    # not steer the RNG stream, or two identical ``fit`` calls with one ``key``
+    # return different chains. ``warmup_key`` is unused on the cached path.
+    key, warmup_key = jax.random.split(key)
+
     if cached is not None:
         parameters = cached
         if verbose:
@@ -221,7 +234,6 @@ def run_hmc(
                 float(parameters["step_size"]),
             )
     else:
-        key, warmup_key = jax.random.split(key)
         with compile_timer("hmc_warmup", fitter.compile_signature(), method="mcmc_hmc"):
             step_size, inv_mass_matrix = _hmc_warmup_only(
                 init_flat,

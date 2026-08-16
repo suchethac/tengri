@@ -24,7 +24,7 @@ Fixed axes via ``slice_fixed_axes``.
    future models (e.g. Comptonization tables, reflection grids, ionized
    absorber transmission cubes) will need; benchmark before assuming a
    speedup over the analytic runtime path.  See
-   ``scripts/benchmark_precompute_analytic.py``.
+   ``bench/scripts/benchmark_precompute_analytic.py``.
 
 References
 ----------

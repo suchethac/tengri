@@ -91,8 +91,11 @@ def test_every_declared_param_has_in_bounds_default():
             f"{len(offenders)} component parameter(s) missing in-bounds defaults:\n"
             + "\n".join(offenders)
             + "\n\nEach declaration must either be ``Fixed(value)`` or carry "
-            "``default=<physical_value>``. See docs/dev/parameter-defaults.md (or "
-            "the #478 commit message) for rationale."
+            "``default=<physical_value>`` inside its own bounds. A default outside "
+            "its bounds is not a style problem: it is the starting point every "
+            "optimizer and sampler is handed, so the first evaluation happens "
+            "somewhere the prior says is impossible. tools/check_param_defaults.py "
+            "enforces the same rule outside pytest."
         )
 
 

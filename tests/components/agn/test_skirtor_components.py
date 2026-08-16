@@ -17,7 +17,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-jax.config.update("jax_enable_x64", True)
+from tests._bounds import assert_non_negative
+from tests._grad_parity import assert_grad_matches_fd
 
 
 @pytest.fixture()
@@ -116,9 +117,9 @@ class TestSKIRTORComponentsV3:
         fn = create_skirtor_components_from_grid(v3_grid_path)
         wavelength = jnp.logspace(1, 7, 100)
         result = fn(wavelength, agn_log_lbol=44.0)
-        assert jnp.all(result.disk >= 0.0)
-        assert jnp.all(result.dust >= 0.0)
-        assert jnp.all(result.total >= 0.0)
+        assert_non_negative(result.disk, name="output")
+        assert_non_negative(result.dust, name="output")
+        assert_non_negative(result.total, name="output")
 
     def test_dust_dominates_over_disk(self, v3_grid_path):
         """In our synthetic grid, dust >> disk by construction."""
@@ -203,6 +204,6 @@ class TestJITAndGradients:
             r = fn(wavelength, agn_log_lbol=lbol)
             return jnp.sum(r.total)
 
-        grad = jax.grad(loss)(44.0)
+        grad = assert_grad_matches_fd(loss, 44.0)
         assert jnp.isfinite(grad)
         assert grad > 0.0

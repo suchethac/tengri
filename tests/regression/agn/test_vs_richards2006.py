@@ -18,6 +18,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tests._jit_parity import assert_jit_matches_eager
+
 
 @pytest.mark.regression_paper
 def test_richards2006_data_file_sha256():
@@ -91,12 +93,10 @@ def test_richards2006_agn_frac_scaling():
 @pytest.mark.regression_paper
 def test_richards2006_jit_compatible():
     """Function is JIT-compatible (pure jnp.interp)."""
-    import jax
 
     from tengri.components.agn.richards2006_disc import richards2006_disc
 
-    jit_disc = jax.jit(richards2006_disc)
     wave = jnp.logspace(2, 5, 50)
-    out = jit_disc(wave, 12.0)
+    out = assert_jit_matches_eager(richards2006_disc, wave, 12.0)
     assert out.shape == wave.shape
     assert bool(jnp.all(jnp.isfinite(out)))

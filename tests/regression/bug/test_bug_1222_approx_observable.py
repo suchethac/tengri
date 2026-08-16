@@ -12,7 +12,7 @@ The fix is an accessor, not a corrected probe: ``model.approx`` answers the same
 question with the same spelling on ``SEDModel`` and ``ForwardModel`` alike, so a
 future guard cannot re-invent a private probe that silently reports "exact".
 
-Design: docs/superpowers/specs/2026-07-17-consolidate-approx-and-bootstrap-design.md
+Design: docs/internal/specs/2026-07-17-consolidate-approx-and-bootstrap-design.md
 """
 
 import warnings

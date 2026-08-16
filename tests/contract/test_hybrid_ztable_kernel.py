@@ -30,9 +30,6 @@ from tengri.components.stellar.sps.precompute import (
 )
 from tengri.utils.cosmology import luminosity_distance
 
-jax.config.update("jax_enable_x64", True)
-
-
 pytestmark = pytest.mark.bounds
 
 

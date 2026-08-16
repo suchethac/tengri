@@ -27,8 +27,6 @@ import pytest
 
 pytestmark = pytest.mark.contract
 
-jax.config.update("jax_enable_x64", True)
-
 # Standard synthetic filter set (used across test adapters)
 _CENTERS = np.array([3e5, 1e7, 1e8, 1e10])  # FIR–radio Angstrom
 _WIDTHS = np.array([1e5, 3e6, 3e7, 3e9])

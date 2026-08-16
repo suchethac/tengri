@@ -71,7 +71,7 @@ class MockData(NamedTuple):
     # MockData is the object returned by ``SEDModel.mock()``; the standalone
     # ``generate_mock()`` returns a mapping. Supporting both ``mock.flux_obs``
     # and ``mock["flux_obs"]`` here means notebook/user code written against
-    # either surface works against both — see ``analysis/mock.py``.
+    # either surface works against both — see ``src/tengri/analysis/mock.py``.
 
     def __getitem__(self, key):
         """Field access by name (``mock["flux_obs"]``) or position (``mock[0]``).

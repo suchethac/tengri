@@ -22,9 +22,6 @@ from tengri.components.stellar.sps.precompute import (
     interpolate_ssp_phot_metallicity,
 )
 
-jax.config.update("jax_enable_x64", True)
-
-
 pytestmark = pytest.mark.bounds
 
 

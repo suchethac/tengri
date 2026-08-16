@@ -29,41 +29,15 @@ class TestBugNSS04ZTableIGM:
     formula change. Inoue et al. (2014) MNRAS 442, 1805 governs the IGM model itself.
     """
 
-    @pytest.mark.skip(
-        reason="forward/_kernels/hybrid.py deleted in Phase 6; IGM now wired in orchestrator"
-    )
-    def test_ztable_igm_wiring_present_in_source(self):
-        """Smoke: verify z-table kernel wires has_igm to actual IGM application.
-
-        The buggy code had `if has_igm: pass`.  The fixed code must reference
-        `_igm_fn` (the import of igm_transmission) inside the kernel setup and
-        must apply `_igm_full` or `_igm_eff` to the SED/photometry.
-        """
-        import inspect
-
-        import tengri.forward._kernels.hybrid as fk
-
-        src = inspect.getsource(fk)
-
-        # Must import igm_transmission (not just set has_igm=True)
-        assert "_igm_fn" in src, (
-            "z-table kernel must import igm_transmission as _igm_fn when has_igm is True"
-        )
-
-        # Must apply full-wavelength IGM to non-stellar SED
-        assert "_igm_full" in src, (
-            "z-table kernel must compute _igm_full and apply it to non_stellar_sed"
-        )
-
-        # Must apply per-filter IGM to stellar photometry
-        assert "_igm_eff" in src, (
-            "z-table kernel must compute _igm_eff and multiply stellar_phot by it"
-        )
-
-        # Must NOT have the old dead `pass` block (buggy version had this comment + pass).
-        # Guard: check that the stub was replaced with real implementation.
-        _dead_stub = "Full wavelength IGM will be evaluated in non-stellar section\n        pass"
-        assert _dead_stub not in src, "Old dead `pass` IGM block still present — fix not applied"
+    # test_ztable_igm_wiring_present_in_source lived here, skipped with
+    # "forward/_kernels/hybrid.py deleted in Phase 6; IGM now wired in
+    # orchestrator". It ran inspect.getsource() on that module and grepped for
+    # the identifiers `_igm_fn`, `_igm_full` and `_igm_eff`, so it could not
+    # survive the module's deletion — nor a rename of any of those locals, for
+    # a bug that was never about their names. The property it was reaching for
+    # (IGM is applied, not merely computed) is asserted behaviourally by
+    # test_igm_attenuates_uv_at_high_z below, which is what should have been
+    # written in the first place and does not care how the wiring is spelled.
 
     def test_igm_trans_table_interpolation_formula(self):
         """Verify that the per-filter IGM interpolation formula is correct.

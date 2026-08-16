@@ -9,7 +9,9 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-jax.config.update("jax_enable_x64", True)
+from tests._bounds import assert_non_negative
+from tests._dust_laws import every_dust_law
+from tests._jit_parity import assert_jit_matches_eager
 
 
 def fd_grad(f, x: float, eps: float = 1e-4) -> float:
@@ -44,7 +46,7 @@ class TestSingleComponentDust:
         from tengri.components.dust.attenuation import single_component_dust
 
         trans = single_component_dust(wavelengths, tau_v=2.0)
-        assert jnp.all(trans >= 0.0)
+        assert_non_negative(trans, name="trans")
         assert jnp.all(trans <= 1.0)
 
     def test_zero_tau_is_unity(self, wavelengths):
@@ -93,32 +95,30 @@ class TestSingleComponentDust:
         trans = single_component_dust(wavelengths, tau_v=0.0, f_obscuration=0.5, law="power_law")
         assert jnp.allclose(trans, 1.0)
 
-    @pytest.mark.parametrize(
-        "law_name",
-        [
-            "power_law",
-            "calzetti",
-            "kriek_conroy",
-            "smc",
-            "cardelli",
-            "li08",
-            "salim",
-        ],
-    )
+    @pytest.mark.parametrize("law_name", every_dust_law())
     def test_all_laws_work(self, wavelengths, law_name):
+        """Named "all laws" and listing seven of twenty-two, until now.
+
+        The hand-written list held power_law, calzetti, kriek_conroy, smc,
+        cardelli, li08 and salim. The other fifteen — including reddy15, which
+        no test in the tree touched — went through this wrapper untested. All
+        eighteen non-grain laws pass these properties; the four grain models
+        skip when the optional dust-extinction backend is absent.
+        """
         from tengri.components.dust.attenuation import single_component_dust
 
         trans = single_component_dust(wavelengths, tau_v=1.0, law=law_name)
         chex.assert_equal_shape([trans, wavelengths])
         chex.assert_tree_all_finite(trans)
-        assert jnp.all(trans >= 0.0)
+        assert_non_negative(trans, name="trans")
         assert jnp.all(trans <= 1.0)
 
     def test_jit_compilable(self, wavelengths):
         from tengri.components.dust.attenuation import single_component_dust
 
-        jitted = jax.jit(lambda w, t: single_component_dust(w, tau_v=t))
-        trans = jitted(wavelengths, 1.0)
+        trans = assert_jit_matches_eager(
+            lambda w, t: single_component_dust(w, tau_v=t), wavelengths, 1.0
+        )
         chex.assert_tree_all_finite(trans)
 
     def test_differentiable(self, wavelengths):
@@ -170,7 +170,7 @@ class TestSingleComponentDustFast:
         from tengri.components.dust.attenuation import single_component_dust_fast
 
         trans = single_component_dust_fast(wavelengths, n_ages=n_ages, tau_v=2.0)
-        assert jnp.all(trans >= 0.0)
+        assert_non_negative(trans, name="trans")
         assert jnp.all(trans <= 1.0)
 
     def test_zero_tau_is_unity(self, wavelengths, n_ages):
@@ -182,8 +182,9 @@ class TestSingleComponentDustFast:
     def test_jit_compilable(self, wavelengths, n_ages):
         from tengri.components.dust.attenuation import single_component_dust_fast
 
-        jitted = jax.jit(lambda w, t: single_component_dust_fast(w, n_ages=n_ages, tau_v=t))
-        trans = jitted(wavelengths, 1.0)
+        trans = assert_jit_matches_eager(
+            lambda w, t: single_component_dust_fast(w, n_ages=n_ages, tau_v=t), wavelengths, 1.0
+        )
         chex.assert_tree_all_finite(trans)
 
     def test_differentiable(self, wavelengths, n_ages):

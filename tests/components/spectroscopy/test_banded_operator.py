@@ -6,7 +6,6 @@ The banded matvec is the shared kernel behind the DESI/PFS resolution matrix
 A dense matrix is the ground-truth reference for the storage convention.
 """
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -20,6 +19,7 @@ from tengri.observation.banded import (
     resolution_bands_from_desi,
 )
 from tengri.observation.spectrum import apply_lsf
+from tests._grad_parity import assert_grad_matches_fd
 
 pytestmark = pytest.mark.contract
 
@@ -75,7 +75,7 @@ def test_banded_matvec_is_differentiable():
     def loss(x):
         return jnp.sum(banded_matvec(offsets, data, x) ** 2)
 
-    g = jax.grad(loss)(jnp.asarray(rng.standard_normal(n)))
+    g = assert_grad_matches_fd(loss, jnp.asarray(rng.standard_normal(n)))
     assert np.all(np.isfinite(np.asarray(g)))
 
 

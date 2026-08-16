@@ -13,8 +13,6 @@ from pathlib import Path
 import jax
 import pytest
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri.forward.sed_model import SEDModel
 from tengri.inference.backends.mcmc import _shared
 from tengri.inference.fitter import Fitter

@@ -13,7 +13,15 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tests._bounds import assert_non_negative
+from tests._dust_laws import every_dust_law, requires_dust_extinction
+
 pytestmark = pytest.mark.bounds
+
+#: Excluded from the k(V)=1 sweep on purpose: prevot_smc does not follow that
+#: normalization convention and has its own test below. Stated here rather than
+#: left as a gap in a hand-written list, which is how reddy15 went untested.
+_NOT_V_NORMALIZED = frozenset({"prevot_smc"})
 
 
 class TestDustAttenuation:
@@ -74,40 +82,23 @@ class TestDustLawCombinations:
     WL: ClassVar = jnp.array([1500.0, 2175.0, 3000.0, 5500.0, 9000.0])
     _REQUIRES_RV: ClassVar[set[str]] = {"cardelli", "conroy2010", "d03_mwrv31"}
 
-    @pytest.mark.parametrize(
-        "name",
-        [
-            "calzetti",
-            "cardelli",
-            "conroy2010",
-            "d03_mwrv31",
-            "hd23_mwrv31",
-            "kriek_conroy",
-            "leitherer02",
-            "li08",
-            "lmc",
-            "narayanan_z",
-            "noll09",
-            "power_law",
-            "salim",
-            "salim_sbl18",
-            "smc",
-            "tea",
-            "vw07_bc",
-            "vw07_diff",
-            "wd01_mwrv31",
-            "wd01_smcbar",
-        ],
-    )
+    @pytest.mark.parametrize("name", every_dust_law(exclude=_NOT_V_NORMALIZED))
     def test_dust_law_normalized_at_V_band(self, name):
-        """All registered laws (except prevot_smc) normalize to k(V)=1 within 5%."""
+        """All registered laws (except prevot_smc) normalize to k(V)=1 within 5%.
+
+        The list used to be written out here by hand and had 20 entries against
+        a 22-entry registry: ``prevot_smc`` on purpose (see
+        ``_NOT_V_NORMALIZED``) and ``reddy15`` by omission, so reddy15 was
+        checked by nothing. Derived from the registry now, so a law added
+        tomorrow is swept without editing this file.
+        """
         from tengri.components.dust.attenuation import resolve_dust_law
 
         fn = resolve_dust_law(name)
         kwargs = {"dust_Rv": 3.1} if name in self._REQUIRES_RV else {}
         k = np.array(fn(self.WL, **kwargs))
         chex.assert_tree_all_finite(k)
-        assert np.all(k >= 0.0), f"{name}: negative k values"
+        assert_non_negative(k, name="k", msg=f"{name}: negative k values")
         assert 0.95 < k[3] < 1.05, f"{name}: k(5500Å) = {k[3]:.3f}"
         assert 1.5 < k[0] < 15.0, f"{name}: k(FUV) = {k[0]:.2f}"
         assert 0.2 < k[4] < 2.0, f"{name}: k(I) = {k[4]:.2f}"
@@ -119,7 +110,15 @@ class TestDustLawCombinations:
         k = np.array(prevot_smc(self.WL))
         assert 0.95 < k[3] < 1.05, f"prevot_smc k(V) = {k[3]:.3f}"
 
-    @pytest.mark.parametrize("name", ["cardelli", "conroy2010", "d03_mwrv31", "hd23_mwrv31"])
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "cardelli",
+            "conroy2010",
+            pytest.param("d03_mwrv31", marks=[requires_dust_extinction]),
+            pytest.param("hd23_mwrv31", marks=[requires_dust_extinction]),
+        ],
+    )
     def test_milky_way_laws_have_uv_bump(self, name):
         """MW-type curves must show a 2175 Å feature: k(2175) > avg(k(1900), k(2450))."""
         from tengri.components.dust.attenuation import resolve_dust_law

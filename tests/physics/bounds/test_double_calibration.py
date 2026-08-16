@@ -2,20 +2,19 @@
 """Tests for double (piecewise) calibration polynomial."""
 
 import chex
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
-
-jax.config.update("jax_enable_x64", True)
 
 from tengri.observation.calibration import (
     apply_double_calibration,
     calibration_polynomial,
     double_calibration_polynomial,
 )
+from tests._grad_parity import assert_grad_matches_fd
+from tests._jit_parity import assert_jit_matches_eager
 
-pytestmark = pytest.mark.unit
+pytestmark = [pytest.mark.unit, pytest.mark.bounds]
 
 
 @pytest.fixture
@@ -90,8 +89,8 @@ class TestDoubleCalibrationPolynomial:
         chex.assert_tree_all_finite(cal)
 
     def test_jit_compatible(self, wavelength, wave_split):
-        fn = jax.jit(double_calibration_polynomial)
-        cal = fn(
+        cal = assert_jit_matches_eager(
+            double_calibration_polynomial,
             wavelength,
             jnp.array([0.1, -0.05]),
             jnp.array([0.05, 0.02]),
@@ -104,7 +103,7 @@ class TestDoubleCalibrationPolynomial:
             cal = double_calibration_polynomial(wavelength, c_blue, jnp.zeros(2), wave_split)
             return jnp.sum(cal)
 
-        grad_val = jax.grad(scalar_fn)(jnp.array([0.1, -0.05]))
+        grad_val = assert_grad_matches_fd(scalar_fn, jnp.array([0.1, -0.05]))
         chex.assert_tree_all_finite(grad_val)
 
 
