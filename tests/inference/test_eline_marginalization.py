@@ -24,10 +24,10 @@ from tengri.observation.eline_marginalization import (
     marginalize_emission_lines,
     predict_with_marginalized_lines,
 )
+from tests._bounds import assert_non_negative
+from tests._grad_parity import assert_grad_matches_fd
 
 pytestmark = pytest.mark.bounds
-
-jax.config.update("jax_enable_x64", True)
 
 
 # ── Fixtures ──────────────────────────────────────────────────────
@@ -104,7 +104,7 @@ class TestDesignMatrix:
     def test_non_negative(self, wave_grid):
         """Design matrix should be non-negative (Gaussian profiles)."""
         G = build_eline_design_matrix(wave_grid, DEFAULT_LINE_WAVELENGTHS[:3], 1000.0, 0.0)
-        assert jnp.all(G >= 0)
+        assert_non_negative(G, name="G")
 
     def test_default_line_list(self, wave_grid):
         """Should work with the full default line list."""
@@ -210,7 +210,7 @@ class TestGradients:
             ln_l, _, _ = marginalize_emission_lines(residual, noise, G)
             return ln_l
 
-        grad = jax.grad(loss)(jnp.ones_like(wave))
+        grad = assert_grad_matches_fd(loss, jnp.ones_like(wave))
         chex.assert_tree_all_finite(grad)
 
     def test_grad_wrt_noise(self, simple_setup):
@@ -224,7 +224,7 @@ class TestGradients:
             ln_l, _, _ = marginalize_emission_lines(residual, noise, G)
             return ln_l
 
-        grad = jax.grad(loss)(jnp.ones_like(wave) * 0.1)
+        grad = assert_grad_matches_fd(loss, jnp.ones_like(wave) * 0.1)
         chex.assert_tree_all_finite(grad)
 
     def test_grad_through_predict(self, simple_setup):
@@ -239,7 +239,7 @@ class TestGradients:
             model_full = predict_with_marginalized_lines(continuum, G, a_hat)
             return jnp.sum((data - model_full) ** 2)
 
-        grad = jax.grad(loss)(jnp.ones_like(wave))
+        grad = assert_grad_matches_fd(loss, jnp.ones_like(wave))
         chex.assert_tree_all_finite(grad)
 
 

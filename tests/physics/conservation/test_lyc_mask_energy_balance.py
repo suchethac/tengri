@@ -36,8 +36,6 @@ from tengri.utils.physics_constants import C_AA
 
 pytestmark = pytest.mark.conservation
 
-jax.config.update("jax_enable_x64", True)
-
 _WG00_GRID = Path(__file__).resolve().parents[3] / "data" / "wg00_attenuation_grid.h5"
 
 TWO_COMPONENT = {

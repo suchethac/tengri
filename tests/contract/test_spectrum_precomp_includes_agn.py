@@ -14,7 +14,6 @@ radio / X-ray). Runs on the synthetic wide SSP with an analytic disc — no
 
 from __future__ import annotations
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -23,8 +22,6 @@ from tengri import FIXED, Fixed, Observation, SEDModel, SpectrumPrecomp
 from tengri.observation.spectroscopy import Spectroscopy
 
 pytestmark = pytest.mark.contract
-
-jax.config.update("jax_enable_x64", True)
 
 _WAVE = jnp.logspace(np.log10(3000.0), np.log10(50000.0), 200)  # optical → MIR, observed Å
 

@@ -22,8 +22,6 @@ import jax
 import numpy as np
 import pytest
 
-jax.config.update("jax_enable_x64", True)
-
 # ── Skip guard ─────────────────────────────────────────────────────
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 

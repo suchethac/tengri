@@ -27,12 +27,12 @@ comparing against the exact path catches that.
 
 from __future__ import annotations
 
-import jax
 import jax.numpy as jnp
 import pytest
 
 from tengri import FIXED, Fixed, Observation, SEDModel, SpectrumPrecomp
 from tengri.observation.spectroscopy import Spectroscopy
+from tests._grad_parity import assert_grad_matches_fd
 
 pytestmark = pytest.mark.regression_bug
 
@@ -110,7 +110,7 @@ def test_precomp_calibration_is_differentiable(synthetic_ssp_wide, wave_obs):
     def total(c1):
         return jnp.sum(model.predict_spectrum({"cal_c1": c1, "cal_c2": 0.0}))
 
-    g = jax.grad(total)(0.1)
+    g = assert_grad_matches_fd(total, 0.1)
     assert jnp.isfinite(g)
     assert abs(float(g)) > 0.0
 

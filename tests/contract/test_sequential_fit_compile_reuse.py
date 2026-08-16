@@ -46,8 +46,6 @@ from tengri.inference import fitter as fitter_mod
 from tengri.inference.fitter import Fitter
 from tengri.observation.photometry import FilterCurve
 
-jax.config.update("jax_enable_x64", True)
-
 pytestmark = pytest.mark.contract
 
 

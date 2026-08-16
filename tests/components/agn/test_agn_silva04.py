@@ -9,13 +9,12 @@ absent so the unit suite stays green on CI images without model data.
 from __future__ import annotations
 
 import chex
-import jax
 import jax.numpy as jnp
 import pytest
 
 from tengri._data_setup import find_data
-
-jax.config.update("jax_enable_x64", True)
+from tests._grad_parity import assert_grad_matches_fd
+from tests._jit_parity import assert_jit_matches_eager
 
 # parents[4] is one level above the repo root from tests/components/agn/, so
 # this guard was permanently true and the tests below never ran (#1431).
@@ -104,8 +103,7 @@ def test_nh_axis_actually_interpolated(torus_fn, wavelength) -> None:
 
 
 def test_jit_compatible(torus_fn, wavelength) -> None:
-    jitted = jax.jit(lambda nh: torus_fn(wavelength, agn_log_nh_silva=nh))
-    sed = jitted(23.0)
+    sed = assert_jit_matches_eager(lambda nh: torus_fn(wavelength, agn_log_nh_silva=nh), 23.0)
     chex.assert_tree_all_finite(sed)
 
 
@@ -116,7 +114,7 @@ def test_grad_flows_through_log_nh(torus_fn, wavelength) -> None:
         sed = torus_fn(wavelength, agn_log_nh_silva=nh)
         return jnp.log1p(jnp.sum(sed))
 
-    g = jax.grad(scalar_loss)(23.0)
+    g = assert_grad_matches_fd(scalar_loss, 23.0)
     assert jnp.isfinite(g)
 
 

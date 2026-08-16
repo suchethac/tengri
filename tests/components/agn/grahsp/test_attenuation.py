@@ -13,6 +13,8 @@ import chex
 import numpy as np
 import pytest
 
+from tests._jit_parity import assert_jit_matches_eager
+
 pytestmark = pytest.mark.bounds
 
 FIXTURE = (
@@ -93,15 +95,15 @@ def test_attenuation_factors(fixture):
 
 
 def test_jit_compatible():
-    import jax
     import jax.numpy as jnp
 
     from tengri.components.agn.grahsp.attenuation import (
         attenuation_factors,
     )
 
-    fn = jax.jit(attenuation_factors)
-    f_gal, f_agn = fn(jnp.array([100.0, 1100.0, 10000.0]), 0.5, 0.3, -1.2, -3.0, 1.2, 1100.0)
+    f_gal, f_agn = assert_jit_matches_eager(
+        attenuation_factors, jnp.array([100.0, 1100.0, 10000.0]), 0.5, 0.3, -1.2, -3.0, 1.2, 1100.0
+    )
     chex.assert_shape(f_gal, (3,))
     chex.assert_tree_all_finite(f_gal)
     chex.assert_tree_all_finite(f_agn)

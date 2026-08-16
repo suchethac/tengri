@@ -31,8 +31,6 @@ import pytest
 
 pytestmark = pytest.mark.regression_paper
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri.components.igm.igm import igm_transmission
 from tengri.utils.cosmology import luminosity_distance_mpc
 from tengri.utils.physics_constants import L_SUN as L_SUN_ERG

@@ -16,6 +16,8 @@ this changes only the size of ``pred.lines.all_waves`` /
 
 from __future__ import annotations
 
+import dataclasses
+
 import pytest
 
 import tengri
@@ -71,7 +73,14 @@ class TestConfigDefault:
         assert cfg.cue_full_catalog is True
 
     def test_field_is_frozen(self):
-        """Config is a frozen dataclass; mutation raises."""
+        """Config is a frozen dataclass; mutation raises FrozenInstanceError.
+
+        Named rather than caught as bare ``Exception``: frozenness is the
+        property, and any other error — a property with a broken setter, a
+        renamed field — would also have satisfied ``raises(Exception)`` while
+        the config was freely mutable. The comment already knew which
+        exception it meant; asserting it costs nothing.
+        """
         cfg = NebularSEDComponentConfig(backend="cue")
-        with pytest.raises(Exception):  # noqa: B017 — dataclass FrozenInstanceError
+        with pytest.raises(dataclasses.FrozenInstanceError):
             cfg.cue_full_catalog = True  # type: ignore[misc]

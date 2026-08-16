@@ -17,10 +17,10 @@ import pytest
 
 from tengri.components.stellar.sfh.mean_sfh import AGEMAX_YR, psb_wild2020
 from tengri.components.stellar.sfh.registry import SFH_REGISTRY, resolve_sfh
+from tests._bounds import assert_non_negative
+from tests._grad_parity import assert_grad_matches_fd
 
 pytestmark = pytest.mark.bounds
-
-jax.config.update("jax_enable_x64", True)
 
 
 @pytest.fixture
@@ -50,7 +50,7 @@ class TestPSBShape:
     def test_non_negative(self, t_lookback, default_params):
         """SFR should be non-negative everywhere (bounds test)."""
         sfr = psb_wild2020(t_lookback, **default_params)
-        assert jnp.all(sfr >= 0.0)
+        assert_non_negative(sfr, name="sfr")
         chex.assert_tree_all_finite(sfr)
 
     def test_two_component_structure(self, t_lookback, default_params):
@@ -163,7 +163,7 @@ class TestJITAndGradients:
             kw = {k: v for k, v in default_params.items() if k != "log_total_mass"}
             return jnp.mean(psb_wild2020(t_lookback, lp, **kw))
 
-        g = jax.grad(loss)(default_params["log_total_mass"])
+        g = assert_grad_matches_fd(loss, default_params["log_total_mass"])
         assert jnp.isfinite(g)
         assert g > 0
 

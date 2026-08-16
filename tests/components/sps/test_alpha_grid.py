@@ -27,8 +27,8 @@ from tengri.components.stellar.sps.dsps_wrapper import (
     interpolate_met_alpha,
     interpolate_met_alpha_evolving,
 )
-
-jax.config.update("jax_enable_x64", True)
+from tests._bounds import assert_non_negative
+from tests._jit_parity import assert_jit_matches_eager
 
 pytestmark = pytest.mark.bounds
 
@@ -400,8 +400,8 @@ class TestInterpolateMetAlphaEvolving:
         g = alpha_ssp_grid
         n_age = len(g["ssp_lg_age_gyr"])
 
-        jit_fn = jax.jit(interpolate_met_alpha_evolving)
-        result = jit_fn(
+        result = assert_jit_matches_eager(
+            interpolate_met_alpha_evolving,
             g["ssp_flux"],
             g["ssp_lgmet"],
             g["ssp_alpha_fe"],
@@ -453,7 +453,9 @@ class TestComputeAlphaFeEvolving:
         result = compute_alpha_fe_evolving(lg_ages, 0.4, 0.0, 13.7)
 
         diffs = jnp.diff(result)
-        assert jnp.all(diffs >= 0), "Alpha should increase with age (lookback time)"
+        assert_non_negative(
+            diffs, name="diffs", msg="Alpha should increase with age (lookback time)"
+        )
 
     def test_equal_old_young_gives_constant(self):
         """If alpha_old == alpha_young, result should be constant.

@@ -22,8 +22,6 @@ from scipy.interpolate import PchipInterpolator
 
 from tengri.utils.grid_interp import interp_nd_pchip
 
-jax.config.update("jax_enable_x64", True)
-
 
 @pytest.mark.regression_paper
 def test_matches_scipy_pchip_1d():

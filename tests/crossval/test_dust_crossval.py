@@ -11,12 +11,9 @@ Usage:
     pytest -m crossval tests/crossval/test_dust_crossval.py -v
 """
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
-
-jax.config.update("jax_enable_x64", True)
 
 pytestmark = pytest.mark.crossval
 

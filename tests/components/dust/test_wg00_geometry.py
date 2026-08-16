@@ -15,15 +15,13 @@ from tengri.components.dust.attenuation import (
     wg00_dusty,
     wg00_shell,
 )
+from tests._bounds import assert_non_negative
 
 
 def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     """Central finite-difference gradient. O(eps^2) accurate."""
 
     return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
-
-
-jax.config.update("jax_enable_x64", True)
 
 
 @pytest.fixture
@@ -50,7 +48,7 @@ class TestWG00Shell:
         """Transmission is in [0, 1] for positive tau."""
         for tau in [0.25, 1.0, 4.0, 16.0]:
             result = wg00_shell(wavelength, tau_v=tau)
-            assert jnp.all(result >= 0.0)
+            assert_non_negative(result, name="result")
             assert jnp.all(result <= 1.0)
 
     def test_more_dust_less_transmission(self, wavelength):
@@ -128,7 +126,7 @@ class TestWG00Cloudy:
         """Transmission is in [0, 1] for positive tau."""
         for tau in [0.25, 1.0, 4.0, 16.0]:
             result = wg00_cloudy(wavelength, tau_v=tau)
-            assert jnp.all(result >= 0.0), f"Negative T at tau={tau}"
+            assert_non_negative(result, name="result", msg=f"Negative T at tau={tau}")
             assert jnp.all(result <= 1.0 + 1e-10), f"T > 1 at tau={tau}"
 
     def test_grayer_than_shell(self, wavelength):
@@ -207,7 +205,7 @@ class TestWG00Dusty:
         """Transmission is in [0, 1] for positive tau."""
         for tau in [0.25, 1.0, 4.0, 16.0]:
             result = wg00_dusty(wavelength, tau_v=tau, n_clumps=10.0)
-            assert jnp.all(result >= 0.0), f"Negative T at tau={tau}"
+            assert_non_negative(result, name="result", msg=f"Negative T at tau={tau}")
             assert jnp.all(result <= 1.0 + 1e-10), f"T > 1 at tau={tau}"
 
     def test_grayer_than_shell(self, wavelength):

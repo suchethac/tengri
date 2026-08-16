@@ -21,8 +21,7 @@ from tengri.components.dust.attenuation import (
     two_component_dust,
     two_component_dust_fast,
 )
-
-jax.config.update("jax_enable_x64", True)
+from tests._bounds import assert_non_negative
 
 
 def fd_grad(f, x: float, eps: float = 1e-4) -> float:
@@ -85,7 +84,7 @@ class TestPrecomputeDustAgeWeights:
     def test_values_between_zero_and_one(self, age_grid):
         """Sigmoid output is always in [0, 1]."""
         weights = precompute_dust_age_weights(age_grid)
-        assert jnp.all(weights >= 0.0)
+        assert_non_negative(weights, name="weights")
         assert jnp.all(weights <= 1.0)
 
     def test_custom_t_birth(self, age_grid):

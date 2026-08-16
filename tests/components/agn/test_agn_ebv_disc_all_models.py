@@ -13,13 +13,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import jax
 import jax.numpy as jnp
 import pytest
 
-pytestmark = pytest.mark.bounds
+from tests._grad_parity import assert_grad_matches_fd
 
-jax.config.update("jax_enable_x64", True)
+pytestmark = pytest.mark.bounds
 
 _DATA_DIR = Path(__file__).resolve().parents[4] / "data"
 _SILVA04 = _DATA_DIR / "silva04_torus_grid.h5"
@@ -129,6 +128,6 @@ def test_grad_flows_through_ebv(model_name, extra_kwargs, available, why, wavele
         )
         return jnp.log1p(jnp.sum(sed))
 
-    g = jax.grad(loss)(0.1)
+    g = assert_grad_matches_fd(loss, 0.1)
     assert jnp.isfinite(g), f"{model_name}: non-finite gradient through agn_ebv_disc"
     assert float(g) != 0.0, f"{model_name}: inert agn_ebv_disc gradient"

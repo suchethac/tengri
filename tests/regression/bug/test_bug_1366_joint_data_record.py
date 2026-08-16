@@ -37,8 +37,6 @@ import jax
 import numpy as np
 import pytest
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri import (
     FIXED,
     Data,

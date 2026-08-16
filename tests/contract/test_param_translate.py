@@ -3,10 +3,6 @@
 
 import warnings
 
-import jax
-
-jax.config.update("jax_enable_x64", True)
-
 import pytest
 
 from tengri.parameters.translate import (

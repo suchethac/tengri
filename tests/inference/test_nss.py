@@ -19,9 +19,6 @@ import numpy as np
 import pytest
 from scipy.special import erf
 
-jax.config.update("jax_enable_x64", True)
-
-
 # ── Helpers ──────────────────────────────────────────────────────────
 
 

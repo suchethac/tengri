@@ -23,10 +23,10 @@ from tengri.components.stellar.sfh.registry import (
 # Age of the universe today [yr], from the default cosmology — never a
 # literal. SFH formation anchor (age_gyr) for dpl/lnorm shape tests.
 from tengri.cosmology import age_at_z0 as _age_at_z0
+from tests._bounds import assert_non_negative
+from tests._jit_parity import assert_jit_matches_eager
 
 _AGE_UNIV_YR = float(_age_at_z0()) * 1e9
-
-jax.config.update("jax_enable_x64", True)
 
 
 class TestRegistryContents:
@@ -128,7 +128,7 @@ class TestResolveComposed:
             start=0.0,
             end=14e9,
         )
-        assert jnp.all(sfr >= 0)
+        assert_non_negative(sfr, name="sfr")
         # Both components integrate to 10**10 Msun each ⇒ composite ≈ 2e10.
         m_total = float(jnp.trapezoid(sfr, t))
         assert abs(m_total - 2e10) / 2e10 < 0.01
@@ -150,7 +150,7 @@ class TestResolveComposed:
             sfh_exp_tau_gyr=2e9,
             sfh_exp_start_gyr=0.0,
         )
-        assert jnp.all(sfr >= 0)
+        assert_non_negative(sfr, name="sfr")
         m_total = float(jnp.trapezoid(sfr, t))
         expected = 10**10.0 + 10**9.0  # tsnorm + exp, independent masses
         assert abs(m_total - expected) / expected < 0.01
@@ -260,7 +260,7 @@ class TestComposedFunction:
         """Composed function is JIT-compatible."""
         fn, _, _, _ = resolve_sfh(["tsnorm", "burst", "field"])
         t = jnp.logspace(6, 10, 200)
-        jit_fn = jax.jit(
+        sfr = assert_jit_matches_eager(
             lambda t_: fn(
                 t_,
                 log_total_mass=1.0,
@@ -273,9 +273,9 @@ class TestComposedFunction:
                 log_tmax_myr=1.0,
                 gp_x=jnp.zeros(200),
                 k0_half=0.0,
-            )
+            ),
+            t,
         )
-        sfr = jit_fn(t)
         chex.assert_tree_all_finite(sfr)
 
 

@@ -9,6 +9,8 @@ import chex
 import numpy as np
 import pytest
 
+from tests._bounds import assert_non_negative
+
 pytestmark = pytest.mark.bounds
 
 FIXTURE = Path(__file__).resolve().parents[4] / "tests" / "fixtures" / "grahsp" / "netzer_disc.npz"
@@ -119,7 +121,7 @@ def test_netzer_disc_output_properties(fixture):
 
     # Should be finite and non-negative (ignoring padding zeros)
     chex.assert_tree_all_finite(out)
-    assert np.all(out >= 0.0), "Disc spectrum should be non-negative"
+    assert_non_negative(out, name="out", msg="Disc spectrum should be non-negative")
 
 
 def test_netzer_disc_interpolation():
@@ -147,7 +149,7 @@ def test_netzer_disc_interpolation():
 
     assert out.shape == wave_out.shape
     chex.assert_tree_all_finite(out)
-    assert np.all(out >= 0.0)
+    assert_non_negative(out, name="out")
 
 
 def test_jit_compatible():

@@ -36,6 +36,7 @@ from tengri import (
     WavePrecomp,
     builders,
 )
+from tests._jit_parity import assert_jit_matches_eager
 
 pytestmark = pytest.mark.regression_bug
 
@@ -89,8 +90,7 @@ def test_forward_predict_under_jit_with_dust_ir(emission_label):
     forward = ForwardModel.build(sed=model, observation=obs)
     p = {**model.spec.get_fixed_values(), **model.spec.sample(jax.random.PRNGKey(0))}
 
-    fn = jax.jit(lambda pp: forward.predict(pp).photometry())
-    out = fn(p)
+    out = assert_jit_matches_eager(lambda pp: forward.predict(pp).photometry(), p)
     jax.block_until_ready(out)
 
     assert out.shape == (2,)

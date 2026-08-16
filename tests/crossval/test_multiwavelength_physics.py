@@ -12,12 +12,11 @@ References
 """
 
 import chex
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
 
-jax.config.update("jax_enable_x64", True)
+from tests._bounds import assert_non_negative
 
 pytestmark = pytest.mark.crossval
 
@@ -306,7 +305,7 @@ class TestPSDPhysics:
 
         f = jnp.geomspace(1e-12, 1e-6, 200)
         psd = psd_extended_regulator(f, s_reg=1.0, tau_in=1e8, tau_eq=1e9, s_dyn=0.5, tau_dyn=1e7)
-        assert jnp.all(psd >= 0), "Extended regulator PSD must be non-negative"
+        assert_non_negative(psd, name="psd", msg="Extended regulator PSD must be non-negative")
         chex.assert_tree_all_finite(psd)
 
     def test_psd_sigma_scales_amplitude(self):

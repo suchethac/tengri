@@ -2,12 +2,11 @@
 """Tests for parametric double-power-law SFH model (DPL)."""
 
 import chex
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
 
-jax.config.update("jax_enable_x64", True)
+from tests._bounds import assert_non_negative
 
 
 def fd_grad(f, x: float, eps: float = 1e-4) -> float:
@@ -87,7 +86,7 @@ class TestSFHForms:
         sfr = np.array(sfh["sfr_mean"])
         t = np.array(sfh["t_gyr"])
         chex.assert_equal_shape([sfr, t])
-        assert np.all(sfr >= 0.0), f"{sfh_type}: negative SFR"
+        assert_non_negative(sfr, name="sfr", msg=f"{sfh_type}: negative SFR")
         chex.assert_tree_all_finite(sfr)
         dt_yr = np.abs(np.diff(t)) * 1e9
         mass = float(np.sum(sfr[:-1] * dt_yr))

@@ -25,9 +25,7 @@ from tengri.utils.grid_interp import (
     slice_fixed_axes,
 )
 from tengri.utils.interpolation import edges_for_grid
-
-jax.config.update("jax_enable_x64", True)
-
+from tests._bounds import assert_non_negative
 
 pytestmark = pytest.mark.bounds
 
@@ -241,7 +239,7 @@ class TestPreintegrateLines:
 
         chex.assert_shape(result.line_filter_weights, (len(lines), len(filter_waves)))
         chex.assert_tree_all_finite(result.line_filter_weights)
-        assert jnp.all(result.line_filter_weights >= 0.0)
+        assert_non_negative(result.line_filter_weights, name="output")
 
     def test_lines_outside_filters_have_small_weight(self, tophat_filters):
         """Lines far outside filter ranges have near-zero weight.

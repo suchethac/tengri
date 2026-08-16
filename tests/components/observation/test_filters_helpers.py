@@ -100,20 +100,29 @@ class TestSuggest:
         if len(result) < 2:
             pytest.skip("Not enough filters to check sorting")
 
-        # Load all returned filters and verify they're sorted by lambda_eff
+        # Load every returned filter and verify they are sorted by lambda_eff.
+        #
+        # A failed load used to be swallowed by `except Exception: pass` and the
+        # filter dropped. Dropping elements can turn an unsorted sequence into a
+        # sorted one, so a load failure could mask the very ordering bug this
+        # test exists to catch — and if every load failed, `wavelengths` was
+        # empty and the guarded assertion below never ran at all.
         wavelengths = []
+        failed = []
         for name in result:
             try:
                 fc = load([name])[2][0]
                 wave_np = np.asarray(fc.wave)
                 trans_np = np.asarray(fc.trans)
-                lam_eff = compute_effective_wavelength(wave_np, trans_np)
-                wavelengths.append(lam_eff)
-            except Exception:
-                pass
+                wavelengths.append(compute_effective_wavelength(wave_np, trans_np))
+            except Exception as exc:
+                failed.append(f"{name}: {type(exc).__name__}")
 
-        if len(wavelengths) >= 2:
-            assert wavelengths == sorted(wavelengths)
+        assert not failed, f"suggest() returned filters that will not load: {failed}"
+        assert len(wavelengths) == len(result), "a filter was dropped before the sort check"
+        assert wavelengths == sorted(wavelengths), (
+            f"suggest() is not sorted by effective wavelength: {wavelengths}"
+        )
 
     def test_suggest_unknown_coverage_raises(self):
         """Unknown coverage preset raises ValueError."""

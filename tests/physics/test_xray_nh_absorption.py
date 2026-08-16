@@ -33,9 +33,6 @@ from tengri.components.xray.xray import (
     xray_agn_corona_bolometric as xray_agn_corona,
 )
 
-jax.config.update("jax_enable_x64", True)
-
-
 # Morrison & McCammon (1983) Table 2 reference: σ(E)·E³ values
 # (units 10⁻²⁴ cm² · keV³). Computed from the published coefficients
 # at the center of representative bins. These numbers are the contract

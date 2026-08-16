@@ -106,6 +106,11 @@ class TestBatchedPresenceMasking:
             da["data"] = data_flat
             return log_posterior_flat_2arg(init_flat, da)
 
+        # Finiteness only, deliberately: the observed fluxes here are ~1e-26, so
+        # a step proportional to them is ~1e-31 and f(x+h) comes back
+        # bit-identical to f(x-h) — the numerical derivative underflows to zero
+        # while the analytic one is ~-3.6e5. That is the probe hitting the
+        # floating-point floor, not evidence about the gradient.
         grad_wrt_data = jax.grad(logposterior_vs_data)(flux_obs)
 
         # For an absent band (presence[0] = 0.0), the gradient must be exactly zero.

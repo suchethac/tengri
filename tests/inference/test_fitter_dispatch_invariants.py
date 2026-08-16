@@ -25,8 +25,6 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri.config.exceptions import ParameterError
 from tengri.inference.fitter import (
     _AUTO_D_THRESHOLD,

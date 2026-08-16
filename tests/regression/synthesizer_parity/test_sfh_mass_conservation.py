@@ -31,10 +31,7 @@ import pytest
 pytestmark = pytest.mark.regression_paper
 from pathlib import Path
 
-import jax
 import jax.numpy as jnp
-
-jax.config.update("jax_enable_x64", True)
 
 from tengri.analysis.simulate import photometry_from_sfh, sed_from_sfh
 

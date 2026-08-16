@@ -17,10 +17,9 @@ import pytest
 from numpy.testing import assert_allclose
 
 from tengri.observation.spectrum import blend_emission_lines
+from tests._bounds import assert_non_negative
 
 pytestmark = pytest.mark.bounds
-
-jax.config.update("jax_enable_x64", True)
 
 
 def fd_grad(f, x: float, eps: float = 1e-4) -> float:
@@ -113,7 +112,7 @@ class TestSingleLine:
         """Output should be non-negative everywhere."""
         lam, lum = halpha
         spec = blend_emission_lines(lam, lum, 500.0, wave_grid)
-        assert jnp.all(spec >= 0), "Spectrum should be non-negative"
+        assert_non_negative(spec, name="spec", msg="Spectrum should be non-negative")
 
 
 # ── Multi-line blending tests ─────────────────────────────────────
