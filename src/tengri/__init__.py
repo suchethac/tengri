@@ -401,6 +401,9 @@ sys.modules["tengri.io"] = io
 #   tengri.inference — Fitter, CatalogFitter, PopulationFitter, VIConfig, ...
 #   tengri.config    — *Config dataclasses, exceptions
 #   tengri.observation — Photometry, Spectroscopy, NoiseModel, ...
+#
+# ``plot`` is deliberately absent: it is resolved lazily in ``__getattr__``
+# below, because importing it pulls matplotlib into every ``import tengri``.
 from tengri import (
     citations,
     config,
@@ -408,7 +411,6 @@ from tengri import (
     inference,
     measure,
     pipeline,
-    plot,
     results,
     units,
 )
@@ -667,19 +669,10 @@ __all__ = [  # noqa: RUF022
 # Plotting utilities
 # Import observation module for namespace alias (already in imports above, adding as alias)
 from tengri import observation
-from tengri.analysis.plotting import (
-    COLORS,
-    SDSS_WAVE_EFF,
-    SPECTRAL_FEATURES,
-    diagnostics_table,
-    plot_corner_comparison,
-    plot_sed_fit,
-    plot_sfh,
-    plot_sfh_comparison,
-    plot_spectrum_fit,
-    safe_corner,
-    setup_style,
-)
+
+# NOTE: the plotting names that used to be imported here are now resolved
+# lazily in ``__getattr__`` (see ``_LAZY_PLOTTING``). They remain in
+# ``__all__`` and ``tengri.<name>`` still works; only the *timing* changed.
 from tengri.inference.catalog import Catalog
 from tengri.inference.catalog_fitter import CatalogFitter
 from tengri.inference.fitter import Fitter
@@ -832,8 +825,46 @@ _DEMOTED_CONFIGS = frozenset(
     {"AGNConfig", "DustConfig", "NebularConfig", "SEDModelConfig", "SFHConfig"}
 )
 
+# Plotting names resolved on first access rather than at import (#1852).
+#
+# Importing them eagerly pulled matplotlib into *every* ``import tengri``,
+# including inference runs, CI shards and slurm tasks that never draw
+# anything. Measured on a clean install: ``import tengri`` 2.43 s, of which
+# ``import matplotlib.pyplot`` alone is 0.77 s -- 32%, paid by everyone.
+#
+# This does not shrink the install. matplotlib stays a hard dependency
+# because nifty8 requires it, so pip fetches it either way; what changes is
+# when it is loaded. ``tengri.plot_sed_fit`` and ``tengri.plot`` behave
+# exactly as before, one attribute lookup later.
+_LAZY_PLOTTING = frozenset(
+    {
+        "COLORS",
+        "SDSS_WAVE_EFF",
+        "SPECTRAL_FEATURES",
+        "diagnostics_table",
+        "plot_corner_comparison",
+        "plot_sed_fit",
+        "plot_sfh",
+        "plot_sfh_comparison",
+        "plot_spectrum_fit",
+        "safe_corner",
+        "setup_style",
+    }
+)
+
 
 def __getattr__(name: str) -> object:
+    if name == "plot":
+        import tengri.plot as _plot
+
+        globals()["plot"] = _plot  # cache: later lookups skip __getattr__
+        return _plot
+    if name in _LAZY_PLOTTING:
+        import tengri.analysis.plotting as _plotting
+
+        obj = getattr(_plotting, name)
+        globals()[name] = obj
+        return obj
     if name in _RENAMED_SYMBOLS:
         new_name, new_path = _RENAMED_SYMBOLS[name]
         from tengri._deprecated import deprecated_attribute
