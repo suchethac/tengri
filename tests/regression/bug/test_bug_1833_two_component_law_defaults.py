@@ -250,3 +250,57 @@ def test_per_component_overrides_are_still_honored(dust_ssp, uv_obs):
         f"delta_diff=-0.6 was set per-component and did not move the SED (rel {moved:.3e}); "
         "the narrowing dropped an explicit override (#1833)."
     )
+
+
+@pytest.mark.parametrize("law", ["kriek_conroy", "calzetti"])
+def test_the_precompute_path_bakes_the_same_curve(law, dust_ssp, uv_obs):
+    """The energy-balance LUT must not disagree with the direct path.
+
+    ``resolve_bc_diff_law_params`` has three callers, and the third is
+    ``SEDModel``'s energy-balance LUT builder for the ``WavePrecomp`` path --
+    which every fitter turns on, since each resolves ``approx="auto"`` to it
+    for photometry. Narrowing only the component would leave the LUT baking a
+    curve *with* the bump while ``apply()`` evaluated one without it: one model
+    carrying two screens depending on whether ``approx`` was on, and invisible
+    to any test that exercises a single path (cf. #1665, #1434).
+
+    ``calzetti`` is the control -- it reads no shape parameter, so the
+    narrowing cannot reach it and this pins that the harness itself compares
+    like with like.
+    """
+    from tengri import WavePrecomp
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        exact = SEDModel.build(
+            ssp_data=dust_ssp,
+            observation=uv_obs,
+            sfh={"type": "dpl", "all_params": FIXED},
+            dust=_two(law),
+            redshift=Fixed(0.5),
+        )
+        precomp = SEDModel.build(
+            ssp_data=dust_ssp,
+            observation=uv_obs,
+            sfh={"type": "dpl", "all_params": FIXED},
+            dust=_two(law),
+            redshift=Fixed(0.5),
+            approx=WavePrecomp(n_z=8, z_min=0.0, z_max=2.0),
+        )
+        params = dict(exact.spec.sample(jax.random.PRNGKey(0)))
+        a = np.asarray(exact.predict_photometry(params))
+        b = np.asarray(precomp.predict_photometry(params))
+
+    assert np.all(np.isfinite(a)) and np.all(np.isfinite(b)), (
+        f"'{law}': non-finite photometry (exact finite={np.all(np.isfinite(a))}, "
+        f"precomp finite={np.all(np.isfinite(b))})"
+    )
+    # Band-averaging makes the two paths agree to a residual, not to the bit;
+    # the defect this guards against is a whole missing Drude bump, which is
+    # 128% -- orders above any quadrature difference.
+    diff = _rel(a, b)
+    assert diff < 0.05, (
+        f"'{law}': exact and WavePrecomp photometry differ by {diff:.4e}. The LUT and "
+        "apply() are not evaluating the same curve, so the model carries two screens "
+        "depending on whether approx is on (#1833)."
+    )
