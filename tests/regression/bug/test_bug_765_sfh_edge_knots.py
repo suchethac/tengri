@@ -39,6 +39,7 @@ from tengri.components.stellar.sfh.nonparametric import (
     psb_continuity,
     sfh_bin_edges_yr,
 )
+from tests._bounds import assert_non_negative
 
 pytestmark = pytest.mark.conservation
 
@@ -63,7 +64,7 @@ def test_sfh_bin_edges_yr_continuity_flex_matches_analytic():
     expect = np.concatenate([[0.0, a[0]], a[0] + np.cumsum(dt), [a[2]]])
     assert edges.shape == expect.shape
     assert np.allclose(edges, expect, rtol=1e-9)
-    assert np.all(np.diff(edges) >= 0.0)
+    assert_non_negative(np.diff(edges), name="output")
 
 
 def test_sfh_bin_edges_yr_psb_continuity():
@@ -93,7 +94,7 @@ def test_inject_edge_knots_monotonic_static_and_brackets_edges():
     lo, hi = float(fine[0]), float(fine[-1])
     merged = np.asarray(_inject_edge_knots(fine, edges, lo, hi))
     assert merged.shape[0] == 200 + 2 * 3  # static size
-    assert np.all(np.diff(merged) >= 0.0)  # sorted ascending
+    assert_non_negative(np.diff(merged), name="output")  # sorted ascending
     # Each interior edge is bracketed by a knot just below and just above.
     for e in [1.0e9, 5.0e9]:
         assert np.any(merged < e) and np.any(merged > e)

@@ -14,13 +14,13 @@ import jax
 import pytest
 
 pytestmark = pytest.mark.bounds
-jax.config.update("jax_enable_x64", True)
 
 import jax.numpy as jnp
 import numpy as np
 import pytest
 
 from tengri.components.igm import igm_transmission
+from tests._jit_parity import assert_jit_matches_eager
 
 
 def fd_grad(f, x: float, eps: float = 1e-4) -> float:
@@ -135,9 +135,8 @@ class TestIGMConvention:
 
     def test_jit_compatible(self):
         """igm_transmission is JIT-compilable."""
-        f = jax.jit(igm_transmission)
         wave = jnp.array([1216.0 * 4.0, 912.0 * 5.0])
-        result = f(wave, 3.0)
+        result = assert_jit_matches_eager(igm_transmission, wave, 3.0)
         chex.assert_tree_all_finite(result)
 
     @pytest.mark.xfail(

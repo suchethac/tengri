@@ -29,8 +29,6 @@ from tengri.inference.preconditioning import (
     preconditioned_logdensity,
 )
 
-jax.config.update("jax_enable_x64", True)
-
 
 def _ill_conditioned_metric(n=6, cond=1e5, seed=0):
     """A PD matrix with a prescribed condition number and a non-trivial rotation."""

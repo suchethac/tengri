@@ -15,8 +15,8 @@ from tengri.components.stellar.sfh.psd_models import (
     psd_matern,
     psd_to_sqrt_power,
 )
-
-jax.config.update("jax_enable_x64", True)
+from tests._bounds import assert_non_negative
+from tests._jit_parity import assert_jit_matches_eager
 
 
 def fd_grad(f, x: float, eps: float = 1e-4) -> float:
@@ -83,9 +83,8 @@ class TestPSDDRW:
 
     def test_psd_drw_is_jittable(self):
         """PSD function can be JIT-compiled."""
-        fn = jax.jit(psd_drw)
         omega = jnp.linspace(0, 10, 50)
-        p = fn(omega, 1.0, 1e8)
+        p = assert_jit_matches_eager(psd_drw, omega, 1.0, 1e8)
         chex.assert_shape(p, (50,))
 
     def test_psd_drw_has_gradients(self):
@@ -180,7 +179,7 @@ class TestAmplitudeOperator:
         """Amplitude operator is non-negative."""
         p = jnp.array([1.0, 0.5, 0.1, 0.01])
         amp = psd_to_sqrt_power(p, d_grid=0.01)
-        assert jnp.all(amp >= 0)
+        assert_non_negative(amp, name="amp")
 
     def test_amplitude_zero_psd(self):
         """Near-zero PSD gives near-zero amplitude (floor at 1e-30)."""

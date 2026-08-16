@@ -11,8 +11,8 @@ import numpy as np
 from numpy.testing import assert_allclose
 
 from tengri.components.dust.attenuation import two_component_dust
-
-jax.config.update("jax_enable_x64", True)
+from tests._bounds import assert_non_negative
+from tests._jit_parity import assert_jit_matches_eager
 
 _CF_KWARGS = {"law_bc": "power_law", "law_diff": "power_law"}
 
@@ -52,7 +52,7 @@ class TestCharlotFall:
     def test_values_between_0_and_1(self, wavelength, age_grid):
         """Attenuation factor is in [0, 1]."""
         atten = two_component_dust(wavelength, age_grid, 1.0, 0.5, **_CF_KWARGS)
-        assert jnp.all(atten >= 0)
+        assert_non_negative(atten, name="atten")
         assert jnp.all(atten <= 1)
 
     def test_no_dust_gives_unity(self, wavelength, age_grid):
@@ -96,8 +96,13 @@ class TestCharlotFall:
 
     def test_is_jittable(self, wavelength, age_grid):
         """two_component_dust is JIT-compatible."""
-        fn = jax.jit(lambda w, a, tv1, tv2: two_component_dust(w, a, tv1, tv2, **_CF_KWARGS))
-        atten = fn(wavelength, age_grid, 0.5, 0.3)
+        atten = assert_jit_matches_eager(
+            lambda w, a, tv1, tv2: two_component_dust(w, a, tv1, tv2, **_CF_KWARGS),
+            wavelength,
+            age_grid,
+            0.5,
+            0.3,
+        )
         chex.assert_shape(atten, (50, 100))
 
     def test_has_gradients(self, wavelength, age_grid):

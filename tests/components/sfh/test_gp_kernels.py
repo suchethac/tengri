@@ -12,8 +12,6 @@ from tengri.observation.noise import (
     matern32_kernel,
 )
 
-jax.config.update("jax_enable_x64", True)
-
 pytestmark = pytest.mark.bounds
 
 

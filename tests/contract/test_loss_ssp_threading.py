@@ -32,8 +32,6 @@ from tengri.inference.loss_functions import build_loss_fn
 from tengri.observation.photometry import FilterCurve
 from tengri.observation.spectroscopy import Spectroscopy
 
-jax.config.update("jax_enable_x64", True)
-
 pytestmark = pytest.mark.contract
 
 
@@ -330,7 +328,7 @@ def test_catalog_of_n_galaxies_threads_and_reuses_one_composite(synthetic_ssp_wi
     )
 
 
-def test_two_fitters_on_one_forward_model_share_one_compile(synthetic_ssp_wide):
+def test_two_fitters_on_one_forward_model_share_the_composite(synthetic_ssp_wide):
     """Sequential per-galaxy fits must reuse ONE compiled program.
 
     Every ``Fitter`` resolves ``approx`` and clones the model, and the compile
@@ -339,11 +337,12 @@ def test_two_fitters_on_one_forward_model_share_one_compile(synthetic_ssp_wide):
     their ``_engine_cache_key()`` values were already identical. Fixed by memoizing
     the resolved clone per (source model, resolved config), so identity-keyed
     caches hit without changing what any cache key means.
+
+    (This docstring came from ``test_two_fitters_on_one_forward_model_share_one_compile``,
+    which sat directly above with the same explanation and an empty body — it
+    asserted nothing and could never fail, while this test already checked
+    exactly what it described.)
     """
-
-
-def test_two_fitters_on_one_forward_model_share_the_composite(synthetic_ssp_wide):
-    """Sequential per-galaxy fits should reuse one compiled composite."""
     from tengri import ForwardModel
     from tengri.inference.backends.mcmc._shared import _get_flat_logdensity
 

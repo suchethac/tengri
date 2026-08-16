@@ -23,9 +23,6 @@ from tengri.inference.backends.vi.native import (
     build_native_vi_catalog_nonlinear_engine,
 )
 
-jax.config.update("jax_enable_x64", True)
-
-
 # ---------------------------------------------------------------------------
 # Shared toy model
 # ---------------------------------------------------------------------------

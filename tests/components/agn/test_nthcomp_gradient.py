@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Regression tests for nthcomp gradient stability.
 
-Tests the JAX autodiff behavior when division-by-near-zero occurs in where
-clauses, which can produce NaN gradients even when the unselected branch is
-masked. This tests the fix for the double-where safety pattern.
+Covers the JAX autodiff behavior of the trilinear nthcomp lookup: that each of
+its three axes is live where the table supports it, exactly frozen where the
+clamp takes over, and that both autodiff modes survive the cotangent
+magnitudes ``disc.py`` actually produces (#1206, #1822).
 """
 
 import pytest
@@ -17,6 +18,7 @@ from tengri.components.agn._nthcomp import (
     _is_table_available,
     nthcomp_lnu_interp,
 )
+from tests._grad_parity import assert_grad_matches_fd
 
 
 @pytest.mark.skipif(not _is_table_available(), reason="nthcomp templates not loaded")
@@ -31,153 +33,272 @@ class TestNthcompGradientStability:
         grid = jnp.array([1.0, 1.0, 2.0, 3.0, 4.0], dtype=jnp.float32)
         val = jnp.array(1.0, dtype=jnp.float32)
 
+        # This should NOT produce NaN or Inf
         def loss(v):
             _, frac = _clamp_interp_index(v, grid)
             return jnp.sum(frac)
 
-        # This should NOT produce NaN or Inf
-        grad = jax.grad(loss)(val)
+        grad = assert_grad_matches_fd(loss, val)
         assert jnp.isfinite(grad), f"Expected finite gradient, got {grad}"
 
     def test_clamp_interp_index_gradient_at_boundary(self):
-        """Verify finite gradients at grid boundaries."""
+        """The clamp's derivative by value, because ``isfinite`` cannot see a dead axis.
+
+        On a uniform grid of span 1 the fractional index has three distinct
+        derivatives, and all three are worth pinning:
+
+        * ``1/span`` = 1.0 strictly inside a cell
+        * ``0.5`` exactly on a node -- JAX averages the two one-sided
+          derivatives through the ``where``, so a fit that lands on a node takes
+          half the step it would take anywhere else
+        * exactly ``0.0`` outside the grid, where the clamp holds ``frac`` fixed
+
+        The version this replaces evaluated at ``grid[0]``, ``grid[2]`` and
+        ``grid[-1]`` -- all three ON nodes, all three 0.5 -- and asserted only
+        that they were finite. It never reached the clamped region it is named
+        for, and zero is finite, so it would have passed just as well if every
+        one of them had been dead.
+        """
         grid = jnp.array([1.0, 2.0, 3.0, 4.0, 5.0], dtype=jnp.float32)
 
         def loss(v):
             _, frac = _clamp_interp_index(v, grid)
             return jnp.sum(frac)
 
-        # Test at the boundary where clamping takes effect
-        grad_at_min = jax.grad(loss)(grid[0])
-        grad_at_max = jax.grad(loss)(grid[-1])
-        grad_in_middle = jax.grad(loss)(grid[2])
-        assert jnp.isfinite(grad_at_min), f"Gradient at min not finite: {grad_at_min}"
-        assert jnp.isfinite(grad_at_max), f"Gradient at max not finite: {grad_at_max}"
-        assert jnp.isfinite(grad_in_middle), f"Gradient in middle not finite: {grad_in_middle}"
-
-    def test_nthcomp_lnu_interp_gradient_at_grid_edges(self):
-        """Finite *and* live inside the table; identically zero outside it (#1822).
-
-        The gamma axis spans [1.5, 3.5] and kTe [0.05, 0.5]. This test used to
-        evaluate at gamma=1.3 with kTe=5.0 — both outside — and assert only
-        ``isfinite``. Every probe therefore sat in the clamped region where the
-        gradient is exactly 0.0, which ``isfinite`` accepts, so a test named for
-        the grid edges never reached a live one.
-        """
-        if not _is_table_available():
-            pytest.skip("nthcomp templates not loaded")
-        nu = jnp.linspace(1e12, 1e19, 50, dtype=jnp.float32)
-
-        def loss(gamma):
-            lnu = nthcomp_lnu_interp(
-                nu, gamma, jnp.array(0.25, dtype=jnp.float32), jnp.array(0.1, dtype=jnp.float32)
-            )
-            return jnp.sum(lnu)
-
-        # Inside the table: finite AND non-zero, including hard against both ends.
-        for gamma_val in [1.51, 2.0, 2.5, 3.49]:
-            gamma = jnp.array(gamma_val, dtype=jnp.float32)
-            grad = jax.grad(loss)(gamma)
-            assert jnp.isfinite(grad), f"Gradient not finite at gamma={gamma_val}: {grad}"
-            assert grad != 0.0, (
-                f"Gradient is exactly zero at gamma={gamma_val}, which is inside the "
-                "table — the rule has stopped differentiating gamma"
-            )
-
-        # Outside: clamped, so exactly zero. Asserted rather than tolerated, so
-        # that a fit initialized out here is a known-dead configuration and not a
-        # surprise (#1521, #1684 are the same silent-clamp shape).
-        for gamma_val in [1.0, 1.45, 3.6, 4.0]:
-            gamma = jnp.array(gamma_val, dtype=jnp.float32)
-            grad = jax.grad(loss)(gamma)
-            assert grad == 0.0, (
-                f"gamma={gamma_val} is outside the table's [1.5, 3.5] and should clamp "
-                f"to a zero gradient, got {grad}"
-            )
-
-    def test_nthcomp_lnu_interp_gradient_near_zero_kTbb(self):
-        """The kTe gradient is live at small seed temperature (#1822).
-
-        This swept kTe = 1, 2, 5 keV — all above the table's 0.5 keV ceiling, so
-        all clamped — and asserted only ``isfinite``. Zero is finite, so it was
-        green on a derivative that was identically zero, which is precisely the
-        failure this file's docstring says it exists to catch. Probes are now
-        inside the grid, and agreement with a central difference is asserted:
-        "non-zero" alone would pass on any wrong constant.
-        """
-        if not _is_table_available():
-            pytest.skip("nthcomp templates not loaded")
-        nu = jnp.linspace(1e12, 1e19, 50, dtype=jnp.float32)
-
-        def loss(kte):
-            lnu = nthcomp_lnu_interp(
-                nu,
-                jnp.array(2.5, dtype=jnp.float32),
-                kte,
-                jnp.array(0.01, dtype=jnp.float32),  # Very small kTbb
-            )
-            return jnp.sum(lnu)
-
-        for kte_val in [0.12, 0.25, 0.45]:
-            kte = jnp.array(kte_val, dtype=jnp.float32)
-            grad = jax.grad(loss)(kte)
-            assert jnp.isfinite(grad), f"Gradient not finite at kTe={kte_val}: {grad}"
-            assert grad != 0.0, (
-                f"d/d(kTe) is exactly zero at kTe={kte_val}, inside the table — the "
-                "custom_jvp has stopped supplying the kTe tangent (#1822)"
-            )
-            h = 1e-4
-            central = float((loss(kte + h) - loss(kte - h)) / (2 * h))
-            assert central != 0.0, "setup: reference is zero and cannot judge the tangent"
-            rel = abs(float(grad) - central) / abs(central)
-            assert rel < 0.10, (
-                f"d/d(kTe) = {float(grad):.5e} disagrees with the central difference "
-                f"{central:.5e} by {rel:.1%} at kTe={kte_val}"
-            )
-
-    def test_nthcomp_lnu_interp_loss_gradient_finite(self):
-        """A mock likelihood that is actually a function of gamma (#1822).
-
-        The previous version compared a model of ~1e-18 against ``observed=1.0``
-        with ``sigma=0.1``, so ``chi2 = sum((0 - 1)/0.1)**2 = 1.0000e+04``
-        *exactly*, at every gamma — verified identical at 1.2 and 2.2. It
-        differentiated a constant, and its analytic gradient (~1e-16) was
-        numerical dust that ``isfinite`` happily accepted.
-
-        The data are now generated from the model itself at a reference gamma,
-        so chi2 has a genuine minimum there and a real slope away from it.
-        """
-        if not _is_table_available():
-            pytest.skip("nthcomp templates not loaded")
-        nu = jnp.linspace(1e12, 1e19, 100, dtype=jnp.float32)
-        kte = jnp.array(0.25, dtype=jnp.float32)
-        ktbb = jnp.array(0.1, dtype=jnp.float32)
-
-        observed_lnu = nthcomp_lnu_interp(nu, jnp.array(2.0, dtype=jnp.float32), kte, ktbb)
-        uncertainty = jnp.maximum(0.05 * observed_lnu, 1e-30)
-
-        def mock_likelihood(gamma):
-            model_lnu = nthcomp_lnu_interp(nu, gamma, kte, ktbb)
-            return jnp.sum(((model_lnu - observed_lnu) / uncertainty) ** 2)
-
-        # The objective must actually vary, or the gradient assertions below are
-        # vacuous — this is the check whose absence let a constant through.
-        chi2_at = [float(mock_likelihood(jnp.array(g, jnp.float32))) for g in (1.7, 2.0, 2.4)]
-        assert chi2_at[1] < chi2_at[0] and chi2_at[1] < chi2_at[2], (
-            f"chi2 has no minimum at the generating gamma: {chi2_at} — the mock "
-            "likelihood is not a function of gamma"
+        interior = float(jax.grad(loss)(jnp.array(2.5, dtype=jnp.float32)))
+        assert interior == pytest.approx(1.0), (
+            f"interior d(frac)/dv should be 1/span = 1.0, got {interior}"
         )
 
-        for gamma_val in [1.7, 1.9, 2.2, 2.4]:
+        for node in (grid[0], grid[2], grid[-1]):
+            on_node = float(jax.grad(loss)(node))
+            assert on_node == pytest.approx(0.5), (
+                f"on node {float(node)} the two-sided average should be 0.5, got {on_node}"
+            )
+
+        for outside in (0.5, 6.0):
+            clamped = float(jax.grad(loss)(jnp.array(outside, dtype=jnp.float32)))
+            assert jnp.isfinite(clamped)
+            assert clamped == 0.0, (
+                f"outside the grid the clamp must hold frac fixed, so the "
+                f"gradient is exactly zero; at v={outside} it is {clamped}. If "
+                f"this became nonzero the clamp changed and the dead-zone "
+                f"behavior pinned in this file is stale."
+            )
+
+    #: Measured on the shipped table (#1822): the gamma axis is live on
+    #: [1.5, 3.5]. Outside it the summed L_nu is bit-identical and the gradient
+    #: is exactly 0.0. The endpoints themselves are excluded from the
+    #: finite-difference checks -- a one-sided derivative at a clamp is not
+    #: something a central difference can reference.
+    GAMMA_LIVE = (1.7, 2.5, 3.0)
+    GAMMA_CLAMPED = (1.0, 1.3, 4.0)
+
+    #: The kTe axis, measured the same way: 15 nodes spanning [0.05, 0.5] keV at
+    #: a spacing of 0.0321. This is RELAGN's *warm* Comptonization region, not a
+    #: hot corona, and ``agn_kt_warm`` is declared ``Uniform(0.1, 0.5)`` --
+    #: entirely inside it. Probes sit off-node: on a node the two one-sided
+    #: derivatives average, so a central difference is referencing something
+    #: else (see the 0.5 pinned above for the clamp's own version of this).
+    KTE_LIVE = (0.12, 0.25, 0.32)
+    KTE_CLAMPED = (0.01, 1.0, 400.0)
+
+    @staticmethod
+    def _sum_lnu(gamma, kte=0.25, ktbb=0.1, n_nu=50):
+        nu = jnp.linspace(1e12, 1e19, n_nu, dtype=jnp.float32)
+        return jnp.sum(
+            nthcomp_lnu_interp(
+                nu,
+                gamma,
+                jnp.array(kte, dtype=jnp.float32),
+                jnp.array(ktbb, dtype=jnp.float32),
+            )
+        )
+
+    @pytest.mark.parametrize("gamma_val", GAMMA_LIVE)
+    def test_gamma_gradient_is_live_inside_the_table(self, gamma_val):
+        """Inside [1.5, 3.5] the gamma gradient must be nonzero AND correct.
+
+        The version this replaces asserted only ``isfinite``, and swept
+        ``gamma = 1.3`` -- which is *below* the table, where the gradient is
+        exactly zero. It was named for the grid edges and never reached a live
+        one, so it could not have failed for a frozen gamma axis.
+
+        The step and tolerance are explicit because nthcomp reads a **float32**
+        lookup table -- and does so whatever dtype it is handed, so promoting
+        the inputs to float64 does not help. Summing 50 float32 samples of a
+        ~1e-18 spectrum leaves the central difference with about three good
+        digits, and no step recovers more: measured relative agreement is
+        9e-4 at h/x = 1e-3, degrading to 5e-2 by h/x = 1e-5 as cancellation
+        takes over. 1e-3 is the optimum, so it is named rather than left to the
+        helper's default of 1e-5.
+
+        Before ``atol`` defaulted to 0.0 this comparison was inert: the
+        gradients here are ~1e-18 against the old fixed floor of 1e-8, so
+        substituting zero for the analytic gradient still passed. The
+        ``!= 0.0`` assertion below was carrying the whole test.
+        """
+        gamma = jnp.array(gamma_val, dtype=jnp.float32)
+        grad = assert_grad_matches_fd(self._sum_lnu, gamma, rtol=3e-2, eps=1e-3 * gamma_val)
+        assert float(grad) != 0.0, (
+            f"gamma={gamma_val} is inside the table but its gradient is exactly "
+            f"zero, so a fit cannot move here"
+        )
+
+    @pytest.mark.parametrize("gamma_val", GAMMA_CLAMPED)
+    def test_gamma_is_frozen_outside_the_table(self, gamma_val):
+        """Outside [1.5, 3.5] the spectrum is frozen and the gradient is zero.
+
+        Pinned as measured behavior, not endorsed: a fit initialized out here
+        cannot move, because the gradient is exactly 0.0 rather than merely
+        small. Asserting it makes the dead zone visible, and makes a future
+        bounds change loud.
+        """
+        clamped_to = 1.5 if gamma_val < 1.5 else 3.5
+        frozen = float(self._sum_lnu(jnp.array(clamped_to, dtype=jnp.float32)))
+        here = float(self._sum_lnu(jnp.array(gamma_val, dtype=jnp.float32)))
+
+        assert here == frozen, (
+            f"gamma={gamma_val} should return the value at the clamped edge "
+            f"{clamped_to}; got {here} vs {frozen}"
+        )
+        grad = float(jax.grad(self._sum_lnu)(jnp.array(gamma_val, dtype=jnp.float32)))
+        assert grad == 0.0, f"expected an exactly zero gradient in the clamped region, got {grad}"
+
+    def test_kte_changes_the_spectrum_inside_the_table(self):
+        """kTe is an axis of the trilinear table, and it does vary the spectrum.
+
+        #1822 reported the opposite -- "sum(L_nu) is bit-identical for kTe in
+        (1, 20, 400) keV at every (gamma, kTbb) corner measured" -- and that
+        measurement reproduces exactly. But all three probes are above the
+        table's 0.5 keV ceiling, so all three clamp to the same edge and return
+        ``f(0.50)``. That is correct edge-clamping, not an ignored parameter,
+        and this test exists so nobody re-fixes a working interpolation.
+
+        This file previously carried that reading as a ``strict=True`` xfail
+        asserting kTe was inert. It passed -- the probes really are identical --
+        which is the trap: a strict xfail is a claim that something is broken,
+        and one written from a wrong diagnosis stays green while pinning the
+        error in place.
+
+        kTbb is swept alongside as a control. If the response were a global
+        scale rather than a per-axis one, both would move together.
+        """
+        gamma = jnp.array(2.0, dtype=jnp.float32)
+
+        cold = float(self._sum_lnu(gamma, kte=0.05))
+        hot = float(self._sum_lnu(gamma, kte=0.5))
+        assert hot / cold == pytest.approx(4.5, rel=0.1), (
+            f"measured 4.5x across the kTe axis [0.05, 0.5]; got {hot / cold:.3f} "
+            f"({cold!r} -> {hot!r})"
+        )
+
+        ktbb_vals = {float(self._sum_lnu(gamma, ktbb=b)) for b in (0.001, 0.05, 0.3)}
+        assert len(ktbb_vals) == 3, (
+            "kTbb is the control for the kTe measurement above; if it is inert "
+            "too then the interpolation is frozen and neither number means what "
+            "it says"
+        )
+
+    @pytest.mark.parametrize("kte_val", KTE_LIVE)
+    def test_kte_gradient_is_live_inside_the_table(self, kte_val):
+        """Inside [0.05, 0.5] keV the kTe gradient must be nonzero AND correct (#1822).
+
+        The ``custom_jvp`` rule unpacked ``_, _, d_gamma, _, _`` and returned
+        ``fd_grad * d_gamma``, discarding the kTe tangent entirely, so
+        ``d/d(agn_kt_warm)`` was exactly 0.0 everywhere -- including across the
+        whole of its declared ``Uniform(0.1, 0.5)`` prior, where the forward
+        response is 4.5x. A gradient fit left it at its initial value and
+        returned the prior as though it had been fitted.
+
+        The test this replaces swept kTe = 1, 2, 5 keV -- all above the ceiling,
+        so all clamped -- and asserted only ``isfinite``. Zero is finite, so it
+        was green on a derivative that was identically zero, which is precisely
+        the failure this file's docstring says it exists to catch.
+
+        Step and tolerance are measured, as for gamma: at h/x = 1e-3 the
+        analytic and central-difference values agree to between 0.1% and 0.7%
+        across these probes, degrading to ~3% by h/x = 1e-4 as float32
+        cancellation takes over.
+        """
+        kte = jnp.array(kte_val, dtype=jnp.float32)
+        grad = assert_grad_matches_fd(
+            lambda k: self._sum_lnu(jnp.array(2.0, dtype=jnp.float32), kte=k),
+            kte,
+            rtol=3e-2,
+            eps=1e-3 * kte_val,
+        )
+        assert float(grad) != 0.0, (
+            f"kTe={kte_val} is inside the table but d/d(kTe) is exactly zero -- "
+            f"the custom_jvp has stopped supplying the kTe tangent (#1822)"
+        )
+
+    @pytest.mark.parametrize("kte_val", KTE_CLAMPED)
+    def test_kte_is_frozen_outside_the_table(self, kte_val):
+        """Outside [0.05, 0.5] keV the spectrum is frozen and the gradient is zero.
+
+        The same dead zone pinned for gamma, and the one the issue's probes
+        landed in. ``agn_kt_warm``'s declared prior does not reach here, so this
+        is documentation of the clamp rather than a fit-reachable regime.
+        """
+        clamped_to = 0.05 if kte_val < 0.05 else 0.5
+        gamma = jnp.array(2.0, dtype=jnp.float32)
+
+        frozen = float(self._sum_lnu(gamma, kte=clamped_to))
+        here = float(self._sum_lnu(gamma, kte=kte_val))
+        assert here == frozen, (
+            f"kTe={kte_val} should return the value at the clamped edge "
+            f"{clamped_to}; got {here} vs {frozen}"
+        )
+
+        grad = float(
+            jax.grad(lambda k: self._sum_lnu(gamma, kte=k))(jnp.array(kte_val, dtype=jnp.float32))
+        )
+        assert grad == 0.0, f"expected an exactly zero gradient in the clamped region, got {grad}"
+
+    def test_mock_likelihood_has_a_minimum_a_fit_could_find(self):
+        """An integration check on a likelihood that is actually a function of gamma.
+
+        The version this replaces compared a model of order 1e-18 against
+        ``observed_lnu = ones``, so chi2 was ``sum((0 - 1) / 0.1)**2`` = 1.0000e4
+        at *every* gamma -- verified identical at 1.2 and 2.2. It differentiated
+        a constant, and its analytic gradient was numerical dust (~1e-16 against
+        a finite difference of exactly 0).
+
+        Generating the data from the model at a known gamma gives a chi2 with a
+        real minimum, which is what an inference run actually descends.
+        """
+        truth = jnp.array(2.0, dtype=jnp.float32)
+        # 50 points, matching _sum_lnu: a second grid size is a second XLA
+        # compile of the same kernel, and this file is in the fast tier.
+        nu = jnp.linspace(1e12, 1e19, 50, dtype=jnp.float32)
+
+        def model(gamma):
+            return nthcomp_lnu_interp(
+                nu, gamma, jnp.array(0.25, dtype=jnp.float32), jnp.array(0.1, dtype=jnp.float32)
+            )
+
+        observed = model(truth)
+        uncertainty = 0.1 * jnp.maximum(observed, jnp.max(observed) * 1e-3)
+
+        def chi2(gamma):
+            return jnp.sum(((model(gamma) - observed) / uncertainty) ** 2)
+
+        assert float(chi2(truth)) == pytest.approx(0.0, abs=1e-6), (
+            "chi2 at the generating gamma is not zero; the mock data and the "
+            "model disagree, so nothing below means what it says"
+        )
+
+        for gamma_val, expected_sign in ((1.8, -1.0), (2.2, +1.0), (2.6, +1.0)):
             gamma = jnp.array(gamma_val, dtype=jnp.float32)
-            grad = jax.grad(mock_likelihood)(gamma)
-            assert jnp.isfinite(grad), (
-                f"Mock likelihood gradient not finite at gamma={gamma_val}: {grad}"
+            grad = float(jax.grad(chi2)(gamma))
+            assert jnp.isfinite(grad)
+            assert grad != 0.0, f"chi2 gradient is exactly zero at gamma={gamma_val}"
+            assert grad * expected_sign > 0, (
+                f"at gamma={gamma_val} the chi2 gradient should point away from "
+                f"the minimum at {float(truth)}, got {grad}"
             )
-            assert grad != 0.0, (
-                f"Mock likelihood gradient is exactly zero at gamma={gamma_val} — "
-                "the objective is not seeing gamma"
-            )
+            assert float(chi2(gamma)) > 0.0
 
 
 if __name__ == "__main__":

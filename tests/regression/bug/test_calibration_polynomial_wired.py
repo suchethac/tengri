@@ -35,8 +35,6 @@ import pytest
 import tengri
 from tengri import FIXED, Fixed, Observation, SEDModel, Spectroscopy
 
-jax.config.update("jax_enable_x64", True)
-
 pytestmark = pytest.mark.regression_bug
 
 _WAVE_OBS = jnp.linspace(4000.0, 9000.0, 300)

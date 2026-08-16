@@ -12,6 +12,8 @@ import chex
 import jax.numpy as jnp
 import pytest
 
+from tests._bounds import assert_non_negative
+
 pytestmark = pytest.mark.regression_bug
 
 _WAVE = jnp.logspace(2.5, 8.0, 500)  # 316 A to 10 cm, broad grid
@@ -28,7 +30,7 @@ class TestRingAreaPi:
             _WAVE, agn_log_lbol=12.0, agn_lum_ratio=1.0, agn_log_mbh=8.0, agn_cos_inc=0.5
         )
         chex.assert_tree_all_finite(l_nu)
-        assert jnp.all(l_nu >= 0.0)
+        assert_non_negative(l_nu, name="l_nu")
 
     def test_kubota_done_disc_finite(self):
         """kubota_done_disc should return finite, positive SED."""
@@ -38,7 +40,7 @@ class TestRingAreaPi:
             _WAVE, agn_log_lbol=12.0, agn_lum_ratio=1.0, agn_log_mbh=8.0, agn_log_ledd=-1.0
         )
         chex.assert_tree_all_finite(l_nu)
-        assert jnp.all(l_nu >= 0.0)
+        assert_non_negative(l_nu, name="l_nu")
 
     def test_adaf_disc_finite(self):
         """adaf_disc should return finite, positive SED."""
@@ -48,4 +50,4 @@ class TestRingAreaPi:
             _WAVE, agn_log_lbol=10.0, agn_lum_ratio=0.1, agn_log_mbh=8.0, agn_log_ledd=-3.0
         )
         chex.assert_tree_all_finite(l_nu)
-        assert jnp.all(l_nu >= 0.0)
+        assert_non_negative(l_nu, name="l_nu")

@@ -194,6 +194,15 @@ print(f"  ∇log-likelihood  warm:       {time.perf_counter() - t:8.4f} s")
 # from the run key) and keeps the lowest-loss one; NUTS is then seeded from that
 # MAP point (`init_from=map_result`). Fully JAX-native, and it converges cleanly
 # (`r_hat ≈ 1.0`).
+#
+# The counts are sized to the problem, and the two knobs are not
+# interchangeable. **Draws** are cheap to cut: 1000 already resolve the
+# posterior far past what the 200-draw summaries and the corner plot below
+# consume, so 600 per chain bought nothing but wall-clock. **Warm-up** is not
+# — it is what buys the step size. Measured on this fit at 250 draws, dropping
+# warm-up to 500 gave 4 divergences and split-R̂ 1.017, and 1000 still left 1
+# divergence; 1500 is where it reaches 0 and the claims below hold. Cut the
+# draws, keep the warm-up.
 
 # %%
 t = time.perf_counter()
@@ -202,7 +211,7 @@ map_result = forward.fit(
     method="map",
     key=key_fit,
     n_restarts=8,
-    n_steps=5000,
+    n_steps=800,  # loss is flat well before this; 5000 bought nothing but wall
 )
 print(f"  MAP wall:  {time.perf_counter() - t:6.2f} s")
 
@@ -213,21 +222,22 @@ posterior = forward.fit(
     key=key_fit,
     init_from=map_result,  # seed all chains at the MAP point
     n_warmup=1500,
-    n_samples=600,
+    n_samples=250,
     n_chains=4,
     n_burnin=0,
     dense_mass_matrix=False,  # diagonal mass matrix — D=7 fits fine, far less RAM
-    target_accept_rate=0.9,  # smaller steps; the default left ~140 divergences here
+    target_accept_rate=0.9,  # smaller steps; the default left divergences here
 )
-print(f"  NUTS wall (4 chains × 600 = 2400 samples): {time.perf_counter() - t:6.2f} s")
+print(f"  NUTS wall (4 chains × 250 = 1000 samples): {time.perf_counter() - t:6.2f} s")
 posterior.summary()
 
 # Convergence check. Two numbers, and they fail in different ways.
 #
 # Divergences are the serious one: a divergent transition means the integrator
 # left the typical set, so those draws bias the posterior. This fit reports 0.
-# Getting there is what `target_accept_rate=0.9` buys — at the default it left
-# ~140 divergences out of 2400, which the published page carried unnoticed.
+# Getting there is what `target_accept_rate=0.9` buys — at the default this fit
+# left divergences in the low hundreds, which the published page carried
+# unnoticed.
 #
 # Split-R̂ measures whether the four chains agree, and lands at ~1.00 here — under
 # the 1.01 you should insist on before quoting an interval in a paper.

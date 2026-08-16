@@ -10,11 +10,10 @@ References
 """
 
 import chex
-import jax
 import jax.numpy as jnp
 import pytest
 
-jax.config.update("jax_enable_x64", True)
+from tests._bounds import assert_non_negative
 
 pytestmark = pytest.mark.crossval
 
@@ -240,4 +239,4 @@ class TestSKIRTORPhysics:
         wave = jnp.geomspace(1000.0, 1e6, 500)
         l_nu = skirtor_analytic(wave, agn_log_lbol=10.42)
         chex.assert_tree_all_finite(l_nu)
-        assert jnp.all(l_nu >= 0)
+        assert_non_negative(l_nu, name="l_nu")

@@ -17,7 +17,6 @@ import pytest
 from numpy.testing import assert_allclose
 
 pytestmark = pytest.mark.bounds
-jax.config.update("jax_enable_x64", True)
 
 from tengri.observation.spectroscopy import Spectroscopy
 

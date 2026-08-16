@@ -64,11 +64,23 @@ def test_blr_none_default_call() -> None:
 
 def test_all_torus_variants_share_signature() -> None:
     """The torus param partition is identical across variants —
-    every torus factory must have the same keyword signature."""
+    every torus factory must have the same keyword signature.
+
+    The count is asserted first because the comparison lives inside the loop
+    and is anchored on ``skirtor``. If ``available()`` ever returned just
+    ``["skirtor"]``, the loop would compare the reference to itself, pass, and
+    prove nothing — which is the failure mode of every "all N agree with a
+    reference" test where N can shrink to one. (An *empty* return is already
+    caught by the ``sigs["skirtor"]`` lookup raising KeyError.)
+    """
     sigs = {
         v: list(inspect.signature(getattr(builders.agn.torus, v)).parameters)
         for v in builders.agn.torus.available()
     }
+    assert len(sigs) > 1, (
+        f"only {len(sigs)} torus variant(s) discovered — a self-comparison "
+        f"cannot detect signature drift"
+    )
     reference = sigs["skirtor"]
     for variant, params in sigs.items():
         assert params == reference, f"torus.{variant} drifted: {params}"

@@ -8,7 +8,7 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-jax.config.update("jax_enable_x64", True)
+from tests._bounds import assert_non_negative
 
 pytestmark = pytest.mark.bounds
 
@@ -28,7 +28,7 @@ class TestKubotaDoneFullAgn:
 
         l_nu = kubota_done_full_agn(wavelength, agn_log_lbol=44.0)
         chex.assert_tree_all_finite(l_nu)
-        assert jnp.all(l_nu >= 0.0)
+        assert_non_negative(l_nu, name="l_nu")
         chex.assert_equal_shape([l_nu, wavelength])
 
     def test_registered_as_kubota_done_full(self):

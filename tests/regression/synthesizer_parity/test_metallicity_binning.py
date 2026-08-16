@@ -29,8 +29,6 @@ import pytest
 
 pytestmark = pytest.mark.regression_paper
 
-jax.config.update("jax_enable_x64", True)
-
 # Only import these after jax config
 from tengri.components.stellar.sps.dsps_wrapper import (
     interpolate_metallicity,

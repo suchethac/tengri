@@ -38,7 +38,6 @@ from tengri.components.radio.radio import (
     radio_total_dpl,
 )
 
-jax.config.update("jax_enable_x64", True)
 _C_AA = 2.99792458e18  # Angstrom/s
 # Wavelengths: 10 MHz – 300 GHz, all safely in the radio band (> 1e7 A)
 _WAVE_RADIO = _C_AA / jnp.logspace(7.0, 11.0, 200)  # Angstrom

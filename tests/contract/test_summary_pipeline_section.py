@@ -171,14 +171,46 @@ def test_summary_skips_pipeline_section_when_chain_empty():
     assert "Parameters:  8 free" in out
 
 
-@pytest.mark.parametrize("attr", ["requires", "publishes", "requires_optional"])
-def test_summary_handles_components_missing_protocol_methods(attr):
-    """A component that doesn't implement the full Protocol shouldn't crash."""
+#: The line ``summary()`` renders for each optional Protocol method.
+_PROTOCOL_LINE = {
+    "requires": "reads:",
+    "requires_optional": "reads*:",
+    "publishes": "publishes:",
+}
+
+
+def test_summary_handles_a_component_implementing_none_of_the_protocol():
+    """A component with no Protocol methods at all shouldn't crash."""
     component = SimpleNamespace(name="partial", config=None)
-    # No publishes / requires / requires_optional methods at all.
-    model = _minimal_model(chain=[component])
-    out = summary(model)
+    out = summary(_minimal_model(chain=[component]))
     assert "1. partial" in out
-    # The missing-method case should not produce a reads/publishes line:
-    assert "publishes:" not in out
-    assert "reads:" not in out
+    assert not [lab for lab in _PROTOCOL_LINE.values() if lab in out]
+
+
+@pytest.mark.parametrize("missing", sorted(_PROTOCOL_LINE))
+def test_summary_handles_a_component_missing_one_protocol_method(missing):
+    """Exactly the missing method's line disappears; the others still render.
+
+    This was previously parametrized over the same three names while building a
+    component with *none* of them, so ``missing`` was never read — three
+    identical runs reported as three passes, and the "missing exactly one"
+    cases the parametrization named were not covered at all. The all-missing
+    case it actually tested now has its own test above.
+    """
+    methods = {
+        "requires": lambda: [SimpleNamespace(name="L_bol")],
+        "requires_optional": lambda: [SimpleNamespace(name="L_agn")],
+        "publishes": lambda: [SimpleNamespace(name="L_ir")],
+    }
+    del methods[missing]
+    component = SimpleNamespace(name="partial", config=None, **methods)
+
+    out = summary(_minimal_model(chain=[component]))
+
+    assert "1. partial" in out
+    rendered = {lab for lab in _PROTOCOL_LINE.values() if lab in out}
+    expected = {lab for key, lab in _PROTOCOL_LINE.items() if key != missing}
+    assert rendered == expected, (
+        f"with {missing}() absent, expected lines {sorted(expected)} but "
+        f"summary rendered {sorted(rendered)}"
+    )

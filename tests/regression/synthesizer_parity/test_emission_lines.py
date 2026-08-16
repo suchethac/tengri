@@ -27,9 +27,6 @@ from __future__ import annotations
 import pytest
 
 pytestmark = pytest.mark.regression_paper
-import jax
-
-jax.config.update("jax_enable_x64", True)
 
 from tengri.observation.line_list import _DOUBLET_RATIOS, LineList
 

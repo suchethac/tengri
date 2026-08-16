@@ -19,8 +19,6 @@ import pytest
 
 pytestmark = pytest.mark.bounds
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri import Observation, Spectroscopy
 from tengri.forward.sed_model import SEDModel
 from tengri.parameters.parameters import Parameters

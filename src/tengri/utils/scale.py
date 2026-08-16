@@ -56,7 +56,11 @@ def representable_floor(value: float) -> float:
 
     A floor sized for a *value* is still not sized for a *derivative* — division's
     VJP needs the denominator squared, so a derivative-safe bound is
-    ``sqrt(tiny)`` (~1.1e-19 in float32). See #1397, #1436, #1439.
+    ``sqrt(tiny)`` (~1.1e-19 in float32). See #1397, #1436, #1439. That case has
+    its own helper, :func:`representable_denominator`; use it whenever the
+    floored quantity is a denominator. This function is **not** sufficient there
+    and will silently pass such a site through: ``1e-30`` is above float32's
+    ``tiny``, so it is returned unchanged while its VJP divides by zero (#1860).
 
     Examples
     --------
@@ -67,6 +71,91 @@ def representable_floor(value: float) -> float:
     True
     """
     return max(float(value), float(jnp.finfo(jnp.result_type(float)).tiny))
+
+
+def representable_denominator(value: float) -> float:
+    r"""Raise a guard floor to the smallest denominator whose *derivative* is finite.
+
+    Parameters
+    ----------
+    value : float
+        The intended floor, as written at the call site [dimensionless].
+
+    Returns
+    -------
+    float
+        ``max(value, sqrt(tiny))`` for the working dtype — a static Python float,
+        safe as a ``jnp.maximum`` / ``jnp.clip`` bound under JIT.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — resolved at trace time from
+    ``jnp.result_type(float)``, so it is a compile-time constant.
+
+    The third member of the family, and the one :func:`representable_floor`'s
+    Notes already specify: *a floor sized for a value is still not sized for a
+    derivative*. Use this wherever the floored quantity is a **denominator**;
+    use :func:`representable_floor` when it is merely an argument to a ``log``.
+
+    A quotient's reverse-mode rule carries a term in the denominator squared,
+
+    .. math::
+
+        \frac{\partial}{\partial d}\left(\frac{n}{d}\right) = -\frac{n}{d^{2}}
+
+    where :math:`n` is the numerator and :math:`d` the floored denominator (both
+    dimensionless here). So the reverse pass needs :math:`1/d^{2}` to be
+    representable, not merely :math:`d`. That is a strictly stronger requirement,
+    and it bites at floors that :func:`representable_floor` passes through
+    untouched:
+
+    ==========  ====================  ====================  ==========
+    floor       ``floor**2`` (f32)    ``1/floor**2`` (f32)  usable
+    ==========  ====================  ====================  ==========
+    ``1e-30``   ``0.0``               ``inf``               no
+    ``1e-20``   ``1e-40``             ``1e40`` (> max)      no
+    ``1e-18``   ``1e-36``             ``1e36``              yes
+    ==========  ====================  ====================  ==========
+
+    ``1e-30`` is *above* float32's ``tiny`` (1.175e-38), so
+    ``representable_floor(1e-30)`` returns it unchanged and a floor census
+    reports the site as clean — while its VJP divides by zero (#1860). ``1e-20``
+    fails too, despite ``1e-40`` being a nominal subnormal, because the
+    reciprocal overflows.
+
+    The bound is analytic. Requiring :math:`1/d^{2} \le \mathrm{max}` gives
+    :math:`d \ge 1/\sqrt{\mathrm{max}}`, and since
+    :math:`1/\mathrm{max} \approx \mathrm{tiny}/4` the cliff sits at
+    :math:`\sqrt{\mathrm{tiny}}/2` — 5.42e-20 in float32. ``sqrt(tiny)``
+    (1.084e-19) is therefore one factor of two inside it, not on it.
+
+    **float64 is unchanged for any floor at or above 1.5e-154**
+    (``sqrt(finfo(float64).tiny)``), which covers the ``1e-30`` / ``1e-40``
+    literals this guards, so those sites stay bit-identical in float64.
+
+    Note the difference from :func:`representable_floor`, which is a no-op in
+    float64 for *every* literal the tree uses. This one is not: a floor below
+    1.5e-154 — the tree carries ``1e-300`` — is raised in float64 as well,
+    because it is derivative-unsafe *there too* (``(1e-300)**2`` is ``0.0`` in
+    float64, whose smallest normal is 2.2e-308). That is the intended behavior
+    and not a float64 regression, but it does mean this helper cannot be applied
+    blind: at such a site, float64 numbers move, and the move is the fix.
+
+    References
+    ----------
+    .. [1] tengri issue #1860 — the filter-integral guard floor NaNs the redshift
+       gradient; ``(1e-30)**2`` flushes to zero in the VJP.
+
+    Examples
+    --------
+    >>> import jax
+    >>> from tengri.utils.scale import representable_denominator
+    >>> with jax.enable_x64(True):
+    ...     representable_denominator(1e-30) == 1e-30  # float64: untouched
+    True
+    """
+    tiny = float(jnp.finfo(jnp.result_type(float)).tiny)
+    return max(float(value), float(numpy.sqrt(tiny)))
 
 
 def representable_exponent(value: float, *, base: float = 10.0) -> float:

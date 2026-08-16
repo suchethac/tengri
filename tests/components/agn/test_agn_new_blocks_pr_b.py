@@ -15,6 +15,7 @@ import pytest
 from tengri.components.agn.blocks._consumes import AGN_BLOCK_CONSUMES
 from tengri.components.agn.blocks._protocol import AGN_BLOCKS
 from tengri.components.agn.blr import _fe2_pseudo_continuum
+from tests._bounds import assert_non_negative
 
 pytestmark = [pytest.mark.contract, pytest.mark.regression_bug]
 
@@ -41,7 +42,7 @@ class TestRichards2006DiscBlock:
         L_lambda = richards2006_disc_block(wave, agn_log_lbol=45.0)
 
         assert np.all(np.isfinite(L_lambda))
-        assert np.all(L_lambda >= 0.0)
+        assert_non_negative(L_lambda, name="L_lambda")
 
     def test_richards2006_disc_uv_peaked(self):
         """Richards2006 disc shows UV-peak (higher flux at short wavelengths)."""
@@ -149,7 +150,7 @@ class TestBorosonGreenFeiiBlock:
         )
 
         assert np.all(np.isfinite(L_lambda))
-        assert np.all(L_lambda >= 0.0)
+        assert_non_negative(L_lambda, name="L_lambda")
 
     def test_boroson_green_feii_disabled_when_strength_zero(self):
         """FeII emission is zero when agn_fe2_strength=0."""

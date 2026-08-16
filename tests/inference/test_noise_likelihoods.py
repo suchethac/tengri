@@ -14,9 +14,9 @@ import jax
 import jax.numpy as jnp
 import numpy.testing as npt
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri.observation.noise import PoissonNoiseLikelihood, StudentTLikelihood
+from tests._grad_parity import assert_grad_matches_fd
+from tests._jit_parity import assert_jit_matches_eager
 
 # ── PoissonNoiseLikelihood ────────────────────────────────────────
 
@@ -103,10 +103,9 @@ class TestPoissonNoiseLikelihood:
     def test_jit_compatible(self):
         """Function compiles under jax.jit."""
         lh = PoissonNoiseLikelihood(gain=1.0)
-        lh_jit = jax.jit(lh.log_prob)
         observed = jnp.array([100.0, 200.0])
         predicted = jnp.array([95.0, 205.0])
-        lp = lh_jit(observed, predicted)
+        lp = assert_jit_matches_eager(lh.log_prob, observed, predicted)
         chex.assert_shape(lp, (2,))
         chex.assert_tree_all_finite(lp)
 
@@ -119,7 +118,7 @@ class TestPoissonNoiseLikelihood:
             return -jnp.sum(lp)  # Negative because log_prob returns likelihood
 
         pred0 = jnp.array([100.0])
-        grad_val = jax.grad(loss)(pred0)
+        grad_val = assert_grad_matches_fd(loss, pred0)
         assert jnp.isfinite(grad_val[0])
 
     def test_outlier_same_as_inlier(self):
@@ -216,11 +215,10 @@ class TestStudentTLikelihood:
     def test_jit_compatible(self):
         """Function compiles under jax.jit."""
         lh = StudentTLikelihood(dof=4.0)
-        lh_jit = jax.jit(lh.log_prob)
         observed = jnp.array([1.0, 5.0, 10.0])
         predicted = jnp.array([0.0, 2.0, 5.0])
         sigma = jnp.array([1.0, 1.0, 2.0])
-        lp = lh_jit(observed, predicted, sigma)
+        lp = assert_jit_matches_eager(lh.log_prob, observed, predicted, sigma)
         chex.assert_shape(lp, (3,))
         chex.assert_tree_all_finite(lp)
 

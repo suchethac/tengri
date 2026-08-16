@@ -15,6 +15,7 @@ from tengri.components.nebular.shock import (
     compute_shock_sed,
     shock_line_ratios,
 )
+from tests._bounds import assert_non_negative
 
 # parents[2] is tests/ from tests/components/nebular/, so this pointed at
 # tests/data/ — which never exists, and the tests below never ran (#1431).
@@ -182,7 +183,7 @@ class TestShockEmissionSed:
     def test_sed_non_negative(self, wavelength):
         """SED should be non-negative everywhere."""
         sed = compute_shock_sed(wavelength, 300.0, 1e6)
-        assert jnp.all(sed >= 0.0)
+        assert_non_negative(sed, name="sed")
 
     def test_sed_has_peaks_at_line_wavelengths(self, wavelength):
         """SED should have peaks near Hα 6563 Å."""
@@ -355,7 +356,7 @@ class TestShockBackend:
         sed = b.predict_nebular_sed(self._WAVE, 300.0, 1e40)
         chex.assert_shape(sed, (self._WAVE.shape[0],))
         chex.assert_tree_all_finite(sed)
-        assert jnp.all(sed >= 0.0)
+        assert_non_negative(sed, name="sed")
 
     def test_predict_nebular_sed_extra_kwargs_ignored(self):
         """**_kwargs allows protocol-uniform call sites to pass extra args."""

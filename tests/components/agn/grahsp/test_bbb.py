@@ -18,6 +18,8 @@ import chex
 import numpy as np
 import pytest
 
+from tests._jit_parity import assert_jit_matches_eager
+
 pytestmark = pytest.mark.bounds
 
 FIXTURE = Path(__file__).resolve().parents[4] / "tests" / "fixtures" / "grahsp" / "sbpl_bbb.npz"
@@ -73,13 +75,12 @@ def test_sbpl_normalization_at_5100A():
 
 
 def test_sbpl_jit_compatible():
-    import jax
     import jax.numpy as jnp
 
     from tengri.components.agn.grahsp.bbb import sbpl_bbb
 
-    fn = jax.jit(sbpl_bbb)
-    out = fn(
+    out = assert_jit_matches_eager(
+        sbpl_bbb,
         wave_nm=jnp.array([100.0, 510.0, 5000.0]),
         l5100=1.0e36,
         uvslope=0.0,

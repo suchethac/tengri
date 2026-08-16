@@ -34,8 +34,6 @@ from tengri.components.stellar.sfh.registry import SFH_REGISTRY
 
 pytestmark = pytest.mark.regression_bug
 
-jax.config.update("jax_enable_x64", True)
-
 _TYPE = "declining_exp"
 
 

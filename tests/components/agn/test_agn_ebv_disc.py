@@ -18,11 +18,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import jax
 import jax.numpy as jnp
 import pytest
 
-jax.config.update("jax_enable_x64", True)
+from tests._grad_parity import assert_grad_matches_fd
 
 _GRID_PATH = Path(__file__).resolve().parents[4] / "data" / "silva04_torus_grid.h5"
 _has_grid = _GRID_PATH.is_file()
@@ -89,6 +88,6 @@ def test_grad_flows_through_ebv(model, wavelength) -> None:
         sed = model(wavelength, agn_log_lbol=44.0, agn_lum_ratio=0.1, agn_ebv_disc=ebv)
         return jnp.log1p(jnp.sum(sed))
 
-    g = jax.grad(scalar_loss)(0.1)
+    g = assert_grad_matches_fd(scalar_loss, 0.1)
     assert jnp.isfinite(g)
     assert float(g) != 0.0
