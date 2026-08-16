@@ -13,14 +13,11 @@ Bagpipes convention: massformed (Carnall et al.)
 Prospector convention: mass_formed (Johnson et al.)
 """
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
 
 pytestmark = pytest.mark.conservation
-
-jax.config.update("jax_enable_x64", True)
 
 from scipy.integrate import trapezoid
 

@@ -19,8 +19,6 @@ import jax
 import numpy as np
 import pytest
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.forward.sed_model import SEDModel
 from tengri.observation.filters import load_filter_set

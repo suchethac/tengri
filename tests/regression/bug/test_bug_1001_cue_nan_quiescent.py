@@ -26,8 +26,6 @@ from tengri.components.nebular.ionizing_spectrum import interpolate_ionizing_par
 
 pytestmark = pytest.mark.regression_bug
 
-jax.config.update("jax_enable_x64", True)
-
 
 @pytest.fixture(scope="module")
 def inf_edged_tables():

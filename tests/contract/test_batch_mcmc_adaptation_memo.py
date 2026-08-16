@@ -38,8 +38,6 @@ from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, Uniform
 from tengri.inference.fitter import Fitter
 from tengri.observation.photometry import FilterCurve
 
-jax.config.update("jax_enable_x64", True)
-
 pytestmark = pytest.mark.contract
 
 _MCMC_KW = dict(n_warmup=15, n_burnin=5, n_samples=12, verbose=False)

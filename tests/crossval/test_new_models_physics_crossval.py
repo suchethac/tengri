@@ -20,12 +20,11 @@ References
 - Smith et al. 2007, ApJ, 656, 770 — PAH Drude profiles
 """
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
 
-jax.config.update("jax_enable_x64", True)
+from tests._bounds import assert_non_negative
 
 pytestmark = pytest.mark.crossval
 
@@ -676,4 +675,4 @@ class TestLi08AttenuationPhysics:
 
         wave = jnp.linspace(900.0, 30000.0, 1000)
         k = np.asarray(li08(wave))
-        assert np.all(k >= 0), "Li08 k(lambda) has negative values"
+        assert_non_negative(k, name="k", msg="Li08 k(lambda) has negative values")

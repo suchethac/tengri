@@ -18,12 +18,9 @@ This is exact by construction. tengri does the same via
 compute_absorbed_luminosity + emission model normalization.
 """
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
-
-jax.config.update("jax_enable_x64", True)
 
 pytestmark = pytest.mark.crossval
 

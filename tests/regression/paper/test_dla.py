@@ -22,10 +22,10 @@ from tengri.components.igm.dla import (
     dla_transmission,
     dla_transmission_obs,
 )
+from tests._bounds import assert_non_negative
+from tests._grad_parity import assert_grad_matches_fd
 
 pytestmark = pytest.mark.regression_paper
-
-jax.config.update("jax_enable_x64", True)
 
 
 @pytest.fixture
@@ -153,7 +153,7 @@ class TestDLATransmission:
     def test_transmission_bounded_0_to_1(self, wave_rest):
         """Transmission is always in [0, 1] (physical constraint)."""
         trans = dla_transmission(wave_rest, log_n_hi=21.0)
-        assert jnp.all(trans >= 0.0)
+        assert_non_negative(trans, name="trans")
         assert jnp.all(trans <= 1.0 + 1e-10)
 
     def test_absorption_widens_with_column_density(self, wave_rest):
@@ -219,7 +219,7 @@ class TestGradientsAndJIT:
         def loss(log_n):
             return jnp.mean(dla_transmission(wave_rest, log_n))
 
-        g = jax.grad(loss)(20.5)
+        g = assert_grad_matches_fd(loss, 20.5)
         assert jnp.isfinite(g)
         assert g < 0, "Increasing N_HI should decrease mean transmission"
 
@@ -229,7 +229,7 @@ class TestGradientsAndJIT:
         def loss(temp):
             return jnp.mean(dla_transmission(wave_rest, 20.5, temp=temp))
 
-        g = jax.grad(loss)(1e4)
+        g = assert_grad_matches_fd(loss, 1e4)
         assert jnp.isfinite(g)
 
     def test_gradient_wrt_turbulence_finite(self, wave_rest):
@@ -238,7 +238,7 @@ class TestGradientsAndJIT:
         def loss(b):
             return jnp.mean(dla_transmission(wave_rest, 20.5, b_turb_kms=b))
 
-        g = jax.grad(loss)(10.0)
+        g = assert_grad_matches_fd(loss, 10.0)
         assert jnp.isfinite(g)
 
     def test_gradient_stability_at_voigt_z_boundary(self):

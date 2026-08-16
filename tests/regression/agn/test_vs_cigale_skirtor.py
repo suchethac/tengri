@@ -11,6 +11,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tests._bounds import assert_non_negative
+
 pytestmark = pytest.mark.regression_paper
 
 
@@ -49,9 +51,15 @@ class TestSKIRTORComponentSeparation:
         )
 
         # All components should be non-negative
-        assert jnp.all(components.disk >= 0.0), "disk component should be non-negative"
-        assert jnp.all(components.dust >= 0.0), "dust component should be non-negative"
-        assert jnp.all(components.total >= 0.0), "total component should be non-negative"
+        assert_non_negative(
+            components.disk, name="output", msg="disk component should be non-negative"
+        )
+        assert_non_negative(
+            components.dust, name="output", msg="dust component should be non-negative"
+        )
+        assert_non_negative(
+            components.total, name="output", msg="total component should be non-negative"
+        )
 
         # Each component should have significant emission (peak > 1e20 erg/s/Hz)
         assert float(jnp.max(components.disk)) > 1e20, "disk should have significant peak"

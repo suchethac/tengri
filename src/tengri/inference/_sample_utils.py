@@ -10,8 +10,9 @@ them here removes ~50 duplicated blocks across the backends.
 from __future__ import annotations
 
 import hashlib
+import warnings
 from collections import OrderedDict
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from threading import Lock
 from typing import TYPE_CHECKING, Any
 
@@ -130,6 +131,114 @@ def _data_fingerprint(fitter: Any) -> str:
     return digest.hexdigest()
 
 
+class _ParamsShim:
+    """Minimal posterior-like wrapper so a plain mapping can seed a fit."""
+
+    __slots__ = ("params",)
+
+    def __init__(self, params):
+        self.params = params
+
+
+def _as_posterior_like(fitter: Any, init_from: Any) -> Any:
+    """Accept a starting point as either a posterior-like object or a mapping.
+
+    ``init_from`` reached ``_unbounded_from_posterior`` directly, which reads
+    ``.params`` off it, so the obvious spelling -- a dict of the parameters you
+    want to start at -- died on ``AttributeError: 'dict' object has no
+    attribute 'params'``, a message about this function's internals rather than
+    about what the caller passed. Every other parameter surface in tengri
+    (``predict``, ``predict_photometry``, ``spec.get_fixed_values``) takes a
+    plain ``dict[str, float]``; this one is now no exception (issue #1854).
+
+    Validation matches what the conversion actually consumes.
+    ``Fitter._unbounded_from_posterior`` reads only the *free* names and starts
+    any it does not find at the standardized ``0.0`` -- the prior center -- so:
+
+    * **Fixed parameters are accepted and ignored.** A ``Posterior.params``
+      carries them, and ``dict(map_result.params)`` is the obvious thing to
+      hand back; refusing those keys would reject the commonest input.
+    * **A partial mapping is accepted**, with every unnamed free parameter
+      starting at its prior center. That is pre-existing behavior, not a new
+      promise -- seeding two of seven axes and leaving five at the center is a
+      legitimate but *weak* start, and mixing may suffer accordingly.
+    * **An unrecognized name is refused.** Silently ignoring a misspelled key
+      would start that axis somewhere the caller did not choose while the fit
+      looked perfectly healthy -- the failure mode
+      ``approx.get("n_subbnads", 0)`` already cost this codebase once.
+    * **A mapping naming no free parameter at all is refused**, because it
+      cannot move the starting point and is therefore always a mistake.
+
+    Parameters
+    ----------
+    fitter : Fitter
+        Supplies the free and fixed parameter names for validation.
+    init_from : Mapping or posterior-like
+        Starting point. A mapping is wrapped; anything exposing ``.params``
+        (a :class:`~tengri.inference.posterior.Posterior`, a MAP result) is
+        returned unchanged.
+
+    Returns
+    -------
+    posterior-like
+        An object with a ``.params`` mapping.
+
+    Raises
+    ------
+    ParameterError
+        If a mapping names an unrecognized parameter, names no free parameter,
+        or if ``init_from`` is neither a mapping nor posterior-like.
+    """
+    if hasattr(init_from, "params"):
+        return init_from
+
+    from tengri.config.exceptions import ParameterError
+
+    if isinstance(init_from, Mapping):
+        free = list(getattr(fitter.spec, "free_params", ()))
+        try:
+            fixed = set(fitter.spec.get_fixed_values())
+        except Exception:
+            fixed = set()
+        known = set(free) | fixed | {"psd_xi"}
+
+        unknown = sorted(name for name in init_from if name not in known)
+        if unknown:
+            raise ParameterError(
+                f"init_from names {len(unknown)} parameter(s) this model does not "
+                f"have: {unknown}. Free parameters are: {free}. A starting point "
+                "for a name the model never reads would be silently ignored, so "
+                "it is refused here instead."
+            )
+        supplied = [name for name in free if name in init_from]
+        if not supplied:
+            raise ParameterError(
+                "init_from names no free parameter, so it cannot move the "
+                f"starting point. Free parameters are: {free}."
+            )
+        missing = [name for name in free if name not in init_from]
+        if missing:
+            # Legal, but weak, and invisible otherwise: those axes start at the
+            # prior center while the fit reports nothing unusual. A two-of-seven
+            # seed has been measured mixing to split R-hat ~1e15 on this path.
+            warnings.warn(
+                f"init_from seeds {len(supplied)} of {len(free)} free parameters; "
+                f"{missing} will start at the prior center. Partial starts mix "
+                "poorly — check split R-hat, or pass every free parameter (a MAP "
+                "result supplies them all).",
+                UserWarning,
+                stacklevel=3,
+            )
+        return _ParamsShim(dict(init_from))
+
+    raise ParameterError(
+        f"init_from must be a mapping of parameter values or a result with a "
+        f".params attribute, not {type(init_from).__name__}. Pass a dict like "
+        "{'dust_tau_bc': 0.3}, or the result of "
+        "forward.fit(..., method='map', key=key)."
+    )
+
+
 def _maybe_map_init(
     fitter: Any,
     key: Array,
@@ -154,11 +263,19 @@ def _maybe_map_init(
     10.74 and zero divergences (issue #1529).
     """
     if init_from is not None:
-        return fitter._unbounded_from_posterior(init_from), key
+        return fitter._unbounded_from_posterior(_as_posterior_like(fitter, init_from)), key
 
     # Cached MAP point (from a prior fit or load_cache) for THIS data?
 
     from tengri.inference._model_cache import _default_owner as _model_cache_owner
+
+    # Advance the key before branching, so a cache hit and a cache miss hand the
+    # sampler the same stream. Previously the hit returned ``key`` untouched
+    # while the miss returned it split for the MAP run, which made the chain
+    # depend on whether a *previous* fit had happened to populate the cache —
+    # invisible to the caller, and enough to give two identical ``fit`` calls
+    # with one ``key`` different posteriors.
+    key, map_key = jax.random.split(key)
 
     mc = _model_cache_owner.get_or_compile_model(fitter.model)
     fingerprint = _data_fingerprint(fitter)
@@ -187,7 +304,6 @@ def _maybe_map_init(
     _prewarm_forward(fitter)
     if verbose:
         print(f"  MAP initialization ({n_map_steps} steps)...")
-    key, map_key = jax.random.split(key)
     map_result = fitter._run_map(
         key=map_key, n_steps=n_map_steps, n_restarts=_MAP_INIT_RESTARTS, verbose=False
     )

@@ -31,11 +31,33 @@ def test_wave_precomp_accepts_catalog_z_range():
 
 
 def test_wave_precomp_catalog_range_is_hashable():
-    """The frozen dataclass must remain hashable so it can serve as a JAX
-    static_argument / dict key for cache lookups."""
-    cz = WavePrecomp(catalog_z_range=(0.05, 1.5))
-    # Hash must succeed (frozen dataclass)
-    assert hash(cz) == hash(cz)
+    """The frozen dataclass must work as a JAX static argument / cache key.
+
+    "Hashable" is not the property that matters — the default object hash is
+    always available and always self-consistent. What a cache key needs is
+    that two *separately constructed* equal policies collide, so a second
+    build finds the first one's entry.
+
+    This asserted ``hash(cz) == hash(cz)`` on a single object, which is true
+    of any object at all, including one whose ``__hash__`` falls back to
+    ``id()`` — precisely the failure that would make every build miss the
+    cache and recompile.
+    """
+    a = WavePrecomp(catalog_z_range=(0.05, 1.5))
+    b = WavePrecomp(catalog_z_range=(0.05, 1.5))
+    assert a is not b, "the two arms must be distinct objects or this proves nothing"
+    assert a == b
+    assert hash(a) == hash(b), "equal policies must collide, or the cache never hits"
+
+    # And the key must still separate policies that differ.
+    other = WavePrecomp(catalog_z_range=(0.05, 2.5))
+    assert a != other
+    assert hash(a) != hash(other), "different z ranges share a cache slot"
+
+    # The property as the cache actually uses it.
+    cache = {a: "compiled"}
+    assert cache.get(b) == "compiled", "an equal policy missed its own cache entry"
+    assert cache.get(other) is None, "a different policy hit the wrong cache entry"
 
 
 def test_catalog_range_distinct_compile_signature_from_no_range():

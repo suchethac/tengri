@@ -26,8 +26,6 @@ from tengri.parameters.priors import Fixed, Uniform
 
 pytestmark = pytest.mark.contract
 
-jax.config.update("jax_enable_x64", True)
-
 
 def _template() -> Parameters:
     """A minimal template Parameters spec with both free and fixed params."""

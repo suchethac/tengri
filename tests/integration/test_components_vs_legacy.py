@@ -31,6 +31,7 @@ import pytest
 from tengri import Parameters, SEDModel
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.parameters.priors import Fixed, Uniform
+from tests._bounds import assert_non_negative
 
 _SSP_PATH = pathlib.Path("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5").resolve()
 
@@ -131,7 +132,7 @@ def test_stellar_only_orchestrator_runs(stellar_only_model):
         f"sed_intrinsic shape too small: {state.sed_intrinsic.shape}"
     )
     chex.assert_tree_all_finite(state.sed_intrinsic)
-    assert jnp.all(state.sed_intrinsic >= 0)
+    assert_non_negative(state.sed_intrinsic, name="output")
 
 
 def test_stellar_only_legacy_runs(stellar_only_model):
@@ -139,7 +140,7 @@ def test_stellar_only_legacy_runs(stellar_only_model):
     legacy = stellar_only_model.predict_rest_sed(_STELLAR_PARAMS)
     assert legacy.sed.shape[0] > 1000
     chex.assert_tree_all_finite(legacy.sed)
-    assert jnp.all(legacy.sed >= 0)
+    assert_non_negative(legacy.sed, name="output")
 
 
 # ── Physical-range agreement: both within order-of-magnitude ──────────

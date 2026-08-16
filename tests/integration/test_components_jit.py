@@ -29,6 +29,7 @@ from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.components.xray.component import XRaySEDComponent
 from tengri.forward.orchestrator import default_params_dict, run_components
 from tengri.protocols.component import ForwardState
+from tests._jit_parity import assert_jit_matches_eager
 
 _SSP_PATH = pathlib.Path("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5").resolve()
 
@@ -98,8 +99,7 @@ def test_orchestrator_chain_jit_matches_eager(ssp, base_params):
     state0 = ForwardState(wave=ssp.ssp_wave, sed_observed=jnp.ones(len(ssp.ssp_wave)))
 
     s_eager = run_components(components, state0, base_params)
-    pipeline_jit = jax.jit(lambda p: run_components(components, state0, p))
-    s_jit = pipeline_jit(base_params)
+    s_jit = assert_jit_matches_eager(lambda p: run_components(components, state0, p), base_params)
 
     assert jnp.allclose(s_jit.sed_intrinsic, s_eager.sed_intrinsic, rtol=1e-12)
     # Spot-check derived scalars too

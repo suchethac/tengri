@@ -34,6 +34,7 @@ from tengri.components.agn.blocks import (
 from tengri.components.agn.blocks.alternates import smc_prevot_block
 from tengri.components.agn.reddening import redden_disc
 from tests._data_skip import requires_grahsp
+from tests._grad_parity import assert_grad_matches_fd
 
 # ──────────────────────────────────────────────────────────────────────
 # Registry
@@ -376,7 +377,7 @@ def test_composable_polar_dust_jit_and_grad():
     chex.assert_equal_shape([out, wave_aa])
     chex.assert_tree_all_finite(out)
 
-    grad = jax.grad(lambda e: jnp.sum(fwd(e)))(jnp.array(0.2))
+    grad = assert_grad_matches_fd(lambda e: jnp.sum(fwd(e)), jnp.array(0.2))
     chex.assert_tree_all_finite(grad)
 
 

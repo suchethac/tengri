@@ -5,7 +5,6 @@ Energy absorbed by dust must equal energy re-radiated (Kirchhoff's law).
 """
 
 import chex
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -15,8 +14,6 @@ from tengri.components.dust.emission import (
     energy_balance_split,
     modified_blackbody,
 )
-
-jax.config.update("jax_enable_x64", True)
 
 pytestmark = pytest.mark.conservation
 

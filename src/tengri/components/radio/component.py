@@ -639,8 +639,7 @@ def _l_nonthermal_fn(state, params):
 
 def _q_ir_fn(state, params):
     """Radio-infrared correlation parameter [dimensionless]."""
-    from tengri.utils.physics_constants import L_SUN
-    from tengri.utils.sed_quantities import compute_q_ir
+    from tengri.utils.sed_quantities import compute_q_ir, derived_luminosity_lsun
 
     derived = state.derived
     if "sed_radio" not in derived:
@@ -650,8 +649,9 @@ def _q_ir_fn(state, params):
     wave = state.wave
     l_1p4ghz = jnp.interp(_WAVE_21CM_AA, wave, L_radio)
 
-    l_ir = jnp.asarray(derived.get("L_ir", 0.0))
-    l_tir_lsun = l_ir / L_SUN
+    # Same seam as ``l_dust_absorbed``: the linear ``L_ir`` is ~3.6e43 erg/s and
+    # is ``inf`` in float32, while q_IR is a dex ratio of order 2 (#1837).
+    l_tir_lsun = derived_luminosity_lsun(derived, "L_ir", "log_L_ir")
     return compute_q_ir(l_tir_lsun, l_1p4ghz)
 
 

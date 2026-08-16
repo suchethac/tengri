@@ -10,6 +10,8 @@ import chex
 import jax.numpy as jnp
 import pytest
 
+from tests._bounds import assert_non_negative
+
 pytestmark = pytest.mark.regression_bug
 
 _WAVE = jnp.logspace(2.5, 8.0, 500)  # 316 A to 10 cm, broad grid
@@ -59,4 +61,4 @@ class TestWarmComptonization:
         nu_warm = 0.2 * _KEV_TO_ERG / _H_PLANCK
         b_nu = _warm_comptonization_lnu(nu, 1e5, nu_warm, 2.5)
         chex.assert_tree_all_finite(b_nu)
-        assert jnp.all(b_nu >= 0.0)
+        assert_non_negative(b_nu, name="b_nu")

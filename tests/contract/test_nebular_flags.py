@@ -3,12 +3,9 @@
 
 import warnings
 
-import jax
 import pytest
 
 pytestmark = pytest.mark.contract
-
-jax.config.update("jax_enable_x64", True)
 
 from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Fixed, Uniform

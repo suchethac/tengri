@@ -16,6 +16,7 @@ import pytest
 
 import tengri
 from tengri import FIXED, FREE, Fixed, Observation, Photometry, SEDModel, WavePrecomp
+from tests._grad_parity import assert_grad_matches_fd
 
 pytestmark = pytest.mark.regression_bug
 
@@ -123,7 +124,7 @@ def test_quadrature_nodes_are_inside_their_band_and_positive(ssp):
 def test_gradient_is_finite_through_the_quadrature(ssp):
     m = _build(ssp, WavePrecomp(n_subbands=5))
     p = dict(m.spec.sample(KEY))
-    g = jax.grad(lambda q: jnp.sum(m.predict_photometry(q)))(p)
+    g = assert_grad_matches_fd(lambda q: jnp.sum(m.predict_photometry(q)), p)
     for v in jax.tree.leaves(g):
         assert bool(jnp.all(jnp.isfinite(v)))
 

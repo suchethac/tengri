@@ -16,8 +16,6 @@ from tengri.components.stellar.sps.dsps_wrapper import LSUN_ERG_PER_S
 
 pytestmark = pytest.mark.bounds
 
-jax.config.update("jax_enable_x64", True)
-
 
 # ── Fixtures: synthetic data for testing vmap ─────────────────────
 

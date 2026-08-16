@@ -162,21 +162,47 @@ def test_combined_nlr_blr_lines_blocks_registered_and_mapped():
     assert "synthesizer_spectra" in AGN_BLOCKS["blr"]
     assert "grahsp" in AGN_BLOCKS["blr"]
     assert "qsogen" in AGN_BLOCKS["blr"]
-    # Verify independent blocks' CONSUMES are unionable
-    assert (
-        AGN_BLOCK_CONSUMES[("nlr", "analytic")] | AGN_BLOCK_CONSUMES[("blr", "analytic")]
-        == AGN_BLOCK_CONSUMES[("nlr", "analytic")] | AGN_BLOCK_CONSUMES[("blr", "analytic")]
-    )
-    assert (
-        AGN_BLOCK_CONSUMES[("nlr", "synthesizer")] | AGN_BLOCK_CONSUMES[("blr", "synthesizer")]
-        == AGN_BLOCK_CONSUMES[("nlr", "synthesizer")] | AGN_BLOCK_CONSUMES[("blr", "synthesizer")]
-    )
-    assert (
-        AGN_BLOCK_CONSUMES[("nlr", "synthesizer_spectra")]
-        | AGN_BLOCK_CONSUMES[("blr", "synthesizer_spectra")]
-        == AGN_BLOCK_CONSUMES[("nlr", "synthesizer_spectra")]
-        | AGN_BLOCK_CONSUMES[("blr", "synthesizer_spectra")]
-    )
+
+
+# The three variants whose NLR and BLR blocks are genuinely independent, i.e.
+# the two regions declare disjoint parameters and enabling both costs the union.
+# ``grahsp`` is deliberately absent — see the negative control below.
+_INDEPENDENT_NLR_BLR_VARIANTS = ["analytic", "synthesizer", "synthesizer_spectra"]
+
+
+@pytest.mark.parametrize("variant", _INDEPENDENT_NLR_BLR_VARIANTS)
+def test_independent_nlr_and_blr_consume_disjoint_params(variant):
+    """Enabling both regions must cost exactly the sum of their parameters.
+
+    This is what "the CONSUMES are unionable" has to mean to be worth
+    asserting: the two blocks are independent, so the union loses nothing.
+    If they ever came to share a knob, one region would silently move the
+    other's parameter and ``agn_active_param_set`` would under-count the
+    free parameters for a unified AGN.
+
+    The assertion this replaced was ``assert (nlr | blr) == (nlr | blr)`` for
+    each of the three variants — the same expression on both sides, so it
+    held for any contents whatsoever and could only fail if ``|`` raised.
+    """
+    nlr = AGN_BLOCK_CONSUMES[("nlr", variant)]
+    blr = AGN_BLOCK_CONSUMES[("blr", variant)]
+    overlap = set(nlr) & set(blr)
+    assert not overlap, f"{variant}: nlr and blr both consume {sorted(overlap)}"
+    assert len(set(nlr) | set(blr)) == len(set(nlr)) + len(set(blr))
+
+
+def test_the_disjointness_check_is_not_vacuous():
+    """``grahsp`` shares its NLR/BLR knobs — the counterexample that proves teeth.
+
+    Both regions are driven by one line amplitude and one line width, so the
+    union is *smaller* than the sum. Kept as a live negative control: if this
+    ever became disjoint too, the test above would be passing on a property no
+    registered variant can violate, and would need a new counterexample.
+    """
+    nlr = set(AGN_BLOCK_CONSUMES[("nlr", "grahsp")])
+    blr = set(AGN_BLOCK_CONSUMES[("blr", "grahsp")])
+    assert nlr & blr, "no registered variant shares nlr/blr params any more"
+    assert len(nlr | blr) < len(nlr) + len(blr)
     cfg = {
         "agn_model": "composable",
         "agn_disc_block": "kubota_done",

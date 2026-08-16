@@ -36,8 +36,6 @@ from tengri.components.stellar.sps.dsps_wrapper import (
 
 pytestmark = pytest.mark.bounds
 
-jax.config.update("jax_enable_x64", True)
-
 
 # ── Helpers ───────────────────────────────────────────────────────
 

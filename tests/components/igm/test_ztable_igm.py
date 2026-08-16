@@ -20,10 +20,10 @@ from tengri.components.stellar.sps.precompute import (
     interpolate_igm_ztable,
     precompute_photometry_ztable,
 )
+from tests._bounds import assert_non_negative
+from tests._grad_parity import assert_grad_matches_fd
 
 pytestmark = pytest.mark.bounds
-
-jax.config.update("jax_enable_x64", True)
 
 
 def fd_grad(f, x: float, eps: float = 1e-4) -> float:
@@ -68,7 +68,7 @@ class TestIGMPrecomputation:
         """IGM transmission is in [0, 1]."""
         fw, ft = filters
         zt = precompute_photometry_ztable(ssp_data, fw, ft, n_z=20, apply_igm=True)
-        assert jnp.all(zt.igm_trans_table >= 0.0)
+        assert_non_negative(zt.igm_trans_table, name="output")
         assert jnp.all(zt.igm_trans_table <= 1.0)
 
     def test_igm_matches_direct_computation(self, ssp_data, filters):
@@ -228,7 +228,7 @@ class TestIGMGradients:
         def loss(z):
             return jnp.sum(interpolate_igm_ztable(zt.igm_trans_table, zt.z_grid, z))
 
-        g = jax.grad(loss)(3.0)
+        g = assert_grad_matches_fd(loss, 3.0)
         assert abs(float(g)) > 1e-10, f"Gradient should be nonzero at z=3: {float(g)}"
 
     def test_gradient_combined_ssp_and_igm(self, ssp_data, filters):

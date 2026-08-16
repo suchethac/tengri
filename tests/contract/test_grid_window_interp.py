@@ -37,8 +37,6 @@ import pytest
 
 pytestmark = pytest.mark.contract
 
-jax.config.update("jax_enable_x64", True)
-
 
 def _dense_reference(x, grid, table, scatter):
     """The contraction as it is written today, for equivalence checking."""

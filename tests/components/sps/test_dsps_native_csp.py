@@ -22,8 +22,8 @@ from tengri.components.stellar.sps.dsps_wrapper import (
     compute_dsps_met_table_weights,
     compute_dsps_native_weights,
 )
-
-jax.config.update("jax_enable_x64", True)
+from tests._bounds import assert_non_negative
+from tests._grad_parity import assert_grad_matches_fd
 
 
 def fd_grad(f, x: float, eps: float = 1e-4) -> float:
@@ -89,7 +89,7 @@ def test_age_weights_non_negative():
         LGMET,
         LGMET_SCATTER,
     )
-    assert jnp.all(aw >= 0.0), "Negative age weights found"
+    assert_non_negative(aw, name="aw", msg="Negative age weights found")
 
 
 def test_ssp_flux_at_z_non_negative():
@@ -105,7 +105,9 @@ def test_ssp_flux_at_z_non_negative():
         LGMET,
         LGMET_SCATTER,
     )
-    assert jnp.all(flux_z >= 0.0), "Negative flux_at_z found (weights must sum to 1)"
+    assert_non_negative(
+        flux_z, name="flux_z", msg="Negative flux_at_z found (weights must sum to 1)"
+    )
 
 
 def test_total_mass_scales_with_sfr():
@@ -332,7 +334,7 @@ def test_met_table_age_weights_non_negative():
         T_OBS_GYR,
         LGMET_SCATTER,
     )
-    assert jnp.all(aw >= 0.0), "Negative age weights found"
+    assert_non_negative(aw, name="aw", msg="Negative age weights found")
 
 
 def test_met_table_finite_output():
@@ -439,7 +441,7 @@ def test_met_table_grad_wrt_lgmet():
         return jnp.sum(aw)
 
     lgmet = jnp.array(LGMET_TABLE)
-    grad = jax.grad(total_mass)(lgmet)
+    grad = assert_grad_matches_fd(total_mass, lgmet)
     assert jnp.all(jnp.isfinite(grad)), f"Non-finite gradient: {grad}"
 
 

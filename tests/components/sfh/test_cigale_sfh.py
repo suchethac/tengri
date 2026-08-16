@@ -23,14 +23,14 @@ from numpy.testing import assert_allclose
 
 pytestmark = pytest.mark.bounds
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri.components.stellar.sfh.mean_sfh import (
     buat08,
     delayed_bq,
     periodic,
     sfh2exp,
 )
+from tests._bounds import assert_non_negative
+from tests._jit_parity import assert_jit_matches_eager
 
 
 def fd_grad(f, x: float, eps: float = 1e-5) -> float:
@@ -50,7 +50,7 @@ class TestDelayedBq:
         sfr = delayed_bq(
             t, log_total_mass=10.0, tau_main_yr=2e9, age_main_yr=5e9, age_bq_yr=500e6, r_sfr=0.1
         )
-        assert jnp.all(sfr >= 0)
+        assert_non_negative(sfr, name="sfr")
 
     def test_zero_beyond_age_main(self):
         """SFR is zero for t > age_main_yr."""
@@ -249,7 +249,7 @@ class TestPeriodic:
                 burst_type=burst_type,
                 age_yr=1000e6,
             )
-            assert jnp.all(sfr >= 0)
+            assert_non_negative(sfr, name="sfr")
 
     def test_zero_beyond_age(self):
         """SFR is zero for t > age_yr."""
@@ -366,7 +366,7 @@ class TestBuat08:
         t = jnp.logspace(7, 10, 200)
         for v in [80.0, 150.0, 220.0, 290.0, 360.0]:
             sfr = buat08(t, log_total_mass=10.0, velocity_km_s=v)
-            assert jnp.all(sfr >= 0)
+            assert_non_negative(sfr, name="sfr")
 
     def test_velocity_clipping(self):
         """Velocities outside [40, 360] are clipped."""
@@ -414,9 +414,8 @@ class TestBuat08:
 
     def test_is_jittable(self):
         """buat08 is JIT-compatible."""
-        fn = jax.jit(buat08)
         t = jnp.logspace(7, 10, 100)
-        sfr = fn(t, 10.0, 220.0)
+        sfr = assert_jit_matches_eager(buat08, t, 10.0, 220.0)
         chex.assert_shape(sfr, (100,))
 
     def test_has_gradients(self):
@@ -485,7 +484,7 @@ class TestSfh2Exp:
         )
 
     def test_nonnegative(self):
-        assert jnp.all(self._sfr() >= 0.0)
+        assert_non_negative(self._sfr(), name="output")
 
     def test_mass_conservation(self):
         """trapezoid(SFR, t) == 10**log_total_mass exactly."""

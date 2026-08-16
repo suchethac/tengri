@@ -23,7 +23,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-jax.config.update("jax_enable_x64", True)
+from tests._bounds import assert_non_negative
 
 
 def fd_grad(f, x: float, eps: float = 1e-4) -> float:
@@ -735,7 +735,7 @@ class TestCreateSkirtorFromGridNpz:
         fn = create_skirtor_from_grid(mock_npz)
         wave = jnp.logspace(4.0, 6.0, 80)
         out = fn(wave, agn_log_lbol=12.0)
-        assert jnp.all(out >= 0.0), "NPZ path: negative L_nu values"
+        assert_non_negative(out, name="out", msg="NPZ path: negative L_nu values")
 
     def test_npz_missing_key_raises(self, tmp_path):
         """create_skirtor_from_grid must raise KeyError when NPZ lacks required keys."""

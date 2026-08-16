@@ -32,8 +32,6 @@ from tengri.observation.photometry import FilterCurve
 
 pytestmark = pytest.mark.contract
 
-jax.config.update("jax_enable_x64", True)
-
 #: Dust deep enough that L_absorbed is large and the IR term is real rather
 #: than a rounding error.
 _TAU_BC, _TAU_DIFF = 2.0, 1.5

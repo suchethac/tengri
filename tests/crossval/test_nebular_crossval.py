@@ -13,14 +13,11 @@ Three comparisons:
 
 from pathlib import Path
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
 
 from tengri.components.stellar.sps.dsps_wrapper import LSUN_ERG_PER_S
-
-jax.config.update("jax_enable_x64", True)
 
 pytestmark = pytest.mark.crossval
 

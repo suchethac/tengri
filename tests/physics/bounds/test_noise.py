@@ -15,8 +15,6 @@ import jax.numpy as jnp
 import numpy.testing as npt
 import pytest
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri.observation.noise import (
     compute_effective_noise,
     compute_std_inv,
@@ -24,6 +22,7 @@ from tengri.observation.noise import (
     variable_noise_hamiltonian,
     variable_noise_metric_vec,
 )
+from tests._jit_parity import assert_jit_matches_eager
 
 
 def fd_grad(f, x: float, eps: float = 1e-4) -> float:
@@ -75,10 +74,9 @@ class TestComputeEffectiveNoise:
 
     def test_jit_compatible(self):
         """Function compiles under jax.jit."""
-        fn = jax.jit(compute_effective_noise)
         noise_obs = jnp.array([0.1, 0.2])
         model_flux = jnp.array([10.0, 20.0])
-        result = fn(noise_obs, model_flux, 0.05)
+        result = assert_jit_matches_eager(compute_effective_noise, noise_obs, model_flux, 0.05)
         chex.assert_shape(result, (2,))
 
     def test_grad_through_f_cal(self):
@@ -533,7 +531,7 @@ class TestVariableNoiseMetricVec:
 
     def test_jit_compatible(self, setup):
         """Compiles under jax.jit."""
-        fn = jax.jit(
+        result = assert_jit_matches_eager(
             lambda xi, v: variable_noise_metric_vec(
                 xi,
                 v,
@@ -541,7 +539,8 @@ class TestVariableNoiseMetricVec:
                 setup["data"],
                 setup["unflatten"],
                 setup["flatten"],
-            )
+            ),
+            setup["xi"],
+            setup["v"],
         )
-        result = fn(setup["xi"], setup["v"])
         chex.assert_tree_all_finite(result)

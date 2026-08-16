@@ -15,15 +15,16 @@ import chex
 import pytest
 
 pytestmark = pytest.mark.bounds
-import jax
 import jax.numpy as jnp
 
-jax.config.update("jax_enable_x64", True)
 from tengri.components.xray.xray import (
     xray_agn_corona_lopez24,
     xray_bolometric_correction_duras,
     xray_total_lopez24,
 )
+from tests._bounds import assert_non_negative
+from tests._grad_parity import assert_grad_matches_fd
+from tests._jit_parity import assert_jit_matches_eager
 
 
 @pytest.fixture()
@@ -49,8 +50,7 @@ class TestBolometricCorrectionDuras:
         assert k_high > k_low
 
     def test_jit(self):
-        fn = jax.jit(xray_bolometric_correction_duras)
-        k = fn(1e44)
+        k = assert_jit_matches_eager(xray_bolometric_correction_duras, 1e44)
         assert jnp.isfinite(k)
 
 
@@ -61,7 +61,7 @@ class TestLopez24Corona:
 
     def test_nonnegative(self, xray_wavelength):
         result = xray_agn_corona_lopez24(xray_wavelength, l_12um_erg_hz=1e30)
-        assert jnp.all(result >= 0.0)
+        assert_non_negative(result, name="result")
 
     def test_zero_outside_xray(self, xray_wavelength):
         result = xray_agn_corona_lopez24(xray_wavelength, l_12um_erg_hz=1e30)
@@ -152,8 +152,9 @@ class TestLopez24Corona:
         assert not jnp.allclose(with_aniso, without_aniso)
 
     def test_jit(self, xray_wavelength):
-        fn = jax.jit(lambda w: xray_agn_corona_lopez24(w, l_12um_erg_hz=1e30))
-        result = fn(xray_wavelength)
+        result = assert_jit_matches_eager(
+            lambda w: xray_agn_corona_lopez24(w, l_12um_erg_hz=1e30), xray_wavelength
+        )
         chex.assert_tree_all_finite(result)
 
     def test_gradient_wrt_alpha_irx(self, xray_wavelength):
@@ -167,7 +168,7 @@ class TestLopez24Corona:
                 )
             )
 
-        grad = jax.grad(loss)(0.3)
+        grad = assert_grad_matches_fd(loss, 0.3)
         assert jnp.isfinite(grad)
         # L_X = νLν / 10**α_IRX decreases with α_IRX -> negative gradient.
         assert grad < 0.0
@@ -182,7 +183,7 @@ class TestLopez24Corona:
                 )
             )
 
-        grad = jax.grad(loss)(1e30)
+        grad = assert_grad_matches_fd(loss, 1e30)
         assert jnp.isfinite(grad)
         assert grad > 0.0
 
@@ -220,6 +221,7 @@ class TestTotalLopez24:
         assert jnp.sum(with_agn) > jnp.sum(no_agn)
 
     def test_jit(self, xray_wavelength):
-        fn = jax.jit(lambda w: xray_total_lopez24(w, l_12um_erg_hz=1e30))
-        result = fn(xray_wavelength)
+        result = assert_jit_matches_eager(
+            lambda w: xray_total_lopez24(w, l_12um_erg_hz=1e30), xray_wavelength
+        )
         chex.assert_tree_all_finite(result)

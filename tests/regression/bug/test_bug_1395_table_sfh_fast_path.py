@@ -38,8 +38,6 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri.components.stellar import component as C
 from tengri.components.stellar.sfh.registry import SFH_REGISTRY
 

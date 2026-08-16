@@ -8,6 +8,8 @@ import chex
 import jax.numpy as jnp
 import pytest
 
+from tests._bounds import assert_non_negative
+
 pytestmark = pytest.mark.regression_bug
 
 
@@ -21,4 +23,4 @@ class TestRadioAGNSimplified:
         wave = jnp.logspace(7.0, 9.0, 100)  # radio wavelengths
         l_nu = radio_agn(wave, L_agn_bol=1e11, radio_loudness=2.0)
         chex.assert_tree_all_finite(l_nu)
-        assert jnp.all(l_nu >= 0.0)
+        assert_non_negative(l_nu, name="l_nu")
