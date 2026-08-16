@@ -309,7 +309,7 @@ class TestParamSpecChemEvol:
         spec = Parameters(
             mean_sfh_type="tsnorm",
             chem_evol=True,
-            sfh_tsnorm_log_total_mass=Uniform(-1, 2),
+            sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
             sfh_tsnorm_peak_lbt_gyr=Uniform(1, 12),
             sfh_tsnorm_width_gyr=Uniform(0.5, 5),
             sfh_tsnorm_skew=Fixed(0.0),
@@ -326,7 +326,7 @@ class TestParamSpecChemEvol:
         spec = Parameters(
             mean_sfh_type="tsnorm",
             chem_evol=True,
-            sfh_tsnorm_log_total_mass=Uniform(-1, 2),
+            sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
             sfh_tsnorm_peak_lbt_gyr=Uniform(1, 12),
             sfh_tsnorm_width_gyr=Uniform(0.5, 5),
             sfh_tsnorm_skew=Fixed(0.0),
@@ -342,7 +342,7 @@ class TestParamSpecChemEvol:
                 mean_sfh_type="tsnorm",
                 chem_evol=True,
                 evolving_metallicity=True,
-                sfh_tsnorm_log_total_mass=Uniform(-1, 2),
+                sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
                 sfh_tsnorm_peak_lbt_gyr=Uniform(1, 12),
                 sfh_tsnorm_width_gyr=Uniform(0.5, 5),
                 sfh_tsnorm_skew=Fixed(0.0),
@@ -353,7 +353,7 @@ class TestParamSpecChemEvol:
         """Without chem_evol, met_logzsol should still be present."""
         spec = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_total_mass=Uniform(-1, 2),
+            sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
             sfh_tsnorm_peak_lbt_gyr=Uniform(1, 12),
             sfh_tsnorm_width_gyr=Uniform(0.5, 5),
             sfh_tsnorm_skew=Fixed(0.0),
@@ -366,7 +366,7 @@ class TestParamSpecChemEvol:
         spec = Parameters(
             mean_sfh_type="tsnorm",
             chem_evol=True,
-            sfh_tsnorm_log_total_mass=Uniform(-1, 2),
+            sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
             sfh_tsnorm_peak_lbt_gyr=Uniform(1, 12),
             sfh_tsnorm_width_gyr=Uniform(0.5, 5),
             sfh_tsnorm_skew=Fixed(0.0),
@@ -381,7 +381,7 @@ class TestParamSpecChemEvol:
             mean_sfh_type="tsnorm",
             chem_evol=True,
             chem_yield=Uniform(0.01, 0.06),
-            sfh_tsnorm_log_total_mass=Uniform(-1, 2),
+            sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
             sfh_tsnorm_peak_lbt_gyr=Uniform(1, 12),
             sfh_tsnorm_width_gyr=Uniform(0.5, 5),
             sfh_tsnorm_skew=Fixed(0.0),
