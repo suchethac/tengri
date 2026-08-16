@@ -19,19 +19,28 @@ Both outcomes are correct. What is not correct is a name that raises something
 else, or raises with no explanation -- that is a menu advertising a choice the
 grammar will not honor.
 
-Measured when this was written: 104 of 114 entries build. All ten refusals are
-deliberate. ``burst`` and ``field`` are additive-only and need a smooth
-component beside them; the other eight are held behind an explicit
-"registered but not yet validated against the DSPS forward path" guard, which
-is the right way to ship a model that is not ready -- loudly, rather than
-silently returning something wrong.
+Measured when this was written, across eleven menus plus the AGN blocks: 158
+entries, of which 144 build. All ten refusals are deliberate -- ``burst`` and
+``field`` are additive-only and need a smooth component beside them, and the
+other eight are held behind an explicit "registered but not yet validated
+against the DSPS forward path" guard, which is the right way to ship a model
+that is not ready: loudly, rather than silently returning something wrong. The
+remaining four are the Synthesizer AGN NLR/BLR blocks, which build once
+``TENGRI_SYNTHESIZER_AGN_GRID_DIR`` points at the downloaded grids and skip
+otherwise. Nothing in the surface is broken.
 
 Guarding the refusal *reasons*, not just the count, is what makes this useful:
 when one of those eight is validated and starts building, this test keeps
 passing; when a wired model quietly regresses into refusing, it fails.
+
+A third outcome is a skip: blocks backed by a grid that is downloaded rather
+than committed (Synthesizer's AGN NLR/BLR tables) cannot be built without it,
+which is missing data rather than a defect. Those skips name the missing path.
 """
 
 from __future__ import annotations
+
+import re
 
 import pytest
 
@@ -114,6 +123,25 @@ def _cases() -> list[tuple[str, str, dict]]:
     for menu, lister, mk in specs:
         for name in _names(lister()):
             out.append((menu, name, mk(name)))
+
+    # The AGN blocks are nested selectors (agn.disc, agn.torus, ...), and the
+    # registry already states how to reach each one in its `use` column. Parse
+    # that rather than keep a private category -> group map here: a new block
+    # category then arrives covered instead of silently unswept.
+    for row in tengri.list_agn_blocks():
+        name = row["name"]
+        if name == "none":
+            continue
+        m = re.search(r"agn=\{'(\w+)':", row.get("use", ""))
+        if m is None:
+            continue
+        out.append(
+            (
+                f"agn.{m.group(1)}",
+                name,
+                {"agn": {"type": "composable", m.group(1): {"type": name, "all_params": FIXED}}},
+            )
+        )
     return out
 
 
@@ -164,6 +192,12 @@ def test_menu_entry_builds_or_refuses_clearly(menu, entry, kwargs, bare_stellar_
                 f"Either wire it up, or make the refusal explicit and add its wording "
                 f"to ALLOWED_REFUSALS in this file."
             )
+    except FileNotFoundError as exc:
+        # Blocks backed by a third-party grid that is downloaded rather than
+        # committed -- Synthesizer's AGN NLR/BLR tables, for one. Absent data is
+        # not a broken selector, so skip rather than fail, and name the path so
+        # the reader can see exactly what to fetch.
+        pytest.skip(f"{menu} '{entry}' needs an external grid that is not installed: {exc}")
     except Exception as exc:  # the point is that nothing else is acceptable
         pytest.fail(
             f"{menu} '{entry}' raised {type(exc).__name__} rather than building or "
