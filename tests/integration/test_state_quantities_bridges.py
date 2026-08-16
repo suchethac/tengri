@@ -37,8 +37,8 @@ from tengri.forward import (
     state_to_sfh_quantities,
     state_to_xray_quantities,
 )
+from tengri.forward.orchestrator import default_params_dict
 from tengri.protocols.component import ForwardState
-from tests._component_params import component_params
 
 # Bare-stellar SSP — required by Cue (wNE SSPs now raise CueWNESSPError).
 _SSP_PATH = pathlib.Path("data/fsps_prsc_miles_chabrier.h5").resolve()
@@ -61,10 +61,6 @@ def state(ssp):
     ]
     state0 = ForwardState(wave=ssp.ssp_wave, sed_observed=jnp.ones(len(ssp.ssp_wave)))
     params = {
-        # Radio/X-ray declared defaults first; the explicit values below
-        # override them, so this pinned set stays complete when a component
-        # declares a new parameter (#1832).
-        **component_params(RadioSEDComponent(), XRaySEDComponent()),
         # tsnorm SFH
         "sfh_tsnorm_log_total_mass": jnp.asarray(10.0),  # 1e10 Msun galaxy (#673)
         "sfh_tsnorm_peak_lbt_gyr": jnp.asarray(2.0),
@@ -78,20 +74,11 @@ def state(ssp):
         "dust_slope": jnp.asarray(-0.7),
         "dust_T": jnp.asarray(35.0),
         "dust_beta_ir": jnp.asarray(1.6),
-        # Radio
-        "radio_q_ir": jnp.asarray(2.64),
-        "radio_alpha_sf": jnp.asarray(0.8),
-        "radio_loudness": jnp.asarray(0.0),
-        "radio_alpha_agn": jnp.asarray(0.7),
-        "radio_T_e": jnp.asarray(1e4),
-        "radio_alpha_ff": jnp.asarray(-0.1),
-        # X-ray
-        "xray_gamma_hmxb": jnp.asarray(2.0),
-        "xray_gamma_lmxb": jnp.asarray(1.6),
-        "xray_gamma_agn": jnp.asarray(1.8),
-        "xray_E_cut": jnp.asarray(300.0),
+        # Radio + X-ray at their declared defaults, rather than a literal that
+        # cannot follow them (#1832).
+        **default_params_dict([RadioSEDComponent(), XRaySEDComponent()]),
+        # The one deliberate departure from the declared defaults.
         "xray_delta_alpha_ox": jnp.asarray(-1.4),
-        "xray_log_nh": jnp.asarray(20.0),
         "redshift": jnp.asarray(0.0),
     }
     return run_components(chain, state0, params)

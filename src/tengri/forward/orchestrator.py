@@ -33,6 +33,7 @@ from tengri.protocols.component import (
 )
 
 __all__ = [
+    "default_params_dict",
     "merge_declared_parameters",
     "run_components",
     "sample_params_dict",
@@ -731,6 +732,90 @@ def sample_params_dict(
             out[name] = jnp.asarray(overrides[name])
         else:
             out[name] = jnp.asarray(prior.sample(subkey))
+    # Bare-name allowlist entries that no component declared but the
+    # caller still wants threaded through (typically redshift).
+    for bare in BARE_NAME_ALLOWLIST:
+        if bare in overrides and bare not in out:
+            out[bare] = jnp.asarray(overrides[bare])
+    return out
+
+
+def default_params_dict(
+    components: Iterable[SEDComponent],
+    overrides: Mapping[str, Any] | None = None,
+) -> dict[str, jnp.ndarray]:
+    r"""Build one params dict from each component's declared *defaults*.
+
+    The deterministic sibling of :func:`sample_params_dict`: same loop
+    ``[components] -> declarations -> params dict -> run_components``, but
+    each value is read off the prior's ``default`` instead of drawn from it.
+
+    Use it wherever a params dict is wanted for the whole of a component
+    chain — pipeline tests, notebook demos, a forward pass at the declared
+    fiducial. The alternative is a literal, and a literal is a copy of the
+    declaration that cannot follow it: eight fixtures listed the ``xray_*``
+    parameters by hand and broke the day ``xray_det_hmxb`` gained a reader,
+    because that one is declared ``Uniform(-2, 2, default=0.0)`` -- free, so
+    absent from ``spec.get_fixed_values()`` -- while the siblings they *had*
+    listed are ``Fixed`` (#1832). Reading the declaration treats free and
+    fixed alike, and reaches the ones nobody thought to copy.
+
+    Parameters
+    ----------
+    components : iterable of SEDComponent
+        Adapters whose declared defaults should be collected.
+    overrides : mapping, optional
+        Values that replace the declared default. Also the only way to
+        supply a :data:`BARE_NAME_ALLOWLIST` name (typically ``redshift``),
+        which no component declares.
+
+    Returns
+    -------
+    dict mapping str -> jnp.ndarray
+        Parameter name -> declared default, ready to feed
+        :func:`run_components`.
+
+    Raises
+    ------
+    ValueError
+        If a declared prior carries no ``default`` to read. Loudly, and
+        naming the parameter: silently omitting it would hand back a dict
+        missing a key the owning component indexes, which is the failure
+        this function exists to prevent.
+
+    Notes
+    -----
+    **JIT-compatible**: not applicable -- builds a dict of concrete scalars,
+    intended to be constructed outside any transform and passed in.
+
+    Deliberately *not* an auto-fill inside :func:`run_components`. A
+    parameter nobody supplies must still raise: ``xray_det_hmxb`` and
+    ``xray_det_lmxb`` were declared, free, and read by nothing for as long
+    as they were because a neutral default made the missing handoff look
+    wired (#1706). Asking for the declared defaults is an explicit request;
+    being handed them behind your back is the bug.
+
+    See Also
+    --------
+    sample_params_dict : the same loop, drawing from the priors instead.
+    tengri.protocols.component.declared_default : one parameter, for a
+        function signature default.
+    """
+    merged = merge_declared_parameters(components)
+    overrides = overrides or {}
+    out: dict[str, jnp.ndarray] = {}
+    for name, prior in merged.items():
+        if name in overrides:
+            out[name] = jnp.asarray(overrides[name])
+            continue
+        default = getattr(prior, "default", None)
+        if default is None:
+            raise ValueError(
+                f"{name!r} is declared with {type(prior).__name__} but carries no "
+                f"default to read, so no value can be supplied for it. Give the "
+                f"declaration a `default=`, or pass overrides={{{name!r}: ...}}."
+            )
+        out[name] = jnp.asarray(default)
     # Bare-name allowlist entries that no component declared but the
     # caller still wants threaded through (typically redshift).
     for bare in BARE_NAME_ALLOWLIST:

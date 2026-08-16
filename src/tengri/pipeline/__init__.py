@@ -53,6 +53,7 @@ from tengri.components.nebular.component import NebularSEDComponent
 from tengri.components.radio.component import RadioSEDComponent
 from tengri.components.xray.component import XRaySEDComponent
 from tengri.forward.orchestrator import (
+    default_params_dict,
     merge_declared_parameters,
     run_components,
     sample_params_dict,
@@ -113,6 +114,7 @@ __all__ = [
     "SpectroscopyLikelihood",
     "StudentTLikelihood",
     "XRaySEDComponent",
+    "default_params_dict",
     "merge_declared_parameters",
     "run_components",
     "sample_params_dict",
