@@ -184,7 +184,7 @@ class TestDifferentiability:
     def test_gradient_vanishes_outside_the_kernel_support(self, n_sigma):
         """Beyond 3 sigma the derivative is exactly zero — the trap, pinned.
 
-        This is correct behaviour for a compactly supported kernel, not a
+        This is correct behavior for a compactly supported kernel, not a
         bug, but it is why the three tests above were silently vacuous: the
         value stays finite the whole way out, so only a non-zero check can
         tell "differentiable" from "far enough away not to matter".

@@ -61,7 +61,7 @@ class TestPlotFilterCurves:
 
         The line count is asserted first because the peak check lives inside
         the loop: had ``plot_filter_curves`` drawn nothing, the loop would run
-        zero times and this test would pass while proving nothing. Neighbouring
+        zero times and this test would pass while proving nothing. Neighboring
         tests in this class already pin the count; these two did not.
         """
         ax = plot_filter_curves(OPTICAL_FILTERS[:2], normalize=True, show_eff_wave=False)

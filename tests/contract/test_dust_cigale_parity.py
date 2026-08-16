@@ -299,7 +299,7 @@ class TestModifiedBlackbodyEpsilon:
 #     assert jnp.isfinite(jax.grad(total)(x))
 #
 # Zero is finite. Every axis below is a template-grid axis or a mixing
-# fraction, and the ordinary way each of them breaks -- a nearest-neighbour
+# fraction, and the ordinary way each of them breaks -- a nearest-neighbor
 # lookup instead of an interpolation, an integer cast, a stray
 # ``stop_gradient`` -- leaves the forward value moving (so the no-op tests
 # above still pass) and the gradient exactly 0.0 (so the finiteness assertion
@@ -418,7 +418,7 @@ def test_bounded_fraction_is_hard_clamped_and_its_gradient_dies_at_the_bound(kno
     """Outside [0, 1] these knobs are frozen and carry no gradient at all.
 
     Nothing else in the suite can see this: every existing test evaluates
-    strictly inside the interval. The behaviour matters because a sampler
+    strictly inside the interval. The behavior matters because a sampler
     working in an unconstrained space can and does propose values outside the
     bound, and there it receives a bit-identical likelihood and an exactly
     zero gradient -- no signal pointing back into the valid range.

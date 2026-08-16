@@ -31,6 +31,8 @@ import pathlib
 
 import pytest
 
+pytestmark = pytest.mark.contract
+
 _TESTS_ROOT = pathlib.Path(__file__).resolve().parent.parent
 _BROAD = {"Exception", "BaseException"}
 

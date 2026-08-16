@@ -14,7 +14,7 @@ from tengri.observation.calibration import (
 from tests._grad_parity import assert_grad_matches_fd
 from tests._jit_parity import assert_jit_matches_eager
 
-pytestmark = pytest.mark.unit
+pytestmark = [pytest.mark.unit, pytest.mark.bounds]
 
 
 @pytest.fixture

@@ -164,7 +164,7 @@ def test_gradient_is_exactly_zero_off_grid(torus_fn, wavelength, axis, point, ar
     outside the grid gets no restoring force along that axis and stalls
     there silently, because the value stays finite the whole time.  Pinning
     it means the trap is visible, and a future switch to an extrapolating
-    kernel turns this red instead of changing fit behaviour unremarked.
+    kernel turns this red instead of changing fit behavior unremarked.
     """
     g = jax.grad(_scalar_loss(torus_fn, wavelength), argnums=argnum)(*point)
     assert float(g) == 0.0, f"{axis}: expected a clamped (zero) gradient, got {float(g)}"

@@ -25,6 +25,8 @@ from tengri.components.agn.skirtor_model import SKIRTORTorus, SKIRTORTorusConfig
 from tengri.components.sed_model_component import _REGISTRY, SEDModelComponent
 from tests._bounds import assert_non_negative
 
+pytestmark = pytest.mark.contract
+
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 _SKIRTOR_CANDIDATES = [
     _DATA_DIR / "skirtor_templates_v3.h5",

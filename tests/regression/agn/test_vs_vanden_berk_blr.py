@@ -68,7 +68,7 @@ _VB01_RATIOS = {
 _FWHM_KMS = 500.0
 assert _BLR_FWHM_KMS == 5000.0, (
     "the BLR default width moved; re-check that 500 km/s still separates the "
-    "measured lines from their neighbours"
+    "measured lines from their neighbors"
 )
 _SIGMA_FRAC = (_FWHM_KMS / 2.354820045) / _C_KMS
 _WINDOW_SIGMA = 8.0
@@ -171,6 +171,7 @@ def test_the_matched_filter_estimator_is_biased_by_wavelength():
     )
 
 
+@pytest.mark.contract
 def test_the_composite_grid_does_not_change_the_answer():
     """The cheap grid is only valid if the normalization ignores it.
 
@@ -192,10 +193,11 @@ def test_the_composite_grid_does_not_change_the_answer():
         )
 
 
+@pytest.mark.contract
 def test_the_measurement_window_actually_contains_the_line():
     """A window narrower than the line reads as a physics discrepancy.
 
-    Found while writing the NLR sibling: an off-by-0.6 A line centre against a
+    Found while writing the NLR sibling: an off-by-0.6 A line center against a
     window of +-0.9 A put Halpha 14 % low, which looks exactly like a real
     disagreement with the reference.
     """

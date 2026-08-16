@@ -180,13 +180,17 @@ def test_fritz_torus_frac_normalization(fritz_grid_path: Path, wavelength_aa: jn
 # each asserted only ``max_diff > 0`` -- a threshold one ULP of difference
 # satisfies -- and covered three of the six axes. Two problems came with them:
 #
-#   * every call passed ``agn_log_lbol=44.0``. That field is log10(L_bol/L_sun)
+#   * each of them passed ``agn_log_lbol=44.0``. That field is log10(L_bol/L_sun)
 #     (NAMING_CONTRACT / CLAUDE.md), so 44.0 asks for 1e44 L_sun = 3.8e77 erg/s,
 #     about 33 dex above any AGN, and the SED came back at 5e64 erg/s/Hz. The
 #     model is exactly linear in luminosity -- +1 dex multiplies the sum by
 #     10.000000 -- so no shape conclusion changed, but every number printed by a
 #     failure was meaningless, and at that scale a float32 path would overflow.
 #     The value that reads as "1e44 erg/s" is 10.4; these use 11.0.
+#     ``test_fritz_analytic_basic`` and ``test_fritz_torus_frac_normalization``
+#     still pass 44.0 and 44.5 and are left alone: both convert through
+#     ``L_sun`` themselves, so they are self-consistent at whatever luminosity
+#     they name, and the model is exactly linear in it.
 #
 #   * the opening-angle test compared oa=60 against oa=140 on a grid that spans
 #     [20, 60]. Beyond the last node the model extrapolates to ~80 and is
@@ -297,7 +301,7 @@ def test_fritz_axis_is_differentiable(
         "distinct values with an exactly zero gradient at 67.5% of samples; "
         "every other axis returns 40/40 distinct with 0% zero. The output "
         "plateaus sit on the node values and switch at 4.5 and 8.0, the "
-        "midpoints of [3,6] and [6,10] -- nearest-neighbour selection."
+        "midpoints of [3,6] and [6,10] -- nearest-neighbor selection."
     ),
     strict=True,
 )
@@ -339,7 +343,7 @@ def test_fritz_clamps_beyond_the_opening_angle_grid(
 ) -> None:
     """Past the opening-angle grid the model extrapolates, then freezes.
 
-    Pinned as measured behaviour, not endorsed. The grid spans [20, 60] deg;
+    Pinned as measured behavior, not endorsed. The grid spans [20, 60] deg;
     the model keeps varying to ~80 and returns a bit-identical SED for every
     value above that. The test this replaces compared oa = 60 against oa = 140
     and read the 1.9% difference as evidence that the opening angle works --

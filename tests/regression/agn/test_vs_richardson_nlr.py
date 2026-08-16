@@ -60,7 +60,7 @@ _A42_RATIOS = {
 
 #: Narrow enough to resolve [NII] 6585 away from Halpha, wide enough that the
 #: grid resolving it stays cheap. At 100 km/s sigma_lambda is 0.93 A at Halpha
-#: and the nearest neighbour ([NII] 6549.86) is 15.8 sigma away; the +-8 sigma
+#: and the nearest neighbor ([NII] 6549.86) is 15.8 sigma away; the +-8 sigma
 #: measurement windows of the two do not touch. The 500 km/s NLR default puts
 #: them 3.2 sigma apart, which is why the default cannot be used here.
 _FWHM_KMS = 100.0
@@ -92,7 +92,7 @@ def _nlr_spectrum():
 
 
 def _line_flux(wave, sed, center_aa, *, axis="nu"):
-    """Integrate one line over +-``_WINDOW_SIGMA`` about its centre.
+    """Integrate one line over +-``_WINDOW_SIGMA`` about its center.
 
     ``axis='nu'`` is the physical energy flux. ``axis='lambda'`` exists only so
     a test can demonstrate the bias that choice introduces.
@@ -239,10 +239,11 @@ def test_nlr_delegate_to_richardson():
     assert float(jnp.max(sed_richardson)) > 0.0, "both SEDs are zero; allclose is vacuous"
 
 
+@pytest.mark.contract
 def test_the_measurement_window_actually_contains_the_line():
     """Guards the flaw found while writing this file.
 
-    The first draft used the old centres (6564.0 for Halpha, 0.61 A off the
+    The first draft used the old centers (6564.0 for Halpha, 0.61 A off the
     vacuum value) with a +-5 sigma window. At 20 km/s that window is +-0.93 A,
     so it sat over the line's wing and Halpha measured 14 % low -- a wrong
     number that looked like a physics discrepancy. Asserting that the window

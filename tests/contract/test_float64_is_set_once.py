@@ -40,7 +40,7 @@ _CONFTEST = _TESTS_ROOT / "conftest.py"
 
 
 class TestDoublePrecisionIsActuallyOn:
-    """Behavioural, not a flag read: a flag can be true while some other dtype
+    """Behavioral, not a flag read: a flag can be true while some other dtype
     policy still demotes."""
 
     def test_a_float64_array_stays_float64(self):
@@ -51,10 +51,10 @@ class TestDoublePrecisionIsActuallyOn:
         kernel must not silently pin the computation to single precision."""
         assert (jnp.asarray(1.0) * 2.0).dtype == np.float64
 
-    def test_the_flag_agrees_with_the_behaviour(self):
+    def test_the_flag_agrees_with_the_behavior(self):
         assert jax.config.jax_enable_x64 is True
 
-    def test_precision_is_enough_to_separate_neighbouring_doubles(self):
+    def test_precision_is_enough_to_separate_neighboring_doubles(self):
         """float32 could not represent this difference at all, so this fails
         loudly rather than subtly if the policy is lost."""
         one_plus_eps = jnp.asarray(1.0) + jnp.asarray(1e-12)

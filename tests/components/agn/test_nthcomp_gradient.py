@@ -82,7 +82,7 @@ class TestNthcompGradientStability:
                 f"outside the grid the clamp must hold frac fixed, so the "
                 f"gradient is exactly zero; at v={outside} it is {clamped}. If "
                 f"this became nonzero the clamp changed and the dead-zone "
-                f"behaviour pinned in this file is stale."
+                f"behavior pinned in this file is stale."
             )
 
     #: Measured on the shipped table (#1822): the gamma axis is live on
@@ -139,7 +139,7 @@ class TestNthcompGradientStability:
     def test_gamma_is_frozen_outside_the_table(self, gamma_val):
         """Outside [1.5, 3.5] the spectrum is frozen and the gradient is zero.
 
-        Pinned as measured behaviour, not endorsed: a fit initialised out here
+        Pinned as measured behavior, not endorsed: a fit initialized out here
         cannot move, because the gradient is exactly 0.0 rather than merely
         small. Whether the clamp should instead raise is #1822. Asserting it
         makes the dead zone visible, and makes a future bounds change loud.
@@ -178,7 +178,7 @@ class TestNthcompGradientStability:
             f"a 400x change in electron temperature left sum(L_nu) bit-identical at {cold!r}"
         )
 
-    def test_kte_is_inert_and_the_neighbouring_axis_is_not(self):
+    def test_kte_is_inert_and_the_neighboring_axis_is_not(self):
         """Pin #1822 precisely, so the xfail above cannot pass for the wrong reason.
 
         If ``nthcomp_lnu_interp`` started returning a constant for *everything*,
