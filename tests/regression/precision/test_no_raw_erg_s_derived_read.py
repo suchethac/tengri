@@ -13,7 +13,7 @@ The defect was never a missing capability -- ``log_L_ir``, ``log_L_age`` and
 ``log_line_lums`` were already published, already finite, and already the
 preferred read at other sites in the same tree. What was missing is this
 guard: something that notices when a *new* consumer reaches for the linear key
-next to a neighbour that does not.
+next to a neighbor that does not.
 
 Two-way gate, matching :mod:`tests.regression.precision.test_no_raw_nion_read`:
 new unauthorized sites are rejected, and stale allow-list entries are flagged
@@ -149,7 +149,7 @@ def test_the_guard_can_actually_fail():
     assert caught == [(1, "L_ir")]
     caught_get = _raw_reads(ast.parse('x = derived.get("L_age", 0.0)'))
     assert caught_get == [(1, "L_age")]
-    # A log companion read is not an offence.
+    # A log companion read is not an offense.
     assert _raw_reads(ast.parse('x = state.derived["log_L_ir"]')) == []
     # Nor is the same text inside a docstring -- the reason for using ast.
     assert _raw_reads(ast.parse('"""Reads state.derived["L_ir"] in erg/s."""')) == []
