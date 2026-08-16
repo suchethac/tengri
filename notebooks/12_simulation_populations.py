@@ -53,6 +53,7 @@ import gc
 import resource
 import sys
 import time
+import warnings
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -588,6 +589,134 @@ for n in (256, 1024, 4096):
 # through the SSP machinery, and the default of 1024 was enough to exhaust
 # memory on the laptop this was written on. If a run dies with no Python
 # traceback, turn it down first.
+#
+# ### 5d. `float32`
+#
+# The last lever is precision, and it is the one whose payoff is most often
+# misdescribed. `tengri` turns float64 on at import because the projection to
+# flux needs the dynamic range — `d_L^2` at any interesting redshift overflows
+# float32 outright. What makes float32 usable anyway is that the forward model
+# never *forms* `d_L^2`: `observation/redshift_kernel.py` applies
+# $(1+z)/(4\pi d_L^2)$ as a log10 offset, precisely so that intermediate cannot
+# overflow. The dynamic range never exists as a number, so it never has to fit.
+#
+# The switch is global, and it only affects arrays created after it — so it has
+# to come **before** the build. A model built under float64 keeps its float64
+# tables no matter what you set afterwards.
+#
+# Rebuilding then emits a `UserWarning` per table — *"Explicitly requested dtype
+# float64 ... will be truncated to float32"*. That is JAX reporting the thing you
+# just asked for, not a problem; the cell silences it so the output stays
+# readable, and checks the resulting dtype instead of trusting it.
+
+# %%
+
+
+def program_cost(fn, arg):
+    """FLOPs, bytes moved, and loop/fusion structure of the compiled program.
+
+    Deterministic, unlike wall clock: it does not depend on what else the
+    machine happens to be running.
+    """
+    exe = fn.lower(arg).compile()
+    c = exe.cost_analysis()
+    if isinstance(c, list):
+        c = c[0]
+    hlo = exe.as_text()
+    return {
+        "flops": c["flops"],
+        "bytes": c["bytes accessed"],
+        "while": hlo.count(" while("),
+        "fusion": hlo.count("fusion("),
+    }
+
+
+f64_fn = jax.jit(jax.vmap(fwd.predict_photometry))
+ref64 = np.asarray(f64_fn(batch))
+c64 = program_cost(f64_fn, batch)
+
+jax.config.update("jax_enable_x64", False)  # global, and BEFORE the build
+
+with warnings.catch_warnings():
+    # The SSP tables ask for float64 explicitly; with x64 off JAX truncates them
+    # and says so, once per table. Here that truncation is the entire point.
+    warnings.filterwarnings("ignore", message=".*Explicitly requested dtype float64.*")
+    fwd32 = build_model()
+    batch32 = {k: v.astype(np.float32) for k, v in batch.items()}
+    f32_fn = jax.jit(jax.vmap(fwd32.predict_photometry))
+    out32 = np.asarray(f32_fn(batch32))
+    c32 = program_cost(f32_fn, batch32)
+
+dmag = np.abs(-2.5 * (np.log10(out32) - np.log10(ref64)))
+print(f"  {'':18s}{'float64':>12s}{'float32':>12s}{'ratio':>10s}")
+print(f"  {'output dtype':18s}{ref64.dtype!s:>12s}{out32.dtype!s:>12s}")
+print(
+    f"  {'FLOPs [M]':18s}{c64['flops'] / 1e6:12.1f}{c32['flops'] / 1e6:12.1f}"
+    f"{c64['flops'] / c32['flops']:9.2f}x"
+)
+print(
+    f"  {'bytes moved [MB]':18s}{c64['bytes'] / 1e6:12.1f}{c32['bytes'] / 1e6:12.1f}"
+    f"{c64['bytes'] / c32['bytes']:9.2f}x"
+)
+print(f"  {'while loops':18s}{c64['while']:12d}{c32['while']:12d}")
+print(f"  {'fusion regions':18s}{c64['fusion']:12d}{c32['fusion']:12d}")
+print(f"\n  agreement with float64: median {np.median(dmag):.0e} mag, worst {dmag.max():.0e} mag")
+
+# %% [markdown]
+# Read that table carefully, because it says something more useful than
+# "float32 is faster".
+#
+# **The FLOP count does not move.** Same arithmetic, same number of `while`
+# loops, same number of fusion regions — the compiled program has the same
+# shape, it is just narrower. float32 is not buying you arithmetic here.
+#
+# **The bytes halve.** About 1.8x fewer bytes moved, and roughly 1.9x less
+# scratch memory. This workload is bandwidth-bound rather than FLOP-bound, so
+# bytes are the currency that matters — which means the dependable win is the
+# **batch ceiling** from section 4, not the clock. Close to twice the width
+# fits in the same RAM.
+#
+# **Whether that becomes speed depends on your machine.** On the shared laptop
+# this was written on it did not separate from noise: repeat runs at the *same*
+# precision scattered by 8-16%, which is wider than the gap between precisions.
+# Before believing any A/B difference, run an A/A control — the same
+# configuration twice — and check the gap you are chasing is bigger than the
+# scatter you already have.
+#
+# Two traps, both measured rather than imagined:
+#
+# **Underflow at high redshift.** Agreement holds at ~1e-5 mag from z = 0.01 to
+# z = 3. At z = 6 the Lyman-break dropout bands are genuinely tiny — float64
+# returns 1e-49 to 1e-41 there — and float32 has no such numbers, so they come
+# back as exactly `0.0` (measured: 128 of 352 fluxes). Those bands are dark
+# either way, but `0.0` turns a color or a log into `-inf`. Above z ~ 4, stay in
+# float64 or mask the dropouts deliberately.
+#
+# This failure mode is why float32 is a maintained property of the codebase
+# rather than a happy accident. float32's smallest subnormal is 1.4e-45, so any
+# smaller constant *is* zero there — and a zero that multiplies is not a
+# rounding error, it is a wrong answer. Two CI guards exist for exactly this
+# (`tools/check_representable_floors.py` for guard floors,
+# `tools/check_float32_representable_constants.py` for computed constants), and
+# `tengri.utils.scale.representable_floor` is the fix at a live site: it lifts a
+# floor to the working dtype's smallest normal and leaves float64 alone. If you
+# write your own float32 path, use it instead of a bare literal.
+#
+# **Grid edges stop being exact.** `Z_FLOOR` above is read off the SSP
+# metallicity grid and clipped *to* it. In float32 that edge is only good to
+# ~1e-7 relative, so a value clipped exactly onto it can land a hair outside,
+# and `Catalog.from_histories` then refuses the whole catalog — correctly, since
+# off-grid nodes are clipped silently inside JIT. Clip with a margin
+# (`Z_FLOOR * (1 + 1e-4)`) instead of to the edge itself.
+#
+# Finally, scope this. Everything above measures `predict_photometry` on the
+# baked-in nebular configuration from section 5a. It does not transfer for free:
+# a different component brings its own small constants, and the CB19 line list
+# once returned *every* line as exactly zero in pure float32 for precisely the
+# reason above. Re-run this comparison after changing the component stack rather
+# than assuming the result carries over. Inference is a separate question again
+# — gradients, mass matrices and log-likelihood *differences* have their own
+# conditioning, and nothing here measures any of it.
 #
 # ## The whole thing
 #
