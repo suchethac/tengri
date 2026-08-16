@@ -83,43 +83,43 @@ env:
 # Only the `slow` job cares about labels (`run-slow-tests`); everything else
 # should run on push / opened / synchronize / reopened, not on label adds.
 jobs:
-  # How much of the suite this run earns, decided ONCE and published, because
-  # GitHub Actions has no YAML anchors and the alternative is the same compound
-  # `if:` copy-pasted into every heavy job — which is how the branch filter above
-  # drifted out of anyone's view in the first place.
+  # Announces what this run does NOT cover. The #1806/#1810 failure was not that
+  # a stacked PR ran less — it was that a green tick on a stacked PR looked
+  # exactly like a green tick on a full run. A run that covers less must say so.
   #
-  # `full` is true for push / schedule / workflow_dispatch, and for a PR whose
-  # base is `main`. A PR stacked on another branch gets the cheap tier: lint,
-  # security, smoke. The expensive tier — the eight test shards and the gallery —
-  # runs when the stack retargets to `main`, which is the point at which its code
-  # is actually proposed for `main`.
+  # NOTHING DEPENDS ON THIS JOB, deliberately. An earlier revision had it publish
+  # a `full` output that `test` and `gallery-changes` consumed via `needs:`. That
+  # put an extra runner acquisition on the critical path of the 19-minute test
+  # matrix in order to compute a boolean that `if:` can evaluate for free, and
+  # this repo routinely has 40+ workflow runs in flight — the first run of that
+  # revision sat with `tier` queued while `smoke`, `lint` and `security` had all
+  # finished, holding back the entire matrix behind a two-minute job that could
+  # not get a runner. The heavy jobs now test `github.base_ref` inline and start
+  # the moment `smoke` clears; this job just narrates, in parallel, blocking
+  # nothing.
   #
-  # The withholding is ANNOUNCED, not silent. That is the whole point: the
-  # #1806/#1810 failure was not that a stacked PR ran less, it was that a green
-  # tick on a stacked PR looked exactly like a green tick on a full run. A run
-  # that covers less must say which parts it did not cover.
+  # The condition is therefore written in three places, which is exactly the
+  # duplication that let the old branch filter drift out of view — so
+  # `tools/check_ci_pr_coverage.py` asserts every full-tier job actually carries
+  # it, rather than trusting anyone to keep them in step.
   tier:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     if: ${{ github.event_name != 'pull_request' || github.event.action != 'labeled' }}
-    outputs:
-      full: ${{ steps.decide.outputs.full }}
     steps:
-      - id: decide
+      - name: Say what this run covers
         env:
           EVENT_NAME: ${{ github.event_name }}
           BASE_REF: ${{ github.base_ref }}
         run: |
           if [ "$EVENT_NAME" != "pull_request" ] || [ "$BASE_REF" = "main" ]; then
-            echo "full=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "full=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "## Full CI tier"
+              echo
+              echo "Everything this workflow gates on is running."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
           fi
-      - name: Say what this run does not cover
-        if: steps.decide.outputs.full != 'true'
-        env:
-          BASE_REF: ${{ github.base_ref }}
-        run: |
           {
             echo "## Partial CI tier"
             echo
@@ -321,11 +321,10 @@ jobs:
   gallery-changes:
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    # `gallery` itself needs this job's output, so gating here cascades to it.
-    needs: tier
+    # `gallery` needs this job's output, so gating here cascades to it.
     if: >-
       ${{ (github.event_name != 'pull_request' || github.event.action != 'labeled')
-      && needs.tier.outputs.full == 'true' }}
+      && (github.event_name != 'pull_request' || github.base_ref == 'main') }}
     permissions:
       contents: read
       pull-requests: read
@@ -534,10 +533,10 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
-    needs: [smoke, tier]
+    needs: smoke
     if: >-
       ${{ (github.event_name != 'pull_request' || github.event.action != 'labeled')
-      && needs.tier.outputs.full == 'true' }}
+      && (github.event_name != 'pull_request' || github.base_ref == 'main') }}
     # Sharded across runners, one tree per shard. The suite had grown to 22-24 min
     # against a 25 min cap — it was about to start failing on timeout rather than on
     # any test. More workers per runner is NOT the lever (that is exactly what OOM-

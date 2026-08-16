@@ -19,12 +19,13 @@ This guard closes the loop on both halves of that.
 **The trigger.** ``pull_request`` must carry no ``branches:`` filter, so the
 workflow fires for a PR against any base. Re-adding one fails the build.
 
-**The jobs.** Firing is not the same as running everything -- the ``tier`` job
-withholds the expensive shards from a PR that is not aimed at ``main``. That is
-a deliberate trade, so every job must appear in exactly one bucket below with a
-written reason. A job in none of them fails the guard, which is the point: the
-next person to add a job decides its tier on purpose instead of inheriting
-whatever the job above it happened to say.
+**The jobs.** Firing is not the same as running everything: the expensive jobs
+test ``github.base_ref`` and stand down for a PR that is not aimed at ``main``.
+That is a deliberate trade, so every job must appear in exactly one bucket below
+with a written reason. A job in none of them fails the guard, which is the
+point -- the next person to add a job decides its tier on purpose instead of
+inheriting whatever the job above it happened to say. The ``tier`` job only
+narrates the decision; nothing depends on it.
 
 Dependencies: standard library only. The ``lint`` job installs ruff and nothing
 else, so this must not import ``yaml`` or ``tengri``.
@@ -50,17 +51,19 @@ WORKFLOW = REPO_ROOT / ".github" / "workflows" / "tests.yml"
 # withholding them would save little and cost the early signal that is the
 # entire reason a stacked PR runs anything at all.
 ALL_PR_JOBS: dict[str, str] = {
-    "tier": "decides the tier and announces what it withholds; must always run",
+    "tier": "narrates which tier this run got; blocks nothing, so it must run "
+    "everywhere in order to be able to say when coverage was withheld",
     "lint": "ruff + the stdlib guard scripts; ~1 min, catches most breakage",
     "security": "bandit + pip-audit; cheap and base-independent",
     "smoke": "import/collection guards; `test` declares `needs: smoke`, so it "
     "cannot be withheld without also disabling the full tier",
 }
 
-# Jobs gated on `needs.tier.outputs.full == 'true'` -- i.e. push/schedule/
-# dispatch, or a PR whose base is `main`. These are the expensive ones; a stack
-# earns them when it retargets to `main`, which is when its code is actually
-# proposed for `main`.
+# Jobs whose own `if:` tests `github.base_ref`, so they run for push / schedule
+# / dispatch and for a PR based on `main`, and stand down otherwise. These are
+# the expensive ones; a stack earns them when it retargets to `main`, which is
+# when its code is actually proposed for `main`. Membership here is enforced --
+# see `guards_on_base_ref`.
 FULL_TIER_JOBS: dict[str, str] = {
     "test": "eight shards, ~19 min wall; the dominant cost of a run",
     "gallery-changes": "gates `gallery`; withholding it cascades correctly",
@@ -113,6 +116,27 @@ def pull_request_filters_by_branch(text: str) -> bool:
     return re.search(r"^\s+branches(-ignore)?:", match.group(1), re.MULTILINE) is not None
 
 
+def job_block(text: str, name: str) -> str:
+    """The YAML body of one job, up to the next job key."""
+    pattern = re.compile(
+        rf"^  {re.escape(name)}:\s*$(.*?)(?=^  [A-Za-z]|\Z)", re.MULTILINE | re.DOTALL
+    )
+    match = pattern.search(text)
+    return match.group(1) if match else ""
+
+
+def guards_on_base_ref(block: str) -> bool:
+    """True when a job's own ``if:`` tests the pull request's base branch.
+
+    The tier condition is inline rather than carried on a ``needs:`` edge --
+    see the comment above the ``tier`` job for why making the test matrix wait
+    on a runner for a boolean was the wrong trade. Inline means the expression
+    is repeated, and a repeated expression drifts, which is the failure this
+    whole guard exists to prevent. So it is asserted rather than trusted.
+    """
+    return "github.base_ref" in block
+
+
 def main() -> int:
     if not WORKFLOW.is_file():
         print(f"ERROR: cannot read {WORKFLOW.relative_to(REPO_ROOT)}", file=sys.stderr)
@@ -142,6 +166,17 @@ def main() -> int:
                 "Add it to ALL_PR_JOBS, FULL_TIER_JOBS, or ALREADY_GATED_JOBS\n"
                 "with a reason. An unlisted job is an unmade decision about\n"
                 "which pull requests it runs for."
+            )
+
+    for name in FULL_TIER_JOBS:
+        if name in found and not guards_on_base_ref(job_block(text, name)):
+            problems.append(
+                f"job `{name}` is listed as full-tier-only but its `if:` does not\n"
+                "test `github.base_ref`, so it will run for a PR against any base.\n"
+                "The tier condition is inline by design (a `needs:` edge would put\n"
+                "a runner acquisition on the test matrix's critical path); inline\n"
+                "means repeated, and repeated means it can drift, which is what\n"
+                "this checks."
             )
 
     for name in sorted(set(classified) - set(found)):
