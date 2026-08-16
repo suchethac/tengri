@@ -153,14 +153,14 @@ def _as_posterior_like(fitter: Any, init_from: Any) -> Any:
 
     Validation matches what the conversion actually consumes.
     ``Fitter._unbounded_from_posterior`` reads only the *free* names and starts
-    any it does not find at the standardized ``0.0`` -- the prior centre -- so:
+    any it does not find at the standardized ``0.0`` -- the prior center -- so:
 
     * **Fixed parameters are accepted and ignored.** A ``Posterior.params``
       carries them, and ``dict(map_result.params)`` is the obvious thing to
       hand back; refusing those keys would reject the commonest input.
     * **A partial mapping is accepted**, with every unnamed free parameter
-      starting at its prior centre. That is pre-existing behaviour, not a new
-      promise -- seeding two of seven axes and leaving five at the centre is a
+      starting at its prior center. That is pre-existing behavior, not a new
+      promise -- seeding two of seven axes and leaving five at the center is a
       legitimate but *weak* start, and mixing may suffer accordingly.
     * **An unrecognized name is refused.** Silently ignoring a misspelled key
       would start that axis somewhere the caller did not choose while the fit
@@ -219,11 +219,11 @@ def _as_posterior_like(fitter: Any, init_from: Any) -> Any:
         missing = [name for name in free if name not in init_from]
         if missing:
             # Legal, but weak, and invisible otherwise: those axes start at the
-            # prior centre while the fit reports nothing unusual. A two-of-seven
+            # prior center while the fit reports nothing unusual. A two-of-seven
             # seed has been measured mixing to split R-hat ~1e15 on this path.
             warnings.warn(
                 f"init_from seeds {len(supplied)} of {len(free)} free parameters; "
-                f"{missing} will start at the prior centre. Partial starts mix "
+                f"{missing} will start at the prior center. Partial starts mix "
                 "poorly — check split R-hat, or pass every free parameter (a MAP "
                 "result supplies them all).",
                 UserWarning,

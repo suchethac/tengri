@@ -142,7 +142,7 @@ def test_non_mapping_non_posterior_raises_a_useful_message(ssp_data_fsps, fixtur
         forward.fit(flux, noise, key=jax.random.PRNGKey(3), init_from=3.14, **NUTS)
 
 
-def test_partial_mapping_warns_that_the_rest_start_at_the_prior_centre(ssp_data_fsps, fixture):
+def test_partial_mapping_warns_that_the_rest_start_at_the_prior_center(ssp_data_fsps, fixture):
     """Partial starts are legal but weak, and must say so.
 
     Unnamed free parameters start at the standardized 0.0. Measured on this
@@ -154,5 +154,5 @@ def test_partial_mapping_warns_that_the_rest_start_at_the_prior_centre(ssp_data_
     partial = {free[0]: float(np.asarray(point.params[free[0]]))}
 
     _, forward = _build(ssp_data_fsps)
-    with pytest.warns(UserWarning, match="prior centre"):
+    with pytest.warns(UserWarning, match="prior center"):
         forward.fit(flux, noise, key=jax.random.PRNGKey(3), init_from=partial, **NUTS)
