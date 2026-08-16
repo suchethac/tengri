@@ -28,8 +28,17 @@ tengri. Both read the *same* FSPS MIST + MILES Chabrier templates, so a
 ## Prerequisites
 
 ```bash
-pip install fsps astro-prospector sedpy jupytext jupyter
+FFLAGS="-DMILES" pip install --no-binary fsps fsps
+pip install astro-prospector sedpy jupytext jupyter
 ```
+
+`FFLAGS="-DMILES"` is not optional. The spectral library is fixed when the
+FSPS Fortran is compiled -- `src/sps_vars.f90` ships `#define C3K_LR 1` and
+`#define MILES 0` -- and python-fsps >= 0.5.0 installs a C3K-lowres binary
+wheel by default. tengri's downloaded grid is MIST+MILES, so a default install
+compares two different stellar libraries and nothing raises: §1's SSP residual
+comes out ~1e-1 instead of ~1e-9, and every later section moves with it.
+`prospector_driver` now refuses to run against a non-MILES build.
 
 `python-fsps` needs the FSPS Fortran tables and the `SPS_HOME`
 environment variable pointing at them:
@@ -39,12 +48,14 @@ export SPS_HOME=/path/to/fsps
 ```
 
 Without `SPS_HOME` the notebook stops at Setup with a message. The
-notebook is built for an FSPS install compiled with **MIST isochrones +
-MILES spectral library** (the `python-fsps` default); `sp.libraries`
-reports the combination your build uses. tengri downloads the matching
-grid automatically (next section) — if your FSPS uses a different
-isochrone or library, swap the catalog name in the "Common SSP grid"
-cell so the two sides use identical inputs.
+notebook needs an FSPS compiled with **MIST isochrones + MILES spectral
+library**; `sp.libraries` reports the combination your build uses, and a
+matching build prints `['mist', 'miles', ...]` with 5994 wavelengths over 12
+metallicities. (MILES was python-fsps's default once; it is not any more.)
+
+tengri downloads the matching grid automatically (next section). If your FSPS
+uses a different isochrone or library, swap the catalog name in the "Common
+SSP grid" cell so the two sides use identical inputs.
 
 ## The SSP grid (downloaded, not shipped)
 
