@@ -105,7 +105,7 @@ def create_simple_params(redshift):
     """Create simple parametric SFH for comparison."""
     return Parameters(
         mean_sfh_type="tsnorm",
-        sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
+        sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
         sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
         sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -192,7 +192,7 @@ def profile_component_breakdown(ssp_data, obs, mock_data):
             "Stellar only",
             {
                 "mean_sfh_type": "tsnorm",
-                "sfh_tsnorm_log_total_mass": Uniform(-1.0, 2.5),
+                "sfh_tsnorm_log_total_mass": Uniform(7.0, 12.5),
                 "sfh_tsnorm_peak_lbt_gyr": Uniform(0.5, 12.0),
                 "sfh_tsnorm_width_gyr": Uniform(0.2, 5.0),
                 "sfh_tsnorm_skew": Uniform(-1.0, 1.0),
@@ -205,7 +205,7 @@ def profile_component_breakdown(ssp_data, obs, mock_data):
             "Stellar + Dust",
             {
                 "mean_sfh_type": "tsnorm",
-                "sfh_tsnorm_log_total_mass": Uniform(-1.0, 2.5),
+                "sfh_tsnorm_log_total_mass": Uniform(7.0, 12.5),
                 "sfh_tsnorm_peak_lbt_gyr": Uniform(0.5, 12.0),
                 "sfh_tsnorm_width_gyr": Uniform(0.2, 5.0),
                 "sfh_tsnorm_skew": Uniform(-1.0, 1.0),
@@ -221,7 +221,7 @@ def profile_component_breakdown(ssp_data, obs, mock_data):
             "Stellar + Dust + Nebular",
             {
                 "mean_sfh_type": "tsnorm",
-                "sfh_tsnorm_log_total_mass": Uniform(-1.0, 2.5),
+                "sfh_tsnorm_log_total_mass": Uniform(7.0, 12.5),
                 "sfh_tsnorm_peak_lbt_gyr": Uniform(0.5, 12.0),
                 "sfh_tsnorm_width_gyr": Uniform(0.2, 5.0),
                 "sfh_tsnorm_skew": Uniform(-1.0, 1.0),
@@ -238,7 +238,7 @@ def profile_component_breakdown(ssp_data, obs, mock_data):
             "Full (+ IGM)",
             {
                 "mean_sfh_type": "tsnorm",
-                "sfh_tsnorm_log_total_mass": Uniform(-1.0, 2.5),
+                "sfh_tsnorm_log_total_mass": Uniform(7.0, 12.5),
                 "sfh_tsnorm_peak_lbt_gyr": Uniform(0.5, 12.0),
                 "sfh_tsnorm_width_gyr": Uniform(0.2, 5.0),
                 "sfh_tsnorm_skew": Uniform(-1.0, 1.0),

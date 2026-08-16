@@ -100,6 +100,14 @@ ALLOWED_PHRASES = (
     # paper I's uses -ling. Both are reproduced exactly, per the citation rule
     # in CLAUDE.md ("never write citations from memory").
     "modelling of star-formation histories",
+    # Temple, Hewett & Banerji 2021, "QSOgen: a model of the UV-to-submillimetre
+    # spectral energy distributions of quasars", MNRAS 508, 737.
+    # DOI 10.1093/mnras/stab2586. MNRAS is a British journal and references.bib
+    # reproduces the published title exactly, so
+    # tools/check_citation_bib_coverage.py folds the spelling rather than
+    # reporting it as title drift -- and its test must write the British form to
+    # prove the fold works.
+    "UV-to-submillimetre spectral energy",
 )
 
 

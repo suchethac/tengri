@@ -321,14 +321,25 @@ class TestBLRLinePhysics:
             )
 
     def test_blr_halpha_hbeta_ratio(self):
-        """Hα/Hβ ~ 2.8 for Type 1 AGN (Vanden Berk+2001 broad: ~260/46 ≈ 5.6 in EW,
-        but in relative strength ~1.43/0.50 = 2.86)."""
+        """Hα/Hβ = 3.56 for the VB01 composite — steeper than Case B.
+
+        Both numbers this docstring used to carry were wrong. VB01 Table 2 gives
+        Hα 30.832 and Hβ 8.649 in ``Rel. Flux`` (ratio 3.565) and 194.52 / 46.21
+        in equivalent width (ratio 4.209); "~260/46 ≈ 5.6 in EW" and
+        "~1.43/0.50 = 2.86" are neither. The BLR is dense and optically thick in
+        the Balmer lines, so its decrement sits well above the Case B value of
+        2.86 — which is why the reverse-engineered 2.86 should have looked
+        suspicious for this component in the first place.
+
+        The tight assertion lives in ``test_agn_crossval.TestBLRBalmerDecrement``
+        against the paper's own 1 sigma; this is the cheap sanity bound.
+        """
         from tengri.components.agn.blr import _BLR_LINE_STRENGTHS, _BLR_LINE_WAVELENGTHS
 
         idx_ha = int(jnp.argmin(jnp.abs(_BLR_LINE_WAVELENGTHS - 6563.0)))
         idx_hb = int(jnp.argmin(jnp.abs(_BLR_LINE_WAVELENGTHS - 4861.0)))
         ratio = float(_BLR_LINE_STRENGTHS[idx_ha] / _BLR_LINE_STRENGTHS[idx_hb])
-        assert 2.0 < ratio < 4.0, f"BLR Hα/Hβ should be ~2.86, got {ratio:.2f}"
+        assert 3.0 < ratio < 4.0, f"BLR Hα/Hβ should be ~3.56 (VB01), got {ratio:.2f}"
 
 
 # ── 6. SHOCK+NLR BPT SEPARATION — diagnostic diagram physics ──────

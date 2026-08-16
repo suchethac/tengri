@@ -173,7 +173,10 @@ def build(input_pickle: Path, output_h5: Path, n_wave: int = 2048) -> None:
         g.create_dataset("log_edd", data=log_edd, compression="gzip")
         g.create_dataset("wavelength", data=common_wave, compression="gzip")
         g.create_dataset("template", data=template, compression="gzip")
-        g.attrs["source_pickle"] = str(input_pickle)
+        # Basename only: the absolute path is machine-specific and ships to the
+        # public repo inside the committed grid. The filename is the part that
+        # identifies the upstream template; the prefix only names someone's disk.
+        g.attrs["source_pickle"] = Path(input_pickle).name
         g.attrs["n_mbh"] = log_mbh.size
         g.attrs["n_edd"] = log_edd.size
         g.attrs["n_wave"] = n_wave

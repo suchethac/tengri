@@ -33,6 +33,12 @@ import warnings
 # approximation, and
 # recipe/parameter-provenance notices). Genuine deprecations in user-facing
 # calls are fixed in the code, not hidden.
+#
+# WildcardPartialFreeWarning is deliberately NOT silenced. This notebook is
+# about discovering what the menu offers, and that warning is the discovery:
+# it names the parameters an `all_params: FREE` wildcard could not free
+# because they carry only a Fixed default. Hiding it here would leave a
+# reader to meet it for the first time alone, in their own code.
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 warnings.filterwarnings("ignore", message=".*WavePrecomp.*")
 warnings.filterwarnings("ignore", message=".*was marked FIXED.*")

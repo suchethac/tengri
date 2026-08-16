@@ -125,6 +125,15 @@ class XRayAirdSEDComponent(SEDModelComponent):
     parameter_prefix: str = "xray_"
     requires_template_data: ClassVar[bool] = False
 
+    #: Publish into the shared ``xray`` domain rather than under the registry
+    #: key. ``DerivedState`` declares ``xray_phot_lnu_precomp`` /
+    #: ``xray_spec_lnu_precomp`` / ``xray_restband_lnu_precomp``; keying them off
+    #: ``name`` instead would emit ``xray_aird_*``, which are not fields, so they
+    #: spill into ``_extras`` and the ADR-0007 guard raises ``ComponentIOError``
+    #: on every WavePrecomp build. Only one X-ray component is ever built, so the
+    #: two can share the domain without colliding.
+    publish_name: ClassVar[str] = "xray"
+
     # Free parameters
     gamma_hmxb = Uniform(
         1.0,

@@ -80,19 +80,63 @@ from tengri.observation.photometry import FilterCurve
 
 pytestmark = pytest.mark.contract
 
-#: Backends reachable from the build grammar without an external template file.
-#: ``draine2021_pah`` is deliberately absent: it also shows zero live parameters,
-#: but that is confounded with #1278 (it silently emits nothing when its template
-#: is missing), so it cannot discriminate this bug.
-EMISSION_TYPES = (
-    "dale2014",
-    "themis",
-    "draine_li2007",
-    "draine_li2014",
-    "modified_blackbody",
-    "casey2012",
-    "astrodust",
-)
+#: Backends this suite refuses to measure, each with the reason it cannot
+#: discriminate #1482 -- not a convenience list.
+#:
+#: ``draine2021_pah`` is the only production entry here, and its exclusion is
+#: measured rather than assumed: in the fixture below it contributes
+#: ``3.706636e+42`` to the rest-frame 10-500 um flux, which is bit-identical to
+#: ``emission={'type': 'none'}``, against ``1.84e+49`` for ``dl07``. The
+#: component emits nothing, so *every* parameter it declares is inert for a
+#: reason that has nothing to do with wildcard scope. Judged here it would read
+#: as a #1482 residual and send the next reader to the wrong file.
+_UNDISCRIMINATING: dict[str, str] = {
+    "draine2021_pah": (
+        "#1278 -- silently emits nothing when its template is missing "
+        "(measured bit-identical to emission='none'), so parameter inertness "
+        "here is confounded and cannot indict wildcard scope"
+    ),
+}
+
+
+def _emission_types() -> tuple[str, ...]:
+    """Every non-deprecated IR backend, derived from the live menu.
+
+    Hardcoding this list is what hid the bug it was written to catch. The
+    frozen tuple named seven backends and so covered five of the thirteen
+    production engines. The eight it missed included ``pah_drude`` and
+    ``dh02_ce01``, which were freeing **twenty** parameters and reading
+    **one** -- the exact defect of #1482, in the suite that owns #1482,
+    unmeasured because the parametrization never reached them. ``dh02_ce01``
+    was registered later still and inherited the same gap.
+
+    **Experimental backends are included**, and that is not incidental: the
+    frozen tuple already carried two of them (``themis``, ``astrodust``), so
+    filtering to ``production`` would quietly *drop* coverage while appearing
+    to broaden it. It would also miss ``energy_balance_split``, which is
+    experimental and measures **20 freed, 6 read, 14 inert** -- the largest
+    surviving instance of this bug. A wildcard that hands a sampler fourteen
+    flat directions is the same defect whatever the maturity label says.
+
+    Only ``deprecated`` is excluded, plus anything named in
+    :data:`_UNDISCRIMINATING` with a measured reason. So a backend added
+    tomorrow is measured on the day it ships.
+    """
+    from tengri import registry
+
+    return tuple(
+        sorted(
+            e["name"]
+            for e in registry.list_dust_emission_models()
+            if e.get("name")
+            and e.get("status", "production") != "deprecated"
+            and e["name"] not in _UNDISCRIMINATING
+            and e["name"] != "none"
+        )
+    )
+
+
+EMISSION_TYPES = _emission_types()
 
 
 def _nothing_freeable() -> dict[str, set[str]]:
@@ -125,6 +169,38 @@ def _nothing_freeable() -> dict[str, set[str]]:
 #: #887 goal state, not a failure: it means every shipped IR backend has at
 #: least one parameter the wildcard can genuinely free.
 NOTHING_FREEABLE = _nothing_freeable()
+
+
+def _declares_nothing() -> frozenset[str]:
+    """Backends that state they read no parameters at all.
+
+    Distinct from :data:`NOTHING_FREEABLE`, which is "declares parameters, but
+    every one is Fixed-by-default". These declare none: ``pah_drude`` is a pure
+    template shape and ``dh02_ce01`` a fixed template pair, so ``'*': FREE``
+    correctly frees nothing and "at least one live parameter" is the wrong
+    question rather than a failed one.
+
+    Both were invisible until :func:`_emission_types` started deriving the
+    parametrization -- and both were freeing **twenty** parameters and reading
+    one, because an empty declaration could not be told from an absent one. The
+    marker that fixed that (``declares_no_parameters``) is the same one read
+    here, so this set cannot drift from the narrowing it describes.
+    """
+    from tengri.forward.component_factory import _EMISSION_TYPE_ALIASES, _REGISTRY
+
+    return frozenset(
+        etype
+        for etype in EMISSION_TYPES
+        if getattr(
+            _REGISTRY.get(_EMISSION_TYPE_ALIASES.get(etype, etype)),
+            "declares_no_parameters",
+            False,
+        )
+    )
+
+
+#: Backends for which "frees at least one live parameter" is meaningless.
+DECLARES_NOTHING = _declares_nothing()
 
 #: Dust attenuation deep enough that L_absorbed is large and IR emission is a
 #: real term rather than a rounding error.
@@ -194,6 +270,11 @@ def test_wildcard_frees_at_least_one_live_parameter(
     """``'*': FREE`` must free something the selected engine actually reads."""
     if emission_type in NOTHING_FREEABLE:
         pytest.skip(f"{emission_type} has nothing freeable — covered by the raise test")
+    if emission_type in DECLARES_NOTHING:
+        # Not a failure: freeing nothing is the correct outcome for an engine
+        # that reads nothing, and is asserted positively by
+        # test_no_freed_parameter_is_inert, which stays enabled for these.
+        pytest.skip(f"{emission_type} declares no parameters — freeing none is correct")
 
     model = _build(synthetic_ssp_wide, panchromatic_obs, emission_type)
     freed, live = _live_params(model)

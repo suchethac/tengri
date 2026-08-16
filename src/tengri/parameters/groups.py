@@ -1200,22 +1200,45 @@ def _declared_param_names(component_type: str) -> frozenset[str] | None:
 
     Notes
     -----
-    An empty ``_priors`` must stay ``None`` (unnarrowed), **not** an empty
-    frozenset. The two are not the same question, and two registered engines
-    sit on opposite sides of it: ``pah_drude`` is genuinely parameter-free (a
-    pure template shape), while ``energy_balance_split`` reads six real knobs
-    (``dust_T_warm``, ``dust_f_cold``, ``dust_L_agn_ir``, ...) that are declared
-    in ``components/dust/_params.py`` rather than on the class, because
-    re-declaring them alongside the attenuator's would raise a duplicate
-    declaration. Nothing introspectable separates the two cases, so returning an
-    empty set here would silently pin all six of the latter's parameters — the
-    very failure this narrowing exists to prevent.
+    An empty ``_priors`` is **three** questions wearing one shape, and inferring
+    from it is wrong for two of them. The component is asked instead:
+
+    * ``declares_no_parameters = True`` — genuinely parameter-free
+      (``pah_drude``, a pure template shape). Narrowing to the empty set is
+      correct: it is what every engine that *does* declare priors gets.
+    * ``reads_parameters = {...}`` — reads real knobs declared elsewhere.
+      ``energy_balance_split``'s warm/cold knobs live in
+      ``components/dust/_params.py`` because re-declaring them beside the
+      attenuator's would raise a duplicate declaration.
+    * neither — unknown, so return ``None`` and leave the wildcard alone rather
+      than guess.
+
+    Returning an empty frozenset for the second case would pin every one of that
+    engine's parameters; returning ``None`` for the first leaves it freeing the
+    whole static union, which is #1482. Both markers exist because the two
+    failures are opposite and neither is introspectable.
     """
     from tengri.forward.component_factory import _EMISSION_TYPE_ALIASES, _REGISTRY
 
     cls = _REGISTRY.get(_EMISSION_TYPE_ALIASES.get(component_type, component_type))
     priors = getattr(cls, "_priors", None)
     if not priors:
+        # Empty ``_priors`` is ambiguous, so ask rather than infer. A component
+        # that declares ``declares_no_parameters`` is stating it reads nothing,
+        # and narrowing it to the empty set is then correct -- it is what every
+        # engine that *does* declare priors already gets. Without the marker the
+        # wildcard is left alone, because the other reading of an empty _priors
+        # is ``energy_balance_split``, whose six knobs live in
+        # ``components/dust/_params.py`` and would all be pinned.
+        if getattr(cls, "declares_no_parameters", False):
+            return frozenset()
+        # ...and a component that names the parameters it reads elsewhere is
+        # answering the same question from the other side. Without this branch
+        # ``energy_balance_split`` stays unnarrowed and ``'*': FREE`` hands the
+        # sampler 20 parameters for the 6 it reads (measured).
+        declared_elsewhere = getattr(cls, "reads_parameters", None)
+        if declared_elsewhere:
+            return frozenset(declared_elsewhere)
         return None
     prefix = getattr(cls, "parameter_prefix", "")
     return frozenset(prefix + name for name in priors)
@@ -2481,11 +2504,48 @@ _RADIO_AGN_PARAMS_BY_MODEL: dict[str, frozenset[str]] = {
 #: it: measured on a UV-to-X-ray fixture with a luminous AGN, ``alpha_irx``
 #: moves the SED by 62% under ``lopez24`` and by *exactly* zero under every
 #: other model, while the wildcard freed it for all of them.
+#: **The "shared params are deliberately absent" rule above ended with #1684.**
+#: It held while every X-ray type resolved to one component, so ``gamma_agn`` /
+#: ``E_cut`` / ``log_nh`` / the XRB offsets were read by all of them and could
+#: not be pinned by omission. ``xray_aird`` now builds ``XRayAirdSEDComponent``,
+#: which reads the XRB offsets and none of the corona parameters — measured:
+#: under ``xray_aird`` the wildcard freed ``xray_E_cut``, ``xray_gamma_agn`` and
+#: ``xray_log_nh`` while none of the three could move the SED, beside
+#: ``xray_det_hmxb`` / ``xray_det_lmxb`` which could.
+#:
+#: So every entry now lists what its model reads in full, rather than only the
+#: names unique to it. Omission no longer means "shared", it means "not read" —
+#: which is what the narrowing needs to be able to say.
 _XRAY_PARAMS_BY_MODEL: dict[str, frozenset[str]] = {
-    "lopez24": frozenset({"xray_alpha_irx"}),
+    "lopez24": frozenset(
+        {
+            "xray_alpha_irx",
+            "xray_E_cut",
+            "xray_gamma_agn",
+            "xray_log_nh",
+            "xray_det_hmxb",
+            "xray_det_lmxb",
+        }
+    ),
+    # Aird+2015 XRB scaling: the Lehmer+2016 offsets, and no corona.
+    "xray_aird": frozenset({"xray_det_hmxb", "xray_det_lmxb"}),
+    # The alpha_ox corona and nothing else: no XRB channel, so the Lehmer+2016
+    # offsets are genuinely unread here, and no N_H screen.
+    "agn_xray_corona": frozenset({"xray_gamma_agn", "xray_E_cut", "xray_delta_alpha_ox"}),
 }
-#: What the non-``lopez24`` branch reads instead.
-_XRAY_DEFAULT_MODEL_PARAMS: frozenset[str] = frozenset({"xray_delta_alpha_ox"})
+#: What the shared ``XRaySEDComponent`` corona reads on its non-``lopez24``
+#: branch (``yang20`` / ``simple`` / ``agn_xray_corona``, which all resolve to
+#: it). ``xray_alpha_irx`` is absent because only the lopez24 branch reads it.
+_XRAY_DEFAULT_MODEL_PARAMS: frozenset[str] = frozenset(
+    {
+        "xray_delta_alpha_ox",
+        "xray_E_cut",
+        "xray_gamma_agn",
+        "xray_log_nh",
+        "xray_det_hmxb",
+        "xray_det_lmxb",
+    }
+)
 #: Union of the above: the names the scope may narrow away.
 _XRAY_VARIANT_PARAMS: frozenset[str] = _XRAY_DEFAULT_MODEL_PARAMS | frozenset().union(
     *_XRAY_PARAMS_BY_MODEL.values()

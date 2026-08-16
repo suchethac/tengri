@@ -80,6 +80,7 @@ from tengri import (
     plot,
     recipes,
 )
+from tengri.units import erg_per_s_to_lsun, lnu_to_llambda
 
 plot.setup_style()
 
@@ -190,7 +191,6 @@ params = model.spec.sample(jax.random.PRNGKey(0))
 state = model.predict_state(params)
 
 wave_rest = np.asarray(state.wave)  # Å
-nu = 2.998e18 / wave_rest  # Hz
 total = np.asarray(state.sed_intrinsic)  # erg/s/Hz, post-dust-attenuation + emission
 
 
@@ -224,8 +224,17 @@ ax.set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
 wave_um = wave_rest / 1e4
 
 
+def nu_lnu(wave, lnu):
+    """nu*L_nu [erg/s] on a wavelength grid [Angstrom].
+
+    nu*L_nu and lambda*L_lambda are the same quantity, so the public unit
+    conversion gives it without hand-rolling a speed-of-light literal.
+    """
+    return None if lnu is None else wave * lnu_to_llambda(lnu, wave)
+
+
 def nuLnu(y):
-    return nu * y if y is not None else None
+    return nu_lnu(wave_rest, y)
 
 
 ax.plot(wave_um, nuLnu(total), color=C["total"], lw=2.2, label="total")
@@ -298,8 +307,6 @@ base["dust"]["all_params"] = FIXED
 base["dust"]["emission"]["all_params"] = FIXED
 base["redshift"] = Fixed(0.5)
 
-base_model = SEDModel.build(ssp_data=ssp, observation=obs, **base)
-
 
 def predict_rest(m, p):
     s = m.predict_state(p)
@@ -321,7 +328,7 @@ for label, sfh_dict, color in [
     m = SEDModel.build(ssp_data=ssp, observation=obs, **cfg)
     p = m.spec.sample(jax.random.PRNGKey(0))
     w, sed = predict_rest(m, p)
-    ax.plot(w / 1e4, w * sed * 0 + 2.998e18 / w * sed, label=label, color=color, lw=1.3)
+    ax.plot(w / 1e4, nu_lnu(w, sed), label=label, color=color, lw=1.3)
 ax.set_xscale("log")
 ax.set_yscale("log")
 ax.set_xlim(0.05, 30)
@@ -330,17 +337,19 @@ ax.set_ylabel(r"$\nu L_\nu$ [erg/s]")
 ax.set_title("SFH shape")
 ax.legend(frameon=False, fontsize=9)
 
-# (b) Birth-cloud τ_V sweep — same SFH, varying attenuation
+# (b) Birth-cloud τ_V sweep — same structure, varying parameter value
+# Build once with tau_bc as a free parameter; predict at each value.
+# This teaches that a model is a function of its parameters: same structure, many parameter values.
 ax = axes[0, 1]
 cmap = plt.colormaps["viridis"]
 tau_grid = [0.0, 0.5, 1.0, 2.0, 3.0]
+cfg = deepcopy(base)
+cfg["dust"]["tau_bc"] = Uniform(0.0, 3.0)  # tau_bc is now a free parameter
+m = SEDModel.build(ssp_data=ssp, observation=obs, **cfg)
+p = m.spec.sample(jax.random.PRNGKey(0))
 for tau, col in zip(tau_grid, cmap(np.linspace(0.15, 0.85, len(tau_grid)))):
-    cfg = deepcopy(base)
-    cfg["dust"]["tau_bc"] = tau
-    m = SEDModel.build(ssp_data=ssp, observation=obs, **cfg)
-    p = m.spec.sample(jax.random.PRNGKey(0))
-    w, sed = predict_rest(m, p)
-    ax.plot(w / 1e4, 2.998e18 / w * sed, color=col, lw=1.2, label=rf"$\tau_{{\rm BC}}={tau:g}$")
+    w, sed = predict_rest(m, {**p, "dust_tau_bc": tau})
+    ax.plot(w / 1e4, nu_lnu(w, sed), color=col, lw=1.2, label=rf"$\tau_{{\rm BC}}={tau:g}$")
 ax.set_xscale("log")
 ax.set_yscale("log")
 ax.set_xlim(0.05, 30)
@@ -349,28 +358,25 @@ ax.set_ylabel(r"$\nu L_\nu$ [erg/s]")
 ax.set_title("Birth-cloud optical depth")
 ax.legend(frameon=False, fontsize=9, ncol=2)
 
-# (c) AGN bolometric luminosity sweep
-# Lightweight AGN (multicolor disc + Nenkova torus): five rebuilds of
-# the kitchen-sink model with SKIRTOR is far too heavy. The Nenkova
-# torus is a cheap analytic stand-in for the visual story.
-# ``log_lbol`` is log10(L_bol / Lsun), so 10–11 spans a Seyfert to a
-# low-luminosity quasar.
+# (c) AGN bolometric luminosity sweep — same structure, varying parameter value
+# Lightweight AGN (multicolor disc + Nenkova torus): build once, predict at each luminosity.
+# The Nenkova torus is a cheap analytic stand-in (SKIRTOR would cost 5×).
+# ``log_lbol`` is log10(L_bol / Lsun), so 10–11 spans a Seyfert to a low-luminosity quasar.
 ax = axes[1, 0]
 log_lbol_grid = [9.5, 10.0, 10.5, 11.0, 11.5]
 cmap = plt.colormaps["plasma"]
+cfg = deepcopy(base)
+cfg["agn"] = {
+    "disc": {"type": "multicolor", "all_params": FIXED, "log_lbol": Uniform(9.0, 12.0)},
+    "torus": {"type": "nenkova", "all_params": FIXED},
+}
+m = SEDModel.build(ssp_data=ssp, observation=obs, **cfg)
+p = m.spec.sample(jax.random.PRNGKey(0))
 for log_lbol, col in zip(log_lbol_grid, cmap(np.linspace(0.15, 0.85, len(log_lbol_grid)))):
-    cfg = deepcopy(base)
-    cfg["agn"] = {
-        "disc": {"type": "multicolor", "all_params": FIXED, "log_lbol": log_lbol},
-        "torus": {"type": "nenkova", "all_params": FIXED},
-    }
-    m = SEDModel.build(ssp_data=ssp, observation=obs, **cfg)
-    p = m.spec.sample(jax.random.PRNGKey(0))
-    w, sed = predict_rest(m, p)
+    w, sed = predict_rest(m, {**p, "agn_log_lbol": log_lbol})
     ax.plot(
-        w / 1e4, 2.998e18 / w * sed, color=col, lw=1.2, label=rf"$\log L_{{\rm AGN}}={log_lbol:g}$"
+        w / 1e4, nu_lnu(w, sed), color=col, lw=1.2, label=rf"$\log L_{{\rm AGN}}={log_lbol:g}$"
     )
-    del m
 ax.set_xscale("log")
 ax.set_yscale("log")
 ax.set_xlim(0.05, 30)
@@ -389,8 +395,10 @@ for z, col in zip(z_grid, cmap(np.linspace(0.15, 0.85, len(z_grid)))):
     cfg["apply_igm"] = z > 0
     m = SEDModel.build(ssp_data=ssp, observation=obs, **cfg)
     p = m.spec.sample(jax.random.PRNGKey(0))
-    w, sed = predict_rest(m, p)
-    ax.plot(w * (1 + z) / 1e4, 2.998e18 / w * sed, color=col, lw=1.2, label=rf"$z={z:g}$")
+    pred = m.predict(p)
+    w_obs = np.asarray(pred.wave_obs)  # observed-frame wavelength [Å]
+    sed_obs = np.asarray(pred.obs_sed())  # L_nu [erg/s/Hz], observed frame + IGM
+    ax.plot(w_obs / 1e4, nu_lnu(w_obs, sed_obs), color=col, lw=1.2, label=rf"$z={z:g}$")
 ax.set_xscale("log")
 ax.set_yscale("log")
 ax.set_xlim(0.05, 30)
@@ -454,8 +462,6 @@ print(model_edited.summary())
 # punch straight through.
 
 # %%
-L_SUN = 3.828e33  # erg/s — IAU 2015 nominal solar luminosity
-C_AA = 2.998e18  # Å/s
 C_UM = 2.998e14  # speed of light in [µm Hz], for the λ → ν twin axis
 
 money_shot = dict(
@@ -495,7 +501,6 @@ state = ms_model.predict_state(ms_model.spec.sample(jax.random.PRNGKey(0)))
 
 wave_aa = np.asarray(state.wave)  # Å
 wave_um = wave_aa / 1e4
-nu_hz = C_AA / wave_aa
 
 
 def _comp(key):
@@ -505,7 +510,7 @@ def _comp(key):
 
 # νL_ν in solar luminosities so the y-axis matches the reference figure.
 def nuLnu_lsun(lnu):
-    return nu_hz * lnu / L_SUN if lnu is not None else None
+    return None if lnu is None else erg_per_s_to_lsun(nu_lnu(wave_aa, lnu))
 
 
 lnu_age = _comp("lnu_age")
@@ -610,7 +615,7 @@ secax.set_xlabel(r"Rest-frame frequency $\nu$  [Hz]")
 # Hero numbers, read back from the model.
 m_star = 10.0 ** float(state.derived["log_mstar"])
 sfr = float(state.derived["sfr"])
-log_lagn = np.log10(float(state.derived["L_agn_bol"]) / L_SUN)
+log_lagn = np.log10(erg_per_s_to_lsun(float(state.derived["L_agn_bol"])))
 ax.set_title(
     "Multiwavelength SED\n"
     rf"$M_\star \approx {m_star:.0e}\,M_\odot$, "

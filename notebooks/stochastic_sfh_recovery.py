@@ -98,6 +98,7 @@ from tengri import (
     Photometry,
     SEDModel,
     Spectroscopy,
+    WavePrecomp,
     builders,
 )
 from tengri.observation import LineFluxData
@@ -158,7 +159,12 @@ LABEL = {
 }
 
 
-def build(observation, n_grid=N_GRID):
+#: The SSP x filter lookup table every fit on this page rides. One instance,
+#: shared by all three observables — see the note under the builds below.
+FAST_PATH = WavePrecomp()
+
+
+def build(observation, n_grid=N_GRID, approx=FAST_PATH):
     """The same physical model behind all three fits, on one observable.
 
     A rising double power law (Carnall et al. 2018) — a galaxy still forming stars,
@@ -176,9 +182,22 @@ def build(observation, n_grid=N_GRID):
         redshift=Fixed(Z_GAL),
         apply_igm=False,
         n_grid=n_grid,
+        approx=approx,
     )
 
 
+# Every model here rides the `WavePrecomp` SSP x filter table (the `build` default
+# above). It is worth being precise about what that buys, because the per-call
+# figure oversells it: one photometry forward pass drops from 6.66 ms to 0.10 ms,
+# a factor of 67, for a 3e-4 relative flux change — far inside the S/N 20 noise.
+# But the HMC below speeds up by only ~1.4-1.7x (752 s on the exact path against
+# 450-550 s here, the spread being machine load), and the MAP fits by 1.4-2.9x,
+# because a field-SFH posterior spends most of its time in the
+# correlated-field prior and the dense mass matrix — neither of which a photometry
+# table touches. Measured per leapfrog step: the SED gradient is 0.51 ms while the
+# sampler pays ~7.7 ms, so the table is optimizing well under a tenth of the work.
+# The table itself costs ~1 s to build, since the redshift is Fixed and there is no
+# z-grid quadrature to pay for.
 model = {k: build(v) for k, v in OBSERVATION.items()}
 spec = model["B"].spec
 fixed_values = spec.get_fixed_values()
@@ -493,13 +512,47 @@ plt.show()
 # interesting part. So we run a Hamiltonian Monte Carlo posterior on case **B** and
 # plot it with the library helper.
 #
-# Two honest caveats. The posterior is wide and strongly correlated (mass ↔ SFR,
-# dust ↔ recent SFR), so it needs a long trajectory: `n_leapfrog_steps=100`, where
-# the default of 10 under-explores and returns deceptively tight bands. And the
-# non-centered field rotates with $\tau$, so the curvature is position-dependent
-# and one global mass matrix cannot represent it — expect $\hat{R} \approx 1.1$ and
-# some divergences however long this runs. **Read the recovered values; treat the
-# widths as indicative.**
+# One caveat, and it is larger than this page used to admit. The posterior is
+# wide and strongly correlated (mass ↔ SFR, dust ↔ recent SFR), so it needs a long
+# trajectory: `n_leapfrog_steps=100`, where the default of 10 under-explores and
+# returns deceptively tight bands. And the non-centered field rotates with $\tau$,
+# so the curvature is position-dependent and one global mass matrix cannot
+# represent it.
+#
+# The cell below now prints the diagnostic, and it does not pass: **$\hat{R}
+# \approx 1.6$** at this budget, on a $D=25$ posterior, with a handful of
+# divergences. A stable integrator and a large $\hat{R}$ together say the chains
+# are each sampling something, but not the same thing. So the bands below are
+# **not credible intervals** — read the recovered SFH *shape* against the truth,
+# which is what this page is for, and do not read the widths.
+#
+# More sampling is not the fix *at this budget*, and this was measured rather than
+# assumed: quadrupling the warmup exhausts memory before it converges. Confirmed
+# again while investigating #1743 — 1200 warmup x 100 leapfrog with a dense mass
+# matrix is SIGKILLed on the machine this page is developed on.
+#
+# **Two plausible fixes were tried and are worse — do not reach for them (#1743).**
+# Both were measured on a matched $D=25$ field model:
+#
+# - **Reparameterizing the field.** `sfh={'field_centering': a}` (#1355) moves the
+#   amplitude dependence out of the non-centered map, which is the obvious reading
+#   of "the field rotates with $\tau$". Measured: `a=1.0` (the default,
+#   non-centered) gives $\hat{R}$ 1.10, while `a=0.5` and `a=0.0` both give
+#   **2.54** — with *zero* divergences, the signature of chains that stopped moving
+#   rather than chains that mix. The non-centered coordinates are what makes this
+#   fit work. Centering it walks into Neal's funnel, which is the standard reason
+#   non-centered is the default for hierarchical and GP models.
+# - **geoVI / MGVI.** The natural-looking tool for position-dependent curvature.
+#   Measured on the same model: ~12x slower than HMC at a matched budget, and
+#   `chi2/dof ~ 35` at 5, 15 and 30 iterations alike — flat, so it is not
+#   converging slowly, it is not converging. It samples in the same coordinates
+#   HMC does, which is the likely reason it inherits the same difficulty.
+#
+# **What did help**, on that matched model: more warmup (300 -> 600 took $\hat{R}$
+# from 1.10 to 1.02) and `mcmc_nuts`, which adapts trajectory length instead of
+# fixing it (1.014). Neither is wired in here — this page's budget is chosen to
+# run in minutes, and the higher-warmup variant exceeds this machine's memory —
+# but they are the directions to take if you need a posterior you can quote.
 
 # %%
 # Cost is (n_warmup + n_samples) x n_leapfrog_steps gradient evaluations, so the
@@ -516,6 +569,15 @@ posterior = ForwardModel.build(sed=model["B"], observation=OBSERVATION["B"]).fit
 print(f"HMC in {time.perf_counter() - t0:.0f} s")
 
 # %%
+# Check convergence: are the draws actually distinct and properly mixed?
+diag = posterior.diagnostics
+n_div = diag.get("n_divergent", 0)
+max_rhat = float(np.nanmax(list(posterior.rhat().values())))
+print(f"HMC diagnostics: {n_div} divergences, max R-hat {max_rhat:.4f}")
+if n_div > 0 or max_rhat > 1.01:
+    print("  ⚠ WARNING: Posterior may not have converged properly. "
+          "For publication, increase n_warmup and n_leapfrog_steps.")
+
 ax = plot_sfh(model["B"], posterior, true_params=truth_full,
               method="HMC", xscale="log", label="posterior (case B)")
 ax.set_title("Case B posterior — 7 filters + 8 emission lines")
