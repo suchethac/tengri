@@ -91,21 +91,17 @@ DATA_PREFIXES = ("data/",)
 #: no toctree references ``notebooks/archive*`` or ``explore/``. Clearing their
 #: outputs, or rebuilding them from their jupytext mirrors, would return several
 #: MiB each.
-INVENTORY: dict[str, float] = {
-    "explore/02_stochastic_performance.ipynb": 8.7,
-    "notebooks/archive_2/fitting/06_advanced_inference.ipynb": 7.1,
-    "notebooks/archive_2/demonstrations/06_advanced_inference.ipynb": 7.1,
-    "notebooks/archive_2/demonstrations/12_advanced_inference.ipynb": 6.9,
-    "notebooks/archive_2/fitting/01_fitting_spectra.ipynb": 5.3,
-    "notebooks/archive/000_quickstart_executed.ipynb": 5.1,
-    # The site logo, at 5 MiB. A PNG this size is a rendering artifact rather
-    # than a design decision; every page that shows it pays for it.
-    "docs/_static/tengri-logo.png": 5.1,
-    "notebooks/_migrated_galleries/02_sfh_gallery.ipynb": 5.1,
-    "notebooks/archive_2/quickstart/03_bursty_sfh_recovery.ipynb": 5.0,
-    "notebooks/archive_2/demonstrations/01_spectroscopic_fitting.ipynb": 4.6,
-    "notebooks/archive_2/demonstrations/05_inference_methods.ipynb": 4.2,
-}
+#: **Empty, and that is the finished state.** It held eleven entries when this
+#: guard landed: ten unpublished notebooks carrying embedded PNG, and a 5 MiB
+#: site logo. All eleven were dealt with rather than tolerated --
+#: `docs/_static/tengri-logo.png` was 3998x3766 for a favicon and a ~400 px
+#: hero, and 93 archived notebooks were carrying 164 MB of stored output that
+#: nothing renders.
+#:
+#: An empty inventory means the limits above are a real line rather than a
+#: description of the status quo. Adding an entry is a deliberate act that has
+#: to be argued for in a comment beside it.
+INVENTORY: dict[str, float] = {}
 
 
 def _tracked_files() -> list[Path]:
