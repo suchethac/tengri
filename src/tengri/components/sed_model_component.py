@@ -269,6 +269,65 @@ class SEDModelComponent(TemplateThreading):
     _optional_inputs_tuple: ClassVar[tuple[DerivedKey, ...]] = ()
     _citations_tuple: ClassVar[tuple[str, ...]] = ()
 
+    #: Set to ``True`` by a component that genuinely reads no parameters.
+    #:
+    #: An empty ``_priors`` is ambiguous and cannot be inferred from: it means
+    #: either "this component reads nothing" (``pah_drude``, a pure template
+    #: shape) or "this component's parameters are declared somewhere other than
+    #: the class" (``energy_balance_split`` reads six knobs declared in
+    #: ``components/dust/_params.py``, because re-declaring them beside the
+    #: attenuator's would raise a duplicate declaration).
+    #:
+    #: ``_declared_param_names`` therefore refuses to guess: it narrows a group
+    #: wildcard to the empty set only when a component *says* it reads nothing,
+    #: and leaves the wildcard alone otherwise. Inferring instead of asking
+    #: would pin all six of the latter's parameters, which is the failure that
+    #: narrowing exists to prevent; not asking at all leaves the former freeing
+    #: the whole static union, which is #1482.
+    declares_no_parameters: ClassVar[bool] = False
+
+    #: Fully-prefixed parameter names a component reads but declares elsewhere.
+    #:
+    #: The other half of the ambiguity :attr:`declares_no_parameters` resolves.
+    #: An empty ``_priors`` has two readings, and that attribute only answers
+    #: one of them ("I read nothing"). This answers the other: *"I read these,
+    #: and they are declared somewhere else."*
+    #:
+    #: ``energy_balance_split`` is the case. Its warm/cold and AGN-IR knobs live
+    #: in ``components/dust/_params.py`` rather than on the class, because
+    #: ``dust_eta_balance`` and the energy-balance bookkeeping are shared with
+    #: the attenuator and re-declaring them here would raise a duplicate
+    #: declaration. With neither marker set, ``_declared_param_names`` returns
+    #: ``None`` and leaves the group unnarrowed -- so ``'*': FREE`` hands the
+    #: sampler the whole static union of every IR engine's parameters. Measured
+    #: on that backend: **20 freed, 6 read, 14 inert** -- #1482 exactly, in the
+    #: one engine the original fix could not reach.
+    #:
+    #: Names are stored already prefixed, because that is how they are declared;
+    #: :attr:`parameter_prefix` is not applied to them a second time.
+    reads_parameters: ClassVar[frozenset[str]] = frozenset()
+
+    #: Domain to publish precompute keys under, when it differs from ``name``.
+    #:
+    #: ``name`` is the registry key, and the precompute keys are derived from it
+    #: (``{name}_phot_lnu_precomp`` and siblings). Those keys are typed fields on
+    #: ``DerivedState``, so a component whose registry key is not itself a
+    #: declared domain spills into ``_extras`` and trips the ADR-0007 guard.
+    #:
+    #: Several components share one domain by construction -- only one X-ray
+    #: component is ever built, so ``xray_aird`` and the shared ``xray``
+    #: component publish the same ``xray_*`` fields and are never in a state
+    #: together. Setting this lets the registry key and the published domain
+    #: differ, instead of adding a parallel set of ``DerivedState`` fields per
+    #: registry name (which would also leave each new name outside the
+    #: ``sed_xray`` accounting until someone remembered to add it).
+    publish_name: ClassVar[str] = ""
+
+    @property
+    def _derived_prefix(self) -> str:
+        """Prefix for this component's published derived keys."""
+        return self.publish_name or self.name
+
     # Instance attributes (set by subclass, but with class defaults)
     name: str = "component"
     parameter_prefix: str = "component_"
@@ -754,7 +813,7 @@ class SEDModelComponent(TemplateThreading):
         # Compute zeroth-order LUT
         phot_lnu_precomp, _ = self.predict_precomp(p, filter_eff_waves, **inputs)
 
-        published = {f"{self.name}_phot_lnu_precomp": phot_lnu_precomp}
+        published = {f"{self._derived_prefix}_phot_lnu_precomp": phot_lnu_precomp}
 
         # Optionally compute first-order Taylor slope
         if self.taylor_order >= 1:
@@ -766,7 +825,7 @@ class SEDModelComponent(TemplateThreading):
 
             # Element-wise gradient using vmap
             slope = jax.vmap(jax.grad(predict_precomp_scalar))(filter_eff_waves)
-            published[f"{self.name}_phot_lnu_slope_precomp"] = slope
+            published[f"{self._derived_prefix}_phot_lnu_slope_precomp"] = slope
 
         return published
 
@@ -815,7 +874,7 @@ class SEDModelComponent(TemplateThreading):
         )
 
         out = dict(published)
-        out[f"{self.name}_spec_lnu_precomp"] = spec_lnu_precomp
+        out[f"{self._derived_prefix}_spec_lnu_precomp"] = spec_lnu_precomp
         return out
 
     def predict_precomp(

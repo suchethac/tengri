@@ -7600,6 +7600,41 @@ class SEDModel:
         setattr(self, cache_attr, response)
         return response
 
+    #: Provenance tags that mean a caller asked for this parameter's value.
+    #: ``registry_default`` and ``wildcard_fixed`` are deliberately absent —
+    #: neither expresses a request, and for those an attenuation law's own
+    #: published default must stand rather than the shared spec default.
+    _REQUESTED_PROVENANCE = frozenset({"user_prior", "user_fixed", "user_free", "wildcard_free"})
+
+    def _requested_law_shape_params(self) -> frozenset[str]:
+        """Shape parameters of the selected attenuation law a caller asked for.
+
+        Returns an empty set for a law that reads no shape parameter (the
+        default ``calzetti`` among them), which keeps the build-time cached
+        ``k(lambda)`` and the fast path unchanged. See
+        :attr:`DustAttenuationSEDComponentConfig.live_shape_params` and #1808.
+        """
+        law = getattr(self, "_dust_law_diff", None) or getattr(self.spec, "dust_law_diff", None)
+        if law is None:
+            return frozenset()
+        try:
+            from tengri.parameters.groups import _law_shape_params
+
+            reads = _law_shape_params(law)
+        except Exception:  # pragma: no cover - law not registered
+            return frozenset()
+        if not reads:
+            return frozenset()
+        provenance = getattr(self.spec, "_group_provenance", None) or {}
+        return frozenset(
+            name
+            for name in reads
+            # ``_grid`` suffixes mark a declared free prior intersected with a
+            # template grid; still a request, so match on the stem.
+            if str(provenance.get(name, "registry_default")).removesuffix("_grid")
+            in self._REQUESTED_PROVENANCE
+        )
+
     def _build_component_chain(self):
         """Construct the orchestrator chain from ``self``'s settings.
 
@@ -7650,8 +7685,26 @@ class SEDModel:
                 neb_backend_name = "baked_in"  # fallback
             neb_backend_instance = neb_inst
 
+        # Which attenuation-law shape parameters did somebody actually ask for?
+        #
+        # The single_component screen used to call its law with no arguments,
+        # so dust_slope / dust_delta / dust_bump_strength were unfittable
+        # (#1808). Passing the spec's values unconditionally is not the fix
+        # either: the spec declares ONE shared dust_delta / dust_bump_strength,
+        # both Fixed(0.0), while each law carries its paper's value in its own
+        # signature (kriek_conroy bump=1.0, narayanan_z delta=-0.2), and
+        # overriding those collapses three distinct published laws onto one
+        # curve — measured.
+        #
+        # Provenance separates the two cases, and it can only be read here: the
+        # component sees a plain params dict, and deciding at call time would
+        # mean branching on a traced value. registry_default and wildcard_fixed
+        # mean "nobody asked", so the law's own default stands.
+        dust_live_shape_params = self._requested_law_shape_params()
+
         chain = build_components(
             ssp_data=self.ssp_data,
+            dust_live_shape_params=dust_live_shape_params,
             sfh_model=mean_model,
             field=field_on,
             metallicity_model=getattr(self, "_met_mode", "delta"),

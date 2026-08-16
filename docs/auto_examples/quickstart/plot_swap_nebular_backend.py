@@ -8,10 +8,10 @@ depends entirely on the nebular backend the model is built with.
 
 We hold the SFH (a young starburst with peak SFR ≈ 30 yr ago), dust,
 and metallicity fixed, and toggle the nebular block between Cue
-(Li+2024 neural emulator) and ``none`` (stellar continuum only).
+(Li+2025 neural emulator) and ``none`` (stellar continuum only).
 The lines that vanish in the right column are the gas's signature.
 
-Reference: Li et al. 2024, ApJ submitted (Cue emulator).
+Reference: Li et al. 2025, ApJ, 986, 9 (Cue emulator; arXiv:2405.04598).
 """
 
 import os

@@ -26,7 +26,20 @@ class TestAGNXRayCoronaDefaults:
         sed_in = jnp.zeros_like(wave)
         l_2500 = 3.16e29  # erg/s/Hz — inside the Just+2007 calibration window
 
-        defaults = {name: jnp.asarray(dist.default) for name, dist in type(comp)._priors.items()}
+        # Defaults come from the xray group's declarations, because that is
+        # where this component's parameters live: it declares none of its own
+        # since #1684 (they were duplicates of xray_gamma_agn / xray_E_cut /
+        # xray_delta_alpha_ox under a prefix no group supplied, which is what
+        # made it unbuildable). Read off the declaration rather than repeating
+        # the numbers, per ADR-0011.
+        from tengri.components.xray._params import PARAMS as XRAY_PARAMS
+        from tengri.protocols.component import declared_default
+
+        defaults = {
+            "gamma_agn": jnp.asarray(declared_default(XRAY_PARAMS, "xray_gamma_agn")),
+            "E_cut": jnp.asarray(declared_default(XRAY_PARAMS, "xray_E_cut")),
+            "delta_alpha_ox": jnp.asarray(declared_default(XRAY_PARAMS, "xray_delta_alpha_ox")),
+        }
         sed_out, published = comp.predict(
             defaults, sed_in, wave, L_2500_30deg=jnp.asarray(l_2500), L_agn_bol=0.0
         )
@@ -38,4 +51,6 @@ class TestAGNXRayCoronaDefaults:
         sed_np = np.asarray(sed_out)
         l_2kev = float(np.interp(12.398 / 2.0, wave_np, sed_np))
         assert l_2kev / l_2kev_expected == pytest.approx(1.0, abs=0.05)
-        assert float(published["L_xray_agn"]) > 0
+        # Publishes sed_xray (a real DerivedState field) rather than
+        # L_xray_agn, which was not one -- see #1684.
+        assert float(np.sum(np.asarray(published["sed_xray"]))) > 0
