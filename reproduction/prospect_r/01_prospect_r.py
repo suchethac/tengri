@@ -52,6 +52,7 @@ from reproduction.prospect_r._drivers import prospect_driver as P, units as U
 
 import tengri
 from tengri import FIXED, Fixed, SEDModel, load_ssp_data
+from tengri.utils.physics_constants import LOG10_ZSUN
 
 # Force the inline backend so figures embed on (re-)render regardless of the
 # ambient MPLBACKEND. A non-inline backend (e.g. Agg) drops the save_fig()
@@ -77,17 +78,16 @@ print(
 
 # Metallicity pin. ProSpect / BC03 work in absolute metal mass fraction Z with
 # Z⊙ = 0.02 (the BC03 convention); tengri's `logzsol` is log10(Z / Z⊙) with
-# Z⊙ = 10**(-1.848) (Asplund+2009). The two solar conventions differ, so to
-# put both codes at the *same absolute* Z = 0.02 the tengri side needs
-# logzsol = log10(0.02) − (−1.848) = 0.149, not 0. Matching absolute Z (not the
-# label "solar") is what keeps the SED panels honest.
-LOG10_ZSUN_TENGRI = -1.848
+# tengri's Z⊙ is Asplund+2009 (`LOG10_ZSUN`). The two solar conventions differ,
+# so to put both codes at the *same absolute* Z = 0.02 the tengri side needs
+# logzsol = log10(0.02) − LOG10_ZSUN ≈ 0.149, not 0. Matching absolute Z (not
+# the label "solar") is what keeps the SED panels honest.
 Z_SOLAR = 0.02
 
 
 def logzsol_for_Z(z_abs: float) -> float:
     """tengri ``logzsol`` that lands a model at absolute metallicity ``z_abs``."""
-    return float(np.log10(z_abs) - LOG10_ZSUN_TENGRI)
+    return float(np.log10(z_abs) - LOG10_ZSUN)
 
 
 MET_LOGZSOL = logzsol_for_Z(Z_SOLAR)  # ≈ 0.149

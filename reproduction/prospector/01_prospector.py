@@ -68,6 +68,7 @@ from reproduction.prospector._drivers import prospector_driver as P, units as U
 
 import tengri
 from tengri import FIXED, Fixed, SEDModel, load_ssp_data
+from tengri.utils.physics_constants import LOG10_ZSUN
 
 # Force the inline backend so figures embed on (re-)render regardless of the
 # ambient MPLBACKEND. A non-inline backend (e.g. Agg) drops the save_fig()
@@ -91,10 +92,10 @@ print(
     f"rel_err = {_unit_check['rel_err']:.2e}  (target < 1e-3)"
 )
 
-# Metallicity pin. FSPS `logzsol` and tengri `logzsol` are both
-# log10(Z / Z⊙); the FSPS MILES grid uses Z⊙ = 10**(-1.848) (Asplund+2009).
-# Solar on both sides is logzsol = 0.
-LOG10_ZSUN = -1.848
+# Metallicity pin. FSPS `logzsol` and tengri `logzsol` are both log10(Z / Z⊙),
+# against the same Asplund+2009 Z⊙ that `LOG10_ZSUN` carries, so solar on both
+# sides is logzsol = 0. A library whose Z⊙ differs (BC03/Padova, PARSEC, BASTI)
+# breaks that identity — see LOG10_ZSUN_BY_LIBRARY.
 MET_LOGZSOL = 0.0
 MET_FIDUCIAL = {"logzsol": Fixed(MET_LOGZSOL), "all_params": FIXED}
 

@@ -59,6 +59,7 @@ from reproduction.bagpipes._drivers import bagpipes_driver as B, units as U
 
 import tengri
 from tengri import FIXED, Fixed, SEDModel, load_ssp_data
+from tengri.utils.physics_constants import C_AA, L_SUN, LOG10_ZSUN
 
 # Force the inline backend so figures embed on (re-)render regardless of the
 # ambient MPLBACKEND. A non-inline backend (e.g. Agg) drops the save_fig()
@@ -83,10 +84,9 @@ print(
     f"rel_err = {_unit_check['rel_err']:.2e}  (target < 1e-3)"
 )
 
-# Metallicity pin — BAGPIPES `metallicity=1.0` is Z/Z_⊙ = 1; the bundled
-# grid uses Z_⊙ = 10**(-1.848) (Asplund+2009) at HDU `ZMET_1.000ZSOL`.
+# Metallicity pin — BAGPIPES `metallicity=1.0` is Z/Z_⊙ = 1 against the same
+# Asplund+2009 Z_⊙ that `LOG10_ZSUN` carries, at HDU `ZMET_1.000ZSOL`.
 # tengri's `met_logzsol = log10(Z/Z_⊙) = 0` is the bit-aligned counterpart.
-LOG10_ZSUN = -1.848
 MET_LOGZSOL = 0.0
 MET_FIDUCIAL = {"logzsol": Fixed(MET_LOGZSOL), "all_params": FIXED}
 
@@ -121,6 +121,15 @@ def _assert_comparable(arr_ref, arr_t, *, name: str) -> None:
 #
 # BAGPIPES' BC03+MILES Kroupa templates re-shaped into the DSPS HDF5
 # layout that tengri reads — same numerical SSPs on both sides.
+#
+# The repackaged grid is **not** in the repository: `.gitignore` excludes
+# `*.h5`, so it is rebuilt from whatever BAGPIPES is installed. The §13
+# magnitudes below moved by up to 0.007 mag when it was rebuilt under
+# BAGPIPES 1.3.6, against a committed run made from an earlier build — small,
+# but it is a published number that the committed source alone does not
+# determine. Read the version the run actually used off the printout, and
+# treat a §13 difference of this size as a template-version difference until
+# the versions are shown to match.
 
 # %%
 ssp_file = _HERE / "_drivers" / "data" / "bc03_miles_from_bagpipes.h5"
@@ -133,7 +142,8 @@ ssp = load_ssp_data(str(ssp_file.resolve()))
 print(
     f"BC03+MILES Kroupa SSP: {ssp.ssp_wave.shape[0]} wavelengths, "
     f"{ssp.ssp_lgmet.shape[0]} metallicities, "
-    f"{ssp.ssp_lg_age_gyr.shape[0]} age bins."
+    f"{ssp.ssp_lg_age_gyr.shape[0]} age bins.\n"
+    f"repackaged from BAGPIPES {B.bagpipes_version()}"
 )
 
 
@@ -155,8 +165,12 @@ print(
 from astropy.io import fits as _fits
 
 ages_yr = [1e6, 1e7, 1e8, 1e9, 1e10]
-L_SUN = 3.826e33  # erg/s — match the value bagpipes hard-codes
-_C_AA = 2.998e18  # speed of light [Å/s]
+# BAGPIPES hard-codes its own solar luminosity, so its grid must be scaled by
+# that value and tengri's by tengri's. Using one for both is what the first
+# version of this cell did: the 0.05% offset cancels in the ratio below and is
+# therefore invisible here, but it is wrong the moment anything absolute is
+# reported. docs-const: intentional — upstream constant, not tengri's.
+L_SUN_BAGPIPES = 3.826e33  # docs-const: intentional — BAGPIPES' own L_sun, not tengri's
 
 _grid_path = Path(B.__file__).resolve().parent / "data"  # not used directly
 _bagpipes_grid_dir = Path(__import__("bagpipes").config.grid_dir)
@@ -170,7 +184,7 @@ bagpipes_ssp = []
 for age_yr in ages_yr:
     ia = int(np.argmin(np.abs(_age_yr_native - age_yr)))
     # Lsun/Å/Msun → erg/s/Hz/Msun: × λ²/c × L_sun
-    lnu = _flux_zsol_aa[ia] * _wave_aa**2 / _C_AA * L_SUN
+    lnu = _flux_zsol_aa[ia] * _wave_aa**2 / C_AA * L_SUN_BAGPIPES
     bagpipes_ssp.append((_wave_aa, lnu))
 
 i_zsun = int(np.argmin(np.abs(ssp.ssp_lgmet - LOG10_ZSUN)))
@@ -319,7 +333,7 @@ DPL_ALPHA = 1.5
 DPL_BETA = 1.0
 DPL_TAU_GYR = 3.0
 
-# Build the bagpipes side directly via model_galaxy.sfh inspection.
+# Build the BAGPIPES side directly via model_galaxy.sfh inspection.
 _comp_b_dpl = {
     "redshift": 0.0,
     "dblplaw": {
@@ -405,7 +419,8 @@ print(
 # `width_dex ≈ FWHM/(2.355 × tmax × ln 10)`.
 #
 #
-# **Caveat:** tengri's `lnorm` is a log10-space Gaussian, not the exact Carnall+2018 1/T ln-space lognormal — the detailed wing shape differs slightly.
+# **Caveat:** tengri's `lnorm` is a log10-space Gaussian, not the exact Carnall+2018 1/T ln-space
+# lognormal — the detailed wing shape differs slightly.
 #
 # **Verification Status:** PARTIAL (11/33) — Parametric SFH family physics
 
@@ -653,10 +668,13 @@ if _ratios.size:
 # %% [markdown]
 # ## §5 Metallicity sensitivity (chemical enrichment, single-Z form)
 #
-# BAGPIPES exposes `metallicity` (Z / Z☉) on every SFH block; tengri
-# carries the same knob via `logzsol = log10(Z / Z☉)`. Both codes also
-# is the single-Z response: sweep `Z ∈ {0.2, 1.0, 2.5} Z☉` at the
-# fiducial 5 Gyr delayed-τ SFH and overlay the optical-NIR stellar
+# BAGPIPES exposes `metallicity` (Z / Z☉) on every SFH block; tengri carries
+# the same knob via `logzsol = log10(Z / Z☉)`. Both support time-varying Z
+# (BAGPIPES `metallicity_bins`, tengri `chemical_enrichment_history`), but the
+# single-Z response is the reproducible test: sweep `Z ∈ {0.2, 1.0, 2.5} Z☉` at
+# the fiducial 5 Gyr delayed-τ SFH and overlay the optical-NIR continuum. Both
+# track the age-metallicity degeneracy the same way — high Z is redder, with
+# deeper absorption features.
 #
 
 # %%
@@ -873,7 +891,7 @@ save_fig("bagpipes_05_dust_attenuation_applied.png")
 # fraction, but PDR dust emits `R ≈ 14×` more per unit mass (DL07 Eq. 33),
 # so a 5% mass fraction carries ~40% of the luminosity.
 #
-# **Verification Status:** CROSSVAL — Dust IR emission vs bagpipes
+# **Verification Status:** CROSSVAL — Dust IR emission vs BAGPIPES
 
 # %%
 QPAH_FIDUCIAL = 2.5
@@ -1003,7 +1021,7 @@ save_fig("bagpipes_06_dust_ir.png")
 # evolved stellar continuum.
 NEB_AGE = 0.01  # Gyr
 
-# Give bagpipes a dense spec_wavs grid through the optical so its
+# Give BAGPIPES a dense spec_wavs grid through the optical so its
 # Cloudy-v25 lines aren't smeared into broad bumps by the coarse default
 # 747-point grid (which spans 1 Å to 1e8 Å — far too sparse around Hα).
 _neb_spec_wavs = np.arange(900.0, 7000.0, 1.0)
@@ -1642,12 +1660,16 @@ for _b, _f, _mf, _mn, _mfn, _mnn in zip(
 #
 # Timing a single forward evaluation on the fiducial galaxy (τ-delayed SFH,
 # Calzetti at A_V = 1, DL07 IR, Cloudy v25 / Cue v17 nebular, Inoue14 IGM).
-# Both complete a SED in ~10² ms; tengri's JAX differentiation costs ~1 forward pass vs ~2×n_params finite-differences.
-# is gradients: `jax.grad` differentiates the JIT'd objective at the cost of
-# roughly one extra forward pass, while non-JAX codes require `2 × n_params`
+# Both codes complete a full SED in ~10² ms. The real tengri advantage is
+# gradients: `jax.grad` differentiates the JIT'd objective for roughly one
+# extra forward pass, where a non-JAX code needs `2 × n_params`
+# finite-difference passes — a 20× swing at ten parameters.
 #
-# Timings depend on JAX cache state, CPU, and cache warmth; the numbers below
-# are illustrative orders of magnitude, not a benchmark.
+# The forward numbers below are not a benchmark and should not be quoted as
+# one. They move with CPU load and JAX cache warmth: three runs of this cell
+# on one quiet machine gave 78, 85 and 92 ms for the same BAGPIPES call, so
+# the printed ratio swings between 0.6× and 0.8× without anything changing.
+# Read them as "same order of magnitude", which is the only claim they carry.
 
 # %%
 import time

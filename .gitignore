@@ -183,3 +183,6 @@ psd_bank*/
 n_sweep_results*.json
 longer_chains.log
 run[0-9].log
+
+# Isolated docs-build venv (matplotlib pinned; see docs/requirements.txt)
+.venv-docs/

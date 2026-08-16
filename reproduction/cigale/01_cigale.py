@@ -69,6 +69,7 @@ from reproduction.cigale._drivers import cigale_driver as C, units as U
 import tengri
 from tengri import FIXED, Fixed, SEDModel, load_ssp_data
 from tengri.dust import register_dale2014_tabulated
+from tengri.utils.physics_constants import L_SUN
 
 # Force the inline backend so figures embed on (re-)render regardless of the
 # ambient MPLBACKEND. A non-inline backend (e.g. Agg) drops the save_fig()
@@ -123,7 +124,7 @@ TAU_BC_FIDUCIAL = 0.0  # CIGALE modified_starburst = single continuum screen
 # tengri's met_logzsol = log10(Z/Z_⊙) with Z_⊙ = 10**LOG10_ZSUN ≈ 0.0142
 # (Asplund+2009). Pin explicitly so the comparison is bit-aligned regardless
 # of registry-default convention.
-LOG10_ZSUN = -1.848
+LOG10_ZSUN = -1.848  # docs-const: intentional — rounded; exact value needs a pcigale re-run
 MET_LOGZSOL = float(np.log10(0.02) - LOG10_ZSUN)  # ≈ +0.149
 MET_FIDUCIAL = {"logzsol": Fixed(MET_LOGZSOL), "all_params": FIXED}
 
@@ -245,8 +246,13 @@ import pickle as _pickle
 from pathlib import Path as _P
 
 ages_yr = [1e6, 1e7, 1e8, 1e9, 1e10]
-L_SUN = 3.828e33  # erg/s
-_C_AA = 2.998e18  # speed of light [Å/s]
+# `_C_AA` is CIGALE's rounded c, not tengri's `C_AA` (2.99792458e18): a 2.5e-5
+# relative difference. It stays rounded because the committed numbers below were
+# produced with it and `pcigale` is not installable from PyPI, so the notebook
+# cannot be re-executed here to confirm the change is invisible at the three
+# significant figures reported. Import `C_AA` and re-run when pcigale is
+# available; do not swap it blind.
+_C_AA = 2.998e18  # docs-const: intentional — CIGALE's rounded c; see note above
 
 # CIGALE side: raw BC03 Chabrier Z=0.02 pickle, converted W/nm/Msun →
 # Lsun/Hz/Msun (the exact conversion used by _drivers/cigale_ssp_to_dsps.py).
@@ -758,7 +764,7 @@ plt.show()
 # through the FUV; CIGALE zeros attenuation below 912 Å. Models here
 # set `dust={'lyman_cutoff': True}` to match (see §7).
 #
-# **Verification Status:** CROSSVAL — Dust IR emission vs bagpipes
+# **Verification Status:** CROSSVAL — Dust IR emission vs BAGPIPES
 
 # %%
 sed_c_ir = C.run_chain(
@@ -814,7 +820,7 @@ residual = abs(L_abs - L_emit) / max(L_abs, 1e-30)
 _assert_comparable(L_c_ir, s_ir.sed_intrinsic, name="§6 IR")
 
 # Shared-axis overlay + ratio panel (#864): the FIR-peak partition difference
-# (~1.0-1.15, Dale2014 stellar-heated) is only readable on one scale.
+# (~1.0–1.15, Dale2014 stellar-heated) is only readable on one scale.
 fig, ax, ax_r, ratio = U.overlay_ratio_fig(
     w_c_ir,
     L_c_ir,
@@ -890,7 +896,7 @@ plt.show()
 import jax
 import jax.numpy as jnp
 
-_c_aa_dust = 2.998e18
+_c_aa_dust = 2.998e18  # docs-const: intentional — CIGALE's rounded c
 
 # Matched fiducial chain (mirrors the §6 dale2014 cell): same SFH + BC03 +
 # Calzetti attenuation on both sides, so the absorbed luminosity that feeds
@@ -2046,7 +2052,7 @@ save_fig("cigale_11_radio_synchrotron.png")
 # CIGALE applies Meiksin (2006) IGM attenuation inside its
 # `redshifting` module — Lyman series **and** the diffuse-IGM Lyα
 # forest continuum suppression, so transmission redward of the Lyman
-# limit at z = 3 sits at ~0.18-0.25 rather than 1. tengri ships the
+# limit at z = 3 sits at ~0.18–0.25 rather than 1. tengri ships the
 # matching `igm.meiksin06`; this panel uses it directly so both sides
 # apply the same Meiksin prescription. The transmission curves overlay
 # at z = 3, 5, 7 to **max |ΔT| ~ 1e-7** (float precision, median
@@ -2219,7 +2225,7 @@ def _ratio_at(target_aa: float) -> float:
     return float(L_t_on_ext[j] / L_ext[j]) if L_ext[j] > 0 else float("nan")
 
 
-_C_AA_HZ = 2.998e18  # Å/s
+_C_AA_HZ = 2.998e18  # docs-const: intentional — CIGALE's rounded c
 print(
     "  X-ray  1 keV = {:.2f}×, 5 keV = {:.2f}×  (XRB + hot gas; no AGN corona)".format(
         _ratio_at(12.398 / 1.0), _ratio_at(12.398 / 5.0)
