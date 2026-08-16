@@ -9,6 +9,7 @@ alike.
 
 import os
 import urllib.error
+import urllib.parse
 import urllib.request
 import warnings
 from pathlib import Path
@@ -733,6 +734,43 @@ def download_template(
     return filepath
 
 
+def require_remote_url(url: str) -> str:
+    """Return ``url`` if it is an ordinary remote URL, else raise.
+
+    ``urllib.request.urlopen`` accepts ``file://``, and on most builds
+    ``ftp://`` and other handlers too. A download helper that forwards an
+    unchecked string therefore doubles as a local-file reader: a config or
+    catalogue entry naming ``file:///etc/passwd`` gets opened and written to
+    the destination path as though it had been fetched.
+
+    Every URL tengri fetches is an https one from the public data mirror, so
+    the restriction costs nothing and closes the confusion (bandit B310).
+
+    Parameters
+    ----------
+    url : str
+        URL about to be passed to :func:`urllib.request.urlopen`.
+
+    Returns
+    -------
+    str
+        The same URL, unchanged.
+
+    Raises
+    ------
+    ValueError
+        If the scheme is anything other than ``http`` or ``https``.
+    """
+    scheme = urllib.parse.urlparse(url).scheme.lower()
+    if scheme not in ("http", "https"):
+        raise ValueError(
+            f"refusing to fetch {url!r}: only http and https URLs are "
+            f"downloaded, got scheme {scheme!r}. Pass a local path directly "
+            f"instead of a file:// URL."
+        )
+    return url
+
+
 def _download_file(url: str, dest: Path, chunk_size: int = 8192, progress: bool = True) -> None:
     """Download a file from a URL to a destination path with simple progress.
 
@@ -763,17 +801,21 @@ def _download_file(url: str, dest: Path, chunk_size: int = 8192, progress: bool 
     except ImportError:
         use_progress = False
 
+    require_remote_url(url)
+
     # Perform HEAD request to get total size
     try:
         head_request = urllib.request.Request(url, method="HEAD")
-        with urllib.request.urlopen(head_request, timeout=10) as response:
+        # B310: scheme restricted to http/https by require_remote_url above.
+        with urllib.request.urlopen(head_request, timeout=10) as response:  # nosec B310
             total_size = int(response.headers.get("Content-Length", 0))
     except Exception:
         total_size = 0
 
     # Download with progress
     downloaded = 0
-    with open(dest, "wb") as f, urllib.request.urlopen(url, timeout=30) as response:
+    # B310: scheme restricted to http/https by require_remote_url above.
+    with open(dest, "wb") as f, urllib.request.urlopen(url, timeout=30) as response:  # nosec B310
         if response.status != 200:
             raise urllib.error.HTTPError(
                 url, response.status, f"HTTP {response.status}", response.headers, None
