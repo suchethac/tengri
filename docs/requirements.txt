@@ -17,3 +17,12 @@ sphinx-gallery>=0.15
 # renders were produced with 3.10.8. Regenerate on anything else and the diff is
 # version noise indistinguishable from a real figure change.
 matplotlib==3.10.8
+
+# Floored, not pinned: this one decides *where* figures land, not what they look
+# like. matplotlib-inline 0.1.6 against IPython 8.27 breaks the per-cell flush,
+# so `%matplotlib inline` — the line the reproduction notebooks run precisely to
+# guarantee inline embedding — instead suppresses it. Figures then accumulate
+# until the next explicit `plt.show()`. Measured on 01_agnfitter: 20 figures
+# across 20 cells became 17 piled into 3, and the notebook still exited 0 with
+# every assertion passing. Nothing in the build catches that but the eye.
+matplotlib-inline>=0.1.7
