@@ -112,7 +112,7 @@ class XRayAirdSEDComponent(SEDModelComponent):
     builds its keyword arguments purely from the declared sets — so all four
     take their literal fallbacks on every call regardless of what the rest of
     the model computed, and the corona term is identically zero. That is a live
-    defect, tracked separately, not a description of intended behaviour; the
+    defect, tracked separately, not a description of intended behavior; the
     prose here used to claim the reads happen, which is how #1755 survived as
     long as it did. Prefer the default ``yang20``
     (:class:`tengri.components.xray.component.XRaySEDComponent`), which wires
