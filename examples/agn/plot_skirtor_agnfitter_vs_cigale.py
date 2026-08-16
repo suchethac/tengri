@@ -117,6 +117,15 @@ try:
 except Exception as e:
     print(f"Warning: AGNfitter-averaged model unavailable ({e})")
 
+# The whole point of this example is the *comparison*. One side missing is worth
+# a warning; both missing leaves a figure with annotations and no SEDs, which
+# the runner would otherwise score as a pass.
+if not torus_models:
+    raise RuntimeError(
+        "neither torus model built, so there is nothing to compare — see the "
+        "two warnings above for the underlying failures"
+    )
+
 # Plot each model
 for label, model, color in torus_models:
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))

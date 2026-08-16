@@ -60,10 +60,15 @@ ax_menu.text(
 )
 
 # Right panel: overlay rest-frame SEDs
+plotted = 0
+first_failure: Exception | None = None
+
 for name, recipe_fn, color in RECIPE_CONFIGS:
     try:
         model = tengri.SEDModel.build(ssp_data=ssp, **recipe_fn())
-    except Exception:
+    except Exception as e:
+        if first_failure is None:
+            first_failure = e
         continue
 
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
@@ -71,6 +76,15 @@ for name, recipe_fn, color in RECIPE_CONFIGS:
     wave = np.asarray(model.wavelengths)
     nu_l_nu = C_AA_PER_S / wave * np.asarray(out.rest_sed())
     ax_seds.loglog(wave, nu_l_nu, color=color, lw=1.4, label=name)
+    plotted += 1
+
+# The left panel prints spec introspection and would still render, so an empty
+# right panel is not visible in the exit status without this.
+if plotted == 0:
+    raise RuntimeError(
+        f"none of the {len(RECIPE_CONFIGS)} recipes built, so the SED panel is "
+        f"empty. First failure: {type(first_failure).__name__}: {first_failure}"
+    ) from first_failure
 
 ax_seds.set(
     xlim=(700, 5e6),
