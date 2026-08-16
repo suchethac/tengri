@@ -137,9 +137,12 @@ class TestCycleDetection:
 
 class TestRealPipeline:
     """The canonical build_components pipeline must reproduce its
-    hand-coded order under the sort. The contract-graph snapshot in
-    tests/integration/test_derived_contract_snapshots.py is the
-    end-to-end version of this check; this is the unit version."""
+    hand-coded order under the sort.
+
+    This was described as "the unit version", with
+    tests/integration/test_derived_contract_snapshots.py as the end-to-end
+    counterpart. That file was deleted in #1029, so there is no end-to-end
+    version any more and this class is the whole of the check."""
 
     def test_stellar_nebular_dust_radio_xray_igm_order_preserved(self):
         from tengri.components.dust.component import DustAttenuationSEDComponent

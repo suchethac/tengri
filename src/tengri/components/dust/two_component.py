@@ -189,6 +189,21 @@ class DustSEDComponentConfig(SEDComponentConfig):
     #: ``dust={'eb_include_lyc': True}``. Static, non-fittable; enters
     #: ``compile_signature``.
     eb_include_lyc: bool = False
+    #: Flat shape-parameter names a caller actually asked for, resolved from
+    #: spec provenance by ``SEDModel._requested_law_shape_params``. Names
+    #: outside the set are not passed to the attenuation law, so the law's own
+    #: published default stands. #1833: injecting the shared ``Fixed(0.0)``
+    #: unconditionally deleted ``kriek_conroy``'s 2175 Å bump and overrode
+    #: ``narayanan_z`` / ``tea``'s ``dust_delta=-0.2``. Mirrors
+    #: :attr:`DustAttenuationSEDComponentConfig.live_shape_params` (#1808).
+    #:
+    #: ``None`` (the default) means *unset*, not *empty*: a component built
+    #: directly has no spec to ask, so it keeps the historical pass-all rather
+    #: than silently pinning every law to its signature default. Only
+    #: ``SEDModel`` sets it, because only ``SEDModel`` knows who asked. The
+    #: single-screen config spells its default ``frozenset()`` for the same
+    #: reason in reverse — passing nothing is *its* historical behavior.
+    live_shape_params: frozenset[str] | None = None
 
 
 @dataclass(frozen=True)
@@ -432,6 +447,7 @@ class DustSEDComponent(TemplateThreading):
             params,
             dict(self.config.bc_law_overrides),
             dict(self.config.diff_law_overrides),
+            self.config.live_shape_params,
         )
         return self._transmission_from_law_params(
             params, wavelength, ssp_ages_yr, bc_law_params, diff_law_params
@@ -510,6 +526,7 @@ class DustSEDComponent(TemplateThreading):
             params,
             dict(self.config.bc_law_overrides),
             dict(self.config.diff_law_overrides),
+            self.config.live_shape_params,
         )
         transmission = self._transmission_from_law_params(
             params, wave, ssp_ages_yr, bc_law_params, diff_law_params
@@ -590,9 +607,13 @@ class DustSEDComponent(TemplateThreading):
         # in their own clouds behind the same foreground ISM.
         neb_law = self.config.law_neb or self.config.law_bc
         _neb_overrides = dict(self.config.neb_law_overrides)
-        neb_bc_params = {
-            k: jnp.asarray(_neb_overrides.get(k, v)) for k, v in bc_law_params.items()
-        }
+        # Start from the stellar birth-cloud params, then layer every nebular
+        # override on top. Merging rather than iterating ``bc_law_params`` keys:
+        # since #1833 that dict omits shape parameters nobody requested, and a
+        # comprehension over its keys would drop a ``neb_law_overrides`` entry
+        # for an omitted one — an explicit setting silently ignored, which is
+        # the failure class #1833 itself is.
+        neb_bc_params = {k: jnp.asarray(v) for k, v in {**bc_law_params, **_neb_overrides}.items()}
         diff_law_kw = {k: jnp.asarray(v) for k, v in diff_law_params.items()}
         k_bc_neb = _resolve_law(neb_law)(wave, **neb_bc_params)
         k_diff_neb = _resolve_law(self.config.law_diff)(wave, **diff_law_kw)
@@ -742,21 +763,30 @@ class DustSEDComponent(TemplateThreading):
 
             tau_bc = jnp.asarray(params["dust_tau_bc"])
             tau_diff = jnp.asarray(params["dust_tau_diff"])
-            # Per-component slope (birth cloud may differ from diffuse). The
-            # LUT path threads only the slope, matching its existing surface.
-            n_slope_bc = jnp.asarray(bc_law_params["n_slope"])
-            n_slope_diff = jnp.asarray(diff_law_params["n_slope"])
+            # The SAME resolved law parameters as the full-grid screen above,
+            # splatted whole. This site used to thread `n_slope` alone —
+            # "matching its existing surface" — which silently dropped
+            # dust_bump_strength / dust_delta / dust_Rv, so the per-filter
+            # attenuation LUT evaluated a *different curve* from the screen in
+            # the same model whenever any of the three was non-default. Every
+            # other call site (the screen at :meth:`_transmission_from_law_params`
+            # and the nebular screen below) passes the whole dict; this one is
+            # now consistent with them. Found by #1833's exact-vs-precompute
+            # test, which the narrowing turned from a silent divergence into a
+            # loud KeyError.
+            bc_kw = {k: jnp.asarray(v) for k, v in bc_law_params.items()}
+            diff_kw = {k: jnp.asarray(v) for k, v in diff_law_params.items()}
             law_bc_fn = resolve_dust_law(self.config.law_bc)
             law_diff_fn = resolve_dust_law(self.config.law_diff)
             d_lambda = jnp.asarray(1.0)
             # Evaluate k_bc and k_diff at the filter pivots and ±δλ for
             # the finite-difference slope.
-            k_bc_at = law_bc_fn(filter_eff, n_slope=n_slope_bc)
-            k_diff_at = law_diff_fn(filter_eff, n_slope=n_slope_diff)
-            k_bc_plus = law_bc_fn(filter_eff + d_lambda, n_slope=n_slope_bc)
-            k_bc_minus = law_bc_fn(filter_eff - d_lambda, n_slope=n_slope_bc)
-            k_diff_plus = law_diff_fn(filter_eff + d_lambda, n_slope=n_slope_diff)
-            k_diff_minus = law_diff_fn(filter_eff - d_lambda, n_slope=n_slope_diff)
+            k_bc_at = law_bc_fn(filter_eff, **bc_kw)
+            k_diff_at = law_diff_fn(filter_eff, **diff_kw)
+            k_bc_plus = law_bc_fn(filter_eff + d_lambda, **bc_kw)
+            k_bc_minus = law_bc_fn(filter_eff - d_lambda, **bc_kw)
+            k_diff_plus = law_diff_fn(filter_eff + d_lambda, **diff_kw)
+            k_diff_minus = law_diff_fn(filter_eff - d_lambda, **diff_kw)
             k_bc_slope = (k_bc_plus - k_bc_minus) / (2.0 * d_lambda)
             k_diff_slope = (k_diff_plus - k_diff_minus) / (2.0 * d_lambda)
             a_bc = jnp.exp(-tau_bc * k_bc_at)
@@ -785,10 +815,16 @@ class DustSEDComponent(TemplateThreading):
             # stays FREE. Measured cheaper than pre-baking it: the baked form has
             # to stream two extra tensors, while this one is compute-bound and XLA
             # fuses it into the contraction.
+            #
+            # "Any other shape parameter" was aspirational until #1833: every
+            # evaluation in this block passed ``n_slope=`` alone, so a free
+            # ``dust_delta`` / ``dust_bump_strength`` / ``dust_Rv`` moved the
+            # full-grid screen and not the LUT the fit actually reads. They all
+            # splat the resolved dicts now, which is what makes the claim true.
             sub_waves = state.derived.get("stellar_subband_waves_rest_precomp")
             if sub_waves is not None:
-                a_bc_sub = jnp.exp(-tau_bc * law_bc_fn(sub_waves, n_slope=n_slope_bc))
-                a_diff_sub = jnp.exp(-tau_diff * law_diff_fn(sub_waves, n_slope=n_slope_diff))
+                a_bc_sub = jnp.exp(-tau_bc * law_bc_fn(sub_waves, **bc_kw))
+                a_diff_sub = jnp.exp(-tau_diff * law_diff_fn(sub_waves, **diff_kw))
                 derived_overrides["dust_bc_attenuation_subband_precomp"] = a_bc_sub
                 derived_overrides["dust_diff_attenuation_subband_precomp"] = a_diff_sub
 
@@ -800,18 +836,18 @@ class DustSEDComponent(TemplateThreading):
             rb_eff = state.derived.get("filter_restband_eff_waves")
             if rb_eff is not None:
                 derived_overrides["dust_bc_restband_attenuation_precomp"] = jnp.exp(
-                    -tau_bc * law_bc_fn(rb_eff, n_slope=n_slope_bc)
+                    -tau_bc * law_bc_fn(rb_eff, **bc_kw)
                 )
                 derived_overrides["dust_diff_restband_attenuation_precomp"] = jnp.exp(
-                    -tau_diff * law_diff_fn(rb_eff, n_slope=n_slope_diff)
+                    -tau_diff * law_diff_fn(rb_eff, **diff_kw)
                 )
             rb_sub_waves = state.derived.get("stellar_restband_subband_waves_precomp")
             if rb_sub_waves is not None:
                 derived_overrides["dust_bc_restband_attenuation_subband_precomp"] = jnp.exp(
-                    -tau_bc * law_bc_fn(rb_sub_waves, n_slope=n_slope_bc)
+                    -tau_bc * law_bc_fn(rb_sub_waves, **bc_kw)
                 )
                 derived_overrides["dust_diff_restband_attenuation_subband_precomp"] = jnp.exp(
-                    -tau_diff * law_diff_fn(rb_sub_waves, n_slope=n_slope_diff)
+                    -tau_diff * law_diff_fn(rb_sub_waves, **diff_kw)
                 )
 
             # IR re-emission is now handled by separate dust emission components.

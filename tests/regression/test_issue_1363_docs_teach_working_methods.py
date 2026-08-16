@@ -34,8 +34,32 @@ _PRESCRIPTIVE = re.compile(r'(?:method\s*=\s*|\.run\s*\(\s*)["\']([a-z0-9_]+)["\
 
 #: Docs a reader is meant to copy from. Plans and dev benchmarks are working notes and
 #: legitimately record what was run at the time, including broken backends.
-_SEARCH_DIRS = ("docs/superpowers/specs", "docs/inference", "docs/user", "docs/advanced")
+_SEARCH_DIRS = (
+    "docs/internal/specs",
+    "docs/internal/inference",
+    "docs/internal/user",
+    "docs/internal/advanced",
+)
 _SKIP_PARTS = ("/plans/", "/dev/", "/archive/", "/adr/")
+
+
+def test_search_dirs_all_exist() -> None:
+    """Every directory in ``_SEARCH_DIRS`` must exist.
+
+    ``_published_markdown`` skips a directory that is not there, so a renamed
+    path silently shrinks this file's coverage while every test in it keeps
+    passing. That has now happened twice: once when ``docs/superpowers/specs``
+    became ``docs/internal/specs``, and again when ``inference``, ``user`` and
+    ``advanced`` moved under ``internal/`` and this tuple was not updated with
+    them. This test is the tripwire, and it is why the guard is worth its four
+    lines: it fails loudly on the next rename instead of quietly covering less.
+    """
+    missing = [d for d in _SEARCH_DIRS if not (REPO / d).is_dir()]
+    assert not missing, (
+        f"_SEARCH_DIRS names {missing}, which do not exist. _published_markdown "
+        f"skips missing directories, so these are scanned as zero files and this "
+        f"module's other tests pass without checking them. Fix the paths."
+    )
 
 
 def _broken_methods() -> set[str]:

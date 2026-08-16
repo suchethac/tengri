@@ -456,10 +456,11 @@ class TestAGNCrossLevelPlacement:
 
     def test_shared_param_inside_sub_block_is_honored(self):
         """``agn_log_lbol`` (shared) supplied inside ``disc`` must apply."""
+        supplied = Uniform(9.42, 13.42)
         params = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
             agn={
-                "disc": {"type": "qsogen", "*": FIXED, "agn_log_lbol": Uniform(43, 47)},
+                "disc": {"type": "qsogen", "*": FIXED, "agn_log_lbol": supplied},
                 "torus": {"type": "none"},
                 "lines": {"type": "none"},
                 "feii": {"type": "none"},
@@ -469,7 +470,9 @@ class TestAGNCrossLevelPlacement:
         )
         dist = params.get_distribution("agn_log_lbol")
         assert not dist.is_fixed
-        assert dist.bounds == (43.0, 47.0)
+        # Compare against what was supplied: the claim is that the sub-block
+        # prior survives, not that it equals any particular pair of numbers.
+        assert dist.bounds == (supplied.lo, supplied.hi)
         assert params._group_provenance.get("agn_log_lbol") == "user_prior"
 
     def test_sub_block_param_at_top_level_is_honored(self):
@@ -497,8 +500,8 @@ class TestAGNCrossLevelPlacement:
             parse_groups(
                 sfh={"type": "dpl", "*": FIXED},
                 agn={
-                    "agn_log_lbol": Uniform(43, 47),
-                    "disc": {"type": "qsogen", "*": FIXED, "agn_log_lbol": Uniform(44, 46)},
+                    "agn_log_lbol": Uniform(9.42, 13.42),
+                    "disc": {"type": "qsogen", "*": FIXED, "agn_log_lbol": Uniform(10.42, 12.42)},
                     "torus": {"type": "none"},
                     "lines": {"type": "none"},
                     "feii": {"type": "none"},

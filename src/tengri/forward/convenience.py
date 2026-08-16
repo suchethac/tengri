@@ -153,7 +153,33 @@ def mock_batch(model: SEDModel, params_batch, snr=20.0, key=None) -> MockData:
 # ── Batch predictions (vmap over galaxies) ────────────────────────
 
 
-def predict_photometry_batch(model: SEDModel, params_batch):
+def _threaded_batch(model, method_name, params_batch, ssp_data, template_data):
+    """vmap ``method_name`` over the batch axis with the grids broadcast, not baked.
+
+    ``jax.vmap(model.predict_photometry)`` closure-captures ``model``, so the SSP
+    grid reaches the trace as a constant and a caller who wraps the batch helper
+    in their own ``jax.jit`` has no channel to pass it in — the #1753 gap, one
+    level up (#1793). Making the grids *arguments* of the vmapped function, with
+    ``in_axes=None`` so they are shared rather than mapped, puts them on the same
+    threading footing as the scalar surfaces.
+
+    Resolution goes through ``_resolve_threaded_data`` so the override policy is
+    stated once; ``ForwardModel`` delegates that to its inner SED.
+    """
+    resolve = getattr(model, "_resolve_threaded_data", None)
+    if resolve is None:  # pragma: no cover - ForwardModel delegates; SEDModel defines it
+        inner = model._inner_sed_for_delegation()
+        resolve = inner._resolve_threaded_data
+    ssp, templates = resolve(ssp_data, template_data)
+    bound = getattr(model, method_name)
+
+    def _one(params, ssp_arg, template_arg):
+        return bound(params, ssp_data=ssp_arg, template_data=template_arg)
+
+    return jax.vmap(_one, in_axes=(0, None, None))(params_batch, ssp, templates)
+
+
+def predict_photometry_batch(model: SEDModel, params_batch, *, ssp_data=None, template_data=None):
     """Compute photometry for a batch of galaxies via vmap.
 
     Parameters
@@ -162,6 +188,11 @@ def predict_photometry_batch(model: SEDModel, params_batch):
         Forward model instance.
     params_batch : dict of arrays
         Each value has shape (N, ...) with leading batch dimension.
+    ssp_data, template_data : Any | None, keyword-only, optional
+        The JIT-threading channel (#1793). ``None`` (default) uses the model's
+        own arrays, which is correct for every ordinary call. Pass them only
+        when wrapping this helper in your own JAX transform, so the grid enters
+        as an argument instead of being frozen into your compiled program.
 
     Returns
     -------
@@ -172,11 +203,14 @@ def predict_photometry_batch(model: SEDModel, params_batch):
     -----
     **JIT-compatible**: yes — all operations use ``jnp`` primitives.
     See :func:`jax.vmap` for vmap internals.
+
+    The grids are broadcast with ``in_axes=None``: one shared table across the
+    batch, never a per-galaxy copy.
     """
-    return jax.vmap(model.predict_photometry)(params_batch)
+    return _threaded_batch(model, "predict_photometry", params_batch, ssp_data, template_data)
 
 
-def predict_spectrum_batch(model: SEDModel, params_batch):
+def predict_spectrum_batch(model: SEDModel, params_batch, *, ssp_data=None, template_data=None):
     """Compute spectra for a batch of galaxies via vmap.
 
     Requires ``precompute_spectroscopy()`` to have been called.
@@ -187,6 +221,8 @@ def predict_spectrum_batch(model: SEDModel, params_batch):
         Forward model instance.
     params_batch : dict of arrays
         Each value has shape (N, ...) with leading batch dimension.
+    ssp_data, template_data : Any | None, keyword-only, optional
+        The JIT-threading channel — see :func:`predict_photometry_batch` (#1793).
 
     Returns
     -------
@@ -198,7 +234,7 @@ def predict_spectrum_batch(model: SEDModel, params_batch):
     **JIT-compatible**: yes — all operations use ``jnp`` primitives.
     See :func:`jax.vmap` for vmap internals.
     """
-    return jax.vmap(model.predict_spectrum)(params_batch)
+    return _threaded_batch(model, "predict_spectrum", params_batch, ssp_data, template_data)
 
 
 # ── Prior predictive check ────────────────────────────────────────

@@ -313,7 +313,7 @@ def _usage_hint(name: str, kind: str) -> str:
     and "now what?"
 
     Patterns are based on the canonical spec/filter/fitter call sites
-    used in ``docs/spine/00_quickstart.py``.
+    used in ``notebooks/00_quickstart.py``.
     """
     if kind == "filter":
         return f'Photometry.from_names(["{name}"])'

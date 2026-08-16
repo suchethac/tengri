@@ -128,7 +128,7 @@ two honest answers now:
 | `src/tengri/inference/fitter.py` | `_memory_mode` removed from `compile_signature` |
 | `tests/unit/test_compile_log.py` | 18 unit tests for tracer |
 | `tests/unit/test_compile_signature_invariants.py` | 4 white-box invariants pinning `_memory_mode` exclusion |
-| `docs/inference/compilation_diagnostics.md` | How-to for the tracer |
+| `docs/internal/inference/compilation_diagnostics.md` | How-to for the tracer |
 
 ## Reproducing the measurement
 

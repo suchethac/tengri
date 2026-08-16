@@ -42,7 +42,7 @@ def build_fitter():
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 10.0),
         sfh_tsnorm_width_gyr=Uniform(0.1, 3.0),
         sfh_tsnorm_trunc=Uniform(0.01, 1.0),
-        sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
+        sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
         met_logzsol=Gaussian(-0.3, 0.3, -1.5, 0.2),
         dust_tau_bc=Uniform(0.0, 2.0),
         dust_tau_diff=0.3,

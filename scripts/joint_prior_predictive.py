@@ -69,7 +69,7 @@ OUT_DIR.mkdir(parents=True, exist_ok=True)
 def make_spec(psd_sigma_fixed: float) -> Parameters:
     """Spec with σ_PSD pinned; everything else from prior."""
     return Parameters(
-        sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
+        sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
         sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
         sfh_tsnorm_skew=Uniform(-3.0, 3.0),

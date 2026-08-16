@@ -175,7 +175,11 @@ CITATIONS["dust_charlot_fall_2000"] = Citation(
 )
 ```
 
-Example regression test in `tests/integration/test_dust_attenuation.py`:
+Paper-value regression tests live in `tests/regression/paper/`; the attenuation
+laws are covered in `tests/regression/paper/test_dust_attenuation_laws.py`, which
+is the file to read for the real shape of this. The sketch below is the pattern,
+not a copy of any test in the tree:
+
 ```python
 def test_charlot_fall_attenuation_calibration():
     """Verify Charlot & Fall (2000) attenuation law at known wavelength."""
