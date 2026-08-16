@@ -18,7 +18,7 @@ from tengri.inference.backends.mcmc._shared import (
     _get_cached_adaptation,
     _get_flat_logdensity,
     _nuts_chain_scan,
-    _nuts_full_scan,
+    _nuts_warmup_only,
     _set_cached_adaptation,
     _vmap_chains,
 )
@@ -376,90 +376,91 @@ def run_nuts(
     # when the adaptation is reused.
     key, warmup_key = jax.random.split(key)
 
+    def ld_1arg(pos):
+        return log_posterior_flat_2arg(pos, data_args)
+
+    # ── Warmup: adapt (step_size, inverse_mass_matrix) once, then cache. ──
+    # Split from sampling so a fresh call and a cached one end in the SAME
+    # sampling scan. While the two were fused, a first fit ran warmup+sampling
+    # inside `_nuts_full_scan` and every later fit on the same model ran a
+    # sampling-only scan against the cached parameters — structurally different
+    # computations, so one pinned `key` returned two different posteriors. HMC
+    # had already been split this way and was reproducible; NUTS had not.
     if cached is not None:
         parameters = cached
-
-        def ld_1arg(pos):
-            return log_posterior_flat_2arg(pos, data_args)
-
         if verbose:
             logger.info(
                 "  Reusing cached warmup (%.1fs). Step size: %.4f",
                 time.time() - t0,
                 float(parameters["step_size"]),
             )
-        key, chain_key = jax.random.split(key)
-        if n_chains > 1:
-
-            def _init(p):
-                return blackjax.mcmc.nuts.init(p, ld_1arg)
-
-            def _scan(s, ks):
-                return _nuts_chain_scan(
-                    s,
-                    ks,
-                    log_posterior_flat_2arg,
-                    data_args,
-                    parameters["step_size"],
-                    parameters["inverse_mass_matrix"],
-                    max_num_doublings,
-                )
-
-            with compile_timer(
-                "nuts_chain_scan_vmap", fitter.compile_signature(), method="mcmc_nuts"
-            ):
-                positions, divergent = _vmap_chains(
-                    _init,
-                    _scan,
-                    init_flat=init_flat,
-                    chain_key=chain_key,
-                    n_chains=n_chains,
-                    n_iter=n_burnin + n_samples,
-                    n_burnin=n_burnin,
-                )
-                jax.block_until_ready(positions)
-            _multichain_burnin_done = True
-        else:
-            state = blackjax.mcmc.nuts.init(init_flat, ld_1arg)
-            chain_keys = jax.random.split(chain_key, n_burnin + n_samples)
-            with compile_timer("nuts_chain_scan", fitter.compile_signature(), method="mcmc_nuts"):
-                positions, divergent = _nuts_chain_scan(
-                    state,
-                    chain_keys,
-                    log_posterior_flat_2arg,
-                    data_args,
-                    parameters["step_size"],
-                    parameters["inverse_mass_matrix"],
-                    max_num_doublings,
-                )
-                jax.block_until_ready(positions)
-            _multichain_burnin_done = False
     else:
-        _multichain_burnin_done = False
-        key, chain_key = jax.random.split(key)
-        chain_keys = jax.random.split(chain_key, n_burnin + n_samples)
-        with compile_timer("nuts_full_scan", fitter.compile_signature(), method="mcmc_nuts"):
-            positions, divergent, step_size, inv_mass_matrix = _nuts_full_scan(
+        with compile_timer("nuts_warmup", fitter.compile_signature(), method="mcmc_nuts"):
+            step_size, inv_mass_matrix = _nuts_warmup_only(
                 init_flat,
                 warmup_key,
-                chain_keys,
                 log_posterior_flat_2arg,
                 data_args,
                 n_warmup,
-                max_num_doublings,
                 use_dense,
                 target_accept_rate,
                 bool(pathfinder_warmstart),
             )
-            jax.block_until_ready(positions)
+            jax.block_until_ready(step_size)
         parameters = {"step_size": step_size, "inverse_mass_matrix": inv_mass_matrix}
         _set_cached_adaptation(fitter, adapt_key, parameters)
         if verbose:
             logger.info(
-                "  Warmup + chain complete (%.1fs). Step size: %.4f",
+                "  Warmup complete (%.1fs). Step size: %.4f",
                 time.time() - t0,
                 float(step_size),
             )
+
+    # ── Sampling: one path, whether the adaptation was just tuned or reused. ──
+    key, chain_key = jax.random.split(key)
+    if n_chains > 1:
+
+        def _init(p):
+            return blackjax.mcmc.nuts.init(p, ld_1arg)
+
+        def _scan(s, ks):
+            return _nuts_chain_scan(
+                s,
+                ks,
+                log_posterior_flat_2arg,
+                data_args,
+                parameters["step_size"],
+                parameters["inverse_mass_matrix"],
+                max_num_doublings,
+            )
+
+        with compile_timer("nuts_chain_scan_vmap", fitter.compile_signature(), method="mcmc_nuts"):
+            positions, divergent = _vmap_chains(
+                _init,
+                _scan,
+                init_flat=init_flat,
+                chain_key=chain_key,
+                n_chains=n_chains,
+                n_iter=n_burnin + n_samples,
+                n_burnin=n_burnin,
+            )
+            jax.block_until_ready(positions)
+        _multichain_burnin_done = True
+    else:
+        state = blackjax.mcmc.nuts.init(init_flat, ld_1arg)
+        chain_keys = jax.random.split(chain_key, n_burnin + n_samples)
+        with compile_timer("nuts_chain_scan", fitter.compile_signature(), method="mcmc_nuts"):
+            positions, divergent = _nuts_chain_scan(
+                state,
+                chain_keys,
+                log_posterior_flat_2arg,
+                data_args,
+                parameters["step_size"],
+                parameters["inverse_mass_matrix"],
+                max_num_doublings,
+            )
+            jax.block_until_ready(positions)
+        _multichain_burnin_done = False
 
     # Burnin discard happens Python-side (not inside JIT) so changing
     # n_burnin doesn't trigger a recompile when n_burnin + n_samples is

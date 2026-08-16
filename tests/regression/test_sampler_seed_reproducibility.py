@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Same key + same config must mean same chain, whatever the caches hold.
 
-Three defects motivated these, all of the same shape: state that accumulates on
+Four defects motivated these, all of the same shape: state that accumulates on
 a reused model silently steered a fit whose seed the caller had pinned.
 
 1. ``_maybe_map_init`` returned ``key`` untouched on a MAP-cache hit but a
@@ -14,6 +14,13 @@ a reused model silently steered a fit whose seed the caller had pinned.
    catalog loop reusing one model handed every galaxy the first galaxy's step
    size and mass matrix. This is the defect ``_data_fingerprint`` was written
    for on the MAP cache (#1529); its sibling never got the guard.
+4. NUTS fused warmup into the sampling scan, so a first fit and a cached one
+   ran *different computations* whatever the key. ``_nuts_warmup_only`` splits
+   them, mirroring ``_hmc_warmup_only`` -- which is why HMC was already
+   reproducible and NUTS was not.
+
+``mcmc_dynamic_hmc`` still fuses warmup and sampling and is knowingly absent
+from ``REPRODUCIBLE_SAMPLERS``; it needs the same split.
 """
 
 from __future__ import annotations
@@ -48,6 +55,19 @@ HMC = dict(
     n_leapfrog_steps=10,
     dense_mass_matrix=True,
 )
+NUTS = dict(
+    method="mcmc_nuts",
+    n_warmup=60,
+    n_samples=60,
+    n_chains=2,
+    n_burnin=0,
+    dense_mass_matrix=False,
+)
+
+#: Backends whose warmup is separated from sampling, so a fresh call and a
+#: cached-adaptation call run the same scan. ``mcmc_dynamic_hmc`` still fuses
+#: the two and is knowingly absent.
+REPRODUCIBLE_SAMPLERS = {"hmc": HMC, "nuts": NUTS}
 
 
 def _build(ssp_data):
@@ -79,39 +99,74 @@ def target(ssp_data_fsps):
     return np.asarray(mock["flux_obs"]), np.asarray(mock["noise"])
 
 
-def test_repeated_fit_on_reused_model_is_identical(ssp_data_fsps, target):
+@pytest.mark.parametrize("name", sorted(REPRODUCIBLE_SAMPLERS))
+def test_repeated_fit_on_reused_model_is_identical(ssp_data_fsps, target, name):
     """Two identical calls on ONE model must return the same chain.
 
-    Before the fix the second call took the cached-adaptation branch, which had
-    consumed one fewer key split, and returned a different posterior entirely.
+    Two independent causes, both fixed: the second call took the
+    cached-adaptation branch, which had consumed one fewer key split; and for
+    NUTS that branch also ran a *different computation*, a sampling-only scan
+    against cached parameters where the first call fused warmup into the scan.
     """
     flux, noise = target
     _, forward = _build(ssp_data_fsps)
     key = jax.random.PRNGKey(3)
+    kwargs = REPRODUCIBLE_SAMPLERS[name]
 
-    first = _fingerprint(forward.fit(flux, noise, key=key, **HMC))
-    second = _fingerprint(forward.fit(flux, noise, key=key, **HMC))
+    first = _fingerprint(forward.fit(flux, noise, key=key, **kwargs))
+    second = _fingerprint(forward.fit(flux, noise, key=key, **kwargs))
 
     assert first == second, (
-        f"a reused model returned a different chain for the same key: {first!r} then {second!r}"
+        f"{name}: a reused model returned a different chain for the same key: "
+        f"{first!r} then {second!r}"
     )
 
 
-def test_reused_model_matches_a_fresh_one(ssp_data_fsps, target):
+@pytest.mark.parametrize("name", sorted(REPRODUCIBLE_SAMPLERS))
+def test_warm_model_matches_fresh_model(ssp_data_fsps, target, name):
     """A warm cache must not change the answer a fresh model would give."""
     flux, noise = target
-    _, warm = _build(ssp_data_fsps)
     key = jax.random.PRNGKey(3)
+    kwargs = REPRODUCIBLE_SAMPLERS[name]
 
-    warm.fit(flux, noise, key=key, **HMC)  # populate every cache
-    reused = _fingerprint(warm.fit(flux, noise, key=key, **HMC))
+    _, warm = _build(ssp_data_fsps)
+    warm.fit(flux, noise, key=key, **kwargs)  # populate every cache
+    reused = _fingerprint(warm.fit(flux, noise, key=key, **kwargs))
 
     _, cold = _build(ssp_data_fsps)
-    fresh = _fingerprint(cold.fit(flux, noise, key=key, **HMC))
+    fresh = _fingerprint(cold.fit(flux, noise, key=key, **kwargs))
 
     assert reused == fresh, (
-        f"cache warmth changed the posterior: reused {reused!r} vs fresh {fresh!r}"
+        f"{name}: cache warmth changed the posterior: {reused!r} vs fresh {fresh!r}"
     )
+
+
+def test_nuts_split_warmup_keeps_sampling_quality(ssp_data_fsps, target):
+    """Splitting warmup out of the NUTS scan must not cost mixing.
+
+    The sampling phase now starts from ``init_flat`` rather than continuing
+    from the warmup end state, matching HMC. That is only acceptable if the
+    chain still mixes, so pin the diagnostics rather than trusting the shape.
+    """
+    flux, noise = target
+    _, forward = _build(ssp_data_fsps)
+    posterior = forward.fit(
+        flux,
+        noise,
+        key=jax.random.PRNGKey(3),
+        method="mcmc_nuts",
+        n_warmup=300,
+        n_samples=200,
+        n_chains=2,
+        n_burnin=0,
+        dense_mass_matrix=False,
+    )
+
+    worst_rhat = max(float(v) for v in posterior.rhat().values())
+    n_divergent = posterior.diagnostics.get("n_divergent", 0)
+
+    assert worst_rhat < 1.1, f"NUTS did not mix after the split: max R-hat {worst_rhat}"
+    assert int(n_divergent) == 0, f"NUTS diverged {n_divergent} times after the split"
 
 
 def test_adaptation_cache_is_keyed_on_the_target(ssp_data_fsps, target):
