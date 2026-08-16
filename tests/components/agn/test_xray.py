@@ -70,20 +70,34 @@ class TestXRBNormalization:
         )
 
     def test_hmxb_band_luminosity(self):
-        """HMXB 2-10 keV luminosity at SFR=1 Msun/yr, Z=Z_sun matches Lehmer+19.
+        """HMXB 2-10 keV luminosity at SFR=1 Msun/yr and the default Z.
 
         Yang+22 / Lehmer+19 quartic in Z:
             log L_HMXB(2-10 keV) [W] = 33.28 - 62.12 Z + 569.44 Z² - 1833.8 Z³
                                       + 1968.33 Z⁴
-        At Z = 0.02: log L = 32.25 W → 1.78e39 erg/s. Compatible with Grimm+2003
-        within the ~30% scatter between linear and polynomial calibrations.
+
+        The default is ``Z_SUN`` = 0.0142 (Asplund 2009), giving 3.22e39 erg/s.
+
+        This asserted 1.78e39 while its own message called that value "Z_sun",
+        which is the confusion #1755 was about: 1.78e39 is the quartic at
+        **Z = 0.02**, a solar convention the rest of the codebase does not use.
+        Evaluate the polynomial at the constant rather than restating a
+        precomputed magnitude, so the two cannot drift apart again.
         """
+        from tengri.utils.physics_constants import Z_SUN
+
+        expected = 10.0 ** (
+            40.28 - 62.12 * Z_SUN + 569.44 * Z_SUN**2 - 1833.80 * Z_SUN**3 + 1968.33 * Z_SUN**4
+        )
         L_band = float(jnp.trapezoid(xray_xrb(_WAVE_GRID, sfr=1.0, stellar_mass=0.0), _NU_GRID))
         np.testing.assert_allclose(
             L_band,
-            10**32.25 * 1e7,  # W -> erg/s, ~ 1.78e39
+            expected,  # ~3.22e39 at Z_SUN = 0.0142
             rtol=0.05,
-            err_msg="Lehmer+19 (yang20.py:207-214): HMXB L_2-10keV ≈ 1.78e39 erg/s at Z_sun",
+            err_msg=(
+                f"Lehmer+19 (yang20.py:207-214): HMXB L_2-10keV should be "
+                f"{expected:.3e} erg/s at the default Z={Z_SUN}"
+            ),
         )
 
     def test_lmxb_band_luminosity(self):
