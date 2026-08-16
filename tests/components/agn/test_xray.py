@@ -125,23 +125,27 @@ class TestXRBNormalization:
     def test_combined_ranalli2003(self):
         """Combined XRB at SFR=1, M*=1e10, age=10 Gyr sits inside Ranalli+2003.
 
-        HMXB (Lehmer+19) ~ 3.22e39 + LMXB (Lehmer+14, 10 Gyr) ~ 8.15e38 sums to
-        ~4.03e39 erg/s, against Ranalli+2003's 3.7e39 — a +8.98% error, using
-        30% of the relation's own ~30% scatter band and leaving 21.0 percentage
-        points of headroom.
-
-        3ee867f83 (#1845) moved this, and moved it the right way. Routing the
-        galaxy's metallicity into the HMXB term took that term from 1.78e39 to
-        3.22e39; LMXB is untouched at 8.15e38. The combined value went from
-        2.5972e39 to 4.0324e39, which is to say from 29.81% *below* Ranalli --
-        99.4% of the band, 0.19 percentage points of headroom -- to 8.98% above
-        it. The fixture had been sitting on its limit and now is not.
+        HMXB (Lehmer+16, Z_sun = 0.0142) + LMXB (Lehmer+14, 10 Gyr) ~ 8.15e38
+        sums to 4.0324e39 erg/s, against Ranalli+2003's 3.7e39 — an 8.98%
+        error, comfortably inside the relation's own ~30% scatter.
 
         One assertion was doing two incompatible jobs — a literature
-        consistency bound and a drift detector — so they are separate. That
-        separation is why #1845 reported as "our number moved" against a pin
-        rather than as a brush with the literature band; only the drift
-        detector needed updating, and the bound below held throughout.
+        consistency bound and a drift detector — so they are separate.
+
+        The drift detector earned itself immediately. It was pinned at
+        2.5972e39 on 2026-08-16 (#1739); #1845 landed the next day and rewired
+        the HMXB term to read the galaxy's metallicity instead of a hardcoded
+        ``0.02`` fallback (#1755), which moved this number 55% and left the pin
+        stale. Verified rather than re-pinned from the failure output: passing
+        ``metallicity_z=0.02`` explicitly reproduces 2.597164e39, i.e. the old
+        pin to 1.4e-5 relative, so the whole shift is that one default moving
+        0.02 -> Z_sun and nothing else.
+
+        Note the direction. The old value used 99.4% of the 30% band and left
+        0.19 percentage points of headroom, so any drift the wrong way flipped
+        it red; the corrected metallicity moves it *toward* Ranalli and leaves
+        ~21 points. The physics improved and the fixture stopped living on its
+        limit.
         """
         L_band = float(
             jnp.trapezoid(
@@ -169,8 +173,10 @@ class TestXRBNormalization:
             err_msg=(
                 "combined XRB luminosity moved. This is the implementation's own "
                 "value, not a literature number — if the change is intended, "
-                "update it here and check the Ranalli bound above still holds "
-                "(it now has 21.0 percentage points of margin)."
+                "update it here and check the Ranalli bound above still holds. "
+                "Before re-pinning, identify which input moved: this pin has "
+                "already gone stale once because the HMXB metallicity default "
+                "changed underneath it (#1845)."
             ),
         )
 
