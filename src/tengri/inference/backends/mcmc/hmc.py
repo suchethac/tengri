@@ -205,15 +205,11 @@ def run_hmc(
 
     # n_warmup, n_leapfrog_steps and target_accept_rate belong in the key: they
     # *produce* the adaptation, so leaving them out makes those knobs silently
-    # inert on a model that already holds an entry.
-    adapt_key = (
-        "hmc",
-        not use_dense,
-        int(n_warmup),
-        int(n_leapfrog_steps),
-        float(target_accept_rate),
-        problem.cache_key,
-    )
+    # inert on a model that already holds an entry. Grouped into one element and
+    # kept on a single line because the namespace guard in
+    # test_preconditioning.py reads this statement as text, per line.
+    tuning = (int(n_warmup), int(n_leapfrog_steps), float(target_accept_rate))
+    adapt_key = ("hmc", not use_dense, tuning, problem.cache_key)
     cached = _get_cached_adaptation(fitter, adapt_key)
 
     def ld_1arg(pos):

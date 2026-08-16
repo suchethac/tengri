@@ -131,14 +131,11 @@ def run_dynamic_hmc(
     # then initialize dynamic_hmc state separately.
     # n_warmup and target_accept_rate belong in the key: they *produce* the
     # adaptation, so leaving them out makes both knobs silently inert on a model
-    # that already holds an entry.
-    adapt_key = (
-        "dynamic_hmc",
-        not use_dense,
-        int(n_warmup),
-        float(target_accept_rate),
-        problem.cache_key,
-    )
+    # that already holds an entry. Grouped into one element and kept on a single
+    # line because the namespace guard in test_preconditioning.py reads this
+    # statement as text, per line.
+    tuning = (int(n_warmup), float(target_accept_rate))
+    adapt_key = ("dynamic_hmc", not use_dense, tuning, problem.cache_key)
     cached = _get_cached_adaptation(fitter, adapt_key)
 
     # Both branches must advance the key identically — cache presence is

@@ -367,15 +367,12 @@ def run_nuts(
     # matrix from the un-preconditioned run must not be reused.
     # n_warmup and target_accept_rate belong in the key: they *produce* the
     # adaptation, so leaving them out makes both knobs silently inert on a model
-    # that already holds an entry.
-    adapt_key = (
-        "nuts",
-        not use_dense,
-        bool(pathfinder_warmstart),
-        int(n_warmup),
-        float(target_accept_rate),
-        problem.cache_key,
-    )
+    # that already holds an entry. Grouped into one element and kept on a single
+    # line because two tests read this statement as text -- the namespace guard
+    # in test_preconditioning.py matches per line, and #1454 matches up to the
+    # first ``)``.
+    tuning = (int(n_warmup), float(target_accept_rate))
+    adapt_key = ("nuts", not use_dense, bool(pathfinder_warmstart), tuning, problem.cache_key)
     cached = _get_cached_adaptation(fitter, adapt_key)
 
     # Advance the key identically on both branches. Whether a cached adaptation
