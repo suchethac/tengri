@@ -45,7 +45,7 @@ def test_float64_tolerance_is_exactly_the_historical_value():
     """float64 must be judged by the old 1e-9, not a loosened bound.
 
     The derived term is ~1e-13 in float64, below the 1e-9 floor, so the floor
-    wins and float64 behaviour is unchanged by construction.
+    wins and float64 behavior is unchanged by construction.
     """
     assert _uniform_rtol(_grid(np.float64)) == 1e-9
 
