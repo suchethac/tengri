@@ -18,8 +18,6 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-jax.config.update("jax_enable_x64", True)
-
 # ── Skip guard ─────────────────────────────────────────────────────
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 _SSP_FILE = _DATA_DIR / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"

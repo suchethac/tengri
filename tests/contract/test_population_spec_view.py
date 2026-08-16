@@ -8,8 +8,10 @@ that :mod:`tengri.inference` reaches for, so a duck-typing leak
 fails loudly here rather than silently producing wrong-shape outputs
 inside a JIT'd loss function.
 
-Task 2.5 from the plan
-``docs/superpowers/plans/2026-05-22-single-hamiltonian-fitter.md``.
+Originally "Task 2.5" of a single-hamiltonian-fitter plan dated 2026-05-22.
+That plan is not in the repo and never was -- no file of that name appears
+anywhere in the history -- so this docstring is the only surviving statement
+of what these tests are for. Treat it as the specification.
 """
 
 from __future__ import annotations
@@ -23,8 +25,6 @@ from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Fixed, Uniform
 
 pytestmark = pytest.mark.contract
-
-jax.config.update("jax_enable_x64", True)
 
 
 def _template() -> Parameters:

@@ -16,8 +16,6 @@ import pytest
 
 from tengri import Fixed, Observation, Parameters, SEDModel, Spectroscopy, Uniform
 
-jax.config.update("jax_enable_x64", True)
-
 # Migrated to the synthetic SSP fixture (#613) so this structural population
 # spectroscopy-chunking test runs in CI instead of skipping on missing data.
 

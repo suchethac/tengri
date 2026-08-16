@@ -32,6 +32,8 @@ from tengri.components.agn.disc import (
     compute_l2500,
     kubota_done_disc,
 )
+from tests._bounds import assert_non_negative
+from tests._jit_parity import assert_jit_matches_eager
 
 # ── beloborodov_gamma_hot ─────────────────────────────────────────
 
@@ -67,8 +69,7 @@ class TestBeloborodovGammaHot:
 
     def test_jit(self):
         """beloborodov_gamma_hot works under jax.jit."""
-        fn = jax.jit(beloborodov_gamma_hot)
-        gamma = fn(1.0, 1.0)
+        gamma = assert_jit_matches_eager(beloborodov_gamma_hot, 1.0, 1.0)
         expected = 7.0 / 3.0
         assert jnp.isclose(gamma, expected, atol=1e-6)
 
@@ -139,7 +140,7 @@ class TestKubotaDoneSelfConsistent:
         )
         chex.assert_equal_shape([result, wavelength])
         chex.assert_tree_all_finite(result)
-        assert jnp.all(result >= 0.0)
+        assert_non_negative(result, name="result")
 
     def test_self_consistent_gamma_in_range(self, wavelength):
         """Derived Gamma_hot must lie in [1.4, 3.0].

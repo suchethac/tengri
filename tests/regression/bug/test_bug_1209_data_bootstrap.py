@@ -19,7 +19,7 @@ answers to "where is my data?" had drifted apart:
 
 These pin the invariants that make those states unrepresentable.
 
-Design: docs/superpowers/specs/2026-07-17-consolidate-approx-and-bootstrap-design.md
+Design: docs/internal/specs/2026-07-17-consolidate-approx-and-bootstrap-design.md
 """
 
 import warnings
@@ -281,7 +281,7 @@ def test_default_ssp_builds_the_cue_recipes(recipe_name):
 
     These four recipes use the Cue nebular backend, which *rejects* wNE grids
     (``CueWNESSPError``). Under the old wNE default this exact pattern — the one
-    ``docs/recipes/jwst_nirspec_spectroscopy.md`` prints — raised on the first
+    ``docs/internal/recipes/jwst_nirspec_spectroscopy.md`` prints — raised on the first
     line a new user would type. Five of ten recipes were unbuildable that way.
     """
     tengri = pytest.importorskip("tengri")

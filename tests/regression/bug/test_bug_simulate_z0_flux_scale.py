@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Regression: ``analysis/simulate.py`` uses the 10-pc convention at z=0.
+"""Regression: ``src/tengri/analysis/simulate.py`` uses the 10-pc convention at z=0.
 
 Before this fix, ``sed_from_sfh`` and ``spectrum_from_sfh`` used a
 ``dl_cm = luminosity_distance(redshift) if redshift > 0 else 1.0``

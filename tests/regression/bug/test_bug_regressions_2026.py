@@ -19,7 +19,6 @@ import jax.numpy as jnp
 import pytest
 
 pytestmark = pytest.mark.regression_bug
-jax.config.update("jax_enable_x64", True)
 
 
 # ── 1. QSOgen Balmer continuum optical depth direction ────────────

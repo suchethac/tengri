@@ -22,8 +22,6 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-jax.config.update("jax_enable_x64", True)
-
 pytestmark = pytest.mark.regression_paper
 
 from tengri.components.agn.blocks.alternates import (
@@ -31,6 +29,7 @@ from tengri.components.agn.blocks.alternates import (
     smc_prevot_block,
 )
 from tengri.components.dust.qsogen_ext import QSOGEN_EXT_R, qsogen_quasar_extinction
+from tests._grad_parity import assert_grad_matches_fd
 
 # A_lambda/E(B-V) = E(lambda-V)/E(B-V) + R at R=3.1, read off the Temple+2021
 # pl_ext_comp_03 curve. The color-excess curve is 0 at V, so A_V/E(B-V) = R.
@@ -79,7 +78,7 @@ class TestFunction:
         def loss(w):
             return jnp.sum(qsogen_quasar_extinction(w))
 
-        g = jax.grad(loss)(jnp.array([2500.0, 5000.0]))
+        g = assert_grad_matches_fd(loss, jnp.array([2500.0, 5000.0]))
         chex.assert_tree_all_finite(g)
 
 

@@ -18,6 +18,8 @@ from tengri.parameters.groups import (
     parse_groups,
 )
 
+pytestmark = pytest.mark.contract
+
 _EXPECTED_KEYS = {"name", "kind", "status", "citation", "short_doc", "use"}
 
 

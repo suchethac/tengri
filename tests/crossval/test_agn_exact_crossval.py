@@ -19,13 +19,10 @@ Models tested:
 10. Radio DPL — analytical shape at specific frequencies
 """
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
 from astropy import constants as const
-
-jax.config.update("jax_enable_x64", True)
 
 pytestmark = pytest.mark.crossval
 

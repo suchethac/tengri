@@ -243,6 +243,69 @@ def _nuts_full_scan(
     return positions, divergent, step_size, inv_mass_matrix
 
 
+@functools.partial(jax.jit, static_argnums=(2, 4, 5, 6, 7))
+def _nuts_warmup_only(
+    init_flat,
+    warmup_key,
+    logdensity_fn_2arg,
+    data_args,
+    n_warmup,
+    use_dense,
+    target_accept_rate,
+    use_pathfinder_warmup: bool = False,
+):
+    """BlackJAX NUTS window adaptation only — returns tuned (step_size, inv_mass).
+
+    The warmup half of :func:`_nuts_full_scan`, split out for the same reason
+    :func:`_hmc_warmup_only` was: so the fresh and cached-adaptation paths end
+    in the *same* sampling call. While warmup and sampling were fused here, a
+    first fit ran ``_nuts_full_scan`` and every later fit on the same model ran
+    a sampling-only scan against the cached parameters — structurally different
+    computations, so one pinned ``key`` produced two different posteriors. HMC
+    had already been split this way and was reproducible; NUTS was not.
+
+    Same static-arg / traced-``data_args`` contract as :func:`_nuts_full_scan`.
+
+    Returns
+    -------
+    step_size : scalar
+    inv_mass_matrix : ndarray, shape (D,) or (D, D)
+    """
+    import blackjax
+
+    def ld_1arg(pos):
+        return logdensity_fn_2arg(pos, data_args)
+
+    # Discard per-step adaptation info; blackjax retains it all by default and
+    # warns about the memory cost when it goes unused (#1028).
+    from blackjax.adaptation.base import get_filter_adapt_info_fn
+
+    _drop_adapt_info = get_filter_adapt_info_fn()
+
+    if use_pathfinder_warmup:
+        from blackjax.adaptation.pathfinder_adaptation import pathfinder_adaptation
+
+        warmup = pathfinder_adaptation(
+            blackjax.nuts,
+            ld_1arg,
+            target_acceptance_rate=target_accept_rate,
+            adaptation_info_fn=_drop_adapt_info,
+        )
+        with _bounded_pathfinder_elbo_draws():
+            (_, parameters), _ = warmup.run(warmup_key, init_flat, num_steps=n_warmup)
+    else:
+        warmup = blackjax.window_adaptation(
+            blackjax.nuts,
+            ld_1arg,
+            is_mass_matrix_diagonal=not use_dense,
+            target_acceptance_rate=target_accept_rate,
+            adaptation_info_fn=_drop_adapt_info,
+        )
+        (_, parameters), _ = warmup.run(warmup_key, init_flat, num_steps=n_warmup)
+
+    return parameters["step_size"], parameters["inverse_mass_matrix"]
+
+
 @functools.partial(jax.jit, static_argnums=(2, 6))
 def _nuts_chain_scan(
     state,
@@ -902,21 +965,51 @@ def _get_flat_logdensity(fitter, init_params):
     return logdensity_flat, unravel_fn, init_flat, fitter._data_args
 
 
+def _adaptation_cache_key(fitter, method_key):
+    """Key an adaptation entry by engine shape, method, **and target data**.
+
+    ``_engine_cache_key`` identifies the compiled *engine shape* — data length,
+    free-parameter names, feature channels — and deliberately says nothing
+    about the data values. Two galaxies with the same band count therefore
+    share it. Without the data in the key, the ordinary catalog loop that
+    reuses one model hands every galaxy the first galaxy's step size and mass
+    matrix: adaptation tuned on another target's posterior geometry.
+
+    This is the defect :func:`~tengri.inference._sample_utils._data_fingerprint`
+    was written for (issue #1529), where the *MAP* cache seeded every fit from
+    the first galaxy's optimum and killed six of eight NUTS fits. The
+    adaptation cache is that cache's sibling and was never given the same
+    guard; ``ghmc`` and ``mclmc`` additionally keyed on nothing but a bare
+    method name. Hashing the data separates targets while keeping the intended
+    win — a genuine refit of the same target still hits, because this keys on
+    content rather than identity.
+
+    ``method_key`` is the backend's own tuple and must carry every setting that
+    *produces* the adaptation — warmup length and target acceptance rate as
+    well as the structural choices. Leave one out and that knob goes quiet on a
+    model that already holds an entry: measured while tuning the quickstart, a
+    500 / 1000 / 1500 warmup sweep returned byte-identical diagnostics three
+    times over, which reads as "warmup length does not matter here" rather than
+    "your knob was ignored".
+    """
+    from tengri.inference._sample_utils import _data_fingerprint
+
+    return (fitter._engine_cache_key(), method_key, _data_fingerprint(fitter))
+
+
 def _get_cached_adaptation(fitter, method_key):
     """Retrieve cached adaptation parameters by method key, or None if not cached."""
     mc = _model_cache_owner.get_or_compile_model(fitter.model)
     cache = mc.get("adaptation")
     if cache is None:
         return None
-    engine_key = fitter._engine_cache_key()
-    return cache.get((engine_key, method_key))
+    return cache.get(_adaptation_cache_key(fitter, method_key))
 
 
 def _set_cached_adaptation(fitter, method_key, params):
     """Store adaptation parameters on the Model for cross-fitter reuse."""
     cache = _model_cache_owner.get_or_compile_model(fitter.model).setdefault("adaptation", {})
-    engine_key = fitter._engine_cache_key()
-    cache[(engine_key, method_key)] = params
+    cache[_adaptation_cache_key(fitter, method_key)] = params
 
 
 def _vmap_chains(

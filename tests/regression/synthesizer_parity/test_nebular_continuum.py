@@ -21,14 +21,11 @@ Reference papers:
 
 from __future__ import annotations
 
-import jax
 import jax.numpy as jnp
 import pytest
 
 pytestmark = pytest.mark.regression_paper
 from scipy.integrate import simpson
-
-jax.config.update("jax_enable_x64", True)
 
 from tengri.components.nebular import _DEFAULT_CUE_WEIGHTS_PATH
 from tengri.components.nebular.cue import CueBackend

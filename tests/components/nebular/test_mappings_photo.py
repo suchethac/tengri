@@ -23,6 +23,7 @@ from tengri.components.nebular.mappings_photo import (
     _interp_stellar_grid,
     _log_z_abs_to_zo,
 )
+from tests._bounds import assert_non_negative
 
 pytestmark = pytest.mark.bounds
 
@@ -255,7 +256,7 @@ class TestMappingsPhotoStellarBackend:
         _, lum = self.backend.predict_nebular_line_luminosities(
             ssp_weights, ssp_log_ages, log_z=-2.0
         )
-        assert jnp.all(lum >= 0.0)
+        assert_non_negative(lum, name="lum")
 
     def test_fesc_unity_gives_zero(self):
         """Full escape fraction should zero out all line luminosities."""
@@ -310,7 +311,7 @@ class TestMappingsPhotoStellarBackend:
         ssp_weights = jnp.ones(4)
         ssp_log_ages = jnp.array([6.0, 6.5, 7.0, 7.5])
         sed = self.backend.predict_nebular_sed(ssp_weights, ssp_wave, ssp_log_ages, log_z=-2.0)
-        assert jnp.all(sed >= 0.0)
+        assert_non_negative(sed, name="sed")
 
     def test_logZ_gas_ties_to_stellar_when_none(self):
         """neb_logZ_gas=None should give same result as explicit log_z."""
@@ -349,7 +350,7 @@ class TestMappingsPhotoAGNBackend:
 
     def test_luminosities_positive(self):
         _, lum = self.backend.predict_agn_line_luminosities(agn_log_l_ion_erg=45.0)
-        assert jnp.all(lum >= 0.0)
+        assert_non_negative(lum, name="lum")
 
     def test_scales_linearly_with_l_ion(self):
         """Doubling L_ion should double all luminosities."""
@@ -456,7 +457,7 @@ class TestMappingsQHSanitization:
         backend = self._make_backend_shell()
         backend._precompute_qh(ssp_data)
 
-        assert jnp.all(backend._qh_table >= 0.0)
+        assert_non_negative(backend._qh_table, name="output")
 
     def test_get_qh_at_nonnegative_with_normal_table(self):
         """_get_qh_at must return ≥ 0 after bilinear interpolation."""

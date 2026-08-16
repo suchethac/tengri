@@ -20,8 +20,6 @@ from tengri import Fitter, Fixed, Parameters, SEDModel, Uniform
 
 pytestmark = pytest.mark.contract
 
-jax.config.update("jax_enable_x64", True)
-
 
 # ── Fixtures ─────────────────────────────────────────────────────
 # synthetic_ssp and simple_observation are provided by conftest.py (session scope)

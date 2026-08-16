@@ -19,8 +19,6 @@ from numpy.testing import assert_allclose
 
 pytestmark = pytest.mark.bounds
 
-jax.config.update("jax_enable_x64", True)
-
 
 def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     """Central finite-difference gradient. O(eps^2) accurate."""
@@ -47,10 +45,9 @@ from tengri.components.stellar.sfh.mean_sfh import (
 # Age of the universe today [yr], from the default cosmology — never a
 # literal. SFH formation anchor (age_gyr) for dpl/lnorm shape tests.
 from tengri.cosmology import age_at_z0 as _age_at_z0
+from tests._bounds import assert_non_negative
 
 _AGE_UNIV_YR = float(_age_at_z0()) * 1e9
-
-jax.config.update("jax_enable_x64", True)
 
 
 # ── Helpers ───────────────────────────────────────────────────────
@@ -105,7 +102,7 @@ class TestSkewedGaussianKernel:
         """Kernel values are non-negative (it's an exponential)."""
         age = jnp.logspace(6, 10, 500)
         kernel = _skewed_gaussian_kernel(age, peak_lbt=3e9, width=1e9, skew=0.5)
-        assert jnp.all(kernel >= 0)
+        assert_non_negative(kernel, name="kernel")
 
 
 # ── Double Power Law (legacy + registry) ──────────────────────────
@@ -460,7 +457,7 @@ class TestTriweightBurst:
         """Kernel is non-negative everywhere."""
         t = jnp.logspace(5, 11, 1000)
         kernel = triweight_burst(t, log_tpeak_myr=2.0, log_tmax_myr=1.0)
-        assert jnp.all(kernel >= 0)
+        assert_non_negative(kernel, name="kernel")
 
     def test_peaks_at_tpeak(self):
         """Kernel peaks near the specified log_tpeak_myr."""

@@ -1,12 +1,9 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Unit tests for the SEDModel class."""
 
-import jax
 import pytest
 
 pytestmark = pytest.mark.contract
-
-jax.config.update("jax_enable_x64", True)
 
 from tengri.parameters.translate import PARAM_MAP, _build_param_map
 

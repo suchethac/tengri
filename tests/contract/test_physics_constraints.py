@@ -16,14 +16,13 @@ References
 - Planck Collaboration 2018 — cosmological parameters
 """
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
 
-pytestmark = pytest.mark.bounds
+from tests._bounds import assert_non_negative
 
-jax.config.update("jax_enable_x64", True)
+pytestmark = pytest.mark.bounds
 
 
 # ── 1. Balmer decrement physics (Case B recombination + dust) ─────
@@ -368,14 +367,14 @@ class TestDustPhysicalMonotonicity:
         from tengri.components.dust.attenuation import calzetti
 
         k = np.asarray(calzetti(optical_uv_wave))
-        assert np.all(k >= 0), "Calzetti k(lambda) has negative values"
+        assert_non_negative(k, name="k", msg="Calzetti k(lambda) has negative values")
 
     def test_smc_positive_everywhere(self, optical_uv_wave):
         """SMC k(lambda) >= 0 at all wavelengths."""
         from tengri.components.dust.attenuation import smc
 
         k = np.asarray(smc(optical_uv_wave))
-        assert np.all(k >= 0), "SMC k(lambda) has negative values"
+        assert_non_negative(k, name="k", msg="SMC k(lambda) has negative values")
 
     def test_calzetti_uv_steeper_than_nir(self):
         """k(UV) must be much larger than k(NIR) for Calzetti."""

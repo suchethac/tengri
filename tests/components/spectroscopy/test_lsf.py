@@ -22,10 +22,11 @@ from tengri.observation.spectrum import (
     nirspec_g140m_resolution,
     nirspec_prism_resolution,
 )
+from tests._bounds import assert_non_negative
+from tests._grad_parity import assert_grad_matches_fd
+from tests._jit_parity import assert_jit_matches_eager
 
 pytestmark = pytest.mark.bounds
-
-jax.config.update("jax_enable_x64", True)
 
 
 def fd_grad(f, x: float, eps: float = 1e-4) -> float:
@@ -66,7 +67,7 @@ class TestInstrumentProfiles:
         wave_um = jnp.linspace(0.6, 5.3, 100)
         R = nirspec_prism_resolution(wave_um)
         # Should increase monotonically
-        assert jnp.all(jnp.diff(R) >= 0)
+        assert_non_negative(jnp.diff(R), name="output")
 
     def test_nirspec_prism_boundary_clipping(self):
         """PRISM resolution is clipped at boundaries (30 and 330)."""
@@ -234,7 +235,7 @@ class TestLSFGradients:
         def loss(spec):
             return jnp.sum(apply_lsf(spec, wave, resolution=100.0) ** 2)
 
-        g = jax.grad(loss)(delta_spectrum)
+        g = assert_grad_matches_fd(loss, delta_spectrum)
         assert jnp.all(jnp.isfinite(g))
 
     def test_gradient_finite_variable_r(self, wave, delta_spectrum):
@@ -244,7 +245,7 @@ class TestLSFGradients:
         def loss(spec):
             return jnp.sum(apply_lsf(spec, wave, resolution=R_var) ** 2)
 
-        g = jax.grad(loss)(delta_spectrum)
+        g = assert_grad_matches_fd(loss, delta_spectrum)
         assert jnp.all(jnp.isfinite(g))
 
     def test_gradient_wrt_resolution_matches_finite_difference(self, wave, delta_spectrum):
@@ -261,13 +262,15 @@ class TestLSFGradients:
 
     def test_jit_constant_r(self, wave, delta_spectrum):
         """JIT compilation works for constant R (structural compatibility)."""
-        fn = jax.jit(lambda s: apply_lsf(s, wave, resolution=100.0))
-        result = fn(delta_spectrum)
+        result = assert_jit_matches_eager(
+            lambda s: apply_lsf(s, wave, resolution=100.0), delta_spectrum
+        )
         assert jnp.all(jnp.isfinite(result))
 
     def test_jit_variable_r(self, wave, delta_spectrum):
         """JIT compilation works for variable R (structural compatibility)."""
         R_var = 30.0 + 55.0 * (wave / 1e4 - 0.6)
-        fn = jax.jit(lambda s: apply_lsf(s, wave, resolution=R_var))
-        result = fn(delta_spectrum)
+        result = assert_jit_matches_eager(
+            lambda s: apply_lsf(s, wave, resolution=R_var), delta_spectrum
+        )
         assert jnp.all(jnp.isfinite(result))

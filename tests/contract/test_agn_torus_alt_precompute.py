@@ -20,8 +20,6 @@ _DATA = Path(__file__).resolve().parents[4] / "data"
 _SILVA04_GRID = _DATA / "silva04_torus_grid.h5"
 _CAT3D_GRID = _DATA / "cat3d_wind_torus_grid.h5"
 
-jax.config.update("jax_enable_x64", True)
-
 
 @pytest.fixture(scope="module")
 def filter_set():

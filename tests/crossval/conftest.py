@@ -13,11 +13,8 @@ so the tests are silently skipped when the dependency is missing.
 
 from pathlib import Path
 
-import jax
 import numpy as np
 import pytest
-
-jax.config.update("jax_enable_x64", True)
 
 # ── SSP data paths (needed for tengri SEDModel tests) ────────────────
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"

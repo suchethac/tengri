@@ -20,8 +20,6 @@ import pytest
 
 pytestmark = pytest.mark.bounds
 
-jax.config.update("jax_enable_x64", True)
-
 
 def _make_signal_responses(n_gal, n_dpg, K, seed=1):
     """Build K=1 and K>1 signal_response closures for a toy linear model.

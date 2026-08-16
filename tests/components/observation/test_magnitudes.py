@@ -38,9 +38,6 @@ from tengri.utils.magnitudes import (
 pytestmark = pytest.mark.bounds
 from tengri.utils.physics_constants import MPC_CM, TEN_PC_CM
 
-jax.config.update("jax_enable_x64", True)
-
-
 # ── Test AB Magnitude System ──────────────────────────────────────
 
 

@@ -111,13 +111,14 @@ sys.path.insert(0, str(REPO / "src"))
 # pre-build it"; ``docs/dev/synthesizer_parity.md`` lists
 # ``SFHConfig.sps_backend`` as "NEW — must add". Both are correct as written.
 # A guard that fails those is a guard people turn off.
+# "superpowers" and "specs" were separate entries here until the plans and specs
+# moved under docs/internal/; "internal" now covers both, and leaving them would
+# be two parts no path can match.
 EXCLUDED_DIR_PARTS = {
     "_build",
     "auto_examples",
     "archive",
-    "superpowers",
     "adr",
-    "specs",
     "internal",
     "__pycache__",
     "dev",  # developer design notes, benchmarks, parity audits

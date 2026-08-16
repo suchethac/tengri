@@ -136,3 +136,47 @@ def test_affine_models_really_are_affine(synthetic_ssp_wide, model_name):
     )
     # The exact affine prediction, which also pins that L_agn_ir is applied.
     np.testing.assert_allclose(ratio, 1.5, rtol=1e-9)
+
+
+def test_every_advertised_emission_model_can_be_evaluated(synthetic_ssp_wide):
+    """The builders menu must not name a model the forward pass rejects.
+
+    The linearity sweep above is parametrized off the same menu and skips
+    whatever raises, so a menu entry that does not resolve costs a silent hole
+    in the sweep rather than a failure. This asserts the two registries agree.
+
+    Evaluation, not construction: ``SEDModel.build`` accepts every advertised
+    name, so a build-only check passes and proves nothing.
+
+    This carried an ``xfail(strict=True)`` exempting ``dh02_ce01``, which
+    ``emission_builders.available()`` advertised while ``predict_state``
+    raised ``ValueError: ... not found in registry``. The ratchet fired on
+    2026-08-16: the marker went XPASS after #1807 landed on main, with the
+    companion check confirming the name was still advertised — so it was
+    registered rather than quietly dropped from the menu, which is the outcome
+    the exemption was written to wait for. Marker and exemption both removed;
+    the sweep now covers every advertised name with no holes.
+    """
+    broken = {}
+    for name in sorted(emission_builders.available()):
+        try:
+            _model(synthetic_ssp_wide, name, 1.0).predict_state({})
+        except (ValueError, KeyError) as exc:
+            broken[name] = f"{type(exc).__name__}: {exc}"
+    assert not broken, f"advertised but not evaluable: {sorted(broken)}"
+
+
+def test_the_menu_is_not_empty():
+    """The sweep above is vacuous if the menu it reads is empty.
+
+    This replaces ``test_the_unevaluable_list_still_describes_reality``, which
+    existed only to say *which way* the exemption above had been resolved. With
+    the exemption gone that question is answered, but the sweep is parametrized
+    off ``available()`` and would pass trivially on an empty menu, so the one
+    thing still worth pinning is that the menu has entries.
+    """
+    advertised = set(emission_builders.available())
+    assert len(advertised) >= 5, (
+        f"the dust-emission builders menu advertises only {sorted(advertised)}; "
+        f"the sweep above is parametrized off it and proves nothing if it is empty"
+    )

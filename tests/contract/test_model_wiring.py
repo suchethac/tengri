@@ -5,12 +5,9 @@ Verifies that THEMIS, BOSA, and patchy IGM parameters appear in
 the Parameters registry when their respective models are enabled.
 """
 
-import jax
 import pytest
 
 pytestmark = pytest.mark.contract
-
-jax.config.update("jax_enable_x64", True)
 
 from tengri.parameters.parameters import Parameters
 

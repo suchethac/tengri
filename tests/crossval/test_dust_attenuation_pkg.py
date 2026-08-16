@@ -17,12 +17,9 @@ References
 - Witt & Gordon 2000, ApJ, 528, 799
 """
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
-
-jax.config.update("jax_enable_x64", True)
 
 try:
     import astropy.units as u
@@ -291,7 +288,7 @@ class TestRegressionValues:
 
     Values computed from dust_attenuation v0.5.dev22 (2026-03-27).
     Also available as standalone unit tests in
-    tests/unit/test_dust_attenuation_laws.py (no package needed).
+    tests/components/dust/test_dust_attenuation_laws.py (no package needed).
     """
 
     def test_calzetti_reference_values(self):

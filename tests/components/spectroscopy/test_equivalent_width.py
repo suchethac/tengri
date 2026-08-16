@@ -4,15 +4,15 @@
 from __future__ import annotations
 
 import chex
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
 
 pytestmark = pytest.mark.bounds
-jax.config.update("jax_enable_x64", True)
 
 from tengri.analysis.diagnostics.spectral import equivalent_width
+from tests._grad_parity import assert_grad_matches_fd
+from tests._jit_parity import assert_jit_matches_eager
 
 _C_AA_S = 2.99792458e18
 
@@ -70,8 +70,7 @@ class TestEquivalentWidthJIT:
 
     def test_jit(self, wave):
         l_nu = _flat_continuum_with_emission(wave, 6564.61, 50.0)
-        fn = jax.jit(lambda w, s: equivalent_width(w, s, 6564.61))
-        ew = fn(wave, l_nu)
+        ew = assert_jit_matches_eager(lambda w, s: equivalent_width(w, s, 6564.61), wave, l_nu)
         assert jnp.isfinite(ew)
 
     def test_gradient(self, wave):
@@ -81,5 +80,5 @@ class TestEquivalentWidthJIT:
         def loss(s):
             return equivalent_width(wave, s, 6564.61)
 
-        grad = jax.grad(loss)(l_nu)
+        grad = assert_grad_matches_fd(loss, l_nu)
         chex.assert_tree_all_finite(grad)

@@ -29,7 +29,6 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     return float((f(x + eps) - f(x - eps)) / (2.0 * eps))
 
 
-jax.config.update("jax_enable_x64", True)
 # 2-10 keV wavelength/frequency grid for band integration
 _E_GRID = jnp.linspace(2.0, 10.0, 500)  # keV
 _NU_GRID = _E_GRID * _KEV_TO_HZ  # Hz
@@ -110,11 +109,20 @@ class TestXRBNormalization:
         )
 
     def test_combined_ranalli2003(self):
-        """Combined XRB at SFR=1, M*=1e10, age=10 Gyr within 30% of Ranalli+2003.
+        """Combined XRB at SFR=1, M*=1e10, age=10 Gyr sits inside Ranalli+2003.
 
-        HMXB (Lehmer+19, Z=0.02) ≈ 1.78e39 + LMXB (Lehmer+14, 10 Gyr) ≈ 8.15e38
-        sums to ≈ 2.6e39 erg/s — well inside Ranalli+2003's 30% scatter band
-        around 3.7e39 erg/s.
+        HMXB (Lehmer+19, Z=0.02) ~ 1.78e39 + LMXB (Lehmer+14, 10 Gyr) ~ 8.15e38
+        sums to ~2.6e39 erg/s, against Ranalli+2003's 3.7e39.
+
+        The docstring used to call that "well inside" the 30% scatter band. It
+        is not: measured 2.5972e39 against 3.7e39 is a 29.81% error, which uses
+        99.4% of the band and leaves 0.19 percentage points of headroom. Any
+        change moving the XRB normalization by more than ~0.7% the wrong way
+        flipped this red, and the failure read as a physics regression rather
+        than a fixture sitting on its limit.
+
+        One assertion was doing two incompatible jobs — a literature
+        consistency bound and a drift detector — so they are now separate.
         """
         L_band = float(
             jnp.trapezoid(
@@ -122,11 +130,29 @@ class TestXRBNormalization:
                 _NU_GRID,
             )
         )
+
+        # The science claim: consistent with the observed relation, whose own
+        # scatter is ~30%. Kept as a bound, not as the drift signal.
         np.testing.assert_allclose(
             L_band,
             3.7e39,
             rtol=0.30,
-            err_msg="Ranalli+2003 A&A 399 Eq. 3: L_2-10keV ≈ 3.7e39 erg/s at SFR=1, M*=1e10",
+            err_msg="Ranalli+2003 A&A 399 Eq. 3: L_2-10keV ~ 3.7e39 erg/s at SFR=1, M*=1e10",
+        )
+
+        # The drift detector: what this implementation actually produces today.
+        # Tight, so a real change is caught precisely and reported as a change
+        # in our number rather than as a brush with the literature band.
+        np.testing.assert_allclose(
+            L_band,
+            2.5972e39,
+            rtol=1e-3,
+            err_msg=(
+                "combined XRB luminosity moved. This is the implementation's own "
+                "value, not a literature number — if the change is intended, "
+                "update it here and check the Ranalli bound above still holds "
+                "(it had only 0.19 percentage points of margin)."
+            ),
         )
 
     def test_xray_only_mask(self):

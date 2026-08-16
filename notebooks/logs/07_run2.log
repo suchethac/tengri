@@ -1,6 +1,0 @@
-[NbConvertApp] Converting notebook notebooks/07_fitting_photometry.ipynb to notebook
-W0409 16:52:26.772646  142064 cpp_gen_intrinsics.cc:74] Empty bitcode string provided for eigen. Optimizations relying on this IR will be disabled.
-W0409 16:52:27.309577  141957 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
-W0409 16:52:36.230423  142174 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
-W0409 16:52:54.353027  142174 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.
-W0409 16:53:34.329394  142174 pjrt_executable.cc:638] Assume version compatibility. PjRt-IFRT does not track XLA executable versions.

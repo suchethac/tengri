@@ -13,11 +13,17 @@ Markers (see tests/TESTING.md)
 
 from __future__ import annotations
 
+import functools
 from pathlib import Path
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
+
+from tests._bounds import assert_non_negative
+from tests._grad_parity import assert_grad_matches_fd
+from tests._jit_parity import assert_jit_matches_eager
 
 # ────────────────────────────────────────────────────────────────────────────
 
@@ -120,7 +126,7 @@ def test_fritz_analytic_basic(fritz_grid_path: Path, wavelength_aa: jnp.ndarray)
 
     assert L_nu.shape == wavelength_aa.shape
     assert jnp.all(jnp.isfinite(L_nu)), "Output contains NaN or Inf"
-    assert jnp.all(L_nu >= 0), "Output contains negative luminosities"
+    assert_non_negative(L_nu, name="L_nu", msg="Output contains negative luminosities")
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -168,112 +174,86 @@ def test_fritz_torus_frac_normalization(fritz_grid_path: Path, wavelength_aa: jn
 # Parameter variation
 
 
-@pytest.mark.contract
-def test_fritz_tau_changes_output(fritz_grid_path: Path, wavelength_aa: jnp.ndarray) -> None:
-    """Changing tau changes the output SED shape."""
+# ── the six grid axes, measured ───────────────────────────────────
+#
+# This replaces three ~35-line near-duplicates (tau, psy, opening angle) that
+# each asserted only ``max_diff > 0`` -- a threshold one ULP of difference
+# satisfies -- and covered three of the six axes. Two problems came with them:
+#
+#   * each of them passed ``agn_log_lbol=44.0``. That field is log10(L_bol/L_sun)
+#     (NAMING_CONTRACT / CLAUDE.md), so 44.0 asks for 1e44 L_sun = 3.8e77 erg/s,
+#     about 33 dex above any AGN, and the SED came back at 5e64 erg/s/Hz. The
+#     model is exactly linear in luminosity -- +1 dex multiplies the sum by
+#     10.000000 -- so no shape conclusion changed, but every number printed by a
+#     failure was meaningless, and at that scale a float32 path would overflow.
+#     The value that reads as "1e44 erg/s" is 10.4; these use 11.0.
+#     ``test_fritz_analytic_basic`` and ``test_fritz_torus_frac_normalization``
+#     still pass 44.0 and 44.5 and are left alone: both convert through
+#     ``L_sun`` themselves, so they are self-consistent at whatever luminosity
+#     they name, and the model is exactly linear in it.
+#
+#   * the opening-angle test compared oa=60 against oa=140 on a grid that spans
+#     [20, 60]. Beyond the last node the model extrapolates to ~80 and is
+#     clamped flat past that (oa = 80, 100, 140 and 1000 all return the same
+#     SED), so the test was measuring extrapolation, not the opening angle.
+#
+#: axis -> (grid low, grid high, off-node evaluation point, measured max
+#: relative SED change across the full axis). Endpoints are the real grid
+#: bounds read from the HDF5 axes. The evaluation point is the midpoint of the
+#: widest interior cell, which is off-node by construction -- a derivative
+#: referenced against a central difference must not sit on a node.
+_FRITZ_AXES = {
+    "agn_fritz_tau": (0.1, 10.0, 8.0, 0.711),
+    "agn_fritz_psy": (0.001, 89.99, 5.0505, 0.657),
+    "agn_fritz_oa": (20.0, 60.0, 30.0, 0.127),
+    "agn_fritz_beta": (-1.0, 0.0, -0.875, 0.574),
+    "agn_fritz_gamma": (0.0, 6.0, 1.0, 0.270),
+    "agn_fritz_r_ratio": (10.0, 150.0, 125.0, 0.178),
+}
+
+#: Fixed point in the other five dimensions. Physical luminosity, mid-grid
+#: everywhere else.
+_FRITZ_BASE = dict(
+    agn_log_lbol=11.0,
+    agn_torus_frac=0.5,
+    agn_fritz_r_ratio=60.0,
+    agn_fritz_tau=1.0,
+    agn_fritz_beta=-0.5,
+    agn_fritz_gamma=4.0,
+    agn_fritz_oa=60.0,
+    agn_fritz_psy=30.1,
+)
+
+
+@functools.lru_cache(maxsize=2)
+def _fritz_engine(path: str):
     from tengri.components.agn.fritz import create_fritz_from_grid
 
-    fritz_fn = create_fritz_from_grid(str(fritz_grid_path))
+    return create_fritz_from_grid(path)
 
-    sed_tau_low = fritz_fn(
-        wavelength_aa,
-        agn_log_lbol=44.0,
-        agn_torus_frac=0.5,
-        agn_fritz_r_ratio=60.0,
-        agn_fritz_tau=0.1,
-        agn_fritz_beta=-0.5,
-        agn_fritz_gamma=4.0,
-        agn_fritz_oa=60.0,
-        agn_fritz_psy=0.001,
-    )
 
-    sed_tau_high = fritz_fn(
-        wavelength_aa,
-        agn_log_lbol=44.0,
-        agn_torus_frac=0.5,
-        agn_fritz_r_ratio=60.0,
-        agn_fritz_tau=6.0,
-        agn_fritz_beta=-0.5,
-        agn_fritz_gamma=4.0,
-        agn_fritz_oa=60.0,
-        agn_fritz_psy=0.001,
-    )
-
-    # SEDs should differ (optical depth changes the thermal shape)
-    max_diff = jnp.max(jnp.abs(sed_tau_low - sed_tau_high))
-    assert float(max_diff) > 0, "Different tau values produce identical output"
+def _fritz_sed(path: str, wave: jnp.ndarray, **overrides):
+    return _fritz_engine(path)(wave, **{**_FRITZ_BASE, **overrides})
 
 
 @pytest.mark.contract
-def test_fritz_psy_changes_output(fritz_grid_path: Path, wavelength_aa: jnp.ndarray) -> None:
-    """Changing psy (viewing angle) changes the output."""
-    from tengri.components.agn.fritz import create_fritz_from_grid
-
-    fritz_fn = create_fritz_from_grid(str(fritz_grid_path))
-
-    sed_psy_type2 = fritz_fn(
-        wavelength_aa,
-        agn_log_lbol=44.0,
-        agn_torus_frac=0.5,
-        agn_fritz_r_ratio=60.0,
-        agn_fritz_tau=1.0,
-        agn_fritz_beta=-0.5,
-        agn_fritz_gamma=4.0,
-        agn_fritz_oa=60.0,
-        agn_fritz_psy=0.001,  # type-2 edge-on
-    )
-
-    sed_psy_type1 = fritz_fn(
-        wavelength_aa,
-        agn_log_lbol=44.0,
-        agn_torus_frac=0.5,
-        agn_fritz_r_ratio=60.0,
-        agn_fritz_tau=1.0,
-        agn_fritz_beta=-0.5,
-        agn_fritz_gamma=4.0,
-        agn_fritz_oa=60.0,
-        agn_fritz_psy=89.99,  # type-1 face-on
-    )
-
-    max_diff = jnp.max(jnp.abs(sed_psy_type2 - sed_psy_type1))
-    assert float(max_diff) > 0, "Different viewing angles produce identical output"
-
-
-@pytest.mark.contract
-def test_fritz_opening_angle_changes_output(
-    fritz_grid_path: Path, wavelength_aa: jnp.ndarray
+@pytest.mark.parametrize("axis", sorted(_FRITZ_AXES))
+def test_fritz_axis_moves_the_sed(
+    axis: str, fritz_grid_path: Path, wavelength_aa: jnp.ndarray
 ) -> None:
-    """Changing opening angle changes the output."""
-    from tengri.components.agn.fritz import create_fritz_from_grid
+    """Each grid axis measurably reshapes the SED across its own grid range."""
+    lo, hi, _, expected = _FRITZ_AXES[axis]
+    path = str(fritz_grid_path)
 
-    fritz_fn = create_fritz_from_grid(str(fritz_grid_path))
+    sed_lo = _fritz_sed(path, wavelength_aa, **{axis: lo})
+    sed_hi = _fritz_sed(path, wavelength_aa, **{axis: hi})
+    rel = float(jnp.max(jnp.abs(sed_lo - sed_hi)) / jnp.max(jnp.abs(sed_lo)))
 
-    sed_oa_small = fritz_fn(
-        wavelength_aa,
-        agn_log_lbol=44.0,
-        agn_torus_frac=0.5,
-        agn_fritz_r_ratio=60.0,
-        agn_fritz_tau=1.0,
-        agn_fritz_beta=-0.5,
-        agn_fritz_gamma=4.0,
-        agn_fritz_oa=60.0,
-        agn_fritz_psy=0.001,
+    assert rel > 0.5 * expected, (
+        f"{axis} moves the SED by only {rel:.3e} across [{lo}, {hi}]; measured "
+        f"2026-08-16 it moves it by {expected:.3f}. Anything near zero means "
+        f"the axis stopped reaching the templates."
     )
-
-    sed_oa_large = fritz_fn(
-        wavelength_aa,
-        agn_log_lbol=44.0,
-        agn_torus_frac=0.5,
-        agn_fritz_r_ratio=60.0,
-        agn_fritz_tau=1.0,
-        agn_fritz_beta=-0.5,
-        agn_fritz_gamma=4.0,
-        agn_fritz_oa=140.0,
-        agn_fritz_psy=0.001,
-    )
-
-    max_diff = jnp.max(jnp.abs(sed_oa_small - sed_oa_large))
-    assert float(max_diff) > 0, "Different opening angles produce identical output"
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -281,55 +261,106 @@ def test_fritz_opening_angle_changes_output(
 
 
 @pytest.mark.gradient
-def test_fritz_grad_tau_finite(fritz_grid_path: Path, wavelength_aa: jnp.ndarray) -> None:
-    """Gradient w.r.t. tau is finite."""
-    from tengri.components.agn.fritz import create_fritz_from_grid
+@pytest.mark.parametrize("axis", sorted(_FRITZ_AXES))
+def test_fritz_axis_is_differentiable(
+    axis: str, fritz_grid_path: Path, wavelength_aa: jnp.ndarray
+) -> None:
+    """Each axis carries a non-zero gradient that matches a finite difference.
 
-    fritz_fn = create_fritz_from_grid(str(fritz_grid_path))
+    This replaces two tests (tau and psy) that asserted only ``isfinite`` on
+    ``jax.grad``. Zero is finite, and on this model that is not hypothetical:
+    ``agn_fritz_tau`` has an identically zero derivative over two thirds of its
+    range (see the ratchet below). The old tau test happened to differentiate
+    at tau = 1.0, one of the few places the axis is alive, and could not have
+    failed anywhere else.
+    """
+    _, _, x, _ = _FRITZ_AXES[axis]
+    path = str(fritz_grid_path)
 
-    def loss(tau_val: float) -> float:
-        L_nu = fritz_fn(
-            wavelength_aa,
-            agn_log_lbol=44.0,
-            agn_torus_frac=0.5,
-            agn_fritz_r_ratio=60.0,
-            agn_fritz_tau=tau_val,
-            agn_fritz_beta=-0.5,
-            agn_fritz_gamma=4.0,
-            agn_fritz_oa=60.0,
-            agn_fritz_psy=0.001,
-        )
-        return jnp.sum(L_nu)
+    def total(value):
+        return jnp.sum(_fritz_sed(path, wavelength_aa, **{axis: value}))
 
-    grad_fn = jax.grad(loss)
-    g = grad_fn(1.0)
-    assert float(jnp.isfinite(g)), "Gradient contains NaN or Inf"
+    value = float(total(x))
+    # atol=0.0: these sums are ~1e31 erg/s/Hz, so the helper's old fixed
+    # absolute floor was meaningless here in the other direction too.
+    grad = float(assert_grad_matches_fd(total, x, rtol=1e-3, atol=0.0))
+
+    assert grad != 0.0, f"{axis} has an exactly zero gradient at {x}"
+    sensitivity = abs(x * grad / value) if value else 0.0
+    assert sensitivity > 1e-3, (
+        f"{axis} is effectively flat at {x}: d ln(sum L_nu) / d ln {axis} = "
+        f"{sensitivity:.3e}. A fit cannot move this parameter."
+    )
 
 
 @pytest.mark.gradient
-def test_fritz_grad_psy_finite(fritz_grid_path: Path, wavelength_aa: jnp.ndarray) -> None:
-    """Gradient w.r.t. psy is finite."""
-    from tengri.components.agn.fritz import create_fritz_from_grid
+@pytest.mark.xfail(
+    reason=(
+        "#1851: agn_fritz_tau is the only one of the six Fritz axes that is not "
+        "interpolated. A 40-point uniform sweep of [0.1, 10] returns 18 "
+        "distinct values with an exactly zero gradient at 67.5% of samples; "
+        "every other axis returns 40/40 distinct with 0% zero. The output "
+        "plateaus sit on the node values and switch at 4.5 and 8.0, the "
+        "midpoints of [3,6] and [6,10] -- nearest-neighbor selection."
+    ),
+    strict=True,
+)
+def test_fritz_tau_is_interpolated_like_every_other_axis(
+    fritz_grid_path: Path, wavelength_aa: jnp.ndarray
+) -> None:
+    """Ratchet: flips to a pass the moment the tau axis is interpolated.
 
-    fritz_fn = create_fritz_from_grid(str(fritz_grid_path))
+    A dead axis is invisible to every other test in this file. The forward
+    value still moves -- tau reshapes the SED by 71% end to end, so
+    ``test_fritz_axis_moves_the_sed`` passes -- while any fit that starts at
+    tau > 3 sits on a plateau and receives no gradient at all.
+    """
+    path = str(fritz_grid_path)
+    lo, hi, _, _ = _FRITZ_AXES["agn_fritz_tau"]
 
-    def loss(psy_val: float) -> float:
-        L_nu = fritz_fn(
-            wavelength_aa,
-            agn_log_lbol=44.0,
-            agn_torus_frac=0.5,
-            agn_fritz_r_ratio=60.0,
-            agn_fritz_tau=1.0,
-            agn_fritz_beta=-0.5,
-            agn_fritz_gamma=4.0,
-            agn_fritz_oa=60.0,
-            agn_fritz_psy=psy_val,
-        )
-        return jnp.sum(L_nu)
+    def total(value):
+        return jnp.sum(_fritz_sed(path, wavelength_aa, agn_fritz_tau=value))
 
-    grad_fn = jax.grad(loss)
-    g = grad_fn(30.0)
-    assert float(jnp.isfinite(g)), "Gradient contains NaN or Inf"
+    grad_fn = jax.jit(jax.grad(total))
+    xs = np.linspace(lo, hi, 40)
+    values = np.array([float(total(float(x))) for x in xs])
+    grads = np.array([float(grad_fn(float(x))) for x in xs])
+
+    zero_fraction = float(np.mean(grads == 0.0))
+    assert zero_fraction == 0.0, (
+        f"{zero_fraction:.1%} of a uniform tau sweep has an exactly zero "
+        f"gradient; the axis is a lookup, not an interpolation."
+    )
+    assert len(np.unique(values)) == len(xs), (
+        f"a {len(xs)}-point tau sweep returns only {len(np.unique(values))} "
+        f"distinct SEDs; the axis snaps to its {8} grid nodes."
+    )
+
+
+@pytest.mark.contract
+def test_fritz_clamps_beyond_the_opening_angle_grid(
+    fritz_grid_path: Path, wavelength_aa: jnp.ndarray
+) -> None:
+    """Past the opening-angle grid the model extrapolates, then freezes.
+
+    Pinned as measured behavior, not endorsed. The grid spans [20, 60] deg;
+    the model keeps varying to ~80 and returns a bit-identical SED for every
+    value above that. The test this replaces compared oa = 60 against oa = 140
+    and read the 1.9% difference as evidence that the opening angle works --
+    it is evidence about extrapolation. A caller who fits oa freely will find
+    it dead above 80.
+    """
+    path = str(fritz_grid_path)
+
+    def total(oa):
+        return float(jnp.sum(_fritz_sed(path, wavelength_aa, agn_fritz_oa=oa)))
+
+    far, further, absurd = total(100.0), total(140.0), total(1000.0)
+    assert far == further == absurd, (
+        "the opening angle is no longer frozen above the grid; the clamp "
+        "changed and the note above is stale."
+    )
+    assert total(60.0) != far, "oa is frozen at the last grid node, not beyond it"
 
 
 # ────────────────────────────────────────────────────────────────────────────
@@ -342,9 +373,9 @@ def test_fritz_jit_compiles(fritz_grid_path: Path, wavelength_aa: jnp.ndarray) -
     from tengri.components.agn.fritz import create_fritz_from_grid
 
     fritz_fn = create_fritz_from_grid(str(fritz_grid_path))
-    fritz_jit = jax.jit(fritz_fn)
 
-    L_nu = fritz_jit(
+    L_nu = assert_jit_matches_eager(
+        fritz_fn,
         wavelength_aa,
         agn_log_lbol=44.0,
         agn_torus_frac=0.5,
@@ -397,7 +428,7 @@ def test_fritz_torus_block_callable(fritz_grid_path: Path, wavelength_aa: jnp.nd
 
     assert L_lambda.shape == wavelength_aa.shape
     assert jnp.all(jnp.isfinite(L_lambda))
-    assert jnp.all(L_lambda >= 0)
+    assert_non_negative(L_lambda, name="L_lambda")
 
 
 # ────────────────────────────────────────────────────────────────────────────

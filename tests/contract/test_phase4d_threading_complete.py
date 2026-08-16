@@ -31,6 +31,7 @@ from tengri import Parameters, SEDModel
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.observation import Observation, Photometry
 from tengri.parameters.priors import Fixed, Uniform
+from tests._jit_parity import assert_jit_matches_eager
 
 pytestmark = pytest.mark.contract
 
@@ -272,8 +273,7 @@ class TestAGNSKIRTORTemplateThreading:
             pytest.skip("SKIRTOR grid not available")
 
         fixed_vals = model.spec.get_fixed_values()
-        predict_jit = jax.jit(lambda p: model.predict_photometry(p))
-        result = predict_jit(fixed_vals)
+        result = assert_jit_matches_eager(lambda p: model.predict_photometry(p), fixed_vals)
 
         # Assert something the compile actually has to produce: finite fluxes
         # of the right shape, not merely "not None".

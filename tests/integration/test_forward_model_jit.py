@@ -12,6 +12,8 @@ import jax
 import jax.numpy as jnp
 import pytest
 
+from tests._grad_parity import assert_grad_matches_fd
+
 
 @pytest.fixture
 def sed_model_minimal(synthetic_ssp, simple_observation):
@@ -51,7 +53,7 @@ def test_forward_model_end_to_end_jit(sed_model_minimal, simple_observation) -> 
     value = loss(params)
     assert jnp.isfinite(value)
 
-    grads = jax.grad(loss)(params)
+    grads = assert_grad_matches_fd(loss, params)
     assert all(jnp.isfinite(g).all() for g in grads.values())
 
 
@@ -88,7 +90,7 @@ def test_forward_model_predict_deterministic(sed_model_minimal, simple_observati
 def test_forward_model_closure_audit() -> None:
     """ForwardModel.predict must not capture data-file globals (§9.2).
 
-    Architecture spec ``docs/dev/forward-model-architecture.md`` §9.2:
+    Architecture spec ``docs/dev/archive/forward-model-architecture.md`` §9.2:
     data files (SSP grids, filter matrices, templates) MUST flow through
     component-owned frozen state, never through free-variable closure
     capture in a ``@jit``-able function. The closure count is a useful
