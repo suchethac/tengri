@@ -27,6 +27,17 @@ Thumbs.db
 *.npz
 *.hdf5
 *.h5
+# Downloader collision suffixes. curl -O and wget append .1, .2, ... rather
+# than overwriting, and the result does not match the extension patterns above:
+# `foo.h5.1` is not `*.h5`. That is not hypothetical -- a second fetch of the
+# 64 MB bare-stellar SSP grid landed as data/fsps_prsc_miles_chabrier.h5.1 and
+# was committed, then deleted. It is gone from the tree and still costs 58.7 MB
+# of pack, the single largest dead blob in this repository's history, because
+# deleting a file does not unsend it.
+*.h5.*
+*.hdf5.*
+*.npz.*
+*.npy.*
 # Snapshot regression baselines are checked in (small, deterministic).
 !tests/_data/kernel_snapshots/*.npy
 !tests/regression/data/dust_emission_golden/*.npy
