@@ -526,15 +526,33 @@ plt.show()
 # **not credible intervals** — read the recovered SFH *shape* against the truth,
 # which is what this page is for, and do not read the widths.
 #
-# More sampling is not the fix, and this was measured rather than assumed:
-# quadrupling the budget on the fast path exhausts memory before it converges, and
-# the failure is geometric, not statistical.
+# More sampling is not the fix *at this budget*, and this was measured rather than
+# assumed: quadrupling the warmup exhausts memory before it converges. Confirmed
+# again while investigating #1743 — 1200 warmup x 100 leapfrog with a dense mass
+# matrix is SIGKILLed on the machine this page is developed on.
 #
-# Fixed-length HMC is the wrong tool for a $D=25$ correlated field: a single
-# global trajectory length cannot serve a geometry whose curvature changes with
-# position. tengri ships geoVI and MGVI precisely for this class of posterior;
-# routing this fit through one of them is the real fix, and is tracked as an
-# issue rather than papered over here.
+# **Two plausible fixes were tried and are worse — do not reach for them (#1743).**
+# Both were measured on a matched $D=25$ field model:
+#
+# - **Reparameterizing the field.** `sfh={'field_centering': a}` (#1355) moves the
+#   amplitude dependence out of the non-centered map, which is the obvious reading
+#   of "the field rotates with $\tau$". Measured: `a=1.0` (the default,
+#   non-centered) gives $\hat{R}$ 1.10, while `a=0.5` and `a=0.0` both give
+#   **2.54** — with *zero* divergences, the signature of chains that stopped moving
+#   rather than chains that mix. The non-centered coordinates are what makes this
+#   fit work. Centering it walks into Neal's funnel, which is the standard reason
+#   non-centered is the default for hierarchical and GP models.
+# - **geoVI / MGVI.** The natural-looking tool for position-dependent curvature.
+#   Measured on the same model: ~12x slower than HMC at a matched budget, and
+#   `chi2/dof ~ 35` at 5, 15 and 30 iterations alike — flat, so it is not
+#   converging slowly, it is not converging. It samples in the same coordinates
+#   HMC does, which is the likely reason it inherits the same difficulty.
+#
+# **What did help**, on that matched model: more warmup (300 -> 600 took $\hat{R}$
+# from 1.10 to 1.02) and `mcmc_nuts`, which adapts trajectory length instead of
+# fixing it (1.014). Neither is wired in here — this page's budget is chosen to
+# run in minutes, and the higher-warmup variant exceeds this machine's memory —
+# but they are the directions to take if you need a posterior you can quote.
 
 # %%
 # Cost is (n_warmup + n_samples) x n_leapfrog_steps gradient evaluations, so the
