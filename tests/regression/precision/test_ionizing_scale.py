@@ -123,26 +123,30 @@ def test_pure_float32_non_finites_are_the_linear_transition_publishes(ssp_bare):
             )
 
 
-@pytest.mark.xfail(
-    reason="#1206 item 3 (breaking unit change, not yet done). Measured cause: in pure"
-    " float32 every linear transition publish overflows — stellar_mass_scale (~1e42),"
-    " nion (~1e56), L_ir / L_absorbed / L_agn_bol / L_age, and line_lums (123 of 128"
-    " lines inf at ~1e41 erg/s). balmer_decrement is a ratio of two of those lines, so"
-    " it is nan. Their log counterparts (log_stellar_mass_scale, log_nion, log_L_ir) are"
-    " all finite — see the companion test above, which pins that split. NOT the SKIRTOR"
-    " interp_nd_triweight dtype mismatch this reason used to blame: that is item 4, and"
-    " it shipped.",
-    strict=True,
-)
 def test_balmer_decrement_pure_float32(ssp_bare):
     """(B) Pure-float32 under ``jax.enable_x64(False)``: the full model.
 
-    Disable JAX x64 globally, forcing all scalars and arrays to float32. Fails
-    until item 3 returns the emission-line luminosities in ``L_sun``/log10; the
-    Tier A guarantee (mixed precision) is test A, which passes.
+    Disable JAX x64 globally, forcing all scalars and arrays to float32.
 
-    Strict: when item 3 lands this must announce itself as an unexpected pass
-    rather than keep reporting a clean xfail on work that is already done.
+    **This was a strict xfail against #1206 item 3, and the marker fired — but
+    not for the work it named.** Its reason read: "every linear transition
+    publish overflows ... balmer_decrement is a ratio of two of those lines, so
+    it is nan." The first half is still true; ``line_lums`` remains erg/s and
+    remains ``inf`` in float32, and the companion test above still pins that.
+    The second half stopped following from it. #1837 routed the six line-ratio
+    diagnostics through the ``log_line_lums`` companion on a peak-relative
+    scale, so the ratio no longer reads the overflowed linear array at all —
+    the common factor cancels exactly, and the decrement is recovered without
+    item 3's breaking unit change.
+
+    So the strictness did its job precisely: it refused to keep reporting a
+    clean xfail on work that was already done. The lesson is that an xfail
+    reason names a *cause*, and a consumer-side fix can remove the cause
+    without the named work landing. Item 3 is still open.
+
+    The assertions below are the reason this is worth keeping as a live test
+    rather than deleting: the decrement is not merely finite in float32, it
+    lands inside the Case B range and tracks the float64 reference to 5e-3.
     """
     # Build f64 reference
     m64 = build_model(ssp_bare, "float64")
