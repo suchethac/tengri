@@ -7360,8 +7360,14 @@ class SEDModel:
             and self.ssp_data is not None
         ):
             fixed = self.spec.get_fixed_values()
+            # Same narrowing as the component's own apply() (#1833) — read off
+            # the component that is actually in the chain, so the LUT cannot
+            # bake a different curve from the one the direct path evaluates.
             bc_params, diff_params = resolve_bc_diff_law_params(
-                fixed, dict(dust.config.bc_law_overrides), dict(dust.config.diff_law_overrides)
+                fixed,
+                dict(dust.config.bc_law_overrides),
+                dict(dust.config.diff_law_overrides),
+                dust.config.live_shape_params,
             )
             ssp_ages_yr = (10.0**self.ssp_data.ssp_lg_age_gyr) * 1e9
 
@@ -7636,23 +7642,48 @@ class SEDModel:
     #: published default must stand rather than the shared spec default.
     _REQUESTED_PROVENANCE = frozenset({"user_prior", "user_fixed", "user_free", "wildcard_free"})
 
-    def _requested_law_shape_params(self) -> frozenset[str]:
-        """Shape parameters of the selected attenuation law a caller asked for.
+    def _requested_law_shape_params(self, *laws: str | None) -> frozenset[str]:
+        """Shape parameters of the selected attenuation law(s) a caller asked for.
 
-        Returns an empty set for a law that reads no shape parameter (the
-        default ``calzetti`` among them), which keeps the build-time cached
-        ``k(lambda)`` and the fast path unchanged. See
-        :attr:`DustAttenuationSEDComponentConfig.live_shape_params` and #1808.
+        Parameters
+        ----------
+        *laws : str or None
+            Attenuation-law registry keys in play. ``None`` entries are
+            skipped. Defaults to the diffuse law alone, which is the single
+            screen's only law.
+
+        Returns
+        -------
+        frozenset of str
+            Flat names whose provenance says somebody asked. Empty for a law
+            that reads no shape parameter (the default ``calzetti`` among
+            them), which keeps the build-time cached ``k(lambda)`` and the
+            single screen's fast path unchanged.
+
+        Notes
+        -----
+        **JIT-compatible**: no — build-time provenance lookup.
+
+        The union is over every law in play, not just the diffuse one: the
+        two-component screen evaluates ``law_bc``, ``law_diff`` and ``law_neb``,
+        and a parameter read only by the birth-cloud law would otherwise be
+        dropped as unrequested while the user had plainly requested it. See
+        :attr:`DustAttenuationSEDComponentConfig.live_shape_params` (#1808) and
+        :attr:`DustSEDComponentConfig.live_shape_params` (#1833).
         """
-        law = getattr(self, "_dust_law_diff", None) or getattr(self.spec, "dust_law_diff", None)
-        if law is None:
-            return frozenset()
-        try:
-            from tengri.parameters.groups import _law_shape_params
+        from tengri.parameters.groups import _law_shape_params
 
-            reads = _law_shape_params(law)
-        except Exception:  # pragma: no cover - law not registered
-            return frozenset()
+        names = laws or (
+            getattr(self, "_dust_law_diff", None) or getattr(self.spec, "dust_law_diff", None),
+        )
+        reads: set[str] = set()
+        for law in names:
+            if law is None:
+                continue
+            try:
+                reads |= set(_law_shape_params(law))
+            except Exception:  # pragma: no cover - law not registered
+                continue
         if not reads:
             return frozenset()
         provenance = getattr(self.spec, "_group_provenance", None) or {}
@@ -7730,7 +7761,21 @@ class SEDModel:
         # component sees a plain params dict, and deciding at call time would
         # mean branching on a traced value. registry_default and wildcard_fixed
         # mean "nobody asked", so the law's own default stands.
-        dust_live_shape_params = self._requested_law_shape_params()
+        #
+        # #1833: the two-component screen needs the same treatment and the union
+        # over the three laws it evaluates. It was passing the shared spec values
+        # unconditionally, so kriek_conroy lost its 2175 A bump and narayanan_z /
+        # tea their delta = -0.2 — the exact outcome rejected above, on the path
+        # every shipped recipe builds.
+        _dust_model = getattr(self, "_dust_model", "two_component")
+        if _dust_model == "single_component":
+            dust_live_shape_params = self._requested_law_shape_params()
+        else:
+            dust_live_shape_params = self._requested_law_shape_params(
+                getattr(self, "_dust_law_bc", None),
+                getattr(self, "_dust_law_diff", None),
+                getattr(self, "_dust_law_neb", None),
+            )
 
         chain = build_components(
             ssp_data=self.ssp_data,

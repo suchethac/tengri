@@ -189,6 +189,21 @@ class DustSEDComponentConfig(SEDComponentConfig):
     #: ``dust={'eb_include_lyc': True}``. Static, non-fittable; enters
     #: ``compile_signature``.
     eb_include_lyc: bool = False
+    #: Flat shape-parameter names a caller actually asked for, resolved from
+    #: spec provenance by ``SEDModel._requested_law_shape_params``. Names
+    #: outside the set are not passed to the attenuation law, so the law's own
+    #: published default stands. #1833: injecting the shared ``Fixed(0.0)``
+    #: unconditionally deleted ``kriek_conroy``'s 2175 Å bump and overrode
+    #: ``narayanan_z`` / ``tea``'s ``dust_delta=-0.2``. Mirrors
+    #: :attr:`DustAttenuationSEDComponentConfig.live_shape_params` (#1808).
+    #:
+    #: ``None`` (the default) means *unset*, not *empty*: a component built
+    #: directly has no spec to ask, so it keeps the historical pass-all rather
+    #: than silently pinning every law to its signature default. Only
+    #: ``SEDModel`` sets it, because only ``SEDModel`` knows who asked. The
+    #: single-screen config spells its default ``frozenset()`` for the same
+    #: reason in reverse — passing nothing is *its* historical behavior.
+    live_shape_params: frozenset[str] | None = None
 
 
 @dataclass(frozen=True)
@@ -432,6 +447,7 @@ class DustSEDComponent(TemplateThreading):
             params,
             dict(self.config.bc_law_overrides),
             dict(self.config.diff_law_overrides),
+            self.config.live_shape_params,
         )
         return self._transmission_from_law_params(
             params, wavelength, ssp_ages_yr, bc_law_params, diff_law_params
@@ -510,6 +526,7 @@ class DustSEDComponent(TemplateThreading):
             params,
             dict(self.config.bc_law_overrides),
             dict(self.config.diff_law_overrides),
+            self.config.live_shape_params,
         )
         transmission = self._transmission_from_law_params(
             params, wave, ssp_ages_yr, bc_law_params, diff_law_params
@@ -590,9 +607,13 @@ class DustSEDComponent(TemplateThreading):
         # in their own clouds behind the same foreground ISM.
         neb_law = self.config.law_neb or self.config.law_bc
         _neb_overrides = dict(self.config.neb_law_overrides)
-        neb_bc_params = {
-            k: jnp.asarray(_neb_overrides.get(k, v)) for k, v in bc_law_params.items()
-        }
+        # Start from the stellar birth-cloud params, then layer every nebular
+        # override on top. Merging rather than iterating ``bc_law_params`` keys:
+        # since #1833 that dict omits shape parameters nobody requested, and a
+        # comprehension over its keys would drop a ``neb_law_overrides`` entry
+        # for an omitted one — an explicit setting silently ignored, which is
+        # the failure class #1833 itself is.
+        neb_bc_params = {k: jnp.asarray(v) for k, v in {**bc_law_params, **_neb_overrides}.items()}
         diff_law_kw = {k: jnp.asarray(v) for k, v in diff_law_params.items()}
         k_bc_neb = _resolve_law(neb_law)(wave, **neb_bc_params)
         k_diff_neb = _resolve_law(self.config.law_diff)(wave, **diff_law_kw)
