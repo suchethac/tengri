@@ -1,6 +1,12 @@
 cloudy_grid_*.h5
 dl07_templates.h5
+# ...except the copy that is committed. A nested .gitignore outranks the root
+# one for files beneath it, so this negation has to live here rather than
+# beside its siblings in the root file.
+!dl07_templates.h5
 # cue_weights.npz is tracked (10 MB, MIT upstream) — the Cue backend needs it
-# out of the box. Regenerate with scripts/convert_cue_weights.py.
+# out of the box. Regenerate with scripts/convert_cue_weights.py. That was the
+# whole of its protection until #1857 follow-up: a comment, not a rule. The
+# root .gitignore now carries `!data/cue_weights.npz`.
 # claude-squad worktree symlink to repo data/ — not tracked
 data

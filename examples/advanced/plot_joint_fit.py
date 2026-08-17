@@ -16,7 +16,6 @@ import os
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
 import warnings
-from pathlib import Path
 
 import jax
 import jax.numpy as jnp
@@ -28,27 +27,19 @@ from tengri.analysis.plotting import setup_style
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+# `all_params: FREE` leaves met_alpha_fe and met_logzsol_scatter pinned, since
+# neither declares a prior. That is deliberate here -- this example is about
+# combining photometry with spectroscopy, not about abundance ratios -- and the
+# warning itself says to filter it when so. Unfiltered it lands in the rendered
+# page carrying an absolute source path.
+warnings.filterwarnings("ignore", message=".*all_params: FREE.*")
 
 ssp = tengri.load_ssp()
 
-_FILTER_DIR = next(
-    (
-        str(d)
-        for d in [
-            Path("data/filters"),
-            Path("../data/filters"),
-            Path("../../data/filters"),
-            Path("../../../data/filters"),
-        ]
-        if d.exists()
-    ),
-    "data/filters",
-)
-
-phot = tengri.Photometry.from_names(
-    ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"],
-    cache_dir=_FILTER_DIR,
-)
+# No cache_dir: tengri resolves each curve across its own data directories, so
+# an example works from any working directory. See plot_fisher_degeneracy.py
+# for why the four-deep relative walk this replaces was a hazard.
+phot = tengri.Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
 wave_rest = jnp.linspace(3800.0, 9200.0, 200)
 z = 0.1
 wave_obs = wave_rest * (1 + z)

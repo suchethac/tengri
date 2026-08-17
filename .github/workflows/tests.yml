@@ -230,6 +230,15 @@ jobs:
       # inventoried and may stay but not grow; data/ gets its own higher limit
       # for the SSP grids. Stdlib-only.
       - run: python tools/check_file_sizes.py
+      # Git applies ignore rules only to UNTRACKED files, so a file added before
+      # a rule keeps working while the repository declares its directory
+      # disposable -- and every consequence is silent. 41 tracked files were in
+      # that state: `git add -A` would not have recovered any of them after a
+      # delete-and-re-add, ruff skips such files inside a git checkout (#1598 hid
+      # two real defects that way), and 28 duplicate filter curves sat there,
+      # twenty of which made data/filters/ unreachable for the gallery (#1857).
+      # Stdlib-only.
+      - run: python tools/check_tracked_not_ignored.py
       # tengri implements published models and validates against the reference
       # codes; it does not port or copy their source. The wording drifted back
       # twice after being swept by hand, so it is pinned here. Stdlib-only.
