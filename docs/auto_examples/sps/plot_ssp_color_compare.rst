@@ -33,7 +33,7 @@ TP-AGB treatment, where BC03 and FSPS-MIST differ most).
 This is the systematic an SED fitter inherits from its assumed SSP
 grid even before any prior or noise is involved.
 
-.. GENERATED FROM PYTHON SOURCE LINES 17-121
+.. GENERATED FROM PYTHON SOURCE LINES 17-133
 
 
 
@@ -43,19 +43,8 @@ grid even before any prior or noise is involved.
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit__impl': FileNotFoundError: [Errno 2] No such file or directory: '~/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -96,10 +85,15 @@ grid even before any prior or noise is involved.
     obs = tengri.Observation(photometry=tengri.Photometry.from_names(BANDS))
 
     data = {}
+    first_failure: Exception | None = None
     for ssp_name, label in LIBRARIES:
         try:
             ssp = tengri.load_ssp(ssp_name)
-        except (FileNotFoundError, Exception):
+        except Exception as e:
+            # Was `except (FileNotFoundError, Exception)`: the tuple reads as a
+            # missing-grid check but the second member makes it a catch-all.
+            if first_failure is None:
+                first_failure = e
             continue
         sfh = {
             "type": "tsnorm",
@@ -128,6 +122,13 @@ grid even before any prior or noise is involved.
         flux = np.asarray(model.predict_photometry(p))
         colors = {name: -2.5 * np.log10(flux[i] / flux[j]) for name, i, j in COLORS_TO_PLOT}
         data[label] = colors
+
+    if not data:
+        raise RuntimeError(
+            f"none of the {len(LIBRARIES)} SSP libraries loaded, so there are no "
+            f"colors to compare. First failure: "
+            f"{type(first_failure).__name__}: {first_failure}"
+        ) from first_failure
 
     fig, ax = plt.subplots(figsize=(7.2, 4.6))
     x = np.arange(len(COLORS_TO_PLOT))
@@ -167,7 +168,7 @@ grid even before any prior or noise is involved.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.047 seconds)
+   **Total running time of the script:** (0 minutes 6.107 seconds)
 
 
 .. _sphx_glr_download_auto_examples_sps_plot_ssp_color_compare.py:

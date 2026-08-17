@@ -901,6 +901,15 @@
    "name": "list"
   }
  ],
+ "first_failure": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "NoneType"
+  }
+ ],
  "fname": [
   {
    "is_class": false,
@@ -981,6 +990,15 @@
    "module": "tengri",
    "module_short": "tengri",
    "name": "load_filter"
+  }
+ ],
+ "loaded": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "int"
   }
  ],
  "model": [

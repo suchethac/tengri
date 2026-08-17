@@ -50,6 +50,9 @@ target_log10_z = 0.0  # solar
 colors = plt.cm.tab10(np.linspace(0, 0.9, len(ssp_names)))
 fig, ax = plt.subplots(figsize=(6.5, 4.5))
 
+plotted = 0
+first_failure: Exception | None = None
+
 for ssp_name, color in zip(ssp_names, colors):
     try:
         # Load SSP library
@@ -84,9 +87,22 @@ for ssp_name, color in zip(ssp_names, colors):
             color=color,
             label=ssp_name.replace("_chabrier", "").replace("_", " "),
         )
+        plotted += 1
 
-    except (FileNotFoundError, Exception):
-        pass
+    except Exception as e:
+        # Was `except (FileNotFoundError, Exception)` with a bare `pass`. The
+        # tuple's second member subsumes the first, so this caught every error
+        # in a ~30-line body — the grid lookup, the normalization, the plot call
+        # — and discarded all of them.
+        if first_failure is None:
+            first_failure = e
+
+if plotted == 0:
+    raise RuntimeError(
+        f"none of the {len(ssp_names)} SSP libraries produced a curve, so the "
+        f"shootout is empty. First failure: "
+        f"{type(first_failure).__name__}: {first_failure}"
+    ) from first_failure
 
 ax.set_xlim(0.05, 5.0)
 ax.set_ylim(1e-3, 2.0)

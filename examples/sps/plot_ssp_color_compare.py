@@ -51,10 +51,15 @@ COLORS_TO_PLOT = [
 obs = tengri.Observation(photometry=tengri.Photometry.from_names(BANDS))
 
 data = {}
+first_failure: Exception | None = None
 for ssp_name, label in LIBRARIES:
     try:
         ssp = tengri.load_ssp(ssp_name)
-    except (FileNotFoundError, Exception):
+    except Exception as e:
+        # Was `except (FileNotFoundError, Exception)`: the tuple reads as a
+        # missing-grid check but the second member makes it a catch-all.
+        if first_failure is None:
+            first_failure = e
         continue
     sfh = {
         "type": "tsnorm",
@@ -83,6 +88,13 @@ for ssp_name, label in LIBRARIES:
     flux = np.asarray(model.predict_photometry(p))
     colors = {name: -2.5 * np.log10(flux[i] / flux[j]) for name, i, j in COLORS_TO_PLOT}
     data[label] = colors
+
+if not data:
+    raise RuntimeError(
+        f"none of the {len(LIBRARIES)} SSP libraries loaded, so there are no "
+        f"colors to compare. First failure: "
+        f"{type(first_failure).__name__}: {first_failure}"
+    ) from first_failure
 
 fig, ax = plt.subplots(figsize=(7.2, 4.6))
 x = np.arange(len(COLORS_TO_PLOT))
