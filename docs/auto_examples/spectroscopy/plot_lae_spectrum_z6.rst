@@ -22,7 +22,7 @@ Lyman-alpha emitter spectrum at z=6: IGM absorption and Lyα escape
 ==================================================================
 
 High-redshift Lyα emitter at z=6 with young age (~10 Myr), low metallicity
-(Z~0.1 Zsun), and minimal dust. The observed-frame spectrum (7000–13000 Å)
+(Z~0.1 Z☉), and minimal dust. The observed-frame spectrum (7000–13000 Å)
 reveals the redshifted Lyα emission line at 8512 Å, the Lyman break at
 6384 Å, characteristic IGM blue-wing absorption, and the rest-UV continuum.
 Demonstrates Lyα radiative transfer and reionization-era observability.
@@ -41,8 +41,12 @@ Demonstrates Lyα radiative transfer and reionization-era observability.
 
  .. code-block:: none
 
-    /tengri/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 100% of its stellar mass before the Big Bang at z=6.00 (cosmic age 0.93 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/src/tengri/forward/orchestrator.py:794: SFHBeforeBigBangWarning: Star formation history forms 100% of its stellar mass before the Big Bang at z=6.00 (cosmic age 0.93 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
       state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/spectroscopy/plot_lae_spectrum_z6.py:159: UserWarning: Glyph 197 (\N{LATIN CAPITAL LETTER A WITH RING ABOVE}) missing from font(s) cmr10.
+      plt.savefig("plot_lae_spectrum_z6.png", dpi=150, bbox_inches="tight")
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/spectroscopy/plot_lae_spectrum_z6.py:159: UserWarning: Glyph 945 (\N{GREEK SMALL LETTER ALPHA}) missing from font(s) cmr10.
+      plt.savefig("plot_lae_spectrum_z6.png", dpi=150, bbox_inches="tight")
 
 
 
@@ -202,6 +206,11 @@ Demonstrates Lyα radiative transfer and reionization-era observability.
     ax_lya.grid(True, alpha=0.3, which="major", axis="y")
 
     plt.savefig("plot_lae_spectrum_z6.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 7.177 seconds)
 
 
 .. _sphx_glr_download_auto_examples_spectroscopy_plot_lae_spectrum_z6.py:

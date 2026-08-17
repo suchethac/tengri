@@ -23,10 +23,10 @@ Log-normal peak time shifts stellar age and SED morphology
 
 The peak time of a log-normal SFH controls when most stars formed, shifting the
 age structure and dramatically affecting UV slope, 4000 Å break strength, and
-NIR luminosity. Following the Carnall+2018 / BAGPIPES convention (#514), the
-peak is measured in *cosmic time since formation* (T = age - lookback); larger
-peak times therefore correspond to more recent star formation. We vary the peak
-across its prior range with every other parameter fixed.
+NIR luminosity. Following Carnall+2018 / BAGPIPES, the peak is measured in
+*cosmic time since formation* (T = age - lookback); larger peak times
+correspond to more recent star formation. We vary the peak across its prior
+range with every other parameter fixed.
 
 .. GENERATED FROM PYTHON SOURCE LINES 12-69
 
@@ -38,25 +38,8 @@ across its prior range with every other parameter fixed.
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /tengri/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
-      return load_ssp_data(str(candidate))
-    /tengri/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 44% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
-      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
-    /tengri/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 7% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
-      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
-    /tengri/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 2% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
-      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 

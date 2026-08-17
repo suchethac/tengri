@@ -21,21 +21,16 @@
 What each shipped tengri recipe produces
 ==========================================
 
-``tengri.recipes`` ships several curated starting-point model configs
-that map common astronomer use-cases onto the nested-dict ``SEDModel.build``
-grammar. This card overlays the rest-frame SED of every shipped recipe
-so users can pick by eye:
+Six curated recipes span galaxy populations: star-forming at 0–6 (bare-stellar
+SSP), quiescent at z ≈ 0.05 (bare-stellar, τ_diff-free to trace dust),
+AGN panchromatic (bare-stellar, full AGN composite with disc+torus+radio+xray),
+stochastic JWST high-z with burstiness (bare-stellar, DPL+field at 0.5–12),
+mock-recovery minimal (any SSP, 4–5 free params for benchmarking), and
+dust-demo (wNE only — baked nebular emission visualized). All use WavePrecomp()
+except photoz (ztable does not cover z > 12). Use ``load_ssp("*.wNE")`` only
+for dust_demo; others silently under-predict if fed wNE.
 
-- ``star_forming_photometry`` — broadband photometric fit of a typical SF galaxy
-- ``quiescent_z0``           — old red passively-evolving system
-- ``agn_panchromatic``       — composable AGN + host
-- ``stochastic_sfh_jwst``    — IFT correlated-field SFH for high-z JWST data
-- ``mock_recovery_minimal``  — smallest model usable for parameter-recovery tests
-- ``dust_demo``              — emphasis on dust attenuation + emission
-
-Each is built with no overrides and evaluated at default parameter values.
-
-.. GENERATED FROM PYTHON SOURCE LINES 19-81
+.. GENERATED FROM PYTHON SOURCE LINES 14-76
 
 
 
@@ -49,10 +44,44 @@ Each is built with no overrides and evaluated at default parameter values.
 
  .. code-block:: none
 
-    /tengri/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 5% of its stellar mass before the Big Bang at z=5.18 (cosmic age 1.12 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/src/tengri/forward/sed_model.py:8270: WildcardPartialFreeWarning: 'all_params: FREE' freed 2 of 3 parameters in group 'dust'. These have no declared prior, only Fixed defaults, so they stay pinned:
+      dust_f_obscuration
+    The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. dust={'f_obscuration': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
+      spec = parse_groups(**groups)
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/src/tengri/forward/sed_model.py:8270: WildcardPartialFreeWarning: 'all_params: FREE' freed 6 of 8 parameters in group 'sfh'. These have no declared prior, only Fixed defaults, so they stay pinned:
+      met_alpha_fe, met_logzsol_scatter
+    The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. sfh={'met_alpha_fe': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
+      spec = parse_groups(**groups)
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/src/tengri/forward/orchestrator.py:794: SFHBeforeBigBangWarning: Star formation history forms 5% of its stellar mass before the Big Bang at z=5.18 (cosmic age 1.12 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
       state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
-    /tengri/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 38% of its stellar mass before the Big Bang at z=10.43 (cosmic age 0.45 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/src/tengri/forward/sed_model.py:8270: WildcardPartialFreeWarning: 'all_params: FREE' freed 3 of 6 parameters in group 'sfh'. These have no declared prior, only Fixed defaults, so they stay pinned:
+      met_alpha_fe, met_logzsol_scatter, sfh_dexp_start_gyr
+    The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. sfh={'met_alpha_fe': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
+      spec = parse_groups(**groups)
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/src/tengri/forward/sed_model.py:8270: WildcardPartialFreeWarning: 'all_params: FREE' freed 2 of 3 parameters in group 'dust'. These have no declared prior, only Fixed defaults, so they stay pinned:
+      dust_f_obscuration
+    The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. dust={'f_obscuration': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
+      spec = parse_groups(**groups)
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/src/tengri/forward/sed_model.py:8270: WildcardPartialFreeWarning: 'all_params: FREE' freed 6 of 8 parameters in group 'sfh'. These have no declared prior, only Fixed defaults, so they stay pinned:
+      met_alpha_fe, met_logzsol_scatter
+    The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. sfh={'met_alpha_fe': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
+      spec = parse_groups(**groups)
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/src/tengri/forward/orchestrator.py:794: SFHBeforeBigBangWarning: Star formation history forms 5% of its stellar mass before the Big Bang at z=5.18 (cosmic age 1.12 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
       state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/src/tengri/forward/sed_model.py:8270: WildcardPartialFreeWarning: 'all_params: FREE' freed 2 of 3 parameters in group 'dust'. These have no declared prior, only Fixed defaults, so they stay pinned:
+      dust_f_obscuration
+    The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. dust={'f_obscuration': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
+      spec = parse_groups(**groups)
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/src/tengri/forward/sed_model.py:8270: WildcardPartialFreeWarning: 'all_params: FREE' freed 8 of 10 parameters in group 'sfh'. These have no declared prior, only Fixed defaults, so they stay pinned:
+      met_alpha_fe, met_logzsol_scatter
+    The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. sfh={'met_alpha_fe': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
+      spec = parse_groups(**groups)
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/src/tengri/forward/orchestrator.py:794: SFHBeforeBigBangWarning: Star formation history forms 38% of its stellar mass before the Big Bang at z=10.43 (cosmic age 0.45 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/src/tengri/forward/sed_model.py:8270: WildcardPartialFreeWarning: 'all_params: FREE' freed 6 of 8 parameters in group 'sfh'. These have no declared prior, only Fixed defaults, so they stay pinned:
+      met_alpha_fe, met_logzsol_scatter
+    The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. sfh={'met_alpha_fe': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
+      spec = parse_groups(**groups)
 
 
 
@@ -129,7 +158,7 @@ Each is built with no overrides and evaluated at default parameter values.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 14.116 seconds)
+   **Total running time of the script:** (1 minutes 5.848 seconds)
 
 
 .. _sphx_glr_download_auto_examples_recipes_plot_recipe_compare.py:

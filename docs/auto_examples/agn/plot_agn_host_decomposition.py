@@ -12,7 +12,7 @@ Three traces shown:
 
 - **Host only** (``agn_lum_ratio=0``): Star-forming galaxy, SFH + dust
 - **AGN only** (``agn_lum_ratio=1.0``): Bolometric luminosity fixed
-- **Composite** (``agn_lum_ratio=0.5``): 50-50 mix, physical decomposition
+- **Composite** (``agn_lum_ratio=0.5``): 50–50 mix, physical decomposition
 
 For real data, this three-trace pattern can be extended to a suite of
 ``agn_lum_ratio`` values to fit a composite Seyfert II SED photometrically.

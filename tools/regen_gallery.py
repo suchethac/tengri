@@ -41,6 +41,14 @@ Usage
 Requires the optional data grids (SSP, SKIRTOR, astrodust, ...): the examples
 actually execute. CI cannot run this — it has neither the grids nor the RAM,
 which is why the rendered gallery is committed in the first place.
+
+Batch in single digits. Every requested example runs inside **one** sphinx
+process, and the per-example JAX/SSP allocations are not fully released between
+them, so the peak grows with the batch. Forty at once was OOM-killed on a 48 GB
+machine (``sphinx exit=-9``); eight at a time completes. The snapshot in step 3
+survives the kill, so a killed batch leaves the gallery intact rather than
+hollowed out — but it also does no work, so prefer several small batches over
+one large one. ``--stale`` on a large drift is exactly the case to split up.
 """
 
 from __future__ import annotations
@@ -194,6 +202,12 @@ def main() -> int:
     # conf.py switches to the committed renders when CI is set; we are the
     # machine that produces them, so make sure execution is on.
     env.pop("CI", None)
+    # sphinx-gallery executes each script from the gallery output directory, not
+    # the repo root, so a relative ``data/filters`` lookup misses and the filter
+    # loader falls through to an SVO download -- which fails without astroquery
+    # and network. The script runs fine by hand and only breaks under the build,
+    # which makes it a confusing failure. Pin the data directory absolutely.
+    env.setdefault("TENGRI_DATA_DIR", str(REPO / "data"))
 
     # The snapshot deliberately outlives a crash. These builds execute real
     # science examples and can be OOM-killed mid-flight; an auto-deleting

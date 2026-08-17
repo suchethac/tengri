@@ -21,13 +21,14 @@
 Recipe introspection and SED morphology comparison
 ===================================================
 
-The tengri public API ships recipes for common SED fitting scenarios
-(star-forming, quiescent, AGN). This example showcases the introspection API
-(``tengri.list_recipes()``, ``tengri.describe_recipe()``) and visually
-differentiates the rest-frame SED morphology across three representative
-models: young star-former, quiescent, and AGN-dominated.
+Call ``tengri.list_recipes()`` to see the shipped menu with SSP requirements
+(bare-stellar, wNE, or any) and ``tengri.describe_recipe(name)`` to fetch
+a recipe's docstring. Three models showcase the morphological diversity:
+star-forming (DPL+Cue nebular, free z to 6), quiescent at z=0.05 (dexp,
+lower dust ceiling), and AGN-panchromatic (full composite, z to 6).
+All require bare-stellar SSP (Cue backend).
 
-.. GENERATED FROM PYTHON SOURCE LINES 11-86
+.. GENERATED FROM PYTHON SOURCE LINES 12-87
 
 
 
@@ -37,19 +38,8 @@ models: young star-former, quiescent, and AGN-dominated.
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /tengri/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 5% of its stellar mass before the Big Bang at z=5.18 (cosmic age 1.12 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
-      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -132,7 +122,7 @@ models: young star-former, quiescent, and AGN-dominated.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 5.832 seconds)
+   **Total running time of the script:** (0 minutes 9.736 seconds)
 
 
 .. _sphx_glr_download_auto_examples_recipes_plot_recipe_introspection_tour.py:

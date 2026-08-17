@@ -2,24 +2,13 @@
 Prior predictive check: what does the model predict before it sees data?
 ========================================================================
 
-Before fitting, sample 200 draws from the prior and push each through the
-forward model. The envelope of predicted photometry is the prior predictive
-distribution — what the model can produce under our chosen priors, without
-any conditioning on observations.
+The prior predictive envelope — which combinations of parameters the model
+can produce under the chosen priors, without data — reveals silent pathologies.
+Coverage: does the envelope contain the data? If not, the posterior will
+shift to prior boundaries. Width: narrow bands indicate parameters already
+constrained by the prior alone; data cannot improve estimates there.
 
-Two things to read off the figure:
-
-1. **Coverage.** Does the prior envelope contain the data? If not, the
-   priors are inconsistent with the observation and the posterior will
-   shift to the edge of prior support — a silent pathology.
-2. **Width.** Where is the envelope wide vs narrow? Wide bands say "this
-   parameter combination is under-constrained by the prior alone";
-   narrow bands say "the prior already pins the prediction here." Bands
-   that are narrow at the data point are the ones the data will *not*
-   teach us much about.
-
-This is best practice for Bayesian workflow — see Gelman et al. 2020
-("Bayesian Workflow", arXiv:2011.01808 §4.2).
+Reference: Gelman+2020 (Bayesian Workflow).
 """
 
 import warnings

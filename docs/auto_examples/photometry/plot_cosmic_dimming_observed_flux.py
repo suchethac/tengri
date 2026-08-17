@@ -3,7 +3,7 @@ Cosmic dimming and K-correction with redshift
 ==============================================
 
 How does the observed photometric flux of a FIXED-luminosity galaxy decline with
-redshift? We track a star-forming galaxy (log M* = 10.5, SFR = 10 Msun/yr) across
+redshift? We track a star-forming galaxy (log M* = 10.5, SFR = 10 M☉/yr) across
 z = 0.1 to 6 in three optical/infrared bands (SDSS r, JWST J, JWST H), visualizing
 the three physical effects:
 

@@ -21,25 +21,16 @@
 Lyman-alpha equivalent width peaks at young ages, varies with gas metallicity
 ==============================================================================
 
-Lyman-alpha (Lyα) equivalent width (EW) traces stellar population age
-through the presence and strength of massive O stars. We construct a
-sequence of constant star-formation-rate (CSF) models with ages ranging
-from 1 Myr to 30 Myr across three gas metallicities (Z = 0.1, 0.5, 1.0 Zsun),
-compute the rest-frame Lyα emission line luminosity and the underlying
-continuum at 1216 Å, then derive EW(Lyα) = L(Lyα) / L_continuum.
-
-Key result: EW peaks at ~3–5 Myr when spectral type O dominates ionization,
-then decays past 10 Myr as stars age. Higher metallicity suppresses ionizing
-photon production, reducing peak EW and shifting the peak slightly older.
+Lyα rest-frame wavelength is 1216 Å (vacuum). EW peaks at 3–5 Myr when O-type
+stars dominate ionization, then decays past 10 Myr. Higher metallicity
+suppresses ionizing photon production, reducing peak EW.
 
 References
 ----------
-Charlot & Fall 1993 (ApJ 405, 538) — Empirical population synthesis and
-spectral evolution across age and metallicity.
-Schaerer 2003 (A&A 397, 527) — Ionizing photon production in massive
-starburst populations.
 
-.. GENERATED FROM PYTHON SOURCE LINES 23-124
+Schaerer 2003, A&A, 397, 527 (ionizing photon production in massive starburst populations).
+
+.. GENERATED FROM PYTHON SOURCE LINES 14-115
 
 
 
@@ -49,8 +40,25 @@ starburst populations.
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/nebular/plot_lyalpha_ew_vs_age.py:113: UserWarning: Glyph 945 (\N{GREEK SMALL LETTER ALPHA}) missing from font(s) cmr10.
+      fig.tight_layout()
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/nebular/plot_lyalpha_ew_vs_age.py:113: UserWarning: Glyph 197 (\N{LATIN CAPITAL LETTER A WITH RING ABOVE}) missing from font(s) cmr10.
+      fig.tight_layout()
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/nebular/plot_lyalpha_ew_vs_age.py:114: UserWarning: Glyph 945 (\N{GREEK SMALL LETTER ALPHA}) missing from font(s) cmr10.
+      plt.savefig("plot_lyalpha_ew_vs_age.png", dpi=150, bbox_inches="tight")
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/nebular/plot_lyalpha_ew_vs_age.py:114: UserWarning: Glyph 197 (\N{LATIN CAPITAL LETTER A WITH RING ABOVE}) missing from font(s) cmr10.
+      plt.savefig("plot_lyalpha_ew_vs_age.png", dpi=150, bbox_inches="tight")
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -159,7 +167,7 @@ starburst populations.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 27.639 seconds)
+   **Total running time of the script:** (0 minutes 30.243 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_lyalpha_ew_vs_age.py:

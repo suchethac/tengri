@@ -2,9 +2,10 @@
 Register and use a custom photometric filter
 ==============================================
 
-How do I combine a custom photometric filter with standard filters? This
-recipe generates a synthetic Gaussian filter at 2 μm and pairs it with
-SDSS optical bands, then predicts the full SED and photometry.
+Build a FilterCurve from a Gaussian transmission profile and combine it
+with standard filters. The Photometry object merges them, then SEDModel
+predicts photometry on all bands at once — custom filters compose naturally
+with the standard library.
 """
 
 import os

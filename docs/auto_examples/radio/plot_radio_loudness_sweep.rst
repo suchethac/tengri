@@ -21,7 +21,7 @@
 AGN radio loudness R: orders of magnitude in jet power
 =======================================================
 
-Radio loudness R = log_10(L_5GHz / L_B) quantifies the ratio of AGN radio
+Radio loudness R = log₁₀(L_5GHz / L_B) quantifies the ratio of AGN radio
 to optical luminosity. Radio-quiet AGN have R ≲ 1; radio-loud sources
 (FR I/II, blazars) reach R ∼ 3–5. Each decade in R corresponds to an order
 of magnitude increase in jet radio luminosity at fixed bolometric AGN power.

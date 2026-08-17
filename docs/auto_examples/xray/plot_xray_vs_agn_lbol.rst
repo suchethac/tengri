@@ -21,7 +21,7 @@
 X-ray SED response to AGN bolometric luminosity
 ================================================
 
-At fixed host (constant SFR = 3 M_sun/yr, Mineo+12 HMXB contribution)
+At fixed host (constant SFR = 3 M☉/yr, Mineo+12 HMXB contribution)
 we sweep the composable AGN's bolometric luminosity ``agn_log_lbol``
 from 9 to 13 (in log L_sun). The host XRB component is a flat
 power-law below ~10 keV; the AGN corona contributes a much harder
@@ -41,21 +41,8 @@ deep X-ray surveys (Lehmer+2010, 2016).
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_trapezoid': FileNotFoundError: [Errno 2] No such file or directory: '~/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit__interp': FileNotFoundError: [Errno 2] No such file or directory: '~/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -148,7 +135,7 @@ deep X-ray surveys (Lehmer+2010, 2016).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 5.973 seconds)
+   **Total running time of the script:** (0 minutes 19.408 seconds)
 
 
 .. _sphx_glr_download_auto_examples_xray_plot_xray_vs_agn_lbol.py:

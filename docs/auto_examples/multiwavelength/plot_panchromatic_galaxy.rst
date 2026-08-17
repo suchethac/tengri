@@ -21,13 +21,7 @@
 UV-to-radio SED of a star-forming galaxy
 =========================================
 
-Full panchromatic SED combining stellar continuum, dust absorption,
-dust infrared emission, and radio synchrotron. Demonstrates how a
-unified model spans from ultraviolet through centimeter wavelengths
-with continuous physics from stellar populations through dust and
-synchrotron emission.
-
-.. GENERATED FROM PYTHON SOURCE LINES 11-100
+.. GENERATED FROM PYTHON SOURCE LINES 5-94
 
 
 

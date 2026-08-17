@@ -206,6 +206,138 @@ class _RegistryTable(list):
             )
         return {d["name"]: d[value] for d in self}
 
+    def to_rst(self, *, title: str | None = None) -> str:
+        """Render as reStructuredText list-table directive.
+
+        Returns a well-formed ``.. list-table::`` directive suitable for
+        inclusion in Sphinx documentation. Escapes cell content safely:
+        replaces newlines with spaces and wraps values containing
+        reStructuredText-special leading characters. Empty cells emit
+        ``-`` to maintain list structure.
+
+        Parameters
+        ----------
+        title : str, optional
+            Optional title for the directive (appears as table caption).
+
+        Returns
+        -------
+        str
+            reStructuredText list-table directive, or a ``.. note::``
+            message if the table is empty.
+
+        Notes
+        -----
+        Column choice follows this strategy: always include ``use`` and
+        ``status`` columns even though ``_columns()`` hides ``use`` on
+        single-kind tables (the documentation page needs both). Otherwise
+        reuse the ``_columns()`` logic so all four renderings
+        (text/HTML/RST/``describe()``) stay synchronized when a new field
+        is added: the ``_PREFERRED_COLS`` and ``_ALWAYS_HIDDEN`` class
+        attributes are the single source of truth.
+
+        List-table is chosen over grid-table because cell values contain
+        commas, pipes, and backticks (e.g. ``use`` holds code like
+        ``SEDModel.build(..., dust={'type': 'calzetti'})``), which cannot
+        be escaped safely in a grid-table markup.
+        """
+        if not self:
+            return ".. note::\n\n   The registry is empty."
+
+        # Column strategy: start with _columns() logic but force 'use' visible.
+        kinds = {d.get("kind") for d in self}
+        hidden = set(self._ALWAYS_HIDDEN)
+        if len(kinds) <= 1:
+            hidden.add("kind")
+            # Do NOT add 'use' to hidden — keep it visible for RST output.
+        all_keys = list(self[0].keys())
+        cols = [k for k in self._PREFERRED_COLS if k in all_keys and k not in hidden]
+        cols += [k for k in all_keys if k not in cols and k not in hidden]
+
+        # Characters docutils reads as inline markup anywhere in a cell, not
+        # just at its start. ``**`` is the one that actually bit: every recipe's
+        # ``use`` column is ``SEDModel.build(ssp_data=ssp, **recipe)``, and
+        # Python's kwargs unpacking is RST's strong-emphasis opener, so the page
+        # built with ten "Inline strong start-string without end-string"
+        # warnings -- which the docs build turns into a failure via ``-W``.
+        _INLINE_MARKUP = ("*", "|", "`", "_")
+
+        def _escape_cell(v: Any) -> str:
+            """Escape and normalize cell content for an RST list-table."""
+            s = "" if v is None else str(v)
+            # Newlines would end the list item early.
+            s = s.replace("\n", " ")
+            # An empty item breaks list-table parsing; a dash is a real cell.
+            if not s or s.isspace():
+                return "-"
+            # Inline literal is the only escape that covers markup *inside* a
+            # value, and these cells are code or citations rather than prose, so
+            # rendering them literally is also what they should look like.
+            if any(c in s for c in _INLINE_MARKUP):
+                if "`" in s:
+                    # Double backticks cannot contain a backtick; escape instead.
+                    return s.replace("\\", "\\\\").replace("`", "\\`").replace("*", "\\*")
+                return f"``{s}``"
+            return s
+
+        def _emit(cells: list[str]) -> list[str]:
+            """One table row: ``* -`` opens it, ``  -`` continues it.
+
+            The distinction is the whole grammar of a list-table. Emitting
+            ``* -`` for every cell is silently wrong rather than an error --
+            docutils reads it as N single-column rows and renders a tall,
+            one-column list, so a check that only looks at line prefixes sees
+            nothing amiss.
+            """
+            return [f"   * - {cells[0]}"] + [f"     - {c}" for c in cells[1:]]
+
+        # The title is the directive *argument*. `list-table` has no
+        # ``:caption:`` option; passing one raises an "unknown option" warning,
+        # which is a build failure under the ``-W`` the docs build with.
+        lines: list[str] = [f".. list-table:: {title}" if title else ".. list-table::"]
+        lines += ["   :header-rows: 1", "   :widths: auto", ""]
+        lines += _emit([_escape_cell(c) for c in cols])
+        for row in self:
+            lines.append("")
+            lines += _emit([_escape_cell(row.get(col, "")) for col in cols])
+
+        return "\n".join(lines)
+
+
+class _DescribeRecord(dict):
+    """A `dict` that prints as a labeled block. Plain dict otherwise."""
+
+    def __repr__(self) -> str:
+        if not self:
+            return "(empty)"
+        # Render every field except param_details first; render that last
+        # as an indented sub-table since it's a list-of-dicts.
+        non_details = [(k, v) for k, v in self.items() if k != "param_details"]
+        width = max((len(k) for k, _ in non_details), default=0) + 2
+        lines: list[str] = []
+        for k, v in non_details:
+            if isinstance(v, list) and v and all(isinstance(x, str) for x in v):
+                if len(v) <= 4:
+                    lines.append(f"  {k.ljust(width)}{', '.join(v)}")
+                else:
+                    lines.append(f"  {k.ljust(width)}{v[0]}")
+                    for item in v[1:]:
+                        lines.append(f"  {' ' * width}{item}")
+            else:
+                lines.append(f"  {k.ljust(width)}{v}")
+
+        # Sub-table for parameter defaults and descriptions.
+        details = self.get("param_details")
+        if details:
+            name_w = max(len(d["name"]) for d in details)
+            def_w = max(len(d["default"]) for d in details)
+            lines.append("")
+            lines.append("  param_details (free-parameter priors):")
+            for d in details:
+                desc = d.get("description", "")
+                lines.append(f"    {d['name'].ljust(name_w)}  {d['default'].ljust(def_w)}  {desc}")
+        return "\n".join(lines)
+
     def _repr_html_(self) -> str:
         """Jupyter HTML repr — renders as a real HTML table in notebooks."""
         if not self:

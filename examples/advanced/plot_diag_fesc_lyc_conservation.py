@@ -5,10 +5,6 @@ Lyman continuum escape fraction conservation in Cue nebular model
 When ionizing photons escape (f_esc > 0), fewer LyC photons ionize the ISM
 within the galaxy, suppressing all nebular line emission proportionally:
 L(Hα) ∝ (1 − f_esc) × Q_H, where Q_H is the intrinsic ionizing photon rate.
-
-We build a young, dust-free, fixed-metallicity model and sweep f_esc from 0
-to 0.95 in 10 steps. If the Cue emulator respects energy conservation, the
-Hα luminosity should follow the theoretical (1 − f_esc) scaling exactly.
 """
 
 import warnings

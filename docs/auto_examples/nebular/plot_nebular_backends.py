@@ -9,7 +9,7 @@ Compare four nebular emission backends on identical star-forming spectra:
 3. **SSP-embedded** — nebular lines baked into SSP templates (BakedIn / Byler)
 4. **BakedIn** — wNE SSP with emission in continuum (compare line shapes with Cue)
 
-Shows [OIII] 5007 + H-beta and H-alpha regions. BakedIn and Cue have
+Shows [OIII] 5007 + H-beta and Hα regions. BakedIn and Cue have
 different ionization flexibility — BakedIn pulls lines from SSP metallicity
 grid, Cue samples ionization parameter (log U) independently.
 

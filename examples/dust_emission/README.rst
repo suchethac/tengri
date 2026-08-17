@@ -1,7 +1,4 @@
 Dust Emission
 =============
 
-How dust re-radiates absorbed starlight in the IR — PAH features and the
-q_PAH / U_min sweeps of Draine & Li templates, modified-blackbody
-temperature sweeps, and dives into the BOSA, THEMIS, PAHspec, and
-Astrodust (HD23) template grids.
+Dust emission templates auto-load from ``data/``; analytic fallbacks are not suitable for science. PAH features in Draine & Li templates (q_PAH and U_min sweeps). Temperature sweeps. Template libraries: BOSA, THEMIS, PAHspec, Astrodust (HD23).

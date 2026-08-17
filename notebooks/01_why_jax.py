@@ -16,7 +16,7 @@
 # %% [markdown]
 # # Why JAX — differentiable inference, in the language of SED fitting
 #
-# Traditional SED fitting (`emcee` + Prospector / Bagpipes / CIGALE) is
+# Traditional SED fitting (`emcee` + Prospector / BAGPIPES / CIGALE) is
 # gradient-free: at every step the sampler queries the likelihood and
 # guesses the next move. In 10–30 dimensions, with 10⁴ likelihood calls
 # per chain step, a single galaxy takes hours.

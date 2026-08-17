@@ -2,11 +2,11 @@
 Redshift constraint: spectroscopy vs photometry alone
 ======================================================
 
-When redshift is known from spectroscopy, the SED fit is more precise than
-when inferring redshift from photometry alone. This recipe generates mock
-photometry at a known redshift, then fits it with redshift fixed (spectroscopic)
-and redshift free (photometric only), showing how redshift degeneracies affect
-parameter recovery.
+Two fits on the same mock data: one with redshift fixed (spectroscopic
+known, free SFH/dust/met), one with redshift free (photometric only).
+The fixed-z fit converges to truth; free-z is degenerate with dust and SFH,
+showing why spectroscopy breaks the age-dust-redshift degeneracies
+that plague photometry-only fitting.
 """
 
 import os

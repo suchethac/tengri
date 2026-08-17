@@ -52,6 +52,38 @@ def _require_sps_home() -> None:
         )
 
 
+# The comparison is only meaningful if both sides read the same stellar
+# library. tengri downloads ``fsps_mist_miles_chabrier``; FSPS builds its own
+# from ``$SPS_HOME``, and which library that is was fixed when python-fsps was
+# compiled. MILES is a compile-time flag, not a runtime parameter --
+# ``src/sps_vars.f90`` ships ``#define C3K_LR 1`` and ``#define MILES 0``.
+_REQUIRED_LIBRARY = "miles"
+
+
+def _require_matching_library(sp) -> None:
+    """Fail loudly when FSPS was built against a library the grid does not match.
+
+    python-fsps >= 0.5.0 defaults to C3K low-resolution, so a plain
+    ``pip install fsps`` silently produces the wrong comparison: C3K-lr gives
+    1936 wavelengths over 13 metallicities against the grid's MILES 5994 over
+    12. Nothing raises -- the notebook simply reports a §1 SSP residual of
+    ~1e-1 where a matched pair gives ~1e-9, and every downstream section moves
+    with it. Rebuild with MILES enabled:
+
+        FFLAGS="-DMILES" pip install --no-binary fsps --force-reinstall fsps
+    """
+    libs = [x.decode() if isinstance(x, bytes) else str(x) for x in sp.libraries]
+    if not any(_REQUIRED_LIBRARY in x.lower() for x in libs):
+        raise RuntimeError(
+            f"FSPS was built with libraries {libs}, but this comparison needs "
+            f"'{_REQUIRED_LIBRARY}'. tengri's downloaded grid is MIST+MILES; a "
+            "C3K build compares two different stellar libraries and the §1 "
+            "residual degrades from ~1e-9 to ~1e-1 with no error raised. "
+            'Rebuild with: FFLAGS="-DMILES" pip install --no-binary fsps '
+            "--force-reinstall fsps"
+        )
+
+
 def _get_sp():
     """Return the cached :class:`fsps.StellarPopulation` (lazy, ~30 s once)."""
     global _SP
@@ -60,6 +92,7 @@ def _get_sp():
         import fsps
 
         _SP = fsps.StellarPopulation(zcontinuous=1, imf_type=_IMF_CHABRIER)
+        _require_matching_library(_SP)
     return _SP
 
 

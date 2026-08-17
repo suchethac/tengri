@@ -3,12 +3,16 @@
 .. _sphx_glr_auto_examples_sps:
 
 Stellar Population Synthesis
-=============================
+============================
 
 DSPS-based SSP grids: age, metallicity, and spectral properties.
 
 - ``plot_ssp_grid.py`` — SSP grid visualization (age, metallicity, spectrum)
 
+
+.. raw:: html
+
+  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
 
 
 .. raw:: html
@@ -19,7 +23,7 @@ DSPS-based SSP grids: age, metallicity, and spectral properties.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Young, metal-rich and old, metal-poor stellar populations can produce similar colors — a fundamental degeneracy in stellar population inference. This example builds a 2D grid of single-burst SSP-like models varying age (log10(t/Gyr) = -2 to 1.1) and metallicity (log10(Z/Zsun) = -2 to 0.4), then plots three SDSS broadband colors (u − r, g − r, NUV − r) as pcolormesh grids to visualize the degeneracy.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Per-SSP-library solar metallicity differs: MIST Z☉ = 0.0142, BC03/Padova Z☉ = 0.0190, PARSEC Z☉ = 0.0152, BASTI Z☉ = 0.0200. A given logzsol is only meaningful against its library.">
 
 .. only:: html
 
@@ -70,7 +74,7 @@ DSPS-based SSP grids: age, metallicity, and spectral properties.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Tengri assembles a galaxy SED out of named blocks that can each be toggled on or off at build time. We construct six models that successively add one more block, then overlay the rest-frame \nu L_\nu after each addition. Every block has a visible signature somewhere in the SED:">
+    <div class="sphx-glr-thumbcontainer" tooltip="Energy is conserved: dust attenuation removes UV/optical flux, which is re-radiated in the far-infrared (Dale 2014 templates restore the balance). IGM absorption (Inoue 2014) sculpts the rest-frame continuum below the Lyman break (912 Å).">
 
 .. only:: html
 
@@ -206,7 +210,7 @@ DSPS-based SSP grids: age, metallicity, and spectral properties.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Four-panel overview of the DSPS SSP grid: age evolution at fixed metallicity, metallicity evolution at fixed age, monochromatic flux vs age, and color-color diagram across the full grid. Shows how stellar populations age from UV-hot to IR-red as they cool.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Per-SSP-library solar metallicity differs: MIST Z☉ = 0.0142, BC03/Padova Z☉ = 0.0190, PARSEC Z☉ = 0.0152, BASTI Z☉ = 0.0200.">
 
 .. only:: html
 

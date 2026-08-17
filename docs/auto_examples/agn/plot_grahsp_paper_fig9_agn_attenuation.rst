@@ -43,7 +43,7 @@ the torus too. The intrinsic torus component is overplotted dashed black.
 
  .. code-block:: none
 
-    /tengri/examples/agn/plot_grahsp_paper_fig9_agn_attenuation.py:86: RuntimeWarning: divide by zero encountered in divide
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/examples/agn/plot_grahsp_paper_fig9_agn_attenuation.py:86: RuntimeWarning: divide by zero encountered in divide
       "top", functions=(lambda x: 2.99792458e14 / x, lambda nu: 2.99792458e14 / nu)
 
 

@@ -2,20 +2,15 @@
 z~3 Lyman-break galaxy U-dropout selection: color-color diagnosis
 ===================================================================
 
-Demonstrates the U-dropout (Lyman-break) selection technique for identifying
-galaxies at redshift z~3 based on rest-frame ultraviolet color-color selection.
-Generates 200 mock galaxies spanning z = 0.1–4.0 with both star-forming and
-quiescent star formation histories, each with light dust. Computes observed-frame
-U, G, R photometry and overlays the Steidel+1996 U-dropout selection box.
+Steidel+1996 U-dropout box is calibrated for a specific filter set and does
+not transfer to arbitrary filters: (U − G) > 1.0, (G − R) < 1.5,
+(U − G) > 1.5(G − R) + 0.3. True z~3 galaxies cluster inside; lower-redshift
+galaxies fall outside.
 
-The U-dropout box is defined by:
-  (U - G) > 1.0
-  (G - R) < 1.5
-  (U - G) > 1.5 * (G - R) + 0.3
+References
+----------
 
-True z~3 galaxies cluster inside the box; lower-redshift galaxies fall outside,
-demonstrating the technique's redshift selectivity. References: Steidel+1996,
-Madau+1996 dropout technique.
+Steidel et al. 1996, ApJL, 462, L17 (Lyman-break selection at z ~ 3).
 """
 
 import os

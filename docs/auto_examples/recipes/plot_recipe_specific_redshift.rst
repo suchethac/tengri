@@ -21,11 +21,11 @@
 Redshift constraint: spectroscopy vs photometry alone
 ======================================================
 
-When redshift is known from spectroscopy, the SED fit is more precise than
-when inferring redshift from photometry alone. This recipe generates mock
-photometry at a known redshift, then fits it with redshift fixed (spectroscopic)
-and redshift free (photometric only), showing how redshift degeneracies affect
-parameter recovery.
+Two fits on the same mock data: one with redshift fixed (spectroscopic
+known, free SFH/dust/met), one with redshift free (photometric only).
+The fixed-z fit converges to truth; free-z is degenerate with dust and SFH,
+showing why spectroscopy breaks the age-dust-redshift degeneracies
+that plague photometry-only fitting.
 
 .. GENERATED FROM PYTHON SOURCE LINES 11-128
 
@@ -37,43 +37,8 @@ parameter recovery.
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit__impl': FileNotFoundError: [Errno 2] No such file or directory: '~/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /tengri/src/tengri/forward/sed_model.py:7566: WildcardPartialFreeWarning: 'all_params: FREE' freed 2 of 7 parameters in group 'dust'. These have no declared prior, only Fixed defaults, so they stay pinned:
-      dust_Rv, dust_bump_strength, dust_delta, dust_f_obscuration, dust_slope
-    The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. dust={'Rv': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
-      spec = parse_groups(**groups)
-    /tengri/src/tengri/forward/sed_model.py:7566: WildcardPartialFreeWarning: 'all_params: FREE' freed 6 of 8 parameters in group 'sfh'. These have no declared prior, only Fixed defaults, so they stay pinned:
-      met_alpha_fe, met_logzsol_scatter
-    The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. sfh={'met_alpha_fe': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
-      spec = parse_groups(**groups)
-    /tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_lnu_filter_integral': FileNotFoundError: [Errno 2] No such file or directory: '~/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_val_and_grad': FileNotFoundError: [Errno 2] No such file or directory: '~/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_predict_photometry': FileNotFoundError: [Errno 2] No such file or directory: '~/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_predict_properties': FileNotFoundError: [Errno 2] No such file or directory: '~/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_single_step': FileNotFoundError: [Errno 2] No such file or directory: '~/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_scan_batch': FileNotFoundError: [Errno 2] No such file or directory: '~/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit__unstack': FileNotFoundError: [Errno 2] No such file or directory: '~/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit__threefry_split': FileNotFoundError: [Errno 2] No such file or directory: '~/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -198,7 +163,7 @@ parameter recovery.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (5 minutes 14.738 seconds)
+   **Total running time of the script:** (0 minutes 23.033 seconds)
 
 
 .. _sphx_glr_download_auto_examples_recipes_plot_recipe_specific_redshift.py:

@@ -33,7 +33,7 @@ The three agree at Seyfert luminosities and diverge by tenths of a dex
 at quasar L_2500. The left panel shows the alpha_OX(L_2500) curves; the
 right panel propagates the divergence into the X-ray spectrum at the
 upper end (L_bol = 1e46 erg/s, a luminous quasar), where the three
-predictions for the 2-10 keV luminosity differ by a factor of ~2.
+predictions for the 2–10 keV luminosity differ by a factor of ~2.
 
 References
 ----------
@@ -52,8 +52,21 @@ References
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/xray/plot_alpha_ox_relations.py:106: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
+      fig.tight_layout()
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/xray/plot_alpha_ox_relations.py:107: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
+      plt.savefig("plot_alpha_ox_relations.png", dpi=150, bbox_inches="tight")
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 

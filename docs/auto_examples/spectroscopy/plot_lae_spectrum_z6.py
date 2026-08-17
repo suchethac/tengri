@@ -3,7 +3,7 @@ Lyman-alpha emitter spectrum at z=6: IGM absorption and Lyα escape
 ==================================================================
 
 High-redshift Lyα emitter at z=6 with young age (~10 Myr), low metallicity
-(Z~0.1 Zsun), and minimal dust. The observed-frame spectrum (7000–13000 Å)
+(Z~0.1 Z☉), and minimal dust. The observed-frame spectrum (7000–13000 Å)
 reveals the redshifted Lyα emission line at 8512 Å, the Lyman break at
 6384 Å, characteristic IGM blue-wing absorption, and the rest-UV continuum.
 Demonstrates Lyα radiative transfer and reionization-era observability.

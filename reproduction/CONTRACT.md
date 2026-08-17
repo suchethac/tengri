@@ -35,6 +35,33 @@ reference codes themselves differ there. `save_fig` uses the single
 arr_t, *, name)`. If you improve a shared helper, propagate it to every
 comparison in the same PR.
 
+## 3a. Matched inputs, asserted
+
+A comparison is only meaningful if both sides read the same templates, and
+that condition can fail silently. Where a comparison drives a reference code
+*live*, assert the match in the driver and raise with the fix.
+
+`prospector` is the live case today — the only comparison that constructs an
+`fsps.StellarPopulation` rather than reading committed reference data. tengri
+downloads `fsps_mist_miles_chabrier`; FSPS builds its own grid from
+`$SPS_HOME`, and which spectral library that is was fixed when the Fortran was
+compiled (`src/sps_vars.f90` ships `#define C3K_LR 1`, `#define MILES 0`).
+python-fsps >= 0.5.0 installs a C3K-lowres wheel by default, so the documented
+`pip install fsps` yields 1936 wavelengths over 13 metallicities against the
+grid's MILES 5994 over 12. Nothing raises. The §1 SSP residual reports ~1e-1
+where a matched pair gives ~1e-9, every later section moves with it, and the
+notebook still renders 16 figures and exits 0 — a plausible-looking wrong
+audit. `prospector_driver._require_matching_library` now refuses that build.
+
+Comparisons reading committed reference data (`agnfitter`, `bagpipes`,
+`synthesizer`) cannot drift this way; their inputs are in the repo. `cigale`
+drives `pcigale` live but reads its BC03 pickle rather than generating a grid,
+and its §8 MILES swap is deliberate — the CIGALE reference stays
+CLOUDY-on-BC03. `prospect_r` drives ProSpect through `rpy2` against `BC03lr`;
+whether that matches tengri's `bc03_pdva_stelib_chabrier` is **unverified** —
+it needs an R install with ProSpect to check, and deserves the same assertion
+once someone has one.
+
 ## 4. Figures
 
 Every saved PNG is prefixed with its slug (`cigale_*`, `bagpipes_*`,

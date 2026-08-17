@@ -1,12 +1,6 @@
 """
 Rest-frame spectrum with stellar population ages
 ==================================================
-
-Compare the rest-frame spectrum of a young and old galaxy at fixed redshift.
-Shows how the optical continuum color, Balmer decrement, and absorption line
-strengths depend on mean stellar age, holding metallicity and dust fixed.
-
-Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
 """
 
 import os

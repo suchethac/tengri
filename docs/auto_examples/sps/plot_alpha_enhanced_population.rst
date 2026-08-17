@@ -45,9 +45,9 @@ References: Thomas et al. 2005 (MNRAS 357, 1113); Conroy & van Dokkum 2012 (ApJ 
 
  .. code-block:: none
 
-    /tengri/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
       return load_ssp_data(str(candidate))
-    /tengri/src/tengri/forward/sed_model.py:1111: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.01 Gyr is narrower than the SSP grid spacing 0.612 Gyr at peak sfh_tsnorm_peak_lbt_gyr=5 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.612 for smooth behavior.
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/forward/sed_model.py:1111: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.01 Gyr is narrower than the SSP grid spacing 0.612 Gyr at peak sfh_tsnorm_peak_lbt_gyr=5 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.612 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
       [α/Fe] = 0.0 dex (typical for elliptical: 0.0–0.6)
       [α/Fe] = 0.2 dex (typical for elliptical: 0.0–0.6)

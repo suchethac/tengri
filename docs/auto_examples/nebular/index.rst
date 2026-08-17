@@ -5,12 +5,21 @@
 Nebular Emission
 ================
 
-Gas-phase emission from H II regions and the diffuse ionized medium — the
-Cue and Cloudy-grid backends and how to swap between them, BPT and
-strong-line metallicity diagnostics, the ionization parameter, gas density
-and escape fraction, Lyman-alpha and line widths, and luminosity scalings
-such as the Halpha–SFR calibration.
+Emission lines are vacuum throughout: Hα is 6564.61 Å, not the 6562.8 Å air
+value. Mixing the two shifts every line centroid.
 
+``neb={'type': ...}`` takes ``ssp``, ``cue``, ``cb19``, ``cloudy`` or ``none``.
+The default, ``ssp``, uses the emission already baked into a with-nebular (wNE)
+SSP grid. The live backends instead compute it, and expect a bare stellar grid.
+Feed a bare grid to the baked-in path and both continuum and line fluxes come
+out low, with no error raised.
+
+Gas-phase metallicity is its own knob and does not follow the stellar one.
+
+
+.. raw:: html
+
+  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
 
 
 .. raw:: html
@@ -55,7 +64,7 @@ such as the Halpha–SFR calibration.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The Baldwin-Phillips-Terlevich (BPT) diagram ([OIII]/Hβ vs [NII]/Hα) separates ionization mechanisms by tracing distinct loci.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Emission lines are vacuum throughout: [OIII] = 5008.24 Å, [NII] = 6585.28 Å, Hα = 6564.61 Å, Hβ = 4862.68 Å. Overlays Kewley+2001 SF/AGN demarcation and Kauffmann+2003 SF/composite line.">
 
 .. only:: html
 
@@ -191,7 +200,7 @@ such as the Halpha–SFR calibration.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="A 1-D log Z_gas sweep on the SED scale, complementing the 2-D atlas in plot_cue_parameter_atlas.py and the line-ratio projection in plot_strong_line_metallicity_diagnostics.py. Reader sees how every strong optical line moves together as Z_gas climbs, with [N II]/Halpha and [O III]/Hbeta the textbook diagnostics.">
+    <div class="sphx-glr-thumbcontainer" tooltip="A 1-D log Z_gas sweep on the SED scale, complementing the 2-D atlas in plot_cue_parameter_atlas.py and the line-ratio projection in plot_strong_line_metallicity_diagnostics.py. Reader sees how every strong optical line moves together as Z_gas climbs, with [N II]/Hα and [O III]/Hbeta the textbook diagnostics.">
 
 .. only:: html
 
@@ -208,7 +217,7 @@ such as the Halpha–SFR calibration.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Lyman-alpha (Lyα) equivalent width (EW) traces stellar population age through the presence and strength of massive O stars. We construct a sequence of constant star-formation-rate (CSF) models with ages ranging from 1 Myr to 30 Myr across three gas metallicities (Z = 0.1, 0.5, 1.0 Zsun), compute the rest-frame Lyα emission line luminosity and the underlying continuum at 1216 Å, then derive EW(Lyα) = L(Lyα) / L_continuum.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Lyα rest-frame wavelength is 1216 Å (vacuum). EW peaks at 3–5 Myr when O-type stars dominate ionization, then decays past 10 Myr. Higher metallicity suppresses ionizing photon production, reducing peak EW.">
 
 .. only:: html
 

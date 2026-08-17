@@ -2,9 +2,10 @@
 Load and fit photometry from CSV
 ================================
 
-How do I load measured photometry from a table and fit it? This recipe
-generates mock photometry for 3 galaxies and fits each one independently
-with a MAP fit, demonstrating the workflow for catalog-scale SED fitting.
+Mock 3 galaxies, fit each independently with MAP. The workflow is: sample
+true parameters → generate mock fluxes + noise → fit with free SFH/dust and
+fixed redshift. Demonstrates vectorizing catalog-scale fits when redshift is
+already known (e.g., spectroscopy).
 """
 
 import os

@@ -49,7 +49,7 @@ References:
 
  .. code-block:: none
 
-    /tengri/src/tengri/parameters/parameters.py:684: RecipeWarning: Composable AGN: every block selector is 'none' — the AGN SED will be identically zero. Pick at least a disc block to produce non-trivial output.
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-805/src/tengri/parameters/parameters.py:684: RecipeWarning: Composable AGN: every block selector is 'none' — the AGN SED will be identically zero. Pick at least a disc block to produce non-trivial output.
       validate_block_recipe(
 
 

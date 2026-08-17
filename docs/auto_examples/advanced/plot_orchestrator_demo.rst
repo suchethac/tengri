@@ -21,17 +21,11 @@
 Component Orchestrator End-to-End
 ==================================
 
-TODO[examples-sweep]: This script uses low-level component orchestration
-(build_components, run_components) which is experimental Phase II-2.6 API
-intended for infrastructure use, not recommended for user-facing examples.
+Low-level component orchestration using build_components and run_components.
+For production use, see plot_joint_fit.py and plot_radio_xray.py which use
+the SEDModel.build() nested-dict grammar.
 
-Recommended replacement: Use SEDModel.build() with recipe-based composition.
-See plot_joint_fit.py and plot_radio_xray.py for the public-API path.
-
-The orchestrator layer may change; forward-compatible SED building goes
-through the SEDModel.build() nested-dict grammar and recipes.
-
-.. GENERATED FROM PYTHON SOURCE LINES 15-144
+.. GENERATED FROM PYTHON SOURCE LINES 9-136
 
 
 
@@ -129,13 +123,11 @@ through the SEDModel.build() nested-dict grammar and recipes.
             "xray_gamma_agn": jnp.asarray(1.8),
             "xray_E_cut": jnp.asarray(300.0),
             "xray_delta_alpha_ox": jnp.asarray(-1.4),
-            # log10 N_H [cm^-2] photoelectric absorption (#768); 20 = unobscured.
+            # log10 N_H [cm^-2] photoelectric absorption; 20 = unobscured.
             "xray_log_nh": jnp.asarray(20.0),
-            # Lehmer+2016 XRB luminosity offsets [dex], read since #1706. 0.0 is the
-            # declared default: the term scales by 10**offset, so this is no offset.
+            # XRB luminosity offsets [dex]; Lehmer+2016. 0.0 = no offset.
             # Every xray_* parameter is indexed directly by the component, so this
-            # hand-rolled dict -- the point of the low-level orchestrator API -- must
-            # supply each one; a missing key is a KeyError, not a silent default.
+            # hand-rolled dict supplies each one; a missing key raises KeyError.
             "xray_det_hmxb": jnp.asarray(0.0),
             "xray_det_lmxb": jnp.asarray(0.0),
             "redshift": jnp.asarray(0.0),
@@ -189,11 +181,6 @@ through the SEDModel.build() nested-dict grammar and recipes.
     except ImportError as e:
         print(f"Orchestrator API not available: {e}")
         print("Use SEDModel.build() instead (see examples/quickstart and examples/advanced).")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 5.260 seconds)
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_orchestrator_demo.py:

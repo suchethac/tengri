@@ -16,8 +16,6 @@
 # %% [markdown]
 # # Reproducing BAGPIPES's physics with tengri
 #
-# BAGPIPES (Carnall et al. 2018) is the reference code for galaxy SED
-# fitting at high redshift and rest-UV continuum work at cosmic noon.
 # This notebook compares its physics modules — stellar populations,
 # parametric and non-parametric star formation histories, dust attenuation
 # (Calzetti, Cardelli, Salim, CF00), nebular emission (Cloudy v25), dust
@@ -61,6 +59,7 @@ from reproduction.bagpipes._drivers import bagpipes_driver as B, units as U
 
 import tengri
 from tengri import FIXED, Fixed, SEDModel, load_ssp_data
+from tengri.utils.physics_constants import C_AA, L_SUN, LOG10_ZSUN
 
 # Force the inline backend so figures embed on (re-)render regardless of the
 # ambient MPLBACKEND. A non-inline backend (e.g. Agg) drops the save_fig()
@@ -85,12 +84,11 @@ print(
     f"rel_err = {_unit_check['rel_err']:.2e}  (target < 1e-3)"
 )
 
-# Metallicity pin — BAGPIPES `metallicity=1.0` is Z/Z_⊙ = 1; the bundled
-# grid uses Z_⊙ = 10**(-1.848) (Asplund+2009) at HDU `ZMET_1.000ZSOL`.
+# Metallicity pin — BAGPIPES `metallicity=1.0` is Z/Z_⊙ = 1 against the same
+# Asplund+2009 Z_⊙ that `LOG10_ZSUN` carries, at HDU `ZMET_1.000ZSOL`.
 # tengri's `met_logzsol = log10(Z/Z_⊙) = 0` is the bit-aligned counterpart.
-LOG10_ZSUN = -1.848
 MET_LOGZSOL = 0.0
-MET_FIDUCIAL = {"logzsol": Fixed(MET_LOGZSOL), "*": FIXED}
+MET_FIDUCIAL = {"logzsol": Fixed(MET_LOGZSOL), "all_params": FIXED}
 
 # Notebook-vs-script compatible: ``__file__`` is undefined when this is
 # run via nbclient (the kernel's resources path is set to the
@@ -123,6 +121,15 @@ def _assert_comparable(arr_ref, arr_t, *, name: str) -> None:
 #
 # BAGPIPES' BC03+MILES Kroupa templates re-shaped into the DSPS HDF5
 # layout that tengri reads — same numerical SSPs on both sides.
+#
+# The repackaged grid is **not** in the repository: `.gitignore` excludes
+# `*.h5`, so it is rebuilt from whatever BAGPIPES is installed. The §13
+# magnitudes below moved by up to 0.007 mag when it was rebuilt under
+# BAGPIPES 1.3.6, against a committed run made from an earlier build — small,
+# but it is a published number that the committed source alone does not
+# determine. Read the version the run actually used off the printout, and
+# treat a §13 difference of this size as a template-version difference until
+# the versions are shown to match.
 
 # %%
 ssp_file = _HERE / "_drivers" / "data" / "bc03_miles_from_bagpipes.h5"
@@ -135,7 +142,8 @@ ssp = load_ssp_data(str(ssp_file.resolve()))
 print(
     f"BC03+MILES Kroupa SSP: {ssp.ssp_wave.shape[0]} wavelengths, "
     f"{ssp.ssp_lgmet.shape[0]} metallicities, "
-    f"{ssp.ssp_lg_age_gyr.shape[0]} age bins."
+    f"{ssp.ssp_lg_age_gyr.shape[0]} age bins.\n"
+    f"repackaged from BAGPIPES {B.bagpipes_version()}"
 )
 
 
@@ -150,13 +158,19 @@ print(
 # lower panel shows the relative residual `|tengri − BAGPIPES| /
 # BAGPIPES`, ~1e-7 from float32 round-trip through the HDF5 repackaging — both
 # codes consume identical numerics.
+#
+# **Verification Status:** CROSSVAL (2 tests — thin) — CSP integral — CIC age kernel (default)
 
 # %%
 from astropy.io import fits as _fits
 
 ages_yr = [1e6, 1e7, 1e8, 1e9, 1e10]
-L_SUN = 3.826e33  # erg/s — match the value bagpipes hard-codes
-_C_AA = 2.998e18  # speed of light [Å/s]
+# BAGPIPES hard-codes its own solar luminosity, so its grid must be scaled by
+# that value and tengri's by tengri's. Using one for both is what the first
+# version of this cell did: the 0.05% offset cancels in the ratio below and is
+# therefore invisible here, but it is wrong the moment anything absolute is
+# reported. docs-const: intentional — upstream constant, not tengri's.
+L_SUN_BAGPIPES = 3.826e33  # docs-const: intentional — BAGPIPES' own L_sun, not tengri's
 
 _grid_path = Path(B.__file__).resolve().parent / "data"  # not used directly
 _bagpipes_grid_dir = Path(__import__("bagpipes").config.grid_dir)
@@ -170,7 +184,7 @@ bagpipes_ssp = []
 for age_yr in ages_yr:
     ia = int(np.argmin(np.abs(_age_yr_native - age_yr)))
     # Lsun/Å/Msun → erg/s/Hz/Msun: × λ²/c × L_sun
-    lnu = _flux_zsol_aa[ia] * _wave_aa**2 / _C_AA * L_SUN
+    lnu = _flux_zsol_aa[ia] * _wave_aa**2 / C_AA * L_SUN_BAGPIPES
     bagpipes_ssp.append((_wave_aa, lnu))
 
 i_zsun = int(np.argmin(np.abs(ssp.ssp_lgmet - LOG10_ZSUN)))
@@ -214,8 +228,7 @@ save_fig("bagpipes_01_ssp_bc03_miles.png")
 # %% [markdown]
 # ## §2 Parametric star formation histories — delayed-τ
 #
-# BAGPIPES' `delayed` SFH is the same closed-form τ-delayed shape
-# tengri uses: `SFR(t) ∝ t · exp(−t/τ)`, peaking at cosmic time `t = τ`.
+# tengri uses: `SFR(t) ∝ t · exp(−t/τ)`.
 # Both integrate to the same formed mass — BAGPIPES via `massformed`,
 # tengri via `log_total_mass`.
 #
@@ -223,6 +236,8 @@ save_fig("bagpipes_01_ssp_bc03_miles.png")
 # `SEDModel` on the 256-point log-spaced lookback grid the SFH-convolution
 # code uses. The printed `∫SFR dt` check confirms the area integrates to
 # `10**log_total_mass`.
+#
+# **Verification Status:** PARTIAL (11/33) — Parametric SFH family physics
 
 # %%
 LOG_MASS_FIDUCIAL = 10.0
@@ -250,9 +265,9 @@ _m_sfh = SEDModel.build(
         "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
         "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
-        "*": FIXED,
+        "all_params": FIXED,
     },
-    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
 _state_sfh = _m_sfh.predict_state({})
@@ -310,13 +325,15 @@ save_fig("bagpipes_02_sfh_delayed.png")
 # takes an explicit `age_gyr` anchor and converts internally using the
 # same method as the delayed-τ case. Anchoring to the BAGPIPES age of
 # the universe matches the curves directly.
+#
+# **Verification Status:** PARTIAL (11/33) — Parametric SFH family physics
 
 # %%
 DPL_ALPHA = 1.5
 DPL_BETA = 1.0
 DPL_TAU_GYR = 3.0
 
-# Build the bagpipes side directly via model_galaxy.sfh inspection.
+# Build the BAGPIPES side directly via model_galaxy.sfh inspection.
 _comp_b_dpl = {
     "redshift": 0.0,
     "dblplaw": {
@@ -346,9 +363,9 @@ m_dpl = SEDModel.build(
         "tau_gyr": Fixed(DPL_TAU_GYR),
         "age_gyr": Fixed(AGE_OF_UNIVERSE_GYR),
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
-        "*": FIXED,
+        "all_params": FIXED,
     },
-    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
 s_dpl = m_dpl.predict_state({})
@@ -401,13 +418,11 @@ print(
 # log-space width `width_gyr` (dex). To match BAGPIPES' linear-time FWHM:
 # `width_dex ≈ FWHM/(2.355 × tmax × ln 10)`.
 #
-# Like `dpl`, tengri's `lnorm` anchors to cosmic time since formation via
-# `age_gyr`, so `peak_gyr` is the cosmic-age peak — matching BAGPIPES when
-# fed the BAGPIPES age of the universe.
 #
-# tengri's `lnorm` is a log10-space Gaussian, not the exact Carnall+2018
-# 1/T ln-space lognormal. The detailed wing shape differs slightly; the
-# functional form prioritizes simplicity and numerical stability.
+# **Caveat:** tengri's `lnorm` is a log10-space Gaussian, not the exact Carnall+2018 1/T ln-space
+# lognormal — the detailed wing shape differs slightly.
+#
+# **Verification Status:** PARTIAL (11/33) — Parametric SFH family physics
 
 # %%
 LN_TMAX_GYR = 4.0
@@ -436,9 +451,9 @@ m_ln = SEDModel.build(
         "width_gyr": Fixed(LN_WIDTH_DEX),
         "age_gyr": Fixed(AGE_OF_UNIVERSE_GYR),
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
-        "*": FIXED,
+        "all_params": FIXED,
     },
-    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
 s_ln = m_ln.predict_state({})
@@ -491,6 +506,8 @@ print(
 # BAGPIPES indexes `dsfr_i` from oldest to youngest; tengri's `ratio_i` indexes
 # youngest to oldest. The panel below reverses the BAGPIPES array so both panels
 # show the same SFH shape.
+#
+# **Verification Status:** PARTIAL (5/43) — Non-parametric continuity / Dirichlet
 
 # %%
 # Bin edges shared between codes. Both want them in **increasing**
@@ -532,9 +549,9 @@ for row, (label, ratios) in enumerate(_cases):
             "type": "continuity",
             "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
             **{f"ratio_{i}": Fixed(ratios[i]) for i in range(6)},
-            "*": FIXED,
+            "all_params": FIXED,
         },
-        dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+        dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
         redshift=Fixed(0.0),
     )
     s_c = m_c.predict_state({})
@@ -586,9 +603,9 @@ m_stellar = SEDModel.build(
         "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
         "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
-        "*": FIXED,
+        "all_params": FIXED,
     },
-    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
 s_stellar = m_stellar.predict_state({})
@@ -651,15 +668,12 @@ if _ratios.size:
 # %% [markdown]
 # ## §5 Metallicity sensitivity (chemical enrichment, single-Z form)
 #
-# BAGPIPES exposes `metallicity` (Z / Z☉) on every SFH block; tengri
-# carries the same knob via `logzsol = log10(Z / Z☉)`. Both codes also
-# support time-varying Z (BAGPIPES `metallicity_bins`; tengri's
-# `chemical_enrichment_history`), but the simplest reproducible test
-# is the single-Z response: sweep `Z ∈ {0.2, 1.0, 2.5} Z☉` at the
-# fiducial 5 Gyr delayed-τ SFH and overlay the optical-NIR stellar
-# continuum. Both codes track the standard
-# age-metallicity-degeneracy direction: high-Z → redder + deeper
-# absorption features.
+# BAGPIPES exposes `metallicity` (Z / Z☉) on every SFH block; tengri carries
+# the same knob via `logzsol = log10(Z / Z☉)`. Both support time-varying Z
+# (BAGPIPES `metallicity_bins`, tengri `chemical_enrichment_history`), but the
+# single-Z response is the reproducible test: sweep `Z ∈ {0.2, 1.0, 2.5} Z☉` at
+# the fiducial 5 Gyr delayed-τ SFH and overlay the optical-NIR continuum.
+#
 
 # %%
 _Z_VALUES = [0.2, 1.0, 2.5]
@@ -689,15 +703,15 @@ for color, z, logz in zip(_colors, _Z_VALUES, _logzsol_values):
     ax_b.plot(w_b_z, L_b_z, color=color, linewidth=1.7, label=f"Z = {z:g} Z⊙")
     m_z = SEDModel.build(
         ssp_data=ssp,
-        met={"logzsol": Fixed(logz), "*": FIXED},
+        met={"logzsol": Fixed(logz), "all_params": FIXED},
         sfh={
             "type": "delayed",
             "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
             "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
             "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
-            "*": FIXED,
+            "all_params": FIXED,
         },
-        dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+        dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
         redshift=Fixed(0.0),
     )
     s_z = m_z.predict_state({})
@@ -716,6 +730,8 @@ save_fig("bagpipes_15_metallicity_sweep.png")
 # Salim+2018) compared against tengri's `calzetti`, `cardelli`, `noll09`, and
 # `salim`. Both evaluate the analytic laws directly, normalized to `A(λ)/A_V`
 # at 5500 Å.
+#
+# **Verification Status:** CROSSVAL — Attenuation law library
 
 # %%
 from tengri.dust import list_laws
@@ -727,7 +743,7 @@ _law_pairs = [
     ({"type": "CF00", "Av": 1.0, "eta": 2.0, "n": -0.7}, "noll09", "Charlot & Fall 2000"),
     ({"type": "Salim", "Av": 1.0, "delta": 0.0, "B": 0.0}, "salim", "Salim+2018 (δ=0)"),
 ]
-_tengri_laws = list_laws(headline=False).to_dict("fn")  # {name: fn(wave_aa) -> k at tau_V=1}
+_tengri_laws = list_laws(headline=False).to_dict('fn')  # {name: fn(wave_aa) -> k at tau_V=1}
 wave_law = np.logspace(np.log10(1000.0), np.log10(50000.0), 2000)
 
 
@@ -770,13 +786,14 @@ save_fig("bagpipes_04_dust_attenuation.png")
 # %% [markdown]
 # ## §7 Dust attenuation applied
 #
-# Fiducial galaxy with and without attenuation. BAGPIPES applies Calzetti
 # as a single screen at A_V = 1.0. tengri matches this by putting the full
 # A_V on the diffuse component (attenuates all ages equally) and zeroing the
 # birth-cloud term: `τ_diff = A_V/1.086`, `τ_bc = 0`. tengri's `τ_bc` is
 # age-gated to stars younger than ~10 Myr, so this configuration ensures the
 # old stellar population receives proper attenuation matching the BAGPIPES
 # single-screen treatment.
+#
+# **Verification Status:** PARTIAL (2/88) — Two-component attenuation (birth cloud + diffuse)
 
 # %%
 AV_FIDUCIAL = 1.0
@@ -807,9 +824,9 @@ m_nd = SEDModel.build(
         "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
         "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
-        "*": FIXED,
+        "all_params": FIXED,
     },
-    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
 s_nd = m_nd.predict_state({})
@@ -822,7 +839,7 @@ m_d = SEDModel.build(
         "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
         "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
-        "*": FIXED,
+        "all_params": FIXED,
     },
     dust={
         "type": "two_component",
@@ -830,7 +847,7 @@ m_d = SEDModel.build(
         "law_diff": "calzetti",
         "tau_bc": Fixed(TAU_BC),
         "tau_diff": Fixed(TAU_DIFF),
-        "*": FIXED,
+        "all_params": FIXED,
     },
     redshift=Fixed(0.0),
 )
@@ -861,16 +878,18 @@ save_fig("bagpipes_05_dust_attenuation_applied.png")
 # %% [markdown]
 # ## §8 Dust IR re-emission and energy balance
 #
-# Absorbed stellar UV/optical reappears in the IR. BAGPIPES uses the
+# BAGPIPES uses the
 # Draine & Li (2007) template family parametrized by `(qpah, umin, gamma)`;
 # tengri uses its own DL07 template grid with energy balance enforced to
 # floating point.
 #
 # At matched parameters, both DL07 SEDs agree in shape and bolometry: both
-# peak near ~130 µm and track each other to ~6% across 30–100 µm. The
+# peak near ~130 μm and track each other to ~6% across 30–100 μm. The
 # agreement depends on proper PDR luminosity weighting: `gamma` is a dust-mass
 # fraction, but PDR dust emits `R ≈ 14×` more per unit mass (DL07 Eq. 33),
 # so a 5% mass fraction carries ~40% of the luminosity.
+#
+# **Verification Status:** CROSSVAL — Dust IR emission vs BAGPIPES
 
 # %%
 QPAH_FIDUCIAL = 2.5
@@ -908,7 +927,7 @@ m_ir = SEDModel.build(
         "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
         "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
-        "*": FIXED,
+        "all_params": FIXED,
     },
     dust={
         "type": "two_component",
@@ -921,9 +940,9 @@ m_ir = SEDModel.build(
             "qpah": Fixed(QPAH_FIDUCIAL),
             "umin": Fixed(UMIN_FIDUCIAL),
             "gamma_dl": Fixed(GAMMA_FIDUCIAL),
-            "*": FIXED,
+            "all_params": FIXED,
         },
-        "*": FIXED,
+        "all_params": FIXED,
     },
     redshift=Fixed(0.0),
 )
@@ -988,9 +1007,11 @@ save_fig("bagpipes_06_dust_ir.png")
 # metallicity or ionization parameter. Both codes hit it (2.82 vs 2.83), which
 # is what certifies that the ionizing continuum driving Cue is the right one.
 # It read **0.41** for as long as a float32 SSP grid was silently overflowing
-# the erg/s mass scale into that ionizing SED (#1099) — a corruption worth
+# the erg/s mass scale into that ionizing SED — a corruption worth
 # 50 orders of magnitude that left the stellar continuum, and therefore every
 # other panel in this notebook, looking perfect.
+#
+# **Verification Status:** CROSSVAL — Cloudy grid / Cue vs FSPS baked-in
 
 # %%
 # Young 10 Myr constant-SFR fiducial — the regime where nebular
@@ -998,7 +1019,7 @@ save_fig("bagpipes_06_dust_ir.png")
 # evolved stellar continuum.
 NEB_AGE = 0.01  # Gyr
 
-# Give bagpipes a dense spec_wavs grid through the optical so its
+# Give BAGPIPES a dense spec_wavs grid through the optical so its
 # Cloudy-v25 lines aren't smeared into broad bumps by the coarse default
 # 747-point grid (which spans 1 Å to 1e8 Å — far too sparse around Hα).
 _neb_spec_wavs = np.arange(900.0, 7000.0, 1.0)
@@ -1032,10 +1053,10 @@ m_neb_on = SEDModel.build(
         "start_gyr": Fixed(NEB_AGE),
         "end_gyr": Fixed(0.0),
         "log_total_mass": Fixed(9.0),
-        "*": FIXED,
+        "all_params": FIXED,
     },
-    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
-    neb={"type": "cue", "neb_logU": Fixed(-2.0), "neb_logZ_gas": Fixed(0.0), "*": FIXED},
+    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+    neb={"type": "cue", "neb_logU": Fixed(-2.0), "neb_logZ_gas": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
 s_neb_on = m_neb_on.predict_state({})
@@ -1048,9 +1069,9 @@ m_neb_off = SEDModel.build(
         "start_gyr": Fixed(NEB_AGE),
         "end_gyr": Fixed(0.0),
         "log_total_mass": Fixed(9.0),
-        "*": FIXED,
+        "all_params": FIXED,
     },
-    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
 s_neb_off = m_neb_off.predict_state({})
@@ -1131,6 +1152,8 @@ save_fig("bagpipes_08_nebular.png")
 # Hα width at `veldisp = 150 km/s` is σ_eff = sqrt(127² + 150²) ≈ 197 km/s,
 # FWHM ≈ 10 Å. tengri's `velocity_broaden` operates on unbinned input
 # and returns the pure-Gaussian profile at σ = 150 km/s (FWHM ≈ 7.7 Å).
+#
+# **Verification Status:** CROSSVAL — Spectroscopy forward model
 
 # %%
 VELDISP_KMS = 150.0
@@ -1259,7 +1282,7 @@ m_full = SEDModel.build(
         "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
         "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
-        "*": FIXED,
+        "all_params": FIXED,
     },
     dust={
         "type": "two_component",
@@ -1272,11 +1295,11 @@ m_full = SEDModel.build(
             "qpah": Fixed(QPAH_FIDUCIAL),
             "umin": Fixed(UMIN_FIDUCIAL),
             "gamma_dl": Fixed(GAMMA_FIDUCIAL),
-            "*": FIXED,
+            "all_params": FIXED,
         },
-        "*": FIXED,
+        "all_params": FIXED,
     },
-    neb={"type": "cue", "neb_logU": Fixed(-2.0), "neb_logZ_gas": Fixed(0.0), "*": FIXED},
+    neb={"type": "cue", "neb_logU": Fixed(-2.0), "neb_logZ_gas": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
 s_full = m_full.predict_state({})
@@ -1307,6 +1330,8 @@ save_fig("bagpipes_07_panchromatic.png")
 # Visible departures are single-pixel spikes at Lyman-series edges, where each
 # code samples the step at slightly offset grid positions. The DLA term governs
 # Lyman-continuum opacity below 912 Å.
+#
+# **Verification Status:** CROSSVAL — Inoue+2014 IGM transmission
 
 # %%
 Z_FIDUCIAL_IGM = 4.0
@@ -1414,11 +1439,6 @@ print(
 # %% [markdown]
 # ## §13 Photometry — SDSS ugriz AB magnitudes
 #
-# Photometry integrates the panchromatic SED through filters to produce
-# observables. BAGPIPES uses `filt_list` + `model_galaxy.photometry`;
-# tengri uses `tengri.Photometry`. Both use the same `∫ F_ν T dν / ∫ T dν`
-# band-averaged flux definition.
-#
 # Using the same SDSS filter set (tengri bundled), the §7 panchromatic SED
 # is convolved and placed at 10 pc. Differences trace back to that SED, not to
 # the integration — both codes use the same band-averaged flux definition.
@@ -1434,6 +1454,8 @@ print(
 # is trained on, and the two backends genuinely part company there. What keeps
 # the photometric consequence down to 0.05 mag is not agreement: it is that
 # nebular light is a small fraction of an old galaxy's broadband flux.
+#
+# **Verification Status:** CROSSVAL — Photometry projection
 
 # %%
 from tengri.filters import load_filter
@@ -1530,7 +1552,7 @@ m_full_nonneb = SEDModel.build(
         "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
         "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
-        "*": FIXED,
+        "all_params": FIXED,
     },
     dust={
         "type": "two_component",
@@ -1543,9 +1565,9 @@ m_full_nonneb = SEDModel.build(
             "qpah": Fixed(QPAH_FIDUCIAL),
             "umin": Fixed(UMIN_FIDUCIAL),
             "gamma_dl": Fixed(GAMMA_FIDUCIAL),
-            "*": FIXED,
+            "all_params": FIXED,
         },
-        "*": FIXED,
+        "all_params": FIXED,
     },
     redshift=Fixed(0.0),
 )
@@ -1626,9 +1648,8 @@ for _b, _f, _mf, _mn, _mfn, _mnn in zip(
     _nb = _band_avg(w_b_full, _L_b_neb_only, _f)
     _nt = _band_avg(_w_t_full, _L_t_neb_only, _f)
     print(
-        f"{_b:8s} {_d_full:+8.3f} {_d_nn:+9.3f} {_d_full - _d_nn:+11.3f}  {_nt / _nb:.2f}×"
-        if _nb > 0
-        else f"{_b:8s} {_d_full:+8.3f}"
+        f"{_b:8s} {_d_full:+8.3f} {_d_nn:+9.3f} {_d_full - _d_nn:+11.3f}"
+        f"  {_nt / _nb:.2f}×" if _nb > 0 else f"{_b:8s} {_d_full:+8.3f}"
     )
 
 
@@ -1637,13 +1658,16 @@ for _b, _f, _mf, _mn, _mfn, _mnn in zip(
 #
 # Timing a single forward evaluation on the fiducial galaxy (τ-delayed SFH,
 # Calzetti at A_V = 1, DL07 IR, Cloudy v25 / Cue v17 nebular, Inoue14 IGM).
-# Both codes complete a full SED in ~10² ms. The real tengri speed advantage
-# is gradients: `jax.grad` differentiates the JIT'd objective at the cost of
-# roughly one extra forward pass, while non-JAX codes require `2 × n_params`
-# finite-difference passes. For a 10-parameter model, that is a 20× swing.
+# Both codes complete a full SED in ~10² ms. The real tengri advantage is
+# gradients: `jax.grad` differentiates the JIT'd objective for roughly one
+# extra forward pass, where a non-JAX code needs `2 × n_params`
+# finite-difference passes — a 20× swing at ten parameters.
 #
-# Timings depend on JAX cache state, CPU, and cache warmth; the numbers below
-# are illustrative orders of magnitude, not a benchmark.
+# The forward numbers below are not a benchmark and should not be quoted as
+# one. They move with CPU load and JAX cache warmth: three runs of this cell
+# on one quiet machine gave 78, 85 and 92 ms for the same BAGPIPES call, so
+# the printed ratio swings between 0.6× and 0.8× without anything changing.
+# Read them as "same order of magnitude", which is the only claim they carry.
 
 # %%
 import time
@@ -1692,12 +1716,12 @@ print(f"§14 speedup tengri / BAGPIPES: {_t_b_per / _t_t_per:.1f}×")
 #
 # Full forward model at once: tengri configured to emulate BAGPIPES end to end
 # (BC03+MILES SSP, τ-delayed SFH, Calzetti dust, DL07 IR, and nebular) overlaid
-# on BAGPIPES at matched parameters (§11 configuration). The top panel shows
-# the overlay; the bottom shows fractional residual `tengri / BAGPIPES − 1` with
 # the ±25% band shaded. Optical agreement is reported as a normalization ratio
 # and its robust 16–84% spread (tracking the stellar continuum). Emission lines
 # and sub-912 Å are sparse points the percentile rejects as outliers; the
 # broadband gap is quantified in §13.
+#
+# **Verification Status:** PARTIAL (68/126) — Absolute SED normalization
 
 # %%
 import chex
@@ -1805,12 +1829,10 @@ plt.show()
 #   oldest→youngest, tengri young→old).
 # - **§4 stellar SED.** tengri / BAGPIPES median ratio in the optical
 #   ≈ 1.010 ± 0.001 — a flat ~1 % systematic at matched SFH and SSP.
-# - **§5 metallicity sensitivity.** Both codes track the standard
-#   age-metallicity-degeneracy direction. Visual match.
 # - **§6–§8 dust attenuation + IR.** Calzetti curves overlap; CF00 /
 #   Cardelli / Salim differ by construction. With the §7 single-screen
 #   mapping the attenuated optical matches to ~1 %, and the DL07 IR matches
-#   in shape (both peak ~130 µm; 30–100 µm and submm to ~6 %).
+#   in shape (both peak ~130 μm; 30–100 μm and submm to ~6 %).
 # - **§9 nebular.** Cloudy v25 (BAGPIPES) vs Cloudy v17 (Cue, tengri):
 #   tengri Hα ≈ 3.6 × BAGPIPES Hα.
 # - **§10 LSF.** tengri's `velocity_broaden` matches the analytic

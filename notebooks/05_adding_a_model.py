@@ -249,7 +249,7 @@ else:
 #
 #     log_lbol      = Uniform( 8.0, 14.0, "log L_bol",            units="dex (L_sun)")
 #     theta_view    = Uniform( 0.0, 90.0, "viewing angle",        units="deg")
-#     optical_depth = Uniform( 3.0, 11.0, "9.7 µm optical depth", units="")
+#     optical_depth = Uniform( 3.0, 11.0, "9.7 μm optical depth", units="")
 #
 #     inputs  = {}
 #     outputs = {"L_agn_torus": "erg/s"}
@@ -273,7 +273,7 @@ else:
 #     parameter_prefix = "neb_"
 #
 #     logU     = Uniform(-4.0, -2.0, "ionization parameter",       units="dex")
-#     logZ_gas = Uniform(-2.0,  0.5, "gas metallicity (Z/Zsun)",   units="dex")
+#     logZ_gas = Uniform(-2.0,  0.5, "gas metallicity (Z/Z☉)",   units="dex")
 #     fesc     = Fixed(0.0,          "Lyman continuum escape frac", units="")
 #
 #     inputs  = {"ssp_ages_yr": "yr", "age_weights": ""}

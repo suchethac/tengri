@@ -35,7 +35,7 @@ This gallery:
 
 1. Builds ~50 star-forming galaxy models with:
 
-   - Variable dust opacity (tau_diff ∈ [0, 2], tau_bc ∈ [0.1, 1.5])
+   - Variable dust opacity (τ_diff ∈ [0, 2], τ_bc ∈ [0.1, 1.5])
    - Fixed SFH shape (DPL) and redshift (z = 0.1)
    - Fixed dust temperature (35 K, cool)
 
@@ -68,8 +68,21 @@ References
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/photometry/plot_wise_agn_color_color.py:273: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
+      fig.tight_layout()
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/photometry/plot_wise_agn_color_color.py:274: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
+      plt.savefig("plot_wise_agn_color_color.png", dpi=150, bbox_inches="tight")
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -305,6 +318,11 @@ References
 
     fig.tight_layout()
     plt.savefig("plot_wise_agn_color_color.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.650 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_wise_agn_color_color.py:

@@ -25,6 +25,19 @@ import numpy as np
 from . import units as U
 
 
+def bagpipes_version() -> str:
+    """Installed BAGPIPES version, for the SSP-grid provenance line.
+
+    The repackaged grid is gitignored (``*.h5``), so it is rebuilt from
+    whichever BAGPIPES is installed and the §13 magnitudes move with it.
+    Printing the version is what lets a reader tell a template-version
+    difference from a physics one.
+    """
+    from importlib.metadata import version
+
+    return version("bagpipes")
+
+
 def _model_galaxy_class():
     """Lazy import so ``import reproduction.bagpipes._drivers.*`` doesn't
     pay the (~3-second) bagpipes startup cost when only ``units`` or the

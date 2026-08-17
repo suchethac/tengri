@@ -21,14 +21,10 @@
 SSP Grid: Age and Metallicity Evolution
 =======================================
 
-Four-panel overview of the DSPS SSP grid: age evolution at fixed metallicity,
-metallicity evolution at fixed age, monochromatic flux vs age, and color-color
-diagram across the full grid. Shows how stellar populations age from UV-hot
-to IR-red as they cool.
+Per-SSP-library solar metallicity differs: MIST Z☉ = 0.0142, BC03/Padova
+Z☉ = 0.0190, PARSEC Z☉ = 0.0152, BASTI Z☉ = 0.0200.
 
-Reference: DSPS SSP grid (Conroy et al. 2009).
-
-.. GENERATED FROM PYTHON SOURCE LINES 12-156
+.. GENERATED FROM PYTHON SOURCE LINES 8-152
 
 
 
@@ -38,8 +34,21 @@ Reference: DSPS SSP grid (Conroy et al. 2009).
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/sps/plot_ssp_grid.py:150: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
+      fig.tight_layout()
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/sps/plot_ssp_grid.py:151: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
+      plt.savefig("plot_ssp_grid.png", dpi=150, bbox_inches="tight")
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 

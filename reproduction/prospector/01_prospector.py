@@ -68,6 +68,7 @@ from reproduction.prospector._drivers import prospector_driver as P, units as U
 
 import tengri
 from tengri import FIXED, Fixed, SEDModel, load_ssp_data
+from tengri.utils.physics_constants import LOG10_ZSUN
 
 # Force the inline backend so figures embed on (re-)render regardless of the
 # ambient MPLBACKEND. A non-inline backend (e.g. Agg) drops the save_fig()
@@ -91,12 +92,12 @@ print(
     f"rel_err = {_unit_check['rel_err']:.2e}  (target < 1e-3)"
 )
 
-# Metallicity pin. FSPS `logzsol` and tengri `logzsol` are both
-# log10(Z / Z⊙); the FSPS MILES grid uses Z⊙ = 10**(-1.848) (Asplund+2009).
-# Solar on both sides is logzsol = 0.
-LOG10_ZSUN = -1.848
+# Metallicity pin. FSPS `logzsol` and tengri `logzsol` are both log10(Z / Z⊙),
+# against the same Asplund+2009 Z⊙ that `LOG10_ZSUN` carries, so solar on both
+# sides is logzsol = 0. A library whose Z⊙ differs (BC03/Padova, PARSEC, BASTI)
+# breaks that identity — see LOG10_ZSUN_BY_LIBRARY.
 MET_LOGZSOL = 0.0
-MET_FIDUCIAL = {"logzsol": Fixed(MET_LOGZSOL), "*": FIXED}
+MET_FIDUCIAL = {"logzsol": Fixed(MET_LOGZSOL), "all_params": FIXED}
 
 # Fiducial galaxy shared across the SED panels.
 LOG_MASS_FIDUCIAL = 10.0
@@ -160,6 +161,9 @@ print(
 # overlaid: FSPS (solid) vs tengri's repackaged HDF5 (black dashed). The lower
 # panel shows the relative residual `|tengri − FSPS| / FSPS`. Both read identical
 # numerics; the residual floor is the float32 round-trip — gray line marks 1e-6.
+
+# %% [markdown]
+# **Verification Status:** CROSSVAL (2 tests — thin) — CSP integral — CIC age kernel (default)
 
 # %%
 _target_ages_yr = [1e6, 1e7, 1e8, 1e9, 1e10]
@@ -232,6 +236,9 @@ print(f"§1 SSP 1 Gyr optical residual: median {np.median(_res):.2e}, max {_res.
 # `SEDModel` on the log-spaced lookback grid the SFH-convolution code uses. The
 # printed `∫SFR dt` confirms the area integrates to 1 M⊙ (tengri `log_total_mass = 0`).
 
+# %% [markdown]
+# **Verification Status:** PARTIAL (11/33) — Parametric SFH family physics
+
 # %%
 t_p, sfr_p = P.sfh_curve(tau=TAU_GYR_FIDUCIAL, tage=AGE_GYR_FIDUCIAL)
 t_p_cosmic_gyr = AGE_GYR_FIDUCIAL - t_p / 1e9
@@ -245,9 +252,9 @@ _m_sfh = SEDModel.build(
         "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
         "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
         "log_total_mass": Fixed(0.0),
-        "*": FIXED,
+        "all_params": FIXED,
     },
-    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
 _state_sfh = _m_sfh.predict_state({})
@@ -290,9 +297,9 @@ save_fig("prospector_02_sfh_delayed.png")
 #
 # Remaining 0.3–2% optical residuals trace to comparison conventions: tengri's
 # age weights match dense code-independent quadrature of the same SSP arrays
-# to ~1e-4 per node (#964); Prospector floors the youngest bin at 1 Myr where
-# tengri fills to lookback 0 (#962); and FSPS's `sfh=3` path carries its own
-# quadrature. The L⊙ constant mismatch is rescaled at SSP load (#969).
+# to ~1e-4 per node; Prospector floors the youngest bin at 1 Myr where
+# tengri fills to lookback 0; and FSPS's `sfh=3` path carries its own
+# quadrature. The L⊙ constant mismatch is rescaled at SSP load.
 
 # %%
 # Shared seven-bin lookback grid (tengri's DEFAULT_BIN_EDGES_GYR). Passed
@@ -328,7 +335,7 @@ def _tengri_nonparam(sfh_dict, params=None):
         ssp_data=ssp,
         met=MET_FIDUCIAL,
         sfh=sfh_dict,
-        dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+        dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
         redshift=Fixed(0.0),
     )
     return model, model.predict_state(params if params is not None else {})
@@ -410,7 +417,7 @@ ab_cont, m_cont = P.continuity_masses(
 )
 w_cont, L_cont = P.csp_lnu_binned(agebins=ab_cont, masses=m_cont, logzsol=MET_LOGZSOL)
 
-_sfh_cont = {"type": "continuity", "log_total_mass": Fixed(LOG_MASS_FIDUCIAL), "*": FIXED}
+_sfh_cont = {"type": "continuity", "log_total_mass": Fixed(LOG_MASS_FIDUCIAL), "all_params": FIXED}
 _sfh_cont.update({f"ratio_{i}": Fixed(float(r)) for i, r in enumerate(CONT_RATIOS)})
 _m_cont, _s_cont = _tengri_nonparam(_sfh_cont)
 _assert_comparable(L_cont, _s_cont.sed_intrinsic, name="§2a continuity")
@@ -466,7 +473,7 @@ _sfh_flex = {
     "ratio_old": Fixed(FLEX_RATIO_OLD),
     "flex_0": Fixed(float(FLEX_INNER[0])),
     "flex_1": Fixed(float(FLEX_INNER[1])),
-    "*": FIXED,
+    "all_params": FIXED,
 }
 _m_flex, _s_flex = _tengri_nonparam(_sfh_flex)
 _assert_comparable(L_flex, _s_flex.sed_intrinsic, name="§2b continuity_flex")
@@ -524,7 +531,7 @@ def _tengri_z_from_massfracs(mass_fracs):
 
 
 _z_tengri = _tengri_z_from_massfracs(m_dir / m_dir.sum())
-_sfh_dir = {"type": "dirichlet", "log_total_mass": Fixed(LOG_MASS_FIDUCIAL), "*": FIXED}
+_sfh_dir = {"type": "dirichlet", "log_total_mass": Fixed(LOG_MASS_FIDUCIAL), "all_params": FIXED}
 _sfh_dir.update({f"z_{i}": Fixed(float(z)) for i, z in enumerate(_z_tengri)})
 _m_dir, _s_dir = _tengri_nonparam(_sfh_dir)
 _assert_comparable(L_dir, _s_dir.sed_intrinsic, name="§2c dirichlet")
@@ -576,7 +583,7 @@ ab_psb, m_psb = P.continuity_masses(
 )
 w_psb, L_psb = P.csp_lnu_binned(agebins=ab_psb, masses=m_psb, logzsol=MET_LOGZSOL)
 
-_sfh_psb = {"type": "continuity", "log_total_mass": Fixed(LOG_MASS_FIDUCIAL), "*": FIXED}
+_sfh_psb = {"type": "continuity", "log_total_mass": Fixed(LOG_MASS_FIDUCIAL), "all_params": FIXED}
 _sfh_psb.update({f"ratio_{i}": Fixed(float(r)) for i, r in enumerate(PSB_RATIOS)})
 _m_psb, _s_psb = _tengri_nonparam(_sfh_psb)
 _assert_comparable(L_psb, _s_psb.sed_intrinsic, name="§2d psb")
@@ -597,7 +604,7 @@ _sfh_suess = {
     "ratio_old_0": Fixed(0.2),
     "ratio_old_1": Fixed(-0.3),
     "ratio_old_2": Fixed(0.0),
-    "*": FIXED,
+    "all_params": FIXED,
 }
 _m_suess, _s_suess = _tengri_nonparam(_sfh_suess)
 _lbt_s = np.asarray(_s_suess.derived["sfh_grid_lbt_yr"]) / 1e9
@@ -643,13 +650,13 @@ _sfh_field = {
     "sfh_dpl_age_gyr": Fixed(AGE_UNIV_GYR),
     "sfh_field_psd_sigma": Fixed(2.0),
     "sfh_field_psd_tau_myr": Fixed(150.0),
-    "*": FIXED,
+    "all_params": FIXED,
 }
 _m_field = SEDModel.build(
     ssp_data=ssp,
     met=MET_FIDUCIAL,
     sfh=_sfh_field,
-    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
 
@@ -689,10 +696,11 @@ save_fig("prospector_02e_sfh_ift_field.png")
 # Stellar SED from τ-delayed SFH convolved with MIST+MILES SSPs, with no dust
 # or nebular. Both panels show optical and surviving stellar mass. The printed
 # optical ratio matches to unity to ≤0.2%: both engines use the same dense
-# convolution. Two historical offsets were fixed: the DSPS age-weight handoff
-# lost 3.8% of the oldest mass (+1.2% optical bias; fixed #964), and the
-# repackaged grid's FSPS-native L⊙ units were converted with the IAU constant
-# (0.29%; rescaled at SSP load, #969).
+# convolution.
+#
+
+# %% [markdown]
+# **Verification Status:** CROSSVAL — Photometry projection
 
 # %%
 w_p, L_p = P.csp_lnu(logzsol=0.0, tau=TAU_GYR_FIDUCIAL, tage=AGE_GYR_FIDUCIAL, sfh=4, av=0.0)
@@ -706,9 +714,9 @@ m_stellar = SEDModel.build(
         "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
         "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
-        "*": FIXED,
+        "all_params": FIXED,
     },
-    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
 s_stellar = m_stellar.predict_state({})
@@ -771,6 +779,9 @@ print(
 # `f_bump = 0.6`. tengri's `kriek_conroy` matches the FSPS construction; both
 # are printed below.
 
+# %% [markdown]
+# **Verification Status:** CROSSVAL — Attenuation law library
+
 # %%
 from tengri.dust import list_laws
 
@@ -780,7 +791,7 @@ _law_pairs = [
     ("powerlaw", "power_law", "Charlot & Fall 2000 (power law)"),
     ("conroy", "kriek_conroy", "Kriek & Conroy 2013"),
 ]
-_tengri_laws = list_laws(headline=False).to_dict("fn")  # {name: fn(wave_aa) -> k at tau_V=1}
+_tengri_laws = list_laws(headline=False).to_dict('fn')  # {name: fn(wave_aa) -> k at tau_V=1}
 wave_law = np.logspace(np.log10(1000.0), np.log10(30000.0), 2000)
 
 
@@ -850,6 +861,9 @@ save_fig("prospector_04_dust_attenuation.png")
 # younger than ~10 Myr; an even split would under-attenuate the old population
 # that dominates the 5 Gyr fiducial, leaving the optical ~1.5× too bright.
 
+# %% [markdown]
+# **Verification Status:** CROSSVAL — Attenuation law library
+
 # %%
 TAU_DIFF = AV_FIDUCIAL / 1.086  # full single screen on the diffuse (all-age) component
 TAU_BC = 0.0  # birth-cloud term off — matches FSPS dust1 = 0
@@ -868,7 +882,7 @@ m_d = SEDModel.build(
         "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
         "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
-        "*": FIXED,
+        "all_params": FIXED,
     },
     dust={
         "type": "two_component",
@@ -876,7 +890,7 @@ m_d = SEDModel.build(
         "law_diff": "calzetti",
         "tau_bc": Fixed(TAU_BC),
         "tau_diff": Fixed(TAU_DIFF),
-        "*": FIXED,
+        "all_params": FIXED,
     },
     redshift=Fixed(0.0),
 )
@@ -911,20 +925,23 @@ save_fig("prospector_05_dust_applied.png")
 # (2007) templates via `add_dust_emission=True`; tengri uses its own DL07 grid
 # with energy balance enforced to floating point.
 #
-# At matched parameters, both DL07 SEDs agree in shape (both peak ~130 µm;
-# 30–100 µm track to ~6%). The PDR luminosity weighting is critical: `γ` is
+# At matched parameters, both DL07 SEDs agree in shape (both peak ~130 μm;
+# 30–100 μm track to ~6%). The PDR luminosity weighting is critical: `γ` is
 # dust-mass fraction, but PDR dust emits `R ≈ 14×` more per unit mass (DL07
 # Eq. 33); with that weight the warm component lands where FSPS places it.
 #
-# Two conventions differ. FSPS ships DL07 with the 3.3 µm PAH feature halved
+# Two conventions differ. FSPS ships DL07 with the 3.3 μm PAH feature halved
 # (stated in `dust/dustem` headers); tengri carries the original, and the grids
-# agree to within 1.2% everywhere else (#963). Bands on rest-frame 3–3.6 µm
-# (WISE W1 at low z) inherit that choice. And FIR amplitude differs by construction (#961):
+# agree to within 1.2% everywhere else. Bands on rest-frame 3–3.6 μm
+# (WISE W1 at low z) inherit that choice. And FIR amplitude differs by construction:
 # FSPS re-emits all absorbed luminosity (measured `L_IR/L_abs = 0.9996`),
 # including LyC; tengri's canonical balance excludes λ < 912 Å (those photons
-# re-emerge as nebular, the CIGALE convention #922). At this fiducial, LyC
+# re-emerge as nebular, the CIGALE convention). At this fiducial, LyC
 # carries ~11% of absorbed energy, so tengri's far-IR sits ~11% below Prospector.
 # Both ratios are printed; opt-in `dust={'eb_include_lyc': True}` closes the gap.
+
+# %% [markdown]
+# **Verification Status:** CROSSVAL — Dust IR emission physics (MBB, Casey12, CMB)
 
 # %%
 w_p_ir, L_p_ir = P.csp_lnu(
@@ -947,7 +964,7 @@ m_ir = SEDModel.build(
         "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
         "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
-        "*": FIXED,
+        "all_params": FIXED,
     },
     dust={
         "type": "two_component",
@@ -960,9 +977,9 @@ m_ir = SEDModel.build(
             "qpah": Fixed(QPAH_FIDUCIAL),
             "umin": Fixed(UMIN_FIDUCIAL),
             "gamma_dl": Fixed(GAMMA_FIDUCIAL),
-            "*": FIXED,
+            "all_params": FIXED,
         },
-        "*": FIXED,
+        "all_params": FIXED,
     },
     redshift=Fixed(0.0),
 )
@@ -1024,7 +1041,7 @@ m_ir_fsps = SEDModel.build(
         "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
         "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
-        "*": FIXED,
+        "all_params": FIXED,
     },
     dust={
         "type": "two_component",
@@ -1038,9 +1055,9 @@ m_ir_fsps = SEDModel.build(
             "qpah": Fixed(QPAH_FIDUCIAL),
             "umin": Fixed(UMIN_FIDUCIAL),
             "gamma_dl": Fixed(GAMMA_FIDUCIAL),
-            "*": FIXED,
+            "all_params": FIXED,
         },
-        "*": FIXED,
+        "all_params": FIXED,
     },
     redshift=Fixed(0.0),
 )
@@ -1063,6 +1080,9 @@ print(
 # Full SED from rest-UV to far-IR: stellar + nebular + dust attenuation + DL07 IR.
 # Percent-level disagreements from §3–§6 (and §8's nebular gap) stack here; the
 # headline is overall shape, not bit-for-bit agreement at individual wavelengths.
+
+# %% [markdown]
+# **Verification Status:** CROSSVAL — Photometry projection
 
 # %%
 w_p_full, L_p_full = P.csp_lnu(
@@ -1088,7 +1108,7 @@ m_full = SEDModel.build(
         "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
         "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
-        "*": FIXED,
+        "all_params": FIXED,
     },
     dust={
         "type": "two_component",
@@ -1101,11 +1121,11 @@ m_full = SEDModel.build(
             "qpah": Fixed(QPAH_FIDUCIAL),
             "umin": Fixed(UMIN_FIDUCIAL),
             "gamma_dl": Fixed(GAMMA_FIDUCIAL),
-            "*": FIXED,
+            "all_params": FIXED,
         },
-        "*": FIXED,
+        "all_params": FIXED,
     },
-    neb={"type": "cue", "neb_logU": Fixed(-2.0), "neb_logZ_gas": Fixed(0.0), "*": FIXED},
+    neb={"type": "cue", "neb_logU": Fixed(-2.0), "neb_logZ_gas": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
 s_full = m_full.predict_state({})
@@ -1135,6 +1155,9 @@ save_fig("prospector_07_panchromatic.png")
 # version. The panel reports integrated, continuum-subtracted line luminosity
 # (width- and grid-independent).
 
+# %% [markdown]
+# **Verification Status:** CROSSVAL — Cloudy grid / Cue vs FSPS baked-in
+
 # %%
 NEB_AGE = 0.01  # Gyr — a young constant-SFR population, where lines dominate
 
@@ -1153,10 +1176,10 @@ m_neb = SEDModel.build(
         "start_gyr": Fixed(NEB_AGE),
         "end_gyr": Fixed(0.0),
         "log_total_mass": Fixed(9.0),
-        "*": FIXED,
+        "all_params": FIXED,
     },
-    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
-    neb={"type": "cue", "neb_logU": Fixed(-2.0), "neb_logZ_gas": Fixed(0.0), "*": FIXED},
+    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+    neb={"type": "cue", "neb_logU": Fixed(-2.0), "neb_logZ_gas": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
 s_neb = m_neb.predict_state({})
@@ -1208,8 +1231,11 @@ save_fig("prospector_08_nebular.png")
 # consistently. tengri's `nenkova` block interpolates the same FSPS CLUMPY
 # template library (`Nenkova08_y010_torusg_n10_q2.0`) with a differentiable
 # triweight kernel in `agn_tau` (a fitted parameter, not frozen). At matched
-# bolometric luminosity both trace the same templates: mid-IR peak and 10 µm
+# bolometric luminosity both trace the same templates: mid-IR peak and 10 μm
 # silicate feature coincide.
+
+# %% [markdown]
+# **Verification Status:** CROSSVAL — Nenkova+08 (CLUMPY) torus
 
 # %%
 FAGN = 0.5
@@ -1242,15 +1268,15 @@ m_agn = SEDModel.build(
         "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
         "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
-        "*": FIXED,
+        "all_params": FIXED,
     },
-    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
     agn={
         "type": "composable",
         "disc": {"type": "none"},
-        "torus": {"type": "nenkova", "agn_tau": Fixed(AGN_TAU), "*": FIXED},
+        "torus": {"type": "nenkova", "agn_tau": Fixed(AGN_TAU), "all_params": FIXED},
         "agn_log_lbol": Fixed(_agn_log_lbol),
-        "*": FIXED,
+        "all_params": FIXED,
     },
     redshift=Fixed(0.0),
 )
@@ -1288,6 +1314,9 @@ print(f"§9 torus mid-IR peak: FSPS {_peak_p_agn / 1e4:.1f} µm, tengri {_peak_t
 # as default. At the same redshift both should track closely; any residual is from
 # the Madau coefficient implementations, reported below. (IGM numbering follows
 # the CIGALE master sequence; §10 X-ray and §11 radio are absent from Prospector.)
+
+# %% [markdown]
+# **Verification Status:** CROSSVAL — Inoue+2014 IGM transmission
 
 # %%
 from tengri.igm import igm_transmission_madau
@@ -1426,10 +1455,10 @@ plt.show()
 # are the quantitative record.
 #
 # **Prospector-mode checklist.** Two *default conventions* differ between
-# the codes and must be set explicitly for a faithful match (#961):
+# the codes and must be set explicitly for a faithful match:
 #
 # 1. **Far-IR amplitude** — tengri's canonical energy balance excludes the
-#    Lyman continuum from dust heating (#922), FSPS re-emits all of it;
+#    Lyman continuum from dust heating, FSPS re-emits all of it;
 #    at this fiducial the difference is ~11 % in every FIR band. Opt into
 #    the FSPS convention with `dust={'eb_include_lyc': True}` (§6).
 # 2. **IGM** — `SEDModel.build` defaults the IGM **on** (Inoue+2014);
@@ -1439,6 +1468,10 @@ plt.show()
 #
 # The nebular grid (Cue vs Byler+2017, §8) is the remaining *physics-input*
 # difference; it is inherent to the backends, not a switchable convention.
+
+# %% [markdown]
+# **Verification Status:** PARTIAL (68/126) — Absolute SED normalization
+#
 
 # %% [markdown]
 # ## References

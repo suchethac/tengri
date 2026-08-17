@@ -26,7 +26,7 @@ baryonic mass of disc galaxies and their observed rotation velocity,
 parametrized as M_baryon ∝ V_rot^4 (slope 4.0 on the log-log plane).
 
 This example constructs 30 mock disc-like galaxies spanning stellar masses
-from 1e9 to 1e11 M_sun via a log_total_mass sweep, assigns circular velocity
+from 1e9 to 1e11 M☉ via a log_total_mass sweep, assigns circular velocity
 from the McGaugh+2000 baryonic TF scaling law, and then computes rest-frame
 optical (SDSS r-band) absolute magnitude using tengri.predict_photometry.
 
@@ -53,8 +53,21 @@ References:
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/usecases/plot_usecase_tully_fisher_relation.py:208: RankWarning: Polyfit may be poorly conditioned
+      z_fit = np.polyfit(log_v_circs, m_r_abs, 1)
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/usecases/plot_usecase_tully_fisher_relation.py:219: UserWarning: Attempting to set identical low and high xlims makes transformation singular; automatically expanding.
+      ax.set_xlim(log_v_circs.min() - x_margin, log_v_circs.max() + x_margin)
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -268,6 +281,11 @@ References:
 
     fig.tight_layout()
     plt.savefig("plot_usecase_tully_fisher_relation.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.776 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_tully_fisher_relation.py:
