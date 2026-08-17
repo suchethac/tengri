@@ -141,9 +141,9 @@ from tengri import FIXED, FREE, SEDModel, Uniform, load_ssp
 from tengri.observation import Observation, Photometry
 
 # load_ssp resolves a short alias and walks parent dirs for data/, so this works
-# whatever the working directory is. Do not hand-build a "data/..." path in a
-# notebook: it only resolves from the repo root, and the executor runs from
-# notebooks/.
+# whatever the working directory is. Do not hand-build a cwd-relative data/...
+# path in a notebook: it only resolves from the repo root, and the executor
+# runs from notebooks/.
 ssp = load_ssp("prsc_miles_chabrier_wNE")
 obs = Observation(
     photometry=Photometry.from_names(
