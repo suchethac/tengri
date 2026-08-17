@@ -68,6 +68,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri._deprecated import UNSET, resolve_renamed_flag
 from tengri.components.stellar.sfh.registry import compute_field_gp, resolve_sfh
 from tengri.components.stellar.sps.dsps_wrapper import csp_age_dt
 from tengri.config.exceptions import (
@@ -271,8 +272,20 @@ class WavePrecomp:
     ----------
     n_z : int, default 250
         Number of grid points in the ztable. Higher → finer redshift
-        interpolation, slower precompute. Default 250 ensures <1% error
-        across all bands over z ∈ [0, 1.5] with ~37s build overhead (#1134).
+        interpolation, slower precompute. Default 250 holds the ztable's *own*
+        contribution below 1 % across all bands over z ∈ [0, 1.5] with ~37s
+        build overhead (#1134).
+
+        That is a bound on the redshift interpolation alone, **not** on the
+        LUT's total error, and the two are not close. Measured on a 12-band
+        tsnorm + two-component-dust model against the exact projector, raising
+        ``n_z`` 250 → 1000 moves the GALEX FUV error at z = 1.5 by nothing at
+        all (10.410 % → 10.402 %), while ``n_subbands=32`` cuts the same number
+        ~9× (→ 1.150 %). The dominant term is :attr:`band_integration`, because
+        the Lyman break is a step *inside* the bandpass and quadrature converges
+        as 1/K² only on smooth integrands. Reach for ``n_z`` to fix a wobble
+        along the redshift axis; reach for the band-integration knobs to fix a
+        band whose SED has an edge in it.
     z_min : float or None, default None
         Lower bound of the ztable grid. ``None`` → pull from the redshift
         prior with 1 % padding. Ignored when redshift is ``Fixed`` unless
@@ -4917,9 +4930,12 @@ class SEDModel:
         #
         # The fallback keeps `redden=True` meaningful for a chain that publishes
         # no attenuated catalog — no dust component, or a backend with no
-        # discrete lines.
+        # discrete lines. The FAST line-LUT path (#1477) runs stateless by design
+        # and takes the fallback screen.
         if redden:
-            _log_atten = state.derived.get("log_line_lums_attenuated")
+            _log_atten = (
+                state.derived.get("log_line_lums_attenuated") if state is not None else None
+            )
             if _log_atten is None:
                 all_lums = self._attenuate_line_catalog(params, all_waves, all_lums)
             else:
@@ -5215,7 +5231,9 @@ class SEDModel:
         den_flux = _match(line_ratio_data.denominator_waves)
         return line_ratio_data.model_ratio(num_flux, den_flux)
 
-    def predict_spectral_indices(self, params, index_defs, *, state=None, fast=False):
+    def predict_spectral_indices(
+        self, params, index_defs, *, state=None, approx=False, fast=UNSET
+    ):
         """Predict spectral index values from the model SED.
 
         Generates a rest-frame spectrum covering the index wavelength
@@ -5231,9 +5249,9 @@ class SEDModel:
             Index definitions to measure.
         state : ForwardState, optional
             A pre-computed forward state to measure on (shares one
-            ``predict_state`` across channels). Ignored when ``fast=True``.
-        fast : bool, default False
-            Route through the FeaturePrecomp window-LUT fast path
+            ``predict_state`` across channels). Ignored when ``approx=True``.
+        approx : bool, default False
+            Route through the FeaturePrecomp window-LUT path
             (:meth:`_feature_fast_indices`): contract precomputed SSP window
             integrals with SED-free SFH weights and the model's per-age dust
             screen, instead of reconstructing the full-grid SED. ~17x faster
@@ -5242,9 +5260,14 @@ class SEDModel:
             (or no) nebular, delta metallicity, parametric non-field SFH**. Any
             other configuration (additive nebular, AGN, non-delta metallicity,
             GP-field SFH, alpha-Fe grid) **raises** ``ValueError`` rather than
-            silently falling back, because ``fast=True`` is an explicit opt-in;
-            use ``fast=False`` there. Slope indices are filled from the exact
+            silently falling back, because ``approx=True`` is an explicit opt-in;
+            use ``approx=False`` there. Slope indices are filled from the exact
             SED (they are not window-LUT-expressible).
+
+            Named for the build-time ``approx=FeaturePrecomp(...)`` it selects.
+            Spelled ``fast`` until 2026-08.
+        fast : bool, optional
+            Deprecated spelling of `approx`. Removed in v1.0.
 
         Returns
         -------
@@ -5253,7 +5276,7 @@ class SEDModel:
 
         Notes
         -----
-        **JIT-compatible**: yes — both paths are pure ``jnp``. The ``fast`` path
+        **JIT-compatible**: yes — both paths are pure ``jnp``. The ``approx`` path
         builds its window LUT once (cached on the model) from concrete SSP data,
         so it is safe to call under ``jax.jit``.
 
@@ -5263,11 +5286,19 @@ class SEDModel:
         from tengri.forward.result import SEDResult
         from tengri.observation.spectral_indices import measure_index_jax
 
+        approx = resolve_renamed_flag(
+            approx,
+            fast,
+            old_name="fast",
+            new_name="approx",
+            caller="SEDModel.predict_spectral_indices",
+        )
+
         # Indices are measured off the rest-frame SED, which the fast-nebular
         # grid path gutted (#1665). Same guard as predict_spectrum — this
         # consumer was simply missing from that census.
 
-        if fast:
+        if approx:
             return self._feature_fast_indices(params, tuple(index_defs))
 
         # Spectral indices (D4000 / Balmer break / Lick EW) are rest-frame
@@ -5409,25 +5440,25 @@ class SEDModel:
         allowed = tuple(allowed)
         stellar = next((c for c in chain if isinstance(c, StellarSEDComponent)), None)
         if stellar is None:
-            raise ValueError(f"{caller}(fast=True) requires a stellar component.")
+            raise ValueError(f"{caller}(approx=True) requires a stellar component.")
         for c in chain:
             if not isinstance(c, allowed):
                 raise ValueError(
-                    f"{caller}(fast=True) does not support a "
+                    f"{caller}(approx=True) does not support a "
                     f"{type(c).__name__} in the chain: it adds rest-frame flux the window "
-                    f"LUT does not model. Use fast=False for this model."
+                    f"LUT does not model. Use approx=False for this model."
                 )
         neb = next((c for c in chain if isinstance(c, NebularSEDComponent)), None)
         if neb is not None and getattr(neb.config, "backend", None) != "baked_in":
             raise ValueError(
-                f"{caller}(fast=True) supports baked-in nebular only "
+                f"{caller}(approx=True) supports baked-in nebular only "
                 f"(chain has backend={getattr(neb.config, 'backend', None)!r}); an additive "
-                f"backend's emission is not in the SSP window integrals. Use fast=False."
+                f"backend's emission is not in the SSP window integrals. Use approx=False."
             )
         return stellar
 
     def _feature_fast_indices(self, params, index_defs):
-        """FeaturePrecomp window-LUT measurement of ``index_defs`` (``fast=True``).
+        """FeaturePrecomp window-LUT measurement of ``index_defs`` (``approx=True``).
 
         Contracts the precomputed SSP window integrals with SED-free SFH+met
         weights (:meth:`StellarSEDComponent.compute_joint_weights`) and the
@@ -5477,7 +5508,7 @@ class SEDModel:
             )
         return values
 
-    def measure_line_fluxes(self, params, line_defs=None, *, fast=False, state=None):
+    def measure_line_fluxes(self, params, line_defs=None, *, approx=False, state=None, fast=UNSET):
         r"""Emission-line fluxes **measured from the model spectrum**, catalog-style.
 
         The counterpart to :meth:`predict_line_fluxes`: where ``predict_*`` returns
@@ -5502,19 +5533,24 @@ class SEDModel:
             unconditionally, so a model built with an eight-line
             :class:`~tengri.observation.LineFluxData` silently returned **five**
             fluxes, for different lines, in a different order.
-        fast : bool, default False
-            Route through the window-LUT fast path
+        approx : bool, default False
+            Route through the window-LUT path
             (:func:`~tengri.observation.line_measurement.measure_line_fluxes_from_window_lut`):
             SED-free SFH weights × precomputed SSP line-window integrals × the
             per-age dust screen — no full-grid SED. Bit-exact with the exact path
             for the supported configuration (stellar + two-component/no dust +
             baked-in/no nebular, delta metallicity, parametric non-field SFH) and
             **raises** otherwise (same contract as
-            :meth:`predict_spectral_indices` ``fast=True``). An **additive** Cue
-            backend is *not* fast-eligible — its emission is not in the SSP window
-            integrals — so use ``fast=False`` for Cue.
+            :meth:`predict_spectral_indices` ``approx=True``). An **additive** Cue
+            backend is *not* eligible — its emission is not in the SSP window
+            integrals — so use ``approx=False`` for Cue.
+
+            Named for the build-time ``approx=FeaturePrecomp(...)`` it selects.
+            Spelled ``fast`` until 2026-08.
         state : ForwardState, optional
             Pre-computed forward state to measure on (exact path only).
+        fast : bool, optional
+            Deprecated spelling of `approx`. Removed in v1.0.
 
         Returns
         -------
@@ -5538,6 +5574,13 @@ class SEDModel:
             resolve_line_defs,
         )
 
+        approx = resolve_renamed_flag(
+            approx,
+            fast,
+            old_name="fast",
+            new_name="approx",
+            caller="SEDModel.measure_line_fluxes",
+        )
         # Omitting ``line_defs`` used to mean DESI_LINES unconditionally, ignoring
         # the model's own Observation: a model built with an eight-line
         # LineFluxData returned FIVE fluxes, for different lines, in a different
@@ -5555,7 +5598,7 @@ class SEDModel:
         # linear form is ``inf`` at every distance and the flux ``nan`` (#1859).
         log10_4pi_dl2 = log10_four_pi_dl2(dl_cm)
 
-        if fast:
+        if approx:
             from tengri.components.dust.two_component import DustSEDComponent
             from tengri.components.stellar.sps.dsps_wrapper import LSUN_ERG_PER_S
 

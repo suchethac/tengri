@@ -3,15 +3,19 @@
 
 Validates that reparametrizing the ionizing-SED scale as a log offset
 prevents float32 overflow in the Cue nebular ionizing flux.
-Balmer decrement H-alpha/H-beta ≈ 2.86 (Case B, independent of total mass scale).
+Balmer decrement H-alpha/H-beta: intrinsically ≈ 2.86 (Case B, independent of total
+mass scale), and **larger than that once reddened**. The fixture is dusty
+(``dust_tau_bc`` ~ 2.05), so the observed decrement is ~6.81; the tests assert it
+sits *above* intrinsic rather than at it. Asserting the intrinsic range on an
+attenuated model is how #1833 stayed hidden — see ``INTRINSIC_DECREMENT_TAU_ZERO``.
 
 TIER A, forward_dtype="float32" under x64=True — NOT a mixed-precision guarantee:
   - test A (test_balmer_decrement_mixed_precision_f32): PASSES, but not for the
     reason its name gives. ``forward_dtype`` casts nothing (#1433), so the two
     builds it compares are bit-identical (measured: both 2.788906888791338) and
     the comparison against the f64 reference cannot fail. What the test still
-    establishes is the physics: the decrement is finite and inside the Case B
-    range. Float32 safety of the ionizing SED is established by the pure-float32
+    establishes is the physics: the decrement is finite and above the intrinsic
+    Case B ratio. Float32 safety of the ionizing SED is established by the pure-float32
     tests below, which use ``jax.enable_x64(False)`` — the mechanism that works.
 
 TIER B STEP 1 DELIVERED (pure-float32, jax.enable_x64(False)) — the log_nion contract (#1206):
@@ -34,6 +38,27 @@ from .conftest import build_model
 
 pytestmark = pytest.mark.regression_bug
 
+#: Intrinsic (unattenuated) Case B Halpha/Hbeta ratio at 1e4 K.
+CASE_B_INTRINSIC = 2.86
+
+#: The decrement this fixture returns with both dust screens at tau = 0 —
+#: i.e. the intrinsic ratio the model actually produces. Measured 2.788907.
+#:
+#: This number is also what the two decrement tests below *used* to see with
+#: dust switched ON, which is how #1833 hid: the fixture draws
+#: ``dust_tau_bc = 2.05`` and ``dust_tau_diff = 0.79``, so an unattenuated
+#: reading was the symptom of attenuation never reaching the Balmer lines.
+#: #1841 fixed that, the decrement rose to 6.8075 (0.969 mag of differential
+#: extinction, consistent with tau_bc + tau_diff = 2.84), and these tests
+#: failed — because they asserted the *intrinsic* range on an *observed*
+#: quantity. Asserting "above intrinsic" instead is both correct physics and
+#: strictly stronger: it goes red if dust ever stops reddening the lines again.
+INTRINSIC_DECREMENT_TAU_ZERO = 2.788907
+
+#: Generous ceiling. The fixture's tau implies ~6.8; anything past this is a
+#: runaway rather than a dusty draw.
+DECREMENT_CEILING = 30.0
+
 
 def test_balmer_decrement_mixed_precision_f32(ssp_bare):
     """(A) The Balmer decrement is finite and Case B, at ``forward_dtype="float32"``.
@@ -44,10 +69,10 @@ def test_balmer_decrement_mixed_precision_f32(ssp_bare):
     the same computation and ``assert_allclose(dec32, dec64)`` compares a float64
     result against itself — measured bit-identical, 2.788906888791338 both.
 
-    What survives is worth keeping, so the test stays: the decrement is finite and
-    inside the Case B range, on the panchromatic model, which is a real check on
-    the log-offset reparametrization. It is just not a float32 check. For that see
-    the pure-float32 tests in this file and
+    What survives is worth keeping, so the test stays: the decrement is finite
+    and above the intrinsic Case B ratio on this dusty panchromatic model, which
+    is a real check on the log-offset reparametrization. It is just not a float32
+    check. For that see the pure-float32 tests in this file and
     ``tests/regression/precision/test_forward_dtype_knob.py``.
     """
     # Build f64 reference (x64=True, forward_dtype="float64")
@@ -62,7 +87,15 @@ def test_balmer_decrement_mixed_precision_f32(ssp_bare):
 
     # Decrement should be finite and close to the f64 reference
     assert np.isfinite(dec32), f"f32 Balmer decrement is non-finite: {dec32}"
-    assert 2.7 < dec32 < 3.1, f"f32 Balmer decrement {dec32} off Case B range"
+    # The fixture is dusty (tau_bc ~ 2.05), so the OBSERVED decrement must sit
+    # above the intrinsic Case B ratio. Asserting the intrinsic range here is
+    # what let #1833 pass unnoticed — see INTRINSIC_DECREMENT_TAU_ZERO.
+    assert CASE_B_INTRINSIC < dec32 < DECREMENT_CEILING, (
+        f"f32 Balmer decrement {dec32} outside "
+        f"({CASE_B_INTRINSIC}, {DECREMENT_CEILING}) — an attenuated decrement "
+        "must exceed the intrinsic Case B ratio; at or below it means dust is "
+        "not reaching the Balmer lines"
+    )
     assert_allclose(dec32, dec64, rtol=5e-3)
 
 
@@ -146,7 +179,8 @@ def test_balmer_decrement_pure_float32(ssp_bare):
 
     The assertions below are the reason this is worth keeping as a live test
     rather than deleting: the decrement is not merely finite in float32, it
-    lands inside the Case B range and tracks the float64 reference to 5e-3.
+    lands above the intrinsic Case B ratio (the fixture is reddened) and tracks
+    the float64 reference to 5e-3.
     """
     # Build f64 reference
     m64 = build_model(ssp_bare, "float64")
@@ -160,8 +194,54 @@ def test_balmer_decrement_pure_float32(ssp_bare):
         dec32 = float(m32.predict(p).properties["balmer_decrement"])
 
     assert np.isfinite(dec32), f"pure-f32 Balmer decrement is non-finite: {dec32}"
-    assert 2.7 < dec32 < 3.1, f"pure-f32 Balmer decrement {dec32} off Case B range"
+    assert CASE_B_INTRINSIC < dec32 < DECREMENT_CEILING, (
+        f"pure-f32 Balmer decrement {dec32} outside "
+        f"({CASE_B_INTRINSIC}, {DECREMENT_CEILING}) — an attenuated decrement "
+        "must exceed the intrinsic Case B ratio"
+    )
     assert_allclose(dec32, dec64, rtol=5e-3)
+
+
+def test_dust_reddens_the_balmer_lines(ssp_bare):
+    """Zeroing the two dust screens must return the decrement to intrinsic.
+
+    This is the test #1833 needed and did not have. The fixture draws
+    ``dust_tau_bc = 2.05`` and ``dust_tau_diff = 0.79``, so the observed
+    decrement has to exceed the intrinsic ratio; before #1841 it did not, and
+    every assertion in this file was satisfied by an *unattenuated* reading of
+    an attenuated model.
+
+    Checking both ends is what makes it load-bearing. A bound on the observed
+    value alone can be met by a model with no dust at all; pinning the tau = 0
+    value as well says the difference between them is the attenuation.
+    """
+    m = build_model(ssp_bare, "float64")
+    p = dict(m.spec.sample(jax.random.PRNGKey(0)))
+    p["redshift"] = 1.0
+
+    dec_dusty = float(m.predict(p).properties["balmer_decrement"])
+
+    no_dust = dict(p)
+    for key in ("dust_tau_bc", "dust_tau_diff"):
+        assert key in no_dust, f"fixture no longer samples {key}; update this test"
+        no_dust[key] = 0.0
+    dec_intrinsic = float(m.predict(no_dust).properties["balmer_decrement"])
+
+    # Only the two screens were touched, so anything that moved is attenuation.
+    assert_allclose(dec_intrinsic, INTRINSIC_DECREMENT_TAU_ZERO, rtol=1e-4)
+    assert dec_dusty > dec_intrinsic, (
+        f"dust did not redden the Balmer lines: dusty {dec_dusty} <= "
+        f"intrinsic {dec_intrinsic} at tau_bc={p['dust_tau_bc']:.3f}, "
+        f"tau_diff={p['dust_tau_diff']:.3f} (this is #1833)"
+    )
+
+    # Differential extinction implied by the ratio of ratios, for the record.
+    differential_mag = 2.5 * np.log10(dec_dusty / dec_intrinsic)
+    assert 0.5 < differential_mag < 2.0, (
+        f"A(Hbeta) - A(Halpha) = {differential_mag:.3f} mag is not consistent "
+        f"with tau_bc + tau_diff = "
+        f"{p['dust_tau_bc'] + p['dust_tau_diff']:.2f}"
+    )
 
 
 def test_log_q_h_pure_float32_cue_only(ssp_bare):
