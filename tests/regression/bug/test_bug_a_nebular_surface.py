@@ -17,14 +17,17 @@ Three related fixes on the predict_emission_lines + nebular pipeline:
   Fix: attenuate stellar continuum below 912 Å by ``fesc`` in
   NebularSEDComponent.apply.
 
-The Cue-needing assertions are guarded with skips when the bare-stellar
-SSP file isn't present (CI / minimal install). The BakedIn assertions
-verify the predict_emission_lines NotImplementedError path is intact.
+The Cue-needing assertions skip when the bare-stellar SSP is genuinely
+absent (minimal install). Until #1867 they skipped *always*: the fixture
+named ``data/ssp_prsc_miles_chabrier_noNE.h5``, a file that does not
+exist, so the #313 Balmer-decrement assertion had not executed on any
+checkout since the grid was renamed. It now resolves through
+``tengri.load_ssp()``, which is cwd-independent and cannot decay into a
+silent skip. The BakedIn assertions verify the predict_emission_lines
+NotImplementedError path is intact.
 """
 
 from __future__ import annotations
-
-import pathlib
 
 import jax
 import jax.numpy as jnp
@@ -36,14 +39,26 @@ import tengri
 from tengri import FIXED, Fixed
 from tengri.forward.prediction import EmissionLines
 
-_BARE_STELLAR_SSP = pathlib.Path("data/ssp_prsc_miles_chabrier_noNE.h5").resolve()
-
 
 @pytest.fixture(scope="module")
 def ssp_bare():
-    if not _BARE_STELLAR_SSP.exists():
-        pytest.skip(f"Bare-stellar SSP not present at {_BARE_STELLAR_SSP}")
-    return tengri.load_ssp_data(str(_BARE_STELLAR_SSP))
+    """The bare-stellar grid Cue needs, resolved the way users get it.
+
+    This used to be a hardcoded ``data/ssp_prsc_miles_chabrier_noNE.h5``,
+    a filename that does not exist -- the grid is ``fsps_prsc_miles_chabrier``
+    (``_data_setup.DEFAULT_SSP``, what ``download_ssp()`` fetches). So the
+    guard below skipped unconditionally on every checkout, CI included, and
+    #313's Balmer-decrement assertion had not run since the rename (#1867).
+
+    ``load_ssp()`` is cwd-independent: it honors ``$TENGRI_DATA_DIR``, walks
+    every ancestor for ``data/``, and falls back to the package tree -- so it
+    cannot decay into a silent skip the next time a file is renamed. A skip
+    is not a pass, and a guard that skips is not a guard.
+    """
+    try:
+        return tengri.load_ssp()
+    except FileNotFoundError as exc:  # pragma: no cover - depends on checkout
+        pytest.skip(f"default bare-stellar SSP not available: {exc}")
 
 
 def test_emission_lines_namedtuple_has_full_catalog_fields():
@@ -106,7 +121,13 @@ def test_balmer_decrement_rises_under_dust_sweep(ssp_bare):
     for tau_diff in [0.0, 1.0, 2.0]:
         m = tengri.SEDModel.build(
             ssp_bare,
-            sfh={"type": "const", "*": FIXED, "log_sfr": 0.0},
+            sfh={
+                "type": "const",
+                "*": FIXED,
+                "log_total_mass": 10.0,
+                "start_gyr": 10.0,
+                "end_gyr": 0.0,
+            },
             dust={
                 "type": "two_component",
                 "*": FIXED,
@@ -134,7 +155,13 @@ def test_cue_exposes_more_than_thirteen_species(ssp_bare):
     """#303: Cue's all_waves should expose ≫13 lines (full catalog)."""
     m = tengri.SEDModel.build(
         ssp_bare,
-        sfh={"type": "const", "*": FIXED, "log_sfr": 0.0},
+        sfh={
+            "type": "const",
+            "*": FIXED,
+            "log_total_mass": 10.0,
+            "start_gyr": 10.0,
+            "end_gyr": 0.0,
+        },
         dust={"type": "two_component", "*": FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
         neb={"type": "cue", "*": FIXED},
         redshift=Fixed(0.05),
@@ -155,7 +182,13 @@ def test_stellar_lyc_attenuated_by_fesc(ssp_bare):
     for fesc in [0.0, 0.5, 1.0]:
         m = tengri.SEDModel.build(
             ssp_bare,
-            sfh={"type": "const", "*": FIXED, "log_sfr": 0.0},
+            sfh={
+                "type": "const",
+                "*": FIXED,
+                "log_total_mass": 10.0,
+                "start_gyr": 10.0,
+                "end_gyr": 0.0,
+            },
             neb={"type": "cue", "*": FIXED, "fesc": fesc},
             dust={"type": "two_component", "*": FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
             redshift=Fixed(0.05),
@@ -177,14 +210,18 @@ def test_stellar_lyc_attenuated_by_fesc(ssp_bare):
     )
 
 
-def test_bakedin_predict_lines_still_raises():
+def test_bakedin_predict_lines_still_raises(ssp_bare):
     """Pre-existing behavior: BakedIn nebular raises NotImplementedError."""
-    if not _BARE_STELLAR_SSP.exists():
-        pytest.skip("Need any SSP for this test")
-    ssp = tengri.load_ssp_data(str(_BARE_STELLAR_SSP))
+    ssp = ssp_bare
     m = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "const", "*": FIXED, "log_sfr": 0.0},
+        sfh={
+            "type": "const",
+            "*": FIXED,
+            "log_total_mass": 10.0,
+            "start_gyr": 10.0,
+            "end_gyr": 0.0,
+        },
         dust={"type": "two_component", "*": FIXED},
     )
     p = dict(m.spec.sample(jax.random.PRNGKey(0)))
