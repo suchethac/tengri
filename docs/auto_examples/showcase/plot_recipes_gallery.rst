@@ -18,24 +18,10 @@
 .. _sphx_glr_auto_examples_showcase_plot_recipes_gallery.py:
 
 
-recipes for common science cases
-=========================================
+Recipes for common science cases
+=================================
 
-Each recipe is a nested-dict configuration — drop-in templates for common galaxy
-fitting scenarios. This gallery overlays the rest-frame SED of all five shipped
-recipes, highlighting how model complexity scales from minimal mock-recovery to
-panchromatic AGN:
-
-- ``star_forming_photometry`` — optical+NIR+MIR photometry of star-forming galaxies
-- ``quiescent_z0`` — low-redshift quiescent sample
-- ``agn_panchromatic`` — multi-wavelength AGN host fitting
-- ``stochastic_sfh_jwst`` — high-redshift burstiness and temporal structure
-- ``mock_recovery_minimal`` — lightweight parameter-recovery benchmarking
-
-All models are sampled at default prior medians to display the characteristic
-SED shape of each recipe.
-
-.. GENERATED FROM PYTHON SOURCE LINES 19-95
+.. GENERATED FROM PYTHON SOURCE LINES 5-81
 
 
 
@@ -49,41 +35,41 @@ SED shape of each recipe.
 
  .. code-block:: none
 
-    /tengri/src/tengri/forward/sed_model.py:8398: WildcardPartialFreeWarning: 'all_params: FREE' freed 2 of 3 parameters in group 'dust'. These have no declared prior, only Fixed defaults, so they stay pinned:
+    /tengri/src/tengri/forward/sed_model.py:8484: WildcardPartialFreeWarning: 'all_params: FREE' freed 2 of 3 parameters in group 'dust'. These have no declared prior, only Fixed defaults, so they stay pinned:
       dust_f_obscuration
     The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. dust={'f_obscuration': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
       spec = parse_groups(**groups)
-    /tengri/src/tengri/forward/sed_model.py:8398: WildcardPartialFreeWarning: 'all_params: FREE' freed 6 of 8 parameters in group 'sfh'. These have no declared prior, only Fixed defaults, so they stay pinned:
+    /tengri/src/tengri/forward/sed_model.py:8484: WildcardPartialFreeWarning: 'all_params: FREE' freed 6 of 8 parameters in group 'sfh'. These have no declared prior, only Fixed defaults, so they stay pinned:
       met_alpha_fe, met_logzsol_scatter
     The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. sfh={'met_alpha_fe': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
       spec = parse_groups(**groups)
-    /tengri/src/tengri/forward/orchestrator.py:794: SFHBeforeBigBangWarning: Star formation history forms 5% of its stellar mass before the Big Bang at z=5.18 (cosmic age 1.12 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+    /tengri/src/tengri/forward/orchestrator.py:951: SFHBeforeBigBangWarning: Star formation history forms 5% of its stellar mass before the Big Bang at z=5.18 (cosmic age 1.12 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
       state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
-    /tengri/src/tengri/forward/sed_model.py:8398: WildcardPartialFreeWarning: 'all_params: FREE' freed 3 of 6 parameters in group 'sfh'. These have no declared prior, only Fixed defaults, so they stay pinned:
+    /tengri/src/tengri/forward/sed_model.py:8484: WildcardPartialFreeWarning: 'all_params: FREE' freed 3 of 6 parameters in group 'sfh'. These have no declared prior, only Fixed defaults, so they stay pinned:
       met_alpha_fe, met_logzsol_scatter, sfh_dexp_start_gyr
     The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. sfh={'met_alpha_fe': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
       spec = parse_groups(**groups)
-    /tengri/src/tengri/forward/sed_model.py:8398: WildcardPartialFreeWarning: 'all_params: FREE' freed 2 of 3 parameters in group 'dust'. These have no declared prior, only Fixed defaults, so they stay pinned:
+    /tengri/src/tengri/forward/sed_model.py:8484: WildcardPartialFreeWarning: 'all_params: FREE' freed 2 of 3 parameters in group 'dust'. These have no declared prior, only Fixed defaults, so they stay pinned:
       dust_f_obscuration
     The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. dust={'f_obscuration': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
       spec = parse_groups(**groups)
-    /tengri/src/tengri/forward/sed_model.py:8398: WildcardPartialFreeWarning: 'all_params: FREE' freed 6 of 8 parameters in group 'sfh'. These have no declared prior, only Fixed defaults, so they stay pinned:
+    /tengri/src/tengri/forward/sed_model.py:8484: WildcardPartialFreeWarning: 'all_params: FREE' freed 6 of 8 parameters in group 'sfh'. These have no declared prior, only Fixed defaults, so they stay pinned:
       met_alpha_fe, met_logzsol_scatter
     The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. sfh={'met_alpha_fe': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
       spec = parse_groups(**groups)
-    /tengri/src/tengri/forward/orchestrator.py:794: SFHBeforeBigBangWarning: Star formation history forms 5% of its stellar mass before the Big Bang at z=5.18 (cosmic age 1.12 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+    /tengri/src/tengri/forward/orchestrator.py:951: SFHBeforeBigBangWarning: Star formation history forms 5% of its stellar mass before the Big Bang at z=5.18 (cosmic age 1.12 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
       state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
-    /tengri/src/tengri/forward/sed_model.py:8398: WildcardPartialFreeWarning: 'all_params: FREE' freed 2 of 3 parameters in group 'dust'. These have no declared prior, only Fixed defaults, so they stay pinned:
+    /tengri/src/tengri/forward/sed_model.py:8484: WildcardPartialFreeWarning: 'all_params: FREE' freed 2 of 3 parameters in group 'dust'. These have no declared prior, only Fixed defaults, so they stay pinned:
       dust_f_obscuration
     The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. dust={'f_obscuration': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
       spec = parse_groups(**groups)
-    /tengri/src/tengri/forward/sed_model.py:8398: WildcardPartialFreeWarning: 'all_params: FREE' freed 8 of 10 parameters in group 'sfh'. These have no declared prior, only Fixed defaults, so they stay pinned:
+    /tengri/src/tengri/forward/sed_model.py:8484: WildcardPartialFreeWarning: 'all_params: FREE' freed 8 of 10 parameters in group 'sfh'. These have no declared prior, only Fixed defaults, so they stay pinned:
       met_alpha_fe, met_logzsol_scatter
     The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. sfh={'met_alpha_fe': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
       spec = parse_groups(**groups)
-    /tengri/src/tengri/forward/orchestrator.py:794: SFHBeforeBigBangWarning: Star formation history forms 38% of its stellar mass before the Big Bang at z=10.43 (cosmic age 0.45 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+    /tengri/src/tengri/forward/orchestrator.py:951: SFHBeforeBigBangWarning: Star formation history forms 38% of its stellar mass before the Big Bang at z=10.43 (cosmic age 0.45 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
       state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
-    /tengri/src/tengri/forward/sed_model.py:8398: WildcardPartialFreeWarning: 'all_params: FREE' freed 6 of 8 parameters in group 'sfh'. These have no declared prior, only Fixed defaults, so they stay pinned:
+    /tengri/src/tengri/forward/sed_model.py:8484: WildcardPartialFreeWarning: 'all_params: FREE' freed 6 of 8 parameters in group 'sfh'. These have no declared prior, only Fixed defaults, so they stay pinned:
       met_alpha_fe, met_logzsol_scatter
     The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. sfh={'met_alpha_fe': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
       spec = parse_groups(**groups)
@@ -177,7 +163,7 @@ SED shape of each recipe.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 25.834 seconds)
+   **Total running time of the script:** (0 minutes 11.701 seconds)
 
 
 .. _sphx_glr_download_auto_examples_showcase_plot_recipes_gallery.py:
