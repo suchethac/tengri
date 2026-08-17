@@ -176,6 +176,9 @@ INVARIANT = frozenset(
         "exercised",
         "exercises",
         "exercising",
+        # Same gap "advisable" had below: the family was listed but its -able
+        # derivative was not, so the checker demanded the non-word "exercizable".
+        "exercisable",
         # "advise" is -ise in American English too, exactly like the "exercise",
         # "surprise" and "revise" families already listed here. It was simply
         # missing, so the checker demanded the non-word "advized".

@@ -541,10 +541,16 @@ class RadioSEDComponent(TemplateThreading):
         # summed by predict_via_precomp / predict_spectrum_via_precomp.
         # Spectroscopy: a pixel is a point-sample, so evaluating at the pixel
         # wavelength is exact.
+        from tengri.components._band_projection import project_additive_onto_photometry
+
         filter_eff = state.derived.get("filter_eff_waves")
         if filter_eff is not None:
             band = _term_band_response(template_data, "radio")
             fw_pad = state.derived.get("phot_filter_waves_padded")
+            ft_pad = state.derived.get("phot_filter_trans_padded")
+
+            # Compute precomputed photometry if band response is available.
+            precomputed = None
             if band is not None:
                 # Exact fast path. Radio is a sum of rank-1 terms — SF synchrotron,
                 # free-free, AGN jet — each a scalar amplitude times a spectral shape
@@ -556,20 +562,20 @@ class RadioSEDComponent(TemplateThreading):
                 # is where the whole WavePrecomp speedup lives (#1109).
                 ref = self.emission_terms(params, band["lam_ref"], **inputs)
                 amps = jnp.stack([t[i] for i, t in enumerate(ref.values())]) / band["S_ref"]
-                derived_overrides["radio_phot_lnu_precomp"] = amps @ band["R"]
-            elif fw_pad is not None:
-                # Exact dense path: integrate the radio SED through the true filter
-                # transmission on every call, so a wide radio bandpass — over which the
-                # (broken-)power-law has real curvature — stays exact rather than being
-                # sampled at one effective wavelength.
-                from tengri.observation.photometry import lnu_filter_integral_batch
+                precomputed = amps @ band["R"]
 
-                ft_pad = state.derived.get("phot_filter_trans_padded")
-                derived_overrides["radio_phot_lnu_precomp"] = lnu_filter_integral_batch(
-                    L_radio, wave, fw_pad, ft_pad, z
-                )
-            else:
-                derived_overrides["radio_phot_lnu_precomp"] = _emit(filter_eff)
+            # Project onto observed-frame photometric filters.
+            derived_overrides["radio_phot_lnu_precomp"] = project_additive_onto_photometry(
+                precomputed,
+                L_radio,
+                wave,
+                filter_eff,
+                fw_pad,
+                ft_pad,
+                z,
+                fallback_fn=_emit,
+            )
+
             # The REST band (#1148): ``phot_rest_fnu`` projects at z=0, so its
             # filter samples the pivot itself, not pivot/(1+z). Same emission,
             # different wavelengths — reusing the observed-band value here is

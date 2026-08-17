@@ -103,6 +103,7 @@ class RadioPowerLawSEDComponent(SEDModelComponent):
 
     name: str = "radio_powerlaw"
     parameter_prefix: str = "radio_"
+    requires_template_data: ClassVar[bool] = False
 
     # Free parameters
     q_ir = Uniform(

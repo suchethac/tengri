@@ -102,7 +102,7 @@ from tengri.utils.grid import (
     log_age_to_age_yr,
     make_log_age_grid,
 )
-from tengri.utils.scale import LOG10_4PI, apply_log10_scale
+from tengri.utils.scale import apply_log10_scale, log10_four_pi_dl2
 
 #: Second probe luminosity [erg/s] for the additive-emitter homogeneity check in
 #: :meth:`SEDModel._dust_emission_band_response`. A physically plausible L_IR
@@ -396,9 +396,14 @@ class WavePrecomp:
     ``band_integration="effective_wavelength"`` (or ``"taylor"``, if
     ``taylor_correction=True`` accompanies it); prefer naming the scheme.
 
-    Only the *multiplicative* stellar + nebular screen needs this. Additive emitters
-    (dust IR, radio, X-ray, AGN) factorize exactly through the rank-1/rank-K band
-    response of #1107/#1117 and are unaffected."""
+    Only the *multiplicative* stellar screen needs this. Additive emitters (dust IR,
+    radio, X-ray, AGN) factorize exactly through the rank-1/rank-K band response of
+    #1107/#1117 and are unaffected. Nebular is not affected either, for the opposite
+    reason: it never had a sub-band tensor to size, and since #1738 it does not need
+    one — its screen is integrated through the band exactly, from the reddened
+    continuum a dusty model materializes anyway. (This said "stellar + nebular" for
+    as long as the nebular bucket was in fact screened at a single wavelength per
+    band, which is the error #1738 removed.)"""
 
     taylor_correction: bool | None = None
     """First-order spectral-moment (Ψ) correction to the effective-wavelength dust
@@ -808,18 +813,22 @@ def _warn_grid_warm_failed(label: str, exc: Exception) -> None:
 #: rule does not differentiate them, so every gradient backend sees exactly
 #: zero. Maps parameter name -> the reason, for the warning below.
 #:
-#: ``agn_kt_warm`` (`kd18_disc_model.py`, ``Uniform(0.1, 0.5)``) reaches the SED
-#: solely via ``_nthcomp_lnu_interp`` (`disc.py:1263`), whose ``custom_jvp``
-#: supplies a ``gamma`` tangent only — the ``kTe`` tangent is discarded, as a
-#: deliberate cost trade-off (a second kernel evaluation per JVP). Measured: the
-#: rule returns exactly ``0.0`` where a central difference gives
-#: ``d ln f / d ln kTe`` ~ -0.24, so the sensitivity is real and order-unity.
-_DEAD_GRADIENT_PARAMS: dict[str, str] = {
-    "agn_kt_warm": (
-        "it reaches the SED only through the nthcomp interpolation kernel, whose "
-        "derivative rule supplies a gamma tangent but no kTe tangent"
-    ),
-}
+#: Empty since #1822, and kept rather than deleted: the check costs nothing and
+#: the class of bug recurs (``met_alpha_fe`` raises the same warning from its own
+#: site, and #1206/#1764 are the earlier instances).
+#:
+#: ``agn_kt_warm`` was the sole entry. It reached the SED only via
+#: ``_nthcomp_lnu_interp``, whose ``custom_jvp`` supplied a ``gamma`` tangent and
+#: discarded the ``kTe`` one, so the rule returned exactly ``0.0`` against a
+#: central difference of ~7e41. #1822 added the kTe tangent, and the same
+#: measurement now agrees with a converged central difference to 0.6%.
+#:
+#: The audit that produced #1822 also found the *other* half was worse than
+#: documented: reverse-mode ``d/d(agn_gamma_warm)`` — the tangent believed to be
+#: working — returned **NaN**, not a number, because the kernel forced a float32
+#: output and the cotangent from a realistic ring luminosity (~1e66) overflows
+#: float32. That one never appeared here, since a NaN gradient is not a dead one.
+_DEAD_GRADIENT_PARAMS: dict[str, str] = {}
 
 
 def _warn_dead_gradient_params(spec) -> None:
@@ -894,6 +903,40 @@ def _warn_agn_dust_double_count(spec) -> None:
         AGNDustDoubleCountWarning,
         stacklevel=3,
     )
+
+
+def _state_has_content(state) -> bool:
+    """Report whether a component state carries anything beyond its name.
+
+    Parameters
+    ----------
+    state : SEDComponentState or None
+        Any component state, of any subclass.
+
+    Returns
+    -------
+    bool
+        True when at least one field other than ``name`` is not ``None``.
+
+    Notes
+    -----
+    Read off the dataclass fields rather than a hand-written list of attribute
+    names. The list this replaced named five (``data``, ``ssp_phot_lut``,
+    ``ssp_spec_lut``, ``filter_waves``, ``k_lambda``) and so judged an
+    :class:`~tengri.components.igm.component.IGMSEDComponentState` carrying only
+    ``band_table`` to be empty -- a state class the list predated. Every such
+    list goes stale the moment a component adds a field, and the failure is
+    silent: the populated state is discarded and the model still returns
+    plausible numbers (#1738).
+    """
+    if state is None:
+        return False
+    try:
+        fields = dataclasses.fields(state)
+    except TypeError:
+        # Not a dataclass; fall back to "it exists, so it counts".
+        return True
+    return any(getattr(state, f.name, None) is not None for f in fields if f.name != "name")
 
 
 def _fold_igm_into_subbands(igm_comp, stellar_state):
@@ -4894,7 +4937,7 @@ class SEDModel:
         # NebularSEDComponent) — no L_sun conversion here. Multiplying by
         # L_SUN was a 33.6-dex unit error that made every joint
         # photometry+line-flux fit unusable against real data.
-        log10_scale = -LOG10_4PI - 2.0 * jnp.log10(dl_cm)
+        log10_scale = -log10_four_pi_dl2(dl_cm)
         flux = apply_log10_scale(selected_lums, log10_scale)
         return flux
 
@@ -5125,7 +5168,7 @@ class SEDModel:
         # ``line_lums`` are erg/s (DerivedKey contract) — same fix as
         # ``predict_line_fluxes``. The scale cancels in every ratio, so
         # this is unit hygiene, not a behavior change.
-        log10_scale = -LOG10_4PI - 2.0 * jnp.log10(dl_cm)
+        log10_scale = -log10_four_pi_dl2(dl_cm)
 
         def _match(targets):
             targets = jnp.asarray(targets)
@@ -5472,7 +5515,10 @@ class SEDModel:
         # fixed one, and raises if the model has neither.
         z = jnp.asarray(self._get_redshift(params))
         dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
-        four_pi_dl2 = 4.0 * jnp.pi * dl_cm**2
+        # log10, never the linear divisor: 4 pi d_L^2 is ~1e57 (and ~1.2e40 even
+        # at the 10-pc z=0 convention) against a float32 ceiling of 3.4e38, so the
+        # linear form is ``inf`` at every distance and the flux ``nan`` (#1859).
+        log10_4pi_dl2 = log10_four_pi_dl2(dl_cm)
 
         if fast:
             from tengri.components.dust.two_component import DustSEDComponent
@@ -5489,7 +5535,7 @@ class SEDModel:
             else:
                 transmission = dust.compute_transmission(params, pc.window_centers, ssp_ages_yr)
             return measure_line_fluxes_from_window_lut(
-                joint_weights, scale, transmission, pc, four_pi_dl2
+                joint_weights, scale, transmission, pc, log10_4pi_dl2
             )
 
         if state is None:
@@ -5497,7 +5543,10 @@ class SEDModel:
         else:
             rest = SEDResult(wavelength=state.wave, sed=state.sed_intrinsic)
         return jnp.stack(
-            [measure_line_flux_jax(rest.wavelength, rest.sed, ld, four_pi_dl2) for ld in line_defs]
+            [
+                measure_line_flux_jax(rest.wavelength, rest.sed, ld, log10_4pi_dl2)
+                for ld in line_defs
+            ]
         )
 
     def predict_hbeta(self, params: dict) -> float:
@@ -7843,24 +7892,55 @@ class SEDModel:
             shock_component=getattr(self, "_shock_component", "combined"),
         )
 
-        # Eager-precompute the stellar photometry LUT when wave_precomp is
-        # enabled: a fixed-z LUT when redshift is Fixed, a free-z ztable
-        # when redshift is Free (Uniform prior).
-        if (
+        # SINGLE BUILD-TIME PRECOMPUTATION PASS: resolve all component data before
+        # first predict, unconditionally at build time (not gated on approx flags).
+        # This ensures that components load their template data exactly once,
+        # fixing #1278 where precompute() never ran on the default path.
+        #
+        # Strategy: iterate once over the chain. For each component:
+        # 1. Call precompute() with basic args (load data if needed)
+        # 2. If wave_precomp is enabled, augment precomputed state with LUT data
+        # 3. If spectrum_precomp is enabled, augment precomputed state with spec LUT data
+        #
+        # This unifies the four separate isinstance scans (AGN/Nebular/IGM ×2)
+        # into one loop that handles all specializations in order.
+        from dataclasses import replace
+
+        from tengri.components.agn.component import AGNSEDComponent
+        from tengri.components.igm.component import IGMSEDComponent
+        from tengri.components.nebular.component import NebularSEDComponent
+        from tengri.components.stellar.component import StellarSEDComponent
+
+        # Precompute-config state: extracted once, reused for all components
+        wave_precomp_enabled = (
             self._approx.get("wave_precomp")
             and self.observation is not None
             and hasattr(self.observation, "photometry")
             and self.observation.photometry is not None
-            and len(chain) > 0
-            and chain[0].name == "stellar"
-        ):
-            from dataclasses import replace
+        )
+        spec_precomp_enabled = (
+            self._approx.get("spectrum_precomp")
+            and self.observation is not None
+            and self.observation.can_do_spectroscopy
+        )
 
-            from tengri.components.stellar.component import StellarSEDComponent
+        # Build filter/redshift specs once (reused by all components)
+        filters = None
+        redshift_spec = None
+        spec_wave_obs = None
 
-            stellar = chain[0]
-            if isinstance(stellar, StellarSEDComponent):
-                # Build filter tuple from observation photometry.
+        if wave_precomp_enabled or spec_precomp_enabled:
+            # Determine redshift spec (shared by both paths)
+            try:
+                redshift_dist = self.spec.get_distribution("redshift")
+                is_fixed = redshift_dist.is_fixed
+                z_bounds = redshift_dist.bounds
+            except (AttributeError, KeyError):
+                is_fixed = True
+                z_bounds = (0.0,)
+
+            if wave_precomp_enabled:
+                # Build filter tuple
                 filters = tuple(
                     zip(
                         self.observation.photometry.filter_waves,
@@ -7869,35 +7949,15 @@ class SEDModel:
                     )
                 )
 
-                # Determine redshift spec: fixed or free.
-                try:
-                    redshift_dist = self.spec.get_distribution("redshift")
-                    is_fixed = redshift_dist.is_fixed
-                    z_bounds = redshift_dist.bounds
-                except (AttributeError, KeyError):
-                    # Fallback: assume fixed at 0.0 if redshift not in spec
-                    is_fixed = True
-                    z_bounds = (0.0,)
-
-                # Catalog-fit reuse (Approach A): when the user passes
-                # ``WavePrecomp(catalog_z_range=...)``, route through the
-                # free-z ztable branch even when redshift is Fixed in the
-                # spec — different per-galaxy ``Fixed(z)`` values then share
-                # the same compile.
+                # Redshift spec for photometry
                 if is_fixed and self._catalog_z_range is None:
-                    # Fixed-z LUT
                     redshift_spec = {"mode": "fixed", "value": float(z_bounds[0])}
                 else:
-                    # Free-z ztable. User can override n_z / z_min /
-                    # z_max via ``approx=WavePrecomp(...)``; otherwise pull from
-                    # the redshift prior with 1 % padding and use n_z=100.
                     cfg = self._approx_config or WavePrecomp()
                     if self._catalog_z_range is not None:
                         z_lo, z_hi = self._catalog_z_range
-                        pad = 0.0  # explicit range — no padding
+                        pad = 0.0
                     elif z_bounds is None or len(z_bounds) < 2:
-                        # Fixed spec falling through (no bounds for a Fixed dist);
-                        # default to a generous photo-z range.
                         z_lo, z_hi = 0.001, 3.0
                         pad = 0.0
                     else:
@@ -7910,109 +7970,9 @@ class SEDModel:
                         "n_z": cfg.n_z,
                     }
 
-                # Call precompute to build the LUT or ztable.
-                state = stellar.precompute(
-                    ssp_data=stellar.ssp_data,
-                    wave_grid=None,
-                    approx=self._approx,
-                    filters=filters,
-                    redshift_spec=redshift_spec,
-                )
-                # Replace the stellar component with one carrying the precomputed state.
-                chain[0] = replace(stellar, _state=state)
-
-                # The AGN component also needs filter passbands
-                # so its apply() can publish ``agn_phot_lnu_precomp``. Find the
-                # AGN component in the chain and re-precompute it with filters.
-                from tengri.components.agn.component import AGNSEDComponent
-
-                for idx, comp in enumerate(chain):
-                    if isinstance(comp, AGNSEDComponent):
-                        agn_state = comp.precompute(
-                            ssp_data=None,
-                            wave_grid=None,
-                            approx=self._approx,
-                            filters=filters,
-                        )
-                        chain[idx] = replace(comp, _state=agn_state)
-                        break
-
-                # The non-BakedIn nebular component caches
-                # filters too, for its filter-integrated precompute publish.
-                from tengri.components.nebular.component import NebularSEDComponent
-
-                for idx, comp in enumerate(chain):
-                    if isinstance(comp, NebularSEDComponent):
-                        neb_state = comp.precompute(
-                            ssp_data=None,
-                            wave_grid=None,
-                            approx=self._approx,
-                            filters=filters,
-                        )
-                        chain[idx] = replace(comp, _state=neb_state)
-                        break
-
-                # The IGM component tabulates its filter-averaged transmission
-                # <T>_f against redshift here, where the filter convention and
-                # padded curves are in scope. Without it, predict_via_precomp
-                # band-averages the full-grid Inoue+2014 curve on every call —
-                # which pins the full-resolution grid and defeats the dead-code
-                # elimination that IS the WavePrecomp speedup (#932).
-                from tengri.components.igm.component import IGMSEDComponent
-
-                for idx, comp in enumerate(chain):
-                    if isinstance(comp, IGMSEDComponent):
-                        igm_state = comp.precompute_band_factors(
-                            wave_rest=self.wavelengths,
-                            photometry=self.observation.photometry,
-                            filters=filters,
-                            redshift_spec=redshift_spec,
-                        )
-                        chain[idx] = replace(comp, _state=igm_state)
-                        # <T>_f alone is not enough: it averages the transmission
-                        # UNWEIGHTED by the spectrum, forming <S>*<T> where the flux
-                        # needs <S*T>. Across GALEX FUV at z~0.8 the transmission runs
-                        # from ~1 to ~0 inside the bandpass and that covariance term
-                        # reaches -9.5% (#1135). Fold T into the sub-band quadrature
-                        # weights instead — at BUILD time, so it is free at runtime.
-                        chain[0] = replace(
-                            chain[0],
-                            _state=_fold_igm_into_subbands(comp, chain[0]._state),
-                        )
-                        break
-
-        # SpectrumPrecomp — pre-rebin the SSP grid to the spectrum
-        # pixel centers. Only the stellar component needs a build-time LUT;
-        # downstream SEDModelComponents (dust / AGN / IGM / nebular continuum)
-        # route through their ``_apply_spec_precomp`` branch at runtime once
-        # the stellar component publishes ``spec_eff_waves``.
-        if (
-            self._approx.get("spectrum_precomp")
-            and self.observation is not None
-            and self.observation.can_do_spectroscopy
-            and len(chain) > 0
-            and chain[0].name == "stellar"
-        ):
-            from dataclasses import replace
-
-            from tengri.components.stellar.component import StellarSEDComponent
-
-            stellar = chain[0]
-            if isinstance(stellar, StellarSEDComponent):
+            if spec_precomp_enabled:
                 spec_wave_obs = self.observation.spectroscopy.wave_obs
-
-                # Fixed vs free redshift (mirror the wave_precomp dispatch).
-                try:
-                    redshift_dist = self.spec.get_distribution("redshift")
-                    is_fixed = redshift_dist.is_fixed
-                    z_bounds = redshift_dist.bounds
-                except (AttributeError, KeyError):
-                    is_fixed = True
-                    z_bounds = (0.0,)
-
-                if is_fixed:
-                    redshift_spec = {"mode": "fixed", "value": float(z_bounds[0])}
-                else:
+                if not is_fixed:
                     cfg = self._approx_config or SpectrumPrecomp()
                     if z_bounds is None or len(z_bounds) < 2:
                         z_lo, z_hi, pad = 0.001, 3.0, 0.0
@@ -8031,57 +7991,130 @@ class SEDModel:
                         ),
                         "n_z": getattr(cfg, "n_z", 100),
                     }
-
-                spec_state = stellar.precompute(
-                    ssp_data=stellar.ssp_data,
-                    wave_grid=None,
-                    approx=self._approx,
-                    spec_wave_obs=spec_wave_obs,
-                    redshift_spec=redshift_spec,
-                )
-                # Part A (joint): MERGE the spectrum LUT into the stellar state
-                # rather than overwriting it — the photometry-LUT block above
-                # may already have populated ssp_phot_lut/ztable for a joint
-                # model. Spec-only models have no prior phot state, so the merge
-                # is a no-op on the phot fields.
-                prev = stellar._state
-                if prev is not None:
-                    merged = replace(
-                        prev,
-                        ssp_spec_lut=spec_state.ssp_spec_lut,
-                        ssp_spec_ztable=spec_state.ssp_spec_ztable,
-                    )
                 else:
-                    merged = spec_state
-                chain[0] = replace(stellar, _state=merged)
+                    redshift_spec = {"mode": "fixed", "value": float(z_bounds[0])}
 
-                # The IGM component tabulates its per-pixel transmission against
-                # redshift, the twin of the photometry band factor. Without it,
-                # predict_spectrum_via_precomp samples the full-grid Inoue+2014
-                # curve every call and the spectrum LUT buys nothing at all.
-                # MERGE, don't overwrite: a joint phot+spec model already carries
-                # the band table from the WavePrecomp block above.
-                from tengri.components.igm.component import IGMSEDComponent
+        # MAIN PRECOMPUTATION LOOP: every component, one pass
+        for idx, comp in enumerate(chain):
+            requires_template_data = getattr(comp, "requires_template_data", True)
+            if not requires_template_data:
+                continue
 
-                for idx, comp in enumerate(chain):
-                    if isinstance(comp, IGMSEDComponent):
-                        spec_igm = comp.precompute_spec_factors(
-                            wave_rest=self.wavelengths,
-                            spec_wave_obs=spec_wave_obs,
-                            redshift_spec=redshift_spec,
+            # Some components resolve their own templates inside ``predict``,
+            # against the traced ``wave``. Caching those here would replace
+            # traced values with concrete ones, which are then closure-captured
+            # and baked into the graph -- measured at 4.97 MB for astrodust, and
+            # at 29.94 MB on builds 2+ in the case recorded on
+            # ``_template_data_for_jit``. ``astrodust.predict`` documents the
+            # same trap from the tracer-leak side.
+            #
+            # This is deliberately its own flag rather than a reuse of
+            # ``accepts_threaded_templates``. That one already means "I publish a
+            # bundle from ``templates_for_threading()``", and
+            # ``test_every_opted_in_component_can_resolve_a_bundle`` enforces it;
+            # borrowing it here made astrodust declare a bundle it cannot
+            # produce, which is the advertise-without-delivering shape #1738 is
+            # about.
+            if getattr(comp, "resolves_templates_at_trace_time", False):
+                continue
+
+            # Base precompute: load data, set up _state
+            state = comp.precompute(
+                ssp_data=comp.ssp_data if hasattr(comp, "ssp_data") else None,
+                wave_grid=self.wavelengths,
+                approx=self._approx,
+            )
+
+            # Wave_precomp augmentation: build LUTs for photometry
+            if wave_precomp_enabled and len(chain) > 0 and chain[0].name == "stellar":
+                if isinstance(comp, StellarSEDComponent) and filters is not None:
+                    state = comp.precompute(
+                        ssp_data=comp.ssp_data,
+                        wave_grid=None,
+                        approx=self._approx,
+                        filters=filters,
+                        redshift_spec=redshift_spec,
+                    )
+                elif (isinstance(comp, AGNSEDComponent) and filters is not None) or (
+                    isinstance(comp, NebularSEDComponent) and filters is not None
+                ):
+                    state = comp.precompute(
+                        ssp_data=None,
+                        wave_grid=None,
+                        approx=self._approx,
+                        filters=filters,
+                    )
+                elif isinstance(comp, IGMSEDComponent):
+                    igm_state = comp.precompute_band_factors(
+                        wave_rest=self.wavelengths,
+                        photometry=self.observation.photometry,
+                        filters=filters,
+                        redshift_spec=redshift_spec,
+                    )
+                    # The band factors ARE the precompute product for IGM: its own
+                    # precompute() is a documented no-op, so ``state`` here is an
+                    # empty marker. An earlier version of this pass kept that
+                    # marker and copied only the two spec_* fields across, which
+                    # dropped band_zgrid/band_table -- so predict_via_precomp
+                    # re-evaluated the full Inoue+2014 curve on every call and the
+                    # #1135 fold stopped being free (12.7 MFLOPs, caught by
+                    # test_the_fold_is_free_at_runtime). The richer state wins.
+                    state = igm_state
+                    # Fold IGM transmission into stellar subbands
+                    if isinstance(chain[0], StellarSEDComponent):
+                        chain[0] = replace(
+                            chain[0],
+                            _state=_fold_igm_into_subbands(comp, chain[0]._state),
                         )
-                        prev_igm = comp._state
-                        igm_state = (
-                            replace(
-                                prev_igm,
-                                spec_zgrid=spec_igm.spec_zgrid,
-                                spec_table=spec_igm.spec_table,
-                            )
-                            if prev_igm is not None
-                            else spec_igm
+
+            # Spectrum_precomp augmentation: build spectrum LUTs
+            if spec_precomp_enabled and len(chain) > 0 and chain[0].name == "stellar":
+                if isinstance(comp, StellarSEDComponent) and spec_wave_obs is not None:
+                    spec_state = comp.precompute(
+                        ssp_data=comp.ssp_data,
+                        wave_grid=None,
+                        approx=self._approx,
+                        spec_wave_obs=spec_wave_obs,
+                        redshift_spec=redshift_spec,
+                    )
+                    # Merge spectrum LUT into existing state
+                    if state is not None:
+                        state = replace(
+                            state,
+                            ssp_spec_lut=spec_state.ssp_spec_lut,
+                            ssp_spec_ztable=spec_state.ssp_spec_ztable,
                         )
-                        chain[idx] = replace(comp, _state=igm_state)
-                        break
+                    else:
+                        state = spec_state
+                elif isinstance(comp, IGMSEDComponent) and spec_wave_obs is not None:
+                    spec_igm = comp.precompute_spec_factors(
+                        wave_rest=self.wavelengths,
+                        spec_wave_obs=spec_wave_obs,
+                        redshift_spec=redshift_spec,
+                    )
+                    if state is not None:
+                        state = replace(
+                            state,
+                            spec_zgrid=spec_igm.spec_zgrid,
+                            spec_table=spec_igm.spec_table,
+                        )
+                    else:
+                        state = spec_igm
+
+            # Replace component with precomputed state if it has _state field.
+            # CRITICAL: never clobber an existing populated state with an empty marker.
+            # The specialization blocks (wave_precomp, spectrum_precomp) run AFTER this
+            # pass and populate _state further. If this pass overwrites with an empty
+            # marker, silent wrong-physics results ensue. Check if old state has content.
+            if hasattr(comp, "_state"):
+                old_state = comp._state
+                # State is "empty" if it's just a bare marker with no data.
+                # A populated state has at least one content field.
+                old_has_content = _state_has_content(old_state)
+                new_has_content = _state_has_content(state)
+                # Only replace if: (1) new state has content, or (2) old state was empty
+                if new_has_content or not old_has_content:
+                    chain[idx] = replace(comp, _state=state)
 
         # Bake the fast-dust-emission routing flag onto the dust component so
         # ``apply`` can branch on it statically (structural, not a runtime arg).
