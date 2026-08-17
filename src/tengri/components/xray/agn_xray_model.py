@@ -100,6 +100,7 @@ class AGNXRayCoronaSEDComponent(SEDModelComponent):
         self.config = AGNXRayCoronaSEDComponentConfig()
 
     name: str = "agn_xray_corona"
+    requires_template_data: ClassVar[bool] = False
 
     #: The ``xray`` group's prefix, not a private one.
     #:

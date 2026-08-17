@@ -221,7 +221,6 @@ UNCURATED_DOIS = frozenset(
         "10.1146/annurev.astro.41.011802.094840",  # attenuation.py
         "10.1146/annurev.astro.46.060407.145222",  # physics_constants.py
         "10.1214/088342307000000014",  # gp_sfh.py
-        "10.21105/astro.2112.06830",  # interpolation.py
         "10.22201/ia.01851101p.2019.55.02.14",  # mappings_shock_precompute.py +1
         "10.22201/ia.01851101p.2019.55.02.21",  # shock_model.py
         "10.3390/e23070853",  # native.py +1

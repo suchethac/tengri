@@ -38,7 +38,7 @@ The SED uses a starburst history (τ = 100 Myr) with two-component dust and
 sfr-scaled nebular emission, rendered in the observer frame at z=1 with complete
 IGM attenuation.
 
-.. GENERATED FROM PYTHON SOURCE LINES 22-146
+.. GENERATED FROM PYTHON SOURCE LINES 22-162
 
 
 
@@ -48,8 +48,19 @@ IGM attenuation.
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /tengri/examples/photometry/plot_filter_throughput_overlay.py:160: UserWarning: This figure includes Axes that are not compatible with tight_layout, so results might be incorrect.
+      fig.tight_layout()
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -150,6 +161,9 @@ IGM attenuation.
     ax_sed.grid(True, alpha=0.2, which="both")
 
     # Overlay filter transmission curves
+    loaded = 0
+    first_failure: Exception | None = None
+
     for label, filter_names, color in FILTERS_BY_GROUP:
         for fname in filter_names:
             try:
@@ -162,11 +176,24 @@ IGM attenuation.
                     alpha=0.35,
                     lw=0,
                 )
-            except Exception:
+                loaded += 1
+            except Exception as e:
+                if first_failure is None:
+                    first_failure = e
                 continue
 
         # Legend handle: one opaque rectangle per group
         ax_filt.fill_between([], [], color=color, alpha=0.6, label=label, edgecolor="none")
+
+    # The legend handles above are `fill_between([], [], ...)` -- collections with
+    # no data. Every filter failing therefore leaves a panel that still has artists
+    # and a complete legend, so only a count of real loads detects it.
+    if loaded == 0:
+        raise RuntimeError(
+            "no filter transmission curve could be loaded, so the throughput panel "
+            f"is empty behind a full legend. First failure: "
+            f"{type(first_failure).__name__}: {first_failure}"
+        ) from first_failure
 
     ax_filt.set_ylim(0, 0.8)
     ax_filt.set_xlabel(r"Observed wavelength $\lambda$ [$\mathrm{\AA}$]", fontsize=11)
@@ -181,7 +208,7 @@ IGM attenuation.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 8.133 seconds)
+   **Total running time of the script:** (0 minutes 4.287 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_filter_throughput_overlay.py:

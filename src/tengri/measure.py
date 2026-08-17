@@ -26,7 +26,7 @@ Convention    The engines' native form               What ``measure`` asks you f
 **units**     rest-frame :math:`L_\nu` [erg/s/Hz]    rest-frame :math:`L_\nu`
 **distance**  ``compute_photometry`` -> ``dl_cm``;   a single ``redshift=``
               ``measure_line_flux_jax`` ->
-              ``four_pi_dl2``
+              ``log10_four_pi_dl2``
 ============  =====================================  ==============================
 
 This module adds **no new algorithms**. It dispatches to
@@ -149,13 +149,18 @@ def _resolve_line(line_def):
         ) from None
 
 
-def _four_pi_dl2(redshift, dl_cm=None):
-    r"""``4 pi d_L^2`` [cm^2] — the distance convention ``measure_line_flux_jax`` wants."""
+def _log10_four_pi_dl2(redshift, dl_cm=None):
+    r"""``log10(4 pi d_L^2)`` [dex] — the distance convention ``measure_line_flux_jax`` wants.
+
+    Log, not linear: :math:`4\pi d_L^2` is ``inf`` in float32 at every distance
+    (#1859).
+    """
     from tengri.cosmology import luminosity_distance
+    from tengri.utils.scale import log10_four_pi_dl2
 
     if dl_cm is None:
         dl_cm = jnp.asarray(luminosity_distance(jnp.asarray(redshift))).reshape(())
-    return 4.0 * jnp.pi * jnp.asarray(dl_cm) ** 2
+    return log10_four_pi_dl2(dl_cm)
 
 
 # ── the operators ─────────────────────────────────────────────────
@@ -263,8 +268,8 @@ def line_flux(wave_rest, lnu, line_def, *, redshift, dl_cm=None):
 
     **Distance convention.** The engine
     (:func:`~tengri.observation.line_measurement.measure_line_flux_jax`) takes
-    :math:`4\pi d_L^2` directly; this wrapper derives it, which is the point of
-    the façade.
+    :math:`\log_{10}(4\pi d_L^2)` directly; this wrapper derives it, which is the
+    point of the façade.
 
     Examples
     --------
@@ -276,7 +281,7 @@ def line_flux(wave_rest, lnu, line_def, *, redshift, dl_cm=None):
         jnp.asarray(wave_rest),
         jnp.asarray(lnu),
         _resolve_line(line_def),
-        _four_pi_dl2(redshift, dl_cm),
+        _log10_four_pi_dl2(redshift, dl_cm),
     )
 
 

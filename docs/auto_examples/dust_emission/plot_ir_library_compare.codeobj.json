@@ -948,6 +948,15 @@
    "name": "Artist.tight_layout"
   }
  ],
+ "first_failure": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "NoneType"
+  }
+ ],
  "ir": [
   {
    "is_class": false,
@@ -1395,6 +1404,15 @@
    "module": "numpy",
    "module_short": "numpy",
    "name": "float64"
+  }
+ ],
+ "plotted": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "int"
   }
  ],
  "plt.cm.viridis": [
