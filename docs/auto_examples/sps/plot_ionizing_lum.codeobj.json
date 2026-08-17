@@ -618,6 +618,15 @@
    "name": "Artist.tight_layout"
   }
  ],
+ "first_failure": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "NoneType"
+  }
+ ],
  "label": [
   {
    "is_class": false,
@@ -845,6 +854,15 @@
    "module": "os",
    "module_short": "os",
    "name": "environ"
+  }
+ ],
+ "plotted": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "int"
   }
  ],
  "plt.cm.viridis": [

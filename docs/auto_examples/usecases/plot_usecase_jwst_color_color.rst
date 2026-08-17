@@ -30,7 +30,7 @@ rest-frame UV-to-IR with minimal prior knowledge.
 Reference: Whitaker et al. 2011, ApJ, 735, 86 (high-z color selection);
 Conroy 2013, ARA&A, 51, 393 (SED fitting).
 
-.. GENERATED FROM PYTHON SOURCE LINES 14-178
+.. GENERATED FROM PYTHON SOURCE LINES 14-181
 
 
 
@@ -44,14 +44,198 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting).
 
  .. code-block:: none
 
-    /tengri/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
-      return load_ssp_data(str(candidate))
-    /tengri/src/tengri/forward/sed_model.py:1111: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
-    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:109: RuntimeWarning: invalid value encountered in scalar divide
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:112: RuntimeWarning: invalid value encountered in scalar divide
       color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
-    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:110: RuntimeWarning: invalid value encountered in scalar divide
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: RuntimeWarning: invalid value encountered in scalar divide
       color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:112: RuntimeWarning: invalid value encountered in scalar divide
+      color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: RuntimeWarning: invalid value encountered in scalar divide
+      color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:112: RuntimeWarning: invalid value encountered in scalar divide
+      color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: RuntimeWarning: invalid value encountered in scalar divide
+      color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:112: RuntimeWarning: invalid value encountered in scalar divide
+      color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: RuntimeWarning: invalid value encountered in scalar divide
+      color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:112: RuntimeWarning: invalid value encountered in scalar divide
+      color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: RuntimeWarning: invalid value encountered in scalar divide
+      color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:112: RuntimeWarning: invalid value encountered in scalar divide
+      color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: RuntimeWarning: invalid value encountered in scalar divide
+      color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:112: RuntimeWarning: invalid value encountered in scalar divide
+      color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: RuntimeWarning: invalid value encountered in scalar divide
+      color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:112: RuntimeWarning: invalid value encountered in scalar divide
+      color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: RuntimeWarning: invalid value encountered in scalar divide
+      color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:112: RuntimeWarning: invalid value encountered in scalar divide
+      color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: RuntimeWarning: invalid value encountered in scalar divide
+      color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:112: RuntimeWarning: invalid value encountered in scalar divide
+      color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: RuntimeWarning: invalid value encountered in scalar divide
+      color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:112: RuntimeWarning: invalid value encountered in scalar divide
+      color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: RuntimeWarning: invalid value encountered in scalar divide
+      color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:112: RuntimeWarning: invalid value encountered in scalar divide
+      color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: RuntimeWarning: invalid value encountered in scalar divide
+      color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:112: RuntimeWarning: invalid value encountered in scalar divide
+      color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: RuntimeWarning: invalid value encountered in scalar divide
+      color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:112: RuntimeWarning: invalid value encountered in scalar divide
+      color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: RuntimeWarning: invalid value encountered in scalar divide
+      color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:112: RuntimeWarning: invalid value encountered in scalar divide
+      color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: RuntimeWarning: invalid value encountered in scalar divide
+      color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:112: RuntimeWarning: invalid value encountered in scalar divide
+      color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: RuntimeWarning: invalid value encountered in scalar divide
+      color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:112: RuntimeWarning: invalid value encountered in scalar divide
+      color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: RuntimeWarning: invalid value encountered in scalar divide
+      color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:112: RuntimeWarning: invalid value encountered in scalar divide
+      color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: RuntimeWarning: invalid value encountered in scalar divide
+      color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:112: RuntimeWarning: invalid value encountered in scalar divide
+      color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: RuntimeWarning: invalid value encountered in scalar divide
+      color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:112: RuntimeWarning: invalid value encountered in scalar divide
+      color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: RuntimeWarning: invalid value encountered in scalar divide
+      color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:112: RuntimeWarning: invalid value encountered in scalar divide
+      color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: RuntimeWarning: invalid value encountered in scalar divide
+      color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:112: RuntimeWarning: invalid value encountered in scalar divide
+      color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: RuntimeWarning: invalid value encountered in scalar divide
+      color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:112: RuntimeWarning: invalid value encountered in scalar divide
+      color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: RuntimeWarning: invalid value encountered in scalar divide
+      color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
 
 
 
@@ -81,14 +265,17 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting).
 
     ssp = tengri.load_ssp()
 
-    # Build JWST filter observation
-    try:
-        obs = tengri.Observation(
-            photometry=tengri.Photometry.from_names(["jwst_f150w", "jwst_f277w", "jwst_f444w"])
-        )
-    except Exception:
-        # Fallback if filter names differ
-        obs = None
+    # Build JWST filter observation.
+    #
+    # There is deliberately no fallback. This used to catch and set ``obs = None``,
+    # which ``SEDModel.build`` accepts -- so a filter-name change would have built
+    # three models with no photometry and produced a JWST color-color diagram
+    # with no JWST filters in it. These three bands are not incidental to the
+    # example; they *are* the example, so failing to load them is fatal by
+    # construction.
+    obs = tengri.Observation(
+        photometry=tengri.Photometry.from_names(["jwst_f150w", "jwst_f277w", "jwst_f444w"])
+    )
 
     # Generate three galaxy classes
     key = jax.random.PRNGKey(123)
@@ -230,7 +417,7 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 30.150 seconds)
+   **Total running time of the script:** (1 minutes 54.334 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_jwst_color_color.py:

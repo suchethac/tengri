@@ -35,7 +35,7 @@ so users can pick by eye:
 
 Each is built with no overrides and evaluated at default parameter values.
 
-.. GENERATED FROM PYTHON SOURCE LINES 19-81
+.. GENERATED FROM PYTHON SOURCE LINES 19-99
 
 
 
@@ -49,10 +49,44 @@ Each is built with no overrides and evaluated at default parameter values.
 
  .. code-block:: none
 
-    /tengri/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 5% of its stellar mass before the Big Bang at z=5.18 (cosmic age 1.12 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+    /tengri/src/tengri/forward/sed_model.py:8398: WildcardPartialFreeWarning: 'all_params: FREE' freed 2 of 3 parameters in group 'dust'. These have no declared prior, only Fixed defaults, so they stay pinned:
+      dust_f_obscuration
+    The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. dust={'f_obscuration': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
+      spec = parse_groups(**groups)
+    /tengri/src/tengri/forward/sed_model.py:8398: WildcardPartialFreeWarning: 'all_params: FREE' freed 6 of 8 parameters in group 'sfh'. These have no declared prior, only Fixed defaults, so they stay pinned:
+      met_alpha_fe, met_logzsol_scatter
+    The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. sfh={'met_alpha_fe': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
+      spec = parse_groups(**groups)
+    /tengri/src/tengri/forward/orchestrator.py:794: SFHBeforeBigBangWarning: Star formation history forms 5% of its stellar mass before the Big Bang at z=5.18 (cosmic age 1.12 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
       state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
-    /tengri/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 38% of its stellar mass before the Big Bang at z=10.43 (cosmic age 0.45 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+    /tengri/src/tengri/forward/sed_model.py:8398: WildcardPartialFreeWarning: 'all_params: FREE' freed 3 of 6 parameters in group 'sfh'. These have no declared prior, only Fixed defaults, so they stay pinned:
+      met_alpha_fe, met_logzsol_scatter, sfh_dexp_start_gyr
+    The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. sfh={'met_alpha_fe': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
+      spec = parse_groups(**groups)
+    /tengri/src/tengri/forward/sed_model.py:8398: WildcardPartialFreeWarning: 'all_params: FREE' freed 2 of 3 parameters in group 'dust'. These have no declared prior, only Fixed defaults, so they stay pinned:
+      dust_f_obscuration
+    The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. dust={'f_obscuration': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
+      spec = parse_groups(**groups)
+    /tengri/src/tengri/forward/sed_model.py:8398: WildcardPartialFreeWarning: 'all_params: FREE' freed 6 of 8 parameters in group 'sfh'. These have no declared prior, only Fixed defaults, so they stay pinned:
+      met_alpha_fe, met_logzsol_scatter
+    The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. sfh={'met_alpha_fe': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
+      spec = parse_groups(**groups)
+    /tengri/src/tengri/forward/orchestrator.py:794: SFHBeforeBigBangWarning: Star formation history forms 5% of its stellar mass before the Big Bang at z=5.18 (cosmic age 1.12 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
       state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
+    /tengri/src/tengri/forward/sed_model.py:8398: WildcardPartialFreeWarning: 'all_params: FREE' freed 2 of 3 parameters in group 'dust'. These have no declared prior, only Fixed defaults, so they stay pinned:
+      dust_f_obscuration
+    The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. dust={'f_obscuration': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
+      spec = parse_groups(**groups)
+    /tengri/src/tengri/forward/sed_model.py:8398: WildcardPartialFreeWarning: 'all_params: FREE' freed 8 of 10 parameters in group 'sfh'. These have no declared prior, only Fixed defaults, so they stay pinned:
+      met_alpha_fe, met_logzsol_scatter
+    The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. sfh={'met_alpha_fe': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
+      spec = parse_groups(**groups)
+    /tengri/src/tengri/forward/orchestrator.py:794: SFHBeforeBigBangWarning: Star formation history forms 38% of its stellar mass before the Big Bang at z=10.43 (cosmic age 0.45 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
+    /tengri/src/tengri/forward/sed_model.py:8398: WildcardPartialFreeWarning: 'all_params: FREE' freed 6 of 8 parameters in group 'sfh'. These have no declared prior, only Fixed defaults, so they stay pinned:
+      met_alpha_fe, met_logzsol_scatter
+    The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. sfh={'met_alpha_fe': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
+      spec = parse_groups(**groups)
 
 
 
@@ -104,16 +138,34 @@ Each is built with no overrides and evaluated at default parameter values.
 
     fig, ax = plt.subplots(figsize=(7.4, 4.8))
 
+    plotted = 0
+    first_failure: Exception | None = None
+
     for name, recipe_fn, color in RECIPE_FNS:
         try:
             model = tengri.SEDModel.build(ssp_data=SSPS[name], **recipe_fn())
-        except Exception:
+        except Exception as e:
+            # A recipe that needs an SSP flavor this box does not have is a real
+            # skip. Every recipe failing is not — see the guard below.
+            if first_failure is None:
+                first_failure = e
             continue
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
         out = model.predict(p)
         wave = np.asarray(model.wavelengths)
         nu_l_nu = C_AA_PER_S / wave * np.asarray(out.rest_sed())
         ax.loglog(wave, nu_l_nu, color=color, lw=1.4, label=name)
+        plotted += 1
+
+    # Without this, a build break in every recipe renders an empty axes and the
+    # gallery runner reports the example as passing -- the exact hole the runner
+    # exists to close (#1145). Swallowing per-recipe is fine; swallowing all of
+    # them means the figure shows nothing it claims to compare.
+    if plotted == 0:
+        raise RuntimeError(
+            f"none of the {len(RECIPE_FNS)} recipes built, so this comparison is "
+            f"empty. First failure: {type(first_failure).__name__}: {first_failure}"
+        ) from first_failure
 
     ax.set(
         xlim=(700, 5e6),
@@ -129,7 +181,7 @@ Each is built with no overrides and evaluated at default parameter values.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 14.116 seconds)
+   **Total running time of the script:** (2 minutes 15.691 seconds)
 
 
 .. _sphx_glr_download_auto_examples_recipes_plot_recipe_compare.py:
