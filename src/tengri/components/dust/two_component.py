@@ -60,7 +60,7 @@ from tengri.protocols.component import (
     SEDComponentState,
 )
 from tengri.utils.physics_constants import C_AA
-from tengri.utils.scale import pow10
+from tengri.utils.scale import log10_magnitude, pow10
 
 __all__ = [
     "DustSEDComponent",
@@ -281,6 +281,12 @@ class DustSEDComponent(TemplateThreading):
                 "log10(L_ir / (erg/s)); the float32-safe form of L_ir",
             ),
             DerivedKey("sed_dust_attenuated", "erg/s/Hz", "Attenuated stellar SED"),
+            DerivedKey(
+                "log_line_lums_attenuated",
+                "dex",
+                "log10 of the discrete line catalog after the nebular screen; absent when no "
+                "photoionized backend published one (#1867)",
+            ),
         )
 
     def optional_inputs(self) -> tuple[DerivedKey, ...]:
@@ -309,6 +315,16 @@ class DustSEDComponent(TemplateThreading):
                 "lyc_transmission",
                 "",
                 "Stellar LyC survival fraction where(λ<912, neb_fesc, 1); absent for BakedIn",
+            ),
+            DerivedKey(
+                "line_waves",
+                "Angstrom",
+                "Discrete nebular line wavelengths (Cue/CloudyGrid); absent for BakedIn",
+            ),
+            DerivedKey(
+                "log_line_lums",
+                "dex",
+                "INTRINSIC log10 line luminosities to redden (#1867); absent for BakedIn",
             ),
         )
 
@@ -636,6 +652,63 @@ class DustSEDComponent(TemplateThreading):
         _f_obsc = jnp.asarray(params.get("dust_f_obscuration", 0.0))
         sed_neb_attenuated = sed_neb * (_f_obsc + (1.0 - _f_obsc) * jnp.exp(-tau_neb))
 
+        # ── 2c. Emission-line catalog attenuation (#1867) ──────────────────
+        # The discrete line catalog gets the SAME screen as the nebular
+        # continuum in 2b, evaluated at the line wavelengths: same law, same
+        # resolved parameters, same Lyman clip, same covering-fraction form.
+        # Reusing `neb_law` / `neb_bc_params` / `diff_law_kw` rather than
+        # re-deriving them is the point — a second derivation is a second
+        # thing that can disagree, which is #1858.
+        #
+        # Publishing it here rather than leaving each consumer to remember is
+        # what #1867 was: `Prediction._ensure_lines` reddened into a cache key
+        # the accessors never read, so `pred.lines.*` AND
+        # `predict_properties(names=("halpha", ...))` both returned intrinsic
+        # luminosities while documented as observed. The Balmer decrement sat
+        # at 2.7886 across a tau_diff sweep of 0.8 -> 2.5 on which
+        # `predict_line_fluxes(redden=True)` correctly ran 4.3282 -> 7.3814.
+        #
+        # A model with no dust component publishes nothing here and every
+        # consumer falls back to the intrinsic catalog, which is the right
+        # answer there — so the fallback is not a silent failure.
+        #
+        # Reads and publishes the LOG companion, never the linear `line_lums`.
+        # Line luminosities are ~1e40-1e43 erg/s, past float32's 3.4e38 ceiling
+        # (#1534/#1837), so the linear array is already `inf` there and a screen
+        # applied to it produces `inf * 0.3`. `log_line_lums` is exact in
+        # float32. `tests/regression/precision/test_no_raw_erg_s_derived_read.py`
+        # holds this line, and caught the first draft of this block reading the
+        # linear key.
+        #
+        # Computed here, beside the bindings it shares; published with the rest
+        # of `derived_overrides` further down, which is where that dict is
+        # built. Kept as a local on purpose -- `derived_overrides` does not
+        # exist yet at this point in `apply`.
+        _line_waves = state.derived.get("line_waves")
+        _log_line_lums = state.derived.get("log_line_lums")
+        log_line_lums_attenuated = None
+        if _line_waves is not None and _log_line_lums is not None:
+            line_wave = jnp.asarray(_line_waves)
+            k_bc_line = _lyman_clip(
+                _resolve_law(neb_law)(line_wave, **neb_bc_params),
+                line_wave,
+                self.config.lyman_cutoff_aa,
+            )
+            k_diff_line = _lyman_clip(
+                _resolve_law(self.config.law_diff)(line_wave, **diff_law_kw),
+                line_wave,
+                self.config.lyman_cutoff_aa,
+            )
+            tau_line = (
+                jnp.asarray(params["dust_tau_bc"]) * k_bc_line
+                + jnp.asarray(params["dust_tau_diff"]) * k_diff_line
+            )
+            # Transmission is O(1) and dimensionless, so its log10 is
+            # representable in float32 for any tau. A fully opaque screen gives
+            # -inf, the catalog's existing "genuinely dark line" sentinel.
+            transmission = _f_obsc + (1.0 - _f_obsc) * jnp.exp(-tau_line)
+            log_line_lums_attenuated = jnp.asarray(_log_line_lums) + log10_magnitude(transmission)
+
         # ── 3. Energy balance: ∫ (L_nu_intrinsic - L_nu_attenuated) dν ──
         # ν = c/λ. trapezoid(integrand, x=ν) with ν descending returns a
         # negative signed area; abs() recovers the positive erg/s.
@@ -765,6 +838,12 @@ class DustSEDComponent(TemplateThreading):
             # the true observed total. Unattenuated when dust is off / zero-τ.
             sed_nebular=sed_neb_attenuated,
         )
+        # Discrete emission-line catalog, reddened in 2c with the same screen
+        # as the nebular continuum above (#1867). Absent when no photoionized
+        # backend published a catalog; consumers then fall back to the
+        # intrinsic `log_line_lums`.
+        if log_line_lums_attenuated is not None:
+            derived_overrides["log_line_lums_attenuated"] = log_line_lums_attenuated
         filter_eff = state.derived.get("filter_eff_waves")
         if filter_eff is not None:
             from tengri.components.dust.attenuation import resolve_dust_law
@@ -804,6 +883,58 @@ class DustSEDComponent(TemplateThreading):
             derived_overrides["dust_bc_attenuation_slope_precomp"] = a_bc_slope
             derived_overrides["dust_diff_attenuation_precomp"] = a_diff
             derived_overrides["dust_diff_attenuation_slope_precomp"] = a_diff_slope
+
+            # The nebular bucket's screen, integrated THROUGH the band rather than
+            # sampled at λ_eff (#1738). ``A(λ_eff)·Φ_neb`` is only correct where the
+            # screen is flat across the filter, and nebular emission is line-dominated:
+            # a line sits where it sits, not at λ_eff, so the sampled screen is wrong
+            # by the screen's own variation across the band. Measured on a real FSPS
+            # SSP through SDSS griz, that error inflated the precomp-vs-exact gap by up
+            # to 26x over the stellar-only floor while nebular carried only 0.8-3.5 %
+            # of the band flux.
+            #
+            # This is EXACT, not the K-point convergent form the stellar continuum
+            # uses (#1122): ``sed_neb_attenuated`` is the reddened continuum on the
+            # full grid, so its band integral is the answer ``predict()`` computes.
+            # Affordable for the same reason it is needed — a dusty model already
+            # materializes the nebular continuum (``DustSEDComponent`` declares
+            # ``sed_nebular`` an input, which is what disarms the fast nebular grid,
+            # #1281/#1748), so the dense array is already live in the compiled graph
+            # and no dead-code elimination is given up. Where it is NOT materialized
+            # there is no dust consumer, hence no screen, hence nothing to correct.
+            # Guarded on the bucket this term REPLACES, not on the continuum it reads.
+            # A ``neb={'type': 'none'}`` model still publishes ``sed_nebular`` — as
+            # zeros — so keying off the continuum does not discriminate, and the
+            # projection READS the dense grid: on a dust-only model it resurrects the
+            # full-resolution chain XLA had eliminated, measured at 197,365 ->
+            # 1,285,037 gradient FLOPs (6.5x). That elimination is the entire point of
+            # the LUT (#1109), and spending it to integrate zeros is the worst
+            # available trade. ``nebular_phot_lnu_precomp`` is absent exactly when
+            # there is no λ_eff screening to correct — including BakedIn nebular,
+            # whose emission is already inside the stellar LUT.
+            _neb_phot = state.derived.get("nebular_phot_lnu_precomp")
+            if _neb_phot is not None and _sed_neb is not None:
+                from tengri.components._band_projection import (
+                    project_additive_onto_photometry,
+                )
+                from tengri.parameters.resolve import require_redshift
+
+                z_neb = jnp.asarray(
+                    require_redshift(params, "components.dust.two_component.apply")
+                )
+                fw_pad = state.derived.get("phot_filter_waves_padded")
+                ft_pad = state.derived.get("phot_filter_trans_padded")
+                derived_overrides["nebular_phot_lnu_attenuated_precomp"] = (
+                    project_additive_onto_photometry(
+                        None,  # no band response: a multiplicative screen is not rank-1
+                        sed_neb_attenuated,
+                        wave,
+                        filter_eff,
+                        fw_pad,
+                        ft_pad,
+                        z_neb,
+                    )
+                )
             # Log-derivatives d(ln A)/dλ = −τ·k'(λ_eff), published directly (no
             # division by A) so the two-component Taylor projection (#617) is
             # NaN-safe where A → 0 (e.g. X-ray/UV bands far off the dust curve):
@@ -848,6 +979,24 @@ class DustSEDComponent(TemplateThreading):
                 derived_overrides["dust_diff_restband_attenuation_precomp"] = jnp.exp(
                     -tau_diff * law_diff_fn(rb_eff, **diff_kw)
                 )
+            # The rest-frame twin of the band-integrated nebular screen above (#1738).
+            # Emitted HERE, beside its observed-frame partner, because emitting only
+            # one is #1665: every rest-frame consumer silently kept the λ_eff screen
+            # and 13/13 spectral indices moved with nothing raised. ``redshift=0``
+            # puts the filter in the rest frame, where ``phot_rest_fnu`` projects.
+            if rb_eff is not None and _neb_phot is not None and _sed_neb is not None:
+                derived_overrides["nebular_restband_lnu_attenuated_precomp"] = (
+                    project_additive_onto_photometry(
+                        None,
+                        sed_neb_attenuated,
+                        wave,
+                        rb_eff,
+                        fw_pad,
+                        ft_pad,
+                        jnp.zeros_like(z_neb),
+                    )
+                )
+
             rb_sub_waves = state.derived.get("stellar_restband_subband_waves_precomp")
             if rb_sub_waves is not None:
                 derived_overrides["dust_bc_restband_attenuation_subband_precomp"] = jnp.exp(

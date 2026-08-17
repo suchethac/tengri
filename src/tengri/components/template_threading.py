@@ -122,7 +122,15 @@ class TemplateThreading:
             return None
         try:
             return load(None)
-        except Exception:
-            # A component that cannot load here is no worse off than before
-            # threading existed: it falls back to its in-predict load.
+        except (FileNotFoundError, OSError):
+            # A missing or unreadable optional data file is the one failure this
+            # path is allowed to absorb: the component is no worse off than
+            # before threading existed and falls back to its in-predict load.
+            #
+            # Deliberately not ``except Exception``. Widening it here makes a
+            # stale API or a typo indistinguishable from an absent grid, and
+            # this codebase has paid for that twice: #1660 reported an
+            # AttributeError from a changed signature as "SSP data not
+            # available" and sat green for months, and #1615 hid a stale-API
+            # break behind skips. A programming error must surface (#1738).
             return None

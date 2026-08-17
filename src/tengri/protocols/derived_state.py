@@ -228,6 +228,9 @@ class DerivedState:
     dust_attenuation_factor: jnp.ndarray | None = None
     sed_dust_attenuated: jnp.ndarray | None = None
     sed_dust_ir: jnp.ndarray | None = None
+    #: Bolometric IR luminosity from dust emission component [erg/s].
+    #: Published by dust-emission components that close the energy balance.
+    L_ir_emission: jnp.ndarray | None = None
     # Dust attenuation per filter. A(λ_eff) and its
     # wavelength derivative A'(λ_eff) at each filter pivot, used
     # to apply Taylor-expansion attenuation in
@@ -322,6 +325,18 @@ class DerivedState:
     #: float32-safe companion to ``line_lums`` (#1534); ~1e41 erg/s is ``inf``
     #: in pure float32. Same sentinel convention as ``log_L_age``.
     log_line_lums: jnp.ndarray | None = None
+    #: ``log_line_lums`` after the dust screen, published by whichever dust
+    #: component ran, with the same law/params/clip it applies to the nebular
+    #: continuum (#1867). ``None`` when no dust component ran, and
+    #: consumers then fall back to the intrinsic ``log_line_lums`` — the
+    #: correct answer in that case.
+    #:
+    #: A typed field rather than an ``_extras`` entry deliberately: both public
+    #: line surfaces (``pred.lines.*`` and ``predict_properties``) resolve
+    #: through it, and #1867 was exactly a reddened catalog going somewhere
+    #: nothing read. A typed field is greppable and checkable; an untyped extra
+    #: would reproduce the failure mode.
+    log_line_lums_attenuated: jnp.ndarray | None = None
     # Stellar Lyman-continuum survival fraction where(λ<912, neb_fesc, 1),
     # published by photoionized backends so two-component dust can honor the
     # fesc absorption on the per-age lnu_age path (#824).
@@ -332,6 +347,26 @@ class DerivedState:
     # For BakedIn nebular this is None — the nebular emission is already
     # baked into the SSP grid and therefore included in stellar_phot_lnu_precomp.
     nebular_phot_lnu_precomp: jnp.ndarray | None = None
+    # The same bucket with the young-limit dust screen already integrated THROUGH
+    # each band, published by the dust component from the reddened continuum it
+    # computes anyway (#1738). ``predict_via_precomp`` prefers this over reddening
+    # ``nebular_phot_lnu_precomp`` at λ_eff, which is only correct where the screen
+    # is flat across the filter — and nebular emission is line-dominated, so it is
+    # not. Exact rather than the K-point form the stellar continuum uses (#1122),
+    # because the reddened continuum is already on the full grid here. ``None`` when
+    # no dust component runs, in which case there is no screen to integrate.
+    #
+    # THE SUFFIX IS LOAD-BEARING. ``predict_via_precomp`` sums every key ending
+    # ``_phot_lnu_precomp`` into the total, and ``_restband_lnu_precomp`` likewise.
+    # These two are REPLACEMENT terms, not additive contributions: renaming either to
+    # end in the discovered suffix would sum the nebular bucket twice, once bare and
+    # once reddened. The ``_attenuated_`` infix is what keeps them out of that sweep.
+    nebular_phot_lnu_attenuated_precomp: jnp.ndarray | None = None
+    # The rest-frame twin, integrated with the filter at z=0 where
+    # ``phot_rest_fnu`` projects. Emitted with its observed-frame partner or not at
+    # all: shipping only the observed one is #1665, which left every rest-frame
+    # consumer on the λ_eff screen and moved 13/13 spectral indices silently.
+    nebular_restband_lnu_attenuated_precomp: jnp.ndarray | None = None
     # Shock (MAPPINGS V) per filter — rest-frame Lν, erg/s/Hz, intrinsic (no
     # dust, no cosmology), exactly like ``nebular_phot_lnu_precomp``. A separate
     # additive component from the photoionized backend (#851), so it carries its

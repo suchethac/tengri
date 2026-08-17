@@ -17,6 +17,15 @@
    "name": "tuple"
   }
  ],
+ "_line_failure": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "NoneType"
+  }
+ ],
  "ax": [
   {
    "is_class": false,
