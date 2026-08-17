@@ -45,9 +45,9 @@ from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 # SKIRTOR_mean_3p grid parametrized by three independent axes:
 # oa (half-opening angle), incl (inclination), tv (optical depth).
 AXIS_PARAMS: tuple[str, ...] = (
-    "skirtor_agnfitter_oa",
-    "skirtor_agnfitter_incl",
-    "skirtor_agnfitter_tv",
+    "agn_oa_skirtor",
+    "agn_incl_skirtor",
+    "agn_tv_skirtor",
 )
 
 

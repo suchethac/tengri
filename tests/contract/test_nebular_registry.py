@@ -18,6 +18,8 @@ from tengri.parameters.groups import (
     parse_groups,
 )
 
+pytestmark = pytest.mark.contract
+
 _EXPECTED_KEYS = {"name", "kind", "status", "citation", "short_doc", "use"}
 
 
@@ -53,9 +55,22 @@ class TestNebularRegistry:
         assert tengri.list_nebular_backends(status="unvalidated") == []
 
     def test_status_filter_refuses_a_status_no_menu_uses(self):
-        """A typo must not read as "there are none" (#1679)."""
+        """A typo must not read as "there are none" (#1679).
+
+        The example used to be ``status="deprecated"``, chosen because tengri
+        assigned it nowhere. It stopped being unassigned the moment a menu row
+        got that status, and this test then failed for a reason that had
+        nothing to do with the rule it pins. Use a misspelling, which cannot
+        become real, and assert that premise instead of assuming it.
+        """
+        from tengri.registry import _menu_vocabulary
+
+        typo = "producton"
+        assert typo not in set(_menu_vocabulary("status")), (
+            f"{typo!r} has become a real status; pick another misspelling."
+        )
         with pytest.raises(ValueError, match="is not a status any menu uses"):
-            tengri.list_nebular_backends(status="deprecated")
+            tengri.list_nebular_backends(status=typo)
 
     def test_parse_groups_accepts_standalone_variants(self):
         # ``cloudy`` requires an external grid path (see

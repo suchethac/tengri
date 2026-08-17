@@ -17,13 +17,11 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tests.crossval.conftest import SSP_EXISTS
-
-jax.config.update("jax_enable_x64", True)
-
 from tengri.forward.sed_model import SEDModel
 from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Uniform
+from tests._bounds import assert_non_negative
+from tests.crossval.conftest import SSP_EXISTS
 
 pytestmark = [
     pytest.mark.crossval,
@@ -211,7 +209,7 @@ class TestIGMTransmissionPhysics:
         for z in [0.5, 1.0, 2.0, 3.0, 5.0]:
             wave_obs = jnp.linspace(500.0, 20000.0, 1000)
             t_igm = np.asarray(igm_transmission(wave_obs, z))
-            assert np.all(t_igm >= 0), f"Negative IGM at z={z}"
+            assert_non_negative(t_igm, name="t_igm", msg=f"Negative IGM at z={z}")
             assert np.all(t_igm <= 1.0 + 1e-10), f"IGM > 1 at z={z}"
 
     def test_igm_increases_with_redshift(self):
@@ -288,7 +286,7 @@ class TestRandomParameterPhysics:
         filters = load_filter_set(["sdss_r"])
         spec = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
+            sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
             sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
             sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),

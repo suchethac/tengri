@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import jax
 import jax.numpy as jnp
 import pytest
 
@@ -12,6 +11,7 @@ from tengri.observation.fiber_aperture import (
     arcsec_to_kpc,
     circular_aperture_mask,
 )
+from tests._grad_parity import assert_grad_matches_fd
 
 pytestmark = pytest.mark.bounds
 
@@ -89,7 +89,7 @@ def test_aperture_fraction_differentiable_in_radius(grid_2kpc) -> None:
     def frac_of_r(r):
         return aperture_fraction(profile, grid_2kpc, radius_kpc=r)
 
-    dfrac = jax.grad(frac_of_r)(jnp.float64(1.0))
+    dfrac = assert_grad_matches_fd(frac_of_r, jnp.float64(1.0))
     assert jnp.isfinite(dfrac)
     assert float(dfrac) > 0.0
 

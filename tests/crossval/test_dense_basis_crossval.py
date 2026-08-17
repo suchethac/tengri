@@ -19,12 +19,9 @@ References
 - Tutorial: https://dense-basis.readthedocs.io/en/latest/tutorials/fitting_different_SFH_shapes.html
 """
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
-
-jax.config.update("jax_enable_x64", True)
 
 pytestmark = pytest.mark.crossval
 
@@ -40,7 +37,7 @@ skip_no_db = pytest.mark.skipif(
     reason="dense_basis package not installed (pip install dense_basis)",
 )
 
-from tengri.components.stellar.sfh.dense_basis import dense_basis as dense_basis_sfh
+from tengri.components.stellar.sfh.dense_basis import dense_basis as dense_basis
 
 # ── Test data: 6 canonical tutorial shapes (Iyer+2019) ────────────
 # Format: [log_M*, log_SFR_inst, Nparam, tx0, tx1, tx2]
@@ -81,13 +78,13 @@ TUTORIAL_SHAPES = {
 
 
 def _compute_tengri_cumulative_mass(tx: tuple[float, ...], n_points: int = 500) -> tuple:
-    """Compute cumulative mass curve from tengri dense_basis_sfh.
+    """Compute cumulative mass curve from tengri dense_basis.
 
     Returns cumulative mass fraction integrated from oldest to youngest,
     with lookback time in Gyr (descending: oldest first).
     """
     age_yr = jnp.geomspace(1e6, 13.7e9, n_points)
-    sfr = dense_basis_sfh(
+    sfr = dense_basis(
         age_yr,
         log_total_mass=10.0,
         tx_frac_0=tx[0],
@@ -201,7 +198,7 @@ class TestDenseBasisCrossval:
 
         # Tengri peak
         age_yr = jnp.geomspace(1e6, 13.7e9, 500)
-        sfr_tengri = dense_basis_sfh(
+        sfr_tengri = dense_basis(
             age_yr,
             log_total_mass=10.0,
             tx_frac_0=tx[0],

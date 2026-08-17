@@ -71,7 +71,11 @@ class PosteriorProperties(ReadOnlyPropertyMapping, Mapping):
         if post._model is None:
             raise RuntimeError(
                 "No model reference on this Posterior — cannot compute properties. "
-                "(It is populated automatically by Fitter.run().)"
+                "Fitter.run() attaches one; save() deliberately does not persist it "
+                "(a model is a runtime object), so a Posterior read back with "
+                "Posterior.load(path) has none. Reload passing the model: "
+                "Posterior.load(path, model=model). There is no way to attach one "
+                "afterwards, so reloading is the fix — not re-running the fit."
             )
         return post._model
 

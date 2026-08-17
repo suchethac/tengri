@@ -13,8 +13,6 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri.observation.noise_model import NoiseModel
 from tengri.observation.observation import Observation
 from tengri.observation.photometry import FilterCurve
@@ -415,7 +413,7 @@ class TestParamSpecWithParams:
             sfh_dpl_alpha=Uniform(0.5, 3.0),
             sfh_dpl_beta=Uniform(0.3, 2.0),
             sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
-            sfh_dpl_log_total_mass=Uniform(-1.0, 2.5),
+            sfh_dpl_log_total_mass=Uniform(7.0, 12.5),
             met_logzsol=Uniform(-1.5, 0.2),
             dust_tau_bc=Uniform(0.0, 3.0),
             redshift=Fixed(0.5),

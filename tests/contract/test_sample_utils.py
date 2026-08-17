@@ -4,11 +4,9 @@ import pytest
 pytestmark = pytest.mark.contract
 """Tests for shared sampling utilities (_sample_utils.py)."""
 
-import jax
 import jax.numpy as jnp
 
 pytestmark = pytest.mark.contract
-jax.config.update("jax_enable_x64", True)
 
 from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physical
 

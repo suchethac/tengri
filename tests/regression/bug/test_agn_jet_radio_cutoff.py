@@ -30,8 +30,6 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri.radio import radio_agn, radio_agn_dpl, radio_sfr_bell2003
 from tengri.utils.physics_constants import C_AA
 

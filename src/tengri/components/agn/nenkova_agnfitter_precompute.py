@@ -37,7 +37,7 @@ from tengri.utils.grid_interp import (
 )
 
 # Nenkova AGNfitter grid parametrized by inclination only.
-AXIS_PARAMS: tuple[str, ...] = ("nenkova_agnfitter_cos_inc",)
+AXIS_PARAMS: tuple[str, ...] = ("agn_cos_inc",)
 
 
 def precompute_nenkova_agnfitter_photometry(
@@ -164,7 +164,7 @@ def build_nenkova_agnfitter_photometry_lookup(precomp: dict):
     callable
         Function with signature::
 
-            fn(agn_log_lbol, nenkova_agnfitter_cos_inc, agn_torus_frac)
+            fn(agn_log_lbol, agn_cos_inc, agn_torus_frac)
                 -> ndarray, shape (n_filters,)
 
         Returns torus L_ν [erg/s/Hz]. Caller applies
@@ -192,7 +192,7 @@ def build_nenkova_agnfitter_photometry_lookup(precomp: dict):
     @jax.jit
     def nenkova_agnfitter_phot(
         agn_log_lbol,
-        nenkova_agnfitter_cos_inc,
+        agn_cos_inc,
         agn_torus_frac,
     ):
         """Compute Nenkova AGNfitter torus photometry via PCHIP interpolation.
@@ -202,7 +202,7 @@ def build_nenkova_agnfitter_photometry_lookup(precomp: dict):
         # grid_phot stores L_ν [erg/s/Hz] per L_sun of L_bol (unit torus fraction)
         # Return: L_bol_lsun [L_sun] * torus_frac * phot [erg/s/Hz/L_sun] = L_ν [erg/s/Hz]
         l_bol_lsun = 10.0**agn_log_lbol
-        point = (nenkova_agnfitter_cos_inc,)
+        point = (agn_cos_inc,)
         phot_per_lsun = interp_nd_pchip(grid_phot, axes, point)
         return l_bol_lsun * agn_torus_frac * phot_per_lsun
 

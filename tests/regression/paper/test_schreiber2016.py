@@ -9,6 +9,7 @@ import pytest
 pytestmark = pytest.mark.regression_paper
 
 from tengri.components.dust.emission import schreiber2016
+from tests._bounds import assert_non_negative
 
 
 class TestSchreiber2016:
@@ -176,7 +177,7 @@ class TestSchreiber2016:
             dust_f_pah=0.5,
         )
 
-        assert jnp.all(l_nu >= 0.0)
+        assert_non_negative(l_nu, name="l_nu")
 
     def test_mixed_models_are_between_pure_components(self, wavelength_grid, l_absorbed):
         """Test that f_pah=0.5 gives intermediate flux between pure models."""

@@ -23,8 +23,6 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri import load_ssp_data
 from tengri.components.nebular.cue import _MAX_NEB_LOG_AGE, CueBackend
 from tengri.components.nebular.ionizing_spectrum import (

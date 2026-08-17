@@ -17,7 +17,6 @@ from __future__ import annotations
 import time
 
 import chex
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -28,6 +27,7 @@ from tengri.components.agn.blocks import (
     composable_precompute,
 )
 from tests._data_skip import requires_grahsp
+from tests._jit_parity import assert_jit_matches_eager
 
 pytestmark = pytest.mark.contract
 
@@ -362,7 +362,7 @@ def test_parameters_agn_axis_grids_accepted():
         agn_disc_block="grahsp_sbpl",
         agn_torus_block="skirtor",
         agn_attenuation_block="none",
-        agn_log_lbol=Fixed(45.0),
+        agn_log_lbol=Fixed(11.42),
         agn_log_mbh=Fixed(8.0),
         agn_log_ledd=Fixed(-1.0),
         agn_tau_skirtor=Fixed(7.0),
@@ -426,7 +426,6 @@ def test_lookup_works_with_explicit_jit_wrapper():
         axis_grids={"agn_grahsp_l5100": np.logspace(43, 46, 4)},
     )
     fn = composable_precompute.build_lookup(pre)
-    jit_fn = jax.jit(fn)
-    out = jit_fn(jnp.array(1.0), jnp.array(1e44))
+    out = assert_jit_matches_eager(fn, jnp.array(1.0), jnp.array(1e44))
     chex.assert_shape(out, (3,))
     chex.assert_tree_all_finite(out)

@@ -39,6 +39,11 @@ import numpy as np
 from tengri.utils.filter_convention import FilterConvention, filter_weight_np as _filter_weight_np
 from tengri.utils.grid_interp import preintegrate_grid, subband_quadrature
 from tengri.utils.physics_constants import TEN_PC_CM
+from tengri.utils.scale import (
+    apply_log10_scale,
+    log10_flux_scale as _log10_flux_scale,
+    log10_weighted_sum as _log10_weighted_sum,
+)
 
 # SSP precompute grid axes: (lgmet, lg_age_gyr). The age axis is never user-fixed
 # (ages are determined by the SFH). Only metallicity may be Fixed.
@@ -113,8 +118,10 @@ class PhotometricPrecomputation(NamedTuple):
         Used for evaluating dust at a single wavelength per band.
     effective_wavelengths_rest : array, shape (n_filters,)
         Effective wavelength in rest frame [Angstrom].
-    flux_scale : float
-        Geometric factor (1+z) / (4π dL²) [dimensionless].
+    log10_flux_scale : float
+        ``log10`` of the geometric factor (1+z) / (4π dL²) [dex re cm⁻²]. Stored
+        as a log: the linear factor is ``0.0`` in float32 at every distance, so a
+        stored linear scale is zeroed by the cast alone (#1859).
     redshift : float
         Source redshift [dimensionless].
     n_filters : int
@@ -149,7 +156,7 @@ class PhotometricPrecomputation(NamedTuple):
     ssp_phot_moment: "jnp.ndarray | None"
     effective_wavelengths: jnp.ndarray
     effective_wavelengths_rest: jnp.ndarray
-    flux_scale: float
+    log10_flux_scale: float
     redshift: float
     n_filters: int
     ssp_subband_phot: "jnp.ndarray | None" = None
@@ -169,8 +176,10 @@ class SpectroscopicPrecomputation(NamedTuple):
         Rest-frame wavelengths of spectral pixels [Angstrom].
     wave_obs_pixels : array, shape (n_pix,)
         Observed-frame wavelengths [Angstrom].
-    flux_scale : float
-        Geometric scaling factor (1+z) / (4π dL²) [dimensionless].
+    log10_flux_scale : float
+        ``log10`` of the geometric scaling factor (1+z) / (4π dL²)
+        [dex re cm⁻²]. Stored as a log for the reason given in
+        :class:`PhotometricPrecomputation` (#1859).
     redshift : float
         Source redshift [dimensionless].
 
@@ -185,7 +194,7 @@ class SpectroscopicPrecomputation(NamedTuple):
     ssp_on_pixels: jnp.ndarray
     wave_rest_pixels: jnp.ndarray
     wave_obs_pixels: jnp.ndarray
-    flux_scale: float
+    log10_flux_scale: float
     redshift: float
 
 
@@ -289,7 +298,7 @@ def precompute_photometry(
         ssp_phot_moment=preint.moment,
         effective_wavelengths=preint.effective_wavelengths,
         effective_wavelengths_rest=preint.effective_wavelengths_rest,
-        flux_scale=preint.flux_scale,
+        log10_flux_scale=preint.log10_flux_scale,
         redshift=float(redshift),
         n_filters=preint.n_filters,
         ssp_subband_phot=preint.subband_phot,
@@ -449,29 +458,28 @@ def precompute_spectroscopy(
     ssp_on_pixels_np = _vectorized_interp(wave_rest_np, wave_ssp_np, ssp_flux_np)
     ssp_on_pixels = jnp.array(ssp_on_pixels_np)
 
-    # Inline the (1+z)/(4π d_L²) geometric scale rather than calling the
-    # ``@jit``'d ``lnu_to_fnu`` and ``float()``-casting; the latter raises
+    # The (1+z)/(4π d_L²) geometric scale as a log10 offset, rather than calling
+    # the ``@jit``'d ``lnu_to_fnu`` and ``float()``-casting; the latter raises
     # ConcretizationTypeError when this precompute runs inside a jit trace
     # (e.g. when the user calls ``predict_*`` for the first time inside a
     # ``jax.jit`` wrapper without warming the chain). See companion fix in
-    # ``utils/grid_interp.py``.
-    import math as _math
-
-    flux_scale = (1.0 + redshift) / (4.0 * _math.pi * dl_cm**2)
+    # ``utils/grid_interp.py``. Log, not linear: the factor is ~1e-57 and stores
+    # as exactly 0.0 in float32 (#1859).
+    log10_flux_scale = _log10_flux_scale(redshift, dl_cm)
     # ``redshift`` may itself be a tracer when this path runs inside jit;
     # keep the conversion defensive in that case too.
     try:
-        flux_scale_out = float(flux_scale)
+        log10_flux_scale_out = float(log10_flux_scale)
         redshift_out = float(redshift)
     except (TypeError, jax.errors.ConcretizationTypeError):
-        flux_scale_out = flux_scale
+        log10_flux_scale_out = log10_flux_scale
         redshift_out = redshift
 
     return SpectroscopicPrecomputation(
         ssp_on_pixels=ssp_on_pixels,
         wave_rest_pixels=wave_rest_pixels,
         wave_obs_pixels=wave_obs_pixels,
-        flux_scale=flux_scale_out,
+        log10_flux_scale=log10_flux_scale_out,
         redshift=redshift_out,
     )
 
@@ -571,7 +579,7 @@ class PhotometricZTable(NamedTuple):
         [erg/s/Hz/Msun].
     eff_waves_rest_table : array, shape (n_z, n_filters)
         Rest-frame effective wavelengths at each redshift [Angstrom].
-    flux_scale_table : array, shape (n_z,)
+    log10_flux_scale_table : array, shape (n_z,)
         Geometric factor (1+z)/(4π dL²) at each redshift [dimensionless].
     z_grid : array, shape (n_z,)
         Redshift grid [dimensionless].
@@ -591,7 +599,7 @@ class PhotometricZTable(NamedTuple):
 
     ssp_phot_table: jnp.ndarray
     eff_waves_rest_table: jnp.ndarray
-    flux_scale_table: jnp.ndarray
+    log10_flux_scale_table: jnp.ndarray
     z_grid: jnp.ndarray
     n_filters: int
     igm_trans_table: jnp.ndarray
@@ -661,8 +669,21 @@ def _ztable_cache_key(
     # n_subbands changes the table's CONTENT, so it must change the hash. Without
     # it a cached K=0 table is reused for a K=5 model and the quadrature silently
     # no-ops -- persistently, across processes (#1122).
+    # The PAYLOAD SCHEMA is part of the key, not just the payload's inputs. #1859
+    # renamed ``flux_scale_table`` -> ``log10_flux_scale_table`` and changed what
+    # the numbers mean; without a version bump a warm cache would either KeyError
+    # or, worse, hand a linear table to a consumer expecting logs. Bump this
+    # whenever the npz field set or the meaning of a field changes.
     h.update(
-        repr((bool(apply_igm), bool(taylor_correction), str(convention), int(n_subbands))).encode()
+        repr(
+            (
+                bool(apply_igm),
+                bool(taylor_correction),
+                str(convention),
+                int(n_subbands),
+                "schema=2",
+            )
+        ).encode()
     )
     return h.hexdigest()
 
@@ -719,7 +740,7 @@ def precompute_photometry_ztable(
                 return PhotometricZTable(
                     ssp_phot_table=jnp.array(d["ssp_phot_table"]),
                     eff_waves_rest_table=jnp.array(d["eff_waves_rest_table"]),
-                    flux_scale_table=jnp.array(d["flux_scale_table"]),
+                    log10_flux_scale_table=jnp.array(d["log10_flux_scale_table"]),
                     z_grid=jnp.array(d["z_grid"]),
                     n_filters=int(d["n_filters"]),
                     igm_trans_table=jnp.array(d["igm_trans_table"]),
@@ -759,7 +780,7 @@ def precompute_photometry_ztable(
         payload = {
             "ssp_phot_table": np.asarray(table.ssp_phot_table),
             "eff_waves_rest_table": np.asarray(table.eff_waves_rest_table),
-            "flux_scale_table": np.asarray(table.flux_scale_table),
+            "log10_flux_scale_table": np.asarray(table.log10_flux_scale_table),
             "z_grid": np.asarray(table.z_grid),
             "n_filters": np.asarray(table.n_filters),
             "igm_trans_table": np.asarray(table.igm_trans_table),
@@ -853,7 +874,7 @@ def _compute_photometry_ztable(
 
     ssp_phot_all = np.zeros((n_z_pts, n_met, n_age, n_filters))
     eff_waves_rest_all = np.zeros((n_z_pts, n_filters))
-    flux_scale_all = np.zeros(n_z_pts)
+    log10_flux_scale_all = np.zeros(n_z_pts)
     igm_trans_all = np.ones((n_z_pts, n_filters))
     # Taylor moment Ψ on the z grid (only if requested).
     ssp_phot_moment_all = (
@@ -955,14 +976,17 @@ def _compute_photometry_ztable(
                 ssp_subband_all[zi, :, :, f_idx, :] = phi_k
                 subband_waves_all[zi, :, :, f_idx, :] = nodes_obs / (1.0 + z_val)
 
-        # Geometric flux scale
+        # Geometric flux scale, stored as a log10 offset. The build is eager
+        # float64 and the linear value is correct here — it is the *storage* that
+        # loses it: ~1e-57 casts to exactly 0.0 in a float32 array, so a linear
+        # table is zeroed for every z above ~0 (#1859).
         dl_cm = float(luminosity_distance(z_val))
-        flux_scale_all[zi] = (1.0 + z_val) / (4.0 * np.pi * dl_cm**2)
+        log10_flux_scale_all[zi] = float(_log10_flux_scale(z_val, dl_cm))
 
     return PhotometricZTable(
         ssp_phot_table=jnp.array(ssp_phot_all),
         eff_waves_rest_table=jnp.array(eff_waves_rest_all),
-        flux_scale_table=jnp.array(flux_scale_all),
+        log10_flux_scale_table=jnp.array(log10_flux_scale_all),
         z_grid=z_grid,
         n_filters=n_filters,
         igm_trans_table=jnp.array(igm_trans_all),
@@ -983,14 +1007,17 @@ def _compute_photometry_ztable(
 
 @jax.jit
 def fast_photometry(
-    weights: jnp.ndarray, ssp_phot_at_z: jnp.ndarray, dust_at_eff: jnp.ndarray, flux_scale: float
+    weights: jnp.ndarray,
+    ssp_phot_at_z: jnp.ndarray,
+    dust_at_eff: jnp.ndarray,
+    log10_flux_scale: float,
 ) -> jnp.ndarray:
     """Compute photometry from pre-computed SSP broadband fluxes.
 
     This is what runs at each MCMC step. No wavelength integrals —
     just a weighted sum over the age dimension.
 
-    c_gal(band) = flux_scale * sum_i weights_i * dust_i(band) * c_SSP_i(band)
+    c_gal(band) = 10**log10_flux_scale * sum_i weights_i * dust_i(band) * c_SSP_i(band)
 
     Parameters
     ----------
@@ -1002,8 +1029,9 @@ def fast_photometry(
     dust_at_eff : array, shape (n_age, n_filters)
         Dust transmission (dimensionless, in [0, 1]) evaluated at
         effective wavelengths per age/band.
-    flux_scale : float
-        Geometric factor (1+z) / (4 π d_L²) [cm⁻²].
+    log10_flux_scale : float
+        ``log10`` of the geometric factor (1+z) / (4 π d_L²) [dex re cm⁻²], from
+        :func:`tengri.utils.scale.log10_flux_scale`.
 
     Returns
     -------
@@ -1015,12 +1043,16 @@ def fast_photometry(
     **JIT-compatible**: yes — uses ``jnp.einsum`` for fast weighted sum.
     **Gradient-safe**: yes.
 
+    The scale arrives as a ``log10`` offset because the linear factor is ~1e-57
+    and exactly ``0.0`` in float32 at every distance — so a float32 fit returned
+    zero flux in every band, finite and silent (#1859). The applied product
+    (~1e-29) is representable; only the factor was not.
     """
     # Weighted sum: weights [Msun] * ssp [Lsun/Hz/Msun] * dust -> Lsun/Hz
     from tengri.components.stellar.sps.dsps_wrapper import LSUN_ERG_PER_S
 
     flux_lsun = jnp.einsum("i,if,if->f", weights, dust_at_eff, ssp_phot_at_z)
-    return flux_scale * flux_lsun * LSUN_ERG_PER_S
+    return apply_log10_scale(flux_lsun * LSUN_ERG_PER_S, log10_flux_scale)
 
 
 @jax.jit
@@ -1028,7 +1060,7 @@ def fast_spectrum(
     weights: jnp.ndarray,
     ssp_on_pixels_at_z: jnp.ndarray,
     dust_at_pixels: jnp.ndarray,
-    flux_scale: float,
+    log10_flux_scale: float,
 ) -> jnp.ndarray:
     """Compute spectrum from pre-rebinned SSP templates.
 
@@ -1041,8 +1073,9 @@ def fast_spectrum(
     dust_at_pixels : array, shape (n_age, n_pix)
         Dust transmission (dimensionless, in [0, 1]) at each pixel
         wavelength per age.
-    flux_scale : float
-        Geometric factor (1+z) / (4 π d_L²) [cm⁻²].
+    log10_flux_scale : float
+        ``log10`` of the geometric factor (1+z) / (4 π d_L²) [dex re cm⁻²], from
+        :func:`tengri.utils.scale.log10_flux_scale`.
 
     Returns
     -------
@@ -1054,9 +1087,11 @@ def fast_spectrum(
     **JIT-compatible**: yes — uses ``jnp.einsum`` for fast weighted sum.
     **Gradient-safe**: yes.
 
+    The scale arrives as a ``log10`` offset for the reason given in
+    :func:`fast_photometry`: the linear factor is ``0.0`` in float32 (#1859).
     """
     flux = jnp.einsum("i,ip,ip->p", weights, dust_at_pixels, ssp_on_pixels_at_z)
-    return flux_scale * flux
+    return apply_log10_scale(flux, log10_flux_scale)
 
 
 @jax.jit
@@ -1092,7 +1127,7 @@ def interpolate_ssp_phot_metallicity(
 
 
 @jax.jit
-def interpolate_ztable(ztable_ssp_phot, ztable_eff_rest, ztable_flux_scale, z_grid, z):
+def interpolate_ztable(ztable_ssp_phot, ztable_eff_rest, ztable_log10_flux_scale, z_grid, z):
     """Interpolate z-table to a specific redshift (JIT-compatible).
 
     Linear interpolation along the z dimension of the precomputed table.
@@ -1103,8 +1138,9 @@ def interpolate_ztable(ztable_ssp_phot, ztable_eff_rest, ztable_flux_scale, z_gr
         Precomputed SSP photometry [Lsun/Hz/Msun] on z grid.
     ztable_eff_rest : array, shape (n_z, n_filters)
         Rest-frame effective wavelengths [Angstrom] on z grid.
-    ztable_flux_scale : array, shape (n_z,)
-        Geometric flux scale (1+z)/(4π d_L²) [cm⁻²] on z grid.
+    ztable_log10_flux_scale : array, shape (n_z,)
+        ``log10`` of the geometric flux scale (1+z)/(4π d_L²) [dex re cm⁻²] on
+        the z grid.
     z_grid : array, shape (n_z,)
         Redshift grid (dimensionless), sorted ascending.
     z : float
@@ -1116,14 +1152,23 @@ def interpolate_ztable(ztable_ssp_phot, ztable_eff_rest, ztable_flux_scale, z_gr
         Interpolated SSP photometry [Lsun/Hz/Msun].
     eff_waves_rest : array, shape (n_filters,)
         Interpolated rest-frame effective wavelengths [Angstrom].
-    flux_scale : float
-        Interpolated geometric factor [cm⁻²].
+    log10_flux_scale : float
+        ``log10`` of the interpolated geometric factor [dex re cm⁻²].
 
     Notes
     -----
     **JIT-compatible**: yes — all operations use ``jnp`` primitives.
     **Gradient-safe**: yes — linear interpolation is differentiable.
 
+    The flux scale is stored and interpolated in ``log10`` because the linear
+    table is ~1e-57 and casts to exactly ``0.0`` in float32 — the table builds
+    correctly in float64 and is zeroed on storage (#1859).
+
+    **Still the arithmetic interpolation, not the geometric one.**
+    :func:`~tengri.utils.scale.log10_weighted_sum` reproduces
+    ``(1-f)·s_i + f·s_{i+1}`` exactly; a plain ``lerp`` of the logs would be a
+    different function (the geometric mean at the midpoint) and would silently
+    move float64 results.
     """
     z_clamped = jnp.clip(z, z_grid[0], z_grid[-1])
     idx = jnp.clip(jnp.searchsorted(z_grid, z_clamped) - 1, 0, len(z_grid) - 2)
@@ -1131,16 +1176,19 @@ def interpolate_ztable(ztable_ssp_phot, ztable_eff_rest, ztable_flux_scale, z_gr
 
     ssp_phot = (1.0 - frac) * ztable_ssp_phot[idx] + frac * ztable_ssp_phot[idx + 1]
     eff_rest = (1.0 - frac) * ztable_eff_rest[idx] + frac * ztable_eff_rest[idx + 1]
-    flux_scale = (1.0 - frac) * ztable_flux_scale[idx] + frac * ztable_flux_scale[idx + 1]
+    log10_flux_scale = _log10_weighted_sum(
+        jnp.stack([ztable_log10_flux_scale[idx], ztable_log10_flux_scale[idx + 1]]),
+        jnp.stack([1.0 - frac, frac]),
+    )
 
-    return ssp_phot, eff_rest, flux_scale
+    return ssp_phot, eff_rest, log10_flux_scale
 
 
 @jax.jit
 def interpolate_ztable_smooth(
     ztable_ssp_phot: jnp.ndarray,
     ztable_eff_rest: jnp.ndarray,
-    ztable_flux_scale: jnp.ndarray,
+    ztable_log10_flux_scale: jnp.ndarray,
     z_grid: jnp.ndarray,
     z: float,
     scatter: float,
@@ -1161,8 +1209,9 @@ def interpolate_ztable_smooth(
         Precomputed SSP photometry [Lsun/Hz/Msun] on z grid.
     ztable_eff_rest : array, shape (n_z, n_filters)
         Rest-frame effective wavelengths [Angstrom] on z grid.
-    ztable_flux_scale : array, shape (n_z,)
-        Geometric flux scale (1+z)/(4π d_L²) [cm⁻²] on z grid.
+    ztable_log10_flux_scale : array, shape (n_z,)
+        ``log10`` of the geometric flux scale (1+z)/(4π d_L²) [dex re cm⁻²] on
+        the z grid.
     z_grid : array, shape (n_z,)
         Redshift grid (dimensionless, sorted ascending).
     z : float
@@ -1180,14 +1229,17 @@ def interpolate_ztable_smooth(
         Interpolated SSP photometry [Lsun/Hz/Msun].
     eff_waves_rest : array, shape (n_filters,)
         Interpolated rest-frame effective wavelengths [Angstrom].
-    flux_scale : float
-        Interpolated geometric factor [cm⁻²].
+    log10_flux_scale : float
+        ``log10`` of the interpolated geometric factor [dex re cm⁻²].
 
     Notes
     -----
     **JIT-compatible**: yes — uses triweight kernel via :func:`compute_grid_weights`.
     **Gradient-safe**: yes — C²-continuous gradients.
 
+    The kernel-weighted average of the flux scale is taken in ``log10`` for the
+    reason given in :func:`interpolate_ztable`, and by the same primitive, so it
+    remains the arithmetic weighted sum ``Σ w_z s_z`` exactly (#1859).
     """
     from tengri.utils.interpolation import compute_grid_weights, edges_for_grid
 
@@ -1195,8 +1247,8 @@ def interpolate_ztable_smooth(
     w = compute_grid_weights(z, z_grid, scatter=scatter, edges=edges)
     ssp_phot = jnp.einsum("z,zmaf->maf", w, ztable_ssp_phot)
     eff_rest = jnp.einsum("z,zf->f", w, ztable_eff_rest)
-    flux_scale = jnp.dot(w, ztable_flux_scale)
-    return ssp_phot, eff_rest, flux_scale
+    log10_flux_scale = _log10_weighted_sum(ztable_log10_flux_scale, w)
+    return ssp_phot, eff_rest, log10_flux_scale
 
 
 @jax.jit

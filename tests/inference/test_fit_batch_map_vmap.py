@@ -29,7 +29,23 @@ pytestmark = [
     pytest.mark.contract,
 ]
 
-jax.config.update("jax_enable_x64", True)
+#: Declared support for ``sfh_tsnorm_log_total_mass``, named once so the truth
+#: this test synthesizes at and the bounds it asserts against cannot drift from
+#: the prior the fit actually runs under.
+#:
+#: They did drift. #369 renamed ``sfh_*_log_peak_sfr`` to ``log_total_mass`` —
+#: ``log10(SFR)`` became ``log10(M*)`` — and c66c0aff0 (#1839) converted the
+#: prior here from ``Uniform(-1.0, 2.5)`` to the declared range, but the truth
+#: below and the two assertions at the end kept the old numbers. The fit then
+#: had to explain a 10 Msun galaxy with a prior admitting nothing under 1e7,
+#: so MAP pegged every galaxy at 8.99 and the ``< 2.5`` assertion could not be
+#: satisfied by any value the prior allows. ``tools/check_param_ranges.py``
+#: cannot see this: it compares a call-site *prior* against the declaration,
+#: and neither a ``jnp.array(1.0)`` truth nor a bare ``assert`` is a prior.
+_MASS_LO, _MASS_HI = 7.0, 12.5
+
+#: A 1e10 Msun galaxy — mid-prior, so a converged MAP lands nowhere near an edge.
+_MASS_TRUTH = 10.0
 
 
 def _make_model(ssp):
@@ -43,7 +59,7 @@ def _make_model(ssp):
     )
 
     spec = Parameters(
-        sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
+        sfh_tsnorm_log_total_mass=Uniform(_MASS_LO, _MASS_HI),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
         sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
         sfh_tsnorm_skew=Uniform(-3.0, 3.0),
@@ -67,7 +83,7 @@ def _synthesize_catalog(model, n: int = 4, snr: float = 30.0, seed: int = 0):
 
     key = jax.random.PRNGKey(seed)
     base = {**model.spec.sample(key)}
-    base["sfh_tsnorm_log_total_mass"] = jnp.array(1.0)
+    base["sfh_tsnorm_log_total_mass"] = jnp.array(_MASS_TRUTH)
     base["sfh_tsnorm_peak_lbt_gyr"] = jnp.array(3.0)
     base["sfh_tsnorm_width_gyr"] = jnp.array(3.0)
 
@@ -103,7 +119,16 @@ def test_fit_batch_map_vmap_returns_finite_map_for_small_catalog(ssp_data_wne):
         assert a.shape[0] == n_gal, f"{name!r} has shape {a.shape}, expected leading {n_gal}"
         assert jnp.all(jnp.isfinite(a)), f"{name!r} produced non-finite MAP estimates"
 
-    # Spot-check: log_total_mass should sit well inside its prior bounds
+    # Spot-check: log_total_mass should sit well inside its prior bounds. Pegged
+    # at an edge is the signature of a fit that could not explain the data —
+    # which is what a truth outside the prior produces, and how this assertion
+    # came to be unsatisfiable (#1839 converted the prior, not these numbers).
+    # Bounds come from the declaration above rather than repeated literals.
     log_total_mass = result["sfh_tsnorm_log_total_mass"]
-    assert jnp.all(log_total_mass > -1.0), f"log_total_mass hit lower prior: {log_total_mass}"
-    assert jnp.all(log_total_mass < 2.5), f"log_total_mass hit upper prior: {log_total_mass}"
+    margin = 0.05 * (_MASS_HI - _MASS_LO)
+    assert jnp.all(log_total_mass > _MASS_LO + margin), (
+        f"log_total_mass pegged at lower prior {_MASS_LO}: {log_total_mass}"
+    )
+    assert jnp.all(log_total_mass < _MASS_HI - margin), (
+        f"log_total_mass pegged at upper prior {_MASS_HI}: {log_total_mass}"
+    )

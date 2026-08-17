@@ -24,7 +24,7 @@ from tengri.observation.spectral_indices import SpectralIndexData
 from tengri.observation.spectroscopy import Spectroscopy
 from tengri.parameters.priors import Distribution
 from tengri.parameters.resolve import require_redshift
-from tengri.utils.scale import LOG10_4PI, apply_log10_scale
+from tengri.utils.scale import apply_log10_scale, log10_flux_scale
 
 _OBSERVATION_DEPRECATION_WARNED = False
 
@@ -1299,7 +1299,7 @@ class Observation:
 
         z = jnp.asarray(require_redshift(params, "observation.observation.predict_via_precomp"))
         dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
-        log10_cos = jnp.log10(1.0 + z) - LOG10_4PI - 2.0 * jnp.log10(dl_cm)
+        log10_cos = log10_flux_scale(z, dl_cm)
         phot_fnu = apply_log10_scale(total_lnu, log10_cos)
 
         # phot_rest_fnu: the SED reprojected at z=0, d_L=10 pc — the galaxy as it is.
@@ -1475,7 +1475,7 @@ class Observation:
             require_redshift(params, "observation.observation.predict_spectrum_via_precomp")
         )
         dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
-        log10_cos = jnp.log10(1.0 + z) - LOG10_4PI - 2.0 * jnp.log10(dl_cm)
+        log10_cos = log10_flux_scale(z, dl_cm)
         spec_fnu = apply_log10_scale(total_spec_lnu, log10_cos)
 
         # spec_rest_fnu: same LUT sum projected at z=0, d_L=10pc.

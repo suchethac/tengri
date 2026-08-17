@@ -9,10 +9,9 @@ Auto-collapses any axis whose corresponding parameter is
 
 References
 ----------
-.. [1] S. F. Hönig & M. Kishimoto, "The dusty heart of nearby active
-   galaxies. II. From clumpy torus models to a unified model," ApJL 838,
-   L20 (2017). arXiv:1702.08691.
-   (CITATION-AUDIT NOTE: not found in ~/writing-workspace; verify against source)
+.. [1] S. F. Hönig & M. Kishimoto, "Dusty winds in active galactic nuclei: reconciling
+   observations with models," ApJL 838,
+   L20 (2017). arXiv:1702.08691. https://doi.org/10.3847/2041-8213/aa6838
 .. [2] L. N. Martínez-Ramírez, G. Calistro Rivera, E. Lusso, et al.,
    "AGNfitter-rx: Modeling the radio-to-X-ray spectral energy
    distributions of AGNs," A&A 688, A46 (2024). arXiv:2405.12111.
@@ -41,9 +40,9 @@ from tengri.utils.grid_interp import (
 # CAT3D-Wind grid parametrized by three axes: inclination (as cos),
 # radial power-law index, and wind fraction.
 AXIS_PARAMS: tuple[str, ...] = (
-    "cat3d_cos_inc",
-    "cat3d_a",
-    "cat3d_fwd",
+    "agn_cos_inc",
+    "agn_a_cat3d",
+    "agn_fwd_cat3d",
 )
 
 
@@ -87,8 +86,8 @@ def precompute_cat3d_photometry(
 
     References
     ----------
-    .. [1] S. F. Hönig & M. Kishimoto, "The dusty heart of nearby active
-       galaxies. II. From clumpy torus models to a unified model," ApJL 838,
+    .. [1] S. F. Hönig & M. Kishimoto, "Dusty winds in active galactic nuclei: reconciling
+       observations with models," ApJL 838,
        L20 (2017). arXiv:1702.08691.
 
     Notes
@@ -186,7 +185,7 @@ def build_cat3d_photometry_lookup(precomp: dict):
     callable
         Function with signature::
 
-            fn(agn_log_lbol, cat3d_cos_inc, cat3d_a, cat3d_fwd,
+            fn(agn_log_lbol, agn_cos_inc, agn_a_cat3d, agn_fwd_cat3d,
                agn_torus_frac) -> ndarray, shape (n_filters,)
 
         Returns torus L_ν [erg/s/Hz]. Caller applies
@@ -194,8 +193,8 @@ def build_cat3d_photometry_lookup(precomp: dict):
 
     References
     ----------
-    .. [1] S. F. Hönig & M. Kishimoto, "The dusty heart of nearby active
-       galaxies. II. From clumpy torus models to a unified model," ApJL 838,
+    .. [1] S. F. Hönig & M. Kishimoto, "Dusty winds in active galactic nuclei: reconciling
+       observations with models," ApJL 838,
        L20 (2017). arXiv:1702.08691.
 
     Notes
@@ -218,9 +217,9 @@ def build_cat3d_photometry_lookup(precomp: dict):
     @jax.jit
     def cat3d_phot(
         agn_log_lbol,
-        cat3d_cos_inc,
-        cat3d_a,
-        cat3d_fwd,
+        agn_cos_inc,
+        agn_a_cat3d,
+        agn_fwd_cat3d,
         agn_torus_frac,
     ):
         """Compute CAT3D-Wind torus photometry via monotone-cubic interpolation.
@@ -230,7 +229,7 @@ def build_cat3d_photometry_lookup(precomp: dict):
         # grid_phot stores L_ν [erg/s/Hz] per L_sun of L_bol (unit torus fraction)
         # Return: L_bol_lsun [L_sun] * torus_frac * phot [erg/s/Hz/L_sun] = L_ν [erg/s/Hz]
         l_bol_lsun = 10.0**agn_log_lbol
-        point = (cat3d_cos_inc, cat3d_a, cat3d_fwd)
+        point = (agn_cos_inc, agn_a_cat3d, agn_fwd_cat3d)
         phot_per_lsun = interp_nd_pchip(grid_phot, axes, point)
         return l_bol_lsun * agn_torus_frac * phot_per_lsun
 
@@ -271,8 +270,8 @@ def precompute(
 
     References
     ----------
-    .. [1] S. F. Hönig & M. Kishimoto, "The dusty heart of nearby active
-       galaxies. II. From clumpy torus models to a unified model," ApJL 838,
+    .. [1] S. F. Hönig & M. Kishimoto, "Dusty winds in active galactic nuclei: reconciling
+       observations with models," ApJL 838,
        L20 (2017). arXiv:1702.08691.
 
     Notes
@@ -326,8 +325,8 @@ def build_lookup(preint: dict, *, free_param_names: tuple[str, ...] | None = Non
 
     References
     ----------
-    .. [1] S. F. Hönig & M. Kishimoto, "The dusty heart of nearby active
-       galaxies. II. From clumpy torus models to a unified model," ApJL 838,
+    .. [1] S. F. Hönig & M. Kishimoto, "Dusty winds in active galactic nuclei: reconciling
+       observations with models," ApJL 838,
        L20 (2017). arXiv:1702.08691.
 
     Notes

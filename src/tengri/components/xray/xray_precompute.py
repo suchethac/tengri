@@ -8,9 +8,9 @@ three X-ray emitters in :mod:`tengri.components.xray.xray`:
    and Gilfanov+2004 calibrations.  Free axes: ``xray_gamma_hmxb``,
    ``xray_gamma_lmxb``.
 2. **xray_corona** — AGN corona via the α_OX relation (Lusso+2010 / Just+2007).
-   Free axes: ``xray_gamma``, ``xray_delta_alpha_ox``.
+   Free axes: ``xray_gamma_agn``, ``xray_delta_alpha_ox``.
 3. **xray_corona_lopez24** — AGN corona via the α_IRX relation (López+2024,
-   Yang+2022 anisotropy).  Free axes: ``xray_gamma``, ``xray_alpha_irx``.
+   Yang+2022 anisotropy).  Free axes: ``xray_gamma_agn``, ``xray_alpha_irx``.
 
 Each model is L-linear in its scalar luminosity input (SFR×stellar_mass for
 XRBs; L_agn_bol for corona; l_12um for the López24 corona).  Auto-collapses
@@ -24,7 +24,7 @@ Fixed axes via ``slice_fixed_axes``.
    future models (e.g. Comptonization tables, reflection grids, ionized
    absorber transmission cubes) will need; benchmark before assuming a
    speedup over the analytic runtime path.  See
-   ``scripts/benchmark_precompute_analytic.py``.
+   ``bench/scripts/benchmark_precompute_analytic.py``.
 
 References
 ----------
@@ -64,8 +64,8 @@ from tengri.forward.precompute.templates import (
 from tengri.utils.grid_interp import PreintegratedGrid
 
 AXIS_PARAMS_XRB = ("xray_gamma_hmxb", "xray_gamma_lmxb")
-AXIS_PARAMS_CORONA = ("xray_gamma", "xray_delta_alpha_ox")
-AXIS_PARAMS_CORONA_LOPEZ24 = ("xray_gamma", "xray_alpha_irx")
+AXIS_PARAMS_CORONA = ("xray_gamma_agn", "xray_delta_alpha_ox")
+AXIS_PARAMS_CORONA_LOPEZ24 = ("xray_gamma_agn", "xray_alpha_irx")
 
 AXIS_PARAMS: dict[str, tuple[str, ...]] = {
     "xray_xrb": AXIS_PARAMS_XRB,

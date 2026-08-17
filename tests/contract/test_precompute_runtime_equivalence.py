@@ -19,7 +19,7 @@ Models covered:
 References
 ----------
 .. [1] Existing working example:
-   tests/unit/components/agn/test_agn_nebular_precompute_equivalence.py
+   tests/contract/test_agn_nebular_precompute_equivalence.py
 """
 
 from __future__ import annotations
@@ -30,8 +30,6 @@ import numpy as np
 import pytest
 
 pytestmark = pytest.mark.contract
-
-jax.config.update("jax_enable_x64", True)
 
 
 # ── Fixtures ─────────────────────────────────────────────────────────

@@ -469,6 +469,54 @@ def _memoized_approx_clone(model, cfg):
     return clone
 
 
+def _component_chains(model) -> tuple:
+    """Every component chain ``model`` owns, or ``()`` if none can be inspected.
+
+    ``_build_component_chain`` lives on :class:`SEDModel` and nowhere else, so a
+    bare ``getattr`` on the object the fitter is holding finds it only when that
+    object *is* an ``SEDModel``. It usually is not: inference is canonically
+    through :class:`ForwardModel` (#211), which holds ``populations[i].sed`` —
+    the shape ``inference/catalog.py`` already reaches through by hand.
+
+    That made :func:`fast_nebular_can_engage` answer ``True`` for every
+    ``ForwardModel``, dusty or not — so the **photometry** gate it exists to
+    enforce (#1748: a dusty model may not zero ``sed_nebular``, so the per-Q_H
+    grid cannot serve photometry) never applied on the canonical path. Verified
+    before and after on a dusty two_component model: the bare ``SEDModel``
+    answered ``False``, the ``ForwardModel`` wrapping that same SED ``True``
+    (#1790).
+
+    This is the photometry question only. Whether a *line-flux* fit gets the LUT
+    is a different question with a different answer — dust does not disarm that
+    half, and #1770 measured 4.77x on a dusty line fit — so a caller deciding the
+    line channel must not consult the predicate this feeds.
+
+    Every population is consulted and :func:`fast_nebular_can_engage` requires
+    all of them to be clear, rather than reading ``populations[0]`` — picking one
+    arbitrarily is the failing-open shape ``ForwardModel._single_inner_sed``
+    already refuses for the same reason (#1271).
+    """
+    chain = getattr(model, "_cached_component_chain", None)
+    if chain is not None:
+        return (chain,)
+
+    builder = getattr(model, "_build_component_chain", None)
+    if builder is not None:
+        return (builder(),)
+
+    populations = getattr(model, "populations", None) or ()
+    chains: list = []
+    for pop in populations:
+        sed = getattr(pop, "sed", None)
+        if sed is None:
+            return ()
+        inner = _component_chains(sed)
+        if not inner:
+            return ()
+        chains.extend(inner)
+    return tuple(chains)
+
+
 def fast_nebular_can_engage(model) -> bool:
     """Can the fast nebular grid serve **photometry** for this model?
 
@@ -533,13 +581,28 @@ def fast_nebular_can_engage(model) -> bool:
     """
     from tengri.forward.sed_model import _nebular_continuum_consumers
 
-    chain = getattr(model, "_cached_component_chain", None)
-    if chain is None:
-        builder = getattr(model, "_build_component_chain", None)
-        if builder is None:
-            return True
-        chain = builder()
-    return not _nebular_continuum_consumers(chain)
+    chains = _component_chains(model)
+    if not chains:
+        # Deliberately permissive, and deliberately NOT changed with #1790.
+        #
+        # On the asymmetry alone this should fail closed: a wrong ``False`` only
+        # forfeits a speedup, while a wrong ``True`` attaches a config #1748
+        # measured as bit-identical in compiled FLOPs *and* changes
+        # ``compile_signature()``, so the fit buys a second compiled kernel for
+        # nothing. That was tried. Measured blast radius: 5 failures across
+        # test_batch_inference_defaults_to_precomp, test_issue_1596_photometry_
+        # feature_default and test_issue_1683_build_time_approx_feature_topup —
+        # every one a ``_StubModel`` exposing neither a chain nor populations,
+        # i.e. objects that are not models rather than models we cannot read.
+        #
+        # Once ``_component_chains`` unwraps the wrapper, every real surface
+        # (SEDModel, ForwardModel, the batch and catalog paths) resolves to a
+        # chain, so flipping this default has no demonstrated effect on any
+        # production path — only on doubles. Rewriting five tests to enable a
+        # hardening with no measured benefit is a separate change; #1790 records
+        # it as a follow-up with that blast radius attached.
+        return True
+    return not any(_nebular_continuum_consumers(chain) for chain in chains)
 
 
 def _observation_serves_line_channel(model) -> bool:
@@ -1193,7 +1256,7 @@ class Fitter:
         # user's original model is untouched and the returned posterior
         # references this fit model. ``approx=None`` forces the exact
         # wave-grid path; an explicit config (or tuple) overrides. Spec:
-        # docs/superpowers/specs/2026-07-15-fit-precomp-default-design.md.
+        # docs/internal/specs/2026-07-15-fit-precomp-default-design.md.
         self.model = self._resolve_fit_approx(model, approx)
         # For the #1671 bias advisory in run(): when resolution produced a LUT
         # clone, the caller's un-resolved object is the exact reference. When
@@ -2901,8 +2964,13 @@ class Fitter:
         import pickle
         from pathlib import Path as _Path
 
+        # B301: `path` is a cache this process wrote via save_cache().
+        # Unpickling executes arbitrary code, so the contract is that the
+        # caller supplies their own file; the fingerprint check below is a
+        # correctness guard against a *stale* cache, not a security boundary,
+        # and it runs after the payload has already been deserialized.
         with _Path(path).open("rb") as f:
-            payload = pickle.load(f)
+            payload = pickle.load(f)  # nosec B301
         if payload.get("spec_fingerprint") != self._spec_fingerprint():
             raise ValueError(
                 f"Adaptation cache at {path} was written for a different model "
@@ -2924,7 +2992,11 @@ class Fitter:
         """
         import hashlib
 
-        h = hashlib.sha1()
+        # A cache key over (free names, fixed values), not a security digest:
+        # it decides whether a stored fit may be reused, and nothing trusts it
+        # against a forged input. `usedforsecurity=False` says so to the reader,
+        # to bandit (B324), and to FIPS builds, where a plain sha1() raises.
+        h = hashlib.sha1(usedforsecurity=False)
         for name in self._free_names:
             h.update(name.encode())
         for name, val in sorted(self._fixed_values.items()):

@@ -11,6 +11,7 @@ from tengri.utils.wavelength import (
     interpolate_sed_to_grid,
     make_panchromatic_grid,
 )
+from tests._bounds import assert_non_negative
 
 pytestmark = pytest.mark.contract
 
@@ -141,4 +142,4 @@ class TestInterpolateSedToGrid:
 
         wave_tgt = jnp.logspace(2, 5, 300)
         result = interpolate_sed_to_grid(wave_src, sed_src, wave_tgt)
-        assert jnp.all(result >= 0)
+        assert_non_negative(result, name="result")

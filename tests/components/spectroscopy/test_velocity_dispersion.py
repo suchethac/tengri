@@ -18,9 +18,10 @@ import pytest
 from numpy.testing import assert_allclose
 
 from tengri.observation.spectrum import velocity_broaden
+from tests._grad_parity import assert_grad_matches_fd
+from tests._jit_parity import assert_jit_matches_eager
 
 pytestmark = pytest.mark.bounds
-jax.config.update("jax_enable_x64", True)
 
 
 def fd_grad(f, x: float, eps: float = 1e-4) -> float:
@@ -30,8 +31,17 @@ def fd_grad(f, x: float, eps: float = 1e-4) -> float:
 
 @pytest.fixture
 def wave():
-    """Uniformly spaced wavelength grid (200 pixels, 3800-9200 Å)."""
-    return jnp.linspace(3800.0, 9200.0, 200)
+    """Log-uniform wavelength grid (200 pixels, 3800-9200 Å).
+
+    Log-uniform, not linear (#1742). ``velocity_broaden`` convolves with a
+    constant Gaussian in ``ln(lambda)``, which is exact only on a grid uniform
+    in ``ln(lambda)``; on the ``linspace`` this fixture used to return, the
+    broadening came out low by ``wave[0]/lambda`` — reaching 3800/9200 = 0.41 at
+    the red end of this very range. The function now refuses such a grid rather
+    than returning a plausible wrong answer, so every test here was exercising a
+    precondition violation.
+    """
+    return jnp.logspace(jnp.log10(3800.0), jnp.log10(9200.0), 200)
 
 
 @pytest.fixture
@@ -135,11 +145,12 @@ class TestVelocityBroadenGradients:
         def loss(f):
             return jnp.sum(velocity_broaden(f, wave, 150.0) ** 2)
 
-        g = jax.grad(loss)(flux)
+        g = assert_grad_matches_fd(loss, flux)
         chex.assert_tree_all_finite(g)
 
     def test_jit_compatible(self, wave, sharp_spectrum):
         """Works inside jax.jit."""
-        fn = jax.jit(lambda f, s: velocity_broaden(f, wave, s))
-        result = fn(sharp_spectrum, 150.0)
+        result = assert_jit_matches_eager(
+            lambda f, s: velocity_broaden(f, wave, s), sharp_spectrum, 150.0
+        )
         chex.assert_tree_all_finite(result)

@@ -138,13 +138,13 @@ def build_model():
         ssp_data=ssp,
         observation=obs,
         redshift=Uniform(*Z_PRIOR),  # <-- free redshift: a photo-z fit
-        sfh={"type": "dpl", "*": FIXED, "log_total_mass": Uniform(8.0, 12.0)},
+        sfh={"type": "dpl", "all_params": FIXED, "log_total_mass": Uniform(8.0, 12.0)},
         met={"logzsol": Fixed(0.0)},
         # Free diffuse dust optical depth: marginalize the dust-redshift degeneracy.
         dust={
             "type": "two_component",
             "law_bc": "calzetti",
-            "*": FIXED,
+            "all_params": FIXED,
             "tau_diff": Uniform(0.0, 2.0),
         },
         neb={"type": "ssp"},  # nebular emission is baked into the wNE SSP (fixed logU/fesc)
@@ -215,7 +215,7 @@ print(
 FIT_KW = dict(
     method="mcmc_hmc",
     n_warmup=100,
-    n_samples=120,
+    n_samples=100,
     n_burnin=20,
     n_leapfrog_steps=20,  # longer trajectories mix the dust-redshift degeneracy
     target_accept_rate=0.85,
@@ -312,17 +312,20 @@ print(
 # `forward_chunk_size=K` sets how many galaxy-chains advance *together* per sampler
 # step: `K=1` runs them one at a time (the serial baseline), `K=N` batches the whole
 # catalog. `K` changes *only* the throughput, never the posterior (the vectorization
-# is bit-exact). We re-fit the same catalog at a few `K` — **same sampler settings
-# as above**, so the `K=N` row *is* the headline number — and time each. The wall
+# is bit-exact). We re-fit the same catalog at both ends of the range — `K=1` and
+# `K=N` — **same sampler settings as above**, so the `K=N` row *is* the headline
+# number. Two points give the size of the win, not its shape: whether the gain is
+# linear in `K` or saturates early needs intermediate chunk sizes, and those cost
+# a full extra fit each, which is why this page buys the endpoints only. The wall
 # includes the one-time compile a first run pays; at this sampler depth the ~4400
 # gradient evaluations dwarf it, so a single wall is a stable measure.
 
 # %%
-K_VALUES = [1, 4, N_GAL]
+K_VALUES = [1, N_GAL]
 
 # Same `fit_catalog` (and so the same FIT_KW) as the science fit above — the K=N
 # point *is* that fit, reused rather than re-run.
-sweep_wall = [fit_catalog(1)[0], fit_catalog(4)[0], fit_wall]
+sweep_wall = [fit_catalog(1)[0], fit_wall]
 sweep_per_gal = [w / N_GAL for w in sweep_wall]
 _serial = sweep_per_gal[0]
 
@@ -459,13 +462,13 @@ plt.show()
 #   ~220 HMC iterations x 20 leapfrog steps ~ 4400 forward-model gradient
 #   evaluations; the 3 free parameters are cheap, the ~4400 SED evaluations are the
 #   cost. Batching `K` chains amortizes the per-step overhead, so the **measured
-#   time per galaxy falls as `K` grows even on one CPU**: the sweep above drops from
-#   16.9 s/posterior at `K=1` (serial) to 5.8 s at `K=12` — a **2.9x speedup from
-#   batching alone, no GPU** (a 3-D fit is tiny and underfills the cores serially;
-#   batching feeds the vector units). The exact factor is machine- and load-
-#   dependent — measured here between ~3x and ~5x across runs — which is why the
-#   sweep measures it live rather than quoting a constant. A GPU extends this much
-#   further.
+#   time per galaxy falls between `K=1` and `K=N` even on one CPU** — read the
+#   speedup off the table printed above, not from here: it is machine- and
+#   load-dependent, and has measured anywhere between ~3x and ~5x across runs on
+#   the same code. That variability is the reason the cell measures it live, and
+#   the reason this paragraph does not pin a number to compare against. A 3-D fit
+#   is tiny and underfills the cores serially; batching feeds the vector units,
+#   and a GPU extends it much further.
 # - **Free redshift rides `WavePrecomp`** — the LUT is tabulated over redshift, so
 #   a photo-z fit interpolates the table (nebular emission lines and all) instead
 #   of re-integrating the forward model per step. Baking the nebular emission into
@@ -480,4 +483,4 @@ plt.show()
 #   `bench/scripts/benchmark_catalog_throughput.py`; for cluster-scale catalogs
 #   (one GPU per slice, array jobs) see `scripts/slurm/`; and to shard *one* very
 #   high-dimensional hierarchical fit across devices, see
-#   `docs/advanced/hierarchical.md` (VI, the other track).
+#   `docs/internal/advanced/hierarchical.md` (VI, the other track).

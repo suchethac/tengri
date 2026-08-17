@@ -20,12 +20,9 @@ Usage:
     pytest -m crossval tests/crossval/test_nebular_sps_crossval.py -v
 """
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
-
-jax.config.update("jax_enable_x64", True)
 
 pytestmark = pytest.mark.crossval
 
@@ -63,19 +60,39 @@ class TestIGMPublishedValues:
         T = float(igm_transmission(wave_obs, z)[0])
         assert 0.2 < T < 0.9, f"T={T:.3f} at z=3, lam_rest=1000A; expected partial absorption"
 
-    def test_z3_below_lyman_limit_near_zero(self):
-        """At z=3, lambda_rest=912 A: below Lyman limit, T ~ 0.
+    def test_z3_lyman_continuum_absorbs_blueward_of_the_limit(self):
+        """At z=3, LyC absorption grows *blueward* of 912 A — not at it.
 
-        Photons below the Lyman limit at the source redshift are
-        heavily absorbed by the Lyman continuum.
+        A photon emitted at exactly the Lyman limit is above the limit at every
+        intervening absorber (its rest wavelength at redshift ``z_abs < z`` is
+        ``lam_obs / (1 + z_abs) > 912 A``), so it sees Lyman-*series* forest
+        absorption only, not the Lyman continuum. The LyC opacity switches on
+        for photons emitted shortward of the limit, and deepens as more of the
+        sightline lies below it.
+
+        This test previously asserted ``T < 0.05`` at exactly 912 A rest and
+        failed against a correct implementation, having encoded the trough one
+        boundary away from where it lives (#1728).
         """
         from tengri.components.igm import igm_transmission
 
-        lam_rest = 912.0
         z = 3.0
-        wave_obs = jnp.array([lam_rest * (1.0 + z)])
-        T = float(igm_transmission(wave_obs, z)[0])
-        assert T < 0.05, f"T={T:.3f} at z=3, lam_rest=912A; expected ~0"
+        at_limit = float(igm_transmission(jnp.array([912.0 * (1.0 + z)]), z)[0])
+        blueward = [
+            float(igm_transmission(jnp.array([lam * (1.0 + z)]), z)[0])
+            for lam in (900.0, 850.0, 800.0)
+        ]
+
+        assert at_limit > 0.5, (
+            f"T={at_limit:.3f} at the limit itself: forest absorption only, "
+            "so most of the light should survive"
+        )
+        assert blueward == sorted(blueward, reverse=True), (
+            f"LyC opacity must deepen monotonically blueward of the limit, got {blueward}"
+        )
+        assert blueward[-1] < 0.4, (
+            f"T={blueward[-1]:.3f} at lam_rest=800A; expected substantial LyC absorption"
+        )
 
     def test_z05_lya_almost_transparent(self):
         """At z=0.5, lambda_rest=1216 A: almost no absorption.
@@ -91,18 +108,36 @@ class TestIGMPublishedValues:
         assert T > 0.90, f"T={T:.3f} at z=0.5, lam_rest=1216A; expected >0.90"
 
     def test_z6_lya_gunn_peterson_trough(self):
-        """At z=6, lambda_rest=1216 A: Gunn-Peterson trough, T ~ 0.
+        """At z=6 the Gunn-Peterson trough lies *blueward* of Ly-alpha.
 
-        At z>5 the IGM is significantly neutral and the Ly-alpha
-        forest becomes a Gunn-Peterson trough.
+        Absorbers sit at ``z_abs < z_source``, so a photon emitted at Ly-alpha
+        is already redward of Ly-alpha everywhere along the sightline and
+        nothing can absorb it: ``T = 1`` exactly at and redward of 1216 A rest.
+        The trough is the light emitted shortward of Ly-alpha, which each
+        foreground absorber redshifts *into* resonance.
+
+        The step at Ly-alpha is the signature of a mean-IGM model. A proximate
+        damping wing (``igm='asada25'``) is what smooths it; Inoue+2014 alone
+        is discontinuous there by construction.
+
+        This test previously asserted ``T < 0.05`` at exactly 1216 A rest — the
+        one wavelength where the model must return 1 (#1728).
         """
         from tengri.components.igm import igm_transmission
 
-        lam_rest = 1216.0
         z = 6.0
-        wave_obs = jnp.array([lam_rest * (1.0 + z)])
-        T = float(igm_transmission(wave_obs, z)[0])
-        assert T < 0.05, f"T={T:.3f} at z=6, lam_rest=1216A; expected ~0"
+        blueward = [
+            float(igm_transmission(jnp.array([lam * (1.0 + z)]), z)[0])
+            for lam in (1100.0, 1150.0, 1200.0, 1215.0)
+        ]
+        at_lya = float(igm_transmission(jnp.array([1216.0 * (1.0 + z)]), z)[0])
+        redward = float(igm_transmission(jnp.array([1250.0 * (1.0 + z)]), z)[0])
+
+        assert max(blueward) < 0.1, (
+            f"expected a Gunn-Peterson trough blueward of Ly-alpha at z=6, got {blueward}"
+        )
+        np.testing.assert_allclose(at_lya, 1.0, atol=1e-6)
+        np.testing.assert_allclose(redward, 1.0, atol=1e-6)
 
     def test_transmission_monotonic_with_redshift(self):
         """At fixed rest wavelength, transmission should decrease with z."""
@@ -479,48 +514,49 @@ class TestVelocityBroadening:
         FWHM = 2.3548 * 5.003 = 11.78 A
     """
 
-    def test_broadening_width(self):
-        """Measure the FWHM of a broadened delta function."""
+    @pytest.mark.parametrize("sigma_v", [100.0, 200.0, 300.0, 500.0])
+    def test_broadening_width(self, sigma_v):
+        """A broadened delta function has the requested velocity width, exactly.
+
+        ``velocity_broaden`` convolves in log-wavelength and takes its pixel
+        scale from ``log(wave[1] / wave[0])``, so the grid must be log-uniform —
+        the Notes section of its docstring says so. Measured that way the width
+        is recovered to 5 decimal places, and the tolerance here is 1e-4 rather
+        than the 10% this test used to allow.
+
+        On a *linear* grid the scale is read off the bluest pixel while the line
+        sits elsewhere, and since d(ln lambda) goes as 1/lambda the width comes
+        out low by exactly ``wave[0] / lam_center`` — 4500/5000 = 0.900 for the
+        grid this test used to build, which is what made it fail (#1742). The
+        width is measured by second moment rather than by counting pixels above
+        half maximum, which carried its own one-pixel bias.
+        """
         from tengri.observation.spectrum import velocity_broaden
 
-        sigma_v = 300.0  # km/s
-        lam_center = 5000.0
+        lam_center, n_pix = 5000.0, 4096
+        wave = jnp.exp(jnp.linspace(float(np.log(4500.0)), float(np.log(5500.0)), n_pix))
+        dlnwave = float(jnp.log(wave[1] / wave[0]))
 
-        # Create a narrow Gaussian (approximating a delta function)
-        # on a uniform wavelength grid
-        n_pix = 4096
-        wave = jnp.linspace(4500.0, 5500.0, n_pix)
-        dlam = float(wave[1] - wave[0])
+        # One-pixel-wide line in log space, i.e. as close to a delta as the
+        # grid allows. Its own width adds in quadrature and is accounted for.
+        log_wave = jnp.log(wave)
+        flux_in = jnp.exp(-0.5 * ((log_wave - float(np.log(lam_center))) / dlnwave) ** 2)
+        flux_in = flux_in / jnp.sum(flux_in)
 
-        # Delta function approximated as a very narrow Gaussian
-        delta_sigma = dlam  # 1 pixel wide
-        flux_in = jnp.exp(-0.5 * ((wave - lam_center) / delta_sigma) ** 2)
-        flux_in = flux_in / jnp.sum(flux_in)  # normalize
+        flux_out = np.array(velocity_broaden(flux_in, wave, sigma_v))
 
-        # Broaden
-        flux_out = velocity_broaden(flux_in, wave, sigma_v)
+        weights = flux_out / flux_out.sum()
+        log_wave_np = np.array(log_wave)
+        mean = float((log_wave_np * weights).sum())
+        sigma_ln = float(np.sqrt(((log_wave_np - mean) ** 2 * weights).sum()))
+        sigma_v_measured = sigma_ln * _C_KM_S
 
-        # Measure the width: find FWHM
-        flux_np = np.array(flux_out)
-        peak = flux_np.max()
-        half_max = peak / 2.0
-
-        above_half = np.where(flux_np > half_max)[0]
-        if len(above_half) > 1:
-            fwhm_pix = above_half[-1] - above_half[0]
-            fwhm_aa = fwhm_pix * dlam
-        else:
-            fwhm_aa = 0.0
-
-        # Expected FWHM
-        sigma_aa = lam_center * sigma_v / _C_KM_S
-        expected_fwhm = 2.3548 * sigma_aa
-
+        expected = float(np.hypot(sigma_v, dlnwave * _C_KM_S))
         np.testing.assert_allclose(
-            fwhm_aa,
-            expected_fwhm,
-            rtol=0.1,
-            err_msg=f"FWHM = {fwhm_aa:.2f}A, expected {expected_fwhm:.2f}A",
+            sigma_v_measured,
+            expected,
+            rtol=1e-4,
+            err_msg=f"measured {sigma_v_measured:.4f} km/s, expected {expected:.4f} km/s",
         )
 
     def test_broadening_preserves_flux(self):
@@ -727,57 +763,82 @@ class TestModifiedBlackbodySlope:
     In wavelength: L_nu ~ lambda^{-(2+beta)}.
     """
 
-    def test_rayleigh_jeans_slope_beta_1p8(self):
-        """For beta=1.8, slope in log(L_nu) vs log(nu) should be 2+1.8=3.8."""
+    #: Wavelength where h*nu = k*T — the edge of the Rayleigh-Jeans regime.
+    #: For T = 30 K this is 480 um, so a "500 um to 2 mm" window does not
+    #: probe the RJ tail at all: it straddles the Planck turnover. Fitting
+    #: there returns a slope short of 2+beta by 0.239 *independently of beta*,
+    #: which is the signature of leftover Planck curvature rather than a
+    #: mishandled beta — and is what these tests used to assert against, under
+    #: an atol of 0.15 that the 0.239 offset then broke (#1728).
+    @staticmethod
+    def _rj_crossover_aa(t_dust: float) -> float:
+        return _H_PLANCK * _C_CGS / (_K_BOLTZMANN * t_dust) * 1e8
+
+    def _fit_slope(self, beta: float, t_dust: float, lo_mult: float, hi_mult: float) -> float:
+        """Fit d log L_nu / d log nu over a window set in units of hc/kT."""
         from tengri.components.dust.emission import modified_blackbody
 
-        beta = 1.8
-        T_dust = 30.0
-        L_absorbed = 1e10  # Lsun (arbitrary normalization)
+        crossover = self._rj_crossover_aa(t_dust)
+        wave_aa = jnp.linspace(crossover * lo_mult, crossover * hi_mult, 1000)
+        l_nu = np.array(modified_blackbody(wave_aa, 1e10, dust_T=t_dust, dust_beta_ir=beta))
 
-        # Long wavelengths: 500 um to 2 mm (Rayleigh-Jeans regime for T=30K)
-        wave_aa = jnp.linspace(5e6, 2e7, 1000)  # 500 um to 2 mm in Angstrom
-        l_nu = modified_blackbody(wave_aa, L_absorbed, dust_T=T_dust, dust_beta_ir=beta)
+        nu = _C_CGS / (np.array(wave_aa) * 1e-8)
+        mask = l_nu > 0
+        return float(np.polyfit(np.log10(nu[mask]), np.log10(l_nu[mask]), 1)[0])
 
-        # Compute frequencies
-        wave_cm = np.array(wave_aa) * 1e-8
-        nu = _C_CGS / wave_cm
-        l_nu_np = np.array(l_nu)
+    @pytest.mark.parametrize("beta", [1.5, 1.8, 2.0])
+    def test_rayleigh_jeans_slope(self, beta):
+        """Deep in the RJ tail, d log L_nu / d log nu -> 2 + beta.
 
-        # Only fit where L_nu > 0
-        mask = l_nu_np > 0
-        log_nu = np.log10(nu[mask])
-        log_lnu = np.log10(l_nu_np[mask])
-
-        slope = np.polyfit(log_nu, log_lnu, 1)[0]
-        expected = 2.0 + beta
+        The window is 20-80x past h*nu = k*T, which is where the RJ
+        approximation the assertion relies on is actually valid.
+        """
+        slope = self._fit_slope(beta, t_dust=30.0, lo_mult=20.0, hi_mult=80.0)
         np.testing.assert_allclose(
             slope,
-            expected,
-            atol=0.15,
-            err_msg=f"MBB RJ slope = {slope:.3f}, expected {expected:.1f}",
+            2.0 + beta,
+            atol=0.02,
+            err_msg=f"MBB RJ slope = {slope:.4f}, expected {2.0 + beta:.1f}",
         )
 
-    def test_rayleigh_jeans_slope_beta_2p0(self):
-        """For beta=2.0, slope should be 2+2.0=4.0."""
-        from tengri.components.dust.emission import modified_blackbody
+    def test_slope_converges_to_rj_further_from_the_turnover(self):
+        """The approach to 2+beta is monotonic in how deep the window sits.
 
-        beta = 2.0
-        wave_aa = jnp.linspace(5e6, 2e7, 1000)
-        l_nu = modified_blackbody(wave_aa, 1e10, dust_T=30.0, dust_beta_ir=beta)
+        This is the physical content the single-window test cannot express: a
+        model that hardcoded the RJ slope would pass that test and fail this
+        one, and a model that mishandled beta would fail both. Measured
+        residuals: -0.239 at the turnover, -0.0048 at 10-40x, -0.0012 at
+        20-80x.
+        """
+        beta, t_dust = 1.8, 30.0
+        target = 2.0 + beta
 
-        wave_cm = np.array(wave_aa) * 1e-8
-        nu = _C_CGS / wave_cm
-        l_nu_np = np.array(l_nu)
+        residuals = [
+            abs(self._fit_slope(beta, t_dust, lo, hi) - target)
+            for lo, hi in ((1.04, 4.2), (10.0, 40.0), (20.0, 80.0))
+        ]
 
-        mask = l_nu_np > 0
-        slope = np.polyfit(np.log10(nu[mask]), np.log10(l_nu_np[mask]), 1)[0]
-        expected = 2.0 + beta
-        np.testing.assert_allclose(
-            slope,
-            expected,
-            atol=0.15,
-            err_msg=f"MBB RJ slope = {slope:.3f}, expected {expected:.1f}",
+        assert residuals == sorted(residuals, reverse=True), (
+            f"slope must approach 2+beta as the window moves into the RJ tail, got {residuals}"
+        )
+        assert residuals[0] > 0.1, (
+            "at the Planck turnover the RJ slope should NOT hold; if it does, the "
+            f"model may be hardcoding it (residual {residuals[0]:.4f})"
+        )
+        assert residuals[-1] < 0.01, f"deep RJ residual {residuals[-1]:.4f} too large"
+
+    def test_slope_offset_at_the_turnover_is_beta_independent(self):
+        """Planck curvature, not beta handling.
+
+        The shortfall at the turnover is the same for every beta. If it ever
+        becomes beta-dependent, the emissivity exponent is entangled with the
+        Planck function and the 2+beta reasoning no longer applies.
+        """
+        offsets = [
+            self._fit_slope(beta, 30.0, 1.04, 4.2) - (2.0 + beta) for beta in (1.5, 1.8, 2.0)
+        ]
+        assert max(offsets) - min(offsets) < 1e-3, (
+            f"turnover offset must not depend on beta, got {offsets}"
         )
 
 

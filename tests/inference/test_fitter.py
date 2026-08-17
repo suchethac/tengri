@@ -1,20 +1,19 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Tests for the Fitter class."""
 
+from pathlib import Path
+
 import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
-
-jax.config.update("jax_enable_x64", True)
-
-from pathlib import Path
 
 from tengri.forward.sed_model import SEDModel
 from tengri.inference.fitter import Fitter
 from tengri.inference.posterior import Posterior
 from tengri.parameters.parameters import Parameters
 from tengri.parameters.priors import Gaussian, Uniform
+from tests._grad_parity import assert_grad_matches_fd
 
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 _SSP_FILE = _DATA_DIR / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
@@ -36,7 +35,7 @@ def model_and_mock(ssp_data_wne, sdss_filters):
         sfh_dpl_alpha=Uniform(0.5, 3.0),
         sfh_dpl_beta=Uniform(0.3, 2.0),
         sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
-        sfh_dpl_log_total_mass=Uniform(-1.0, 2.5),
+        sfh_dpl_log_total_mass=Uniform(7.0, 12.5),
         met_logzsol=Uniform(-1.5, 0.2),
         dust_tau_bc=Uniform(0.0, 3.0),
         dust_tau_diff=0.3,
@@ -49,7 +48,12 @@ def model_and_mock(ssp_data_wne, sdss_filters):
         "sfh_dpl_alpha": 1.2,
         "sfh_dpl_beta": 1.0,
         "sfh_dpl_tau_gyr": 4.0,
-        "sfh_dpl_log_total_mass": 0.9,  # log10(8 Msun/yr)
+        # 1e10 Msun. Was 0.9 with the comment "log10(8 Msun/yr)" — an SFR, this
+        # name's pre-#369 meaning. c66c0aff0 (#1839) converted the prior above to
+        # the declared Uniform(7.0, 12.5) and left the truth behind, so the fit
+        # ran on an 8 Msun galaxy under a prior admitting nothing below 1e7. It
+        # stayed green because the assertions here check finiteness, not recovery.
+        "sfh_dpl_log_total_mass": 10.0,
         # free (it carries a prior) but never given a truth value — the forward
         # used to substitute the spec default silently. Say it out loud (#1021).
         "sfh_dpl_age_gyr": float(spec.get_distribution("sfh_dpl_age_gyr").default),
@@ -91,7 +95,7 @@ class TestLossFunction:
         loss_fn = fitter._build_loss_fn()
         data_args = fitter._data_args
         init = fitter._initialize_unbounded(jax.random.PRNGKey(0))
-        grad = jax.grad(lambda p: loss_fn(p, data_args))(init)
+        grad = assert_grad_matches_fd(lambda p: loss_fn(p, data_args), init)
         for name, g in grad.items():
             assert jnp.all(jnp.isfinite(g)), f"Non-finite gradient for {name}"
 

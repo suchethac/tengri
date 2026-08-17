@@ -90,8 +90,7 @@ require Synthesizer Box credentials (``synthesizer-download --agn-grids``).
 References
 ----------
 
-- Li et al. 2024, ApJ, 969, 28 (Cue v1)
-- Li et al. 2025, ApJ, 986, 9 (Cue v2, AGN extension)
+- Li et al. 2025, ApJ, 986, 9 (Cue; arXiv:2405.04598)
 - Gutkin, Charlot & Bruzual 2016, MNRAS, 462, 1757 (BEAGLE HII grids)
 - Chevallard & Charlot 2016, MNRAS, 462, 1415 (BEAGLE)
 - Alsing et al. 2020, ApJS (Speculator architecture)
@@ -389,9 +388,10 @@ def load_cue_weights(npz_path: str) -> CueWeights:
 
     References
     ----------
-    .. [1] Li et al. 2025, "Cue: A fast neural network emulator for nebular
-        emission line and continuum predictions", ApJ, 986, 9 (2025).
-        arXiv:2405.04598. https://doi.org/10.3847/1538-4357/ad7fe3
+    .. [1] Li et al. 2025, "Cue: A Fast and Flexible Photoionization Emulator
+        for Modeling Nebular Emission Powered by Almost Any Ionizing Source",
+        ApJ, 986, 9 (2025). arXiv:2405.04598.
+        https://doi.org/10.3847/1538-4357/adcab4
     .. [2] Charlot & Fall 2000, "A simple model for the absorption of starlight
         by dust grains and its application to metal-rich galaxies", ApJ 539, 718
 
@@ -741,9 +741,10 @@ def predict_all_lines(
 
     References
     ----------
-    .. [1] Li et al. 2025, "Cue: A fast neural network emulator for nebular
-        emission line and continuum predictions", ApJ, 986, 9 (2025).
-        arXiv:2405.04598. https://doi.org/10.3847/1538-4357/ad7fe3
+    .. [1] Li et al. 2025, "Cue: A Fast and Flexible Photoionization Emulator
+        for Modeling Nebular Emission Powered by Almost Any Ionizing Source",
+        ApJ, 986, 9 (2025). arXiv:2405.04598.
+        https://doi.org/10.3847/1538-4357/adcab4
 
     """
     # Fully batched forward pass over the 16 sub-emulators using the
@@ -832,9 +833,10 @@ def predict_continuum(
 
     References
     ----------
-    .. [1] Li et al. 2025, "Cue: A fast neural network emulator for nebular
-        emission line and continuum predictions", ApJ, 986, 9 (2025).
-        arXiv:2405.04598. https://doi.org/10.3847/1538-4357/ad7fe3
+    .. [1] Li et al. 2025, "Cue: A Fast and Flexible Photoionization Emulator
+        for Modeling Nebular Emission Powered by Almost Any Ionizing Source",
+        ApJ, 986, 9 (2025). arXiv:2405.04598.
+        https://doi.org/10.3847/1538-4357/adcab4
 
     """
     log_spec = _speculator_log_spectrum(nn_params, weights.cont_net)

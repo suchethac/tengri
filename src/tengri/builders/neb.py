@@ -8,7 +8,7 @@ Variants come from :data:`tengri.components.nebular._models.NEBULAR_MODELS`:
 - ``none`` — no nebular contribution.
 - ``ssp`` — embedded in the SSP grid (no free params; selects the SSP
   convention).
-- ``cue`` — neural emulator (Li+ 2024).
+- ``cue`` — neural emulator (Li+ 2025).
 - ``cloudy`` — direct CLOUDY interface (requires a Cloudy grid path).
 - ``cb19`` — Charlot & Bruzual 2019 templates.
 

@@ -27,6 +27,7 @@ from tengri.components.agn.polar_dust import (
     calzetti2000_extinction_curve,
     gaskell2004_extinction_curve,
 )
+from tests._bounds import assert_non_negative
 
 
 class TestPiecewisePowerlawDisk:
@@ -111,7 +112,7 @@ class TestSKIRTORDiskSpectrum:
         """All spectral values are non-negative."""
         wavelength = jnp.linspace(8.0, 1e6, 200)
         spectrum = skirtor_disk_spectrum(wavelength, delta=0.0)
-        assert jnp.all(spectrum >= 0.0)
+        assert_non_negative(spectrum, name="spectrum")
 
 
 class TestSchartmann2005DiskSpectrum:
@@ -189,7 +190,7 @@ class TestCalzetti2000Extinction:
         """Extinction coefficient is non-negative."""
         wavelength = jnp.linspace(1000.0, 20000.0, 100)
         k_lambda = calzetti2000_extinction_curve(wavelength)
-        assert jnp.all(k_lambda >= 0.0)
+        assert_non_negative(k_lambda, name="k_lambda")
 
     def test_known_values(self):
         """Check extinction at known wavelengths against literature."""
@@ -228,7 +229,7 @@ class TestGaskell2004Extinction:
         """Extinction coefficient is non-negative."""
         wavelength = jnp.linspace(1000.0, 20000.0, 100)
         k_lambda = gaskell2004_extinction_curve(wavelength)
-        assert jnp.all(k_lambda >= 0.0)
+        assert_non_negative(k_lambda, name="k_lambda")
 
     def test_piecewise_behavior(self):
         """Extinction law changes behavior at x = 3.69 (λ ≈ 271 nm)."""
@@ -239,9 +240,9 @@ class TestGaskell2004Extinction:
         wave_long = jnp.array([5000.0, 10000.0, 20000.0])  # x < 3.69
         k_long = gaskell2004_extinction_curve(wave_long)
         # Short wavelength extinction should be positive
-        assert jnp.all(k_short >= 0.0)
+        assert_non_negative(k_short, name="k_short")
         # Long wavelength clipped to be non-negative by implementation
-        assert jnp.all(k_long >= 0.0)
+        assert_non_negative(k_long, name="k_long")
 
     def test_continuity_at_transition(self):
         """Extinction is continuous at the piecewise transition (x ≈ 3.69)."""

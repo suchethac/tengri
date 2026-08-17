@@ -36,7 +36,7 @@ from tengri.utils.physics_constants import (
     L_SUN,
     MAGGIES_ZP_CGS,
 )
-from tengri.utils.scale import LOG10_4PI, apply_log10_scale
+from tengri.utils.scale import apply_log10_scale, log10_flux_scale, log10_four_pi_dl2
 
 __all__ = [
     "air_to_vacuum",
@@ -446,7 +446,7 @@ def lnu_to_fnu(
     """
     redshift = jnp.asarray(redshift)
     dl_cm = jnp.asarray(dl_cm)
-    log10_factor = jnp.log10(1.0 + redshift) - LOG10_4PI - 2.0 * jnp.log10(dl_cm)
+    log10_factor = log10_flux_scale(redshift, dl_cm)
     return apply_log10_scale(lnu, log10_factor)
 
 
@@ -481,7 +481,7 @@ def fnu_to_lnu(
     """
     redshift = jnp.asarray(redshift)
     dl_cm = jnp.asarray(dl_cm)
-    log10_inv = 2.0 * jnp.log10(dl_cm) + LOG10_4PI - jnp.log10(1.0 + redshift)
+    log10_inv = log10_four_pi_dl2(dl_cm) - jnp.log10(1.0 + redshift)
     return apply_log10_scale(fnu, log10_inv)
 
 

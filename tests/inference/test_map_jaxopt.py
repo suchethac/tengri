@@ -27,8 +27,6 @@ pytestmark = [
     pytest.mark.contract,
 ]
 
-jax.config.update("jax_enable_x64", True)
-
 
 @pytest.fixture(scope="module")
 def fitter_and_mock(ssp_data_wne, sdss_filters):
@@ -43,7 +41,7 @@ def fitter_and_mock(ssp_data_wne, sdss_filters):
     )
 
     spec = Parameters(
-        sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
+        sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
         sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
         sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
         sfh_tsnorm_skew=Uniform(-3.0, 3.0),
@@ -61,7 +59,10 @@ def fitter_and_mock(ssp_data_wne, sdss_filters):
     )
     model = SEDModel(spec, ssp, observation=obs)
     true_params = {
-        "sfh_tsnorm_log_total_mass": 1.0,
+        # 1e10 Msun, inside the declared Uniform(7.0, 12.5) above. Was 1.0 — an
+        # SFR left over from #369's rename, which #1839 converted the prior for
+        # but not the truth (see test_fitter.py for the trace).
+        "sfh_tsnorm_log_total_mass": 10.0,
         "sfh_tsnorm_peak_lbt_gyr": 3.0,
         "sfh_tsnorm_width_gyr": 1.5,
         "sfh_tsnorm_skew": 0.0,

@@ -21,9 +21,7 @@ from tengri.components.stellar.sps.precompute import (
     fast_spectrum,
     interpolate_ssp_phot_metallicity,
 )
-
-jax.config.update("jax_enable_x64", True)
-
+from tengri.utils.scale import apply_log10_scale
 
 pytestmark = pytest.mark.bounds
 
@@ -117,7 +115,9 @@ def sfr_on_ssp(n_age):
 # ── Build compositional photometry kernel ─────────────────────────
 
 
-def _make_fused_phot(ssp_phot, ssp_lgmet, eff_waves_rest, dust_age_w, flux_scale, ssp_ages_yr):
+def _make_fused_phot(
+    ssp_phot, ssp_lgmet, eff_waves_rest, dust_age_w, log10_flux_scale, ssp_ages_yr
+):
     @jax.jit
     def fused_phot(sfr_on_ssp, log_z, tau_v1, tau_v2, dust_n):
         dt = jnp.concatenate(
@@ -136,13 +136,13 @@ def _make_fused_phot(ssp_phot, ssp_lgmet, eff_waves_rest, dust_age_w, flux_scale
         tau_v_eff = dust_age_w * tau_v1 + tau_v2
         dust = jnp.exp(-(tau_v_eff[:, None] * wave_ratio[None, :]))
         flux_lsun = jnp.einsum("i,if,if->f", weights, dust, ssp_at_z)
-        return flux_scale * flux_lsun * LSUN_ERG_PER_S
+        return apply_log10_scale(flux_lsun * LSUN_ERG_PER_S, log10_flux_scale)
 
     return fused_phot
 
 
 def _make_fused_spec(
-    ssp_on_pixels, ssp_lgmet, wave_rest_pixels, dust_age_w, flux_scale, ssp_ages_yr
+    ssp_on_pixels, ssp_lgmet, wave_rest_pixels, dust_age_w, log10_flux_scale, ssp_ages_yr
 ):
     @jax.jit
     def fused_spec(sfr_on_ssp, log_z, tau_v1, tau_v2, dust_n):
@@ -162,7 +162,7 @@ def _make_fused_spec(
         tau_v_eff = dust_age_w * tau_v1 + tau_v2
         dust = jnp.exp(-(tau_v_eff[:, None] * wave_ratio[None, :]))
         flux = jnp.einsum("i,ip,ip->p", weights, dust, ssp_at_z)
-        return flux_scale * flux * LSUN_ERG_PER_S
+        return apply_log10_scale(flux, log10_flux_scale) * LSUN_ERG_PER_S
 
     return fused_spec
 
@@ -177,7 +177,7 @@ def _unfused_photometry(
     ssp_ages_yr,
     eff_waves_rest,
     dust_age_weights,
-    flux_scale,
+    log10_flux_scale,
     log_z,
     tau_v1,
     tau_v2,
@@ -194,7 +194,7 @@ def _unfused_photometry(
         law_diff="power_law",
         n_slope=dust_n,
     )
-    return fast_photometry(weights, ssp_at_z, dust, flux_scale)
+    return fast_photometry(weights, ssp_at_z, dust, log10_flux_scale)
 
 
 # ── Tests ─────────────────────────────────────────────────────────
@@ -213,7 +213,7 @@ class TestFusedPhotometryAccuracy:
         sfr_on_ssp,
     ):
         """Fused photometry matches separate-function photometry."""
-        flux_scale = 1e-30
+        log10_flux_scale = -30.0
         log_z, tau_v1, tau_v2, dust_n = -1.0, 0.5, 0.3, -0.7
 
         fused = _make_fused_phot(
@@ -221,7 +221,7 @@ class TestFusedPhotometryAccuracy:
             ssp_lgmet,
             eff_waves_rest,
             dust_age_weights,
-            flux_scale,
+            log10_flux_scale,
             ssp_ages_yr,
         )
         result_fused = fused(sfr_on_ssp, log_z, tau_v1, tau_v2, dust_n)
@@ -232,7 +232,7 @@ class TestFusedPhotometryAccuracy:
             ssp_ages_yr,
             eff_waves_rest,
             dust_age_weights,
-            flux_scale,
+            log10_flux_scale,
             log_z,
             tau_v1,
             tau_v2,
@@ -252,13 +252,13 @@ class TestFusedPhotometryAccuracy:
         log_z,
     ):
         """Agreement across metallicity range."""
-        flux_scale = 1e-30
+        log10_flux_scale = -30.0
         fused = _make_fused_phot(
             ssp_phot,
             ssp_lgmet,
             eff_waves_rest,
             dust_age_weights,
-            flux_scale,
+            log10_flux_scale,
             ssp_ages_yr,
         )
         result_fused = fused(sfr_on_ssp, log_z, 0.5, 0.3, -0.7)
@@ -269,7 +269,7 @@ class TestFusedPhotometryAccuracy:
             ssp_ages_yr,
             eff_waves_rest,
             dust_age_weights,
-            flux_scale,
+            log10_flux_scale,
             log_z,
             0.5,
             0.3,
@@ -354,13 +354,13 @@ class TestFusedPhotometryGradients:
         ssp_ages_yr,
         sfr_on_ssp,
     ):
-        flux_scale = 1e-30
+        log10_flux_scale = -30.0
         fused = _make_fused_phot(
             ssp_phot,
             ssp_lgmet,
             eff_waves_rest,
             dust_age_weights,
-            flux_scale,
+            log10_flux_scale,
             ssp_ages_yr,
         )
 
@@ -376,7 +376,7 @@ class TestFusedPhotometryGradients:
                     ssp_ages_yr,
                     eff_waves_rest,
                     dust_age_weights,
-                    flux_scale,
+                    log10_flux_scale,
                     log_z,
                     tau_v1,
                     tau_v2,
@@ -412,7 +412,7 @@ class TestFusedSpectrumAccuracy:
         ssp_ages_yr,
         sfr_on_ssp,
     ):
-        flux_scale = 1e-30
+        log10_flux_scale = -30.0
         log_z, tau_v1, tau_v2, dust_n = -1.0, 0.5, 0.3, -0.7
 
         fused = _make_fused_spec(
@@ -420,7 +420,7 @@ class TestFusedSpectrumAccuracy:
             ssp_lgmet,
             wave_rest_pixels,
             dust_age_weights,
-            flux_scale,
+            log10_flux_scale,
             ssp_ages_yr,
         )
         result_fused = fused(sfr_on_ssp, log_z, tau_v1, tau_v2, dust_n)
@@ -437,7 +437,7 @@ class TestFusedSpectrumAccuracy:
             law_diff="power_law",
             n_slope=dust_n,
         )
-        flux = fast_spectrum(weights, ssp_at_z, dust, flux_scale)
+        flux = fast_spectrum(weights, ssp_at_z, dust, log10_flux_scale)
         result_unfused = flux * LSUN_ERG_PER_S
 
         assert_allclose(result_fused, result_unfused, rtol=1e-10)
@@ -457,14 +457,14 @@ class TestFusedKernelSpeedup:
         sfr_on_ssp,
     ):
         """Fused photometry gradient is faster than unfused."""
-        flux_scale = 1e-30
+        log10_flux_scale = -30.0
 
         fused = _make_fused_phot(
             ssp_phot,
             ssp_lgmet,
             eff_waves_rest,
             dust_age_weights,
-            flux_scale,
+            log10_flux_scale,
             ssp_ages_yr,
         )
 
@@ -480,7 +480,7 @@ class TestFusedKernelSpeedup:
                     ssp_ages_yr,
                     eff_waves_rest,
                     dust_age_weights,
-                    flux_scale,
+                    log10_flux_scale,
                     lz,
                     tv1,
                     tv2,

@@ -7,12 +7,9 @@ peer-reviewed paper. If the code doesn't match the paper, the code is wrong.
 References are cited inline with each test.
 """
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
-
-jax.config.update("jax_enable_x64", True)
 
 pytestmark = pytest.mark.crossval
 
@@ -474,10 +471,10 @@ class TestLeja2019:
 
     def test_zero_ratios_flat_sfh(self):
         """Leja+2019: all log-ratios = 0 → equal SFR in all bins."""
-        from tengri.components.stellar.sfh import continuity_sfh
+        from tengri.components.stellar.sfh import continuity
 
         age = jnp.geomspace(1e8, 13e9, 500)
-        sfr = continuity_sfh(
+        sfr = continuity(
             age,
             log_total_mass=10.0,
             ratio_0=0.0,
@@ -534,9 +531,9 @@ class TestSFHMassConservation:
 
         Iyer+2019, ApJ 879, 116 — dense basis SFH is mass-normalized.
         """
-        from tengri.components.stellar.sfh.dense_basis import dense_basis_sfh
+        from tengri.components.stellar.sfh.dense_basis import dense_basis
 
-        sfr = dense_basis_sfh(
+        sfr = dense_basis(
             self.AGE_GRID,
             log_total_mass=10.0,
             log_sfr_inst=0.0,
@@ -558,9 +555,9 @@ class TestSFHMassConservation:
 
         Leja+2019, ApJ 876, 3 — continuity SFH is mass-normalized.
         """
-        from tengri.components.stellar.sfh.nonparametric import continuity_sfh
+        from tengri.components.stellar.sfh.nonparametric import continuity
 
-        sfr = continuity_sfh(
+        sfr = continuity(
             self.AGE_GRID,
             log_total_mass=10.0,
             ratio_0=0.0,
@@ -583,9 +580,9 @@ class TestSFHMassConservation:
 
         Leja+2019: total mass is set by log_total_mass independent of log-ratios.
         """
-        from tengri.components.stellar.sfh.nonparametric import continuity_sfh
+        from tengri.components.stellar.sfh.nonparametric import continuity
 
-        sfr_bursty = continuity_sfh(
+        sfr_bursty = continuity(
             self.AGE_GRID,
             log_total_mass=10.0,
             ratio_0=1.0,
@@ -1209,7 +1206,7 @@ class TestKennicutt1998:
     single-burst BPASS/FSPS ionizing fields (not a galaxy-averaged SFR),
     and for the Salpeter→Chabrier IMF offset (~1.7×).
 
-    See also: TestKennicutt1998Halpha in tests/unit/test_cue_and_ionizing.py.
+    See also: TestKennicutt1998Halpha in tests/components/nebular/test_cue_and_ionizing.py.
     This crossval class additionally tests the linearity of the L(Hα)–Q_H
     relation and the scaling with ionizing photon rate.
     """

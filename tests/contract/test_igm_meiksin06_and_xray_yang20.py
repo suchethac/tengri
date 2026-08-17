@@ -22,6 +22,7 @@ import pytest
 
 import tengri
 from tengri.components.igm.meiksin06 import igm_transmission_meiksin06
+from tests._jit_parity import assert_jit_matches_eager
 
 pytestmark = pytest.mark.contract
 
@@ -68,8 +69,7 @@ def test_meiksin06_transmission_shape():
 def test_meiksin06_jit_and_grad_safe():
     """Pure JAX kernel must JIT and accept gradient wrt z."""
     wave_obs = np.linspace(500.0, 10000.0, 100)
-    jitted = jax.jit(igm_transmission_meiksin06)
-    T = jitted(wave_obs, 3.0)
+    T = assert_jit_matches_eager(igm_transmission_meiksin06, wave_obs, 3.0)
     assert np.isfinite(np.asarray(T)).all()
 
 

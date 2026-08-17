@@ -24,8 +24,6 @@ import pytest
 jax = pytest.importorskip("jax")
 jnp = pytest.importorskip("jax.numpy")
 
-jax.config.update("jax_enable_x64", True)
-
 pytestmark = [pytest.mark.crossval]
 
 
@@ -133,7 +131,7 @@ class TestMulticolorDiscPeak:
         wavelength = jnp.geomspace(10.0, 50000.0, 2000)
         l_nu = multicolor_disc(
             wavelength,
-            agn_log_lbol=44.0,
+            agn_log_lbol=10.42,
             agn_log_mbh=8.0,
             agn_log_ledd=-1.0,
             agn_a_spin=0.0,
@@ -157,13 +155,13 @@ class TestMulticolorDiscPeak:
 
         l_nu_low = multicolor_disc(
             wavelength,
-            agn_log_lbol=44.0,
+            agn_log_lbol=10.42,
             agn_log_mbh=7.0,
             agn_log_ledd=-1.0,
         )
         l_nu_high = multicolor_disc(
             wavelength,
-            agn_log_lbol=44.0,
+            agn_log_lbol=10.42,
             agn_log_mbh=9.0,
             agn_log_ledd=-1.0,
         )
@@ -180,10 +178,44 @@ class TestMulticolorDiscPeak:
 
 
 class TestBLRBalmerDecrement:
-    """Verify BLR Halpha/Hbeta ~ 2.86 (Vanden Berk+2001 calibrated)."""
+    """The BLR Balmer decrement is Vanden Berk+2001's, not Case B's."""
+
+    #: Vanden Berk et al. 2001, AJ 122, 549, Table 2 ("Composite Quasar Emission
+    #: Line Features"), ``Rel. Flux`` column (100 x F/F_Lya). Read off the paper
+    #: itself, not off a secondary source:
+    #:
+    #:     Halpha  lab 6564.61 A   30.832 +/- 0.098
+    #:     Hbeta   lab 4862.68 A    8.649 +/- 0.030
+    VB01_HALPHA_REL_FLUX = 30.832
+    VB01_HBETA_REL_FLUX = 8.649
+
+    #: 1 sigma on the ratio, propagated from the two quoted errors:
+    #: sqrt((0.098/30.832)^2 + (0.030/8.649)^2) = 0.47%. The tolerance is the
+    #: paper's own precision, so a template that agrees with VB01 as well as
+    #: VB01 knows its own numbers passes, and nothing tighter is meaningful.
+    VB01_RATIO_RTOL = 0.005
 
     def test_halpha_hbeta_ratio(self):
-        """Ratio of line strengths should match Vanden Berk+2001."""
+        """The template reproduces VB01's measured flux ratio, not Case B.
+
+        This test used to assert 2.86 -- Case B recombination -- against a
+        comment reading "Vanden Berk+2001: Ha/Hb ~ 1.43/0.50 = 2.86". Neither
+        1.43 nor 0.50 is a Balmer entry anywhere in VB01 Table 2; the quotient
+        was reverse-engineered to land on the Case B value. The measured ratio
+        is 30.832/8.649 = 3.565, so the assertion failed by 20%.
+
+        Case B is the wrong physics for this component. It describes a
+        low-density, optically-thin nebula, where every Balmer photon escapes
+        after one emission. The BLR is neither: at n_e ~ 1e9-1e11 cm^-3 it is
+        optically thick in the Balmer lines, so Hbeta is preferentially
+        destroyed and re-radiated and collisional excitation adds to Halpha.
+        Both push the decrement above 2.86, which is why observed quasar
+        decrements cluster near 3-3.5 and why VB01's composite reads 3.565.
+
+        The template is right and the target was wrong -- the opposite of the
+        conclusion #1752 reached when a published ratio disagreed with an
+        atomic-physics argument, and the published data got "corrected".
+        """
         from tengri.components.agn.blr import _BLR_LINES
 
         lines = np.array(_BLR_LINES)
@@ -198,22 +230,46 @@ class TestBLRBalmerDecrement:
         hb_strength = float(lines[hb_mask, 1][0])
         ratio = ha_strength / hb_strength
 
-        # Vanden Berk+2001: Ha/Hb ~ 1.43/0.50 = 2.86
-        # This is close to Case B recombination (2.86 at T=10^4 K)
+        expected = self.VB01_HALPHA_REL_FLUX / self.VB01_HBETA_REL_FLUX
         np.testing.assert_allclose(
             ratio,
-            2.86,
-            rtol=0.05,
-            err_msg="BLR Ha/Hb ratio deviates from Case B recombination value",
+            expected,
+            rtol=self.VB01_RATIO_RTOL,
+            err_msg=(
+                "BLR Ha/Hb departs from the Vanden Berk+2001 composite by more "
+                "than the paper's own 1 sigma. The template is normalized to "
+                "Hbeta = 1 by dividing VB01's Rel. Flux column by 8.649, so "
+                "this ratio is that column's quotient and nothing else."
+            ),
+        )
+
+    def test_equivalent_width_ratio_is_not_the_flux_ratio(self):
+        """Guard the confusion that produced the fabricated 1.43/0.50.
+
+        VB01 Table 2 reports both a ``Rel. Flux`` and an equivalent width ``W``
+        per feature, and they give different Balmer decrements: 3.565 in flux,
+        194.52/46.21 = 4.209 in EW, because Halpha sits on a fainter continuum
+        than Hbeta. The template stores *flux* ratios, so quoting an EW ratio
+        beside it -- as a neighboring test's docstring did with "~260/46" --
+        compares two different quantities.
+        """
+        ew_ratio = 194.52 / 46.21
+        flux_ratio = self.VB01_HALPHA_REL_FLUX / self.VB01_HBETA_REL_FLUX
+        assert not np.isclose(ew_ratio, flux_ratio, rtol=0.1), (
+            "EW and flux decrements must stay distinguishable in this test"
+        )
+        assert ew_ratio > flux_ratio > 2.86, (
+            "VB01 orders these as Case B < flux < EW; if that changed, the "
+            "numbers above were mistranscribed"
         )
 
     def test_blr_emission_produces_flux(self):
         """BLR emission should produce non-zero line flux around H-alpha."""
-        from tengri.components.agn.blr import blr_emission
+        from tengri.components.agn.blr import compute_blr_sed
 
         wavelength = jnp.linspace(6400.0, 6700.0, 500)
         l_bol_erg = 1e44
-        l_nu = blr_emission(wavelength, l_disc_bol_erg=l_bol_erg)
+        l_nu = compute_blr_sed(wavelength, l_disc_bol_erg=l_bol_erg)
         # Should have a clear peak near H-alpha
         peak_idx = int(jnp.argmax(l_nu))
         peak_wave = float(wavelength[peak_idx])
@@ -229,51 +285,50 @@ class TestNLRLineRatios:
     """Verify NLR forbidden line ratios match atomic physics predictions."""
 
     def test_oiii_ratio(self):
-        """[OIII] 5007/4959 = 2.98 (Storey & Zeippen 2000)."""
-        from tengri.components.agn.nlr import _NLR_LINES
+        """[OIII] 5007/4959 = 2.98 (Storey & Zeippen 2000).
 
-        lines = np.array(_NLR_LINES)
-        oiii_5007 = lines[np.abs(lines[:, 0] - 5007.0) < 5.0, 1]
-        oiii_4959 = lines[np.abs(lines[:, 0] - 4959.0) < 5.0, 1]
+        Measured from the emitted spectrum; this read the private ``_NLR_LINES``
+        table, removed in a refactor (#1728).
+        """
+        from ._nlr_measure import OIII_4959, OIII_5007, doublet_ratio
 
-        assert len(oiii_5007) > 0, "[OIII] 5007 line not found"
-        assert len(oiii_4959) > 0, "[OIII] 4959 line not found"
-
-        ratio = float(oiii_5007[0]) / float(oiii_4959[0])
-        # Storey & Zeippen (2000): 5007/4959 = 2.98
         np.testing.assert_allclose(
-            ratio,
+            doublet_ratio(OIII_5007, OIII_4959),
             2.98,
             rtol=0.02,
             err_msg="[OIII] 5007/4959 ratio deviates from Storey & Zeippen 2000",
         )
 
     def test_nii_ratio(self):
-        """[NII] 6583/6548 ~ 2.94 (Storey & Zeippen 2000)."""
-        from tengri.components.agn.nlr import _NLR_LINES
+        """[NII] 6583/6548 reproduces a42's *measured* 2.70, not the atomic 2.94.
 
-        lines = np.array(_NLR_LINES)
-        nii_6583 = lines[np.abs(lines[:, 0] - 6583.0) < 5.0, 1]
-        nii_6548 = lines[np.abs(lines[:, 0] - 6548.0) < 5.0, 1]
+        Both lines leave the same upper level, so in a photoionization model the
+        ratio is fixed by the transition probabilities alone. Richardson+2014
+        Table 3 is not a model — it is dereddened strengths measured off stacked
+        SDSS composites, in which 6548 is a weak line on the H-alpha wing and
+        comes out ~9% strong. tengri carries the table verbatim (parity with
+        Prospector), so the emitted spectrum inherits 2.70.
 
-        assert len(nii_6583) > 0, "[NII] 6583 line not found"
-        assert len(nii_6548) > 0, "[NII] 6548 line not found"
+        Asserting the atomic value here was the error behind #1752: it read a
+        measurement systematic as a code defect and the template was edited to
+        satisfy it. The atomic constraint is enforced where it applies — on the
+        MAPPINGS shock component and the Cloudy-grid NLR backends.
+        """
+        from ._nlr_measure import NII_6548, NII_6583, doublet_ratio
 
-        ratio = float(nii_6583[0]) / float(nii_6548[0])
-        # Expected: [NII] 6583/6548 ~ 2.94
         np.testing.assert_allclose(
-            ratio,
-            3.0,
+            doublet_ratio(NII_6583, NII_6548),
+            2.13 / 0.79,
             rtol=0.05,
-            err_msg="[NII] 6583/6548 ratio deviates from atomic physics prediction",
+            err_msg="[NII] 6583/6548 no longer reproduces the Richardson+2014 a42 table",
         )
 
     def test_nlr_emission_nonzero(self):
         """NLR emission should produce detectable flux at [OIII] 5007."""
-        from tengri.components.agn.nlr import nlr_emission
+        from tengri.components.agn.nlr import compute_nlr_sed
 
         wavelength = jnp.linspace(4900.0, 5100.0, 200)
-        l_nu = nlr_emission(wavelength, l_disc_bol_erg=1e44)
+        l_nu = compute_nlr_sed(wavelength, l_disc_bol_erg=1e44)
         peak_idx = int(jnp.argmax(l_nu))
         peak_wave = float(wavelength[peak_idx])
         assert abs(peak_wave - 5007.0) < 15.0, (
@@ -385,14 +440,14 @@ class TestGeometricMasking:
         wavelength = jnp.linspace(1000.0, 10000.0, 500)
         l_type1 = unified_nlr_blr(
             wavelength,
-            agn_log_lbol=44.0,
+            agn_log_lbol=10.42,
             agn_cos_inc=1.0,  # face-on, Type 1
             agn_theta_torus=30.0,
             agn_lum_ratio=1.0,
         )
         l_type2 = unified_nlr_blr(
             wavelength,
-            agn_log_lbol=44.0,
+            agn_log_lbol=10.42,
             agn_cos_inc=0.0,  # edge-on, Type 2
             agn_theta_torus=30.0,
             agn_lum_ratio=1.0,
@@ -437,14 +492,14 @@ class TestPolarDust:
         wavelength = jnp.linspace(1000.0, 10000.0, 500)
         l_unreddened = unified_nlr_blr(
             wavelength,
-            agn_log_lbol=44.0,
+            agn_log_lbol=10.42,
             agn_cos_inc=1.0,
             agn_polar_ebv=0.0,
             agn_lum_ratio=1.0,
         )
         l_reddened = unified_nlr_blr(
             wavelength,
-            agn_log_lbol=44.0,
+            agn_log_lbol=10.42,
             agn_cos_inc=1.0,
             agn_polar_ebv=0.1,
             agn_lum_ratio=1.0,
@@ -472,7 +527,7 @@ class TestKubotaDone3Zone:
 
         wavelength = jnp.geomspace(1.0, 100000.0, 5000)
         params = dict(
-            agn_log_lbol=44.0,
+            agn_log_lbol=10.42,
             agn_log_mbh=8.0,
             agn_log_ledd=-1.0,
             agn_a_spin=0.0,
@@ -504,7 +559,7 @@ class TestKubotaDone3Zone:
 
         wavelength = jnp.geomspace(1.0, 100000.0, 5000)
         params = dict(
-            agn_log_lbol=44.0,
+            agn_log_lbol=10.42,
             agn_log_mbh=8.0,
             agn_log_ledd=-1.0,
             agn_a_spin=0.0,
@@ -532,7 +587,7 @@ class TestKubotaDone3Zone:
         wavelength = jnp.geomspace(1.0, 100000.0, 5000)
         l_nu = kubota_done_disc(
             wavelength,
-            agn_log_lbol=44.0,
+            agn_log_lbol=10.42,
             agn_log_mbh=8.0,
             agn_log_ledd=-1.0,
             agn_f_hard=0.02,
@@ -634,46 +689,57 @@ class TestAlphaOxCrossval:
 
 
 class TestXrayAnisotropyCrossval:
-    """Cross-validate X-ray anisotropy against Yang+2022 Equation 2.
+    r"""Cross-validate X-ray anisotropy against Yang+2022, anchored at 30 deg.
 
-    f(theta) = a1 * cos(theta) + a2 * cos^2(theta) + (1 - a1 - a2)
+    .. math::
+
+        f(\mu) = \frac{a_1 \mu + a_2 \mu^2 + (1 - a_1 - a_2)}
+                      {1 - 0.13397 a_1 - 0.25 a_2}
+
+    The denominator is the numerator at :math:`\mu = \cos 30°`, so
+    :math:`f(\cos 30°) = 1`: the input spectrum is the alpha_ox-anchored 30 deg
+    corona, matching X-CIGALE (#980). These tests asserted the un-normalized
+    polynomial, i.e. the pre-#980 code (#1728).
     """
 
-    def test_30deg_anisotropy(self):
-        """For (a1=0.5, a2=0): L_X(30deg)/L_X(0) should be (1+cos30)/2.
+    #: Numerator at cos 30 deg for a1=0.5, a2=0 — the normalization constant.
+    _ANCHOR = 1.0 - 0.13397 * 0.5
 
-        f(30) = 0.5 * cos(30) + 0 + 0.5 = 0.5 * 0.866 + 0.5 = 0.933.
+    def test_30deg_anisotropy(self):
+        """30 deg is the anchor itself: f = 1 exactly.
+
+        Not 0.933. That is the *numerator* at 30 deg, and it is precisely what
+        the denominator divides out — the alpha_ox(L_2500) relation supplying
+        L_2keV is defined at this inclination, so the correction must leave it
+        unchanged here.
         """
         from tengri.components.xray import xray_anisotropy
 
         l_x = jnp.array([1.0])
-        cos_30 = np.cos(np.radians(30.0))
+        cos_30 = float(np.cos(np.radians(30.0)))
         result = float(xray_anisotropy(l_x, cos_inc=cos_30, a1=0.5, a2=0.0)[0])
-        expected = 0.5 * cos_30 + 0.5  # = 0.933
         np.testing.assert_allclose(
             result,
-            expected,
-            atol=0.001,
-            err_msg="L_X at 30 deg deviates from Yang+2022 formula",
+            1.0,
+            atol=2e-5,
+            err_msg="30 deg is the anchor inclination; f must be 1 there",
         )
 
     def test_70deg_anisotropy(self):
-        """For (a1=0.5, a2=0): L_X(70deg)/L_X(0) should be (1+cos70)/2.
-
-        f(70) = 0.5 * cos(70) + 0.5 = 0.5 * 0.342 + 0.5 = 0.671.
-        """
+        """Edge-on-ward of the anchor the corona dims, by the anchored formula."""
         from tengri.components.xray import xray_anisotropy
 
         l_x = jnp.array([1.0])
-        cos_70 = np.cos(np.radians(70.0))
+        cos_70 = float(np.cos(np.radians(70.0)))
         result = float(xray_anisotropy(l_x, cos_inc=cos_70, a1=0.5, a2=0.0)[0])
-        expected = 0.5 * cos_70 + 0.5  # = 0.671
+        expected = (0.5 * cos_70 + 0.5) / self._ANCHOR  # 0.671 / 0.933015 = 0.719
         np.testing.assert_allclose(
             result,
             expected,
             atol=0.001,
-            err_msg="L_X at 70 deg deviates from Yang+2022 formula",
+            err_msg="L_X at 70 deg deviates from the anchored Yang+2022 formula",
         )
+        assert result < 1.0, "70 deg must be fainter than the 30 deg anchor"
 
     def test_type1_type2_ratio(self):
         """L_X(30deg)/L_X(70deg) should match COSMOS Type1/Type2 (~1.4x).
@@ -885,15 +951,63 @@ class TestPolarDustCrossval:
             f"optical attenuation ({opt_attenuation:.3f})"
         )
 
+    @staticmethod
+    def _frequency_weights(wavelength):
+        """Trapezoid weights in frequency for a wavelength grid.
+
+        The same construction ``polar_dust_emission`` normalizes with, so the
+        comparison below is against the module's own quadrature rather than a
+        second opinion about it.
+        """
+        nu = 2.99792458e18 / wavelength
+        delta_nu = jnp.abs(jnp.diff(nu))
+        return jnp.concatenate([delta_nu[:1], 0.5 * (delta_nu[:-1] + delta_nu[1:]), delta_nu[-1:]])
+
     def test_energy_conservation(self):
-        """For a flat input spectrum, absorbed energy should equal reemitted."""
-        from tengri.components.agn.polar_dust import polar_dust_total
+        """Re-emission carries exactly the luminosity the dust intercepted.
+
+        This test used to compare the graybody against ``l_nu - l_att`` and
+        allow 5%. It failed at 1.069, and none of that was lost energy:
+
+        * not quadrature -- the ratio converges to 1.0686 from 5e3 to 2e5 grid
+          points, and extending the grid from 5e6 to 1e8 Angstrom moves nothing;
+        * not leakage -- against the quantity the module publishes as absorbed,
+          the balance is 1.000000 exactly, because ``polar_dust_emission``
+          normalizes on this same grid with these same weights.
+
+        The gap was the Type-1 mask, to six decimals. ``polar_dust_extinction``
+        returns two quantities that are deliberately *not* complementary and
+        says so: ``l_absorbed`` is geometry-independent, because the bi-conical
+        dust intercepts the same disc-photon fraction at any viewing angle and
+        re-radiates it isotropically, while the *attenuation* of the disc is
+        gated to face-on sightlines. So ``l_nu - l_att = mask * l_absorbed``,
+        and the old assertion was really asserting ``1 / mask == 1``.
+
+        It failed on an arbitrary geometry choice rather than on physics: at
+        ``opening_angle_deg=60`` the sigmoid sits at 0.9358, but at 30 degrees
+        it is 0.999955 and the identical wrong claim would have passed.
+
+        Asserted here against the invariant the module actually guarantees,
+        which is exact by construction -- so the tolerance is 1e-6, not 5%.
+        Anything looser hides a real regression.
+        """
+        from tengri.components.agn.polar_dust import (
+            polar_dust_extinction,
+            polar_dust_total,
+        )
 
         # Use a wide wavelength grid spanning UV to FIR
         wavelength = jnp.geomspace(500.0, 5e6, 5000)
         l_nu_flat = jnp.ones_like(wavelength) * 1e-10  # small flat spectrum
 
-        l_att, l_reemit = polar_dust_total(
+        _l_att, l_absorbed = polar_dust_extinction(
+            l_nu_flat,
+            wavelength,
+            cos_inc=1.0,
+            opening_angle_deg=60.0,
+            ebv=0.3,
+        )
+        _, l_reemit = polar_dust_total(
             l_nu_flat,
             wavelength,
             cos_inc=1.0,
@@ -902,28 +1016,95 @@ class TestPolarDustCrossval:
             temperature=100.0,
         )
 
-        # Integrate absorbed and reemitted over frequency
-        nu = 2.99792458e18 / wavelength
-        delta_nu = jnp.abs(jnp.diff(nu))
-        delta_nu = jnp.concatenate(
-            [delta_nu[:1], 0.5 * (delta_nu[:-1] + delta_nu[1:]), delta_nu[-1:]]
-        )
-
-        l_absorbed_total = float(jnp.sum((l_nu_flat - l_att) * delta_nu))
+        delta_nu = self._frequency_weights(wavelength)
+        l_absorbed_total = float(jnp.sum(l_absorbed * delta_nu))
         l_reemit_total = float(jnp.sum(l_reemit * delta_nu))
 
-        # Energy conservation: reemitted should equal absorbed
-        if l_absorbed_total > 0:
-            ratio = l_reemit_total / l_absorbed_total
+        # Assert, do not skip. The old `if l_absorbed_total > 0:` meant a
+        # configuration that absorbed nothing ran zero assertions and reported
+        # green -- an absent result reading as a passing one.
+        assert l_absorbed_total > 0.0, (
+            f"nothing absorbed (total={l_absorbed_total:.3e}); the fixture no "
+            "longer exercises the energy balance it claims to"
+        )
+        np.testing.assert_allclose(
+            l_reemit_total / l_absorbed_total,
+            1.0,
+            rtol=1e-6,
+            err_msg=(
+                f"Energy not conserved: absorbed={l_absorbed_total:.6e}, "
+                f"reemitted={l_reemit_total:.6e}"
+            ),
+        )
+
+    def test_attenuation_is_masked_absorption(self):
+        """``l_nu - l_att`` is ``mask * l_absorbed`` -- pin the contract.
+
+        The relation the previous test tripped over is intentional and
+        documented, but nothing asserted it, so it read as a bug. Pinning it
+        here means the next person meets the design instead of rediscovering it
+        from a 6.9% discrepancy.
+        """
+        from tengri.components.agn.polar_dust import _type1_mask, polar_dust_extinction
+
+        wavelength = jnp.geomspace(500.0, 5e6, 2000)
+        l_nu_flat = jnp.ones_like(wavelength) * 1e-10
+
+        for opening_angle_deg in (30.0, 45.0, 60.0, 75.0):
+            l_att, l_absorbed = polar_dust_extinction(
+                l_nu_flat,
+                wavelength,
+                cos_inc=1.0,
+                opening_angle_deg=opening_angle_deg,
+                ebv=0.3,
+            )
+            mask = float(_type1_mask(1.0, opening_angle_deg))
             np.testing.assert_allclose(
-                ratio,
-                1.0,
-                rtol=0.05,
+                np.asarray(l_nu_flat - l_att),
+                mask * np.asarray(l_absorbed),
+                rtol=1e-10,
+                atol=0.0,
                 err_msg=(
-                    f"Energy not conserved: absorbed={l_absorbed_total:.3e}, "
-                    f"reemitted={l_reemit_total:.3e}, ratio={ratio:.3f}"
+                    f"at opening={opening_angle_deg} deg the disc's loss is not "
+                    f"mask={mask:.6f} times the intercepted luminosity"
                 ),
             )
+
+    def test_reemission_is_isotropic_in_inclination(self):
+        """The FIR bump is the same for every observer.
+
+        This is the physical content the old energy test was reaching for and
+        the reason ``l_absorbed`` carries no mask: the dust re-radiates what it
+        intercepted in all directions, so a Type 2 observer sees the same
+        infrared luminosity as a Type 1. Nothing checked it.
+        """
+        from tengri.components.agn.polar_dust import polar_dust_total
+
+        wavelength = jnp.geomspace(500.0, 5e6, 2000)
+        l_nu_flat = jnp.ones_like(wavelength) * 1e-10
+        delta_nu = self._frequency_weights(wavelength)
+
+        totals = []
+        for cos_inc in (0.0, 0.3, 0.7, 1.0):
+            _, l_reemit = polar_dust_total(
+                l_nu_flat,
+                wavelength,
+                cos_inc=cos_inc,
+                opening_angle_deg=60.0,
+                ebv=0.3,
+                temperature=100.0,
+            )
+            totals.append(float(jnp.sum(l_reemit * delta_nu)))
+
+        np.testing.assert_allclose(
+            totals,
+            totals[0],
+            rtol=1e-12,
+            err_msg=(
+                "polar-dust re-emission must not depend on viewing angle; "
+                f"got {totals} for cos_inc = 0.0, 0.3, 0.7, 1.0"
+            ),
+        )
 
     def test_graybody_peak_wavelength(self):
         """At T=100K, graybody peak should be near Wien peak ~ 29 um."""

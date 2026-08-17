@@ -20,7 +20,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-jax.config.update("jax_enable_x64", True)
+from tests._grad_parity import assert_grad_matches_fd
 
 pytestmark = pytest.mark.crossval
 
@@ -199,7 +199,13 @@ class TestDLAPhysics:
 
         Bagpipes uses Tasitsiomi (2006) Voigt approximation with
         Lee (2013) correction. Test at a few key wavelengths.
+
+        Skips when bagpipes is absent — it is not a tengri dependency, and a
+        missing comparison code is no evidence either way. It used to fail with
+        ModuleNotFoundError, which reads like a tengri defect (#1728).
         """
+        pytest.importorskip("bagpipes", reason="bagpipes not installed")
+
         from bagpipes.models.dla_model import dla_trans as bp_dla
 
         from tengri.components.igm.dla import dla_transmission
@@ -253,14 +259,22 @@ class TestPSBSFHPhysics:
             assert float(jnp.max(sfr)) > 0
 
     def test_sfr_nonzero_at_burstage(self):
-        """SFR should be non-zero at the burst age."""
+        """SFR should be non-zero at the burst age.
+
+        Evaluated on a grid rather than at the single lookback time this test
+        used to pass. The SFH is normalized to a total mass, so the
+        implementation integrates over the supplied grid; a one-element array
+        is degenerate and surfaced as "Shape of array too small to calculate a
+        numerical gradient" from inside numpy (#1728). The value at the burst
+        age is read off the nearest grid point.
+        """
         from tengri.components.stellar.sfh import psb_wild2020
 
         burstage = 500e6
-        t = jnp.array([burstage])
+        t = jnp.geomspace(1e6, 10e9, 2000)
         sfr = psb_wild2020(
             t,
-            log_total_mass=1.0,
+            log_total_mass=10.0,
             age=10e9,
             tau=3e9,
             burstage=burstage,
@@ -268,7 +282,9 @@ class TestPSBSFHPhysics:
             beta=2.0,
             fburst=0.5,
         )
-        assert float(sfr[0]) > 0
+
+        idx = int(jnp.argmin(jnp.abs(t - burstage)))
+        assert float(sfr[idx]) > 0, f"SFR is zero at the burst age ({burstage / 1e6:.0f} Myr)"
 
     def test_zero_beyond_age(self):
         """No star formation before the galaxy formed."""
@@ -308,7 +324,7 @@ class TestPSBSFHPhysics:
             )
             return jnp.trapezoid(sfr, t)
 
-        grad_val = jax.grad(total_mass)(1.0)
+        grad_val = assert_grad_matches_fd(total_mass, 1.0)
         assert jnp.isfinite(grad_val)
 
 
@@ -387,7 +403,7 @@ class TestParameterMirroringPhysics:
             sfh_dpl_alpha=Uniform(0.1, 5.0),
             sfh_dpl_beta=Uniform(0.1, 3.0),
             sfh_dpl_tau_gyr=Uniform(0.1, 12.0),
-            sfh_dpl_log_total_mass=Uniform(-1.0, 3.0),
+            sfh_dpl_log_total_mass=Uniform(7.0, 12.5),
             dust_tau_diff="sfh_dpl_log_total_mass",
         )
 
@@ -414,7 +430,7 @@ class TestParameterMirroringPhysics:
             sfh_dpl_alpha=Uniform(0.1, 5.0),
             sfh_dpl_beta=Uniform(0.1, 3.0),
             sfh_dpl_tau_gyr=Uniform(0.1, 12.0),
-            sfh_dpl_log_total_mass=Uniform(-1.0, 3.0),
+            sfh_dpl_log_total_mass=Uniform(7.0, 12.5),
             dust_tau_diff=Uniform(0.0, 3.0),
         )
         spec_mirror = Parameters(
@@ -423,7 +439,7 @@ class TestParameterMirroringPhysics:
             sfh_dpl_alpha=Uniform(0.1, 5.0),
             sfh_dpl_beta=Uniform(0.1, 3.0),
             sfh_dpl_tau_gyr=Uniform(0.1, 12.0),
-            sfh_dpl_log_total_mass=Uniform(-1.0, 3.0),
+            sfh_dpl_log_total_mass=Uniform(7.0, 12.5),
             dust_tau_diff="sfh_dpl_log_total_mass",
         )
 
@@ -759,10 +775,10 @@ class TestConstExpSFHPhysics:
 
     def test_has_constant_phase(self):
         """Some region should have constant SFR."""
-        from tengri.components.stellar.sfh import constant_then_exponential_sfh
+        from tengri.components.stellar.sfh import constant_then_exponential
 
         t = jnp.linspace(0.0, 13e9, 1000)
-        sfr = constant_then_exponential_sfh(t, log_sfr=1.0, tau=1e9, quench_age=5e9, age=10e9)
+        sfr = constant_then_exponential(t, log_total_mass=10.0, tau=1e9, quench_age=5e9, age=10e9)
 
         mask = (t >= 5e9) & (t <= 10e9)
         if jnp.any(mask):
@@ -772,10 +788,10 @@ class TestConstExpSFHPhysics:
 
     def test_has_exponential_phase(self):
         """Below quench_age, SFR declines exponentially."""
-        from tengri.components.stellar.sfh import constant_then_exponential_sfh
+        from tengri.components.stellar.sfh import constant_then_exponential
 
         t = jnp.linspace(100e6, 4.5e9, 200)
-        sfr = constant_then_exponential_sfh(t, log_sfr=1.0, tau=1e9, quench_age=5e9, age=10e9)
+        sfr = constant_then_exponential(t, log_total_mass=10.0, tau=1e9, quench_age=5e9, age=10e9)
 
         log_sfr_vals = jnp.log(sfr)
         if jnp.all(jnp.isfinite(log_sfr_vals)):
@@ -785,24 +801,24 @@ class TestConstExpSFHPhysics:
 
     def test_continuous_at_quench(self):
         """SFR must be continuous at the quenching boundary."""
-        from tengri.components.stellar.sfh import constant_then_exponential_sfh
+        from tengri.components.stellar.sfh import constant_then_exponential
 
         quench = 5e9
         eps = 1.0
         t_above = jnp.array([quench + eps])
         t_below = jnp.array([quench - eps])
 
-        sfr_a = constant_then_exponential_sfh(t_above, 1.0, 1e9, quench, 10e9)
-        sfr_b = constant_then_exponential_sfh(t_below, 1.0, 1e9, quench, 10e9)
+        sfr_a = constant_then_exponential(t_above, 1.0, 1e9, quench, 10e9)
+        sfr_b = constant_then_exponential(t_below, 1.0, 1e9, quench, 10e9)
 
         np.testing.assert_allclose(float(sfr_a[0]), float(sfr_b[0]), rtol=1e-6)
 
     def test_mass_integral_finite(self):
         """Total mass formed should be finite and positive."""
-        from tengri.components.stellar.sfh import constant_then_exponential_sfh
+        from tengri.components.stellar.sfh import constant_then_exponential
 
         t = jnp.linspace(0.0, 13e9, 2000)
-        sfr = constant_then_exponential_sfh(t, log_sfr=1.0, tau=1e9, quench_age=5e9, age=10e9)
+        sfr = constant_then_exponential(t, log_total_mass=10.0, tau=1e9, quench_age=5e9, age=10e9)
         mass = float(jnp.trapezoid(sfr, t))
         assert mass > 0
         assert np.isfinite(mass)

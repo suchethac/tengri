@@ -9,7 +9,7 @@ astronomer gets burned by:
 * **frame**    — the engines want *rest-frame* wavelengths;
 * **units**    — the engines want rest-frame :math:`L_\\nu` [erg/s/Hz];
 * **distance** — ``compute_photometry`` takes ``dl_cm`` while
-  ``measure_line_flux_jax`` takes ``four_pi_dl2``. One ``redshift=`` argument
+  ``measure_line_flux_jax`` takes ``log10_four_pi_dl2``. One ``redshift=`` argument
   must derive both.
 
 These tests pin the *conventions*, not the physics (the engines carry their own
@@ -218,14 +218,17 @@ def test_unknown_index_name_lists_the_alternatives(model_bessell, params):
         measure.spectral_index(wave, lnu, "Dn4OOO")
 
 
-# ── line flux: the four_pi_dl2 convention ────────────────────────
+# ── line flux: the log10_four_pi_dl2 convention ──────────────────
 
 
-def test_line_flux_derives_four_pi_dl2_from_redshift(model_bessell, params):
-    """``redshift=`` must become ``4 pi d_L^2`` — the engine's actual argument.
+def test_line_flux_derives_log10_four_pi_dl2_from_redshift(model_bessell, params):
+    """``redshift=`` must become ``log10(4 pi d_L^2)`` — the engine's actual argument.
 
     The reference is built INDEPENDENTLY (cosmology called directly, the
-    4-pi-d_L-squared formed by hand) rather than by calling the façade twice.
+    log-of-4-pi-d_L-squared formed by hand) rather than by calling the façade
+    twice — and deliberately *without* ``tengri.utils.scale.log10_four_pi_dl2``,
+    so this stays a check on the façade rather than a tautology through the
+    shared helper (#1859).
     """
     from tengri import measure
     from tengri.cosmology import luminosity_distance
@@ -238,7 +241,8 @@ def test_line_flux_derives_four_pi_dl2_from_redshift(model_bessell, params):
     got = measure.line_flux(wave, lnu, line, redshift=z)
 
     dl_cm = jnp.asarray(luminosity_distance(jnp.asarray(z))).reshape(())
-    expected = measure_line_flux_jax(wave, lnu, line, 4.0 * jnp.pi * dl_cm**2)
+    log10_4pi_dl2 = jnp.log10(4.0 * jnp.pi) + 2.0 * jnp.log10(dl_cm)
+    expected = measure_line_flux_jax(wave, lnu, line, log10_4pi_dl2)
 
     assert np.isfinite(got)
     np.testing.assert_array_equal(np.asarray(got), np.asarray(expected))

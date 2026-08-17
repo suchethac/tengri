@@ -6,7 +6,7 @@ Pitfall P-16 (from Synthesizer issue #159 + PR #1061): `sample_sfzh()` accepted
 between input SFH total mass and the sampled population.
 
 Tengri likelihood: HIGH. Code path: `components/stellar/sfh/` parametric forms +
-`analysis/simulate.py` integration.
+`src/tengri/analysis/simulate.py` integration.
 
 Mirrors: Synthesizer mass-conservation test patterns. Tests that:
 1. The tabulated forward model (`sed_from_sfh`, `photometry_from_sfh`)
@@ -31,10 +31,7 @@ import pytest
 pytestmark = pytest.mark.regression_paper
 from pathlib import Path
 
-import jax
 import jax.numpy as jnp
-
-jax.config.update("jax_enable_x64", True)
 
 from tengri.analysis.simulate import photometry_from_sfh, sed_from_sfh
 

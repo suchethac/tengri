@@ -27,8 +27,6 @@ import pytest
 
 pytestmark = pytest.mark.contract
 
-jax.config.update("jax_enable_x64", True)
-
 # Standard synthetic filter set (used across test adapters)
 _CENTERS = np.array([3e5, 1e7, 1e8, 1e10])  # FIR–radio Angstrom
 _WIDTHS = np.array([1e5, 3e6, 3e7, 3e9])
@@ -128,17 +126,19 @@ class TestRadioPrecomputeAxisCollapse:
 class TestXrayPrecomputeAxisCollapse:
     """Test axis collapse for X-ray models (2 free axes each)."""
 
-    @pytest.mark.parametrize(
-        "model,params",
-        [
-            ("xray_xrb", ("xray_gamma_hmxb", "xray_gamma_lmxb")),
-            ("xray_corona", ("xray_gamma", "xray_delta_alpha_ox")),
-            ("xray_corona_lopez24", ("xray_gamma", "xray_alpha_irx")),
-        ],
-    )
+    @pytest.mark.parametrize("model", ["xray_xrb", "xray_corona", "xray_corona_lopez24"])
     @pytest.mark.parametrize("fixed_axis_idx", [0, 1])
-    def test_xray_collapse_axis(self, model, params, fixed_axis_idx, filter_set_xray):
+    def test_xray_collapse_axis(self, model, fixed_axis_idx, filter_set_xray):
         from tengri.components.xray import xray_precompute as adapter
+
+        # Read the axis names off the adapter rather than restating them here.
+        # A copy in the test cannot disagree with the declaration it copies, so
+        # it cannot catch a name that drifted away from the live parameter — and
+        # the mock below answers to whatever name it is handed, so a wrong one
+        # still collapses and still passes. Both X-ray coronae declared
+        # ``xray_gamma`` against a parameter named ``xray_gamma_agn`` and this
+        # suite stayed green throughout (#1738).
+        params = adapter.AXIS_PARAMS[model]
 
         waves, trans = filter_set_xray
         redshift = 0.5
@@ -221,7 +221,7 @@ class TestQsogenPrecomputeAxisCollapse:
 
 
 class TestSilva04PrecomputeAxisCollapse:
-    """Test axis collapse for Silva04 (silva04_log_NH)."""
+    """Test axis collapse for Silva04 (agn_log_nh_silva)."""
 
     _DATA = Path(__file__).parent.parent.parent.parent / "data"
 
@@ -254,7 +254,9 @@ class TestSilva04PrecomputeAxisCollapse:
         midpoint_idx = len(ax) // 2
         pinned_value = float(ax[midpoint_idx])
 
-        spec = _make_mock_params({"silva04_log_NH": pinned_value})
+        # Read the name off the adapter, not a copy of it — see the note in
+        # TestXrayPrecomputeAxisCollapse (#1738).
+        spec = _make_mock_params({adapter.AXIS_PARAMS[0]: pinned_value})
         coll = adapter.precompute(
             waves, trans, redshift, parameters=spec, grid_path=str(grid_file)
         )

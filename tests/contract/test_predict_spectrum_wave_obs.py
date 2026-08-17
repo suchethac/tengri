@@ -14,15 +14,12 @@ Runs on the synthetic wide SSP (no ``data/ssp_*.h5`` needed).
 
 from __future__ import annotations
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
 
 from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, Uniform
 from tengri.observation.photometry import FilterCurve
-
-jax.config.update("jax_enable_x64", True)
 
 pytestmark = pytest.mark.contract
 

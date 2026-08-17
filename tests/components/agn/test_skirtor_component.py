@@ -17,15 +17,15 @@ import re
 from pathlib import Path
 
 import chex
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri.components.agn.skirtor_model import SKIRTORTorus, SKIRTORTorusConfig
 from tengri.components.sed_model_component import _REGISTRY, SEDModelComponent
+from tests._bounds import assert_non_negative
+
+pytestmark = pytest.mark.contract
 
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 _SKIRTOR_CANDIDATES = [
@@ -225,7 +225,7 @@ class TestSKIRTORPredictParity:
             pytest.skip("Could not load SKIRTOR templates")
 
         sed_out, _ = skirtor_component.predict(params, sed_in, wave)
-        assert jnp.all(sed_out >= 0), "SKIRTOR SED should be non-negative"
+        assert_non_negative(sed_out, name="sed_out", msg="SKIRTOR SED should be non-negative")
 
     def test_parity_vs_skirtor_analytic(self, skirtor_component, wave):
         """Output matches create_skirtor_from_grid result."""

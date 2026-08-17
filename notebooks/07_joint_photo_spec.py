@@ -142,7 +142,7 @@ def build(obs, approx=None):
 # slow exact wave-grid integration.
 model_phot = build(obs_phot, approx=WavePrecomp())
 model_joint = build(obs_joint, approx=SpectrumPrecomp())
-print(f"Free parameters ({model_joint.spec.n_free}): {', '.join(model_joint.spec.free_params)}")
+print(f"Free parameters ({model_joint.spec.n_free}): {', '.join(model_joint.spec.free_params)}", flush=True)
 
 # %% [markdown]
 # ## Mock observation
@@ -173,8 +173,8 @@ flux_phot = p_phot + _rng.normal(size=p_phot.shape) * n_phot
 flux_spec = p_spec + _rng.normal(size=p_spec.shape) * n_spec
 
 wave_eff_um = effective_wavelengths_um(phot_obs)
-print(f"Truth metallicity log(Z/Zsun) = {float(truth['met_logzsol']):+.2f}")
-print(f"Mock: {len(flux_phot)} bands (SNR 20) + {len(flux_spec)}-pixel spectrum (SNR 30/pix)")
+print(f"Truth metallicity log(Z/Zsun) = {float(truth['met_logzsol']):+.2f}", flush=True)
+print(f"Mock: {len(flux_phot)} bands (SNR 20) + {len(flux_spec)}-pixel spectrum (SNR 30/pix)", flush=True)
 
 # %% [markdown]
 # ## Fit
@@ -195,21 +195,40 @@ def run(model, data, label):
     """Fit one model to one Data record and report its convergence."""
     t0 = time.perf_counter()
     post = ForwardModel.build(sed=model).fit(data, key=key_fit, **HMC_VALIDATED)
+    elapsed = time.perf_counter() - t0
     rmax = max(float(v) for v in post.rhat().values())
+    n_div = post.diagnostics.get('n_divergent', 0)
     print(
-        f"  {label:12s} {time.perf_counter() - t0:6.0f}s   max R-hat {rmax:.3f}   "
-        f"divergences {post.diagnostics.get('n_divergent', 'n/a')}"
+        f"  {label:12s} {elapsed:6.0f}s   max R-hat {rmax:.3f}   "
+        f"divergences {n_div}", flush=True
     )
-    return post
+
+    # R-hat cannot see a chain that never moved: with zero within- and
+    # between-chain variance it scores ~1.0 and reads as converged (#1437,
+    # #1734). So check the draws themselves, and raise rather than warn — a
+    # dead fit must not be able to reach the published page.
+    n_draw = HMC_VALIDATED["n_samples"]
+    stuck = [
+        p
+        for p in model.spec.free_params
+        if np.unique(np.asarray(post.samples[p])).size < 0.1 * n_draw
+    ]
+    if stuck or n_div > 0.05 * n_draw or rmax > 1.05:
+        raise RuntimeError(
+            f"{label}: not a usable posterior — max R-hat {rmax:.3f}, {n_div} "
+            f"divergences, {len(stuck)} frozen parameter(s): {', '.join(stuck) or 'none'}"
+        )
+    return post, elapsed
 
 
-print("Fitting (photometry, then joint):")
-post_phot = run(model_phot, Data(photometry=(flux_phot, n_phot)), "photometry")
-post_joint = run(
+print("Fitting (photometry, then joint):", flush=True)
+post_phot, t_phot = run(model_phot, Data(photometry=(flux_phot, n_phot)), "photometry")
+post_joint, t_joint = run(
     model_joint,
     Data(photometry=(flux_phot, n_phot), spectrum=(flux_spec, n_spec)),
     "joint",
 )
+print(f"Total fitting time: {t_phot + t_joint:.1f}s", flush=True)
 
 # %% [markdown]
 # ## Constraint widths: joint vs single-modality
@@ -241,6 +260,13 @@ def width(post, p):
 w_phot = {p: width(post_phot, p) for p in params}
 w_joint = {p: width(post_joint, p) for p in params}
 
+# Compute and report constraint improvements
+ratio_phot_over_joint = {p: w_phot[p] / w_joint[p] for p in params}
+best_improved = sorted(ratio_phot_over_joint.items(), key=lambda x: -x[1])[:3]
+print("\nConstraint improvement (photometry width / joint width):", flush=True)
+for p, ratio in best_improved:
+    print(f"  {p:30s}: {ratio:5.2f}x tighter with spectrum", flush=True)
+
 order = sorted(params, key=lambda p: w_joint[p] / w_phot[p])
 x = np.arange(len(order))
 fig, ax = plt.subplots(figsize=(9.0, 4.2))
@@ -267,8 +293,8 @@ plt.show()
 # back onto the truth that photometry alone could not separate.
 
 # %%
-print(f"{'parameter':<28}{'truth':>9}{'p16':>9}{'p50':>9}{'p84':>9}  cover")
-print("-" * 66)
+print(f"{'parameter':<28}{'truth':>9}{'p16':>9}{'p50':>9}{'p84':>9}  cover", flush=True)
+print("-" * 66, flush=True)
 n_cov = 0
 for p in params:
     s = np.asarray(post_joint.samples[p])
@@ -276,8 +302,8 @@ for p in params:
     tv = float(truth_full[p])
     ok = lo <= tv <= hi
     n_cov += ok
-    print(f"{p:<28}{tv:>9.3f}{lo:>9.3f}{med:>9.3f}{hi:>9.3f}  {'ok' if ok else 'miss'}")
-print(f"\n68% coverage: {n_cov}/{len(params)}")
+    print(f"{p:<28}{tv:>9.3f}{lo:>9.3f}{med:>9.3f}{hi:>9.3f}  {'ok' if ok else 'miss'}", flush=True)
+print(f"\n68% coverage: {n_cov}/{len(params)}", flush=True)
 
 # %% [markdown]
 # ## Posterior SED

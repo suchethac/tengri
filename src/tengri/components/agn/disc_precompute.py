@@ -5,7 +5,7 @@ Implements :class:`~tengri.forward.precompute.protocol.PrecomputeModule` for
 three disc models:
 
 1. **powerlaw_disc**: Simple power-law optical/UV continuum with exponential
-   UV cutoff. One free axis: ``agn_alpha_pl`` (power-law index).
+   UV cutoff. One free axis: ``agn_alpha`` (power-law index).
 
 2. **disc_ss** (Shakura-Sunyaev): Multi-color thin disc with temperature
    gradient. Two free axes: ``agn_log_mbh``, ``agn_log_lbol`` (the post-#846
@@ -18,7 +18,7 @@ three disc models:
 
 Each model is preintegrated through filter curves at model-initialization time.
 Auto-collapses axes whose corresponding parameters are ``Fixed`` in the user's
-``Parameters`` — e.g., a user who pins ``agn_alpha_pl`` gets a scalar template.
+``Parameters`` — e.g., a user who pins ``agn_alpha`` gets a scalar template.
 
 References
 ----------
@@ -31,7 +31,6 @@ References
    ApJ, 178, 347 (1972). https://doi.org/10.1086/151796
 .. [3] A. Laor and H. Netzer, "Massive thin accretion discs – I. Calculated spectra,"
    MNRAS, 238, 897 (1989). https://doi.org/10.1093/mnras/238.3.897
-   (CITATION-AUDIT NOTE: not found in ~/writing-workspace; verify against source)
 .. [4] M. Boquien et al., "CIGALE: a python Code Investigating GALaxy Emission,"
    A&A, 622, A103 (2019). https://doi.org/10.1051/0004-6361/201834156
 """
@@ -63,7 +62,7 @@ from tengri.utils.interpolation import edges_for_grid
 
 
 # powerlaw_disc: parametrized by agn_alpha (power-law index)
-AXIS_PARAMS_POWERLAW = ("agn_alpha_pl",)
+AXIS_PARAMS_POWERLAW = ("agn_alpha",)
 
 # disc_ss (Shakura-Sunyaev): parametrized by BH mass and bolometric luminosity.
 # Since #846 the disc shape is self-consistent with agn_log_lbol (the Eddington
@@ -118,7 +117,6 @@ def _build_grid_powerlaw(
         Preintegrated photometry with shape (n_alpha, n_filters).
     """
     alpha_grid = np.asarray(alpha_grid, dtype=np.float64)
-    len(alpha_grid)
 
     # Standard rest-frame wavelength grid for integration
     # (covers ~10 Angstrom to ~1 mm with fine sampling)
@@ -326,7 +324,7 @@ def precompute(
         One of "powerlaw_disc", "ss_disc", "cigale_disc".
         Default: "powerlaw_disc".
     alpha_grid : ndarray, optional
-        Grid for agn_alpha_pl (powerlaw_disc only). If None, uses a default
+        Grid for agn_alpha (powerlaw_disc only). If None, uses a default
         range [-2, 0] with 15 points.
     mbh_grid : ndarray, optional
         Grid for agn_log_mbh (ss_disc only). If None, uses [6, 7, 8, 9, 10].
@@ -357,12 +355,11 @@ def precompute(
     if model == "powerlaw_disc":
         if alpha_grid is None:
             alpha_grid = np.linspace(-2.0, 0.0, 15, dtype=np.float64)
+        preint = _build_grid_powerlaw(filter_waves, filter_trans, redshift, alpha_grid)
         result = {
-            "grid_phot": _build_grid_powerlaw(
-                filter_waves, filter_trans, redshift, alpha_grid
-            ).phot,
+            "grid_phot": preint.phot,
             "axes": (jnp.asarray(alpha_grid),),
-            "_preint": _build_grid_powerlaw(filter_waves, filter_trans, redshift, alpha_grid),
+            "_preint": preint,
         }
         axis_params = AXIS_PARAMS_POWERLAW
 
@@ -371,20 +368,20 @@ def precompute(
             mbh_grid = np.array([6.0, 7.0, 8.0, 9.0, 10.0], dtype=np.float64)
         if lbol_grid is None:
             lbol_grid = np.array([9.0, 10.0, 11.0, 12.0, 13.0], dtype=np.float64)
+        preint = _build_grid_ss(filter_waves, filter_trans, redshift, mbh_grid, lbol_grid)
         result = {
-            "grid_phot": _build_grid_ss(
-                filter_waves, filter_trans, redshift, mbh_grid, lbol_grid
-            ).phot,
+            "grid_phot": preint.phot,
             "axes": (jnp.asarray(mbh_grid), jnp.asarray(lbol_grid)),
-            "_preint": _build_grid_ss(filter_waves, filter_trans, redshift, mbh_grid, lbol_grid),
+            "_preint": preint,
         }
         axis_params = AXIS_PARAMS_SS
 
     elif model == "cigale_disc":
+        preint = _build_grid_cigale(filter_waves, filter_trans, redshift)
         result = {
-            "grid_phot": _build_grid_cigale(filter_waves, filter_trans, redshift).phot,
+            "grid_phot": preint.phot,
             "axes": (),
-            "_preint": _build_grid_cigale(filter_waves, filter_trans, redshift),
+            "_preint": preint,
         }
         axis_params = AXIS_PARAMS_CIGALE
 

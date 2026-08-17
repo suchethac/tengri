@@ -3,8 +3,25 @@ name: Tests
 on:
   push:
     branches: [main]
+  # No `branches:` filter — this workflow fires for a PR against ANY base.
+  #
+  # It used to read `branches: [main]`, so a PR stacked on another branch ran
+  # none of this. Not hypothetical: #1806 (the nebular band integration) and
+  # #1810 (its correction, which added
+  # `tests/contract/test_precomp_channel_drift.py` and the bound pinning the
+  # known `single_component` defect) both merged into
+  # `worktree-fix-1738-precompute-state` having run exactly ONE check — `build`,
+  # from docs-preview.yml, which is the only workflow here with no branch
+  # filter. A comparable PR against `main` ran twenty. So the tests written to
+  # pin an acknowledged defect were themselves never executed, and the stack's
+  # first real verdict arrived only when it retargeted to `main` — bundled, and
+  # long after the commit anyone would have to bisect to.
+  #
+  # Firing is not the same as running everything: the `tier` job below decides
+  # how much of the suite a given base earns, and says so when it withholds.
+  # `tools/check_ci_pr_coverage.py` (lint job) fails the build if this filter
+  # comes back.
   pull_request:
-    branches: [main]
     types: [opened, synchronize, reopened, labeled]
   schedule:
     # Nightly slow-tier run at 04:00 UTC (mid-afternoon Tokyo).
@@ -66,6 +83,58 @@ env:
 # Only the `slow` job cares about labels (`run-slow-tests`); everything else
 # should run on push / opened / synchronize / reopened, not on label adds.
 jobs:
+  # Announces what this run does NOT cover. The #1806/#1810 failure was not that
+  # a stacked PR ran less — it was that a green tick on a stacked PR looked
+  # exactly like a green tick on a full run. A run that covers less must say so.
+  #
+  # NOTHING DEPENDS ON THIS JOB, deliberately. An earlier revision had it publish
+  # a `full` output that `test` and `gallery-changes` consumed via `needs:`. That
+  # put an extra runner acquisition on the critical path of the 19-minute test
+  # matrix in order to compute a boolean that `if:` can evaluate for free, and
+  # this repo routinely has 40+ workflow runs in flight — the first run of that
+  # revision sat with `tier` queued while `smoke`, `lint` and `security` had all
+  # finished, holding back the entire matrix behind a two-minute job that could
+  # not get a runner. The heavy jobs now test `github.base_ref` inline and start
+  # the moment `smoke` clears; this job just narrates, in parallel, blocking
+  # nothing.
+  #
+  # The condition is therefore written in three places, which is exactly the
+  # duplication that let the old branch filter drift out of view — so
+  # `tools/check_ci_pr_coverage.py` asserts every full-tier job actually carries
+  # it, rather than trusting anyone to keep them in step.
+  tier:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    if: ${{ github.event_name != 'pull_request' || github.event.action != 'labeled' }}
+    steps:
+      - name: Say what this run covers
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if [ "$EVENT_NAME" != "pull_request" ] || [ "$BASE_REF" = "main" ]; then
+            {
+              echo "## Full CI tier"
+              echo
+              echo "Everything this workflow gates on is running."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          {
+            echo "## Partial CI tier"
+            echo
+            echo "This PR targets \`$BASE_REF\`, not \`main\`."
+            echo
+            echo "**Ran:** lint, security, smoke."
+            echo
+            echo "**Did NOT run:** the eight \`test\` shards (including"
+            echo "\`contract\`, which holds the precompute drift guard) or the gallery."
+            echo
+            echo "A green result here is therefore **not** a full verdict. The full"
+            echo "suite runs when this PR is retargeted to \`main\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice title=Partial CI tier::Base is $BASE_REF, not main. The test shards and gallery did not run; a green result here is not a full verdict."
+
   lint:
     runs-on: ubuntu-latest
     if: ${{ github.event_name != 'pull_request' || github.event.action != 'labeled' }}
@@ -88,10 +157,61 @@ jobs:
       # check_doc_examples.py resolves symbols and never looked at paths.
       # Stdlib-only, same as the guards around it.
       - run: python tools/check_claude_md_paths.py
+      # The verification protocol is where README sends anyone asking what is
+      # safe to use for science, and its Test File column IS the evidence. It
+      # cited eight crossval tests; all eight were absent, every row read
+      # PENDING, and 56 real crossval files sat beside it under other names —
+      # so the ledger understated the project until someone re-typed the
+      # filenames (#1725). Resolves paths only: it cannot tell you a cited test
+      # runs, which is why the protocol carries a NOT RUN status. Stdlib-only.
+      - run: python tools/check_verification_protocol_paths.py
+      # The repo is public, so a committed `/Users/<someone>/...` ships. Both
+      # sources are generated output nobody re-reads: sphinx-gallery bakes the
+      # console into docs/auto_examples/*.rst, so a gallery regenerated from a
+      # worktree captures that worktree's path (#1783 replaced 792 of them, and
+      # it had happened before), and three HDF5 grids carried a home directory
+      # in a provenance attribute from the day they were built. Matches the
+      # PATH form, never the username: halos.as.arizona.edu/suchethacooray/ is
+      # the public data mirror download_ssp() needs, and scrubbing it would
+      # break installation. Reads data files as raw bytes because rewriting an
+      # HDF5 attribute leaves the old string in the file's freed space, where
+      # any check going through h5py reports clean. Stdlib-only.
+      - run: python tools/check_no_local_paths.py
+      # A ratchet on repository growth. #1817 declined the history rewrite --
+      # public since 2026-03-21 with two third-party forks, so renumbering every
+      # commit SHA buys clone size and nothing else -- which leaves the
+      # accumulation rate as the part that compounds (~80 MB in four days).
+      # Measured growth vector: excluding data/, the ten largest tracked files
+      # are all .ipynb between 4 and 9 MiB, almost entirely base64 PNG.
+      # Rebuilding five of them from their jupytext mirrors in #1820 removed
+      # 4.9 MiB without touching a line of code. Existing offenders are
+      # inventoried and may stay but not grow; data/ gets its own higher limit
+      # for the SSP grids. Stdlib-only.
+      - run: python tools/check_file_sizes.py
       # tengri implements published models and validates against the reference
       # codes; it does not port or copy their source. The wording drifted back
       # twice after being swept by hand, so it is pinned here. Stdlib-only.
       - run: python tools/check_reimplementation_language.py
+      # `check_doc_examples` resolves symbols and `check_claude_md_paths` resolves
+      # paths; a CITATION is prose, so nothing checked it. The NLR line template
+      # was cited three times, three different ways, one of them a title invented
+      # against a bibcode that belongs to a dwarf-spheroidal kinematics paper —
+      # so the template could not be checked against its source, and when a
+      # doublet ratio in it disagreed with atomic physics the published data got
+      # "corrected" to satisfy a test (#1752). This cannot verify a bibcode is
+      # right (that needs the network) but it enforces that the repo does not
+      # disagree with itself, which is what actually happened. Stdlib-only.
+      - run: python tools/check_citation_consistency.py
+      # The guard above compares citations to EACH OTHER, so it cannot see one
+      # that is wrong the same way everywhere: Feltre+2016 was cited three times
+      # under a DOI belonging to a planet-scattering paper, self-consistently.
+      # references.bib is the curated record and was right about Cue the whole
+      # time, but nothing bound docstrings to it -- every bib consumer is a
+      # runtime path. This compares citations to THE RECORD. It found Vanden
+      # Berk+2001 cited in `blr.py` under the correct DOI with the title of a
+      # different paper ("The SDSS Quasar Catalog"), which a coverage-only check
+      # would have shipped. Backlogs pinned and ratcheting. Stdlib-only.
+      - run: python tools/check_citation_bib_coverage.py
       # A warning that renders a computed number and discards it forces every
       # consumer to regex-parse prose for a value the format spec already
       # rounded: `{frac:.0%}` made "69%" mean anything in 0.685-0.695, and the
@@ -100,11 +220,30 @@ jobs:
       # f-string are on different lines, so a line-based scan of this same tree
       # reports zero hits. Stdlib-only, same as the guards around it.
       - run: python tools/check_warning_payloads.py
+      # Removing a public spelling means rewriting every call site, and that
+      # sweep's census is whatever the author happened to grep. #1720 removed
+      # `stellar=` and reported "six notebooks" migrated -- six under
+      # `notebooks/`, none under `reproduction/`, which has six of its own.
+      # Five died on the removed spelling and stayed dead, because the only
+      # PR-gated checks over `reproduction/` hash the committed PNGs, which keep
+      # matching while the source that produced them no longer runs
+      # (#1776-#1781). AST, not grep: the changelog and the migration guide name
+      # every removed spelling on purpose, and a checker that fails on its own
+      # documentation gets silenced. Stdlib-only, same as the guards around it.
+      - run: python tools/check_removed_apis.py
       # Every test tree must be reachable from some job's path list. The matrix
       # below is explicit, so a directory it stops naming goes dark silently —
       # which is what happened to `tests/unit`. Stdlib-only by design: this job
       # installs ruff and nothing else.
       - run: python tools/check_test_paths_covered.py
+      # The guard above asks whether a test tree reaches a job. This one asks
+      # the same question one level up: whether a pull request reaches this
+      # workflow at all. It used to filter `pull_request` to base `main`, so
+      # #1806 and #1810 merged into a stack having run one check each while a
+      # comparable PR against `main` ran twenty — the tests pinning a known
+      # defect among the ones that never executed. Also fails if a job is added
+      # without declaring its tier. Stdlib-only, same as the guards around it.
+      - run: python tools/check_ci_pr_coverage.py
       # `x / jnp.maximum(d, floor)` returns a plausible finite zero when the
       # numerator is also zero — #1395 shipped that way. The class cannot be
       # swept mechanically (some of these floors are legitimate), so this pins
@@ -112,6 +251,18 @@ jobs:
       # same as the guard above.
       - run: python tools/check_zero_hiding_clamps.py
       - run: python tools/check_representable_floors.py
+      # `tools/` is where this repo keeps its own gates and probes, and almost
+      # none of them are invoked by CI — so a rename under src/ breaks them
+      # silently and there is no run to go red. Seven of 34 were dead on arrival
+      # when this guard was added, all on one move
+      # (`tengri.components.sps` -> `tengri.components.stellar.sps`). Among them
+      # was audit_analysis_constants.py, which audits the JIT closure constants
+      # behind the template-baking class that keeps coming back (#1383, #1462,
+      # #1549, #1597) — the detector was itself unusable and nothing said so.
+      # Resolves against the source tree rather than importing, so it stays
+      # stdlib-only like the guards above and still reports on a tree whose
+      # package does not import.
+      - run: python tools/check_tools_imports.py
       # `nbsphinx_execute = "never"`, so the committed docs/spine/**/*.ipynb IS
       # the published page and nothing else checks it still matches the
       # notebooks/*.py it came from. Two ways of losing that have shipped: a
@@ -120,6 +271,18 @@ jobs:
       # plt.show() a no-op so the page renders with no plots. Stdlib-only, same
       # as the guards above.
       - run: python tools/check_notebook_renders.py
+      # Five notebooks stored 73 code cells as one run-on line with every
+      # newline deleted ('import osimport sysimport time'), unreadable and
+      # unrunnable, for months (#1820). The JSON stayed valid, so every
+      # notebook-aware tool loaded them happily; the guard above covers
+      # docs/spine/ only and ruff never reaches notebooks/archive_2. Flags on
+      # length, NOT on failing to parse: a collapsed cell whose first line ends
+      # in a comment swallows the rest of the cell and parses fine — 34 of the
+      # 73, and the dangerous half, since the ones that fail to parse at least
+      # announce themselves. Threshold 120 chars sits between the longest
+      # healthy single-line cell (90) and the shortest damaged one (148).
+      # Stdlib-only.
+      - run: python tools/check_notebook_cells.py
       # NOTE: `gen_property_table.py --check` cannot live here. This job installs
       # ruff and nothing else, and the generator imports tengri (hence jax) to read
       # the property registry. It runs in `smoke`, which does `pip install -e`.
@@ -133,9 +296,27 @@ jobs:
       # every page it rewrites but does not execute (#1236).
       - run: python tools/check_gallery_fresh.py --strict
 
-  # Static security scan + dependency vulnerability check. Informational
-  # for now (continue-on-error) — surfaces findings in the PR check UI
-  # without blocking. Promote to required once the baseline is clean.
+  # Static security scan + dependency vulnerability check.
+  #
+  # These two are NOT treated alike, and the asymmetry is deliberate.
+  #
+  # `bandit` scans code in this repository. Every finding is actionable here,
+  # and the baseline is clean (0 high, 0 medium at -ll), so it now blocks. It
+  # was advisory until the seven medium+ findings were fixed rather than
+  # tolerated: a SHA1 cache key that now says `usedforsecurity=False`, three
+  # `urlopen` calls that now reject non-http(s) schemes, two pickle loads whose
+  # trust model is written down, and a read-only /tmp fallback.
+  #
+  # `pip-audit` scans third-party dependencies, and stays advisory. A CVE can
+  # be disclosed overnight, in a package nobody here controls, with no fixed
+  # version yet published — and blocking on that hands the merge queue to other
+  # projects' disclosure schedules. It reports; a human decides.
+  #
+  # Its invocation was also simply broken: `pip-audit --disable-pip` exits
+  # non-zero with "The --disable-pip flag can only be used with --requirement",
+  # so the step never audited anything, and `continue-on-error` hid that for as
+  # long as it has been there. A scan that cannot run looks exactly like a scan
+  # that finds nothing.
   security:
     runs-on: ubuntu-latest
     if: ${{ github.event_name != 'pull_request' || github.event.action != 'labeled' }}
@@ -147,13 +328,15 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
       - run: pip install bandit pip-audit
-      - name: Static security scan (bandit, high severity)
+      - name: Static security scan (bandit, medium+ severity)
         run: bandit -r src/ -ll
-        continue-on-error: true
       - name: Install for dependency audit
         run: pip install -e .
+      # `--skip-editable` because `pip install -e .` above marks astro-tengri
+      # editable and pip-audit cannot resolve such a distribution; auditing the
+      # dependencies is the point. Advisory by design — see the job comment.
       - name: Dependency vulnerability scan (pip-audit)
-        run: pip-audit --disable-pip
+        run: pip-audit --skip-editable
         continue-on-error: true
 
   # Decide whether the gallery below has to run for this change.
@@ -181,7 +364,10 @@ jobs:
   gallery-changes:
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    if: ${{ github.event_name != 'pull_request' || github.event.action != 'labeled' }}
+    # `gallery` needs this job's output, so gating here cascades to it.
+    if: >-
+      ${{ (github.event_name != 'pull_request' || github.event.action != 'labeled')
+      && (github.event_name != 'pull_request' || github.base_ref == 'main') }}
     permissions:
       contents: read
       pull-requests: read
@@ -297,7 +483,11 @@ jobs:
 
   smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # 5 -> 8: the all-tier `--collect-only` step added below imports every test
+    # module in the repo (14303 tests, ~10 s warm locally). The job last passed at
+    # 3m30s, so 5 minutes left little headroom, and a guard that trips the job's
+    # own timeout under load reports as a failure of the thing it guards.
+    timeout-minutes: 8
     if: ${{ github.event_name != 'pull_request' || github.event.action != 'labeled' }}
     steps:
       - uses: actions/checkout@v7
@@ -309,6 +499,27 @@ jobs:
       - run: pip install -e ".[dev]"
       - run: python tools/check_param_prefixes.py
       - run: python tools/check_param_defaults.py
+      # The same rule as check_param_defaults, one step later: that guard checks
+      # a signature *default* is inside the declared support; this one checks a
+      # *call-site prior* still overlaps it. #369 renamed sfh_*_log_peak_sfr to
+      # log_total_mass — log10(SFR) became log10(M*) — and carried the ranges
+      # across unconverted, so 150 sites declared priors like Uniform(-1.0, 2.5)
+      # on a stellar mass: 0.1–316 Msun, a prior for a small open cluster. Every
+      # affected fit converged and nothing raised, so the tests kept passing
+      # while testing a regime no galaxy occupies (#1819). Overlap, not
+      # containment: narrowing or widening a prior is ordinary, but a range
+      # sharing no point with the declaration is always a units error. Pinned
+      # Fixed() scalars are deliberately out of scope — Fixed(0.0) on a
+      # log_total_mass is a unit-mass normalization, not a bug.
+      - run: python tools/check_param_ranges.py
+      # #887's guarantee — every parameter is either freeable by
+      # `all_params: FREE` or refused on the record with one of four reasons —
+      # shipped in #1638 with a guard that promises "adding a new one fails the
+      # build until someone writes down which it is". It was never given a
+      # `- run:` line, so it could not fail any build: the guarantee was
+      # unenforced from the day it landed. Green as written (358 parameters, 78
+      # freeable, 33 pinned), so this turns it on with no ratchet.
+      - run: python tools/check_param_free_priors.py
       - run: python tools/check_test_markers.py
       - run: python tools/check_single_dispatch.py
       - run: python tools/check_registry_completeness.py
@@ -341,6 +552,18 @@ jobs:
       # conversion constant (4.78e-13 / L_sun) that appears in no source literal
       # and in no guard call. Finding it requires importing and evaluating.
       - run: python tools/check_float32_representable_constants.py
+      # Every test module in EVERY tier must still import. `check_test_paths_covered`
+      # proves a tree is named by some job; it cannot see whether the files in it
+      # collect. Those are independent failures, and the second one is invisible
+      # in the tiers the gate deselects: `-m 'not crossval and not slow'` never
+      # imports them, so a crossval class that died of an ImportError sat green
+      # for months and took the [N II] doublet check down with it (#1728/#1752).
+      # `-m ''` clears the deselection, so this walks crossval, slow and benchmark
+      # too. Collect-only, so it costs ~10 s and runs no test body. It also pins
+      # `--strict-markers`: an unregistered mark is a collection error here rather
+      # than a warning nobody reads — `-m unit` matched 0 tests while 157 files
+      # declared it.
+      - run: pytest --collect-only -q -m "" tests/ > /dev/null
       - run: pytest tests/components/sps/test_alpha_fe.py tests/components/stellar/test_stellar_skeleton.py -q --no-header
       # The `benchmark` tier: four tests that assert a wall-clock RATIO (fast path
       # vs exact path, cached vs cold). They are real regression guards — they catch
@@ -367,7 +590,9 @@ jobs:
   test:
     runs-on: ubuntu-latest
     needs: smoke
-    if: ${{ github.event_name != 'pull_request' || github.event.action != 'labeled' }}
+    if: >-
+      ${{ (github.event_name != 'pull_request' || github.event.action != 'labeled')
+      && (github.event_name != 'pull_request' || github.base_ref == 'main') }}
     # Sharded across runners, one tree per shard. The suite had grown to 22-24 min
     # against a 25 min cap — it was about to start failing on timeout rather than on
     # any test. More workers per runner is NOT the lever (that is exactly what OOM-
@@ -716,7 +941,31 @@ jobs:
   coverage:
     runs-on: ubuntu-latest
     needs: smoke
-    if: ${{ github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+    # NOT on `push`. This job and `test` run the SAME 8 shards over the SAME
+    # paths at the SAME `-n`; the invocations differ only in `--cov` (here) and
+    # `--timeout=600 --timeout-method=thread` (there). Verified 2026-08-13 by
+    # comparing both matrices field by field: 8 == 8, and every
+    # (shard, paths, nproc) triple identical.
+    #
+    # `test` runs on everything except a bare `labeled` PR event, so before this
+    # change a push to `main` ran BOTH — 16 shards of identical tests, out of 24
+    # jobs total for the push. Removing `push` here drops the push path to 16
+    # jobs (-33%) and takes the serial `coverage (regression-*)` shards, the
+    # slowest things in the workflow, off `main`'s critical path.
+    #
+    # Nothing stops being tested. Every test still runs on every commit to
+    # `main` — once, under `test`, which is also the half carrying the pytest
+    # timeout. What moves is coverage REPORTING, from per-commit to the nightly
+    # `schedule` (and `workflow_dispatch` on demand). Codecov merges uploads
+    # natively, so the merged report is unaffected; only its cadence changes.
+    #
+    # Why this matters beyond runner minutes: at ~34 merges/day the push path
+    # was outrunning the concurrent-job ceiling, so `Tests` on `main` took
+    # 222-387 min wall-clock against ~21 min of compute. On 2026-08-12 a red
+    # landed at 08:57, was fixed at 09:50, and CI first reported it at 10:13 --
+    # 23 minutes AFTER the fix had merged, with five commits stacked on the red
+    # in between. Halving the push path is the cheapest lever on that lag.
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
     strategy:
       fail-fast: false
       matrix:
@@ -972,3 +1221,48 @@ jobs:
         with:
           path: ~/.cache/tengri_jax_cache
           key: ${{ steps.jax_cache.outputs.cache-primary-key }}
+
+  # Cross-validation against FSPS / CIGALE / bagpipes / AGNfitter / Synthesizer.
+  #
+  # This tree was in NO job at all — every suite above passes
+  # `--ignore=tests/crossval` or `-m 'not crossval'` — and it rotted accordingly:
+  # measured on 2026-08-13 at 217 failures and 19 errors out of ~1,210, almost
+  # all of it tests that had stopped importing their own subjects after
+  # renames. Nothing was ever red, because nothing ever ran (#1728).
+  #
+  # It cost ~80-140 s serially to find all of that. The expense was never the
+  # reason it went ungated; it simply was not wired up.
+  #
+  # NOT a PR gate yet, deliberately. ~45 failures remain — genuine numerical
+  # comparisons that need physics judgment, plus reference data CI does not
+  # carry — and a required check that is red on arrival teaches people to
+  # ignore it, which is the failure mode this job exists to end. Nightly makes
+  # the state *visible*, which was the missing ingredient. Promote to a PR gate
+  # once the tier is green; #1728 tracks that.
+  #
+  # Serial (`-n 0`): xdist workers each hold a JAX process with SSP grids and
+  # were observed dying on a 16 GB runner, and a crashed worker reports as an
+  # infrastructure error rather than a test failure — which is precisely the
+  # kind of ambiguity this tier is meant to remove.
+  crossval:
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'schedule'
+      || github.event_name == 'workflow_dispatch'
+      || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'run-crossval'))
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: pip install -e ".[dev]"
+      # Reference grids are not in the repo; the affected modules skip
+      # themselves when absent, so a missing file is reported as a skip rather
+      # than an error. Check the skip count, not just the exit status.
+      - name: Run cross-validation tier
+        run: pytest tests/crossval -q --no-header -m crossval -n 0 -rf
+        env:
+          JAX_PLATFORMS: cpu

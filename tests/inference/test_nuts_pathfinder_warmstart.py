@@ -13,8 +13,6 @@ from pathlib import Path
 import jax
 import pytest
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri.forward.sed_model import SEDModel
 from tengri.inference.backends.mcmc import _shared
 from tengri.inference.fitter import Fitter
@@ -45,7 +43,7 @@ def fitter_and_mock(ssp_data_wne, sdss_filters):
         sfh_dpl_alpha=Uniform(0.5, 3.0),
         sfh_dpl_beta=Uniform(0.3, 2.0),
         sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
-        sfh_dpl_log_total_mass=Uniform(-1.0, 2.5),
+        sfh_dpl_log_total_mass=Uniform(7.0, 12.5),
         met_logzsol=Uniform(-1.5, 0.2),
         dust_tau_bc=Uniform(0.0, 3.0),
         dust_tau_diff=0.3,
@@ -57,7 +55,10 @@ def fitter_and_mock(ssp_data_wne, sdss_filters):
         "sfh_dpl_alpha": 1.2,
         "sfh_dpl_beta": 1.0,
         "sfh_dpl_tau_gyr": 4.0,
-        "sfh_dpl_log_total_mass": 0.9,
+        # 1e10 Msun, inside the declared Uniform(7.0, 12.5) above. Was 0.9 — an
+        # SFR left over from #369's rename, which #1839 converted the prior for
+        # but not the truth (see test_fitter.py for the trace).
+        "sfh_dpl_log_total_mass": 10.0,
         # free (it carries a prior) but never given a truth value — the forward
         # used to substitute the spec default silently. Say it out loud (#1021).
         "sfh_dpl_age_gyr": float(spec.get_distribution("sfh_dpl_age_gyr").default),

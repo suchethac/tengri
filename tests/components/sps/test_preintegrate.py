@@ -25,9 +25,7 @@ from tengri.utils.grid_interp import (
     slice_fixed_axes,
 )
 from tengri.utils.interpolation import edges_for_grid
-
-jax.config.update("jax_enable_x64", True)
-
+from tests._bounds import assert_non_negative
 
 pytestmark = pytest.mark.bounds
 
@@ -97,7 +95,9 @@ class TestPreintegrateGridBasic:
         chex.assert_shape(result.effective_wavelengths, (n_filters,))
         chex.assert_shape(result.effective_wavelengths_rest, (n_filters,))
         npt.assert_allclose(np.asarray(result.phot), const, rtol=1e-10)
-        assert float(result.flux_scale) > 0.0
+        # Stored as log10 (#1859), so the scale itself is ~-57 dex; the
+        # assertion is that it denotes a positive factor, not that it is one.
+        assert 10.0 ** float(result.log10_flux_scale) > 0.0
 
     def test_photometry_is_linear_and_separable(self, synthetic_template_3d, tophat_filters):
         """Filter integration is linear in L_ν, so a separable template factorizes.
@@ -241,7 +241,7 @@ class TestPreintegrateLines:
 
         chex.assert_shape(result.line_filter_weights, (len(lines), len(filter_waves)))
         chex.assert_tree_all_finite(result.line_filter_weights)
-        assert jnp.all(result.line_filter_weights >= 0.0)
+        assert_non_negative(result.line_filter_weights, name="output")
 
     def test_lines_outside_filters_have_small_weight(self, tophat_filters):
         """Lines far outside filter ranges have near-zero weight.

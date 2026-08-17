@@ -21,8 +21,6 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-jax.config.update("jax_enable_x64", True)
-
 # Skip all tests in this module if the handley fork is not installed
 try:
     from blackjax.ns.nss import as_top_level_api as bj_as_top_level_api

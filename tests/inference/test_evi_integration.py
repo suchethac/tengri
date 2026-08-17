@@ -17,8 +17,6 @@ import pytest
 from tengri import Fitter, Fixed, Parameters, SEDModel, Uniform
 from tengri.inference._backend_registry import _BACKENDS
 
-jax.config.update("jax_enable_x64", True)
-
 # ``native_vi_linear`` (MGVI) is registered tier="broken" (#1287): it segfaults
 # on DPL/dense_basis photometry mocks — exactly what these tests build — so
 # ``fitter.run("native_vi_linear")`` raises ``BackendError`` by default. Skip
@@ -42,7 +40,7 @@ def simple_spec():
         sfh_dpl_alpha=Uniform(0.5, 3.0),
         sfh_dpl_beta=Uniform(0.5, 3.0),
         sfh_dpl_tau_gyr=Uniform(1.0, 10.0),
-        sfh_dpl_log_total_mass=Uniform(-1.0, 2.0),
+        sfh_dpl_log_total_mass=Uniform(7.0, 12.5),
         met_logzsol=Uniform(-1.5, 0.0),
         dust_tau_bc=Fixed(0.3),
         dust_tau_diff=Fixed(0.2),
@@ -159,4 +157,4 @@ class TestEVIRuns:
 # TestGeoVIMGVIRouting removed: tested the `native_geovi`/`native_mgvi`
 # deprecated aliases, which were hard-deleted pre-v1.0. Coverage of the
 # canonical names lives in TestEVIRuns above (``native_vi_linear``) and
-# in tests/unit/test_geovi_jit.py (``native_vi_nonlinear``).
+# in tests/inference/test_geovi_jit.py (``native_vi_nonlinear``).

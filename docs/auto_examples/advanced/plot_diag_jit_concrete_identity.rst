@@ -44,13 +44,13 @@ floating-point results beyond ~1e-14 unit roundoff (IEEE 754 double precision).
 
  .. code-block:: none
 
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 8% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+    /tengri/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 8% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
       state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 4% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+    /tengri/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 4% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
       state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 2% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+    /tengri/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 2% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
       state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 1% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+    /tengri/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 1% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
       state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
 
 

@@ -29,6 +29,7 @@ import jax.numpy as jnp
 
 from tengri.utils.filter_convention import FilterConvention, filter_weight as _filter_weight
 from tengri.utils.physics_constants import C_AA
+from tengri.utils.scale import representable_denominator
 
 # ── UV Slope (Calzetti et al. 1994) ────────────────────────────────
 
@@ -318,7 +319,9 @@ def equivalent_width(
 
     integrand = jnp.where(
         line_mask,
-        (f_lambda - f_cont) / jnp.maximum(f_cont, 1e-40),
+        # Derivative-sized floor: f_cont is a denominator, so its VJP needs
+        # 1/floor**2 representable (#1860). 1e-40 squares to 0.0 in float32.
+        (f_lambda - f_cont) / jnp.maximum(f_cont, representable_denominator(1e-40)),
         0.0,
     )
 

@@ -27,7 +27,7 @@ jax.config.update("jax_enable_x64", True)
 import jax.numpy as jnp
 
 from tengri import Fitter, Observation, Parameters, Photometry, SEDModel
-from tengri.components.sps.dsps_wrapper import load_ssp_data
+from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.observation.filters import load_filter_set
 from tengri.parameters.priors import Fixed, Uniform
 
@@ -80,7 +80,7 @@ def _build_params_with_agn(agn_model: str | None = None) -> Parameters:
     extra: dict[str, Any] = {}
     if agn_model:
         extra.update(
-            agn_log_lbol=Uniform(40.0, 47.0),
+            agn_log_lbol=Uniform(6.42, 13.42),
         )
         if agn_model in ("kubota_done_full", "kubota_done_disc"):
             extra.update(

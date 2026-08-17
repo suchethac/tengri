@@ -40,6 +40,9 @@ References
 
 """
 
+from collections.abc import Mapping
+from typing import Any
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -47,7 +50,7 @@ from jax.scipy.special import logsumexp
 
 from tengri.utils.magnitudes import fnu_to_ab_mag, lnu_to_absolute_ab_mag
 from tengri.utils.physics_constants import C_AA, L_SUN, PC_CM
-from tengri.utils.scale import LN10, log10_magnitude, pow10
+from tengri.utils.scale import LN10, log10_magnitude, pow10, representable_denominator
 
 # Re-export for convenience
 __all__ = [
@@ -122,10 +125,16 @@ def compute_mass_weighted_age(weights: jnp.ndarray, ssp_ages_yr: jnp.ndarray) ->
     alone would yield a finite ``0.0`` here, which reads as "every star just
     formed" — a plausible-looking answer for a model with no stellar mass at all.
     """
+    # Select the denominator BEFORE dividing, not the quotient after. The outer
+    # ``where`` picks NaN on the degenerate branch but does not protect the
+    # reverse pass: both branches are differentiated, the quotient's VJP carries
+    # -num/den**2, and a 1e-30 denominator squares to exactly 0.0 in float32
+    # (below tiny = 1.18e-38), so the discarded branch contributes 0 * inf = NaN
+    # to the surviving one (#1860).
     total = jnp.sum(weights)
-    return jnp.where(
-        total > 1e-20, jnp.sum(weights * ssp_ages_yr) / jnp.maximum(total, 1e-30) / 1e9, jnp.nan
-    )
+    ok = total > 1e-20
+    safe_total = jnp.where(ok, total, 1.0)
+    return jnp.where(ok, jnp.sum(weights * ssp_ages_yr) / safe_total / 1e9, jnp.nan)
 
 
 def compute_mass_weighted_metallicity(
@@ -180,10 +189,12 @@ def compute_mass_weighted_metallicity(
     log_z_per_bin = log_z_final + (log_z_initial - log_z_final) * t_frac
     z_linear = 10.0**log_z_per_bin
     total_w = jnp.sum(weights)
-    # NaN, not 0.0, when there is no mass to weight by (#1404).
-    mean_z = jnp.where(
-        total_w > 1e-20, jnp.sum(weights * z_linear) / jnp.maximum(total_w, 1e-30), jnp.nan
-    )
+    # NaN, not 0.0, when there is no mass to weight by (#1404). Denominator
+    # selected before the divide — see compute_mass_weighted_age for why the
+    # outer ``where`` alone leaves the reverse pass NaN in float32 (#1860).
+    ok = total_w > 1e-20
+    safe_total_w = jnp.where(ok, total_w, 1.0)
+    mean_z = jnp.where(ok, jnp.sum(weights * z_linear) / safe_total_w, jnp.nan)
     return jnp.log10(jnp.maximum(mean_z, 1e-30))
 
 
@@ -192,6 +203,92 @@ def compute_mass_weighted_metallicity(
 #: log10 of the solar luminosity [dex re erg/s]. Folded into the bolometric
 #: reductions so the erg/s value is never materialized (see _trapz_to_lsun).
 LOG10_L_SUN: float = float(np.log10(L_SUN))
+
+
+def derived_luminosity_lsun(
+    derived: Mapping[str, Any], key: str, log_key: str, default: float = 0.0
+) -> jnp.ndarray:
+    r"""Read an erg/s ``state.derived`` key in :math:`L_\odot`, log companion first.
+
+    The cross-component contract publishes its energy-balance luminosities in
+    erg/s (``L_ir``, ``L_absorbed``) alongside a ``log10`` companion
+    (``log_L_ir``). For a :math:`10^{10}\,M_\odot` galaxy the linear key is
+    ~3.6e43 and is ``inf`` in float32, while the companion is ~43.6 dex and
+    exact — and the attenuator computes the companion *first*
+    (``L_ir = pow10(log_L_ir)``), so reading it is strictly closer to the
+    source. Consumers that divided the linear key by :math:`L_\odot` returned
+    ``inf`` for a ~9.5e9 :math:`L_\odot` answer that float32 holds easily
+    (issue #1837).
+
+    Parameters
+    ----------
+    derived : Mapping
+        ``state.derived``.
+    key : str
+        Linear key name [erg/s], used only when the companion is absent.
+    log_key : str
+        ``log10`` companion key name [dex re erg/s].
+    default : float, optional
+        Value in erg/s when neither key is present. Default 0.0.
+
+    Returns
+    -------
+    ndarray, shape ()
+        The luminosity in :math:`L_\odot`. Exactly ``0.0`` when the companion
+        is ``-inf`` (the "this term is exactly zero" sentinel).
+
+    Notes
+    -----
+    **JIT/grad/vmap-compatible**: yes. The key presence test is a Python-level
+    branch on a static dict, not a traced value.
+    """
+    log_value = derived.get(log_key)
+    if log_value is not None:
+        return pow10(jnp.asarray(log_value) - LOG10_L_SUN)
+    return jnp.asarray(derived.get(key, default)) / L_SUN
+
+
+def derived_weights_peak_relative(
+    derived: Mapping[str, Any], key: str, log_key: str
+) -> jnp.ndarray:
+    r"""Per-bin weights from an erg/s ``state.derived`` array, rescaled by their peak.
+
+    For weights used only inside :math:`\sum x_i w_i / \sum w_i`, any factor
+    common to every bin cancels exactly, so the absolute scale is free to
+    discard — and discarding it is what makes the mean computable in float32.
+    ``L_age`` peaks at ~3.3e42 erg/s, so 85 of 93 bins are ``inf`` there and
+    ``ssp_ages_yr * L_age`` overflows a second time on top (~1e10 x), while the
+    weighted mean itself is of order 1 (issue #1837).
+
+    Parameters
+    ----------
+    derived : Mapping
+        ``state.derived``.
+    key : str
+        Linear per-bin key [erg/s], used only when the companion is absent.
+    log_key : str
+        ``log10`` companion key [dex re erg/s].
+
+    Returns
+    -------
+    ndarray, shape (n_bin,)
+        Weights in ``[0, 1]``, the brightest bin exactly ``1.0``. All-zero when
+        every bin is dark.
+
+    Notes
+    -----
+    **JIT/grad/vmap-compatible**: yes. ``-inf`` is the "this bin emits nothing"
+    sentinel and powers back to exactly ``0.0``; an all-dark array leaves the
+    peak non-finite, so the offset falls back to zero and every weight
+    underflows to ``0.0`` exactly as the linear path did.
+    """
+    log_values = derived.get(log_key)
+    if log_values is None:
+        return jnp.asarray(derived[key])
+    log_values = jnp.asarray(log_values)
+    peak = jnp.max(log_values)
+    peak = jnp.where(jnp.isfinite(peak), peak, 0.0)
+    return pow10(log_values - peak)
 
 
 def _trapz_to_lsun(integrand: jnp.ndarray, nu: jnp.ndarray) -> jnp.ndarray:
@@ -344,8 +441,10 @@ def _mean_flux_in_band(sed, wave, lam_lo, lam_hi):
     sed_masked = jnp.where(mask, sed, 0.0)
     num = jnp.trapezoid(sed_masked, wave)
     den = jnp.trapezoid(w, wave)
-    # Return NaN if the band has no wavelength coverage (den ≈ 0)
-    return jnp.where(den > 1e-20, num / jnp.maximum(den, 1e-30), jnp.nan)
+    # Return NaN if the band has no wavelength coverage (den ≈ 0). Denominator
+    # selected before the divide — see compute_mass_weighted_age (#1860).
+    ok = den > 1e-20
+    return jnp.where(ok, num / jnp.where(ok, den, 1.0), jnp.nan)
 
 
 def compute_dn4000(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
@@ -375,7 +474,9 @@ def compute_dn4000(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
     """
     red = _mean_flux_in_band(sed, wave, 4000.0, 4100.0)
     blue = _mean_flux_in_band(sed, wave, 3850.0, 3950.0)
-    return red / jnp.maximum(blue, 1e-30)
+    # Denominator floor sized for its derivative, not its value: 1e-30 squares
+    # to exactly 0.0 in float32 so the quotient's VJP divides by zero (#1860).
+    return red / jnp.maximum(blue, representable_denominator(1e-30))
 
 
 def compute_balmer_break(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
@@ -404,7 +505,8 @@ def compute_balmer_break(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
     """
     red = _mean_flux_in_band(sed, wave, 4000.0, 4100.0)
     blue = _mean_flux_in_band(sed, wave, 3620.0, 3720.0)
-    return red / jnp.maximum(blue, 1e-30)
+    # Derivative-sized denominator floor — see compute_dn4000 (#1860).
+    return red / jnp.maximum(blue, representable_denominator(1e-30))
 
 
 def compute_uv_slope_beta(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
@@ -444,10 +546,17 @@ def compute_uv_slope_beta(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
     sxx = jnp.sum(w * log_wave**2)
     sxy = jnp.sum(w * log_wave * log_fnu)
 
-    denom = sxx - sx**2 / jnp.maximum(sw, 1e-30)
-    slope_fnu = (sxy - sx * sy / jnp.maximum(sw, 1e-30)) / jnp.maximum(denom, 1e-30)
+    # Three denominators, all previously floored at 1e-30 — derivative-unsafe in
+    # float32, where 1e-60 flushes to 0.0 and the quotient VJP divides by zero.
+    # ``sw`` is selected before the divide (the trailing ``where`` guards the
+    # value, not the reverse pass); ``denom`` can vanish on a genuinely
+    # degenerate fit, so it takes a derivative-sized floor instead (#1860).
+    ok = sw > 1.0
+    safe_sw = jnp.where(ok, sw, 1.0)
+    denom = sxx - sx**2 / safe_sw
+    slope_fnu = (sxy - sx * sy / safe_sw) / jnp.maximum(denom, representable_denominator(1e-30))
     # Return NaN if no wavelength points in the 1250-2600 Å window
-    return jnp.where(sw > 1.0, slope_fnu - 2.0, jnp.nan)
+    return jnp.where(ok, slope_fnu - 2.0, jnp.nan)
 
 
 def compute_fuv_flux(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
@@ -543,23 +652,111 @@ def compute_uv_luminosity_1600(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarr
     return nu_1600 * l_nu_1600
 
 
-def compute_irx(l_tir_lsun: jnp.ndarray, l_uv_erg: jnp.ndarray) -> jnp.ndarray:
-    """Infrared excess IRX = log10(L_TIR / L_UV).
+#: ``log10(c / 1600 A)`` [dex re Hz] — the 1600 A pivot frequency, kept in the
+#: exponent so ``nu L_nu`` is never materialized (see
+#: :func:`compute_log_uv_luminosity_1600`).
+LOG10_NU_1600: float = float(np.log10(C_AA / 1600.0))
+
+
+def compute_log_uv_luminosity_1600(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
+    r"""``log10`` of the monochromatic UV luminosity at rest-frame 1600 A.
+
+    .. math::
+
+        \log_{10}\left(\frac{(\nu L_\nu)_{1600\,\mathrm{A}}}{\mathrm{erg/s}}\right)
+
+    The range-safe companion to :func:`compute_uv_luminosity_1600`. That
+    function returns :math:`\nu L_\nu` in erg/s, which is ~5e42 for a
+    :math:`10^{10}\,M_\odot` galaxy and therefore **not representable in
+    float32** at all — its ``inf`` then propagated into ``irx`` as ``NaN``, even
+    though IRX itself is a dex ratio of order unity (issue #1837).
 
     Parameters
     ----------
-    l_tir_lsun : float
-        Total IR luminosity in Lsun.
-    l_uv_erg : float
-        UV luminosity νL_ν(1600 Å) in erg/s.
+    sed : array_like, shape (n_wave,)
+        Rest-frame :math:`L_\nu` [erg/s/Hz].
+    wave : array_like, shape (n_wave,)
+        Rest-frame wavelength grid [Angstrom], ascending.
 
     Returns
     -------
-    float
-        IRX (dimensionless log ratio).
+    ndarray, shape ()
+        :math:`\log_{10}(\nu L_\nu)` [dex re erg/s]. ``-inf`` where the
+        interpolated :math:`L_\nu` is exactly zero, following the
+        :func:`~tengri.utils.scale.log10_magnitude` sentinel contract.
+
+    Notes
+    -----
+    **JIT/grad/vmap-compatible**: yes. Equal to
+    ``log10(compute_uv_luminosity_1600(...))`` to ~1e-15 relative in float64,
+    and finite in float32 wherever :math:`L_\nu` itself is.
     """
-    l_tir_erg = l_tir_lsun * L_SUN
-    return jnp.log10(jnp.maximum(l_tir_erg, _FLOOR()) / jnp.maximum(l_uv_erg, _FLOOR()))
+    l_nu_1600 = jnp.interp(1600.0, wave, sed)
+    return log10_magnitude(l_nu_1600) + LOG10_NU_1600
+
+
+def compute_irx(
+    l_tir_lsun: jnp.ndarray,
+    l_uv_erg: jnp.ndarray | None = None,
+    *,
+    log_l_uv_erg: jnp.ndarray | None = None,
+) -> jnp.ndarray:
+    r"""Infrared excess :math:`\mathrm{IRX} = \log_{10}(L_\mathrm{TIR}/L_\mathrm{UV})`.
+
+    .. math::
+
+        \mathrm{IRX} = \log_{10}\left(\frac{L_\mathrm{TIR}}{L_\mathrm{UV}}\right)
+                     = \log_{10} L_\mathrm{TIR}[L_\odot] + \log_{10} L_\odot
+                       - \log_{10} L_\mathrm{UV}[\mathrm{erg/s}]
+
+    Parameters
+    ----------
+    l_tir_lsun : array_like, shape ()
+        Total IR luminosity [Lsun].
+    l_uv_erg : array_like, shape (), optional
+        UV luminosity :math:`\nu L_\nu` [erg/s]. Mutually exclusive with
+        ``log_l_uv_erg``. **Not float32-representable** for a normal galaxy
+        (~5e42 against a 3.4e38 ceiling) — prefer the log form there.
+    log_l_uv_erg : array_like, shape (), optional
+        :math:`\log_{10}(\nu L_\nu / (\mathrm{erg/s}))` [dex], as returned by
+        :func:`compute_log_uv_luminosity_1600`. The float32-safe route.
+
+    Returns
+    -------
+    ndarray, shape ()
+        IRX [dex].
+
+    Raises
+    ------
+    TypeError
+        If neither or both of ``l_uv_erg`` and ``log_l_uv_erg`` are given.
+
+    Notes
+    -----
+    **JIT/grad/vmap-compatible**: yes.
+
+    Evaluated as a difference of logarithms rather than a ratio. The previous
+    form materialized ``l_tir_lsun * L_SUN`` (~7e41 erg/s), which overflows
+    float32 on its own — so IRX was ``NaN`` there even when both inputs were
+    finite, and even though IRX is a dex ratio of order unity (issue #1837).
+    Clamping in the log domain is exactly equivalent to the previous linear
+    clamp because ``log10`` is monotone:
+    ``log10(max(x, f)) == max(log10(x), log10(f))``. float64 is unchanged to
+    ~1e-15 absolute.
+    """
+    if (l_uv_erg is None) == (log_l_uv_erg is None):
+        raise TypeError(
+            "compute_irx requires exactly one of l_uv_erg (linear, erg/s) or "
+            "log_l_uv_erg (dex). Pass log_l_uv_erg from "
+            "compute_log_uv_luminosity_1600 for a float32-safe result."
+        )
+    log_floor = jnp.log10(jnp.asarray(_FLOOR()))
+    log_l_tir_erg = jnp.maximum(log10_magnitude(l_tir_lsun) + LOG10_L_SUN, log_floor)
+    if log_l_uv_erg is None:
+        log_uv = jnp.maximum(log10_magnitude(l_uv_erg), log_floor)
+    else:
+        log_uv = jnp.maximum(jnp.asarray(log_l_uv_erg), log_floor)
+    return log_l_tir_erg - log_uv
 
 
 def compute_rest_uv_color(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:

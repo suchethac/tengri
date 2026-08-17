@@ -25,8 +25,6 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri.config.exceptions import ParameterError
 from tengri.inference.fitter import (
     _AUTO_D_THRESHOLD,
@@ -55,7 +53,7 @@ def low_d_spec():
     return Parameters(
         mean_sfh_type="dpl",
         sfh_dpl_alpha=Uniform(0.5, 5.0),
-        sfh_dpl_log_total_mass=Uniform(-1.0, 3.0),
+        sfh_dpl_log_total_mass=Uniform(7.0, 12.5),
         met_logzsol=Uniform(-2.0, 0.5),
         dust_tau_diff=Fixed(0.3),
         redshift=Fixed(0.1),
@@ -70,7 +68,7 @@ def high_d_spec():
     return Parameters(
         mean_sfh_type="dpl",
         sfh_dpl_alpha=Uniform(0.5, 5.0),
-        sfh_dpl_log_total_mass=Uniform(-1.0, 3.0),
+        sfh_dpl_log_total_mass=Uniform(7.0, 12.5),
         met_logzsol=Uniform(-2.0, 0.5),
         dust_tau_diff=Uniform(0.0, 2.0),
         redshift=Fixed(0.1),
@@ -355,7 +353,7 @@ class TestEngineCacheKey:
         spec_extended = Parameters(
             mean_sfh_type="dpl",
             sfh_dpl_alpha=Uniform(0.5, 5.0),
-            sfh_dpl_log_total_mass=Uniform(-1.0, 3.0),
+            sfh_dpl_log_total_mass=Uniform(7.0, 12.5),
             met_logzsol=Uniform(-2.0, 0.5),
             dust_tau_diff=Uniform(0.0, 2.0),  # was Fixed in low_d_spec
             redshift=Fixed(0.1),

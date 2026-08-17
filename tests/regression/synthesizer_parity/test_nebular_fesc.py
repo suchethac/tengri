@@ -8,8 +8,7 @@ total_photons * (1 - fesc)`` BEFORE nebular continuum calc.
 
 Synthesizer source: https://github.com/flaresimulations/synthesizer/issues/126
 Reference papers:
-  - Li et al. 2024, ApJ, 969, 28 (Cue v1)
-  - Li et al. 2025, ApJ, 986, 9 (Cue v2 with fesc threading)
+  - Li et al. 2025, ApJ, 986, 9 (Cue, incl. fesc threading; arXiv:2405.04598)
   - Byler et al. 2017, ApJ, 840, 122 (photoionization and escape fraction)
 
 Every test cites the pitfall ID from ``~/.claude/plans/synthesizer-pitfall-catalog.md``.
@@ -23,8 +22,6 @@ import pytest
 
 pytestmark = pytest.mark.regression_paper
 from scipy.integrate import simpson
-
-jax.config.update("jax_enable_x64", True)
 
 from tengri.components.nebular import _DEFAULT_CUE_WEIGHTS_PATH
 from tengri.components.nebular._recombination_coeffs import lyc_dust_escape_factor

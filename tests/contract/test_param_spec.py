@@ -6,8 +6,6 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-jax.config.update("jax_enable_x64", True)
-
 pytestmark = pytest.mark.contract
 
 from tengri.parameters.parameters import Parameters
@@ -23,7 +21,7 @@ class TestConstruction:
     def test_parametric_tsnorm(self):
         spec = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_total_mass=Uniform(-1, 2),
+            sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
             redshift=0.1,
         )
         assert not spec.stochastic
@@ -74,7 +72,7 @@ class TestConstruction:
             sfh_dpl_alpha=Uniform(0.5, 3.0),
             sfh_dpl_beta=Uniform(0.3, 2.0),
             sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
-            sfh_dpl_log_total_mass=Uniform(-1, 2),
+            sfh_dpl_log_total_mass=Uniform(7.0, 12.5),
             redshift=0.1,
         )
         assert "sfh_dpl_alpha" in spec.free_params
@@ -84,7 +82,7 @@ class TestConstruction:
         with pytest.raises(ValueError, match="Unknown parameter"):
             Parameters(
                 mean_sfh_type="dpl",
-                sfh_tsnorm_log_total_mass=Uniform(-1, 2),
+                sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
             )
 
     def test_tsnorm_rejects_dpl_params(self):
@@ -166,15 +164,15 @@ class TestValidation:
     def test_validate_good_params_does_not_raise(self):
         spec = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_total_mass=Uniform(-1, 2),
+            sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
         )
         # validate() raises on invalid params — no raise IS the assertion
-        spec.validate({"sfh_tsnorm_log_total_mass": jnp.array(0.5)})
+        spec.validate({"sfh_tsnorm_log_total_mass": jnp.array(10.0)})
 
     def test_validate_out_of_bounds(self):
         spec = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_total_mass=Uniform(-1, 2),
+            sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
         )
         with pytest.raises(ValueError, match="outside bounds"):
             spec.validate({"sfh_tsnorm_log_total_mass": jnp.array(5.0)})
@@ -184,7 +182,7 @@ class TestProperties:
     def test_free_params_list(self):
         spec = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_total_mass=Uniform(-1.0, 3.0),
+            sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
             dust_slope=-0.7,
             redshift=0.1,
         )
@@ -195,7 +193,7 @@ class TestProperties:
     def test_fixed_params_list(self):
         spec = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_total_mass=Uniform(-1, 2),
+            sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
             dust_slope=-0.7,
         )
         fixed = spec.fixed_params
@@ -205,7 +203,7 @@ class TestProperties:
     def test_n_free(self):
         spec = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_total_mass=Uniform(-1, 2),
+            sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
             dust_slope=-0.7,
             redshift=0.1,
         )
@@ -218,13 +216,16 @@ class TestProperties:
         assert fixed["redshift"] == 0.1
 
     def test_get_distribution(self):
+        prior = Uniform(7.0, 12.5)
         spec = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_total_mass=Uniform(-1, 2),
+            sfh_tsnorm_log_total_mass=prior,
         )
         d = spec.get_distribution("sfh_tsnorm_log_total_mass")
         assert isinstance(d, Uniform)
-        assert d.lo == -1
+        # Compare against the declared prior, not a repeated literal: the point
+        # is that get_distribution round-trips what was set.
+        assert d.lo == prior.lo
 
     def test_get_distribution_unknown(self):
         spec = Parameters()
@@ -267,11 +268,14 @@ class TestSampling:
     def test_sample_free_in_bounds(self):
         spec = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_total_mass=Uniform(-1, 2),
+            sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
         )
         params = spec.sample(jax.random.PRNGKey(0))
         val = float(params["sfh_tsnorm_log_total_mass"])
-        assert -1 <= val <= 2
+        # Bounds read off the declaration, so this test tracks the prior
+        # instead of pinning a range that a rename can silently invalidate.
+        d = spec.get_distribution("sfh_tsnorm_log_total_mass")
+        assert d.lo <= val <= d.hi
 
     def test_sample_batch_shapes(self):
         spec = Parameters(mean_sfh_type="tsnorm")
@@ -289,7 +293,7 @@ class TestRepr:
     def test_repr_contains_params(self):
         spec = Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_total_mass=Uniform(-1, 2),
+            sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
             redshift=0.1,
         )
         r = repr(spec)

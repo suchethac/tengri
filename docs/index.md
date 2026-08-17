@@ -173,7 +173,7 @@ and [NOTICE](https://github.com/suchethac/tengri/blob/main/NOTICE).
    spine/04_building_models
 
 .. toctree::
-   :caption: Fitting workflows
+   :caption: Common workflows
    :maxdepth: 1
    :hidden:
 
@@ -181,6 +181,7 @@ and [NOTICE](https://github.com/suchethac/tengri/blob/main/NOTICE).
    spine/07_joint_photo_spec
    spine/10_fastspecfit_joint_fit
    spine/11_catalog_fits
+   spine/12_simulation_populations
 
 .. toctree::
    :caption: Examples
@@ -216,6 +217,5 @@ and [NOTICE](https://github.com/suchethac/tengri/blob/main/NOTICE).
    :maxdepth: 1
    :hidden:
 
-   spine/experimental/stochastic_sfh_recovery
-   spine/experimental/multimodel_bma_candels
+   spine/experimental/index
 ```

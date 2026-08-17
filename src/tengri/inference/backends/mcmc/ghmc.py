@@ -110,8 +110,26 @@ def run_ghmc(
     # Namespaced to this backend, not "hmc": the cache is keyed by tuple, so borrowing
     # another sampler's prefix is a collision waiting on the next field either side
     # adds. GHMC tunes a different kernel and must not inherit HMC's step size.
-    adapt_key = ("ghmc", True)  # always diagonal for GHMC
+    # n_warmup, alpha, delta and target_accept_rate belong in the key: they
+    # *produce* the adaptation, so leaving them out makes those knobs silently
+    # inert on a model that already holds an entry.
+    #
+    # The trailing ``True`` pins "always diagonal" and must stay both LAST and on
+    # this one line: #1454 asserts on this statement as text, matching up to the
+    # first ``)`` and reading the final element. That is what keeps GHMC out of
+    # the dense-mass advisory, so the tuning rides in a single grouped element
+    # rather than being spliced in after it.
+    tuning = (int(n_warmup), float(alpha), float(delta), float(target_accept_rate))
+    adapt_key = ("ghmc", tuning, True)
     cached = _get_cached_adaptation(fitter, adapt_key)
+
+    # Both branches must advance the key identically — cache presence is
+    # invisible to the caller and must not steer the RNG stream, or two
+    # identical ``fit`` calls with one ``key`` return different chains. These
+    # two splits used to live only in the ``else``; they are unused on the
+    # cached path but keep ``chain_key`` on the same stream position.
+    key, warmup_key = jax.random.split(key)
+    key, ghmc_init_key = jax.random.split(key)
 
     if cached is not None:
         parameters = cached
@@ -178,8 +196,6 @@ def run_ghmc(
             _multichain_burnin_done = False
     else:
         _multichain_burnin_done = False
-        key, warmup_key = jax.random.split(key)
-        key, ghmc_init_key = jax.random.split(key)
         key, chain_key = jax.random.split(key)
         chain_keys = jax.random.split(chain_key, n_burnin + n_samples)
         positions, divergent, step_size, momentum_inv_scale = _ghmc_full_scan(

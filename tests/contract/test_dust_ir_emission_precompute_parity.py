@@ -39,7 +39,10 @@ import pytest
 
 pytestmark = pytest.mark.contract
 
-jax.config.update("jax_enable_x64", True)
+# No ``jax.config.update("jax_enable_x64", True)`` here: ``tests/conftest.py``
+# sets it before any test module is imported, so a second call is a no-op that
+# reads as if this file controlled its own precision. Guarded by
+# ``test_float64_is_set_once.py``.
 
 
 def assert_precompute_matches_exact(

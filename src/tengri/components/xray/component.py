@@ -19,6 +19,10 @@ X-ray depends on quantities owned by other components:
   mass in M_⊙, so the adapter exponentiates: ``M_* = 10**log_mstar``.
 - ``L_agn_bol`` (erg/s) — produced by the AGN component. Read from
   ``state.derived["L_agn_bol"]`` with a fallback to 0.0 (no AGN).
+- ``log_metallicity_history`` (dex, absolute log10(Z)) — produced by the
+  stellar component. Its present-day bin drives the Lehmer+2016 HMXB
+  metallicity term; falls back to :data:`~tengri.utils.physics_constants.Z_SUN`
+  when no stellar component is present (#1755).
 - ``redshift`` — bare parameter from :data:`BARE_NAME_ALLOWLIST`,
   passed through but consumed by the observation model rather than
   by ``xray_total`` itself.
@@ -42,6 +46,7 @@ from tengri.components.template_threading import TemplateThreading
 from tengri.components.xray._params import PARAMS as _XRAY_PARAMS
 from tengri.components.xray.xray import (
     COS_INC_REF_30DEG,
+    metallicity_from_history,
     xray_total_lopez24_terms,
     xray_total_terms,
 )
@@ -190,6 +195,12 @@ class XRaySEDComponent(TemplateThreading):
                 "yr",
                 "SSP age grid (stellar); with age_weights gives the LMXB stellar age",
             ),
+            DerivedKey(
+                "log_metallicity_history",
+                "dex",
+                "log10(Z) per SFH bin (stellar); its present-day bin drives the "
+                "Lehmer+2016 HMXB metallicity term",
+            ),
         )
 
     def precompute(
@@ -312,6 +323,10 @@ class XRaySEDComponent(TemplateThreading):
             "sfr": 1.0,
             "stellar_mass": 1.0e10,
             "stellar_age_gyr": 1.0,
+            # Not Z_SUN, deliberately: these are probe draws, not a solar
+            # anchor, and writing the constant here would invite someone to
+            # import it and couple the probe to a value it has no stake in.
+            "metallicity_z": 0.0150,
             "l_2500": 1.0e29,
             "cos_inc": 0.9,
             "l_12um": 1.0e28,
@@ -320,6 +335,12 @@ class XRaySEDComponent(TemplateThreading):
             "sfr": 50.0,
             "stellar_mass": 3.0e11,
             "stellar_age_gyr": 8.0,
+            # Deliberately not the other draw's Z: metallicity scales the HMXB
+            # amplitude only (Gamma_HMXB is a shape parameter and is untouched),
+            # so the term stays rank-1 across the pair while the probe actually
+            # exercises the axis. Equal values would let a metallicity-blind
+            # HMXB pass the proportionality check unnoticed.
+            "metallicity_z": 0.0040,
             "l_2500": 7.0e31,
             "cos_inc": 0.3,
             "l_12um": 5.0e30,
@@ -340,7 +361,8 @@ class XRaySEDComponent(TemplateThreading):
         -------
         dict
             ``sfr`` [Msun/yr], ``stellar_mass`` [Msun], ``stellar_age_gyr`` [Gyr],
-            ``l_2500`` [erg/s/Hz], ``cos_inc`` [dimensionless], ``l_12um`` [erg/s/Hz].
+            ``metallicity_z`` [mass fraction], ``l_2500`` [erg/s/Hz],
+            ``cos_inc`` [dimensionless], ``l_12um`` [erg/s/Hz].
         """
         sfr = jnp.asarray(derived.get("sfr", 1.0))
         # Contract: stellar publishes log_mstar (log10 M_⊙). xray_total
@@ -364,6 +386,22 @@ class XRaySEDComponent(TemplateThreading):
             jnp.sum(age_weights * ssp_ages_yr) / jnp.maximum(_w_sum, 1e-30) / 1.0e9,
             1.0,
         )
+
+        # The HMXB half of Lehmer+2016 is a quartic in Z, and steeper than the
+        # LMXB age term above: an 18x spread across met_logzsol in [-1, +0.3].
+        # HMXBs trace the instantaneous SFR, so the metallicity that matters is
+        # the one the *young* population was born with — the present-day bin of
+        # the history, index 0, the same reduction the nebular component uses.
+        # Published in absolute log10(Z), which is what xray_xrb wants and what
+        # makes this correct for every SSP library: BASTI calls 0.0200 solar
+        # and MIST 0.0142, but both tabulate absolute Z, so nothing here has to
+        # know which grid is loaded.
+        #
+        # Until #1755 this read the key "metallicity_z", which no component has
+        # ever published, so the fallback was the only reachable value and the
+        # fitted metallicity moved the HMXB term not at all. Same failure as the
+        # det_hmxb/det_lmxb offsets in #1706, one argument over.
+        metallicity_z = metallicity_from_history(derived.get("log_metallicity_history"))
 
         # Compute l_2500_30deg with fallback chain:
         # 1. L_2500_intrinsic from composable AGN (un-reddened disc shape)
@@ -401,6 +439,7 @@ class XRaySEDComponent(TemplateThreading):
             "sfr": sfr,
             "stellar_mass": stellar_mass,
             "stellar_age_gyr": stellar_age_gyr,
+            "metallicity_z": metallicity_z,
             "l_2500": l_2500,
             "cos_inc": cos_inc,
             "l_12um": l_12um,
@@ -414,6 +453,7 @@ class XRaySEDComponent(TemplateThreading):
         sfr: jnp.ndarray,
         stellar_mass: jnp.ndarray,
         stellar_age_gyr: jnp.ndarray,
+        metallicity_z: jnp.ndarray,
         l_2500: jnp.ndarray,
         cos_inc: jnp.ndarray,
         l_12um: jnp.ndarray,
@@ -436,6 +476,9 @@ class XRaySEDComponent(TemplateThreading):
             Stellar mass [Msun] — sets the LMXB amplitude.
         stellar_age_gyr : array_like, scalar
             Mass-weighted stellar age [Gyr] — Lehmer+2016 LMXB age term.
+        metallicity_z : array_like, scalar
+            Present-day metallicity [mass fraction, absolute Z] — Lehmer+2016
+            HMXB metallicity term. []
         l_2500 : array_like, scalar
             Disc L_nu at rest-frame 2500 A seen at 30 deg [erg/s/Hz]; drives the
             corona through the alpha_ox relation (``yang20``).
@@ -473,6 +516,7 @@ class XRaySEDComponent(TemplateThreading):
                 sfr=sfr,
                 stellar_mass=stellar_mass,
                 stellar_age_gyr=stellar_age_gyr,
+                metallicity_z=metallicity_z,
                 l_12um_erg_hz=l_12um,
                 alpha_irx=jnp.asarray(params["xray_alpha_irx"]),
                 gamma_hmxb=jnp.asarray(params["xray_gamma_hmxb"]),
@@ -480,6 +524,8 @@ class XRaySEDComponent(TemplateThreading):
                 gamma_agn=jnp.asarray(params["xray_gamma_agn"]),
                 E_cut=jnp.asarray(params["xray_E_cut"]),
                 log_nh=jnp.asarray(params["xray_log_nh"]),
+                log_L_hmxb_offset=jnp.asarray(params["xray_det_hmxb"]),
+                log_L_lmxb_offset=jnp.asarray(params["xray_det_lmxb"]),
             )
         # ``alpha_ox`` is derived from ``l_2500_30deg`` via the Just+2007
         # relation inside ``xray_total`` (#722 — the disc 2500 A now drives
@@ -492,6 +538,7 @@ class XRaySEDComponent(TemplateThreading):
             sfr=sfr,
             stellar_mass=stellar_mass,
             stellar_age_gyr=stellar_age_gyr,
+            metallicity_z=metallicity_z,
             l_2500_30deg=l_2500,
             gamma_hmxb=jnp.asarray(params["xray_gamma_hmxb"]),
             gamma_lmxb=jnp.asarray(params["xray_gamma_lmxb"]),
@@ -500,6 +547,11 @@ class XRaySEDComponent(TemplateThreading):
             delta_alpha_ox=jnp.asarray(params["xray_delta_alpha_ox"]),
             cos_inc=cos_inc,
             log_nh=jnp.asarray(params["xray_log_nh"]),
+            # Lehmer+2016 XRB luminosity offsets (#1706). ``xray_xrb_terms`` has
+            # accepted these all along; the component simply never passed them,
+            # so both were free parameters that nothing read.
+            log_L_hmxb_offset=jnp.asarray(params["xray_det_hmxb"]),
+            log_L_lmxb_offset=jnp.asarray(params["xray_det_lmxb"]),
         )
 
 

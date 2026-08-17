@@ -42,7 +42,7 @@ from tengri import (
     load_ssp_data,
 )
 
-import sys, os  # noqa: E401, E402
+import sys, os  # noqa: E401
 try:
     _nb_dir = os.path.dirname(os.path.abspath(__file__))
     sys.path.insert(0, os.path.join(_nb_dir, "..", ".."))
@@ -63,7 +63,7 @@ elif os.path.exists(os.path.join("..", "..", "..", "data")):
 FIGDIR = os.path.join("tutorials", "figures")
 os.makedirs(FIGDIR, exist_ok=True)
 
-from _plot_style import COLORS, setup_style  # noqa: E402
+from _plot_style import COLORS, setup_style
 
 setup_style()
 
@@ -77,7 +77,7 @@ WAVE_OBS = jnp.linspace(3800.0, 9200.0, 200)
 # %%
 # Good prior
 spec_good = Parameters(
-    sfh_tsnorm_log_total_mass=10.0, 2.5),
+    sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
     sfh_tsnorm_skew=Uniform(-3.0, 3.0),
@@ -183,7 +183,7 @@ plt.show()
 # %%
 # Bad prior: dust way too wide
 spec_bad = Parameters(
-    sfh_tsnorm_log_total_mass=10.0, 2.5),
+    sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
     sfh_tsnorm_skew=Uniform(-3.0, 3.0),
@@ -246,7 +246,7 @@ plt.show()
 
 # %%
 spec_stoch = Parameters(
-    sfh_tsnorm_log_total_mass=10.0, 2.5),
+    sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
     sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
     sfh_tsnorm_width_gyr=Uniform(0.3, 5.0),
     sfh_tsnorm_skew=Uniform(-3.0, 3.0),

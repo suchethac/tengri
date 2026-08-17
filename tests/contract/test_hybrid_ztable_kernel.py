@@ -30,9 +30,6 @@ from tengri.components.stellar.sps.precompute import (
 )
 from tengri.utils.cosmology import luminosity_distance
 
-jax.config.update("jax_enable_x64", True)
-
-
 pytestmark = pytest.mark.bounds
 
 
@@ -79,7 +76,7 @@ class TestZTableBasic:
 
         assert ztable.ssp_phot_table.shape == (15, 5, 15, 3)  # (n_z, n_met, n_age, n_filt)
         chex.assert_tree_all_finite(ztable.ssp_phot_table)
-        chex.assert_tree_all_finite(ztable.flux_scale_table)
+        chex.assert_tree_all_finite(ztable.log10_flux_scale_table)
 
     def test_ztable_interpolation_at_grid_point(self, ssp_data, filters):
         """Z-table interpolation matches fixed-z at grid points."""
@@ -95,17 +92,18 @@ class TestZTableBasic:
         fixed = precompute_photometry(ssp_data, fw, ft, z_test, dl_cm)
 
         # Interpolate z-table
-        ssp_phot_interp, _, flux_scale_interp = interpolate_ztable(
+        ssp_phot_interp, _, log10_flux_scale_interp = interpolate_ztable(
             ztable.ssp_phot_table,
             ztable.eff_waves_rest_table,
-            ztable.flux_scale_table,
+            ztable.log10_flux_scale_table,
             ztable.z_grid,
             z_test,
         )
 
         # Should match exactly at grid points
         assert_allclose(ssp_phot_interp, fixed.ssp_phot, rtol=1e-5)
-        assert_allclose(flux_scale_interp, fixed.flux_scale, rtol=1e-5)
+        # Linear domain: rtol on a ~-57 dex log would be ~1e4x weaker (#1859).
+        assert_allclose(10.0**log10_flux_scale_interp, 10.0**fixed.log10_flux_scale, rtol=1e-5)
 
     def test_ztable_gradient_wrt_z(self, ssp_data, filters):
         """Z-table interpolation is differentiable w.r.t. redshift."""
@@ -116,7 +114,7 @@ class TestZTableBasic:
             ssp_phot, _, flux_scale = interpolate_ztable(
                 ztable.ssp_phot_table,
                 ztable.eff_waves_rest_table,
-                ztable.flux_scale_table,
+                ztable.log10_flux_scale_table,
                 ztable.z_grid,
                 z,
             )
@@ -149,7 +147,7 @@ class TestZTableInterpolationSmoothnessAndMonotonicity:
             ssp_phot, _, _ = interpolate_ztable(
                 ztable.ssp_phot_table,
                 ztable.eff_waves_rest_table,
-                ztable.flux_scale_table,
+                ztable.log10_flux_scale_table,
                 ztable.z_grid,
                 z,
             )
@@ -179,7 +177,7 @@ class TestZTableInterpolationSmoothnessAndMonotonicity:
             ssp_phot_interp, _, _ = interpolate_ztable(
                 ztable.ssp_phot_table,
                 ztable.eff_waves_rest_table,
-                ztable.flux_scale_table,
+                ztable.log10_flux_scale_table,
                 ztable.z_grid,
                 z_test,
             )
@@ -204,7 +202,7 @@ class TestZTableEdgeCases:
         ssp_phot, _, _ = interpolate_ztable(
             ztable.ssp_phot_table,
             ztable.eff_waves_rest_table,
-            ztable.flux_scale_table,
+            ztable.log10_flux_scale_table,
             ztable.z_grid,
             0.001,
         )
@@ -218,7 +216,7 @@ class TestZTableEdgeCases:
         ssp_phot, _, _ = interpolate_ztable(
             ztable.ssp_phot_table,
             ztable.eff_waves_rest_table,
-            ztable.flux_scale_table,
+            ztable.log10_flux_scale_table,
             ztable.z_grid,
             2.9,
         )
@@ -234,7 +232,7 @@ class TestZTableEdgeCases:
         ssp_phot, _, _ = interpolate_ztable(
             ztable.ssp_phot_table,
             ztable.eff_waves_rest_table,
-            ztable.flux_scale_table,
+            ztable.log10_flux_scale_table,
             ztable.z_grid,
             0.55,  # Beyond 0.5
         )
@@ -249,7 +247,7 @@ class TestZTableEdgeCases:
         ssp_phot_min, _, _ = interpolate_ztable(
             ztable.ssp_phot_table,
             ztable.eff_waves_rest_table,
-            ztable.flux_scale_table,
+            ztable.log10_flux_scale_table,
             ztable.z_grid,
             float(ztable.z_grid[0]),
         )
@@ -258,7 +256,7 @@ class TestZTableEdgeCases:
         ssp_phot_max, _, _ = interpolate_ztable(
             ztable.ssp_phot_table,
             ztable.eff_waves_rest_table,
-            ztable.flux_scale_table,
+            ztable.log10_flux_scale_table,
             ztable.z_grid,
             float(ztable.z_grid[-1]),
         )
@@ -277,7 +275,7 @@ class TestZTableConsistency:
         ztable2 = precompute_photometry_ztable(ssp_data, fw, ft, z_grid=z_grid)
 
         assert_allclose(ztable1.ssp_phot_table, ztable2.ssp_phot_table)
-        assert_allclose(ztable1.flux_scale_table, ztable2.flux_scale_table)
+        assert_allclose(ztable1.log10_flux_scale_table, ztable2.log10_flux_scale_table)
 
     def test_interpolation_consistency(self, ssp_data, filters):
         """Interpolation is consistent across calls."""
@@ -289,7 +287,7 @@ class TestZTableConsistency:
         result1 = interpolate_ztable(
             ztable.ssp_phot_table,
             ztable.eff_waves_rest_table,
-            ztable.flux_scale_table,
+            ztable.log10_flux_scale_table,
             ztable.z_grid,
             z_test,
         )
@@ -297,7 +295,7 @@ class TestZTableConsistency:
         result2 = interpolate_ztable(
             ztable.ssp_phot_table,
             ztable.eff_waves_rest_table,
-            ztable.flux_scale_table,
+            ztable.log10_flux_scale_table,
             ztable.z_grid,
             z_test,
         )

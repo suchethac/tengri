@@ -579,6 +579,6 @@ def choose_interim_bounds(measured_curve, *, target_min_ess):
     raise NotImplementedError(
         "choose_interim_bounds is a user-facing modeling decision. "
         "Implement after reviewing the measured curve in task-9-report.md. "
-        "See docs/superpowers/plans/2026-07-29-hierarchical-psd-recovery.md "
+        "See docs/internal/plans/2026-07-29-hierarchical-psd-recovery.md "
         "Milestone D, Step 4, for context on the trade-offs."
     )

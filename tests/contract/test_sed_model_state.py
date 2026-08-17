@@ -12,8 +12,6 @@ import pytest
 
 pytestmark = pytest.mark.contract
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri.forward.sed_model import SEDModel
 from tengri.forward.sed_model_types import SEDModelState
 from tengri.parameters.parameters import Parameters

@@ -17,16 +17,17 @@ of the precomputed filter table.
 
 References
 ----------
-.. [1] Vanden Berk et al. 2001, "The SDSS Quasar Catalog: IV. Fifth Data
-       Release," AJ, 122, 549. arXiv:astro-ph/0105488.
+.. [1] Vanden Berk et al. 2001, "Composite Quasar Spectra from the Sloan
+       Digital Sky Survey," AJ, 122, 549. arXiv:astro-ph/0105231.
+       https://doi.org/10.1086/321167
 .. [2] Boroson & Green 1992, "The Emission-Line Properties of Low-Redshift
        Quasars," ApJS, 80, 109.
 .. [3] Tsuzuki et al. 2006, "Fe II Emission in 14 Low-Redshift Quasars.
        I. Observations," ApJ, 650, 57. (UV Fe II decomposition)
        Verified against ~/writing-workspace/projects/tengri/99-references.bib:Tsuzuki_2006.
-.. [4] Vestergaard & Wilkes 2001, "AGN Black Hole Mass Estimates Based on Unified
-       Models and Ten-Micron Silicate Strengths," ApJS, 134, 1. (UV Fe II)
-       (CITATION-AUDIT NOTE: not found in ~/writing-workspace)
+.. [4] Vestergaard & Wilkes 2001, "An Empirical Ultraviolet Template for Iron
+       Emission in Quasars as Derived from I Zwicky 1," ApJS, 134, 1. (UV Fe II)
+       https://doi.org/10.1086/320357
 .. [5] Kovacevic et al. 2010, "Optical iron emission lines in quasars and AGN,"
        ApJS, 189, 15.
 

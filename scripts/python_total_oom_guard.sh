@@ -122,6 +122,7 @@ SWAP_GROWTH_GB="${SWAP_GROWTH_GB:-3}"
 SWAP_GROWTH_WINDOW_SEC="${SWAP_GROWTH_WINDOW_SEC:-120}"
 SHED_GB="${SHED_GB:-8}"
 PRESSURE_MIN_PYTHON_GB="${PRESSURE_MIN_PYTHON_GB:-8}"
+PYTHON_SHARE_PCT="${PYTHON_SHARE_PCT:-40}"
 COOLDOWN_SEC="${COOLDOWN_SEC:-60}"
 INTERVAL_SEC="${INTERVAL_SEC:-2}"
 MIN_KILL_MB="${MIN_KILL_MB:-0}"
@@ -133,7 +134,7 @@ MAX_TICKS="${MAX_TICKS:-0}"
 PS_FIXTURE="${PS_FIXTURE:-}"
 PRESSURE_FIXTURE="${PRESSURE_FIXTURE:-}"
 
-case "$TOTAL_LIMIT_GB$AVAIL_PCT_MIN$AVAIL_PCT_SOFT$SWAP_MAX_GB$SWAP_GROWTH_GB$SWAP_GROWTH_WINDOW_SEC$SHED_GB$PRESSURE_MIN_PYTHON_GB$COOLDOWN_SEC$INTERVAL_SEC$MIN_KILL_MB" in
+case "$TOTAL_LIMIT_GB$AVAIL_PCT_MIN$AVAIL_PCT_SOFT$SWAP_MAX_GB$SWAP_GROWTH_GB$SWAP_GROWTH_WINDOW_SEC$SHED_GB$PRESSURE_MIN_PYTHON_GB$PYTHON_SHARE_PCT$COOLDOWN_SEC$INTERVAL_SEC$MIN_KILL_MB" in
     *[!0-9]*)
         echo "error: TOTAL_LIMIT_GB, AVAIL_PCT_MIN, AVAIL_PCT_SOFT, SWAP_MAX_GB," \
              "SWAP_GROWTH_GB, SWAP_GROWTH_WINDOW_SEC, SHED_GB," \
@@ -208,6 +209,8 @@ while true; do
     total_kb=0
     n_procs=0
     candidates=""
+    all_rss_kb=0
+    others=""
     while IFS= read -r line; do
         # Strip leading whitespace ps adds for right-justified pid/rss.
         line="${line#"${line%%[![:space:]]*}"}"
@@ -223,11 +226,23 @@ while true; do
         # column: macOS truncates comm to 16 chars unless it is the last
         # column, so `.venv/bin/python` under a long user path becomes
         # `/Users/<user>` and silently never matches.
+        # Every process counts toward the denominator, python or not: the gate
+        # below needs python's SHARE, and a share survives the swap undercount
+        # that an absolute GB figure does not.
+        all_rss_kb=$(( all_rss_kb + rss_kb ))
+
         exe="${args%% *}"
         base="${exe##*/}"
         case "$base" in
             python|python[0-9]*|pypy|pypy[0-9]*) ;;
-            *) continue ;;
+            *)
+                # Keep the big non-python processes for diagnosis. "The memory
+                # is elsewhere" named no culprit, so three crashes in a row left
+                # nothing to act on; >=200MB bounds what we carry per tick.
+                if (( rss_kb >= 204800 )); then
+                    others+="${rss_kb}"$'\t'"${base}"$'\n'
+                fi
+                continue ;;
         esac
 
         # Never count or kill ourselves or our parent shell.
@@ -297,15 +312,40 @@ while true; do
         pressure="$pressure in ${swap_growth_span}s"
     fi
     if [[ -n "$pressure" ]]; then
+        # The gate exists so a 2 GB python cohort is not killed to "fix" a 20 GB
+        # shortfall owned by something else. It must NOT be decided by summed RSS
+        # alone: RSS excludes swapped-out pages, so it collapses exactly when the
+        # machine thrashes -- the same undercount that demoted sum-RSS as a
+        # trigger. On 2026-08-16 it read 4.98GB while two python processes held
+        # 20GB+ each, vetoed six consecutive growth trips, and the box panicked
+        # ~4 min later on a watchdogd timeout. An undercounted number must never
+        # be allowed to VETO the triggers that did fire.
+        share_pct=0
+        (( all_rss_kb > 0 )) && share_pct=$(( total_kb * 100 / all_rss_kb ))
+        gate_reason=""
         if (( total_kb >= PRESSURE_MIN_PYTHON_KB )); then
-            reason="${reason:+$reason; }$pressure"
+            gate_reason="python $(kb_to_gb "$total_kb")GB >= ${PRESSURE_MIN_PYTHON_GB}GB"
+        elif (( PYTHON_SHARE_PCT > 0 && share_pct >= PYTHON_SHARE_PCT )); then
+            # A share is invariant to the undercount: when everything resident
+            # shrinks together, python's fraction of it does not.
+            gate_reason="python is ${share_pct}% of resident memory >= ${PYTHON_SHARE_PCT}%"
+        elif (( SWAP_GROWTH_KB > 0 && swap_growth_kb >= 2 * SWAP_GROWTH_KB )); then
+            # Freefall. Whatever we can reach beats dying politely, and the
+            # cooldown still bounds how much gets taken.
+            gate_reason="swap freefall +$(kb_to_gb "$swap_growth_kb")GB — shedding what is reachable"
+        fi
+
+        if [[ -n "$gate_reason" ]]; then
+            reason="${reason:+$reason; }$pressure ($gate_reason)"
             (( target_kb < SHED_KB )) && target_kb=$SHED_KB
         else
-            # Shedding here would be superstition: python is not holding enough
-            # for its death to fix the shortfall.
+            # Name the culprit. "The memory is elsewhere" was unactionable
+            # across three crashes; say WHERE.
+            top_other=$(printf '%s' "$others" | sort -rn | head -3 \
+                        | awk -F'\t' '{printf "%s=%.1fGB ", $2, $1/1048576}')
             echo "$(date +%H:%M:%S) pressure ($pressure) but python holds only" \
-                 "$(kb_to_gb "$total_kb")GB < ${PRESSURE_MIN_PYTHON_GB}GB — not shedding," \
-                 "the memory is elsewhere" >> "$LOG"
+                 "$(kb_to_gb "$total_kb")GB (${share_pct}% of resident) — not shedding." \
+                 "Largest non-python: ${top_other:-none >200MB}" >> "$LOG"
         fi
     fi
 

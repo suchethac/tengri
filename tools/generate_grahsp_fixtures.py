@@ -33,6 +33,7 @@ References
 
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 
 import numpy as np
@@ -225,7 +226,7 @@ def _load_full_torus_wave():
     start = text.find("self.wave = 1000 * np.array([")
     end = text.find("])", start)
     arr_text = text[start + len("self.wave = 1000 * np.array(") : end + 1]
-    arr = 1000.0 * np.array(eval(arr_text))
+    arr = 1000.0 * np.array(ast.literal_eval(arr_text))
     return arr  # nm, matching upstream `1000 * np.array([...])`
 
 

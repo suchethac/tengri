@@ -54,9 +54,12 @@ def setup_jax(
     # HPC cluster with pre-allocation
     >>> setup_jax(preallocate_gpu=True)
     """
-    # 64-bit precision
-    if enable_x64:
-        os.environ.setdefault("JAX_ENABLE_X64", "True")
+    # 64-bit precision. Only ``jax.config.update`` below has any effect once
+    # JAX is imported; writing JAX_ENABLE_X64 here used to leave a variable in
+    # the environment that reads as authoritative and is not (#1840). Keep the
+    # environment truthful instead, so a later reader -- or a subprocess that
+    # inherits it -- sees the precision actually in force.
+    os.environ["JAX_ENABLE_X64"] = "True" if enable_x64 else "0"
 
     # Platform selection
     if platform is not None:
@@ -235,7 +238,10 @@ def check_resources():
     if not info["x64_enabled"]:
         warnings.warn(
             "64-bit precision disabled. SED fitting benefits from x64. "
-            "Call setup_jax(enable_x64=True) or set JAX_ENABLE_X64=True.",
+            "Call setup_jax(enable_x64=True), or set JAX_ENABLE_X64=True "
+            "before importing tengri, or jax.config.update("
+            "'jax_enable_x64', True) after it. (Setting the environment "
+            "variable after import has no effect -- #1840.)",
             UserWarning,
             stacklevel=2,
         )

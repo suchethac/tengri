@@ -413,7 +413,7 @@ class PopulationSEDModel:
         axis on every per-galaxy quantity (``sed_intrinsic``,
         ``sed_observed``, ``sed_attenuated``, etc.).
 
-        See ``docs/superpowers/plans/2026-05-22-population-sed-batched-forward.md``
+        See ``docs/internal/plans/2026-05-22-population-sed-batched-forward.md``
         for the design rationale.
 
         Parameters

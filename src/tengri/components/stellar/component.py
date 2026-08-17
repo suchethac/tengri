@@ -329,6 +329,32 @@ def _refine_sfh_table_ages(ssp_ages_yr, factor: int = 16):
 
     Notes
     -----
+    **What ``factor`` buys, measured** (2026-08-16, tabulated SFH + Z(t), 128
+    galaxies, ProGeny/MILES, 11 bands, ``WavePrecomp``). Photometry error
+    against a converged factor-64 reference, and the whole-model cost:
+
+    ======  =======  ==========  ===========  ============  ==========
+    factor  parcels  FLOPs [M]   bytes [MB]   median dmag   worst dmag
+    ======  =======  ==========  ===========  ============  ==========
+    32         2945       403.0       1001.8      3.9e-06      2.0e-04
+    16         1473       245.2        569.9      3.4e-05      6.1e-04
+    8           737       166.4        354.0      4.9e-05      2.4e-03
+    4           369       127.2        246.1      8.8e-05      2.6e-03
+    ======  =======  ==========  ===========  ============  ==========
+
+    Convergence is second order from 32 to 8 (the error falls by ~4x per
+    doubling) and then plateaus near 2.6e-3 mag on a separate, saturating
+    error. So ``16`` is not a round number: it is roughly where halving the
+    grid stops being cheap in accuracy. Dropping to ``8`` is a real 1.47x on
+    FLOPs and 1.61x on bytes for ~2 mmag worst case — a science trade, not a
+    free win, which is why it is not the default.
+
+    The grid does **not** need to carry the tabulated history's own knots.
+    Merging them (so every kink in the piecewise-linear SFR is a quadrature
+    node) was measured on the same fixture and left the worst-case error
+    unchanged to three significant figures at every factor, while adding
+    parcels. The dominant error is not knot placement.
+
     **Age-0 anchor templates** (#1016, #1030): a leading age = 0 template
     (bc03 stelib) would give ``log_lo = -inf`` and collapse the grid to
     ``[0, ..., 0, age_max]`` — the CIC mass then vanishes (#1016) or lands
@@ -838,7 +864,7 @@ def _cic_parcels(age_yr, sfr, ssp_ages_yr, t_obs_gyr):
 
 
 def _lgmet_weights(log_z, lgmet_scatter, ssp_lgmet):
-    """DSPS lognormal-MDF metallicity weights, operands canonicalized to one dtype.
+    """Lognormal-MDF metallicity weights for a single parcel.
 
     Parameters
     ----------
@@ -858,12 +884,17 @@ def _lgmet_weights(log_z, lgmet_scatter, ssp_lgmet):
     -----
     **JIT/grad/vmap-safe**: yes.
 
+    The scalar face of :func:`_lgmet_weights_parcels`, which is the single
+    implementation — a scalar parcel pays the same doubled CDF evaluations as a
+    batched one, so routing both through one kernel is what keeps the fix from
+    being a hot-path special case. Every lognormal-MDF call site in this module
+    reaches DSPS's formula through here, so neither the arithmetic nor the dtype
+    canonicalization below can drift between them.
+
     ``ssp_lgmet`` is the cached host SSP grid, built once at load time, so it
     stays float64 even inside ``jax.enable_x64(False)`` while the parameters
-    arrive as float32 tracers. DSPS then sizes its ``dt`` array from the float64
-    grid and scatters an f32-derived value into it
-    (``dt.at[1:-1].set(dtmids)`` in ``dsps.sed.metallicity_weights``), which JAX
-    reports today as::
+    arrive as float32 tracers. Sizing an internal buffer from the float64 grid
+    and scattering an f32-derived value into it is what JAX reports as::
 
         FutureWarning: scatter inputs have incompatible types: cannot safely
         cast value from dtype=float32 to dtype=float64 ...
@@ -874,16 +905,106 @@ def _lgmet_weights(log_z, lgmet_scatter, ssp_lgmet):
     there and float64 results are bit-unchanged — the property that makes the
     pattern safe to apply broadly. Same treatment as
     :func:`tengri.utils.interpolation.compute_grid_weights` (#1206, #1448).
-
-    All three DSPS lognormal-MDF call sites in this module route through here so
-    the canonicalization cannot drift between them.
     """
-    from dsps.sed.metallicity_weights import calc_lgmet_weights_from_lognormal_mdf
+    # Refuse an array rather than silently answering for its first element:
+    # taking [0] of the batched result would return one parcel's weights and
+    # look exactly like success. Shapes are static under JIT, so this costs
+    # nothing and cannot fire on a traced value that is genuinely scalar.
+    if jnp.ndim(log_z) != 0:
+        raise ValueError(
+            f"_lgmet_weights takes a scalar log_z; got shape {jnp.shape(log_z)}. "
+            "Use _lgmet_weights_parcels for a batch — it returns "
+            "(n_parcel, n_met) instead of silently dropping all but the first."
+        )
+    return _lgmet_weights_parcels(jnp.atleast_1d(log_z), lgmet_scatter, ssp_lgmet)[0]
+
+
+def _lgmet_weights_parcels(log_z, lgmet_scatter, ssp_lgmet):
+    r"""Lognormal-MDF weights for many parcels at once, one CDF call per bin *edge*.
+
+    The batched counterpart of :func:`_lgmet_weights`, and the only place the
+    two differ is arithmetic redundancy — the returned weights are the same
+    numbers (see Notes).
+
+    Parameters
+    ----------
+    log_z : array_like, shape (n_parcel,)
+        Absolute ``log10(Z)`` of each parcel. [dex]
+    lgmet_scatter : array_like, scalar
+        Width of the lognormal MDF. [dex]
+    ssp_lgmet : array_like, shape (n_met,)
+        SSP metallicity axis, absolute ``log10(Z)``. [dex]
+
+    Returns
+    -------
+    ndarray, shape (n_parcel, n_met)
+        Non-negative weights; each row sums to 1.
+
+    Notes
+    -----
+    **JIT/grad/vmap-safe**: yes. Static shapes, no data-dependent control flow.
+
+    DSPS reaches the same weights through ``triweighted_histogram``, which
+    ``vmap``\ s a *two-edge* kernel over bins::
+
+        def _triweighted_histogram_kernel(x, sig, lo, hi):
+            return _tw_cuml_kern(x, lo, sig) - _tw_cuml_kern(x, hi, sig)
+
+    Bin ``k`` spans ``[e_k, e_{k+1}]`` and bin ``k+1`` spans
+    ``[e_{k+1}, e_{k+2}]``, so every interior edge is evaluated **twice** —
+    ``2 * n_met`` calls against ``n_met + 1`` distinct edges. The redundancy is
+    a property of the mathematics, not of the syntax, so XLA cannot common up
+    the calls: each vmapped instance receives a different ``lo``/``hi`` slice.
+
+    Evaluating the cumulative kernel once per edge and differencing adjacent
+    entries, :math:`w_k \propto C(e_k) - C(e_{k+1})`, hands the subtraction the
+    same two operands DSPS's ``a - b`` does, computed by the same expression
+    from the same inputs. Measured on the tabulated-metallicity forward path
+    (256 galaxies x 1682 parcels x 15 metallicity nodes x 93 age nodes),
+    against :func:`_joint_weights_cic_met_table` built on the DSPS route:
+
+    ===================  ==========  ==========  ========
+    quantity             DSPS route  this route  ratio
+    ===================  ==========  ==========  ========
+    FLOPs                  352.1 M     237.5 M     1.48x
+    bytes accessed         554.6 MB    554.6 MB     1.00x
+    ===================  ==========  ==========  ========
+
+    All 357,120 output elements were bit-identical. The saving is arithmetic
+    only: XLA already fuses the polynomial, so the redundant evaluations never
+    reached memory and the byte traffic is unchanged. On a memory-bound host
+    that caps what the FLOP reduction can return in wall clock.
+
+    This duplicates DSPS's formula rather than calling it, so the two can drift
+    if DSPS changes its kernel. ``tests/regression/test_lgmet_weights_parcels.py``
+    pins them together and fails loudly if that happens. ``_tw_cuml_kern`` and
+    ``_get_bin_edges`` are private DSPS symbols; the same test is what detects
+    their removal or renaming.
+
+    Operands are canonicalized to one dtype first for the reason given in
+    :func:`_lgmet_weights`.
+    """
+    from dsps.constants import LGMET_HI, LGMET_LO
+    from dsps.utils import _get_bin_edges, _tw_cuml_kern
 
     args = canonical_dsps_kwargs(log_z=log_z, lgmet_scatter=lgmet_scatter, ssp_lgmet=ssp_lgmet)
-    return calc_lgmet_weights_from_lognormal_mdf(
-        args["log_z"], args["lgmet_scatter"], args["ssp_lgmet"]
-    )
+    log_z, lgmet_scatter, ssp_lgmet = args["log_z"], args["lgmet_scatter"], args["ssp_lgmet"]
+
+    edges = _get_bin_edges(ssp_lgmet, LGMET_LO, LGMET_HI)  # (n_met + 1,)
+    cuml = _tw_cuml_kern(log_z[:, None], edges[None, :], lgmet_scatter)
+    tw_hist = cuml[:, :-1] - cuml[:, 1:]  # (n_parcel, n_met)
+
+    total = jnp.sum(tw_hist, axis=-1)
+    weights = tw_hist / jnp.where(total == 0.0, 1.0, total)[:, None]
+
+    # dsps.utils._fill_empty_weights_singlepoint, vectorized over parcels: a
+    # parcel entirely off the grid lands wholly on the nearest end node.
+    n_met = ssp_lgmet.shape[0]
+    empty = jnp.all(weights == 0.0, axis=-1)
+    lo_only = jnp.zeros(n_met, weights.dtype).at[0].set(1.0)
+    hi_only = jnp.zeros(n_met, weights.dtype).at[-1].set(1.0)
+    weights = jnp.where((empty & (log_z < edges[0]))[:, None], lo_only, weights)
+    return jnp.where((empty & (log_z > edges[-1]))[:, None], hi_only, weights)
 
 
 def _joint_weights_cic_met_table(
@@ -920,16 +1041,16 @@ def _joint_weights_cic_met_table(
 
     Notes
     -----
-    **JIT/grad/vmap-safe**: static shapes; the met axis uses DSPS's own
-    lognormal-MDF kernel vmapped over parcels.
+    **JIT/grad/vmap-safe**: static shapes; the met axis uses
+    :func:`_lgmet_weights_parcels`, which evaluates the lognormal MDF for every
+    parcel in one batched call rather than vmapping DSPS's per-bin kernel.
+    Same weights, 1.48x fewer FLOPs — see that function's Notes.
     """
     contrib, idx, f, total_mass, age = _cic_parcels(age_yr, sfr, ssp_ages_yr, t_obs_gyr)
     lg_nodes = jnp.log10(jnp.maximum(ssp_ages_yr, 1e-30))
     lg_age = jnp.log10(jnp.maximum(age, 1e-30))
     lgmet_par = jnp.interp(lg_age, lg_nodes, lgmet_on_ssp_ages)
-    met_w = jax.vmap(lambda g: _lgmet_weights(g, lgmet_scatter, ssp_lgmet))(
-        lgmet_par
-    )  # (n_parcel, n_met)
+    met_w = _lgmet_weights_parcels(lgmet_par, lgmet_scatter, ssp_lgmet)  # (n_parcel, n_met)
     n_met = ssp_lgmet.shape[0]
     n_age = ssp_ages_yr.shape[0]
     joint = (
@@ -1892,7 +2013,7 @@ class StellarSEDComponent:
             )
         # SFH models are routed through SFH_REGISTRY's internal_param_map.
         # Each model is validated against legacy DSPS path via
-        # tests/integration/test_stellar_integration.py.
+        # tests/integration/test_components_vs_legacy.py.
         _SUPPORTED_SFH = (
             "tsnorm",
             "dpl",
@@ -1913,7 +2034,11 @@ class StellarSEDComponent:
             "dense_basis_pure",
             "exp",
             "dexp",
-            "tau",
+            # Was "tau" until #1750. #406 deleted that key from SFH_REGISTRY but
+            # left it here, so this allowlist kept admitting a name the registry
+            # could no longer resolve — dead either way, since the lookup below
+            # raises KeyError first. Same model, unambiguous name.
+            "declining_exp",
             "delayed",
             "periodic",
             "sfh2exp",
@@ -1953,7 +2078,7 @@ class StellarSEDComponent:
         # 13.8 Gyr). This is critical for ``field=True`` parity:
         # ``compute_field_gp`` keys on n_grid + d_log_age to build
         # the GP correlation kernel, so both paths must construct
-        # the grid identically. See tests/integration/test_stellar_integration.py.
+        # the grid identically. See tests/integration/test_components_vs_legacy.py.
         log_age_grid = make_log_age_grid(n_grid)
         sfh_lbt_grid = 10.0**log_age_grid
 
@@ -3543,11 +3668,15 @@ def _l_tir_fn(state, params):
 
 
 def _l_dust_absorbed_fn(state, params):
-    """Dust-absorbed luminosity [Lsun]."""
-    from tengri.utils.physics_constants import L_SUN
+    """Dust-absorbed luminosity [Lsun].
 
-    l_absorbed = jnp.asarray(state.derived.get("L_absorbed", 0.0))
-    return l_absorbed / L_SUN
+    Prefers the ``log_L_ir`` companion: the linear ``L_absorbed`` is ~3.6e43
+    erg/s and is ``inf`` in float32, while this answer (~9.5e9 Lsun) is
+    comfortably representable there (#1837).
+    """
+    from tengri.utils.sed_quantities import derived_luminosity_lsun
+
+    return derived_luminosity_lsun(state.derived, "L_absorbed", "log_L_ir")
 
 
 def _irx_fn(state, params):
@@ -3576,13 +3705,18 @@ def _irx_fn(state, params):
        and the Ultraviolet Luminosity Density at z ~ 3 as Calibrated by Local
        Starburst Galaxies", ApJ, 521, 64. doi:10.1086/307523
     """
-    from tengri.utils.sed_quantities import compute_irx, compute_l_tir, compute_uv_luminosity_1600
+    from tengri.utils.sed_quantities import (
+        compute_irx,
+        compute_l_tir,
+        compute_log_uv_luminosity_1600,
+    )
 
     sed = state.sed_intrinsic
     wave = state.wave
     l_tir = compute_l_tir(sed, wave)
-    l_uv = compute_uv_luminosity_1600(sed, wave)
-    return compute_irx(l_tir, l_uv)
+    # Log-domain UV anchor: nu*L_nu(1600 A) is ~5e42 erg/s and is not
+    # float32-representable, so the linear route returned NaN (#1837).
+    return compute_irx(l_tir, log_l_uv_erg=compute_log_uv_luminosity_1600(sed, wave))
 
 
 def _irx_fuv_fn(state, params):
@@ -3607,14 +3741,20 @@ def _irx_fuv_fn(state, params):
     ``2.998e15`` — the speed of light 1000x too small in [A/s] — which inflated
     every reported IRX by exactly :math:`\log_{10}(1000) = 3` dex (#1131).
     """
+    import math
+
     from tengri.utils.physics_constants import C_AA
+    from tengri.utils.scale import log10_magnitude
     from tengri.utils.sed_quantities import compute_fuv_flux, compute_irx, compute_l_tir
 
     sed = state.sed_intrinsic
     wave = state.wave
     l_tir = compute_l_tir(sed, wave)
     fuv = compute_fuv_flux(sed, wave)
-    return compute_irx(l_tir, fuv * C_AA / 1500.0)
+    # The pivot frequency stays in the exponent: ``fuv * C_AA / 1500`` is
+    # ~4e42 erg/s and overflows float32, though IRX_FUV is ~-0.7 dex (#1837).
+    log_l_uv = log10_magnitude(fuv) + math.log10(C_AA / 1500.0)
+    return compute_irx(l_tir, log_l_uv_erg=log_l_uv)
 
 
 def _uv_slope_beta_fn(state, params):
@@ -3717,7 +3857,11 @@ def _luminosity_weighted_age_gyr_fn(state, params):
     nan_scalar = jnp.asarray(jnp.nan)
 
     if "L_age" in derived and "ssp_ages_yr" in derived:
-        L_age = jnp.asarray(derived["L_age"])
+        from tengri.utils.sed_quantities import derived_weights_peak_relative
+
+        # Peak-relative weights: the common factor cancels in the mean, and raw
+        # ``L_age`` is ~3.3e42 erg/s, 85 of 93 bins ``inf`` in float32 (#1837).
+        L_age = derived_weights_peak_relative(derived, "L_age", "log_L_age")
         ssp_ages_yr = jnp.asarray(derived["ssp_ages_yr"])
         L_total = jnp.maximum(jnp.sum(L_age), _TINY)
         lw_age_yr = jnp.sum(ssp_ages_yr * L_age) / L_total
@@ -3743,7 +3887,10 @@ def _luminosity_weighted_metallicity_fn(state, params):
     nan_scalar = jnp.asarray(jnp.nan)
 
     if "L_age" in derived and "ssp_ages_yr" in derived:
-        L_age = jnp.asarray(derived["L_age"])
+        from tengri.utils.sed_quantities import derived_weights_peak_relative
+
+        # See _luminosity_weighted_age_gyr_fn: scale-free weights (#1837).
+        L_age = derived_weights_peak_relative(derived, "L_age", "log_L_age")
         ssp_ages_yr = jnp.asarray(derived["ssp_ages_yr"])
         L_total = jnp.maximum(jnp.sum(L_age), _TINY)
 

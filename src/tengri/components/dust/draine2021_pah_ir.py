@@ -126,6 +126,7 @@ class Draine2021PAHIRSEDComponent(SEDModelComponent):
     """
 
     name = "draine2021_pah_ir"
+    citations = ("draine2021_pah",)
     parameter_prefix = "dust_"
     config: Draine2021PAHIRConfig = Draine2021PAHIRConfig()
 

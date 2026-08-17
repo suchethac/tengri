@@ -53,7 +53,14 @@ _GUARD_CALLS = {"maximum", "clip", "where"}
 # deduplication, not a migration or a deletion, so the remaining site is still
 # counted and still wants ``representable_floor`` eventually. Two fewer places
 # for that fix to be applied inconsistently.
-_PINNED = 41
+# 41 -> 40: #1837 migrated ``fnu_to_ab_mag``'s ``jnp.maximum(fnu_cgs, 1e-300)``
+# to ``representable_floor(1e-300)``. That floor was not merely inert in float32
+# — it manufactured the failure it was written to prevent. Once the AB
+# zero-point division overflowed to ``inf``, ``lnu / inf`` underflowed to
+# ``0.0``, the sub-subnormal literal failed to clamp it, and ``log10(0)``
+# returned the ``-inf`` that surfaced as ``m_uv = inf``. The guard is still
+# there and still live: a migration, not a deletion.
+_PINNED = 40
 
 _SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 
@@ -79,12 +86,71 @@ def _guard_floor_literals(tree: ast.AST) -> list[tuple[int, float]]:
     return found
 
 
+#: A denominator's floor must survive being SQUARED, because division's VJP
+#: carries ``-num/den**2``. The bound is therefore ``sqrt(tiny)`` = 1.084e-19 in
+#: float32, not ``tiny`` itself — nine decades higher than the rule above.
+#:
+#: This is a genuinely different question from the sub-subnormal census, and the
+#: reason that census is blind to it: ``1e-30`` is *above* float32's ``tiny``, so
+#: ``representable_floor`` returns it unchanged and the site reports clean while
+#: its reverse pass divides by zero. Measured on ``_filter_integral_union``,
+#: where padded filter rows give ``num == den == 0``, the forward value is a
+#: clean ``0/1e-30 == 0.0``, and the gradient is NaN (#1860).
+_F32_DERIVATIVE_BOUND = 1.0844e-19
+
+#: Denominator floors below that bound. Ratchet, like _PINNED: it may fall as
+#: sites migrate to ``representable_denominator``, never rise.
+#:
+#: 57 -> 46. The class is tree-wide, not local to the sites that surfaced it:
+#: 22 files carry one, including ``utils/grid_interp.py`` (5),
+#: ``observation/spectral_indices.py`` (5) and ``inference/posterior.py`` (3).
+#: Of the 11 retired here, 8 were every denominator in ``utils/sed_quantities.py``
+#: — that file now has none — and 3 came with #1863's ``_filter_integral_union``
+#: fix. The remaining 46 are a real backlog, pinned rather than fixed so the
+#: guard can stop new ones arriving while they are worked through; each needs its
+#: own reachability check, since a site whose denominator is bounded away from
+#: zero by construction is not a defect.
+#:
+#: Do NOT raise this to make a red run green. A rise means a new site was added,
+#: which is the thing this exists to prevent.
+_PINNED_DENOMINATORS = 46
+
+
+def _derivative_unsafe_denominators(tree: ast.AST) -> list[tuple[int, float]]:
+    """Return ``(lineno, floor)`` for each ``x / guard(y, floor)`` below the bound.
+
+    Only the *denominator* position counts. The same literal in a numerator, or
+    feeding a ``log``, is a value floor and is the other rule's business.
+    """
+    found: list[tuple[int, float]] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.BinOp) or not isinstance(node.op, ast.Div):
+            continue
+        den = node.right
+        if not isinstance(den, ast.Call):
+            continue
+        name = den.func.attr if isinstance(den.func, ast.Attribute) else None
+        if name is None and isinstance(den.func, ast.Name):
+            name = den.func.id
+        if name not in _GUARD_CALLS:
+            continue
+        for arg in den.args:
+            if (
+                isinstance(arg, ast.Constant)
+                and isinstance(arg.value, float)
+                and 0.0 < arg.value < _F32_DERIVATIVE_BOUND
+            ):
+                found.append((node.lineno, arg.value))
+    return found
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--list", action="store_true", help="print the inventory")
     args = parser.parse_args()
 
     hits: list[tuple[str, int, float]] = []
+    denominators: list[tuple[str, int, float]] = []
     for path in sorted(_SRC.rglob("*.py")):
         try:
             tree = ast.parse(path.read_text(encoding="utf-8"))
@@ -93,10 +159,43 @@ def main() -> int:
             continue
         rel = path.relative_to(_SRC.parent.parent)
         hits.extend((str(rel), lineno, value) for lineno, value in _guard_floor_literals(tree))
+        denominators.extend(
+            (str(rel), lineno, value) for lineno, value in _derivative_unsafe_denominators(tree)
+        )
 
     if args.list:
         for rel, lineno, value in hits:
             print(f"{rel}:{lineno}  {value:g}")
+        for rel, lineno, value in denominators:
+            print(f"{rel}:{lineno}  {value:g}  DENOMINATOR")
+
+    if len(denominators) > _PINNED_DENOMINATORS:
+        listing = "\n".join(f"  {r}:{ln}  floor={v:g}" for r, ln, v in denominators)
+        print(
+            f"FAIL: {len(denominators)} denominator floor(s) below the derivative-safe "
+            f"bound sqrt(tiny) = {_F32_DERIVATIVE_BOUND:g}, up from the pinned "
+            f"{_PINNED_DENOMINATORS} (#1860):\n"
+            f"{listing}\n\n"
+            "Division's VJP carries -num/den**2, so a floor that is representable "
+            "still divides by zero in the reverse pass once squared. The forward "
+            "value is unaffected, which is why this is invisible to a finiteness "
+            "check on the output.\n\n"
+            "Fix: tengri.utils.scale.representable_denominator(<literal>). Where an "
+            "outer jnp.where already selects a degenerate branch, raising the floor "
+            "is NOT enough — both branches are differentiated, so select the "
+            "denominator before dividing instead.",
+            file=sys.stderr,
+        )
+        return 1
+
+    if len(denominators) < _PINNED_DENOMINATORS:
+        print(
+            f"FAIL: {len(denominators)} derivative-unsafe denominators, fewer than the "
+            f"pinned {_PINNED_DENOMINATORS}. Sites were migrated — lower "
+            "_PINNED_DENOMINATORS to lock the improvement in (#1860).",
+            file=sys.stderr,
+        )
+        return 1
 
     if len(hits) > _PINNED:
         print(

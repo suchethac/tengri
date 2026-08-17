@@ -35,30 +35,32 @@ from tengri.forward.precompute.registry import registered_components, resolve
 pytestmark = pytest.mark.contract
 
 #: Declared axis names that match no parameter any ``Parameters`` can hold, so
-#: the axis they govern can never be collapsed. Measured on 969e43066 (#1738).
+#: the axis they govern can never be collapsed. Measured on 969e43066 (#1738),
+#: when ten of the seventeen registered adapters were affected.
 #:
-#: Three distinct causes, all repaired by aligning the string with the live
-#: parameter name:
+#: Three distinct causes. Two are now repaired and so are absent below:
 #:
+#: * a near-miss spelling — ``xray_gamma`` -> ``xray_gamma_agn`` and
+#:   ``agn_alpha_pl`` -> ``agn_alpha``;
 #: * a component-local prefix that is not the component's ``parameter_prefix``
-#:   (``cat3d_*``, ``silva04_*``, ``nenkova_agnfitter_*``, ``skirtor_agnfitter_*``);
-#: * an internal grid-axis label that was never a user parameter at all
-#:   (``cb19``'s seven, and ``log_age`` in the two CLOUDY-family adapters);
-#: * a near-miss spelling — ``xray_gamma`` where the declared parameter is
-#:   ``xray_gamma_agn``, and ``agn_alpha_pl`` where it is ``agn_alpha``.
+#:   — the four AGN torus adapters, each realigned onto the name its *own*
+#:   physics module already documented: ``cat3d_{cos_inc,a,fwd}`` ->
+#:   ``agn_{cos_inc,a_cat3d,fwd_cat3d}``, ``silva04_log_NH`` ->
+#:   ``agn_log_nh_silva``, ``nenkova_agnfitter_cos_inc`` -> ``agn_cos_inc``,
+#:   ``skirtor_agnfitter_{oa,incl,tv}`` -> ``agn_{oa_skirtor,incl_skirtor,tv_skirtor}``.
 #:
-#: ``cb19`` needs more than a rename: it also carries seven axes over a
+#: What remains is the third cause, which a rename cannot fix: an internal
+#: grid-axis label that was never a user parameter at all. ``cb19``'s seven,
+#: ``log_age`` in the two CLOUDY-family adapters, and qsogen's pair have no
+#: live counterpart to point at — the parameter genuinely does not exist, so
+#: closing these means either declaring the parameter or declaring the axis
+#: internal and not user-collapsible. Tracked as #1827.
+#:
+#: ``cb19`` needs more than that again: it also carries seven axes over a
 #: photometry array with six grid dimensions, so repairing the names alone would
 #: make the collapse contract the filter axis. Fix both together.
 DEAD_AXIS_NAMES: dict[str, frozenset[str]] = {
-    "tengri.components.agn.cat3d_precompute": frozenset({"cat3d_cos_inc", "cat3d_a", "cat3d_fwd"}),
-    "tengri.components.agn.silva04_precompute": frozenset({"silva04_log_NH"}),
-    "tengri.components.agn.nenkova_agnfitter_precompute": frozenset({"nenkova_agnfitter_cos_inc"}),
-    "tengri.components.agn.skirtor_agnfitter_precompute": frozenset(
-        {"skirtor_agnfitter_oa", "skirtor_agnfitter_incl", "skirtor_agnfitter_tv"}
-    ),
     "tengri.components.agn.qsogen_precompute": frozenset({"agn_plslp1", "agn_ebv"}),
-    "tengri.components.agn.disc_precompute": frozenset({"agn_alpha_pl"}),
     "tengri.components.nebular.cb19_precompute": frozenset(
         {
             "log_OH_total",
@@ -72,7 +74,6 @@ DEAD_AXIS_NAMES: dict[str, frozenset[str]] = {
     ),
     "tengri.components.nebular.cloudy_precompute": frozenset({"log_age"}),
     "tengri.components.nebular.mappings_photo_precompute": frozenset({"log_age", "neb_logn"}),
-    "tengri.components.xray.xray_precompute": frozenset({"xray_gamma"}),
 }
 
 #: Modules whose dead names still collapse, because they pass ``defaults=`` to
@@ -225,15 +226,17 @@ def test_defaults_tier_entries_are_also_ledgered_dead():
 
 
 def test_most_modules_resolve_their_axis_names():
-    """A regression canary: the healthy majority must not quietly erode.
+    """A regression canary: the healthy count must not quietly erode.
 
-    Ten of seventeen registered adapters carry at least one dead name today.
-    If that ratio inverts, the convention has stopped being followed rather
-    than a single module having drifted.
+    Four of seventeen registered adapters carry at least one dead name, down
+    from ten: two near-miss spellings and the four AGN torus prefix drifts have
+    been repaired. The bound is a ratchet — it is the count of healthy modules
+    at the last repair, so fixing more names fails this test and is the prompt
+    to raise it, while a newly broken name fails it too.
     """
     modules = _modules_with_axes()
     healthy = [m for m in modules if not _dead_names(m)]
-    assert len(healthy) >= 7, (
+    assert len(healthy) >= 13, (
         f"only {len(healthy)}/{len(modules)} precompute modules resolve every "
         f"declared axis name: {sorted(set(modules) - set(healthy))} (#1738)"
     )

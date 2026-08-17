@@ -19,8 +19,6 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-jax.config.update("jax_enable_x64", True)
-
 if jax.device_count() < 2:
     print("SKIP_NO_DEVICES")
     raise SystemExit(0)
@@ -50,7 +48,7 @@ def _build():
     )
     obs = Observation(photometry=Photometry(filters=curves))
     spec = Parameters(
-        sfh_dpl_log_total_mass=Uniform(-1.0, 3.0),
+        sfh_dpl_log_total_mass=Uniform(7.0, 12.5),
         sfh_dpl_alpha=Fixed(2.0),
         sfh_dpl_age_gyr=Fixed(5.0),
         sfh_dpl_beta=Fixed(2.0),

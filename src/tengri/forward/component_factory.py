@@ -283,6 +283,18 @@ def build_components(
     # ``DustAttenuationSEDComponent`` instead of the two-component
     # ``DustSEDComponent``. ``dust_law_diff`` is reused as the screen law.
     dust_model: str = "two_component",
+    # Shape parameters of the selected attenuation law that somebody actually
+    # asked for (user-set or freed), resolved from spec provenance by
+    # SEDModel._build_component_chain. Empty means "nobody asked", and each
+    # law's own published default then stands — see
+    # DustAttenuationSEDComponentConfig.live_shape_params (#1808).
+    #
+    # None means "no spec was consulted" and is NOT the same as empty: the
+    # two-component screen keeps its historical pass-all in that case, since a
+    # caller with no provenance to read cannot conclude that nobody asked
+    # (#1833). The single screen treats both alike — passing nothing is its
+    # historical behavior.
+    dust_live_shape_params: frozenset[str] | None = None,
     # Witt & Gordon (2000) screen (dust_model="wg00", FSPS dust_type=3).
     # Static structural selectors threaded into the WG00 screen component.
     wg00_dust_curve: str = "mw",
@@ -421,7 +433,10 @@ def build_components(
             )
         elif dust_model == "single_component":
             atten_type = "single_component"
-            atten_config = DustAttenuationSEDComponentConfig(law=dust_law_diff)
+            atten_config = DustAttenuationSEDComponentConfig(
+                law=dust_law_diff,
+                live_shape_params=frozenset(dust_live_shape_params or ()),
+            )
         else:
             atten_type = "two_component"
             _overrides = dust_law_overrides or {}
@@ -429,6 +444,11 @@ def build_components(
                 law_bc=dust_law_bc,
                 law_diff=dust_law_diff,
                 law_neb=dust_law_neb,
+                # #1833: without this the shared Fixed(0.0) dust_bump_strength /
+                # dust_delta overwrote each law's published default. Only reaches
+                # here from SEDModel, which is the only caller that knows who
+                # asked; a direct build leaves it None and keeps pass-all.
+                live_shape_params=dust_live_shape_params,
                 bc_law_overrides=tuple(_overrides.get("bc", {}).items()),
                 diff_law_overrides=tuple(_overrides.get("diff", {}).items()),
                 neb_law_overrides=tuple(_overrides.get("neb", {}).items()),
@@ -542,13 +562,39 @@ def build_components(
     if use_xray:
         from tengri.components.xray.component import XRaySEDComponentConfig
 
-        components.append(
-            _resolve_registry_component(
-                "xray",
-                "xray",
-                config=XRaySEDComponentConfig(model=xray_model),
+        # A name that registers its own component class builds that class.
+        # ``xray_aird`` and ``agn_xray_corona`` each ship one -- with their own
+        # config and their own ``predict`` -- and this resolved the key "xray"
+        # unconditionally, passing the name as a config field instead.
+        # ``XRaySEDComponent`` branches on ``config.model`` for ``lopez24`` and
+        # falls through to the yang20 corona otherwise, so both names produced a
+        # bit-identical SED to ``yang20``: #1684, the unfinished half of #1120,
+        # which closed after adding the names to the grammar allowlist but not
+        # here, turning that issue's loud ValueError into silence.
+        #
+        # Derived from the registry rather than a hand-written list, so a corona
+        # registered later is wired by existing -- but only if the group can
+        # actually feed it. A component is routed here only when its
+        # ``parameter_prefix`` matches the prefix the ``xray`` group declares
+        # its parameters under. ``xray_aird`` uses ``xray_`` and is fed;
+        # ``agn_xray_corona`` declares ``gamma`` / ``e_cut`` /
+        # ``delta_alpha_ox`` under ``agn_xray_``, which no group supplies, so
+        # building it raises ``KeyError: 'gamma'`` inside ``predict``. Wiring it
+        # means adding those names to the parameter space -- a public-surface
+        # change, not a factory one -- so it stays on the shared component until
+        # that is decided. Left on the shared component rather than swapped for
+        # an internal KeyError; #1684 tracks the remaining half.
+        _xray_cls = _REGISTRY.get(xray_model) if xray_model != "xray" else None
+        if _xray_cls is not None and getattr(_xray_cls, "parameter_prefix", None) == "xray_":
+            components.append(_resolve_registry_component("xray", xray_model))
+        else:
+            components.append(
+                _resolve_registry_component(
+                    "xray",
+                    "xray",
+                    config=XRaySEDComponentConfig(model=xray_model),
+                )
             )
-        )
     if use_igm or use_dla:
         from tengri.components.igm.component import IGMSEDComponentConfig
 
@@ -571,8 +617,10 @@ def build_components(
     # publishes/requires. The sort is stable (preserves input order
     # among components with no ordering constraint), so the canonical
     # pipeline reproduces the previous hand-coded order byte-for-byte —
-    # verified by the contract-graph + SED-output snapshot tests in
-    # tests/integration/test_derived_contract_snapshots.py.
+    # verified by tests/contract/test_topological_sort.py. This cited
+    # tests/integration/test_derived_contract_snapshots.py until that file was
+    # deleted in #1029; the SED-output half of the check went with it, so the
+    # surviving guarantee is the ordering one.
     components = topological_sort(components)
 
     # ADR-0004: construction-time contract check. After the sort,
@@ -733,7 +781,6 @@ def state_to_sed_quantities(state: Any):
     legacy NamedTuple convention).
     """
     from tengri.forward.prediction import SEDQuantities
-    from tengri.utils.physics_constants import L_SUN
     from tengri.utils.sed_quantities import (
         compute_balmer_break,
         compute_bolometric_luminosity,
@@ -741,11 +788,13 @@ def state_to_sed_quantities(state: Any):
         compute_fuv_flux,
         compute_irx,
         compute_l_tir,
+        compute_log_uv_luminosity_1600,
         compute_m_uv,
         compute_nuv_flux,
         compute_rest_uv_color,
-        compute_uv_luminosity_1600,
         compute_uv_slope_beta,
+        derived_luminosity_lsun,
+        derived_weights_peak_relative,
     )
 
     sed = state.sed_intrinsic
@@ -760,9 +809,12 @@ def state_to_sed_quantities(state: Any):
 
     # Dust-absorbed luminosity from the orchestrator's energy-balance
     # bookkeeping — exact match for legacy ``compute_l_dust_absorbed``.
+    # Reads the ``log_L_ir`` companion when the chain publishes it: the linear
+    # ``L_absorbed`` is ~3.6e43 erg/s and is ``inf`` in float32, while the
+    # answer here (~9.5e9 Lsun) is representable, and the attenuator computes
+    # the log form first anyway (#1837).
     derived = state.derived
-    l_absorbed = jnp.asarray(derived.get("L_absorbed", 0.0))
-    l_dust_absorbed = l_absorbed / L_SUN
+    l_dust_absorbed = derived_luminosity_lsun(derived, "L_absorbed", "log_L_ir")
     # L_TIR uses the legacy semantics (integration of the SED over the
     # 8–1000 μm window) for parity with ``predict_sed_quantities``,
     # not the orchestrator's energy-balance ``L_ir`` derived key —
@@ -782,7 +834,10 @@ def state_to_sed_quantities(state: Any):
     # too small in [A/s], inflating IRX by exactly 3 dex. ``C_AA`` was already
     # imported in this very function. See #1131; the band-averaged FUV variant is
     # published separately as ``irx_fuv``.
-    irx = compute_irx(l_tir, compute_uv_luminosity_1600(sed, wave))
+    # The UV anchor is passed in the log domain: nu*L_nu(1600 A) is ~5e42 erg/s
+    # and is not float32-representable at all, so the linear signature returned
+    # NaN there for an IRX of order -0.8 dex (#1837).
+    irx = compute_irx(l_tir, log_l_uv_erg=compute_log_uv_luminosity_1600(sed, wave))
 
     # Pre-dust stellar SED reconstructed from the per-age cube
     # ``lnu_age``, which StellarSEDComponent publishes before
@@ -806,9 +861,15 @@ def state_to_sed_quantities(state: Any):
     # log_metallicity_history evaluated at each SSP age via linear
     # interpolation — the metallicity ramp is monotonic in lookback
     # time so this is sound for the supported (delta, ramp) modes.
+    #
+    # The weights are used only inside ``sum(x*w)/sum(w)``, so any common
+    # factor cancels exactly. Normalizing by the peak bin keeps every weight in
+    # [0, 1]: raw ``L_age`` peaks at ~3.3e42 erg/s, so 85 of 93 bins were
+    # ``inf`` in float32 and ``ssp_ages_yr * L_age`` overflowed a second time on
+    # top (~1e10 x). Both weighted means are of order 1 (#1837).
     if "L_age" in derived and "ssp_ages_yr" in derived:
-        L_age = jnp.asarray(derived["L_age"])
         ssp_ages_yr = jnp.asarray(derived["ssp_ages_yr"])
+        L_age = derived_weights_peak_relative(derived, "L_age", "log_L_age")
         L_total = jnp.maximum(jnp.sum(L_age), _TINY)
         lw_age_yr = jnp.sum(ssp_ages_yr * L_age) / L_total
         lw_age_gyr = lw_age_yr / 1e9
@@ -865,8 +926,11 @@ def state_to_radio_quantities(state: Any) -> RadioQuantities:
     Returns ``NaN`` fields when the chain did not include
     :class:`RadioSEDComponent` (no ``L_radio`` published).
     """
-    from tengri.utils.physics_constants import L_SUN
-    from tengri.utils.sed_quantities import compute_l_radio_thermal_from_log_qh, compute_q_ir
+    from tengri.utils.sed_quantities import (
+        compute_l_radio_thermal_from_log_qh,
+        compute_q_ir,
+        derived_luminosity_lsun,
+    )
 
     derived = state.derived
     nan_scalar = jnp.asarray(jnp.nan)
@@ -887,8 +951,9 @@ def state_to_radio_quantities(state: Any) -> RadioQuantities:
     l_thermal = compute_l_radio_thermal_from_log_qh(log_nion)
     l_nonthermal = l_1p4ghz - l_thermal
 
-    l_ir = jnp.asarray(derived.get("L_ir", 0.0))
-    l_tir_lsun = l_ir / L_SUN
+    # Same seam as ``l_dust_absorbed``: the linear ``L_ir`` is ~3.6e43 erg/s and
+    # is ``inf`` in float32, while q_IR is a dex ratio of order 2 (#1837).
+    l_tir_lsun = derived_luminosity_lsun(derived, "L_ir", "log_L_ir")
     q_ir = compute_q_ir(l_tir_lsun, l_1p4ghz)
 
     return RadioQuantities(

@@ -78,6 +78,11 @@ def _full_params() -> dict:
         "xray_E_cut": 300.0,
         "xray_delta_alpha_ox": -1.4,
         "xray_log_nh": 20.0,
+        # Read by the component since #1706. Indexed directly, like every other
+        # xray_* parameter here, so a missing key fails loudly rather than
+        # defaulting to a neutral 0.0 that would look wired and do nothing.
+        "xray_det_hmxb": 0.0,
+        "xray_det_lmxb": 0.0,
         "dust_tau_v": 0.3,
         "dust_T": 30.0,
         "dust_beta_ir": 1.8,

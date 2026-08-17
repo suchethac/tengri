@@ -33,8 +33,6 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri import Fixed, Observation, Photometry, SEDModel, recipes
 from tengri.components.nebular.line_precompute import (
     precompute_line_per_qh,

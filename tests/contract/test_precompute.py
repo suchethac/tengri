@@ -12,9 +12,7 @@ from tengri.components.stellar.sps.precompute import (
     fast_spectrum,
     interpolate_ssp_phot_metallicity,
 )
-
-jax.config.update("jax_enable_x64", True)
-
+from tests._grad_parity import assert_grad_matches_fd
 
 pytestmark = pytest.mark.bounds
 
@@ -28,7 +26,7 @@ class TestFastPhotometry:
         weights = jnp.ones(n_age) / n_age
         ssp_phot = jnp.ones((n_age, n_filt))
         dust = jnp.ones((n_age, n_filt))
-        flux = fast_photometry(weights, ssp_phot, dust, 1.0)
+        flux = fast_photometry(weights, ssp_phot, dust, 0.0)
         chex.assert_shape(flux, (n_filt,))
 
     def test_no_dust_equals_ssp_weighted_sum(self):
@@ -37,9 +35,12 @@ class TestFastPhotometry:
         weights = jnp.ones(n_age) / n_age
         ssp_phot = jnp.arange(n_age * n_filt, dtype=float).reshape(n_age, n_filt)
         dust = jnp.ones((n_age, n_filt))
+        # The kernel takes a log10 OFFSET, not a linear factor (#1859): passing
+        # 2.0 here would silently ask for 100x.
         scale = 2.0
+        log10_scale = jnp.log10(scale)
 
-        flux = fast_photometry(weights, ssp_phot, dust, scale)
+        flux = fast_photometry(weights, ssp_phot, dust, log10_scale)
 
         # Expected: scale * Lsun * weighted_sum over ages for each filter
         from tengri.components.stellar.sps.dsps_wrapper import LSUN_ERG_PER_S
@@ -53,8 +54,8 @@ class TestFastPhotometry:
         weights = jnp.ones(n_age) / n_age
         ssp_phot = jnp.ones((n_age, n_filt))
 
-        flux_no_dust = fast_photometry(weights, ssp_phot, jnp.ones((n_age, n_filt)), 1.0)
-        flux_dusty = fast_photometry(weights, ssp_phot, 0.5 * jnp.ones((n_age, n_filt)), 1.0)
+        flux_no_dust = fast_photometry(weights, ssp_phot, jnp.ones((n_age, n_filt)), 0.0)
+        flux_dusty = fast_photometry(weights, ssp_phot, 0.5 * jnp.ones((n_age, n_filt)), 0.0)
 
         assert jnp.all(flux_dusty < flux_no_dust)
 
@@ -64,7 +65,7 @@ class TestFastPhotometry:
         weights = jnp.ones(n_age) / n_age
         ssp_phot = jnp.ones((n_age, n_filt))
         dust = jnp.ones((n_age, n_filt))
-        flux = fast_photometry(weights, ssp_phot, dust, 1.0)
+        flux = fast_photometry(weights, ssp_phot, dust, 0.0)
         chex.assert_shape(flux, (n_filt,))
 
     def test_has_gradients(self):
@@ -73,7 +74,7 @@ class TestFastPhotometry:
         ssp_phot = jnp.ones((n_age, n_filt))
 
         def loss(weights, dust):
-            return jnp.sum(fast_photometry(weights, ssp_phot, dust, 1.0))
+            return jnp.sum(fast_photometry(weights, ssp_phot, dust, 0.0))
 
         w = jnp.ones(n_age) / n_age
         d = jnp.ones((n_age, n_filt)) * 0.8
@@ -92,7 +93,7 @@ class TestFastSpectrum:
         weights = jnp.ones(n_age) / n_age
         ssp_pix = jnp.ones((n_age, n_pix))
         dust = jnp.ones((n_age, n_pix))
-        spec = fast_spectrum(weights, ssp_pix, dust, 1.0)
+        spec = fast_spectrum(weights, ssp_pix, dust, 0.0)
         chex.assert_shape(spec, (n_pix,))
 
     def test_has_gradients(self):
@@ -102,10 +103,10 @@ class TestFastSpectrum:
         dust = jnp.ones((n_age, n_pix)) * 0.8
 
         def loss(weights):
-            return jnp.sum(fast_spectrum(weights, ssp_pix, dust, 1.0) ** 2)
+            return jnp.sum(fast_spectrum(weights, ssp_pix, dust, 0.0) ** 2)
 
         w = jnp.ones(n_age) / n_age
-        g = jax.grad(loss)(w)
+        g = assert_grad_matches_fd(loss, w)
         chex.assert_tree_all_finite(g)
 
 

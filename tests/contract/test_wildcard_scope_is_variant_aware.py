@@ -83,8 +83,13 @@ away the first:
   ``xray_E_cut`` moved the SED by 85% on the same build. A magnitude argument
   cannot explain a set of exact zeros sitting beside a live parameter.
 
-The remaining two, ``xray_det_hmxb`` / ``xray_det_lmxb``, are inert for a third
-reason that is not scoping at all — see :data:`_XRAY_UNREACHABLE_PARAMS`.
+The remaining two, ``xray_det_hmxb`` / ``xray_det_lmxb``, were inert for a third
+reason that is not scoping at all: the component never passed them to the
+physics. Fixed in #1706, so they are no longer narrowed away and
+:data:`_XRAY_UNREACHABLE_PARAMS` is now empty. Their own guard lives in
+``tests/regression/bug/test_xray_xrb_offsets_wired.py``, which sweeps them on
+both X-ray models and on both accelerated paths — this suite cannot see them,
+because a wildcard test only reaches parameters the wildcard frees.
 """
 
 from __future__ import annotations
@@ -282,7 +287,24 @@ def _xray_cases():
                 "dust": {"type": "two_component", "law_bc": "calzetti", "*": FIXED},
                 "neb": {"type": "none"},
                 "xray": {"type": model, "*": FREE},
-                "agn": {"type": "composable", "*": FIXED, "log_lbol": Fixed(13.0)},
+                # The AGN needs a DISC, not just a luminosity. The corona
+                # models anchor to the disc's L_2500 through alpha_ox, and a
+                # bare ``composable`` AGN with no disc block publishes no
+                # L_2500 -- measured: it is bit-identical to no AGN at all.
+                # This went unnoticed while every xray name resolved to the
+                # shared component, whose XRB channel is driven by star
+                # formation and so emits with no AGN; once ``agn_xray_corona``
+                # began building its own component (#1684) the same fixture
+                # made it contribute nothing, and this suite's own
+                # discriminator correctly indicted the fixture rather than the
+                # scope.
+                "agn": {
+                    "type": "composable",
+                    "*": FIXED,
+                    "log_lbol": Fixed(13.0),
+                    "disc": {"type": "multicolor"},
+                    "torus": {"type": "skirtor"},
+                },
             },
             ssp="xray",
         )

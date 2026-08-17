@@ -93,11 +93,43 @@ if not _os.environ.get("TENGRI_VERBOSE_JAX"):
     _os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
     _os.environ.setdefault("ABSL_LOG_LEVEL", "ERROR")
 
-# Enable float64 — required for cosmological distance calculations
-# (dL^2 at z>0.01 overflows float32)
+# Enable float64 by DEFAULT — required for cosmological distance calculations
+# (dL^2 at z>0.01 overflows float32).
+#
+# Default, not decree (#1840). This used to be an unconditional
+# ``jax.config.update("jax_enable_x64", True)``, which silently discarded
+# ``JAX_ENABLE_X64=0`` — the documented JAX way to ask for float32. The
+# environment and the live config then disagreed with no warning, so every
+# float32 probe, benchmark and bug report that selected float32 that way ran
+# in float64 and reported float32 as healthy. A measurement that cannot fail
+# is not a measurement.
+#
+# JAX has already applied the variable by the time this module is imported, so
+# honoring it is simply a matter of not overriding it. When the user has asked
+# for float32 we say so once, because losing d_L^2 to overflow is a silent,
+# catastrophic failure mode and nobody should meet it unwarned.
 import jax
 
-jax.config.update("jax_enable_x64", True)
+_X64_REQUEST = _os.environ.get("JAX_ENABLE_X64")
+
+if _X64_REQUEST is None:
+    jax.config.update("jax_enable_x64", True)
+elif _X64_REQUEST.strip().lower() in {"0", "false", "no", "off"}:
+    import warnings as _warnings
+
+    _warnings.warn(
+        f"JAX_ENABLE_X64={_X64_REQUEST}: tengri is honoring your request for "
+        "float32 and is NOT enabling 64-bit precision. Cosmological distances "
+        "are the known hazard — d_L^2 at z > 0.01 overflows float32 — so any "
+        "code that forms d_L^2 directly will produce inf. tengri's own "
+        "projection avoids it by applying (1+z)/(4*pi*d_L^2) as a log10 "
+        "offset, but third-party code may not. Unset JAX_ENABLE_X64 to "
+        "restore the float64 default.",
+        UserWarning,
+        stacklevel=2,
+    )
+else:
+    jax.config.update("jax_enable_x64", True)
 
 if not _os.environ.get("TENGRI_VERBOSE_JAX"):
     try:
@@ -401,6 +433,9 @@ sys.modules["tengri.io"] = io
 #   tengri.inference — Fitter, CatalogFitter, PopulationFitter, VIConfig, ...
 #   tengri.config    — *Config dataclasses, exceptions
 #   tengri.observation — Photometry, Spectroscopy, NoiseModel, ...
+#
+# ``plot`` is deliberately absent: it is resolved lazily in ``__getattr__``
+# below, because importing it pulls matplotlib into every ``import tengri``.
 from tengri import (
     citations,
     config,
@@ -408,7 +443,6 @@ from tengri import (
     inference,
     measure,
     pipeline,
-    plot,
     results,
     units,
 )
@@ -667,19 +701,10 @@ __all__ = [  # noqa: RUF022
 # Plotting utilities
 # Import observation module for namespace alias (already in imports above, adding as alias)
 from tengri import observation
-from tengri.analysis.plotting import (
-    COLORS,
-    SDSS_WAVE_EFF,
-    SPECTRAL_FEATURES,
-    diagnostics_table,
-    plot_corner_comparison,
-    plot_sed_fit,
-    plot_sfh,
-    plot_sfh_comparison,
-    plot_spectrum_fit,
-    safe_corner,
-    setup_style,
-)
+
+# NOTE: the plotting names that used to be imported here are now resolved
+# lazily in ``__getattr__`` (see ``_LAZY_PLOTTING``). They remain in
+# ``__all__`` and ``tengri.<name>`` still works; only the *timing* changed.
 from tengri.inference.catalog import Catalog
 from tengri.inference.catalog_fitter import CatalogFitter
 from tengri.inference.fitter import Fitter
@@ -832,8 +857,46 @@ _DEMOTED_CONFIGS = frozenset(
     {"AGNConfig", "DustConfig", "NebularConfig", "SEDModelConfig", "SFHConfig"}
 )
 
+# Plotting names resolved on first access rather than at import (#1852).
+#
+# Importing them eagerly pulled matplotlib into *every* ``import tengri``,
+# including inference runs, CI shards and slurm tasks that never draw
+# anything. Measured on a clean install: ``import tengri`` 2.43 s, of which
+# ``import matplotlib.pyplot`` alone is 0.77 s -- 32%, paid by everyone.
+#
+# This does not shrink the install. matplotlib stays a hard dependency
+# because nifty8 requires it, so pip fetches it either way; what changes is
+# when it is loaded. ``tengri.plot_sed_fit`` and ``tengri.plot`` behave
+# exactly as before, one attribute lookup later.
+_LAZY_PLOTTING = frozenset(
+    {
+        "COLORS",
+        "SDSS_WAVE_EFF",
+        "SPECTRAL_FEATURES",
+        "diagnostics_table",
+        "plot_corner_comparison",
+        "plot_sed_fit",
+        "plot_sfh",
+        "plot_sfh_comparison",
+        "plot_spectrum_fit",
+        "safe_corner",
+        "setup_style",
+    }
+)
+
 
 def __getattr__(name: str) -> object:
+    if name == "plot":
+        import tengri.plot as _plot
+
+        globals()["plot"] = _plot  # cache: later lookups skip __getattr__
+        return _plot
+    if name in _LAZY_PLOTTING:
+        import tengri.analysis.plotting as _plotting
+
+        obj = getattr(_plotting, name)
+        globals()[name] = obj
+        return obj
     if name in _RENAMED_SYMBOLS:
         new_name, new_path = _RENAMED_SYMBOLS[name]
         from tengri._deprecated import deprecated_attribute
@@ -855,3 +918,38 @@ def __getattr__(name: str) -> object:
         )
         return getattr(_settings, name)
     raise AttributeError(f"module 'tengri' has no attribute {name!r}")
+
+
+def _reassert_x64_preference() -> None:
+    """Restore an explicit ``JAX_ENABLE_X64=0`` that an import clobbered (#1840).
+
+    Six DSPS modules run a bare ``jax.config.update("jax_enable_x64", True)`` at
+    import time (``dsps.sed.__init__``, ``ssp_weights``, ``stellar_sed``,
+    ``stellar_age_weights``, ``metallicity_weights``, ``dust.blackbody``). They
+    are pulled in transitively by tengri's own imports, so declining to force
+    x64 at the top of this module is necessary but not sufficient: by the time
+    the package finishes importing, the flag is on again regardless.
+
+    This runs last, after every transitive import has had its say, and puts the
+    flag back where the user asked for it. Measured before the fix:
+    ``JAX_ENABLE_X64=0 python -c "import tengri; ..."`` reported
+    ``jax_enable_x64 = True`` and a ``float64`` default dtype.
+
+    A DSPS module imported *lazily* later — several tengri functions import
+    from ``dsps`` inside the function body — can still flip the flag mid-run.
+    That is upstream behavior this package cannot intercept; the supported
+    route for a float32 session remains
+    ``jax.config.update("jax_enable_x64", False)`` immediately before the work,
+    which is what :func:`tengri.utils.devices.setup_jax` does, and what the
+    float32 tests use via the ``jax.enable_x64(False)`` context manager.
+    """
+    request = _os.environ.get("JAX_ENABLE_X64")
+    if request is None or request.strip().lower() not in {"0", "false", "no", "off"}:
+        return
+    import jax as _jax
+
+    if _jax.config.jax_enable_x64:
+        _jax.config.update("jax_enable_x64", False)
+
+
+_reassert_x64_preference()

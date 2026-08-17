@@ -23,9 +23,7 @@ from tengri.components.stellar.sps.precompute import (
     precompute_photometry_ztable,
 )
 from tengri.utils.cosmology import luminosity_distance
-
-jax.config.update("jax_enable_x64", True)
-
+from tests._grad_parity import assert_grad_matches_fd
 
 pytestmark = pytest.mark.bounds
 
@@ -68,7 +66,7 @@ class TestZTablePrecomputation:
         zt = precompute_photometry_ztable(ssp_data, fw, ft, n_z=10)
         assert zt.ssp_phot_table.shape == (10, 3, 20, 3)  # (n_z, n_met, n_age, n_filt)
         chex.assert_shape(zt.eff_waves_rest_table, (10, 3))
-        chex.assert_shape(zt.flux_scale_table, (10,))
+        chex.assert_shape(zt.log10_flux_scale_table, (10,))
         chex.assert_shape(zt.z_grid, (10,))
         assert zt.n_filters == 3
 
@@ -92,8 +90,9 @@ class TestZTablePrecomputation:
         fw, ft = filters
         zt = precompute_photometry_ztable(ssp_data, fw, ft, n_z=20)
         # flux_scale = (1+z)/(4π dL²) — dL grows faster than (1+z)
-        # So flux_scale should generally decrease
-        assert float(zt.flux_scale_table[0]) > float(zt.flux_scale_table[-1])
+        # So flux_scale should generally decrease. Stored as log10 (#1859), and
+        # log10 is monotone, so the ordering assertion is unchanged.
+        assert float(zt.log10_flux_scale_table[0]) > float(zt.log10_flux_scale_table[-1])
 
     def test_all_values_finite(self, ssp_data, filters):
         """All precomputed values are finite."""
@@ -101,7 +100,7 @@ class TestZTablePrecomputation:
         zt = precompute_photometry_ztable(ssp_data, fw, ft, n_z=10)
         chex.assert_tree_all_finite(zt.ssp_phot_table)
         chex.assert_tree_all_finite(zt.eff_waves_rest_table)
-        chex.assert_tree_all_finite(zt.flux_scale_table)
+        chex.assert_tree_all_finite(zt.log10_flux_scale_table)
 
 
 # ── Tests: interpolation accuracy ─────────────────────────────────
@@ -124,17 +123,19 @@ class TestZTableInterpolationAccuracy:
         fixed = precompute_photometry(ssp_data, fw, ft, z_test, dl_cm)
 
         # Interpolate z-table
-        ssp_phot_interp, eff_rest_interp, flux_scale_interp = interpolate_ztable(
+        ssp_phot_interp, eff_rest_interp, log10_flux_scale_interp = interpolate_ztable(
             zt.ssp_phot_table,
             zt.eff_waves_rest_table,
-            zt.flux_scale_table,
+            zt.log10_flux_scale_table,
             zt.z_grid,
             z_test,
         )
 
         assert_allclose(ssp_phot_interp, fixed.ssp_phot, rtol=1e-4)
         assert_allclose(eff_rest_interp, fixed.effective_wavelengths_rest, rtol=1e-4)
-        assert_allclose(flux_scale_interp, fixed.flux_scale, rtol=1e-4)
+        # Compared in the LINEAR domain deliberately: rtol on a ~-57 dex log
+        # would be ~1e4 times weaker than the original assertion (#1859).
+        assert_allclose(10.0**log10_flux_scale_interp, 10.0**fixed.log10_flux_scale, rtol=1e-4)
 
     def test_interpolation_between_grid_points(self, ssp_data, filters):
         """Interpolation between grid points is within 15% of exact.
@@ -155,10 +156,10 @@ class TestZTableInterpolationAccuracy:
         fixed = precompute_photometry(ssp_data, fw, ft, z_test, dl_cm)
 
         # Interpolated
-        ssp_phot_interp, _, flux_scale_interp = interpolate_ztable(
+        ssp_phot_interp, _, log10_flux_scale_interp = interpolate_ztable(
             zt.ssp_phot_table,
             zt.eff_waves_rest_table,
-            zt.flux_scale_table,
+            zt.log10_flux_scale_table,
             zt.z_grid,
             z_test,
         )
@@ -171,8 +172,11 @@ class TestZTableInterpolationAccuracy:
             f"Max SSP photometry error: {float(jnp.max(frac_err)):.4f}"
         )
 
-        # Flux scale should agree within 1% (smooth function of z)
-        fs_err = abs(float(flux_scale_interp) - fixed.flux_scale) / abs(fixed.flux_scale)
+        # Flux scale should agree within 1% (smooth function of z). Compared in
+        # the linear domain so the 1% keeps meaning 1% of the flux scale, not 1%
+        # of its logarithm (#1859).
+        fs_exact = 10.0 ** float(fixed.log10_flux_scale)
+        fs_err = abs(10.0 ** float(log10_flux_scale_interp) - fs_exact) / abs(fs_exact)
         assert fs_err < 0.01, f"Flux scale error: {fs_err:.4f}"
 
 
@@ -191,7 +195,7 @@ class TestZTableGradients:
             ssp_phot, eff_rest, flux_scale = interpolate_ztable(
                 zt.ssp_phot_table,
                 zt.eff_waves_rest_table,
-                zt.flux_scale_table,
+                zt.log10_flux_scale_table,
                 zt.z_grid,
                 z,
             )
@@ -215,13 +219,13 @@ class TestZTableGradients:
             ssp_phot, eff_rest, _ = interpolate_ztable(
                 zt.ssp_phot_table,
                 zt.eff_waves_rest_table,
-                zt.flux_scale_table,
+                zt.log10_flux_scale_table,
                 zt.z_grid,
                 z,
             )
             return jnp.sum(ssp_phot) + jnp.sum(eff_rest)
 
-        g = jax.grad(loss)(0.5)
+        g = assert_grad_matches_fd(loss, 0.5)
         assert abs(float(g)) > 1e-10, f"Gradient w.r.t. z is too small: {float(g)}"
 
     def test_jit_compatible(self, ssp_data, filters):
@@ -234,7 +238,7 @@ class TestZTableGradients:
             return interpolate_ztable(
                 zt.ssp_phot_table,
                 zt.eff_waves_rest_table,
-                zt.flux_scale_table,
+                zt.log10_flux_scale_table,
                 zt.z_grid,
                 z,
             )
@@ -260,7 +264,7 @@ class TestZTableSmoothInterpolation:
         ssp_phot, eff_rest, flux_scale = interpolate_ztable_smooth(
             zt.ssp_phot_table,
             zt.eff_waves_rest_table,
-            zt.flux_scale_table,
+            zt.log10_flux_scale_table,
             zt.z_grid,
             0.5,
             self._scatter(zt),
@@ -276,7 +280,7 @@ class TestZTableSmoothInterpolation:
         ssp_phot, eff_rest, flux_scale = interpolate_ztable_smooth(
             zt.ssp_phot_table,
             zt.eff_waves_rest_table,
-            zt.flux_scale_table,
+            zt.log10_flux_scale_table,
             zt.z_grid,
             0.5,
             self._scatter(zt),
@@ -295,7 +299,7 @@ class TestZTableSmoothInterpolation:
             ssp_phot, eff_rest, flux_scale = interpolate_ztable_smooth(
                 zt.ssp_phot_table,
                 zt.eff_waves_rest_table,
-                zt.flux_scale_table,
+                zt.log10_flux_scale_table,
                 zt.z_grid,
                 z,
                 scatter,
@@ -330,7 +334,7 @@ class TestZTableSmoothInterpolation:
             ssp_phot, _, _ = interpolate_ztable(
                 zt.ssp_phot_table,
                 zt.eff_waves_rest_table,
-                zt.flux_scale_table,
+                zt.log10_flux_scale_table,
                 zt.z_grid,
                 z,
             )
@@ -340,7 +344,7 @@ class TestZTableSmoothInterpolation:
             ssp_phot, _, _ = interpolate_ztable_smooth(
                 zt.ssp_phot_table,
                 zt.eff_waves_rest_table,
-                zt.flux_scale_table,
+                zt.log10_flux_scale_table,
                 zt.z_grid,
                 z,
                 scatter,
@@ -378,7 +382,7 @@ class TestZTableSmoothInterpolation:
         ssp_phot, _, _ = interpolate_ztable_smooth(
             zt.ssp_phot_table,
             zt.eff_waves_rest_table,
-            zt.flux_scale_table,
+            zt.log10_flux_scale_table,
             zt.z_grid,
             z_test,
             scatter,
@@ -399,7 +403,7 @@ class TestZTableSmoothInterpolation:
             return interpolate_ztable_smooth(
                 zt.ssp_phot_table,
                 zt.eff_waves_rest_table,
-                zt.flux_scale_table,
+                zt.log10_flux_scale_table,
                 zt.z_grid,
                 z,
                 scatter,

@@ -72,6 +72,57 @@ class TestProvenanceAttribution:
         assert grouped_spec._group_provenance["dust_tau_diff"] == "wildcard_fixed"
         assert grouped_spec._group_provenance["dust_slope"] == "wildcard_fixed"
 
+    def test_wildcard_free_that_pinned_reports_the_outcome(self):
+        """A wildcard-FREE with no declared prior tags 'wildcard_free_pinned'.
+
+        The parameter stays Fixed, so tagging it plain ``wildcard_free`` put a
+        row reading FREE inside the Fixed block of ``spec.summary()`` — the one
+        table a user consults to answer "what did I hold constant?" (#1726).
+        ``WildcardPartialFreeWarning`` says so at build time, but a notebook can
+        miss or filter it and the summary is what gets read afterwards.
+        """
+        import warnings
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            spec = parse_groups(
+                sfh={"type": "dpl", "*": FREE},
+                dust={"type": "two_component", "law_bc": "calzetti", "*": FREE},
+            )
+
+        provenance = spec._group_provenance
+        pinned = {name for name, tag in provenance.items() if tag == "wildcard_free_pinned"}
+        assert pinned, "expected at least one wildcard-FREE parameter with no declared prior"
+
+        for name in pinned:
+            assert spec.get_distribution(name).is_fixed, (
+                f"{name} is tagged wildcard_free_pinned but is not Fixed"
+            )
+
+        # Every genuinely freed parameter keeps the plain tag.
+        for name, tag in provenance.items():
+            if tag == "wildcard_free":
+                assert not spec.get_distribution(name).is_fixed, (
+                    f"{name} is Fixed but tagged wildcard_free, which is the "
+                    "contradiction #1726 removed"
+                )
+
+    def test_pinned_tag_still_round_trips_as_a_wildcard(self):
+        """``to_groups()`` must hand back ``all_params: FREE``, not overrides.
+
+        The suffix records the outcome; the *intent* was a wildcard, and that is
+        what the round trip should reproduce. Getting this wrong turns a
+        one-line group into a wall of explicit parameters.
+        """
+        import warnings
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            spec = parse_groups(sfh={"type": "dpl", "*": FREE})
+
+        groups = spec.to_groups()
+        assert groups["sfh"].get("all_params") is FREE
+
     def test_flat_construction_has_no_provenance(self):
         """Specs built via the flat-kwarg form have no _group_provenance attribute."""
         spec = Parameters(mean_sfh_type="dpl", redshift=Fixed(0.1))
@@ -112,7 +163,7 @@ class TestSummaryRendering:
         """Flat-kwarg specs render the existing summary without a Source column."""
         spec = Parameters(
             mean_sfh_type="dpl",
-            sfh_dpl_log_total_mass=Uniform(-1, 2),
+            sfh_dpl_log_total_mass=Uniform(7.0, 12.5),
             sfh_dpl_alpha=Uniform(0.5, 3),
             redshift=Fixed(0.1),
         )

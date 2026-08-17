@@ -5,14 +5,11 @@ TEA E_b(delta) relation against Haskell+2024 calibration points.
 Conroy2010 limiting behavior against Cardelli and power_law.
 """
 
-import jax
 import jax.numpy as jnp
 import pytest
 from numpy.testing import assert_allclose
 
 from tengri.components.dust.attenuation import cardelli, conroy2010, power_law
-
-jax.config.update("jax_enable_x64", True)
 
 pytestmark = pytest.mark.crossval
 

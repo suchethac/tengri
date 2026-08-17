@@ -83,14 +83,17 @@ DEFAULT_ROOTS = (
 )
 SUFFIXES = (".py", ".md", ".rst", ".bib", ".ipynb", "")
 # Generated output and frozen archives: not worth gating a PR on.
+# Matching is exact-on-path-part (see the ``path.parts`` test below), so a
+# renamed directory silently stops being excluded. Both entries below moved:
+# the notebook archives consolidated under ``notebooks/archive/``, so the single
+# "archive" part now covers what "archive_2", "_retired" and "_old_notebooks"
+# used to need their own lines for; and ``docs/superpowers/`` became
+# ``docs/internal/``.
 EXCLUDE_PARTS = (
     "auto_examples",  # sphinx-gallery generated from examples/
     "_build",  # local sphinx build output
     "archive",
-    "archive_2",
-    "_retired",
-    "_old_notebooks",
-    "superpowers",  # historical planning records, frozen as written
+    "internal",  # historical planning records and specs, frozen as written
 )
 
 EXCLUDE_FILES = frozenset(

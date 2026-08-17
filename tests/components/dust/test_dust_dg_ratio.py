@@ -11,7 +11,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-jax.config.update("jax_enable_x64", True)
+from tests._jit_parity import assert_jit_matches_eager
 
 
 def fd_grad(f, x: float, eps: float = 1e-4) -> float:
@@ -77,8 +77,7 @@ class TestDustToGasScaling:
         """Function can be JIT-compiled."""
         from tengri.components.dust.attenuation import dust_to_gas_scaling_remy_ruyer
 
-        jit_fn = jax.jit(dust_to_gas_scaling_remy_ruyer)
-        result = jit_fn(0.0)
+        result = assert_jit_matches_eager(dust_to_gas_scaling_remy_ruyer, 0.0)
         assert jnp.isfinite(result)
 
     def test_differentiable(self):

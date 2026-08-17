@@ -10,12 +10,12 @@ insensitive to ``log U``. The ratio therefore rises monotonically
 with ``log U`` at fixed gas metallicity.
 
 We sweep ``log U`` from -3 to -1 at three sub-solar metallicities
-covered by the Cue emulator (Li+2024), with dust-on-lines and LyC
+covered by the Cue emulator (Li+2025), with dust-on-lines and LyC
 escape switched off so the trend isolates the photoionization
 response cleanly.
 
-Reference: Kewley & Dopita 2002 ApJS 142 35; Li et al. 2024
-(Cue neural emulator).
+Reference: Kewley & Dopita 2002 ApJS 142 35; Li et al. 2025, ApJ, 986, 9
+(Cue neural emulator; arXiv:2405.04598).
 """
 
 import warnings

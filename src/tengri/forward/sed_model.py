@@ -57,6 +57,8 @@ from __future__ import annotations
 
 import contextlib
 import dataclasses
+import functools
+import inspect
 import types
 import warnings
 from collections.abc import Mapping
@@ -68,7 +70,12 @@ import numpy as np
 
 from tengri.components.stellar.sfh.registry import compute_field_gp, resolve_sfh
 from tengri.components.stellar.sps.dsps_wrapper import csp_age_dt
-from tengri.config.exceptions import ParameterMapError, warn_measured
+from tengri.config.exceptions import (
+    DeadGradientParameterWarning,
+    DegenerateParameterPairWarning,
+    ParameterMapError,
+    warn_measured,
+)
 from tengri.cosmology import age_at_z, luminosity_distance
 from tengri.forward.approx_policy import BAND_PROJECTION_KEYS, ApproxPolicy
 from tengri.forward.sed_model_types import (
@@ -95,7 +102,7 @@ from tengri.utils.grid import (
     log_age_to_age_yr,
     make_log_age_grid,
 )
-from tengri.utils.scale import LOG10_4PI, apply_log10_scale
+from tengri.utils.scale import apply_log10_scale, log10_four_pi_dl2
 
 #: Second probe luminosity [erg/s] for the additive-emitter homogeneity check in
 #: :meth:`SEDModel._dust_emission_band_response`. A physically plausible L_IR
@@ -1017,6 +1024,19 @@ _VALID_CSP_INTEGRATION = ("trapz", "log_trapz", "log_interp", "dsps_native", "ds
 _DEFAULT_CSP_INTEGRATION = "trapz"
 
 
+@functools.cache
+def _init_keywords(cls: type) -> frozenset[str]:
+    """The keywords ``cls.__init__`` accepts — everything else is grammar input.
+
+    Derived rather than hand-listed, on the #1720 principle: a second copy of a
+    census agrees with the first by convention and nothing else. ``build`` uses
+    this to decide what may be forwarded to the constructor, so a hand-maintained
+    copy drifting from the real signature is exactly the failure it prevents.
+    """
+    params = inspect.signature(cls.__init__).parameters
+    return frozenset(params) - {"self", "spec", "ssp_data"}
+
+
 class SEDModel:
     """Differentiable SED forward model with modular physics and clean API.
 
@@ -1560,6 +1580,7 @@ class SEDModel:
         # ── Metallicity ───────────────────────────────────────────
         param_map_deltas.append(self._init_metallicity(spec))
         self._validate_metallicity_bounds(spec, ssp_data)
+        self._validate_alpha_fe_identifiability(spec, ssp_data)
 
         # ── Dust (attenuation + emission) ─────────────────────────
         param_map_deltas.append(self._init_dust(spec))
@@ -2421,6 +2442,85 @@ class SEDModel:
                         grid_hi_zsol=grid_hi_zsol,
                         stacklevel=3,
                     )
+
+    def _validate_alpha_fe_identifiability(self, spec, ssp_data):
+        """Warn if a free ``met_alpha_fe`` cannot be identified by this model.
+
+        ``[alpha/Fe]`` is a real, independently-interpolated axis only when the
+        SSP grid carries one (:func:`has_alpha_grid`, the 4D path of #226).
+        Without it, ``met_alpha_fe`` reaches the SED solely through
+        :func:`effective_metallicity`, and only from the ``"delta"`` metallicity
+        branch. That leaves two distinct failures, both silent today:
+
+        * **Any non-delta metallicity model** never reads ``met_alpha_fe`` at
+          all. Measured on a 3D grid, sweeping 0.0 -> 0.6 under ``"ramp"`` and
+          ``"two_step"``: ``numpy.array_equal`` returns ``True`` and
+          ``d(sum SED)/d(alpha)`` is exactly ``0.0`` (issue #1764). The
+          parameter is still accepted as free, so the reported posterior is the
+          prior.
+        * **Delta metallicity** folds it in as a pure additive shift,
+          ``log_z_eff = met_logzsol + 0.75 * met_alpha_fe``, so freeing it
+          alongside ``met_logzsol`` gives an exactly flat ridge (issue #1095).
+
+        This check needs three facts that live in three objects — the grid
+        (``ssp_data``), the metallicity mode (``self._met_mode``), and which
+        parameters are free (``spec``) — which is why it belongs here and not on
+        the parameter declaration: :class:`Parameters` cannot see ``ssp_data``,
+        so a guard placed there would fire falsely on every 4D grid.
+
+        Warns rather than raises, matching :meth:`_validate_metallicity_bounds`:
+        the forward model is correct in every case, and both configurations are
+        legitimate if the user wants them.
+        """
+        if ssp_data is None:
+            return  # synthetic / placeholder construction path
+
+        distributions = getattr(spec, "_distributions", {})
+        alpha_dist = distributions.get("met_alpha_fe")
+        if alpha_dist is None or alpha_dist.is_fixed:
+            return
+
+        from tengri.components.stellar.sps.dsps_wrapper import (
+            _ALPHA_TO_Z_COEFF,
+            has_alpha_grid,
+        )
+
+        if has_alpha_grid(ssp_data):
+            return  # 4D grid: [alpha/Fe] interpolates a real axis (#226)
+
+        met_mode = str(self._met_mode)
+        if met_mode != "delta":
+            warn_measured(
+                f"met_alpha_fe is free, but metallicity mode {met_mode!r} never "
+                f"reads it. On an SSP grid with no [alpha/Fe] axis the "
+                f"enhancement is applied only in the 'delta' branch, so "
+                f"d(SED)/d(met_alpha_fe) is exactly 0.0: no gradient-based "
+                f"sampler can move it and the reported posterior is the prior "
+                f"(issue #1764). Use met_mode='delta', pin met_alpha_fe with "
+                f"Fixed(...), or load an SSP grid carrying an [alpha/Fe] axis.",
+                DeadGradientParameterWarning,
+                gradient=0.0,
+                stacklevel=3,
+            )
+            return
+
+        logzsol_dist = distributions.get("met_logzsol")
+        if logzsol_dist is not None and not logzsol_dist.is_fixed:
+            warn_measured(
+                f"met_alpha_fe and met_logzsol are both free, but this SSP grid "
+                f"has no [alpha/Fe] axis, so [alpha/Fe] enters only as an "
+                f"additive shift of the effective metallicity: log_z_eff = "
+                f"met_logzsol + {_ALPHA_TO_Z_COEFF} * met_alpha_fe. The pair is "
+                f"exactly degenerate — the likelihood is flat along "
+                f"met_logzsol + {_ALPHA_TO_Z_COEFF} * met_alpha_fe = const, and "
+                f"a Laplace fit assigns that direction the variance its "
+                f"eigenvalue floor implies rather than a measured one (issues "
+                f"#1095, #1515). Free one or the other, or load an SSP grid "
+                f"carrying an [alpha/Fe] axis.",
+                DegenerateParameterPairWarning,
+                coefficient=_ALPHA_TO_Z_COEFF,
+                stacklevel=3,
+            )
 
     def _init_dust(self, spec):
         """Configure dust attenuation laws, nebular dust, and dust emission.
@@ -4176,7 +4276,7 @@ class SEDModel:
             nebular_grid_sig,
         )
 
-    def predict_photometry(self, params):
+    def predict_photometry(self, params, *, ssp_data=None, template_data=None):
         """Compute observed photometric flux densities through all filters.
 
         Convolves the SED (redshifted and IGM-absorbed) through filter
@@ -4195,6 +4295,15 @@ class SEDModel:
             Parameter values using public parameter names (e.g.,
             ``sfh_tsnorm_log_total_mass``, ``met_logzsol``, ``redshift``).
             See :class:`Parameters` for canonical names.
+        ssp_data : SSPData | None, keyword-only, optional
+            SSP grid to thread in as a traced argument. ``None`` (default) uses
+            ``self.ssp_data``, which is correct for every ordinary call. Pass it
+            explicitly **only when you wrap this method in your own JAX
+            transform** — see the JIT note below.
+        template_data : Any | None, keyword-only, optional
+            Template arrays (nebular grids, dust IR LUTs, AGN libraries) to thread
+            in. ``None`` (default) uses :meth:`_template_data_for_jit`. Same
+            rationale as ``ssp_data``.
 
         Returns
         -------
@@ -4213,6 +4322,27 @@ class SEDModel:
         -----
         **JIT-compatible**: yes. Safe inside :func:`jax.grad` for
         parameter gradients.
+
+        **Threading across a JIT boundary you own (#1753).** This method is
+        already self-JIT'd and structurally cached, and it threads the SSP grid
+        as an argument — so tengri's own compiled programs never bake it. That
+        guarantee does **not** survive being wrapped in a caller's transform::
+
+            predict = jax.jit(model.predict_photometry)  # grid is BAKED
+
+        The inner jit inlines into the outer trace and ``self.ssp_data``, read as
+        a concrete array, becomes a ``Constant`` of your computation. On a real
+        SSP that is 66.89 MB inlined, and the persistent-cache entry grows from
+        0.23 MB to 58.82 MB — a factor of 256, the mechanism behind the 141 GB
+        cache in #1507. Pass the grid in to keep it an invar instead::
+
+            predict = jax.jit(lambda ssp, p: model.predict_photometry(p, ssp_data=ssp))
+            flux = predict(model.ssp_data, params)
+
+        Only the exact wave-grid path pays: under ``approx=WavePrecomp()`` the
+        cube is dead code and XLA eliminates it before codegen. And if you are
+        not composing this into a larger jitted program, do not wrap it at all —
+        the plain call is already compiled and cached.
 
         **Approximation accuracy**: Driven by the build-time ``approx=``
         policy. :class:`WavePrecomp` swaps in the SSP×filter LUT, which is
@@ -4251,7 +4381,9 @@ class SEDModel:
         """
         if self.filter_waves is None:
             raise ValueError("No filters set. Pass filters or observation= to SEDModel().")
-        return self.predict_observables_jit(params).phot_fnu
+        return self.predict_observables_jit(
+            params, ssp_data=ssp_data, template_data=template_data
+        ).phot_fnu
 
     # There is deliberately no ``_refuse_on_fast_nebular`` here any more.
     #
@@ -4283,6 +4415,9 @@ class SEDModel:
         params,
         wave_obs=None,
         wave_chunk_size=None,
+        *,
+        ssp_data=None,
+        template_data=None,
     ):
         """Compute observed spectrum at given wavelengths with LSF convolution.
 
@@ -4312,6 +4447,13 @@ class SEDModel:
             size for XLA compilation. Default None (no chunking, exact behavior).
             For spectroscopy with R~500 at N≥64 galaxies, typical value is 32–64
             to avoid XLA compilation wall-clock.
+        ssp_data, template_data : Any | None, keyword-only, optional
+            The JIT-threading channel — see :meth:`predict_photometry` for what it
+            is for and what baking costs (#1753). Honored on the configured-
+            spectroscopy route (the inference hot path, taken when ``wave_obs`` is
+            ``None`` and the model has a spectroscopy channel). An explicit
+            ``wave_obs`` grid routes through ``_predict_obs_sed`` instead, which
+            does not yet carry the channel — that route still closure-captures.
 
         Returns
         -------
@@ -4400,7 +4542,9 @@ class SEDModel:
             and getattr(self.observation.spectroscopy, "wave_obs", None) is not None
         ):
             del wave_obs, wave_chunk_size
-            return self.predict_observables_jit(params).spec_fnu
+            return self.predict_observables_jit(
+                params, ssp_data=ssp_data, template_data=template_data
+            ).spec_fnu
 
         # No spectroscopy channel but a manually attached grid (``model._wave_obs``)
         # — evaluate directly so photometry-only models with an ad-hoc grid work
@@ -4789,7 +4933,7 @@ class SEDModel:
         # NebularSEDComponent) — no L_sun conversion here. Multiplying by
         # L_SUN was a 33.6-dex unit error that made every joint
         # photometry+line-flux fit unusable against real data.
-        log10_scale = -LOG10_4PI - 2.0 * jnp.log10(dl_cm)
+        log10_scale = -log10_four_pi_dl2(dl_cm)
         flux = apply_log10_scale(selected_lums, log10_scale)
         return flux
 
@@ -5003,7 +5147,7 @@ class SEDModel:
         # ``line_lums`` are erg/s (DerivedKey contract) — same fix as
         # ``predict_line_fluxes``. The scale cancels in every ratio, so
         # this is unit hygiene, not a behavior change.
-        log10_scale = -LOG10_4PI - 2.0 * jnp.log10(dl_cm)
+        log10_scale = -log10_four_pi_dl2(dl_cm)
 
         def _match(targets):
             targets = jnp.asarray(targets)
@@ -5350,7 +5494,10 @@ class SEDModel:
         # fixed one, and raises if the model has neither.
         z = jnp.asarray(self._get_redshift(params))
         dl_cm = jnp.asarray(luminosity_distance(z)).reshape(())
-        four_pi_dl2 = 4.0 * jnp.pi * dl_cm**2
+        # log10, never the linear divisor: 4 pi d_L^2 is ~1e57 (and ~1.2e40 even
+        # at the 10-pc z=0 convention) against a float32 ceiling of 3.4e38, so the
+        # linear form is ``inf`` at every distance and the flux ``nan`` (#1859).
+        log10_4pi_dl2 = log10_four_pi_dl2(dl_cm)
 
         if fast:
             from tengri.components.dust.two_component import DustSEDComponent
@@ -5367,7 +5514,7 @@ class SEDModel:
             else:
                 transmission = dust.compute_transmission(params, pc.window_centers, ssp_ages_yr)
             return measure_line_fluxes_from_window_lut(
-                joint_weights, scale, transmission, pc, four_pi_dl2
+                joint_weights, scale, transmission, pc, log10_4pi_dl2
             )
 
         if state is None:
@@ -5375,7 +5522,10 @@ class SEDModel:
         else:
             rest = SEDResult(wavelength=state.wave, sed=state.sed_intrinsic)
         return jnp.stack(
-            [measure_line_flux_jax(rest.wavelength, rest.sed, ld, four_pi_dl2) for ld in line_defs]
+            [
+                measure_line_flux_jax(rest.wavelength, rest.sed, ld, log10_4pi_dl2)
+                for ld in line_defs
+            ]
         )
 
     def predict_hbeta(self, params: dict) -> float:
@@ -5582,7 +5732,7 @@ class SEDModel:
             self._property_catalog = assemble_available_properties(active_names)
         return self._property_catalog
 
-    def predict_properties(self, params, names=None):
+    def predict_properties(self, params, names=None, *, ssp_data=None, template_data=None):
         """Compute derived properties from the forward state.
 
         Properties are computed from the same orchestrator :class:`ForwardState`
@@ -5599,6 +5749,13 @@ class SEDModel:
             Property names to compute. If None, computes all available
             properties. Each name must be in :attr:`available_properties`,
             else :exc:`KeyError` is raised.
+        ssp_data, template_data : Any | None, keyword-only, optional
+            The JIT-threading channel, forwarded to :meth:`predict_state`. Pass
+            these only when wrapping this method in your own ``jax.jit`` /
+            ``vmap`` / ``grad``, where closure-captured grids would otherwise
+            bake into your compiled program as constants — see
+            :meth:`predict_photometry` for the measured cost (#1753). ``None``
+            (default) uses the model's own arrays.
 
         Returns
         -------
@@ -5703,7 +5860,7 @@ class SEDModel:
         # instead of compare.
 
         # Compute the state once
-        state = self.predict_state(params)
+        state = self.predict_state(params, ssp_data=ssp_data, template_data=template_data)
 
         # Evaluate each property
         result = {}
@@ -6471,7 +6628,7 @@ class SEDModel:
             decls.append(ParamDeclaration(name=pname, prior=prior, description="", units=""))
         return decls
 
-    def run(self, state, params):
+    def run(self, state, params, *, ssp_data=None, template_data=None):
         """Run the SED forward chain. Pure JAX.
 
         SED is the head of the per-population orchestration; in the
@@ -6498,8 +6655,13 @@ class SEDModel:
         upstream state is reserved for a future ``ResolvedSEDModel`` mode
         that needs SED to read spatial keys; today the contract is
         "incoming state ignored, output state freshly built."
+
+        ``ssp_data``/``template_data`` are the JIT-threading channel, forwarded
+        to :meth:`predict_state`; both keyword-only and both defaulting to
+        ``None``, so the ``SubModel`` call shape ``run(state, params)`` is
+        unchanged for every existing caller (#1753).
         """
-        return self.predict_state(params)
+        return self.predict_state(params, ssp_data=ssp_data, template_data=template_data)
 
     def _full_state_chain(self):
         """The component chain with every publication shortcut disabled.
@@ -6548,10 +6710,40 @@ class SEDModel:
         keep using :meth:`predict_photometry`/:meth:`predict_spectrum`
         until the full integration adapter ships.
 
-        This is the public bridge between :class:`SEDModel`'s
-        configuration surface and the orchestrator: it lets users with
-        an existing ``SEDModel`` go through ``run_components`` without
-        re-typing the chain at every call site.
+        **Not a public surface, despite what this docstring used to say**
+        (#1736). The prediction contract — ``docs/dev/NAMING_CONTRACT.md``
+        §4b, binding on code, docs, notebooks and examples — names three:
+        :meth:`predict`, :meth:`predict_photometry` and
+        :meth:`predict_properties`. ``predict_state`` is not among them.
+        It is the internal bridge from this model's configuration surface
+        to the orchestrator, called by :meth:`predict_observables_jit` and
+        by ``ForwardModel.predict_observables``; its return type and the
+        keys on it carry no stability guarantee and may change without
+        notice.
+
+        It is **not** on the removal path either — it has production
+        callers and is classified ``UNSANCTIONED`` rather than retired
+        (``tests/contract/test_public_api_surface.py``). Do not describe
+        it with the d-word: ``test_predict_surface_classification.py``
+        derives that label by searching this docstring for the substring,
+        so the wording here *is* the classification.
+
+        **If you reached for this to get per-component SEDs, use**
+        :attr:`pred.sed.components
+        <tengri.forward.prediction.SEDProperties.components>` **instead**::
+
+            comp = model.predict(params).sed.components
+            comp["sed_intrinsic"]  # stellar, pre-dust  [erg/s/Hz]
+            comp["sed_dust_ir"]  # and sed_nebular, sed_agn, sed_total, ...
+
+        That is the supported decomposition, it reuses the prediction's
+        cached forward state (no second forward pass), and it returns a
+        plain dict of named arrays rather than a pipeline object. Reaching
+        through ``predict_state`` instead hands you a
+        :class:`~tengri.protocols.ForwardState`, whose ``derived`` dict
+        CLAUDE.md explicitly documents as internal — so the convenient
+        path out of this method leads directly into an object the
+        conventions tell readers not to touch.
 
         Parameters
         ----------
@@ -6678,7 +6870,7 @@ class SEDModel:
             chain, state0, full_params, ssp_data=ssp_data, template_data=template_data
         )
 
-    def predict_observables(self, params):
+    def predict_observables(self, params, *, ssp_data=None, template_data=None):
         """Project the orchestrator state into every configured observable.
 
         Single bit-exact entry point: runs the SEDComponent chain and
@@ -6738,10 +6930,12 @@ class SEDModel:
         cache = _default_owner.get_structural_kernel(self.compile_signature())
         impl = cache["predict_observables_impl"]
         return impl(
-            params, self.spec.get_fixed_values(), self.ssp_data, self._template_data_for_jit()
+            params,
+            self.spec.get_fixed_values(),
+            *self._resolve_threaded_data(ssp_data, template_data),
         )
 
-    def predict_observables_jit(self, params):
+    def predict_observables_jit(self, params, *, ssp_data=None, template_data=None):
         """Self-JIT'd, structurally-cached version of :meth:`predict_observables`.
 
         Bit-exact with :meth:`predict_observables` (same orchestrator
@@ -6797,7 +6991,9 @@ class SEDModel:
         # a bare KeyError deep inside a component.
         check_missing_free_params(params, self.spec, self._param_map)
         return self._get_or_build_predict_observables_jit()(
-            params, self.spec.get_fixed_values(), self.ssp_data, self._template_data_for_jit()
+            params,
+            self.spec.get_fixed_values(),
+            *self._resolve_threaded_data(ssp_data, template_data),
         )
 
     def _get_or_build_predict_observables_jit(self):
@@ -6904,6 +7100,39 @@ class SEDModel:
         # a second implementation to keep in sync. Same code → bit-identical.
         cache["predict_observables_impl"] = _impl
         return jit_fn
+
+    def _resolve_threaded_data(self, ssp_data, template_data):
+        """Resolve the JIT-threading channel: caller's arrays, else this model's own.
+
+        The one place the override policy lives, so every public surface that
+        accepts ``ssp_data=``/``template_data=`` resolves them identically.
+
+        Threading matters only across a JIT boundary the *caller* owns. Inside
+        :meth:`predict_observables_jit` the grids already ride in as arguments to a
+        structurally-cached ``jax.jit``, so tengri's own programs never bake them.
+        But a caller who writes ``jax.jit(model.predict_photometry)`` inlines that
+        inner jit into their trace, and ``self.ssp_data`` — read here as a concrete
+        array — becomes a ``Constant`` of *their* computation. Passing the grid in
+        makes it an invar of their trace instead. Measured on a real SSP: the
+        persistent-cache entry goes 0.23 MB → 58.82 MB when it bakes (#1753, #1507).
+
+        Parameters
+        ----------
+        ssp_data : Any | None
+            Caller-supplied SSP grid, or ``None`` to use ``self.ssp_data``.
+        template_data : Any | None
+            Caller-supplied template arrays, or ``None`` to use
+            :meth:`_template_data_for_jit`.
+
+        Returns
+        -------
+        tuple
+            ``(ssp_data, template_data)`` ready to hand to the impl closure.
+        """
+        return (
+            self.ssp_data if ssp_data is None else ssp_data,
+            self._template_data_for_jit() if template_data is None else template_data,
+        )
 
     def _template_data_for_jit(self):
         """Collect template grids/weights for JIT threading (nebular + dust IR + AGN).
@@ -7176,8 +7405,14 @@ class SEDModel:
             and self.ssp_data is not None
         ):
             fixed = self.spec.get_fixed_values()
+            # Same narrowing as the component's own apply() (#1833) — read off
+            # the component that is actually in the chain, so the LUT cannot
+            # bake a different curve from the one the direct path evaluates.
             bc_params, diff_params = resolve_bc_diff_law_params(
-                fixed, dict(dust.config.bc_law_overrides), dict(dust.config.diff_law_overrides)
+                fixed,
+                dict(dust.config.bc_law_overrides),
+                dict(dust.config.diff_law_overrides),
+                dust.config.live_shape_params,
             )
             ssp_ages_yr = (10.0**self.ssp_data.ssp_lg_age_gyr) * 1e9
 
@@ -7446,6 +7681,66 @@ class SEDModel:
         setattr(self, cache_attr, response)
         return response
 
+    #: Provenance tags that mean a caller asked for this parameter's value.
+    #: ``registry_default`` and ``wildcard_fixed`` are deliberately absent —
+    #: neither expresses a request, and for those an attenuation law's own
+    #: published default must stand rather than the shared spec default.
+    _REQUESTED_PROVENANCE = frozenset({"user_prior", "user_fixed", "user_free", "wildcard_free"})
+
+    def _requested_law_shape_params(self, *laws: str | None) -> frozenset[str]:
+        """Shape parameters of the selected attenuation law(s) a caller asked for.
+
+        Parameters
+        ----------
+        *laws : str or None
+            Attenuation-law registry keys in play. ``None`` entries are
+            skipped. Defaults to the diffuse law alone, which is the single
+            screen's only law.
+
+        Returns
+        -------
+        frozenset of str
+            Flat names whose provenance says somebody asked. Empty for a law
+            that reads no shape parameter (the default ``calzetti`` among
+            them), which keeps the build-time cached ``k(lambda)`` and the
+            single screen's fast path unchanged.
+
+        Notes
+        -----
+        **JIT-compatible**: no — build-time provenance lookup.
+
+        The union is over every law in play, not just the diffuse one: the
+        two-component screen evaluates ``law_bc``, ``law_diff`` and ``law_neb``,
+        and a parameter read only by the birth-cloud law would otherwise be
+        dropped as unrequested while the user had plainly requested it. See
+        :attr:`DustAttenuationSEDComponentConfig.live_shape_params` (#1808) and
+        :attr:`DustSEDComponentConfig.live_shape_params` (#1833).
+        """
+        from tengri.parameters.groups import _law_shape_params
+
+        names = laws or (
+            getattr(self, "_dust_law_diff", None) or getattr(self.spec, "dust_law_diff", None),
+        )
+        reads: set[str] = set()
+        for law in names:
+            if law is None:
+                continue
+            try:
+                reads |= set(_law_shape_params(law))
+            except Exception:  # pragma: no cover - law not registered
+                continue
+        if not reads:
+            return frozenset()
+        provenance = getattr(self.spec, "_group_provenance", None) or {}
+        return frozenset(
+            name
+            for name in reads
+            # ``_grid`` suffixes mark a declared free prior intersected with a
+            # template grid; still a request, so match on the stem.
+            if str(provenance.get(name, "registry_default")).removesuffix("_grid")
+            in self._REQUESTED_PROVENANCE
+        )
+
     def _build_component_chain(self):
         """Construct the orchestrator chain from ``self``'s settings.
 
@@ -7496,8 +7791,40 @@ class SEDModel:
                 neb_backend_name = "baked_in"  # fallback
             neb_backend_instance = neb_inst
 
+        # Which attenuation-law shape parameters did somebody actually ask for?
+        #
+        # The single_component screen used to call its law with no arguments,
+        # so dust_slope / dust_delta / dust_bump_strength were unfittable
+        # (#1808). Passing the spec's values unconditionally is not the fix
+        # either: the spec declares ONE shared dust_delta / dust_bump_strength,
+        # both Fixed(0.0), while each law carries its paper's value in its own
+        # signature (kriek_conroy bump=1.0, narayanan_z delta=-0.2), and
+        # overriding those collapses three distinct published laws onto one
+        # curve — measured.
+        #
+        # Provenance separates the two cases, and it can only be read here: the
+        # component sees a plain params dict, and deciding at call time would
+        # mean branching on a traced value. registry_default and wildcard_fixed
+        # mean "nobody asked", so the law's own default stands.
+        #
+        # #1833: the two-component screen needs the same treatment and the union
+        # over the three laws it evaluates. It was passing the shared spec values
+        # unconditionally, so kriek_conroy lost its 2175 A bump and narayanan_z /
+        # tea their delta = -0.2 — the exact outcome rejected above, on the path
+        # every shipped recipe builds.
+        _dust_model = getattr(self, "_dust_model", "two_component")
+        if _dust_model == "single_component":
+            dust_live_shape_params = self._requested_law_shape_params()
+        else:
+            dust_live_shape_params = self._requested_law_shape_params(
+                getattr(self, "_dust_law_bc", None),
+                getattr(self, "_dust_law_diff", None),
+                getattr(self, "_dust_law_neb", None),
+            )
+
         chain = build_components(
             ssp_data=self.ssp_data,
+            dust_live_shape_params=dust_live_shape_params,
             sfh_model=mean_model,
             field=field_on,
             metallicity_model=getattr(self, "_met_mode", "delta"),
@@ -7784,7 +8111,7 @@ class SEDModel:
 
     # ── Batch operations ──────────────────────────────────────────────
 
-    def predict_photometry_batch(self, params_batch):
+    def predict_photometry_batch(self, params_batch, *, ssp_data=None, template_data=None):
         """Compute photometry for a batch of parameter sets via jax.vmap.
 
         **Use this method for** posterior chains / mock catalogs (batched
@@ -7818,9 +8145,9 @@ class SEDModel:
         """
         from tengri.forward.convenience import predict_photometry_batch as _fn
 
-        return _fn(self, params_batch)
+        return _fn(self, params_batch, ssp_data=ssp_data, template_data=template_data)
 
-    def predict_spectrum_batch(self, params_batch):
+    def predict_spectrum_batch(self, params_batch, *, ssp_data=None, template_data=None):
         """Compute spectra for a batch of parameter sets via jax.vmap.
 
         **Use this method for** batched spectra over posterior chains.
@@ -7854,7 +8181,7 @@ class SEDModel:
         """
         from tengri.forward.convenience import predict_spectrum_batch as _fn
 
-        return _fn(self, params_batch)
+        return _fn(self, params_batch, ssp_data=ssp_data, template_data=template_data)
 
     @classmethod
     def from_config(
@@ -8066,16 +8393,26 @@ class SEDModel:
             ).items()
             if v is not None
         }
-        from tengri.parameters.groups import _TOP_LEVEL_SETTINGS, parse_groups
+        from tengri.parameters.groups import parse_groups
 
-        # Top-level parameter settings (e.g. ``n_grid``) belong to
-        # ``parse_groups`` / ``Parameters``, not ``__init__``. Pull any that
-        # arrived via ``**model_kwargs`` over to the group dict so that, e.g.,
-        # ``SEDModel.build(..., n_grid=128)`` works instead of raising a
-        # confusing ``__init__() got an unexpected keyword argument`` error.
-        for _key in _TOP_LEVEL_SETTINGS:
-            if _key in model_kwargs:
-                groups[_key] = model_kwargs.pop(_key)
+        # Anything in ``**model_kwargs`` that ``__init__`` does not declare is
+        # grammar input, and ``parse_groups`` is the only thing that can judge
+        # it. Forwarding it to the constructor instead loses two error channels
+        # that already exist and are correct: the removed-group translations
+        # (``stellar=`` names its ``met=`` replacement) and difflib's suggestion
+        # on a misspelled group (``dsut=`` -> "Did you mean: dust?"). Both
+        # degrade to a bare ``__init__() got an unexpected keyword argument``,
+        # which names no replacement and no suggestion.
+        #
+        # PR #518 diagnosed exactly this and fixed it for the four keys in
+        # ``_TOP_LEVEL_SETTINGS`` (``n_grid`` and friends), which this rule
+        # subsumes — they are not ``__init__`` parameters, so they route here.
+        # Every other keyword kept the old behavior, which is how ``stellar=``
+        # came to die this way in five reproduction notebooks after #1720
+        # removed it (#1776-#1781).
+        _init_kw = _init_keywords(cls)
+        for _key in [k for k in model_kwargs if k not in _init_kw]:
+            groups[_key] = model_kwargs.pop(_key)
 
         # Auto-propagate the emission-line velocity mode from a Spectroscopy
         # observation so the line-velocity params (eline_sigma_kms,

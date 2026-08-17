@@ -21,12 +21,11 @@ from numpy.testing import assert_allclose
 
 pytestmark = pytest.mark.bounds
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri.components.stellar.sfh.dense_basis import (
     _build_quantile_points_pure,
     dense_basis_pure,
 )
+from tests._bounds import assert_non_negative
 
 # ── _build_quantile_points_pure ───────────────────────────────────
 
@@ -76,7 +75,7 @@ class TestDenseBasisPureSfh:
         """SFR is non-negative everywhere and finite."""
         age_yr = self._default_age_grid()
         sfr = dense_basis_pure(age_yr, log_total_mass=10.0, tx_frac_0=0.4, tx_frac_1=0.7)
-        assert jnp.all(sfr >= 0.0)
+        assert_non_negative(sfr, name="sfr")
         chex.assert_tree_all_finite(sfr)
 
     def test_total_mass_scaling(self):
@@ -106,7 +105,7 @@ class TestDenseBasisPureSfh:
             age_yr, log_total_mass=10.0, tx_frac_0=0.2, tx_frac_1=0.5, tx_frac_2=0.8
         )
         chex.assert_equal_shape([sfr, age_yr])
-        assert jnp.all(sfr >= 0.0)
+        assert_non_negative(sfr, name="sfr")
 
     def test_age_universe_yr_custom(self):
         """Custom age_universe_yr changes the timescale."""

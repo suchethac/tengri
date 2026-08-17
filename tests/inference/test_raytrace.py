@@ -1,14 +1,12 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Tests for the Ray Tracing Sampler integration."""
 
+from pathlib import Path
+
 import chex
 import jax
 import jax.numpy as jnp
 import pytest
-
-jax.config.update("jax_enable_x64", True)
-
-from pathlib import Path
 
 from tengri.forward.sed_model import SEDModel
 from tengri.inference.backends.mcmc.raytrace import sample_hamiltonian, sample_raytrace
@@ -209,7 +207,7 @@ def fitter_setup(ssp_data_wne, sdss_filters):
         sfh_dpl_alpha=Uniform(0.5, 3.0),
         sfh_dpl_beta=Uniform(0.3, 2.0),
         sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
-        sfh_dpl_log_total_mass=Uniform(-1.0, 2.5),
+        sfh_dpl_log_total_mass=Uniform(7.0, 12.5),
         met_logzsol=-0.3,
         dust_tau_bc=0.3,
         dust_tau_diff=0.2,
@@ -222,7 +220,13 @@ def fitter_setup(ssp_data_wne, sdss_filters):
         "sfh_dpl_alpha": 1.5,
         "sfh_dpl_beta": 1.0,
         "sfh_dpl_tau_gyr": 5.0,
-        "sfh_dpl_log_total_mass": 1.0,  # log10(10 Msun/yr) = 1
+        # 1e10 Msun, mid-prior. The comment here used to read "log10(10 Msun/yr)",
+        # which is the pre-#369 meaning of this name: that rename turned
+        # log10(SFR) into log10(M*), and c66c0aff0 (#1839) converted the prior
+        # above to the declared Uniform(7.0, 12.5) without converting this truth.
+        # A truth outside its own prior gives MAP nothing to find, so the chain
+        # started at a boundary and ray tracing reported 0% acceptance.
+        "sfh_dpl_log_total_mass": 10.0,
         # free (it carries a prior) but never given a truth value — the forward
         # used to substitute the spec default silently. Say it out loud (#1021).
         "sfh_dpl_age_gyr": float(spec.get_distribution("sfh_dpl_age_gyr").default),

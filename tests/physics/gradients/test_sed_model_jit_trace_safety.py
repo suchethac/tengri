@@ -22,8 +22,6 @@ import pytest
 
 pytestmark = pytest.mark.gradient
 
-jax.config.update("jax_enable_x64", True)
-
 _DATA = Path(__file__).resolve().parents[4] / "data"
 _MAPPINGS_H5 = _DATA / "mappings_templates.h5"
 _CAT3D_H5 = _DATA / "cat3d_wind_torus_grid.h5"
@@ -116,7 +114,7 @@ def cat3d_spec_with_filters(synthetic_ssp):
         dust_tau_diff=Fixed(0.0),
         dust_slope=Fixed(-0.7),
         agn_model="cat3d_wind",
-        agn_log_lbol=Fixed(44.0),
+        agn_log_lbol=Fixed(10.42),
         agn_cos_inc=Fixed(0.5),
         agn_a_cat3d=Fixed(-2.0),
         agn_fwd_cat3d=Fixed(1.75),

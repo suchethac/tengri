@@ -48,6 +48,7 @@ import jax.numpy as jnp
 
 from tengri.observation.spectral_indices import _window_mean_flux, soft_window_ssp_integral
 from tengri.utils.physics_constants import C_AA
+from tengri.utils.scale import apply_log10_scale
 
 
 @dataclasses.dataclass(frozen=True)
@@ -74,7 +75,7 @@ class LineDef:
     feature: tuple
 
 
-def _line_flux_from_means(feat_mean, cont_mean, lam_c, feat_width, four_pi_dl2):
+def _line_flux_from_means(feat_mean, cont_mean, lam_c, feat_width, log10_four_pi_dl2):
     r"""Observed line flux from feature + continuum mean fluxes — the one operator.
 
     ``feat_mean`` / ``cont_mean`` are physical mean :math:`L_\nu` [erg/s/Hz]
@@ -82,6 +83,14 @@ def _line_flux_from_means(feat_mean, cont_mean, lam_c, feat_width, four_pi_dl2):
     subtracted mean to a per-wavelength emission, multiplies by the feature width
     (rectangular narrow-line approximation of :math:`\int (L_\nu-L_\nu^{\rm cont})
     \,d\nu`), and divides by :math:`4\pi d_L^2`.
+
+    .. math::
+
+        F_{\rm line} = (\bar L_\nu^{\rm feat} - \bar L_\nu^{\rm cont})
+                       \frac{c}{\lambda_c^2}\,\Delta\lambda \big/ 4\pi d_L^2
+
+    with :math:`\bar L_\nu` [erg/s/Hz], :math:`c` [Å/s], :math:`\lambda_c` and
+    :math:`\Delta\lambda` [Å], :math:`d_L` [cm], giving [erg/s/cm^2].
 
     Parameters
     ----------
@@ -91,16 +100,36 @@ def _line_flux_from_means(feat_mean, cont_mean, lam_c, feat_width, four_pi_dl2):
         Feature-window center :math:`\lambda_c` [Å].
     feat_width : float
         Feature-window width :math:`\Delta\lambda` [Å].
-    four_pi_dl2 : ndarray, shape ()
-        :math:`4\pi d_L^2` [cm^2] at the evaluation redshift.
+    log10_four_pi_dl2 : ndarray, shape ()
+        :math:`\log_{10}(4\pi d_L^2)` [dex], from
+        :func:`tengri.utils.scale.log10_four_pi_dl2`.
 
     Returns
     -------
     ndarray, shape ()
         Observed line flux [erg/s/cm^2]; positive for emission.
+
+    Notes
+    -----
+    JIT/grad/vmap-safe.
+
+    **Neither the numerator nor the denominator is materialized** (#1859). Both
+    are out of float32 range and in opposite directions, while the answer sits
+    comfortably inside it: for an ordinary galaxy the ``erg/s`` line luminosity is
+    ~1.4e40 (float32 max 3.4e38) and :math:`4\pi d_L^2` is ~1.0e57, so the linear
+    spelling was ``inf/inf`` — ``nan`` at *every* redshift, including the 10-pc
+    :math:`z=0` convention. Grouping the two conversion constants with the
+    distance into one log offset and applying it to the O(1e28) mean keeps every
+    intermediate in range.
+
+    The line-luminosity overflow is distance-independent, so repairing only the
+    divisor would have left the ``nan`` in place.
     """
-    l_line = (feat_mean - cont_mean) * (C_AA / lam_c**2) * feat_width  # erg/s
-    return l_line / four_pi_dl2
+    # log10 of (c / lam_c^2) * feat_width / (4 pi d_L^2) — a ~-45 dex offset that
+    # exists only as an exponent. feat_width == 0 gives -inf, which powers back to
+    # an exact 0.0, matching the linear form's multiply-by-zero.
+    log10_conv = jnp.log10(C_AA) - 2.0 * jnp.log10(lam_c) + jnp.log10(feat_width)
+    return apply_log10_scale(feat_mean - cont_mean, log10_conv - log10_four_pi_dl2)
 
 
 def _continuum_at(lam_c, x_blue, x_red, f_blue, f_red):
@@ -108,7 +137,7 @@ def _continuum_at(lam_c, x_blue, x_red, f_blue, f_red):
     return f_blue + (f_red - f_blue) * (lam_c - x_blue) / (x_red - x_blue)
 
 
-def measure_line_flux_jax(wave, sed_lnu, line_def, four_pi_dl2):
+def measure_line_flux_jax(wave, sed_lnu, line_def, log10_four_pi_dl2):
     r"""Exact catalog-style line flux from a rest-frame :math:`L_\nu` SED.
 
     Backend-agnostic: measures whatever line is present in ``sed_lnu`` (Cue
@@ -125,8 +154,10 @@ def measure_line_flux_jax(wave, sed_lnu, line_def, four_pi_dl2):
         total SED, e.g. ``predict_rest_sed(...).sed``).
     line_def : LineDef
         The line + continuum window definition.
-    four_pi_dl2 : ndarray, shape ()
-        :math:`4\pi d_L^2` [cm^2] at the evaluation redshift.
+    log10_four_pi_dl2 : ndarray, shape ()
+        :math:`\log_{10}(4\pi d_L^2)` [dex] at the evaluation redshift, from
+        :func:`tengri.utils.scale.log10_four_pi_dl2`. The linear divisor is
+        ``inf`` in float32 at every distance (#1859).
 
     Returns
     -------
@@ -144,7 +175,7 @@ def measure_line_flux_jax(wave, sed_lnu, line_def, four_pi_dl2):
     f_feat = _window_mean_flux(wave, sed_lnu, flo, fhi)
     lam_c = 0.5 * (flo + fhi)
     cont = _continuum_at(lam_c, 0.5 * (blo + bhi), 0.5 * (rlo + rhi), f_blue, f_red)
-    return _line_flux_from_means(f_feat, cont, lam_c, fhi - flo, four_pi_dl2)
+    return _line_flux_from_means(f_feat, cont, lam_c, fhi - flo, log10_four_pi_dl2)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -241,7 +272,9 @@ def precompute_line_windows(ssp_wave, ssp_flux, line_defs, edge_width: float = 1
     )
 
 
-def measure_line_fluxes_from_window_lut(joint_weights, scale, transmission, precomp, four_pi_dl2):
+def measure_line_fluxes_from_window_lut(
+    joint_weights, scale, transmission, precomp, log10_four_pi_dl2
+):
     r"""Fast catalog-style line fluxes from the SSP window-integral LUT.
 
     The FeaturePrecomp line-flux path: contract precomputed SSP window integrals
@@ -259,8 +292,9 @@ def measure_line_fluxes_from_window_lut(joint_weights, scale, transmission, prec
         Two-component transmission at each window center per SSP age.
     precomp : LineWindowPrecomputation
         Per-(met, age) window integrals + per-line window recipe.
-    four_pi_dl2 : ndarray, shape ()
-        :math:`4\pi d_L^2` [cm^2] at the evaluation redshift.
+    log10_four_pi_dl2 : ndarray, shape ()
+        :math:`\log_{10}(4\pi d_L^2)` [dex] at the evaluation redshift, from
+        :func:`tengri.utils.scale.log10_four_pi_dl2`.
 
     Returns
     -------
@@ -278,7 +312,7 @@ def measure_line_fluxes_from_window_lut(joint_weights, scale, transmission, prec
     out = []
     for _name, b, r, f, lam_c, width in precomp.line_slots:
         cont = _continuum_at(lam_c, centers[b], centers[r], window_means[b], window_means[r])
-        out.append(_line_flux_from_means(window_means[f], cont, lam_c, width, four_pi_dl2))
+        out.append(_line_flux_from_means(window_means[f], cont, lam_c, width, log10_four_pi_dl2))
     return jnp.stack(out)
 
 

@@ -313,7 +313,7 @@ def _usage_hint(name: str, kind: str) -> str:
     and "now what?"
 
     Patterns are based on the canonical spec/filter/fitter call sites
-    used in ``docs/spine/00_quickstart.py``.
+    used in ``notebooks/00_quickstart.py``.
     """
     if kind == "filter":
         return f'Photometry.from_names(["{name}"])'
@@ -754,10 +754,30 @@ def list_dust_laws(*, status: str | None = None) -> _RegistryTable:
 # introspection helper can never drift apart (closes #495 — same pattern
 # as PR #489 for AGN blocks).
 _DUST_EMISSION_METADATA: dict[str, dict[str, str]] = {
+    # A name missing from this table still appears on the menu — the lookup
+    # below falls back to blank strings — so it shows up as a fully-formed row
+    # describing nothing and citing nobody. Three real engines sat that way
+    # (#1777); ``tests/contract/test_menu_rows_are_not_blank.py`` now refuses a
+    # blank description on any advertised model.
     "dl07": {
         "status": "production",
         "citation": "Draine & Li 2007 (ApJ 657, 810)",
         "short_doc": "Diffuse + PAH grain mixture, Umin/Umax/qpah (alias of draine_li2007)",
+    },
+    "dl07_tabulated": {
+        "status": "deprecated",
+        "citation": "Draine & Li 2007 (ApJ 657, 810)",
+        "short_doc": "Deprecated spelling of draine_li2007 — use that name instead",
+    },
+    "dh02_ce01": {
+        "status": "production",
+        "citation": "Dale & Helou 2002 (ApJ 576, 159); Chary & Elbaz 2001 (ApJ 556, 562)",
+        "short_doc": "Cold-dust template library on a single log10(L_IR) axis",
+    },
+    "draine2021_pah": {
+        "status": "production",
+        "citation": "Draine et al. 2021 (ApJ 917, 3)",
+        "short_doc": "PAHspec grid: size distribution, ionization and starlight spectrum",
     },
     "draine_li2007": {
         "status": "production",
@@ -2802,7 +2822,7 @@ def search(query: str) -> _RegistryTable:
 
 
 def list_all() -> dict[str, _RegistryTable]:
-    """Return everything available — useful for a single notebook cell overview.
+    """Return every menu — the single notebook cell that shows the whole code.
 
     Returns
     -------

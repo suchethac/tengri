@@ -14,8 +14,6 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-jax.config.update("jax_enable_x64", True)
-
 
 def fd_grad(f, x: float, eps: float = 1e-4) -> float:
     """Central finite difference: (f(x+eps) - f(x-eps)) / (2*eps)."""
@@ -267,7 +265,7 @@ class TestFittedMode:
             warnings.simplefilter("ignore", DeprecationWarning)
             return Parameters(
                 mean_sfh_type="dpl",
-                sfh_dpl_log_total_mass=Uniform(-1.0, 2.0),
+                sfh_dpl_log_total_mass=Uniform(7.0, 12.5),
                 met_logzsol=Fixed(-0.3),
                 dust_tau_bc=Fixed(0.1),
                 dust_tau_diff=Fixed(0.1),
@@ -454,7 +452,7 @@ class TestFittedMode:
             warnings.simplefilter("ignore", DeprecationWarning)
             model_spec = Parameters(
                 mean_sfh_type="dpl",
-                sfh_dpl_log_total_mass=Uniform(-1.0, 2.0),
+                sfh_dpl_log_total_mass=Uniform(7.0, 12.5),
                 met_logzsol=Fixed(-0.3),
                 dust_tau_bc=Fixed(0.1),
                 dust_tau_diff=Fixed(0.1),

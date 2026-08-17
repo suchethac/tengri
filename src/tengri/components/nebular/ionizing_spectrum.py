@@ -487,10 +487,10 @@ def fit_ionizing_spectrum(
 
     References
     ----------
-    .. [1] M. Li et al., "The Cue Nebular Emulator: Fast, Interpretable
-       Predictions of Emission-Line Strengths from Stellar Populations,"
+    .. [1] Y. Li et al., "Cue: A Fast and Flexible Photoionization Emulator
+       for Modeling Nebular Emission Powered by Almost Any Ionizing Source,"
        ApJ, 986, 9 (2025). arXiv:2405.04598.
-       https://doi.org/10.3847/1538-4357/ad7fe3
+       https://doi.org/10.3847/1538-4357/adcab4
 
     """
     # float64 for the whole fit, whatever the SSP shipped as (#1206).

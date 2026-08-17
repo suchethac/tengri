@@ -27,12 +27,9 @@ References
 """
 
 import chex
-import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
-
-jax.config.update("jax_enable_x64", True)
 
 pytestmark = pytest.mark.crossval
 
@@ -156,50 +153,62 @@ class TestJust2007:
 
 
 class TestYang2022Anisotropy:
-    """Yang et al. 2022, ApJ, 927, 42.
+    r"""Yang et al. 2022, ApJ, 927, 192.
 
-    Anisotropy correction: f(θ) = a1*cos(θ) + a2*cos²(θ) + (1 - a1 - a2)
+    Anisotropy correction, anchored at the 30° reference inclination:
+
+    .. math::
+
+        f(\mu) = \frac{a_1 \mu + a_2 \mu^2 + (1 - a_1 - a_2)}
+                      {1 - 0.13397 a_1 - 0.25 a_2}
+
+    The α_ox(L_2500) relation that supplies ``L_2keV`` is defined at 30°, so
+    the input spectrum *is* the 30° corona and the correction is normalized to
+    leave it unchanged there. Face-on is therefore brighter than the anchor,
+    not equal to it. X-CIGALE ``yang20.py:231-235``; see #980.
     """
 
-    def test_face_on_maximum(self):
-        """Face-on (cos_inc=1) gives maximum luminosity (factor=1.0)."""
+    @staticmethod
+    def _expected(mu: float, a1: float, a2: float) -> float:
+        """Anchored Yang+2022 factor, written from the paper not the code."""
+        numerator = a1 * mu + a2 * mu**2 + (1.0 - a1 - a2)
+        denominator = 1.0 - 0.13397 * a1 - 0.25 * a2
+        return numerator / denominator
+
+    def test_face_on_is_brighter_than_the_30_degree_anchor(self):
+        """Face-on (cos_inc=1) is the maximum, and exceeds the anchor."""
         from tengri.components.xray import xray_anisotropy
 
         l_x = jnp.ones(10)
         result = xray_anisotropy(l_x, cos_inc=1.0, a1=0.5, a2=0.0)
-        np.testing.assert_allclose(result, 1.0, atol=0.01)
+        np.testing.assert_allclose(result, self._expected(1.0, 0.5, 0.0), rtol=1e-6)
+        assert float(result[0]) > 1.0, "face-on must exceed the 30 deg anchor"
 
     def test_edge_on_reduced(self):
-        """Edge-on (cos_inc=0) gives f = (1 - a1 - a2).
-
-        With default a1=0.5, a2=0: f(0) = 0.5.
-        """
+        """Edge-on (cos_inc=0) gives (1 - a1 - a2) over the anchor."""
         from tengri.components.xray import xray_anisotropy
 
         l_x = jnp.ones(10)
         result = xray_anisotropy(l_x, cos_inc=0.0, a1=0.5, a2=0.0)
-        np.testing.assert_allclose(result, 0.5, atol=0.01)
+        np.testing.assert_allclose(result, self._expected(0.0, 0.5, 0.0), rtol=1e-6)
 
     def test_formula_at_45_degrees(self):
-        """At 45° (cos_inc=0.707): f = 0.5*0.707 + 0 + 0.5 = 0.854."""
+        """At 45 degrees (cos_inc = 0.7071)."""
         from tengri.components.xray import xray_anisotropy
 
-        cos45 = np.cos(np.radians(45.0))
+        cos45 = float(np.cos(np.radians(45.0)))
         l_x = jnp.ones(10)
         result = xray_anisotropy(l_x, cos_inc=cos45, a1=0.5, a2=0.0)
-        expected = 0.5 * cos45 + 0.5
-        np.testing.assert_allclose(result, expected, atol=0.01)
+        np.testing.assert_allclose(result, self._expected(cos45, 0.5, 0.0), rtol=1e-6)
 
     def test_a1_a2_formula(self):
-        """General formula: f = a1*cos + a2*cos^2 + (1-a1-a2)."""
+        """General formula scales the input spectrum linearly."""
         from tengri.components.xray import xray_anisotropy
 
-        cos_inc = 0.6
-        a1, a2 = 0.3, 0.2
+        cos_inc, a1, a2 = 0.6, 0.3, 0.2
         l_x = jnp.array([2.0])
         result = float(xray_anisotropy(l_x, cos_inc, a1, a2)[0])
-        expected = 2.0 * (a1 * cos_inc + a2 * cos_inc**2 + (1 - a1 - a2))
-        np.testing.assert_allclose(result, expected, rtol=1e-6)
+        np.testing.assert_allclose(result, 2.0 * self._expected(cos_inc, a1, a2), rtol=1e-6)
 
 
 # ── 4. MARTINEZ-RAMIREZ+2024 — double power-law AGN radio ─────────

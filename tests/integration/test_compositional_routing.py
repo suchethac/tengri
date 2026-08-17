@@ -27,8 +27,6 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.forward.sed_model import SEDModel
 from tengri.observation.filters import load_filter_set
@@ -72,7 +70,7 @@ class TestEvolvingZRouting:
     def evolvingz_spec(self):
         return Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
+            sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
             sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
             sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),
@@ -138,7 +136,7 @@ class TestChemEvolRouting:
         # chem_evol params all have Fixed defaults — no Uniform needed
         return Parameters(
             mean_sfh_type="tsnorm",
-            sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5),
+            sfh_tsnorm_log_total_mass=Uniform(7.0, 12.5),
             sfh_tsnorm_peak_lbt_gyr=Uniform(0.5, 12.0),
             sfh_tsnorm_width_gyr=Uniform(0.2, 5.0),
             sfh_tsnorm_skew=Uniform(-1.0, 1.0),

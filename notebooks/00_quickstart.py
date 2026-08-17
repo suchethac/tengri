@@ -45,6 +45,7 @@ import tengri
 from tengri import (
     FIXED,
     FREE,
+    Data,
     Fixed,
     ForwardModel,
     Observation,
@@ -68,7 +69,8 @@ C_POST, C_TRUTH, C_DATA = "#3a76d9", "0.15", "#c3372a"
 # ## Stellar library and observation
 #
 # A bare-stellar SSP grid (Cue-compatible if you later want to add nebular
-# emission). `download_ssp` fetches on first use.
+# emission). `load_ssp` with `download=True` fetches the grid on first use if not
+# cached locally; without it, raises `FileNotFoundError` if the grid is missing.
 
 # %%
 SSP_NAME = "fsps_prsc_miles_chabrier"
@@ -176,9 +178,9 @@ print(f"  ∇log-likelihood  warm:       {time.perf_counter() - t:8.4f} s")
 # %% [markdown]
 # ## Fit
 #
-# `forward.fit(flux, noise, ...)` is the whole interface: hand it the data and
-# pick a method. Which channel the data belongs to is read off the observation —
-# this one is photometry, so there is nothing to declare.
+# `forward.fit(Data(photometry=(flux, noise)), ...)` is the whole interface: wrap
+# the data in the `Data` container with the channel name (here, `photometry`), hand
+# it to the fitter, and pick a method. The channel is explicit and unambiguous.
 #
 # Multi-start ADAM for the MAP point estimate, then NUTS with four parallel
 # chains via `jax.vmap` for the full posterior. Each stack JIT-compiles on first
@@ -192,37 +194,62 @@ print(f"  ∇log-likelihood  warm:       {time.perf_counter() - t:8.4f} s")
 # from the run key) and keeps the lowest-loss one; NUTS is then seeded from that
 # MAP point (`init_from=map_result`). Fully JAX-native, and it converges cleanly
 # (`r_hat ≈ 1.0`).
+#
+# The counts are sized to the problem, and the two knobs are not
+# interchangeable. **Draws** are cheap to cut: 1000 already resolve the
+# posterior far past what the 200-draw summaries and the corner plot below
+# consume, so 600 per chain bought nothing but wall-clock. **Warm-up** is not
+# — it is what buys the step size. Measured on this fit at 250 draws, dropping
+# warm-up to 500 gave 4 divergences and split-R̂ 1.017, and 1000 still left 1
+# divergence; 1500 is where it reaches 0 and the claims below hold. Cut the
+# draws, keep the warm-up.
 
 # %%
 t = time.perf_counter()
 map_result = forward.fit(
-    flux_obs,
-    noise,
+    Data(photometry=(flux_obs, noise)),
     method="map",
     key=key_fit,
     n_restarts=8,
-    n_steps=5000,
+    n_steps=800,  # loss is flat well before this; 5000 bought nothing but wall
 )
 print(f"  MAP wall:  {time.perf_counter() - t:6.2f} s")
 
 t = time.perf_counter()
 posterior = forward.fit(
-    flux_obs,
-    noise,
+    Data(photometry=(flux_obs, noise)),
     method="mcmc_nuts",
     key=key_fit,
     init_from=map_result,  # seed all chains at the MAP point
     n_warmup=1500,
-    n_samples=600,
+    n_samples=250,
     n_chains=4,
     n_burnin=0,
     dense_mass_matrix=False,  # diagonal mass matrix — D=7 fits fine, far less RAM
+    target_accept_rate=0.9,  # smaller steps; the default left divergences here
 )
-print(f"  NUTS wall (4 chains × 600 = 2400 samples): {time.perf_counter() - t:6.2f} s")
+print(f"  NUTS wall (4 chains × 250 = 1000 samples): {time.perf_counter() - t:6.2f} s")
 posterior.summary()
 
-# Convergence check: split-R̂ should sit below ~1.01 with few divergences,
-# otherwise the credible intervals are not trustworthy.
+# Convergence check. Two numbers, and they fail in different ways.
+#
+# Divergences are the serious one: a divergent transition means the integrator
+# left the typical set, so those draws bias the posterior. This fit reports 0.
+# Getting there is what `target_accept_rate=0.9` buys — at the default this fit
+# left divergences in the low hundreds, which the published page carried
+# unnoticed.
+#
+# Split-R̂ measures whether the four chains agree, and lands at ~1.00 here — under
+# the 1.01 you should insist on before quoting an interval in a paper.
+#
+# One caveat about how it is earned: `init_from=map_result` starts every chain at
+# the same MAP point. Identical starts under-disperse the chains, which can flatter
+# R̂ by understating the between-chain variance. Measured both ways at 3000 warmup,
+# it makes no difference here — MAP-seeded and dispersed starts both give 1.0008 —
+# so the number is real, not an artifact of the seeding.
+#
+# And note R̂ cannot see a chain that never moved: a frozen chain scores ~1.0 too.
+# Read it together with the divergence count, never alone.
 rhat = posterior.rhat()
 print(
     f"\n  max split-R̂ = {max(float(v) for v in rhat.values()):.4f}"
@@ -254,8 +281,8 @@ def draw_dicts(n):
 DERIVED_KEYS = ("stellar_mass", "sfr_100myr", "sfr_10myr", "ssfr")
 samples = {k: [] for k in DERIVED_KEYS}
 for p in draw_dicts(N_DRAWS):
-    pred = sed_model.predict(p)
-    d = pred.properties
+    # Use predict_properties for ~4× speedup vs predict().properties
+    d = sed_model.predict_properties(p, names=DERIVED_KEYS)
     for k in DERIVED_KEYS:
         v = d.get(k)
         samples[k].append(float("nan") if v is None else float(v))
@@ -292,7 +319,7 @@ def obs_fnu(params):
     return np.asarray(lnu_to_fnu(jnp.asarray(lnu_interp), dl_cm, z_truth))
 
 
-spec_draws = np.stack([obs_fnu(p) for p in draw_dicts(60)])
+spec_draws = np.stack([obs_fnu(p) for p in draw_dicts(40)])
 spec_lo, spec_med, spec_hi = np.percentile(spec_draws, [16, 50, 84], axis=0)
 spec_truth = obs_fnu(truth_full)
 
@@ -374,7 +401,6 @@ fig.savefig(FIG_DIR / "00_posterior_sed.pdf", bbox_inches="tight")
 # %% [markdown]
 # ## Star-formation history
 
-
 # %%
 def sfh(p):
     s = sed_model.predict_state(p)
@@ -385,7 +411,7 @@ def sfh(p):
 
 
 sfr_draws, lbt = [], None
-for p in draw_dicts(120):
+for p in draw_dicts(80):
     lbt_i, sfr_i = sfh(p)
     sfr_draws.append(sfr_i)
     if lbt is None:

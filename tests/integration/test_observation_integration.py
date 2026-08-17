@@ -11,8 +11,6 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-jax.config.update("jax_enable_x64", True)
-
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.forward.sed_model import SEDModel
 from tengri.inference.fitter import Fitter
@@ -46,7 +44,7 @@ def base_spec():
         sfh_dpl_alpha=Uniform(0.5, 3.0),
         sfh_dpl_beta=Uniform(0.3, 2.0),
         sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
-        sfh_dpl_log_total_mass=Uniform(-1.0, 2.5),
+        sfh_dpl_log_total_mass=Uniform(7.0, 12.5),
         met_logzsol=Uniform(-1.5, 0.2),
         dust_tau_bc=Uniform(0.0, 3.0),
         redshift=Fixed(0.5),
@@ -134,7 +132,7 @@ class TestObservationWithModel:
             sfh_dpl_alpha=Uniform(0.5, 3.0),
             sfh_dpl_beta=Uniform(0.3, 2.0),
             sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
-            sfh_dpl_log_total_mass=Uniform(-1.0, 2.5),
+            sfh_dpl_log_total_mass=Uniform(7.0, 12.5),
             met_logzsol=Uniform(-1.5, 0.2),
             dust_tau_bc=Uniform(0.0, 3.0),
             redshift=Fixed(0.5),

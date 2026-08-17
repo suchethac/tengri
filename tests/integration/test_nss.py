@@ -12,8 +12,6 @@ import jax
 import numpy as np
 import pytest
 
-jax.config.update("jax_enable_x64", True)
-
 _SSP_PATH = Path("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
 _SSP_EXISTS = _SSP_PATH.exists()
 pytestmark = pytest.mark.skipif(not _SSP_EXISTS, reason="SSP data not found")
@@ -27,7 +25,7 @@ def smooth_fitter():
     spec = Parameters(
         sfh_dpl_alpha=Uniform(0.5, 3.0),
         sfh_dpl_tau_gyr=Uniform(0.5, 10.0),
-        sfh_dpl_log_total_mass=Uniform(-1.0, 2.0),
+        sfh_dpl_log_total_mass=Uniform(7.0, 12.5),
         met_logzsol=Uniform(-2.0, 0.2),
         dust_tau_bc=Uniform(0.0, 3.0),
         redshift=0.1,

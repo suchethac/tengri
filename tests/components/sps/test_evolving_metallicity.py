@@ -24,10 +24,9 @@ from tengri.components.stellar.sps.dsps_wrapper import (
     interpolate_metallicity_evolving,
 )
 from tengri.parameters.parameters import Parameters
+from tests._grad_parity import assert_grad_matches_fd
 
 pytestmark = pytest.mark.bounds
-
-jax.config.update("jax_enable_x64", True)
 
 
 def fd_grad(f, x: float, eps: float = 1e-4) -> float:
@@ -243,7 +242,7 @@ class TestEvolvingMetallicityGradients:
             flux = interpolate_metallicity_evolving(ssp_flux, ssp_lgmet, log_z_arr)
             return jnp.sum(flux**2)
 
-        grad = jax.grad(loss)(log_z_per_age)
+        grad = assert_grad_matches_fd(loss, log_z_per_age)
         chex.assert_tree_all_finite(grad)
         assert jnp.any(grad != 0.0), "Gradients must be non-zero"
 

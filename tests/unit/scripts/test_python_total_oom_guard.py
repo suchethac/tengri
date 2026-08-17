@@ -162,8 +162,16 @@ def test_pressure_gate_suppresses_shedding_when_python_is_small(tmp_path):
     process, because 2 GB of python cannot fix a 20 GB shortfall caused by
     something else. The gate also makes the runaway self-limiting: once enough
     has been shed, python falls under it and shedding stops on its own.
+
+    The fixture must contain the "something else", or the claim is untestable:
+    with only python in the process table python is 100% of resident memory and
+    suppressing is the wrong answer. The 40 GB hog below is the elsewhere.
     """
-    procs = [(701, 1 * GB, "/venv/bin/python tiny-a"), (702, 1 * GB, "/venv/bin/python tiny-b")]
+    procs = [
+        (701, 1 * GB, "/venv/bin/python tiny-a"),
+        (702, 1 * GB, "/venv/bin/python tiny-b"),
+        (800, 40 * GB, "/Applications/Hog.app/Contents/MacOS/Hog"),
+    ]
     log = _run_guard(
         tmp_path,
         procs,
@@ -177,6 +185,40 @@ def test_pressure_gate_suppresses_shedding_when_python_is_small(tmp_path):
 
     assert _victim_pids(log) == []
     assert "not shedding" in log
+    assert "Hog" in log, f"the log must name the culprit, not just say 'elsewhere':\n{log}"
+
+
+def test_swap_undercount_must_not_veto_a_firing_trigger(tmp_path):
+    """The 2026-08-16 crash: summed RSS vetoed six consecutive growth trips.
+
+    Two python processes held 20 GB+ each, but most of their pages were swapped
+    out, so RSS summed to 4.98 GB — under ``PRESSURE_MIN_PYTHON_GB=8``. The gate
+    concluded "the memory is elsewhere", suppressed every trip, and the box
+    panicked ~4 minutes later on a watchdogd timeout.
+
+    RSS is the number that collapses *because* the machine is thrashing, which
+    is why it was demoted as a trigger — and it must not be allowed to veto the
+    triggers that did fire. Python's *share* of resident memory survives the
+    undercount, because everything resident shrinks together.
+    """
+    procs = [
+        (901, 2500 * MB, "/venv/bin/python -m pytest heavy-a"),
+        (902, 2000 * MB, "/venv/bin/python -m pytest heavy-b"),
+        (903, 480 * MB, "/venv/bin/python -u -c import sys"),
+    ]
+    log = _run_guard(
+        tmp_path,
+        procs,
+        avail_kb=int(0.18 * 48 * GB),
+        swap_used_kb=[15 * GB, 18 * GB, 21 * GB, 22 * GB],
+        shipped_defaults=True,
+        RAM_KB_OVERRIDE=48 * GB,
+        TOTAL_LIMIT_GB=32,
+        MAX_TICKS=4,
+    )
+
+    assert "TRIP" in log, f"the growth trigger was vetoed by an undercounted RSS again:\n{log}"
+    assert _victim_pids(log), "tripped but shed nobody"
 
 
 def test_healthy_machine_kills_nothing(tmp_path):

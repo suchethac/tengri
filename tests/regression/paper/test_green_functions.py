@@ -18,6 +18,7 @@ from tengri.analysis.diagnostics.green_functions import (
     compute_window_function,
     compute_window_function_fourier,
 )
+from tests._bounds import assert_non_negative
 
 pytestmark = pytest.mark.regression_paper
 
@@ -179,7 +180,7 @@ class TestComputeWindowFunctionFourier:
         chex.assert_shape(omega, (expected_len,))
         chex.assert_tree_all_finite(power)
         chex.assert_tree_all_finite(omega)
-        assert jnp.all(power >= 0.0)
+        assert_non_negative(power, name="power")
 
     def test_zero_window_gives_zero_power(self, synthetic_ssp):
         _, _, ages_yr = synthetic_ssp
@@ -205,7 +206,7 @@ class TestComputeWindowFunctionFourier:
         _, _, ages_yr = synthetic_ssp
         window_fn = jnp.ones(ages_yr.shape[0])
         _, omega = compute_window_function_fourier(window_fn, ages_yr)
-        assert jnp.all(jnp.diff(omega) >= 0.0)
+        assert_non_negative(jnp.diff(omega), name="output")
 
 
 # ── compute_time_sensitivity_matrix ───────────────────────────────

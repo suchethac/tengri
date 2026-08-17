@@ -5,10 +5,7 @@ pytestmark = pytest.mark.contract
 
 """Tests for MCLMC and Adjusted MCLMC sampler integration."""
 
-import jax
 import pytest
-
-jax.config.update("jax_enable_x64", True)
 
 try:
     import blackjax  # noqa: F401

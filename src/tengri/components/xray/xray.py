@@ -23,6 +23,8 @@ for obscured and low-luminosity AGN where UV is unreliable.
 Lopez+2024), implemented in JAX for gradient-based inference.
 """
 
+from typing import Any
+
 import jax.numpy as jnp
 
 from tengri._deprecated import deprecated_alias
@@ -31,6 +33,7 @@ from tengri.utils.physics_constants import (
     H_PLANCK as _H_PLANCK,
     KEV_TO_ERG as _KEV_TO_ERG,
     KEV_TO_HZ as _KEV_TO_HZ,
+    Z_SUN as _Z_SUN,
 )
 from tengri.utils.scale import pow10 as _pow10
 
@@ -455,11 +458,59 @@ def _cutoff_powerlaw_band_norm(
     return jnp.maximum(jnp.trapezoid(spec_fine, nu_fine), 1e-60)
 
 
+def metallicity_from_history(log_z_history: Any) -> jnp.ndarray | float:
+    """Present-day absolute Z from a published ``log_metallicity_history``.
+
+    The single definition of how the X-ray block turns the stellar component's
+    metallicity history into the scalar Z the Lehmer+2016 HMXB quartic wants.
+    Both X-ray components call it, so the fallback and the index convention
+    exist in exactly one place (#1755).
+
+    Parameters
+    ----------
+    log_z_history : array_like, shape (n_grid,), or None, or scalar
+        ``state.derived["log_metallicity_history"]`` — absolute log10(Z) per SFH
+        bin, index 0 being the present day. [dex]
+
+        Two shapes mean "absent", because the two component base classes signal
+        it differently: the bare-Protocol path leaves the key out of the dict
+        entirely (``None`` here), while :class:`SEDModelComponent` substitutes a
+        0-d ``jnp.asarray(0.0)`` for any declared-but-unpublished optional input.
+        A real history is always 1-D, so rank alone separates them — and it must
+        be checked, since ``10**0.0`` is Z = 1, a metallicity 70x solar that the
+        quartic would happily evaluate.
+
+    Returns
+    -------
+    ndarray or float, scalar
+        Absolute metallicity as a mass fraction, or
+        :data:`~tengri.utils.physics_constants.Z_SUN` when no history is
+        published. []
+
+    Notes
+    -----
+    **JIT-compatible**: yes. The absent-checks are on rank and on ``None``,
+    both static under tracing; only the ``10**`` is traced.
+
+    Why the present-day bin and not a mass-weighted mean: HMXBs are young
+    systems (age < 100 Myr) tracing the instantaneous SFR, so the relevant
+    metallicity is the one the currently-forming population was born with.
+    This is the same reduction :mod:`tengri.components.nebular.component`
+    applies for the gas-phase metallicity, and for the same reason.
+    """
+    if log_z_history is None:
+        return _Z_SUN
+    arr = jnp.asarray(log_z_history)
+    if arr.ndim == 0:
+        return _Z_SUN
+    return jnp.power(10.0, arr[0])
+
+
 def xray_xrb_terms(
     wavelength: jnp.ndarray,
     sfr: float,
     stellar_mass: float,
-    metallicity_z: float = 0.02,
+    metallicity_z: float = _Z_SUN,
     stellar_age_gyr: float = 1.0,
     gamma_hmxb: float = 2.0,
     gamma_lmxb: float = 1.6,
@@ -483,7 +534,11 @@ def xray_xrb_terms(
     stellar_mass : float
         Stellar mass. [Msun]
     metallicity_z : float, optional
-        Metallicity (mass fraction, not log Z/Z_sun). Default: 0.02 (solar). []
+        Metallicity (mass fraction, not log Z/Z_sun). Default:
+        :data:`~tengri.utils.physics_constants.Z_SUN` = 0.0142, the project-wide
+        solar (Asplund 2009). A *fallback* only: on the model path the X-ray
+        component passes the galaxy's own present-day Z, read from the
+        stellar-published ``log_metallicity_history`` (#1755). []
     stellar_age_gyr : float, optional
         Stellar age in Gyr. Default: 1.0. [Gyr]
     gamma_hmxb : float, optional
@@ -528,11 +583,18 @@ def xray_xrb_terms(
                 40.28 - 62.12Z + 569.44Z^2 - 1833.80Z^3 + 1968.33Z^4
                 \quad [\mathrm{erg\,s^{-1}\,(M_\odot\,yr^{-1})^{-1}}]
 
-        At the ``metallicity_z=0.02`` default this yields 1.78×10^39 erg/s
-        per M_sun/yr SFR; at the Asplund (2009) solar Z=0.0142 it yields
-        3.22×10^39 (#1755). Both are pinned by
+        At the ``metallicity_z`` default — ``Z_SUN`` = 0.0142, the project-wide
+        solar — this yields 3.22×10^39 erg/s per M_sun/yr SFR; at the older
+        Z=0.02 convention it yields 1.78×10^39 (#1755). Both are pinned by
         ``test_xray_lehmer_hmxb_docstring_values``, so this number cannot
         drift from the equation above again.
+
+        The relation is steep in Z — an 18x spread across
+        ``met_logzsol`` ∈ [-1, +0.3] — so the value must track the galaxy, not
+        a constant. It does: the component passes the present-day metallicity
+        published by the stellar component. Before #1755 the key it read
+        (``metallicity_z``) was published by nothing, so this term was frozen
+        at the signature default and the fitted metallicity moved it not at all.
 
     **LMXB luminosity scaling** (Lehmer et al. 2016, ApJ 825, 7, Eq. 15):
         LMXBs are old systems (age > 1 Gyr), so their population traces
@@ -652,7 +714,7 @@ def xray_xrb(
     wavelength: jnp.ndarray,
     sfr: float,
     stellar_mass: float,
-    metallicity_z: float = 0.02,
+    metallicity_z: float = _Z_SUN,
     stellar_age_gyr: float = 1.0,
     gamma_hmxb: float = 2.0,
     gamma_lmxb: float = 1.6,
@@ -677,7 +739,11 @@ def xray_xrb(
     stellar_mass : float
         Stellar mass. [Msun]
     metallicity_z : float, optional
-        Metallicity (mass fraction, not log Z/Z_sun). Default: 0.02 (solar). []
+        Metallicity (mass fraction, not log Z/Z_sun). Default:
+        :data:`~tengri.utils.physics_constants.Z_SUN` = 0.0142, the project-wide
+        solar (Asplund 2009). A *fallback* only: on the model path the X-ray
+        component passes the galaxy's own present-day Z, read from the
+        stellar-published ``log_metallicity_history`` (#1755). []
     stellar_age_gyr : float, optional
         Stellar age in Gyr. Default: 1.0. [Gyr]
     gamma_hmxb : float, optional
@@ -716,11 +782,18 @@ def xray_xrb(
                 40.28 - 62.12Z + 569.44Z^2 - 1833.80Z^3 + 1968.33Z^4
                 \quad [\mathrm{erg\,s^{-1}\,(M_\odot\,yr^{-1})^{-1}}]
 
-        At the ``metallicity_z=0.02`` default this yields 1.78×10^39 erg/s
-        per M_sun/yr SFR; at the Asplund (2009) solar Z=0.0142 it yields
-        3.22×10^39 (#1755). Both are pinned by
+        At the ``metallicity_z`` default — ``Z_SUN`` = 0.0142, the project-wide
+        solar — this yields 3.22×10^39 erg/s per M_sun/yr SFR; at the older
+        Z=0.02 convention it yields 1.78×10^39 (#1755). Both are pinned by
         ``test_xray_lehmer_hmxb_docstring_values``, so this number cannot
         drift from the equation above again.
+
+        The relation is steep in Z — an 18x spread across
+        ``met_logzsol`` ∈ [-1, +0.3] — so the value must track the galaxy, not
+        a constant. It does: the component passes the present-day metallicity
+        published by the stellar component. Before #1755 the key it read
+        (``metallicity_z``) was published by nothing, so this term was frozen
+        at the signature default and the fitted metallicity moved it not at all.
 
     **LMXB luminosity scaling** (Lehmer et al. 2016, ApJ 825, 7, Eq. 15):
         LMXBs are old systems (age > 1 Gyr), so their population traces
@@ -951,8 +1024,8 @@ def xray_hotgas(
 
     References
     ----------
-    .. [1] G. Yang et al., "Fitting AGN/galaxy X-ray-to-radio SEDs with
-       CIGALE and improvement of the code," MNRAS, 491, 740 (2020).
+    .. [1] G. Yang et al., "X-CIGALE: fitting AGN/galaxy SEDs from X-ray
+       to infrared," MNRAS, 491, 740 (2020).
        https://doi.org/10.1093/mnras/stz3001
     .. [2] G. Yang et al., "Fitting AGN/galaxy X-ray-to-radio SEDs with
        CIGALE and improvement of the code," ApJ, 927, 192 (2022).
@@ -1257,8 +1330,8 @@ def xray_agn_corona(
        dependence of narrow emission-line regions in nearby active galactic
        nuclei," ApJ, 665, 1004 (2007).
        https://doi.org/10.1086/519990
-    .. [2] G. Yang et al., "Fitting AGN/galaxy X-ray-to-radio SEDs with
-       CIGALE and improvement of the code," MNRAS, 491, 740 (2020).
+    .. [2] G. Yang et al., "X-CIGALE: fitting AGN/galaxy SEDs from X-ray
+       to infrared," MNRAS, 491, 740 (2020).
        https://doi.org/10.1093/mnras/stz3001
     .. [3] G. Yang et al., "Fitting AGN/galaxy X-ray-to-radio SEDs with
        CIGALE and improvement of the code," ApJ, 927, 192 (2022).
@@ -1382,7 +1455,7 @@ def xray_total_terms(
     wavelength: jnp.ndarray,
     sfr: float = 1.0,
     stellar_mass: float = 1e10,
-    metallicity_z: float = 0.02,
+    metallicity_z: float = _Z_SUN,
     stellar_age_gyr: float = 1.0,
     l_2500_30deg: float = 0.0,
     gamma_hmxb: float = 2.0,
@@ -1417,7 +1490,11 @@ def xray_total_terms(
     stellar_mass : float
         Stellar mass [Msun]. Default: 1e10.
     metallicity_z : float
-        Metallicity (mass fraction). Default: 0.02 (solar). []
+        Metallicity (mass fraction). Default:
+        :data:`~tengri.utils.physics_constants.Z_SUN` = 0.0142, the project-wide
+        solar (Asplund 2009). A *fallback* only: on the model path the X-ray
+        component passes the galaxy's own present-day Z, read from the
+        stellar-published ``log_metallicity_history`` (#1755). []
     stellar_age_gyr : float
         Stellar age in Gyr. Default: 1.0. [Gyr]
     l_2500_30deg : float
@@ -1526,7 +1603,7 @@ def xray_total(
     wavelength: jnp.ndarray,
     sfr: float = 1.0,
     stellar_mass: float = 1e10,
-    metallicity_z: float = 0.02,
+    metallicity_z: float = _Z_SUN,
     stellar_age_gyr: float = 1.0,
     l_2500_30deg: float = 0.0,
     gamma_hmxb: float = 2.0,
@@ -1561,7 +1638,11 @@ def xray_total(
     stellar_mass : float
         Stellar mass [Msun]. Default: 1e10.
     metallicity_z : float
-        Metallicity (mass fraction). Default: 0.02 (solar). []
+        Metallicity (mass fraction). Default:
+        :data:`~tengri.utils.physics_constants.Z_SUN` = 0.0142, the project-wide
+        solar (Asplund 2009). A *fallback* only: on the model path the X-ray
+        component passes the galaxy's own present-day Z, read from the
+        stellar-published ``log_metallicity_history`` (#1755). []
     stellar_age_gyr : float
         Stellar age in Gyr. Default: 1.0. [Gyr]
     l_2500_30deg : float
@@ -1847,6 +1928,7 @@ def xray_total_lopez24_terms(
     sfr: float = 1.0,
     stellar_mass: float = 1e10,
     stellar_age_gyr: float = 1.0,
+    metallicity_z: float = _Z_SUN,
     l_12um_erg_hz: float = 0.0,
     alpha_irx: float = 0.3,
     gamma_hmxb: float = 2.0,
@@ -1854,6 +1936,8 @@ def xray_total_lopez24_terms(
     gamma_agn: float = 1.8,
     E_cut: float = 300.0,
     log_nh: float = 20.0,
+    log_L_hmxb_offset: float = 0.0,
+    log_L_lmxb_offset: float = 0.0,
     **_kwargs,
 ) -> dict[str, jnp.ndarray]:
     r"""Unsummed X-ray SED terms using IRX-based AGN (Lopez+2024) + XRBs.
@@ -1873,6 +1957,12 @@ def xray_total_lopez24_terms(
         Stellar mass. [Msun]. Default: 1e10.
     stellar_age_gyr : float
         Stellar age in Gyr. Default: 1.0. [Gyr]
+    metallicity_z : float
+        Metallicity (mass fraction). Default:
+        :data:`~tengri.utils.physics_constants.Z_SUN` = 0.0142, the project-wide
+        solar (Asplund 2009). A *fallback* only: on the model path the X-ray
+        component passes the galaxy's own present-day Z, read from the
+        stellar-published ``log_metallicity_history`` (#1755). []
     l_12um_erg_hz : float
         Nuclear 12μm luminosity density. [erg/s/Hz]
         Default: 0.0 (no AGN X-ray contribution).
@@ -1910,14 +2000,21 @@ def xray_total_lopez24_terms(
     See :func:`xray_agn_corona_lopez24` for the α_IRX model details
     and :func:`xray_xrb_terms` for the XRB component structure.
     """
+    # ``log_L_*_offset`` are named explicitly in this signature rather than left
+    # to ``**_kwargs``: swallowed there they would be accepted and discarded, and
+    # a fix to the yang20 call site alone would have looked wired while doing
+    # nothing here (#1706).
     xrb_terms = xray_xrb_terms(
         wavelength,
         sfr=sfr,
         stellar_mass=stellar_mass,
         stellar_age_gyr=stellar_age_gyr,
+        metallicity_z=metallicity_z,
         gamma_hmxb=gamma_hmxb,
         gamma_lmxb=gamma_lmxb,
         E_cut=E_cut,
+        log_L_hmxb_offset=log_L_hmxb_offset,
+        log_L_lmxb_offset=log_L_lmxb_offset,
     )
     # Hot gas (CIGALE lopez24: 8.3e31 × SFR), shared with the yang20 path.
     hotgas = xray_hotgas(wavelength, sfr, gamma=1.0, E_cut=1.0)
@@ -1943,6 +2040,7 @@ def xray_total_lopez24(
     sfr: float = 1.0,
     stellar_mass: float = 1e10,
     stellar_age_gyr: float = 1.0,
+    metallicity_z: float = _Z_SUN,
     l_12um_erg_hz: float = 0.0,
     alpha_irx: float = 0.3,
     gamma_hmxb: float = 2.0,
@@ -1967,6 +2065,12 @@ def xray_total_lopez24(
         Stellar mass. [Msun]. Default: 1e10.
     stellar_age_gyr : float
         Stellar age in Gyr. Default: 1.0. [Gyr]
+    metallicity_z : float
+        Metallicity (mass fraction). Default:
+        :data:`~tengri.utils.physics_constants.Z_SUN` = 0.0142, the project-wide
+        solar (Asplund 2009). A *fallback* only: on the model path the X-ray
+        component passes the galaxy's own present-day Z, read from the
+        stellar-published ``log_metallicity_history`` (#1755). []
     l_12um_erg_hz : float
         Nuclear 12μm luminosity density. [erg/s/Hz]
         Default: 0.0 (no AGN X-ray contribution).
@@ -2006,6 +2110,7 @@ def xray_total_lopez24(
         sfr=sfr,
         stellar_mass=stellar_mass,
         stellar_age_gyr=stellar_age_gyr,
+        metallicity_z=metallicity_z,
         l_12um_erg_hz=l_12um_erg_hz,
         alpha_irx=alpha_irx,
         gamma_hmxb=gamma_hmxb,

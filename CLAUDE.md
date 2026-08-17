@@ -2,7 +2,7 @@
 
 ## Project overview
 
-Differentiable SED fitting code in JAX. Models galaxy star formation histories as IFT correlated fields with PSD-governed burstiness priors. Uses DSPS for differentiable stellar population synthesis.
+Differentiable SED fitting code in JAX. Models galaxy star formation histories as IFT correlated fields with PSD-governed burstiness priors. Builds on DSPS for the cosmology, metallicity weights, surviving-mass fractions and the SSP grid format; the composite-stellar-population integral on the default path is tengri's own CIC kernel (`sfh={'age_kernel': 'cic'}`), with DSPS's histogram kernel available as `'dsps'` for cross-code parity (#1727).
 
 **Name:** `tengri`.
 **Paper draft:** *(private paper draft)*
@@ -119,6 +119,21 @@ Deprecated aliases (never use in new code): `Model`, `ParamSpec`, `SpectroscopyC
 - Reference codes MUST be credited in Notes: *"Implements the same model as Prospector (Johnson et al. 2021 [N]_); validated against it."* Never describe tengri code as ported/copied/adapted from another codebase: implementations are independent. External template/SSP **data** files are "repackaged", with attribution.
 - JIT/grad/vmap compatibility MUST be stated in Notes for all `components/` and `forward/` functions.
 - VERIFY equations against the original paper before writing — do not rely on memory or other code.
+
+**Where docs go.** `docs/` serves two audiences and `docs/conf.py` publishes only one of
+them: the `exclude_patterns` list there keeps the whole contributor-only side out of the
+built site. Check that list before adding a page — being excluded is the default for
+anything a user is not meant to read.
+
+- Agent-authored design plans and specs → `docs/internal/plans/` and
+  `docs/internal/specs/`. The brainstorming skill defaults to writing under a
+  docs/superpowers/ directory instead; this line is the project preference that overrides
+  that default, and the old tree was moved so a single `internal` exclude covers every
+  contributor-only page.
+- Contributor handbook (naming, style, architecture narratives) → `docs/dev/`.
+- Anything a user should read → the published tree, plus a toctree entry in
+  `docs/index.md`. A page that is neither excluded nor in a toctree builds as an orphan
+  and emits a warning.
 
 ## Package structure
 
@@ -523,7 +538,10 @@ Search qmd first using `collections: ["tengri"]` before reading any file. Fall b
 - `docs/dev/notebook_orchestration_oom.md` — operational rules for OOM-safe notebook authoring (multi-fit, subagent zombies, watchdog)
 - `tools/check_param_prefixes.py` — CI guard for free-parameter prefix rule (NAMING_CONTRACT §3.2)
 - `tools/check_param_defaults.py` — CI guard that no signature default falls outside its parameter's declared prior. Such a default is unreachable by any fit and is usually a unit confusion: nine AGN entry points shipped `agn_log_lbol=45.0` (the `log10(erg/s)` magnitude) against a declaration in `log10(L/L_sun)`, so a bare call was ~1e33 too luminous. Read defaults off the declaration with `declared_default(PARAMS, name)` instead of repeating the number (ADR-0011)
+- `tools/check_param_ranges.py` — CI guard that a **call-site prior overlaps** its parameter's declared prior; the same rule as `check_param_defaults.py` one step later (that one checks a signature default is *inside* the support). #369 renamed `sfh_*_log_peak_sfr` → `log_total_mass` — `log10(SFR)` became `log10(M*)` — and carried the ranges over unconverted, leaving 150 sites declaring priors like `Uniform(-1.0, 2.5)` on a stellar mass (0.1–316 Msun). Every affected fit converged and nothing raised, so the tests kept passing while sampling a regime no galaxy occupies. **Overlap, not containment** — narrowing or widening a prior is ordinary; a range sharing no point with the declaration is always a units error. Pinned `Fixed()` scalars are deliberately out of scope: `Fixed(0.0)` on a `log_total_mass` is a unit-mass normalization for crossval, not a bug. Runs in `smoke` (imports the registry)
 - `tools/check_british_spelling.py` — CI guard for American-English spelling (NAMING_CONTRACT §10); `--fix` to auto-rewrite
 - `tools/check_reimplementation_language.py` — CI guard for the credit rule above: fails on "ported from" / "copied from" / "adapted from" and on "port" beside a reference-code name. Code "implements"; data is "repackaged". Files that must quote the banned wording are allowlisted in `EXCLUDE_FILES`
 - `tools/check_doc_examples.py` — CI guard that every symbol named in a `src/` docstring or published doc actually exists (`docs/api/*.rst` are autodoc stubs, so docstrings *are* the API reference, and no doctest runner executes them). Runs in the `smoke` job. `docs/dev/` is out of scope by design: design notes and parity audits legitimately name removed or not-yet-built API
+- `tools/check_notebook_cells.py` — CI guard that no committed notebook holds a code cell with its newlines deleted (`'import osimport sysimport time'`). 73 such cells sat in five notebooks for months: the JSON stays valid, so every notebook-aware tool loads them happily, `check_notebook_renders.py` covers `docs/spine/` only, and ruff never reaches `notebooks/archive_2`. **Flags on length, not on failing to parse** — a collapsed cell whose first line ends in a comment swallows the rest of the cell and parses cleanly, which was 34 of the 73 and the dangerous half (the ones that fail to parse at least announce themselves). Threshold 120 chars, measured: the longest healthy single-line cell in the tree is 90, the shortest damaged one 148. Fix by rebuilding from the jupytext `.py` mirror
+- `tools/check_file_sizes.py` — CI guard ratcheting repository growth. #1817 declined the history rewrite (public since 2026-03-21 with two third-party forks, so renumbering every commit SHA buys clone size and nothing else), which leaves the accumulation rate as the part that compounds. Outside `data/` the ten largest tracked files are all `.ipynb` between 4 and 9 MiB, almost entirely base64 PNG. Existing offenders are listed in `INVENTORY` and may stay but not grow; `data/` gets its own higher limit for the SSP grids. `--list` prints current sizes
 - `tools/check_claude_md_paths.py` — CI guard that every repo path named in **this file** exists. The guard above resolves *symbols*; this one resolves *paths*, and nothing did before `area:examples` spent an unknown stretch pointing at a *docs/examples/* that has never existed. **Code markup on a path in this file is an assertion that the path exists** — that is the rule the guard enforces, so write a path you are describing rather than citing (a removed one, a hypothetical) as plain text. A token resolves against the repo root or against `src/tengri/` (this file writes `parameters/groups.py` and 16 others package-relative). Bare basenames (`cue.py`) are references, not paths, and are deliberately not checked
