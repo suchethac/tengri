@@ -216,11 +216,19 @@ def compute_grid_weights(
                 tol = 64.0 * np.finfo(grid_concrete.dtype).eps * grid_scale_concrete
                 if (max_sp - min_sp) > tol:
                     # Non-uniform axis detected at call time. Emit warning.
-                    import warnings
+                    #
+                    # Through warn_measured, not warnings.warn: the message
+                    # rounds the spacing ratio to two decimals for humans, and a
+                    # consumer that has to regex the prose back out gets whatever
+                    # that rounding left -- "1.00x" is anything in 0.995-1.005,
+                    # which straddles "uniform" (#1645). The exact values ride on
+                    # the instance instead. Enforced by
+                    # tools/check_warning_payloads.py.
+                    from tengri.config.exceptions import warn_measured
 
                     n_pts = len(grid_concrete)
                     axis_id = f"grid[{grid_concrete[0]:.4g}..{grid_concrete[-1]:.4g}] (n={n_pts})"
-                    warnings.warn(
+                    warn_measured(
                         f"Non-uniform axis {axis_id} detected (spacing ratio "
                         f"{max_sp / min_sp:.2f}x). #1851 degeneracy applies: "
                         "the triweight kernel will use physical-space interpolation, which "
@@ -228,6 +236,10 @@ def compute_grid_weights(
                         "Pass index_space_interp=True to opt-in to corrected index-space path, "
                         "or index_space_interp=False to silence this warning.",
                         stacklevel=3,
+                        spacing_ratio=float(max_sp / min_sp),
+                        min_spacing=float(min_sp),
+                        max_spacing=float(max_sp),
+                        n_nodes=int(n_pts),
                     )
         except (TypeError, ValueError):
             # grid is a tracer or otherwise not convertible to concrete array;
