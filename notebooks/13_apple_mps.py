@@ -24,10 +24,13 @@
 # The one-line summary, measured on an Apple M4 Pro:
 #
 # ```text
-#     one galaxy at a time    ->  CPU, by one to two orders of magnitude.
-#     a few hundred a batch   ->  roughly comparable; MPS ahead on some shapes.
-#     never assume, measure   ->  run-to-run spread on MPS is ~2x.
+#     one galaxy at a time    ->  CPU, by 59x to 86x. Large and stable.
+#     ~256 galaxies a batch   ->  parity, +/-25%, whichever shape you measure.
+#     never assume, measure   ->  MPS run-to-run spread exceeds the effect size.
 # ```
+#
+# There is no throughput reason to move tengri to the Apple GPU on this hardware.
+# The honest reasons are compile time (~10x faster) and curiosity.
 #
 # The reason is not that the GPU is slow. It is that tengri moves a lot of memory
 # and does very little arithmetic — about **0.12 FLOP per byte** on the
@@ -227,27 +230,41 @@ for n in (1, 32, 256):
 # For iterating on a model that is a real gain regardless of throughput.
 
 # %% [markdown]
-# ### It depends on the SHAPE of the work, and not the way you would guess
+# ### It depends on the SHAPE of the work — but less than you would think
 #
-# "Prediction on the GPU, inference on the CPU" is the intuition. It is
-# **backwards**. Measured at batch 256, one shape per process, two runs each:
+# "Prediction on the GPU, inference on the CPU" is the natural intuition. The
+# data does not support it, and it also does not support the opposite. Batch 256,
+# one shape per process, 3–4 independent runs each:
 #
-# | shape | CPU [ms/gal] | MPS [ms/gal] | |
+# | shape | CPU [ms/gal] | MPS [ms/gal] | MPS/CPU |
 # |---|---|---|---|
-# | **A** forward `predict_photometry` | 0.225, 0.299 | 0.447, 0.644 | MPS ~2.1x slower |
-# | **B** gradient `grad(sum(predict))` | 0.552, 0.715 | 0.807, 0.546 | ~parity |
-# | **C** inference: 50 scanned grad steps | 0.414, 0.526 | 0.720, 0.686 | MPS ~1.5x slower |
+# | **A** forward `predict_photometry` | 0.288, 0.304, 0.290 | 0.296, 0.353, 0.314 | 1.08 |
+# | **B** gradient `grad(sum(predict))` | 0.577, 0.484, 0.571 | 0.497, 0.434, 0.370 | **0.76** |
+# | **C** inference: 50 scanned grad steps | 0.397, 0.389, 0.373 | 0.537, 0.530, 0.355, 0.363 | 1.15 |
 #
-# **Forward prediction is where MPS does worst**, not best. The forward pass is
-# the most memory-bound of the three — it moves the SSP and LUT traffic and then
-# does almost no arithmetic with it. The reverse pass does more work per byte
-# already moved, so the gradient is where the GPU comes closest to earning its
-# dispatch cost.
+# **All three sit within ±25% of parity, and MPS's own run-to-run spread is
+# larger than the gaps between them** — shape C ranges 0.355–0.537 ms, about 51%,
+# while CPU holds to ~5%. With this many replicates the shape ordering is simply
+# not resolvable, with one exception:
 #
-# The practical reading: if you are forward-modeling a catalog and nothing else,
-# the GPU is the *least* likely to help. If you are running gradient-based
-# inference over a large batch, it is the most likely. Neither is a large factor
-# on this hardware.
+# **The gradient is MPS's best case.** It is the only shape where MPS beat CPU in
+# every replication. That is consistent with the arithmetic-intensity argument —
+# the reverse pass does more work per byte already moved than the forward pass
+# does — but the margin is small.
+#
+# An earlier version of this notebook claimed forward prediction was MPS's
+# *worst* case at ~2.1x slower. That came from two runs and did not replicate;
+# it is 1.08x here. Both that claim and the original "MPS wins from ~250" were
+# over-read from too few samples. What survives replication is narrower:
+#
+# ```text
+#   one galaxy      ->  CPU wins by 59x (gradient) to 86x (MAP fit). Large, stable.
+#   ~256 a batch    ->  parity, +/-25%, with MPS noise exceeding the shape differences.
+#   gradient shape  ->  MPS's best case, consistently, by a small margin.
+# ```
+#
+# On this hardware there is no throughput reason to move to the GPU. The
+# defensible reasons are the compile time (§4) and curiosity.
 
 # %% [markdown]
 # ### The same numbers, as a picture
@@ -359,12 +376,12 @@ for i in (1, 2, 3):
 #
 # So: **do not fit one galaxy on the GPU.**
 #
-# Does batching rescue it? Partly, and less than §4's gradient table suggests.
-# Shape C there is exactly this question — a batch of 256 carried through 50
-# scanned gradient steps — and MPS came out ~1.5x *slower* than CPU, where the
-# bare gradient at the same batch was at parity. A fit multiplies the per-step
-# dispatch cost by the number of steps, so it inherits the worse end of the
-# range, not the better one.
+# Does batching rescue it? Partly. Shape C in §4 is exactly this question — a
+# batch of 256 carried through 50 scanned gradient steps — and it lands at
+# **1.15x slower** than CPU, i.e. parity within the noise, while the bare
+# gradient at the same batch was MPS's one consistent win. A fit multiplies
+# per-step dispatch by the step count, so it gives back some of what batching
+# buys.
 #
 # The honest position: a `CatalogFitter` over hundreds of galaxies with a vmapped
 # backend (`mcmc_nuts`, `mcmc_hmc`) is the case with the best chance, because it
