@@ -647,8 +647,10 @@ def download_ssp(
         if partial_filepath.exists():
             partial_filepath.unlink()
         raise RuntimeError(f"Failed to download {url}: {e}") from e
-    except KeyboardInterrupt:
-        # Clean up partial file on interrupt
+    except BaseException:
+        # Clean up the partial file on ANY other interruption -- BaseException so
+        # KeyboardInterrupt/SystemExit are covered too -- then re-raise. A surviving
+        # .partial shadows complete caches in other directories (#1546).
         if partial_filepath.exists():
             partial_filepath.unlink()
         raise
