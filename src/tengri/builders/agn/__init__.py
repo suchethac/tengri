@@ -10,7 +10,7 @@ AGN composition has five orthogonal sub-block axes (``disc``,
 >>> agn = {
 ...     "type": "composable",
 ...     "all_params": FREE,
-...     "log_lbol": Uniform(43, 47),
+...     "log_lbol": Uniform(9.42, 13.42),
 ...     "disc": {"type": "multicolor", "all_params": FREE},
 ...     "torus": {"type": "skirtor", "all_params": FIXED},
 ...     "nlr": {"type": "analytic"},
@@ -24,7 +24,7 @@ The factory mirror:
 >>> from tengri import builders, FREE, FIXED, Uniform
 >>> agn = builders.agn.composable(
 ...     defaults=FREE,
-...     log_lbol=Uniform(43, 47),
+...     log_lbol=Uniform(9.42, 13.42),
 ...     disc=builders.agn.disc.multicolor(defaults=FREE),
 ...     torus=builders.agn.torus.skirtor(defaults=FIXED),
 ...     nlr=builders.agn.nlr.analytic(),
@@ -53,7 +53,7 @@ All 14 top-level AGN models are exposed as factories:
 Examples
 --------
 >>> from tengri import builders, FREE, Uniform
->>> agn = builders.agn.skirtor(defaults=FREE, log_lbol=Uniform(43, 47))
+>>> agn = builders.agn.skirtor(defaults=FREE, log_lbol=Uniform(9.42, 13.42))
 >>> agn = builders.agn.simple(log_mbh=Uniform(6, 9))
 """
 

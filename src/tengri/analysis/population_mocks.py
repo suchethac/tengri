@@ -387,7 +387,7 @@ def make_population(
 
     Notes
     -----
-    Uses ``model.measure_line_fluxes(params, line_defs, fast=False)`` to
+    Uses ``model.measure_line_fluxes(params, line_defs, approx=False)`` to
     measure emission lines, the same operator the likelihood uses, ensuring
     mock self-consistency. Halpha in absorption is a legitimate outcome of
     burstiness during a lull and is always reported via ``n_halpha_absorption``.
@@ -476,14 +476,14 @@ def make_population(
             # Both prediction calls are inside the capture, not just the first.
             # `predict_photometry` runs the traced path, where this check is
             # deliberately skipped; the warning comes from the EAGER path, which
-            # here is `measure_line_fluxes(fast=False)`. Wrapping only the
+            # here is `measure_line_fluxes(approx=False)`. Wrapping only the
             # photometry call recorded 0.0 for every galaxy while the warnings
             # still reached stderr.
             with warnings.catch_warnings(record=True) as caught:
                 warnings.simplefilter("always", SFHBeforeBigBangWarning)
                 phot = np.asarray(model.predict_photometry(params))
                 lines = np.asarray(
-                    model.measure_line_fluxes(params, line_defs=line_defs, fast=False)
+                    model.measure_line_fluxes(params, line_defs=line_defs, approx=False)
                 )
             _out["params"] = params
             _out["phot"] = phot

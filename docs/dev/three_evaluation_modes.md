@@ -155,7 +155,7 @@ spec = Parameters(
     agn_disc_block="grahsp_sbpl",
     agn_torus_block="skirtor",
     agn_attenuation_block="smc_prevot",
-    agn_log_lbol=Uniform(43, 47),
+    agn_log_lbol=Uniform(9.42, 13.42),
     agn_axis_grids={
         "agn_grahsp_l5100": np.logspace(43, 46, 5),
     },
