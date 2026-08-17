@@ -38,12 +38,10 @@ from tengri.components.agn.grahsp.model import GRAHSPParams, evaluate_grahsp_agn
 from tengri.components.agn.grahsp.templates import load_grahsp_templates
 from tengri.forward.precompute.templates import (
     build_template_photometry_lookup,
+    collapse_fixed_axes,
     precompute_template_photometry,
 )
-from tengri.utils.grid_interp import (
-    PreintegratedGrid,
-    slice_fixed_axes,
-)
+from tengri.utils.grid_interp import PreintegratedGrid
 from tengri.utils.interpolation import edges_for_grid
 
 __all__ = ["AXIS_PARAMS", "build_lookup", "precompute"]
@@ -231,27 +229,20 @@ def precompute(
         "_preint": preint,
     }
 
-    if parameters is None:
-        return result
-
     _AXIS_DEFAULTS = {
         "agn_grahsp_plslope": -1.7,
         "agn_grahsp_ebv": 0.05,
     }
-    fixed_values = parameters.get_fixed_values()
-    free_param_names = set(parameters.free_params)
-    fixed: dict[int, float] = {}
-    for i, pname in enumerate(AXIS_PARAMS):
-        if pname in fixed_values:
-            fixed[i] = float(fixed_values[pname])
-        elif pname not in free_param_names:
-            fixed[i] = float(_AXIS_DEFAULTS[pname])
-
+    collapsed, remaining_axes, fixed = collapse_fixed_axes(
+        preint,
+        AXIS_PARAMS,
+        parameters,
+        defaults=_AXIS_DEFAULTS,
+        origin="grahsp_precompute",
+    )
     if not fixed:
         return result
 
-    collapsed = slice_fixed_axes(preint, fixed)
-    remaining_axes = tuple(ax for i, ax in enumerate(result["axes"]) if i not in fixed)
     return {
         "grid_phot": collapsed.phot,
         "axes": remaining_axes,

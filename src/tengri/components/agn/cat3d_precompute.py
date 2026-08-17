@@ -29,20 +29,20 @@ import numpy as np
 from tengri.components._collapsed_lookup import interp_collapsed
 from tengri.components.agn.cat3d_wind import _load_cat3d_arrays
 from tengri.forward.precompute.templates import (
+    collapse_fixed_axes,
     precompute_template_photometry,
 )
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
     interp_nd_pchip,
-    slice_fixed_axes,
 )
 
 # CAT3D-Wind grid parametrized by three axes: inclination (as cos),
 # radial power-law index, and wind fraction.
 AXIS_PARAMS: tuple[str, ...] = (
-    "cat3d_cos_inc",
-    "cat3d_a",
-    "cat3d_fwd",
+    "agn_cos_inc",
+    "agn_a_cat3d",
+    "agn_fwd_cat3d",
 )
 
 
@@ -185,7 +185,7 @@ def build_cat3d_photometry_lookup(precomp: dict):
     callable
         Function with signature::
 
-            fn(agn_log_lbol, cat3d_cos_inc, cat3d_a, cat3d_fwd,
+            fn(agn_log_lbol, agn_cos_inc, agn_a_cat3d, agn_fwd_cat3d,
                agn_torus_frac) -> ndarray, shape (n_filters,)
 
         Returns torus L_ν [erg/s/Hz]. Caller applies
@@ -217,9 +217,9 @@ def build_cat3d_photometry_lookup(precomp: dict):
     @jax.jit
     def cat3d_phot(
         agn_log_lbol,
-        cat3d_cos_inc,
-        cat3d_a,
-        cat3d_fwd,
+        agn_cos_inc,
+        agn_a_cat3d,
+        agn_fwd_cat3d,
         agn_torus_frac,
     ):
         """Compute CAT3D-Wind torus photometry via monotone-cubic interpolation.
@@ -229,7 +229,7 @@ def build_cat3d_photometry_lookup(precomp: dict):
         # grid_phot stores L_ν [erg/s/Hz] per L_sun of L_bol (unit torus fraction)
         # Return: L_bol_lsun [L_sun] * torus_frac * phot [erg/s/Hz/L_sun] = L_ν [erg/s/Hz]
         l_bol_lsun = 10.0**agn_log_lbol
-        point = (cat3d_cos_inc, cat3d_a, cat3d_fwd)
+        point = (agn_cos_inc, agn_a_cat3d, agn_fwd_cat3d)
         phot_per_lsun = interp_nd_pchip(grid_phot, axes, point)
         return l_bol_lsun * agn_torus_frac * phot_per_lsun
 
@@ -279,21 +279,15 @@ def precompute(
     **JIT-compatible**: no — this is a build-time function using NumPy.
     """
     result = precompute_cat3d_photometry(grid_path, filter_waves, filter_trans, redshift=redshift)
-    if parameters is None:
-        return result
 
     preint: PreintegratedGrid = result["_preint"]
-    fixed_values = parameters.get_fixed_values()
-    fixed: dict[int, float] = {}
-    for i, pname in enumerate(AXIS_PARAMS):
-        if pname in fixed_values:
-            fixed[i] = float(fixed_values[pname])
+    collapsed, remaining_axes, fixed = collapse_fixed_axes(
+        preint, AXIS_PARAMS, parameters, origin="cat3d_precompute"
+    )
     if not fixed:
         return result
 
-    collapsed = slice_fixed_axes(preint, fixed)
     # Rebuild dict view; drop the axes that were collapsed
-    remaining_axes = tuple(ax for i, ax in enumerate(result["axes"]) if i not in fixed)
     return {
         "grid_phot": collapsed.phot,
         "axes": remaining_axes,
