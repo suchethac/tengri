@@ -19,6 +19,7 @@ results immediately.
 from __future__ import annotations
 
 import textwrap
+import warnings
 from dataclasses import dataclass
 
 
@@ -887,20 +888,20 @@ _PROPERTIES = _Tutorial(
         All use the same property names and discovery API.
 
         See:  tengri.tutorial("mock_catalog") — batch mock using vmap
-              tengri.tutorial("fast_vs_exact") — exact vs precomputed paths
+              tengri.tutorial("approx_vs_exact") — exact vs precomputed paths
         """
     ).strip(),
 )
 
 
 # ──────────────────────────────────────────────────────────────────
-# Recipe 15 — exact vs fast photometry prediction
+# Recipe 15 — exact vs approximate photometry prediction
 # ──────────────────────────────────────────────────────────────────
 
 
-_FAST_VS_EXACT = _Tutorial(
-    name="fast_vs_exact",
-    title="Exact by default, fast by choice — photometry prediction paths",
+_APPROX_VS_EXACT = _Tutorial(
+    name="approx_vs_exact",
+    title="Exact by default, approximate by choice — photometry prediction paths",
     code=textwrap.dedent(
         """
         # Two prediction paths for photometry:
@@ -909,10 +910,15 @@ _FAST_VS_EXACT = _Tutorial(
         #   Always safe; valid for any filter and any redshift.
         #   Used in fitting.
         #
-        # FAST — lookup table (WavePrecomp)
+        # APPROX — lookup table (WavePrecomp)
         #   Precomputed at build time on the model's filters + z grid.
         #   Cheaper per call, but valid only for build-time filters + grid;
         #   arbitrary filters always use EXACT. Measure before relying on it.
+        #   The keyword is `approx=` on both ends -- `approx=WavePrecomp(...)`
+        #   at build, `approx=True` at call -- because it is one mechanism.
+        #   Measured error: <0.1% at z~0, but 1.4% in sdss_g by z=3, and it is
+        #   a bias, so it enters the gradient multiplied by SNR. See
+        #   bench/reports/2026-08-17_wave_precomp_accuracy.md
 
         import jax
         import tengri
@@ -922,7 +928,7 @@ _FAST_VS_EXACT = _Tutorial(
         # Default: uses exact photometry throughout
         model_exact = tengri.SEDModel.build(ssp_data=ssp, observation=obs, ...)
 
-        # Opt into the fast path: precompute a lookup table
+        # Opt into the approximate path: precompute a lookup table
         # (paid once at build time, saves at every later predict call)
         model_fast = tengri.SEDModel.build(
             ssp_data=ssp,
@@ -944,15 +950,15 @@ _FAST_VS_EXACT = _Tutorial(
         pred = model_exact.predict(params)
         photo_exact = pred.photometry()           # exact path
 
-        # Opt into fast for post-fit batches on build-time filters
-        photo_fast = pred.photometry(fast=True)
+        # Opt into approx for post-fit batches on build-time filters
+        photo_fast = pred.photometry(approx=True)
 
         # ── VMAP BATCH (MOCK CATALOG) ──
 
-        # For many parameter sets on build-time filters, fast is right:
+        # For many parameter sets on build-time filters, approx is right:
         params_batch = spec.sample_batch(jax.random.PRNGKey(0), n=10_000)
         fn_fast = jax.vmap(
-            lambda p: model_fast.predict(p).photometry(fast=True)
+            lambda p: model_fast.predict(p).photometry(approx=True)
         )
         batch_photos = fn_fast(params_batch)  # shape (10000, n_filters)
 
@@ -962,15 +968,15 @@ _FAST_VS_EXACT = _Tutorial(
         2. FAST requires:
            • build-time filters (model.observation.photometry.names)
            • wavelengths within the build-time z grid
-        3. fast=True + arbitrary filters → ValueError
+        3. approx=True + arbitrary filters → ValueError
         4. Fitting always uses build-time choice (no override).
-        5. fast=True is most useful for vmap'd batches on big n_samples.
+        5. approx=True is most useful for vmap'd batches on big n_samples.
 
         Why two paths?
         ───────────────
         A precomputed lookup table is an approximation (interpolant), not
         the true physics. The default (exact) must never silently change
-        the result. fast=True is an explicit opt-in speed knob that users
+        the result. approx=True is an explicit opt-in speed knob that users
         must think about: "Am I using build-time filters? Is this on the
         z grid?" If you answer no, the exact path is your only choice.
 
@@ -1028,7 +1034,7 @@ _MOCK_CATALOG = _Tutorial(
 
         # 3. VMAP OVER PHOTOMETRY
         fn_phot = jax.vmap(
-            lambda p: model.predict(p).photometry(fast=False)
+            lambda p: model.predict(p).photometry(approx=False)
         )
         batch_photos = fn_phot(params_batch)  # shape (n_params, n_filters)
 
@@ -1070,13 +1076,16 @@ _MOCK_CATALOG = _Tutorial(
         • Generate training data for a neural network surrogate
 
         See:  tengri.tutorial("properties")     — derived quantities
-              tengri.tutorial("fast_vs_exact")  — exact vs precomputed paths
+              tengri.tutorial("approx_vs_exact")  — exact vs precomputed paths
         """
     ).strip(),
 )
 
 
 # Master registry
+_LEGACY_TUTORIAL_NAMES = {"fast_vs_exact": "approx_vs_exact"}
+"""Renamed topics, kept resolvable for one release."""
+
 _TUTORIALS: dict[str, _Tutorial] = {
     t.name: t
     for t in (
@@ -1094,7 +1103,7 @@ _TUTORIALS: dict[str, _Tutorial] = {
         _DIAGNOSTICS,
         _HIERARCHICAL,
         _PROPERTIES,
-        _FAST_VS_EXACT,
+        _APPROX_VS_EXACT,
         _MOCK_CATALOG,
     )
 }
@@ -1135,6 +1144,17 @@ def tutorial(name: str | None = None, *, run: bool = False) -> None:
         print("    tengri.tutorial('register_a_model', run=True)  # actually execute")
         print()
         return
+
+    if name in _LEGACY_TUTORIAL_NAMES:
+        new = _LEGACY_TUTORIAL_NAMES[name]
+        warnings.warn(
+            f"tutorial('{name}') was renamed to tutorial('{new}') when the "
+            f"runtime `fast=` keyword became `approx=`; the old name will be "
+            f"removed in tengri v1.0.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        name = new
 
     if name not in _TUTORIALS:
         raise KeyError(f"Unknown tutorial '{name}'.  Run tengri.tutorial() for the menu.")

@@ -279,21 +279,19 @@ def draw_dicts(n):
 
 
 DERIVED_KEYS = ("stellar_mass", "sfr_100myr", "sfr_10myr", "ssfr")
-samples = {k: [] for k in DERIVED_KEYS}
-for p in draw_dicts(N_DRAWS):
-    # Use predict_properties for ~4× speedup vs predict().properties
-    d = sed_model.predict_properties(p, names=DERIVED_KEYS)
-    for k in DERIVED_KEYS:
-        v = d.get(k)
-        samples[k].append(float("nan") if v is None else float(v))
 
+# `posterior.properties` is the property catalog lifted over the sample axis:
+# the same names a `Prediction` uses, one axis wider, evaluated in memory-bounded
+# chunks. It reads every draw the chain produced rather than the 200 resampled
+# here, and `.ci()` returns the 16/50/84 interval directly — so the whole block
+# below used to be a Python loop re-deriving what the object already exposes.
 truth_full = {**fixed, **truth}
-pred_truth = sed_model.predict(truth_full)
-truth_derived = pred_truth.properties
+truth_derived = sed_model.predict(truth_full).properties
+
 print(f"{'quantity':<14}{'truth':>14}{'p16':>14}{'p50':>14}{'p84':>14}")
 print("-" * 70)
 for k in DERIVED_KEYS:
-    lo, med, hi = np.percentile(samples[k], [16, 50, 84])
+    lo, med, hi = posterior.properties.ci(k)
     t = truth_derived.get(k)
     tstr = "—" if t is None else f"{float(t):.3e}"
     print(f"{k:<14}{tstr:>14}{lo:>14.3e}{med:>14.3e}{hi:>14.3e}")
