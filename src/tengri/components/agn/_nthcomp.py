@@ -281,7 +281,7 @@ def _nthcomp_interp(
 ) -> jnp.ndarray:
     """Return the normalized nthcomp L_nu shape via trilinear interpolation.
 
-    The custom-VJP kernel. ``table`` is primal argument 0 so the library can
+    The custom-JVP kernel. ``table`` is primal argument 0 so the library can
     be threaded through ``jax.jit`` as an argument; :func:`nthcomp_lnu_interp`
     is the public entry point that resolves it. Extrapolation beyond grid
     bounds is clamped to boundary values.
@@ -289,8 +289,8 @@ def _nthcomp_interp(
     Parameters
     ----------
     table : NthcompTable
-        Template arrays. Also saved in the residuals, because the backward
-        pass re-evaluates the interpolation at ``gamma + eps``.
+        Template arrays. Also read by the JVP rule, which re-evaluates the
+        interpolation at shifted operands.
     nu : jnp.ndarray
         Frequency grid [Hz].
     gamma : scalar jnp array
@@ -307,7 +307,7 @@ def _nthcomp_interp(
 
     Notes
     -----
-    **JIT-compatible**: yes — uses ``jnp`` primitives and JAX-registered VJP.
+    **JIT-compatible**: yes — uses ``jnp`` primitives and a JAX-registered JVP.
 
     The underlying templates are precomputed Kompaneets equation solutions
     in log-space (Kubota & Done 2018, Section 2.2). Trilinear interpolation
@@ -315,13 +315,19 @@ def _nthcomp_interp(
     varying features (Wien seed-BB tail), then exponentiated. Extrapolation
     beyond grid bounds is clamped to preserve monotonicity at boundaries.
 
-    **Custom JVP**: A finite-difference approximation supplies the ``gamma``
-    derivative, because differentiating the composed ``jnp.interp`` chain
-    directly returns NaN. ``nu``, ``kTe_keV`` and ``kTbb_keV`` are held fixed
-    during fitting and carry exactly zero derivative. See
-    :func:`_nthcomp_interp_jvp` for the rule, and for why it is a ``custom_jvp``
-    rather than the ``custom_vjp`` this used to be (#1206): a ``custom_vjp`` is
-    opaque to forward mode, which takes out geoVI.
+    **Custom JVP**: differentiating the composed ``jnp.interp`` chain directly
+    returns NaN, so :func:`_nthcomp_interp_jvp` supplies finite-difference
+    tangents instead. It is a ``custom_jvp`` rather than the ``custom_vjp`` this
+    used to be (#1206) because a ``custom_vjp`` is opaque to forward mode, which
+    takes out geoVI.
+
+    **Which operands carry a tangent is documented on that rule, and is
+    deliberately not repeated here.** This paragraph used to keep its own copy,
+    and the copy went stale the moment the rule changed: after #1822 gave
+    ``kTe`` a tangent, this text still read "``nu``, ``kTe_keV`` and ``kTbb_keV``
+    are held fixed during fitting and carry exactly zero derivative" — the
+    precise false belief #1822 existed to correct, restated one screen above the
+    correction. Two copies of a contract do not stay in sync; one does.
 
     References
     ----------
@@ -466,8 +472,8 @@ def nthcomp_lnu_interp(
 ) -> jnp.ndarray:
     """Normalized nthcomp :math:`L_\\nu` shape via trilinear interpolation.
 
-    Thin dispatcher over the custom-VJP kernel. See :func:`_nthcomp_interp`
-    for the physics and the gradient treatment.
+    Thin dispatcher over the custom-JVP kernel. See :func:`_nthcomp_interp`
+    for the physics and :func:`_nthcomp_interp_jvp` for the gradient treatment.
 
     Parameters
     ----------
@@ -488,9 +494,9 @@ def nthcomp_lnu_interp(
 
     Notes
     -----
-    **JIT-compatible**: yes. The gradient w.r.t. ``gamma`` is the
-    finite-difference rule registered on :func:`_nthcomp_interp`; the
-    template cotangent is structurally zero.
+    **JIT-compatible**: yes. Derivatives come from the finite-difference rule
+    registered on :func:`_nthcomp_interp`; which operands carry a tangent is
+    documented there and not restated here (#1822).
     """
     table = _template if _template is not None else load_nthcomp_table()
     if table is None:
