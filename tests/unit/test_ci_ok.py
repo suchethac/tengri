@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """The aggregate CI verdict refuses everything it is supposed to refuse.
 
 ``ci-ok`` is about to become the single context branch protection requires, so
