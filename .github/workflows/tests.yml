@@ -1242,8 +1242,17 @@ jobs:
   # Run on:
   #   - nightly schedule
   #   - manual workflow_dispatch
-  #   - PRs labeled `run-slow-tests`
+  #   - PRs carrying the `run-slow-tests` label
   # Skip on regular push/PR to keep fast feedback under 15 min.
+  #
+  # Note the `if:` reads `github.event.pull_request.labels.*.name` — the pull
+  # request's CURRENT label set — not `github.event.label`. So this opts in on
+  # any pull-request event once the label is on, and does NOT need `labeled` to
+  # be a trigger type (it no longer is; see the `types:` note at the top).
+  #
+  # The one behaviour that changed: adding the label to an already-open pull
+  # request no longer starts a run by itself. Push, or use `workflow_dispatch`,
+  # which is listed above precisely for this.
   slow:
     runs-on: ubuntu-latest
     # Split the ~1,270-test tier across two parallel runners (one per suite):
