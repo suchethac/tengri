@@ -326,6 +326,13 @@ class DustSEDComponent(TemplateThreading):
                 "dex",
                 "INTRINSIC log10 line luminosities to redden (#1867); absent for BakedIn",
             ),
+            DerivedKey(
+                "sed_shock",
+                "erg/s/Hz",
+                "Shock SED to attenuate (#1434); creates topological edge so ShockNebular "
+                "runs before DustSEDComponent. Undeclared reads of state.derived keys are "
+                "invisible to topological_sort and can silently return None, defeating the fix.",
+            ),
         )
 
     def declared_parameters(self) -> list[ParamDeclaration]:
@@ -429,9 +436,9 @@ class DustSEDComponent(TemplateThreading):
         r"""Age-resolved two-component transmission :math:`T(\lambda, \mathrm{age})`.
 
         The single source of this component's dust screen. :meth:`apply` calls it
-        on the full SSP wave grid; the FeaturePrecomp fast path
-        (:meth:`SEDModel.predict_spectral_indices` with ``fast=True``) calls it at
-        the index window centers — so the fast path applies **exactly** the dust
+        on the full SSP wave grid; the FeaturePrecomp path
+        (:meth:`SEDModel.predict_spectral_indices` with ``approx=True``) calls it at
+        the index window centers — so the LUT path applies **exactly** the dust
         the forward applies, with no second implementation to keep in sync.
 
         Resolves per-component (birth-cloud vs diffuse) law parameters — the
@@ -814,10 +821,28 @@ class DustSEDComponent(TemplateThreading):
         else:
             non_stellar_pre_dust = state.sed_intrinsic - sed_intrinsic_stellar
         # The nebular continuum (sed_neb) is part of non_stellar_pre_dust but is
-        # reddened by HII-region dust (step 2b). AGN/radio/xray stay unattenuated
-        # by stellar dust. Swap the bare nebular for its attenuated form.
-        non_stellar_other = non_stellar_pre_dust - sed_neb
-        sed_total = non_stellar_other + sed_neb_attenuated + sed_attenuated
+        # reddened by HII-region dust (step 2b). Shock is also reddened the same way
+        # (#1434): shock sits behind the dust screen alongside the nebular continuum.
+        # AGN/radio/xray stay unattenuated by stellar dust. Swap the bare nebular and
+        # shock for their attenuated forms.
+        sed_shock_unatt = state.derived.get("sed_shock")
+        sed_shock = (
+            jnp.zeros_like(wave) if sed_shock_unatt is None else jnp.asarray(sed_shock_unatt)
+        )
+        # Shock gets the same young-limit screen as nebular (#1434: #927 physics):
+        # shocked gas sits behind the dust column whether the shock is star-formation
+        # related (norm='frac') or AGN-outflow related (norm='lhalpha'). For AGN-outflow
+        # shocks the screen geometry is an approximation — MAPPINGS traces often originate
+        # in unobscured outflows — but a single published dust path is more maintainable
+        # than per-mode branches that can diverge. Measure to assess the approximation.
+        tau_shock = (
+            jnp.asarray(params["dust_tau_bc"]) * k_bc_neb
+            + jnp.asarray(params["dust_tau_diff"]) * k_diff_neb
+        )
+        sed_shock_attenuated = sed_shock * (_f_obsc + (1.0 - _f_obsc) * jnp.exp(-tau_shock))
+
+        non_stellar_other = non_stellar_pre_dust - sed_neb - sed_shock
+        sed_total = non_stellar_other + sed_neb_attenuated + sed_shock_attenuated + sed_attenuated
 
         # Per-filter LUTs for two-component attenuation.
         # T(a, λ) factorizes as T_diff(λ) × T_bc(λ)^y(a). For the filter-level
@@ -933,6 +958,35 @@ class DustSEDComponent(TemplateThreading):
                         fw_pad,
                         ft_pad,
                         z_neb,
+                    )
+                )
+            # Shock photometry attenuation (#1434): publish the attenuated form so both
+            # exact and precomp paths read the same value, not two independent
+            # multiplications that can drift. Dust attenuates shock the same way as
+            # nebular continuum — young-limit screen (tau_bc·k_bc + tau_diff·k_diff).
+            # Gate on sed_shock_unatt (the intrinsic form), not sed_shock (which falls back
+            # to zeros_like if intrinsic was absent). This way, publish happens only if
+            # ShockNebular actually emitted something (sed_shock_unatt is not None).
+            if sed_shock_unatt is not None:
+                from tengri.components._band_projection import (
+                    project_additive_onto_photometry,
+                )
+                from tengri.parameters.resolve import require_redshift
+
+                z_shock = jnp.asarray(
+                    require_redshift(params, "components.dust.two_component.apply")
+                )
+                fw_pad = state.derived.get("phot_filter_waves_padded")
+                ft_pad = state.derived.get("phot_filter_trans_padded")
+                derived_overrides["shock_phot_lnu_attenuated_precomp"] = (
+                    project_additive_onto_photometry(
+                        None,  # no band response: a multiplicative screen is not rank-1
+                        sed_shock_attenuated,
+                        wave,
+                        filter_eff,
+                        fw_pad,
+                        ft_pad,
+                        z_shock,
                     )
                 )
             # Log-derivatives d(ln A)/dλ = −τ·k'(λ_eff), published directly (no

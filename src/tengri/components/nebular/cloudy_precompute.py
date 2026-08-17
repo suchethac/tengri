@@ -20,6 +20,11 @@ from __future__ import annotations
 # CloudyGridBackend._preintegrate_photometry in cloudy_grid.py.
 AXIS_PARAMS: tuple[str, ...] = ("met_logzsol", "log_age", "neb_logU")
 
+# "log_age" is an internal grid-axis label, not a declared user parameter.
+# It is intentionally not collapsed by the collapse_fixed_axes logic; the
+# CLOUDY backend handles its own axis management. See issue #1827.
+INTERNAL_AXES: frozenset[str] = frozenset({"log_age"})
+
 
 def precompute(
     filter_waves: list,

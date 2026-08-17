@@ -33,12 +33,13 @@ for SED forward-model components.
 
 from __future__ import annotations
 
+import inspect
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 import jax.numpy as jnp
 
-__all__ = ["CompositeLikelihood"]
+__all__ = ["CompositeLikelihood", "_check_channel_scales"]
 
 
 @dataclass(frozen=True)
@@ -116,8 +117,6 @@ class CompositeLikelihood:
         keep working unchanged. The signature check runs at trace time,
         not per evaluation.
         """
-        import inspect
-
         total = jnp.asarray(0.0)
         for lk in self.likelihoods:
             if data_args is not None and "data_args" in inspect.signature(lk.log_prob).parameters:
@@ -139,3 +138,88 @@ class CompositeLikelihood:
         for lk in self.likelihoods:
             out.extend(lk.declared_parameters())
         return out
+
+
+def _check_channel_scales(likelihoods, prediction, params, data_args):
+    """Eager pre-check that likelihood channels are on representable scales (#1495).
+
+    Evaluates each channel's ``log_prob`` once, eagerly, at a reference
+    parameter point, against the SAME prediction dict the loss builds — and
+    raises when a channel's log-probability is non-finite or outside the
+    float32 window (±3.4e38). A channel whose observations are supplied in
+    the wrong units produces a chi-squared tens of orders of magnitude too
+    large; summed with healthy channels it absorbs them completely through
+    floating-point rounding, and the fit silently optimizes the broken
+    channel alone. This guard converts that silent failure into a loud one
+    naming the channel, before any sampling happens.
+
+    Parameters
+    ----------
+    likelihoods : tuple of Likelihood
+        The constituent likelihood objects to check (a composite's members,
+        or a one-element tuple).
+    prediction : dict
+        The prediction dict the loss path builds (``phot_fnu`` / ``spec_fnu``
+        / feature channels) at the reference parameters.
+    params : dict
+        The reference physical parameters the prediction was evaluated at.
+    data_args : dict
+        The fitter's concrete data arguments (same object the traced loss
+        receives at call time).
+
+    Raises
+    ------
+    ValueError
+        If any channel's log_prob is non-finite or has magnitude > 3.4e38.
+
+    Notes
+    -----
+    Runs once at loss build time, outside JIT; the traced ``log_prob`` is
+    untouched. Not meant to detect every scale problem — only pathological
+    ones (a ~29-order units mismatch) — and it deliberately has NO fallback
+    path: if a channel cannot be evaluated here, the same call fails inside
+    the fit, so the error propagates instead of being swallowed.
+    """
+    if not likelihoods:
+        return
+
+    # float32 representable window: values beyond this are inf under pure f32.
+    max_f32_magnitude = 3.4e38
+
+    for i, lk in enumerate(likelihoods):
+        lk_name = getattr(lk, "name", type(lk).__name__)
+
+        # Evaluate the channel exactly the way the loss does (no try/except —
+        # a failure here is a failure the fit would hit anyway; keep it loud).
+        if "data_args" in inspect.signature(lk.log_prob).parameters:
+            log_prob_val = float(lk.log_prob(prediction, params, data_args=data_args))
+        else:
+            log_prob_val = float(lk.log_prob(prediction, params))
+
+        if jnp.isfinite(log_prob_val) and abs(log_prob_val) <= max_f32_magnitude:
+            continue
+
+        # Scale hints for the error message: the largest magnitudes on each
+        # side of the channel's comparison usually expose the units mismatch.
+        def _scale(x):
+            try:
+                arr = jnp.asarray(x)
+                return float(jnp.max(jnp.abs(arr))) if arr.size else 0.0
+            except (TypeError, ValueError):
+                return float("nan")
+
+        pred_scale = max((_scale(v) for v in prediction.values()), default=float("nan"))
+        obs_scale = _scale(data_args.get("data"))
+        raise ValueError(
+            f"Likelihood channel {i} ({lk_name!r}) evaluated at the reference "
+            f"parameters gives log_prob = {log_prob_val:.3e}, which is "
+            + (
+                "non-finite"
+                if not jnp.isfinite(log_prob_val)
+                else f"outside the float32 window (±{max_f32_magnitude:.1e})"
+            )
+            + f". Max |prediction| = {pred_scale:.3e}, max |data| = {obs_scale:.3e}. "
+            "A chi-squared this large silently absorbs every other channel "
+            "through floating-point rounding — check this channel's units "
+            "against what the model predicts for it (#1495)."
+        )

@@ -3414,7 +3414,7 @@ class Fitter:
 
         # --- "auto" method: dimensionality-based selection ---
         if method == "auto":
-            d = self.spec.n_free
+            d = self.spec.n_latent
             try:
                 from tengri.parameters.defaults import get_inference_defaults
 
@@ -3436,7 +3436,7 @@ class Fitter:
         if method == "auto":
             # Pre-registry semantics: low-D → NUTS (exact), high-D → geoVI (scalable).
             # Dimensionality threshold is configurable via inference defaults.
-            d = self.spec.n_free
+            d = self.spec.n_latent
             try:
                 from tengri.parameters.defaults import get_inference_defaults
 
@@ -3453,7 +3453,7 @@ class Fitter:
             entry = get_backend(chosen)
         elif method == "mcmc":
             # Auto-select within the MCMC family: NUTS for low-D, ray tracing for high-D.
-            d = self.spec.n_free
+            d = self.spec.n_latent
             if d <= _MCMC_AUTO_D_THRESHOLD:
                 chosen = "mcmc_nuts"
             else:

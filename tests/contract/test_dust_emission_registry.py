@@ -56,20 +56,20 @@ class TestLoaderUtilities:
         assert callable(preload_emission_model("modified_blackbody"))
 
     def test_find_data_file_missing(self):
-        from tengri.components.dust.emission import _find_data_file
+        from tengri._data_setup import find_data_str
 
-        assert _find_data_file("__definitely_not_here__.npz") is None
+        assert find_data_str("__definitely_not_here__.npz") is None
 
     def test_find_data_file_present(self, tmp_path, monkeypatch):
         # Redirect via $TENGRI_DATA_DIR rather than by patching a module-level
         # candidate list: the env var is the mechanism users actually have, so
         # this now exercises the real lookup instead of a test-only seam.
-        from tengri.components.dust.emission import emission as em_impl
+        from tengri._data_setup import find_data_str
 
         fake_file = tmp_path / "test_dummy.npz"
         fake_file.write_bytes(b"")
         monkeypatch.setenv("TENGRI_DATA_DIR", str(tmp_path))
-        assert em_impl._find_data_file("test_dummy.npz") == str(fake_file)
+        assert find_data_str("test_dummy.npz") == str(fake_file)
 
 
 # ── apply_dust_emission convenience dispatcher ────────────────────

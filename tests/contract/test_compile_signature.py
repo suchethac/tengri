@@ -177,6 +177,86 @@ class TestSEDModelCompileSignature:
         unpickled = pickle.loads(pickled)
         assert unpickled == sig
 
+    def test_astrodust_settings_affect_signature(self, mock_ssp_data, photometry, spec_dpl):
+        """Astrodust spinning_dust and f_cnm settings must enter compile_signature.
+
+        Models differing ONLY in spinning_dust or f_cnm settings must have
+        different signatures to prevent silent cache collisions. This guards
+        against M4 (deletion of the two signature entries) and enforces the
+        structural-setting wiring in #1093.
+
+        Dropping the astrodust_spinning_dust and astrodust_f_cnm entries from
+        compile_signature() return will turn this red.
+        """
+        # Base spec with astrodust dust emission
+        base_spec = Parameters(
+            redshift=0.1,
+            sfh_dpl_alpha=Uniform(0.5, 4.0),
+            sfh_dpl_beta=Uniform(0.3, 3.0),
+            dust_model="two_component",
+            dust_emission="astrodust",
+            astrodust_spinning_dust=False,
+            astrodust_f_cnm=0.28,
+        )
+
+        # Test spinning_dust difference
+        spec_no_spd = Parameters(
+            redshift=0.1,
+            sfh_dpl_alpha=Uniform(0.5, 4.0),
+            sfh_dpl_beta=Uniform(0.3, 3.0),
+            dust_model="two_component",
+            dust_emission="astrodust",
+            astrodust_spinning_dust=False,
+            astrodust_f_cnm=0.28,
+        )
+        spec_yes_spd = Parameters(
+            redshift=0.1,
+            sfh_dpl_alpha=Uniform(0.5, 4.0),
+            sfh_dpl_beta=Uniform(0.3, 3.0),
+            dust_model="two_component",
+            dust_emission="astrodust",
+            astrodust_spinning_dust=True,
+            astrodust_f_cnm=0.28,
+        )
+
+        model_no_spd = SEDModel(spec_no_spd, mock_ssp_data, observation=photometry)
+        model_yes_spd = SEDModel(spec_yes_spd, mock_ssp_data, observation=photometry)
+
+        sig_no_spd = model_no_spd.compile_signature()
+        sig_yes_spd = model_yes_spd.compile_signature()
+
+        assert sig_no_spd != sig_yes_spd, (
+            "spinning_dust difference must produce different signatures"
+        )
+
+        # Test f_cnm difference (both with spinning_dust=True)
+        spec_fcnm_low = Parameters(
+            redshift=0.1,
+            sfh_dpl_alpha=Uniform(0.5, 4.0),
+            sfh_dpl_beta=Uniform(0.3, 3.0),
+            dust_model="two_component",
+            dust_emission="astrodust",
+            astrodust_spinning_dust=True,
+            astrodust_f_cnm=0.1,
+        )
+        spec_fcnm_high = Parameters(
+            redshift=0.1,
+            sfh_dpl_alpha=Uniform(0.5, 4.0),
+            sfh_dpl_beta=Uniform(0.3, 3.0),
+            dust_model="two_component",
+            dust_emission="astrodust",
+            astrodust_spinning_dust=True,
+            astrodust_f_cnm=0.5,
+        )
+
+        model_fcnm_low = SEDModel(spec_fcnm_low, mock_ssp_data, observation=photometry)
+        model_fcnm_high = SEDModel(spec_fcnm_high, mock_ssp_data, observation=photometry)
+
+        sig_fcnm_low = model_fcnm_low.compile_signature()
+        sig_fcnm_high = model_fcnm_high.compile_signature()
+
+        assert sig_fcnm_low != sig_fcnm_high, "f_cnm difference must produce different signatures"
+
 
 class TestFitterCompileSignature:
     """Tests for Fitter.compile_signature()."""
