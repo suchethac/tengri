@@ -492,7 +492,7 @@ def test_simulate_lines_match_the_single_galaxy_measurement(fwd_table_sfh):
                     "sfh_sfr": jnp.asarray(sfr[i]),
                 },
                 defs,
-                fast=True,
+                approx=True,
             )
         )
         got = np.array([mock.lines[d.name][i] for d in defs])
