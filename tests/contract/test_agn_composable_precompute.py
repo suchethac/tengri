@@ -362,7 +362,7 @@ def test_parameters_agn_axis_grids_accepted():
         agn_disc_block="grahsp_sbpl",
         agn_torus_block="skirtor",
         agn_attenuation_block="none",
-        agn_log_lbol=Fixed(45.0),
+        agn_log_lbol=Fixed(11.42),
         agn_log_mbh=Fixed(8.0),
         agn_log_ledd=Fixed(-1.0),
         agn_tau_skirtor=Fixed(7.0),

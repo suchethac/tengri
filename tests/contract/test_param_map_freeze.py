@@ -155,7 +155,7 @@ class TestParamMapDeltas:
         """Model with AGN should build without errors."""
         spec = Parameters(
             agn_model="parametric",
-            agn_log_lbol=Fixed(45.5),
+            agn_log_lbol=Fixed(11.92),
             redshift=Fixed(0.05),
         )
         model = SEDModel(spec, synthetic_ssp_wide)
@@ -180,7 +180,7 @@ class TestParamMapDeltas:
         spec = Parameters(
             sfh_dpl_alpha=Uniform(0.1, 2.0),
             agn_model="parametric",
-            agn_log_lbol=Fixed(45.5),
+            agn_log_lbol=Fixed(11.92),
             dust_emission="draine_li2007",
             redshift=Fixed(0.05),
         )
