@@ -368,7 +368,11 @@ def create_nenkova_from_grid(grid_path: str) -> Callable:
         **JIT-compatible**: yes. **Gradient-safe**: yes — ``agn_tau`` is a
         differentiable, traceable parameter.
         """
-        template = interp_nd_triweight(grid_jax, (tau_axis,), edges, (agn_tau,))
+        # Nenkova tau axis is non-uniform (I6 fix #1851).
+        # Use index-space interpolation for correct gradients throughout the range.
+        template = interp_nd_triweight(
+            grid_jax, (tau_axis,), edges, (agn_tau,), index_space_interp=True
+        )
         sed = resample_template(wavelength, wave_grid, template, left=0.0, right=0.0)
         nu = _wavelength_to_nu(wavelength)
         integral_safe = _bolometric_integral_nu(sed, nu, floor=1e-100)

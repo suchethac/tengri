@@ -21,6 +21,7 @@ References
 from __future__ import annotations
 
 import dataclasses
+import functools
 
 import jax
 import jax.numpy as jnp
@@ -626,13 +627,14 @@ def _tensor_contract(grid: jnp.ndarray, weights_per_axis: list[jnp.ndarray]) -> 
     return result
 
 
-@jax.jit
+@functools.partial(jax.jit, static_argnames=("index_space_interp",))
 def interp_nd_triweight(
     grid: jnp.ndarray,
     axes: tuple[jnp.ndarray, ...],
     edges: tuple[jnp.ndarray, ...],
     point: tuple,
     scatters: tuple | None = None,
+    index_space_interp: bool | None = None,
 ) -> jnp.ndarray:
     """N-dimensional smooth interpolation via triweight kernel.
 
@@ -657,6 +659,10 @@ def interp_nd_triweight(
     scatters : tuple or None
         Kernel bandwidths per axis. If None, uses 0.5 * (axis[i+1] - axis[i])
         for each axis (half grid spacing). Recommended for smooth inference.
+    index_space_interp : bool or None
+        Whether to use index-space interpolation for non-uniform axes.
+        Passed through to :func:`compute_grid_weights`. See its documentation
+        for details. Default None (see compute_grid_weights).
 
     Returns
     -------
@@ -669,6 +675,12 @@ def interp_nd_triweight(
     The triweight kernel integrates the CDF between bin edges, giving
     smooth weights that transition across grid nodes. This is superior to
     piecewise-linear interpolation, which has discontinuous first derivatives.
+
+    **Non-uniform axis handling (I6, #1851)**: For explicitly non-uniform grids
+    (e.g. Fritz tau, Nenkova tau), pass ``index_space_interp=True`` to use the
+    corrected index-space path. This eliminates the nearest-neighbor degeneracy
+    and produces smooth gradients throughout the grid range. The interpolant is
+    C2 within intervals and C0 at nodes where adjacent spacings differ.
     """
     n_dims = len(axes)
 
@@ -683,7 +695,10 @@ def interp_nd_triweight(
     # Compute weights along each axis
     weights_per_axis = []
     for i in range(n_dims):
-        w = compute_grid_weights(point[i], axes[i], scatter=scatters[i], edges=edges[i])
+        w = compute_grid_weights(
+            point[i], axes[i], scatter=scatters[i], edges=edges[i],
+            index_space_interp=index_space_interp
+        )
         weights_per_axis.append(w)
 
     # Contract grid with weights
@@ -1119,6 +1134,7 @@ def loglog_integral(x: jnp.ndarray, y: jnp.ndarray) -> jnp.ndarray:
 def slice_fixed_axes(
     preint: PreintegratedGrid | PreintegratedLines,
     fixed: dict[int, float],
+    index_space_interp: bool | None = None,
 ) -> PreintegratedGrid | PreintegratedLines:
     """Collapse fixed axes in a preintegrated grid via triweight interpolation.
 
@@ -1140,6 +1156,9 @@ def slice_fixed_axes(
     fixed : dict[int, float]
         Mapping of axis index → fixed value.  Axes are numbered from 0.
         E.g. ``{2: -3.0}`` collapses axis 2 at value -3.0.
+    index_space_interp : bool or None
+        Whether to use index-space interpolation for non-uniform axes.
+        Passed through to :func:`compute_grid_weights`. Default None.
 
     Returns
     -------
@@ -1175,7 +1194,10 @@ def slice_fixed_axes(
             ed = edges[axis_idx]
 
             # Compute triweight weights at the fixed value
-            w = compute_grid_weights(value, ax, scatter=0.5 * float(ax[1] - ax[0]), edges=ed)
+            w = compute_grid_weights(
+                value, ax, scatter=0.5 * float(ax[1] - ax[0]), edges=ed,
+                index_space_interp=index_space_interp
+            )
 
             # Contract phot along this axis using einsum-style contraction.
             # tensordot(w, phot, ([0], [axis_idx])) removes axis_idx from phot,
@@ -1233,7 +1255,10 @@ def slice_fixed_axes(
             ed = edges[axis_idx]
 
             # Compute triweight weights at the fixed value
-            w = compute_grid_weights(value, ax, scatter=0.5 * float(ax[1] - ax[0]), edges=ed)
+            w = compute_grid_weights(
+                value, ax, scatter=0.5 * float(ax[1] - ax[0]), edges=ed,
+                index_space_interp=index_space_interp
+            )
 
             # Contract line_filter_weights along this axis.
             # Shape (*grid_dims, n_lines, n_filters) → (*reduced_grid_dims, n_lines, n_filters)
