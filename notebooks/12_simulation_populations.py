@@ -593,7 +593,7 @@ for n in (256, 1024, 4096):
 #
 # **The ceiling does not tell you where throughput peaks**, and that optimum is
 # a property of your machine rather than of your model. Per-galaxy *work* is
-# flat to 0.3 % from *N* = 256 to 8192 (1.917 to 1.923 MFLOP/galaxy); the
+# flat to 0.2 % from *N* = 256 to 8192 (1.301 to 1.303 MFLOP/galaxy); the
 # wall-clock optimum moves with cache size and with whatever else the machine
 # is running. Size the batch from `memory_analysis`, confirm the work is flat
 # with `cost_analysis`, and tune wall clock last — with the A/A control from
