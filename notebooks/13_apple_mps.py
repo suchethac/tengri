@@ -24,15 +24,28 @@
 # The one-line summary, measured on an Apple M4 Pro:
 #
 # ```text
-#     one galaxy at a time   ->  CPU, by 59x. Do not use the GPU.
-#     ~250+ galaxies a batch ->  MPS wins, and keeps winning as N grows.
+#     one galaxy at a time    ->  CPU, by one to two orders of magnitude.
+#     a few hundred a batch   ->  roughly comparable; MPS ahead on some shapes.
+#     never assume, measure   ->  run-to-run spread on MPS is ~2x.
 # ```
 #
-# The reason is not that the GPU is slow. It is that a tengri gradient moves a
-# lot of memory and does very little arithmetic — about **0.12 FLOP per byte** on
-# the `WavePrecomp` path. A GPU needs roughly 25–50 FLOP/byte before its ALUs
-# matter. So per galaxy there is nothing for the GPU to win with; the only way it
-# wins is by having enough galaxies in flight to hide its dispatch latency.
+# The reason is not that the GPU is slow. It is that tengri moves a lot of memory
+# and does very little arithmetic — about **0.12 FLOP per byte** on the
+# `WavePrecomp` path. A GPU needs roughly 25–50 FLOP/byte before its ALUs matter.
+# So per galaxy there is nothing for the GPU to win with; the only way it wins is
+# by having enough galaxies in flight to hide its dispatch latency.
+#
+# **Two warnings about the numbers in this notebook**, both learned by getting
+# them wrong first:
+#
+# 1. **MPS timings are not reproducible to better than ~2x.** The same script,
+#    same batch, run twice, gave 0.28 and 0.67 ms/galaxy. CPU was stable to ~6%
+#    over the same period. Absolute MPS numbers here are illustrative; the
+#    *ratios* measured side by side in one sitting are what to trust, and even
+#    those move with what else the machine is doing.
+# 2. **Benchmark one shape per process.** Running forward, gradient and a fit in
+#    a single process makes the later ones look worse. That contamination alone
+#    flipped a conclusion for me.
 
 # %% [markdown]
 # ## 1. Install
@@ -148,10 +161,11 @@ print("on device                :", flux.devices())
 print("dtype                    :", flux.dtype)
 
 # %% [markdown]
-# ## 4. Where the GPU actually helps: batches
+# ## 4. Batching: the only thing that moves the needle
 #
-# A single galaxy is the worst case for MPS. Batch with `jax.vmap` and the
-# picture inverts. This is the same call, mapped over a leading axis.
+# A single galaxy is the worst case for MPS by a wide margin. Batching with
+# `jax.vmap` closes most of that gap — and on a quiet machine can reverse it.
+# This is the same call, mapped over a leading axis.
 
 # %%
 import time
@@ -191,15 +205,49 @@ for n in (1, 32, 256):
 # | 512 | 0.31 | **0.18** | MPS 1.7x |
 #
 # MPS total time is almost flat in batch size: **46.7 ms at n=1, 94.4 ms at
-# n=512**, for 512x the work. It is nearly all fixed overhead. CPU is linear at a
-# flat 0.30 ms/galaxy. So the question is never "is the GPU fast" — it is "do you
-# have enough galaxies to amortize ~46 ms of dispatch".
+# n=512**, for 512x the work. It is nearly all fixed overhead. CPU is linear. So
+# the question is never "is the GPU fast" — it is "do you have enough galaxies to
+# amortize ~46 ms of dispatch".
 #
-# Your crossover will differ with model complexity, band count and chip. Measure
-# it; do not inherit this table.
+# **That table is one run and the crossover in it is not a constant.** Repeating
+# the identical script at batch 256 across independent processes, on a busier
+# machine:
+#
+# | | runs [ms/galaxy] | median |
+# |---|---|---|
+# | CPU | 0.70, 0.62, 0.60, 0.52 | 0.61 |
+# | MPS | 0.43, 0.42, 0.35, 0.35 | 0.385 |
+#
+# Same batch size, but every number roughly doubled versus the first table
+# because the machine was under load. The *direction* held; the values did not.
+# Treat "a few hundred galaxies" as the scale at which this becomes worth
+# measuring on your own machine — not as a threshold you can inherit.
 #
 # **Compile time favors MPS heavily** — cold 0.34–0.71 s against CPU's 4.6–5.1 s.
 # For iterating on a model that is a real gain regardless of throughput.
+
+# %% [markdown]
+# ### It depends on the SHAPE of the work, and not the way you would guess
+#
+# "Prediction on the GPU, inference on the CPU" is the intuition. It is
+# **backwards**. Measured at batch 256, one shape per process, two runs each:
+#
+# | shape | CPU [ms/gal] | MPS [ms/gal] | |
+# |---|---|---|---|
+# | **A** forward `predict_photometry` | 0.225, 0.299 | 0.447, 0.644 | MPS ~2.1x slower |
+# | **B** gradient `grad(sum(predict))` | 0.552, 0.715 | 0.807, 0.546 | ~parity |
+# | **C** inference: 50 scanned grad steps | 0.414, 0.526 | 0.720, 0.686 | MPS ~1.5x slower |
+#
+# **Forward prediction is where MPS does worst**, not best. The forward pass is
+# the most memory-bound of the three — it moves the SSP and LUT traffic and then
+# does almost no arithmetic with it. The reverse pass does more work per byte
+# already moved, so the gradient is where the GPU comes closest to earning its
+# dispatch cost.
+#
+# The practical reading: if you are forward-modeling a catalog and nothing else,
+# the GPU is the *least* likely to help. If you are running gradient-based
+# inference over a large batch, it is the most likely. Neither is a large factor
+# on this hardware.
 
 # %% [markdown]
 # ### The same numbers, as a picture
@@ -309,11 +357,19 @@ for i in (1, 2, 3):
 # sequential steps, each one a dispatch — the worst possible shape for this
 # backend, and **86x slower**.
 #
-# So: **do not fit one galaxy on the GPU.** The batch crossover from §4 is what
-# governs fitting too — the win, if you have one, is a `CatalogFitter` over
-# hundreds of galaxies with a vmapped backend (`mcmc_nuts`, `mcmc_hmc`), where
-# the per-step dispatch is amortized across the batch. That end-to-end case is
-# *not* measured here; §4's gradient crossover is the evidence for expecting it.
+# So: **do not fit one galaxy on the GPU.**
+#
+# Does batching rescue it? Partly, and less than §4's gradient table suggests.
+# Shape C there is exactly this question — a batch of 256 carried through 50
+# scanned gradient steps — and MPS came out ~1.5x *slower* than CPU, where the
+# bare gradient at the same batch was at parity. A fit multiplies the per-step
+# dispatch cost by the number of steps, so it inherits the worse end of the
+# range, not the better one.
+#
+# The honest position: a `CatalogFitter` over hundreds of galaxies with a vmapped
+# backend (`mcmc_nuts`, `mcmc_hmc`) is the case with the best chance, because it
+# is the widest. It is **not measured end to end here**, and shape C is a reason
+# for tempered expectations rather than optimistic ones.
 
 # %% [markdown]
 # ## 6. Is the backend healthy?
