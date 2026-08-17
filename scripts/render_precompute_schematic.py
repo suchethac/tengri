@@ -1,20 +1,26 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Render the two precompute schematics shown in ``docs/known_limitations.md``.
 
-Figure 1 (``precompute_schematic.png``) walks a real SSP spectrum through the
-``WavePrecomp`` build: the SED under the GALEX and ugriz bandpasses, one band
-split into sub-bands of equal filter mass, the collapse of each sub-band to a
-single stored number, and the runtime contraction against the dust screen.
+Figure 1 (``precompute_schematic.png``) walks a real SSP grid through the
+``WavePrecomp`` build and out the other side: the spectra under the GALEX and
+ugriz bandpasses, one band split into sub-bands of equal filter mass, the
+per-age-bin quadrature nodes, the stored tensor, the SFH age weights, and the
+composite-stellar-population sum that turns all of it into one band flux.
+
+The point the figure has to carry is that the K stored numbers exist **per age
+bin** (and per metallicity), and that the SFH integration is the weighted sum
+over those age bins — not a single set of K numbers for the whole galaxy.
 
 Figure 2 (``precompute_subband_error.png``) shows where the residual error
 lives: the screen is evaluated at K quadrature nodes and held piecewise
 constant across each sub-band, so the gap between the true screen and its
 sampled version is the entire approximation.
 
-Every curve is real. The SED is an SSP template off the shipped grid, the
-bandpasses are the shipped filter curves, and the sub-band edges and nodes
-come from :func:`~tengri.utils.grid_interp.subband_quadrature` itself, so the
-partition drawn is the one the code actually builds.
+Every curve is real. The spectra come off the shipped SSP grid, the bandpasses
+are the shipped filter curves, the sub-band edges and nodes come from
+:func:`~tengri.utils.grid_interp.subband_quadrature`, and the age weights come
+from the shipped cloud-in-cell kernel ``_age_weights_cic`` — so what is drawn
+is what the code builds.
 
 Run from the repository root::
 
@@ -29,11 +35,14 @@ import matplotlib
 
 matplotlib.use("Agg")
 
+import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.colors import LogNorm
 
 from tengri import load_filter_set, load_ssp_data
 from tengri.components.dust.attenuation import calzetti
+from tengri.components.stellar.component import _age_weights_cic
 from tengri.utils.grid_interp import _filter_weight_np, subband_quadrature
 
 # ── Configuration ───────────────────────────────────────────────────
@@ -44,12 +53,12 @@ SSP_PATH = REPO_ROOT / "data" / "fsps_prsc_miles_chabrier.h5"
 
 DPI = 110
 
-#: Bandpasses drawn under the SED in panel (a) of Figure 1.
+#: Bandpasses drawn under the spectra in panel (a).
 PANEL_FILTERS = ["galex_fuv", "galex_nuv", "sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
 
-#: The band followed through panels (b)-(d). SDSS u carries the Balmer break
-#: at 3646 A inside the bandpass, so the template's own flux-weighted node
-#: moves noticeably from one sub-band to the next.
+#: The band followed through the rest of Figure 1. SDSS u carries the Balmer
+#: break at 3646 A inside the bandpass, so the template's own flux-weighted
+#: node moves visibly from one age bin to the next.
 PIPELINE_BAND = "sdss_u"
 
 #: The band Figure 2 stresses — the attenuation curve is steepest across it,
@@ -62,6 +71,14 @@ N_SUBBANDS = 5
 #: Diffuse-ISM optical depth for the illustrative screen, matching the
 #: tau_diff = 0.7 quoted in the docs' measured accuracy statement.
 TAU_DIFF = 0.7
+
+#: SSP ages highlighted in panels (a) and (c) [Gyr].
+SHOWCASE_AGES_GYR = (0.001, 0.01, 0.1, 1.0, 10.0)
+
+#: Illustrative delayed-tau star formation history.
+SFH_T_FORM_GYR = 10.0
+SFH_TAU_GYR = 3.0
+T_OBS_GYR = 13.8
 
 #: Worst-band error against the exact path, per Appendix "Sub-band
 #: Quadrature Precomputation" of the methods paper. Reference values, not
@@ -89,25 +106,26 @@ BAND_COLORS = {
     "sdss_z": "#9b2c2c",
 }
 
+AGE_CMAP = plt.get_cmap("plasma")
+
 
 # ── Data ────────────────────────────────────────────────────────────
 
 
-def _load_template():
-    """One real SSP template: roughly solar metallicity, 100 Myr."""
+def _load_grid():
+    """The SSP grid at roughly solar metallicity: every age bin, one Z."""
     ssp = load_ssp_data(str(SSP_PATH))
     wave = np.asarray(ssp.ssp_wave, dtype=np.float64)
     lgmet = np.asarray(ssp.ssp_lgmet)
-    lg_age = np.asarray(ssp.ssp_lg_age_gyr)
+    lg_age_gyr = np.asarray(ssp.ssp_lg_age_gyr, dtype=np.float64)
 
     # log10(Zsun) = -1.848 on this grid's absolute-metallicity axis.
     i_met = int(np.argmin(np.abs(lgmet - (-1.848))))
-    j_age = int(np.argmin(np.abs(lg_age - (-1.0))))
-    flux = np.asarray(ssp.ssp_flux, dtype=np.float64)[i_met, j_age]
-    return wave, flux, float(lgmet[i_met]), float(10.0 ** lg_age[j_age] * 1e3)
+    flux = np.asarray(ssp.ssp_flux, dtype=np.float64)[i_met]  # (n_age, n_wave)
+    return wave, flux, lg_age_gyr, float(lgmet[i_met]), flux.shape[0], lgmet.size
 
 
-def _band_grid(band, wave, flux):
+def _band_grid(band, wave, flux_2d):
     """Union quadrature grid for one band, exactly as ``preintegrate_grid`` builds it."""
     filter_waves, filter_trans, _ = load_filter_set([band])
     fw = np.asarray(filter_waves[0], dtype=np.float64)
@@ -120,27 +138,57 @@ def _band_grid(band, wave, flux):
 
     trans = np.interp(grid, fw, ft, left=0.0, right=0.0)
     tw = trans * _filter_weight_np(grid, "bessell")
-    template = np.interp(grid, wave, flux)
-    return grid, tw, template
+    templates = np.stack([np.interp(grid, wave, f) for f in flux_2d])
+    return grid, tw, templates
 
 
-def _partition(grid, tw, template):
-    """Call the shipped partition so the drawn edges and nodes are the real ones."""
+def _partition(grid, tw, templates):
+    """Call the shipped partition so the drawn edges and nodes are the real ones.
+
+    ``templates`` is (n_age, m), so ``phi`` and ``nodes`` come back (n_age, K):
+    one set of K numbers and K nodes *per age bin*, which is the whole point.
+    """
     denom = float(np.trapezoid(tw, grid))
     eff_wave = float(np.trapezoid(tw * grid, grid) / denom)
-    integrand = template * tw
-    phi, nodes = subband_quadrature(grid, tw, integrand[None, :], denom, N_SUBBANDS, eff_wave)
+    phi, nodes = subband_quadrature(grid, tw, templates * tw, denom, N_SUBBANDS, eff_wave)
 
-    # Edges are the K-quantiles of the cumulative filter weight. Recomputed
-    # here only for drawing the shaded bands.
+    # Edges are the K-quantiles of the cumulative filter weight. They depend
+    # on the filter alone, so there is one set for the whole band.
     cum_w = np.concatenate([[0.0], np.cumsum(np.diff(grid) * 0.5 * (tw[1:] + tw[:-1]))])
     edges = np.interp(np.linspace(0.0, cum_w[-1], N_SUBBANDS + 1), cum_w, grid)
-    return phi[0], nodes[0], edges, eff_wave, denom
+    return np.asarray(phi), np.asarray(nodes), edges, eff_wave, denom
+
+
+def _sfh_age_weights(lg_age_gyr):
+    """Age weights from the shipped cloud-in-cell kernel, for a delayed-tau SFH."""
+    lookback_yr = np.logspace(5.0, np.log10(SFH_T_FORM_GYR * 1e9), 600)
+    since_form_gyr = SFH_T_FORM_GYR - lookback_yr / 1e9
+    sfr = np.where(
+        since_form_gyr > 0.0,
+        (since_form_gyr / SFH_TAU_GYR) * np.exp(-since_form_gyr / SFH_TAU_GYR),
+        0.0,
+    )
+    weights, _total = _age_weights_cic(
+        jnp.asarray(lookback_yr),
+        jnp.asarray(sfr),
+        jnp.asarray(10.0**lg_age_gyr * 1e9),
+        T_OBS_GYR,
+    )
+    return lookback_yr, sfr, np.asarray(weights)
 
 
 def _screen(wavelength):
     """Calzetti diffuse-ISM transmission, the way the code applies it."""
     return np.exp(-TAU_DIFF * np.asarray(calzetti(np.asarray(wavelength, dtype=np.float64))))
+
+
+def _age_indices(lg_age_gyr):
+    """Grid indices closest to the showcase ages."""
+    return [int(np.argmin(np.abs(lg_age_gyr - np.log10(a)))) for a in SHOWCASE_AGES_GYR]
+
+
+def _age_color(lg_age, lg_lo, lg_hi):
+    return AGE_CMAP(0.08 + 0.84 * (lg_age - lg_lo) / (lg_hi - lg_lo))
 
 
 # ── Shared drawing helpers ──────────────────────────────────────────
@@ -149,24 +197,12 @@ def _screen(wavelength):
 def _tag(ax, text, color):
     """Tag marking a panel as build-time or runtime work.
 
-    Sits just outside the axes, above the top-right corner: inside the frame
-    it competes with data in every panel, and which corner is free differs
-    from panel to panel.
+    Uses matplotlib's right-aligned title slot rather than a floating text
+    box: inside the frame the tag competes with data (and which corner is
+    free differs per panel), while a free-floating box above the axes
+    collides with the centered title.
     """
-    ax.text(
-        1.0,
-        1.015,
-        text,
-        transform=ax.transAxes,
-        ha="right",
-        va="bottom",
-        fontsize=6.6,
-        weight="bold",
-        color="white",
-        zorder=9,
-        clip_on=False,
-        bbox=dict(boxstyle="round,pad=0.3", fc=color, ec="none"),
-    )
+    ax.set_title(text, loc="right", fontsize=6.4, weight="bold", color=color, pad=6)
 
 
 def _shade_subbands(ax, grid, curve, edges):
@@ -178,7 +214,7 @@ def _shade_subbands(ax, grid, curve, edges):
             curve,
             where=(grid >= edges[k]) & (grid <= edges[k + 1]),
             color=BLUE,
-            alpha=0.34 if k % 2 == 0 else 0.14,
+            alpha=0.32 if k % 2 == 0 else 0.13,
             zorder=1,
         )
     for e in edges:
@@ -204,15 +240,27 @@ def _guard_canvas(fig, *, max_inches: float = 40.0) -> None:
         )
 
 
-# ── Figure 1, panel (a): the SED under the bandpasses ────────────────
+# ── Figure 1 panels ─────────────────────────────────────────────────
 
 
-def _panel_sed(ax, wave, flux, meta):
-    """The real SSP spectrum with the GALEX and ugriz bandpasses beneath it."""
-    lgmet, age_myr = meta
-    sel = (wave >= 900.0) & (wave <= 30000.0)
-    w, f = wave[sel], flux[sel]
-    ax.plot(w, f / f.max(), color=INK, lw=0.85, zorder=4)
+def _panel_sed(ax, wave, flux_2d, lg_age_gyr):
+    """(a) SSP spectra at several ages, under the GALEX and ugriz bandpasses."""
+    sel = (wave >= 900.0) & (wave <= 20000.0)
+    idx = _age_indices(lg_age_gyr)
+    lg_lo, lg_hi = lg_age_gyr[idx[0]], lg_age_gyr[idx[-1]]
+
+    for j in idx:
+        f = flux_2d[j][sel]
+        age_gyr = 10.0 ** lg_age_gyr[j]
+        label = f"{age_gyr * 1e3:.0f} Myr" if age_gyr < 1 else f"{age_gyr:.0f} Gyr"
+        ax.plot(
+            wave[sel],
+            f / f.max(),
+            color=_age_color(lg_age_gyr[j], lg_lo, lg_hi),
+            lw=1.0,
+            zorder=4,
+            label=label,
+        )
 
     ax2 = ax.twinx()
     for band in PANEL_FILTERS:
@@ -222,55 +270,42 @@ def _panel_sed(ax, wave, flux, meta):
         ftv = ftv / ftv.max()
         color = BAND_COLORS[band]
         chosen = band == PIPELINE_BAND
-        ax2.fill_between(fwv, 0, ftv, color=color, alpha=0.55 if chosen else 0.22, zorder=2)
-        ax2.plot(fwv, ftv, color=color, lw=1.4 if chosen else 0.8, zorder=3)
+        ax2.fill_between(fwv, 0, ftv, color=color, alpha=0.5 if chosen else 0.2, zorder=2)
+        ax2.plot(fwv, ftv, color=color, lw=1.3 if chosen else 0.8, zorder=3)
         ax2.text(
             fwv[np.argmax(ftv)],
-            ftv.max() + 0.06,
+            1.06,
             band.split("_")[-1] if band.startswith("sdss") else band.split("_")[-1].upper(),
             ha="center",
             va="bottom",
-            fontsize=6.6,
+            fontsize=6.4,
             color=color,
             weight="bold" if chosen else "normal",
             zorder=5,
         )
 
-    ax2.set_ylim(0, 3.4)
+    ax2.set_ylim(0, 3.6)
     ax2.set_yticks([])
     ax.set_xscale("log")
     ax.set_yscale("log")
     ax.set_xlim(900, 20000)
-    ax.set_ylim(1.2e-3, 3.0)
-    ax.set_xlabel("rest wavelength  [Å]", fontsize=8.5)
-    ax.set_ylabel("$F_\\nu$  (normalized)", fontsize=8.5)
-    ax.tick_params(labelsize=7.5)
-    ax.set_title(
-        f"(a)  SSP template ({age_myr:.0f} Myr, $\\log_{{10}}Z$ = {lgmet:.2f})\n"
-        "under the GALEX + ugriz bandpasses",
-        fontsize=9,
-        pad=6,
+    ax.set_ylim(8e-4, 3.0)
+    ax.set_xlabel("rest wavelength  [Å]", fontsize=8)
+    ax.set_ylabel("$F_\\nu$  (normalized)", fontsize=8)
+    ax.tick_params(labelsize=7)
+    ax.legend(
+        fontsize=6.4, loc="lower right", framealpha=0.92, title="SSP age", title_fontsize=6.4
     )
-    ax.annotate(
-        "the band followed\nin (b)–(d)",
-        xy=(3550, 0.0072),
-        xytext=(3550, 0.0016),
-        fontsize=7.0,
-        color=BLUE,
-        weight="bold",
-        ha="center",
-        va="bottom",
-        arrowprops=dict(arrowstyle="->", color=BLUE, lw=1.1),
-        bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="none", alpha=0.9),
+    ax.set_title(
+        "(a)  the SSP grid — one spectrum per age bin —\nunder the GALEX + ugriz bandpasses",
+        fontsize=8.4,
+        pad=6,
     )
     _tag(ax, "BUILD ONCE", BLUE)
 
 
-# ── Figure 1, panel (b): the equal-mass split ────────────────────────
-
-
-def _panel_split(ax, grid, tw, template, edges, nodes):
-    """The chosen band cut into K sub-bands of equal filter mass."""
+def _panel_split(ax, grid, tw, edges):
+    """(b) The band cut into K sub-bands of equal filter mass."""
     tw_norm = tw / tw.max()
     _shade_subbands(ax, grid, tw_norm, edges)
     ax.plot(grid, tw_norm, color=BLUE, lw=1.3, zorder=3)
@@ -278,217 +313,262 @@ def _panel_split(ax, grid, tw, template, edges, nodes):
     for k in range(N_SUBBANDS):
         ax.text(
             0.5 * (edges[k] + edges[k + 1]),
-            0.075,
-            "$1/K$",
+            0.09,
+            f"$1/K$\n#{k + 1}",
             transform=ax.get_xaxis_transform(),
             ha="center",
             va="center",
-            fontsize=6.2,
+            fontsize=6.0,
             color=BLUE,
             zorder=7,
             bbox=dict(boxstyle="round,pad=0.14", fc="white", ec="none", alpha=0.85),
         )
 
-    # Nodes are wavelengths, not SED values — draw them as axis ticks rather
-    # than as markers riding on a curve, where their height means nothing.
-    for node in nodes:
-        ax.plot(
-            [node, node],
-            [0.0, 0.055],
-            transform=ax.get_xaxis_transform(),
-            color=RED,
-            lw=1.6,
-            zorder=8,
-            clip_on=False,
-        )
-    ax.plot([], [], color=RED, lw=1.6, label="node $\\lambda^{\\star}_k$")
-    ax.legend(fontsize=7.0, loc="upper left", framealpha=0.92)
-
-    ax2 = ax.twinx()
-    ax2.plot(grid, template / template.max(), color=INK, lw=1.0, zorder=4)
-    ax2.set_ylabel("$F_\\nu$  (normalized)", fontsize=8.5)
-    ax2.tick_params(labelsize=7.5)
-    ax2.set_ylim(0, 1.25)
-
     ax.set_xlim(grid[0], grid[-1])
-    ax.set_ylim(0, 1.22)
-    ax.set_xlabel("rest wavelength  [Å]", fontsize=8.5)
-    ax.set_ylabel("filter weight  $T_b w$", fontsize=8.5, color=BLUE)
-    ax.tick_params(axis="y", labelcolor=BLUE, labelsize=7.5)
-    ax.tick_params(axis="x", labelsize=7.5)
+    ax.set_ylim(0, 1.18)
+    ax.set_xlabel("rest wavelength  [Å]", fontsize=8)
+    ax.set_ylabel("filter weight  $T_b w$", fontsize=8, color=BLUE)
+    ax.tick_params(axis="y", labelcolor=BLUE, labelsize=7)
+    ax.tick_params(axis="x", labelsize=7)
     ax.set_title(
-        "(b)  split into $K = 5$ sub-bands of equal filter mass\n"
-        "(the five shaded areas are equal)",
-        fontsize=9,
+        "(b)  the band split into $K = 5$ sub-bands\n"
+        "of equal filter mass (the five areas are equal)",
+        fontsize=8.4,
         pad=6,
     )
     _tag(ax, "BUILD ONCE", BLUE)
 
 
-# ── Figure 1, panel (c): the collapse ───────────────────────────────
+def _panel_per_age(ax, grid, tw, templates, nodes, edges, lg_age_gyr):
+    """(c) Each age bin gets its own integrand, and its own K nodes."""
+    idx = _age_indices(lg_age_gyr)
+    lg_lo, lg_hi = lg_age_gyr[idx[0]], lg_age_gyr[idx[-1]]
 
-
-def _panel_collapse(ax, grid, tw, template, phi, nodes, edges, denom):
-    """Each sub-band's area under the integrand becomes one stored number."""
-    integrand = template * tw / denom
-    scale = integrand.max()
-    _shade_subbands(ax, grid, integrand / scale, edges)
-    ax.plot(grid, integrand / scale, color=INK, lw=1.1, zorder=4)
-
-    # Bars whose AREA equals Phi_k, so "curve area -> one number" is literal.
-    widths = np.diff(edges)
-    heights = phi / widths / scale
-    ax.bar(
-        edges[:-1],
-        heights,
-        width=widths,
-        align="edge",
-        facecolor="none",
-        edgecolor=ORANGE,
-        lw=1.5,
-        zorder=5,
-    )
-    for k, node in enumerate(nodes):
-        ax.plot([node], [heights[k]], "o", color=RED, ms=4.5, zorder=6)
-        ax.annotate(
-            "",
-            xy=(node, 0),
-            xytext=(node, heights[k]),
-            arrowprops=dict(arrowstyle="-", color=RED, lw=0.8, ls=(0, (2, 2))),
-            zorder=5,
+    # Light banding only — a full-height fill drowns the five spectra.
+    for k in range(N_SUBBANDS):
+        ax.axvspan(
+            edges[k], edges[k + 1], color=BLUE, alpha=0.15 if k % 2 == 0 else 0.02, zorder=0
         )
-    ax.plot([], [], "o", color=RED, ms=4.5, label="node $\\lambda^{\\star}_k$")
-    ax.bar([], [], facecolor="none", edgecolor=ORANGE, lw=1.5, label="stored $\\Phi_k$ (area)")
-    ax.legend(fontsize=7.0, loc="upper left", framealpha=0.92)
+    for e in edges:
+        ax.axvline(e, color=GREY, lw=0.7, ls=(0, (3, 3)), zorder=2)
+
+    for row, j in enumerate(idx):
+        integrand = templates[j] * tw
+        color = _age_color(lg_age_gyr[j], lg_lo, lg_hi)
+        age_gyr = 10.0 ** lg_age_gyr[j]
+        ax.plot(grid, integrand / integrand.max(), color=color, lw=1.1, zorder=4)
+
+        y_row = 1.13 + 0.105 * row
+        ax.plot(nodes[j], np.full(N_SUBBANDS, y_row), "|", color=color, ms=8, mew=1.8, zorder=6)
+        ax.text(
+            grid[-1] - 8,
+            y_row,
+            f"{age_gyr * 1e3:.0f} Myr" if age_gyr < 1 else f"{age_gyr:.0f} Gyr",
+            ha="right",
+            va="center",
+            fontsize=5.8,
+            color=color,
+            zorder=7,
+        )
 
     ax.set_xlim(grid[0], grid[-1])
-    ax.set_ylim(0, 1.35)
-    ax.set_xlabel("rest wavelength  [Å]", fontsize=8.5)
-    ax.set_ylabel("$F_\\nu T_b w$  (normalized)", fontsize=8.5)
-    ax.tick_params(labelsize=7.5)
-    ax.set_title(
-        "(c)  each sub-band's area collapses to one number $\\Phi_k$\n"
-        "at the template's own centroid $\\lambda^{\\star}_k$",
-        fontsize=9,
-        pad=6,
-    )
+    ax.set_ylim(0, 1.72)
+    ax.set_xlabel("rest wavelength  [Å]", fontsize=8)
+    ax.set_ylabel("$F_\\nu T_b w$  (each normalized)", fontsize=8)
+    ax.tick_params(labelsize=7)
     ax.text(
         0.5,
         0.055,
-        f"{grid.size} wavelengths  →  $K$ = {N_SUBBANDS} numbers + {N_SUBBANDS} nodes,"
-        " per (Z, age, band)",
+        "the nodes $\\lambda^{\\star}_{jk}$ move with age — each is that\n"
+        "age bin's own flux-weighted centroid in its sub-band",
         transform=ax.transAxes,
         ha="center",
-        fontsize=7.2,
+        fontsize=6.8,
         style="italic",
-        color=ORANGE,
+        color=INK,
         zorder=7,
         bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="none", alpha=0.9),
+    )
+    ax.set_title(
+        "(c)  every age bin is integrated separately\n"
+        "(ticks: that bin's $K$ nodes, colors as in (a))",
+        fontsize=8.4,
+        pad=6,
     )
     _tag(ax, "BUILD ONCE", BLUE)
 
 
-# ── Figure 1, panel (d): the runtime contraction ────────────────────
-
-
-def _panel_contract(ax, grid, tw, template, phi, nodes, edges, denom):
-    """At runtime the screen is evaluated at K nodes and the bars are summed."""
-    widths = np.diff(edges)
-    scale = (phi / widths).max()
-    a_nodes = _screen(nodes)
-
-    ax.bar(
-        edges[:-1],
-        phi / widths / scale,
-        width=widths,
-        align="edge",
-        facecolor="#e8edf3",
-        edgecolor=GREY,
-        lw=0.9,
-        zorder=3,
-        label="$\\Phi_k$  (stored)",
+def _panel_tensor(ax, fig, phi, lg_age_gyr, n_age, n_met):
+    """(d) The stored tensor: K numbers for every age bin, every metallicity."""
+    age_gyr = 10.0**lg_age_gyr
+    top = float(np.max(phi))
+    floor = top * 1e-4
+    mesh = ax.pcolormesh(
+        np.arange(1, N_SUBBANDS + 1),
+        age_gyr,
+        np.maximum(phi, floor),
+        cmap="viridis",
+        norm=LogNorm(vmin=floor, vmax=top),
+        shading="nearest",
     )
-    ax.bar(
-        edges[:-1],
-        phi * a_nodes / widths / scale,
-        width=widths,
-        align="edge",
-        facecolor=ORANGE,
-        alpha=0.75,
-        edgecolor=ORANGE,
-        lw=1.0,
-        zorder=4,
-        label="$\\Phi_k \\, A(\\lambda^{\\star}_k)$",
+    cbar = fig.colorbar(mesh, ax=ax, pad=0.02)
+    cbar.set_label("$\\Phi_{jk}$", fontsize=8)
+    cbar.ax.tick_params(labelsize=6.5)
+
+    ax.set_yscale("log")
+    ax.set_xticks(range(1, N_SUBBANDS + 1))
+    ax.set_xlabel("sub-band  $k$", fontsize=8)
+    ax.set_ylabel("SSP age  [Gyr]", fontsize=8)
+    ax.tick_params(labelsize=7)
+    ax.set_title(
+        "(d)  stored: $K$ numbers per age bin\n"
+        f"$\\Phi_{{ijbk}}$: {n_met} $Z$ × {n_age} ages × $n_b$ × {N_SUBBANDS}",
+        fontsize=8.4,
+        pad=6,
     )
+    # Drawn inside the heatmap: outside, it lands on the colorbar.
+    y_mark = age_gyr[int(0.80 * n_age)]
+    ax.annotate(
+        "",
+        xy=(0.62, y_mark),
+        xytext=(N_SUBBANDS + 0.38, y_mark),
+        arrowprops=dict(arrowstyle="<->", color="white", lw=1.4),
+        zorder=6,
+    )
+    ax.text(
+        0.5 * (N_SUBBANDS + 1),
+        age_gyr[int(0.88 * n_age)],
+        "one row of $K$ numbers\nper age bin",
+        ha="center",
+        va="center",
+        fontsize=6.6,
+        color=INK,
+        zorder=7,
+        bbox=dict(boxstyle="round,pad=0.28", fc="white", ec="none", alpha=0.88),
+    )
+    _tag(ax, "BUILD ONCE", BLUE)
+
+
+def _panel_sfh(ax, lookback_yr, sfr, weights, lg_age_gyr):
+    """(e) The SFH supplies one mass weight per age bin."""
+    age_gyr = 10.0**lg_age_gyr
+    ax.plot(
+        lookback_yr / 1e9, sfr / sfr.max(), color=GREY, lw=1.4, zorder=3, label="SFH: SFR($t$)"
+    )
+    ax.set_xscale("log")
+    ax.set_xlim(1e-4, 12.0)
+    ax.set_ylim(0, 1.35)
+    ax.set_xlabel("lookback age  [Gyr]", fontsize=8)
+    ax.set_ylabel("SFR  (normalized)", fontsize=8, color=GREY)
+    ax.tick_params(axis="y", labelcolor=GREY, labelsize=7)
+    ax.tick_params(axis="x", labelsize=7)
 
     ax2 = ax.twinx()
-    ax2.plot(grid, _screen(grid), color=RED, lw=1.6, zorder=5, label="screen $A(\\lambda)$")
-    ax2.plot(nodes, a_nodes, "o", color=RED, ms=5, zorder=6)
-    ax2.set_ylabel("screen  $A(\\lambda)$", fontsize=8.5, color=RED)
-    ax2.tick_params(axis="y", labelcolor=RED, labelsize=7.5)
-    lo, hi = float(_screen(grid).min()), float(_screen(grid).max())
-    ax2.set_ylim(lo - 0.55 * (hi - lo), hi + 0.10 * (hi - lo))
-
-    # The numbers this panel is claiming: precompute vs the exact integral.
-    exact = float(np.trapezoid(template * _screen(grid) * tw, grid) / denom)
-    precomp = float(np.sum(phi * a_nodes))
-    single = float(np.sum(phi) * _screen(np.array([_eff_wave(grid, tw)]))[0])
-    ax.text(
-        0.985,
-        0.235,
-        f"$f_b = \\sum_k \\Phi_k A(\\lambda^{{\\star}}_k)$\n"
-        f"vs exact integral:  {100 * (precomp / exact - 1):+.3f}%\n"
-        f"single $\\lambda_{{\\rm eff}}$ instead:  {100 * (single / exact - 1):+.2f}%",
-        transform=ax.transAxes,
-        ha="right",
-        va="bottom",
-        fontsize=7.2,
-        color=INK,
-        zorder=8,
-        bbox=dict(boxstyle="round,pad=0.35", fc="white", ec=GREY, lw=0.6, alpha=0.95),
-    )
+    ax2.vlines(age_gyr, 0, weights, color=GREEN, lw=1.5, zorder=4, label="age weight $w_j$")
+    ax2.set_ylabel("$w_j$  (sums to 1)", fontsize=8, color=GREEN)
+    ax2.tick_params(axis="y", labelcolor=GREEN, labelsize=7)
+    ax2.set_ylim(0, float(weights.max()) * 1.35)
 
     handles = ax.get_legend_handles_labels()[0] + ax2.get_legend_handles_labels()[0]
     labels = ax.get_legend_handles_labels()[1] + ax2.get_legend_handles_labels()[1]
-    ax.legend(handles, labels, fontsize=7.0, loc="upper left", framealpha=0.92)
-
-    ax.set_xlim(grid[0], grid[-1])
-    ax.set_ylim(0, 2.15)
-    ax.set_xlabel("rest wavelength  [Å]", fontsize=8.5)
-    ax.set_ylabel("band flux contribution", fontsize=8.5)
-    ax.tick_params(labelsize=7.5)
+    ax.legend(handles, labels, fontsize=6.8, loc="upper left", framealpha=0.92)
     ax.set_title(
-        "(d)  evaluate $A$ at the $K$ nodes,\nscale the stored bars, and sum",
-        fontsize=9,
+        "(e)  the SFH integrated onto the same age grid\n"
+        "(cloud-in-cell kernel → one weight $w_j$ per bin)",
+        fontsize=8.4,
         pad=6,
     )
     _tag(ax, "PER CALL", ORANGE)
 
 
-def _eff_wave(grid, tw):
-    return float(np.trapezoid(tw * grid, grid) / np.trapezoid(tw, grid))
+def _panel_contract(ax, grid, tw, templates, phi, nodes, weights, lg_age_gyr):
+    """(f) The CSP sum: weight each age bin's K numbers and add them all up."""
+    age_gyr = 10.0**lg_age_gyr
+    a_nodes = _screen(nodes)  # (n_age, K)
+    per_age_bare = np.sum(phi, axis=1)
+    per_age_screened = np.sum(phi * a_nodes, axis=1)
+
+    ax.fill_between(
+        age_gyr,
+        0,
+        weights * per_age_bare,
+        color=GREY,
+        alpha=0.30,
+        zorder=2,
+        label="$w_j \\sum_k \\Phi_{jk}$  (no dust)",
+    )
+    ax.fill_between(
+        age_gyr,
+        0,
+        weights * per_age_screened,
+        color=ORANGE,
+        alpha=0.65,
+        zorder=3,
+        label="$w_j \\sum_k \\Phi_{jk} A(\\lambda^{\\star}_{jk})$",
+    )
+    ax.plot(age_gyr, weights * per_age_screened, color=ORANGE, lw=1.1, zorder=4)
+
+    f_b = float(np.sum(weights * per_age_screened))
+    screen_grid = _screen(grid)
+    denom = float(np.trapezoid(tw, grid))
+    exact_per_age = np.array(
+        [float(np.trapezoid(t * screen_grid * tw, grid) / denom) for t in templates]
+    )
+    exact = float(np.sum(weights * exact_per_age))
+
+    ax.set_xscale("log")
+    ax.set_xlim(1e-4, 12.0)
+    ax.set_ylim(0, float(np.max(weights * per_age_bare)) * 1.55)
+    ax.set_xlabel("SSP age bin  [Gyr]", fontsize=8)
+    ax.set_ylabel("contribution to $f_b$", fontsize=8)
+    ax.tick_params(labelsize=7)
+    ax.legend(fontsize=6.8, loc="upper left", framealpha=0.92)
+    ax.text(
+        0.975,
+        0.955,
+        "$f_b = \\sum_j w_j \\sum_k \\Phi_{jk}\\, A(\\lambda^{\\star}_{jk})$\n"
+        f"sum over {lg_age_gyr.size} age bins × {N_SUBBANDS} sub-bands\n"
+        f"vs exact integral:  {100 * (f_b / exact - 1):+.3f}%",
+        transform=ax.transAxes,
+        ha="right",
+        va="top",
+        fontsize=6.9,
+        color=INK,
+        zorder=8,
+        bbox=dict(boxstyle="round,pad=0.35", fc="white", ec=GREY, lw=0.6, alpha=0.95),
+    )
+    ax.set_title(
+        "(f)  per call: screen at each bin's nodes,\nweight by $w_j$, sum — the CSP integral",
+        fontsize=8.4,
+        pad=6,
+    )
+    _tag(ax, "PER CALL", ORANGE)
 
 
 def render_pipeline_figure(out_path: Path) -> None:
-    """Figure 1 — a real SED walked through the WavePrecomp build."""
-    wave, flux, lgmet, age_myr = _load_template()
-    grid, tw, template = _band_grid(PIPELINE_BAND, wave, flux)
-    phi, nodes, edges, _eff, denom = _partition(grid, tw, template)
+    """Figure 1 — a real SSP grid walked through the WavePrecomp build."""
+    wave, flux_2d, lg_age_gyr, lgmet, n_age, n_met = _load_grid()
+    grid, tw, templates = _band_grid(PIPELINE_BAND, wave, flux_2d)
+    phi, nodes, edges, _eff, _denom = _partition(grid, tw, templates)
+    lookback_yr, sfr, weights = _sfh_age_weights(lg_age_gyr)
 
-    fig, axes = plt.subplots(2, 2, figsize=(11.4, 7.4))
-    _panel_sed(axes[0, 0], wave, flux, (lgmet, age_myr))
-    _panel_split(axes[0, 1], grid, tw, template, edges, nodes)
-    _panel_collapse(axes[1, 0], grid, tw, template, phi, nodes, edges, denom)
-    _panel_contract(axes[1, 1], grid, tw, template, phi, nodes, edges, denom)
+    fig, axes = plt.subplots(3, 2, figsize=(11.4, 11.2))
+    _panel_sed(axes[0, 0], wave, flux_2d, lg_age_gyr)
+    _panel_split(axes[0, 1], grid, tw, edges)
+    _panel_per_age(axes[1, 0], grid, tw, templates, nodes, edges, lg_age_gyr)
+    _panel_tensor(axes[1, 1], fig, phi, lg_age_gyr, n_age, n_met)
+    _panel_sfh(axes[2, 0], lookback_yr, sfr, weights, lg_age_gyr)
+    _panel_contract(axes[2, 1], grid, tw, templates, phi, nodes, weights, lg_age_gyr)
 
     fig.suptitle(
-        f"Build-time photometric precomputation — {PIPELINE_BAND.replace('_', ' ')}, "
+        "Build-time photometric precomputation — "
+        f"{PIPELINE_BAND.replace('_', ' ')}, $\\log_{{10}}Z$ = {lgmet:.2f}, "
         f"Calzetti $\\tau_{{\\rm diff}}$ = {TAU_DIFF}",
         fontsize=10.5,
         weight="bold",
-        y=0.985,
+        y=0.994,
     )
-    fig.subplots_adjust(left=0.068, right=0.932, bottom=0.075, top=0.885, wspace=0.42, hspace=0.46)
+    fig.subplots_adjust(left=0.075, right=0.925, bottom=0.052, top=0.925, wspace=0.42, hspace=0.52)
     _guard_canvas(fig)
     fig.savefig(out_path, dpi=DPI, facecolor="white")
     plt.close(fig)
@@ -583,7 +663,7 @@ def _draw_subband_panel(ax, grid, tw, nodes, edges, eff_wave, meta):
 
     ax.set_title(
         f"(a)  $K$ = {N_SUBBANDS} equal-mass sub-bands across GALEX FUV\n"
-        f"SSP: {age_myr:.0f} Myr, $\\log_{{10}} Z$ = {lgmet:.2f};  "
+        f"one age bin: {age_myr:.0f} Myr, $\\log_{{10}} Z$ = {lgmet:.2f};  "
         f"Calzetti, $\\tau_{{\\rm diff}}$ = {TAU_DIFF}",
         fontsize=9.5,
         pad=9,
@@ -659,12 +739,15 @@ def _draw_convergence_panel(ax):
 
 def render_error_figure(out_path: Path) -> None:
     """Figure 2 — the sub-band partition and its convergence."""
-    wave, flux, lgmet, age_myr = _load_template()
-    grid, tw, template = _band_grid(WORST_BAND, wave, flux)
-    _phi, nodes, edges, eff_wave, _denom = _partition(grid, tw, template)
+    wave, flux_2d, lg_age_gyr, lgmet, _n_age, _n_met = _load_grid()
+    grid, tw, templates = _band_grid(WORST_BAND, wave, flux_2d)
+    _phi, nodes, edges, eff_wave, _denom = _partition(grid, tw, templates)
+
+    j_age = int(np.argmin(np.abs(lg_age_gyr - (-1.0))))
+    age_myr = float(10.0 ** lg_age_gyr[j_age] * 1e3)
 
     fig, axes = plt.subplots(1, 2, figsize=(11.6, 4.5), gridspec_kw={"width_ratios": [1.5, 1.0]})
-    _draw_subband_panel(axes[0], grid, tw, nodes, edges, eff_wave, (lgmet, age_myr))
+    _draw_subband_panel(axes[0], grid, tw, nodes[j_age], edges, eff_wave, (lgmet, age_myr))
     _draw_convergence_panel(axes[1])
 
     fig.subplots_adjust(left=0.065, right=0.945, bottom=0.135, top=0.855, wspace=0.42)
@@ -680,7 +763,7 @@ def render_error_figure(out_path: Path) -> None:
 def main() -> None:
     if not SSP_PATH.exists():
         raise FileNotFoundError(
-            f"SSP grid not found at {SSP_PATH}. The figures draw a real template; "
+            f"SSP grid not found at {SSP_PATH}. The figures draw real templates; "
             "download the grid with tengri.download_ssp('fsps_prsc_miles_chabrier')."
         )
     OUT_DIR.mkdir(parents=True, exist_ok=True)
