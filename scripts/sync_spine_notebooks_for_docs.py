@@ -82,6 +82,13 @@ SPINE_TITLES: dict[str, str] = {
 EXPERIMENTAL_SLUGS = [
     "stochastic_sfh_recovery",
     "multimodel_bma_candels",
+    # Apple-GPU guide. Its render is produced on Apple Silicon in a separate
+    # environment (jax-mps + jax 0.10), because the notebook selects
+    # JAX_PLATFORMS=mps and cannot execute anywhere else. check_notebook_renders
+    # compares the render against the source and requires a figure; it does not
+    # re-execute, so a hand-run render is the intended path here rather than a
+    # gap in automation.
+    "apple_mps",
 ]
 EXPERIMENTAL_SUBDIR = "experimental"
 

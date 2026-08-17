@@ -50,6 +50,10 @@ WORKFLOW = REPO_ROOT / ".github" / "workflows" / "tests.yml"
 # Jobs that run for EVERY pull request, whatever its base. Cheap enough that
 # withholding them would save little and cost the early signal that is the
 # entire reason a stacked PR runs anything at all.
+#
+# "Every pull request" includes `labeled` events, and that is enforced below by
+# `guards_off_labeled` rather than left to the reader -- see its docstring for
+# what a `labeled` guard on one of these does to a protected branch.
 ALL_PR_JOBS: dict[str, str] = {
     "tier": "narrates which tier this run got; blocks nothing, so it must run "
     "everywhere in order to be able to say when coverage was withheld",
@@ -137,6 +141,33 @@ def guards_on_base_ref(block: str) -> bool:
     return "github.base_ref" in block
 
 
+def guards_off_labeled(block: str) -> bool:
+    """True when a job does NOT stand down on a bare ``labeled`` pull request.
+
+    The mirror image of ``guards_on_base_ref``: that one asserts the expensive
+    jobs DO carry a condition, this one asserts the always-run gates do NOT.
+
+    Why it is worth a guard. ``main`` is branch-protected, and ``lint``,
+    ``security`` and ``smoke`` are three of its eleven required contexts.
+    CLAUDE.md mandates labelling every PR, so a ``labeled`` event is guaranteed
+    on every one. A job skipped by ``if:`` still publishes a check run -- with
+    conclusion ``skipped`` -- and that run lands in a check suite created after
+    the real one. Branch protection resolves a required context to the newest
+    suite carrying that name, and ``skipped`` does not satisfy it.
+
+    The result is a pull request that is green in every human-facing view
+    (``statusCheckRollup: SUCCESS``) and permanently unmergeable
+    (``mergeStateStatus: BLOCKED``), with no further run possible on that SHA
+    to correct it. Measured on #1856, against #1852 as the control: identical
+    labels, both green, and #1852 was CLEAN only because a later push happened
+    to make its real suite the newest one.
+
+    None of that is visible until someone tries to merge, which is why it is
+    asserted here rather than trusted to review.
+    """
+    return "github.event.action != 'labeled'" not in block
+
+
 def main() -> int:
     if not WORKFLOW.is_file():
         print(f"ERROR: cannot read {WORKFLOW.relative_to(REPO_ROOT)}", file=sys.stderr)
@@ -177,6 +208,19 @@ def main() -> int:
                 "a runner acquisition on the test matrix's critical path); inline\n"
                 "means repeated, and repeated means it can drift, which is what\n"
                 "this checks."
+            )
+
+    for name in ALL_PR_JOBS:
+        if name in found and not guards_off_labeled(job_block(text, name)):
+            problems.append(
+                f"job `{name}` is listed as running for EVERY pull request but its\n"
+                "`if:` stands down on a bare `labeled` event. A skipped job still\n"
+                "publishes a `skipped` check run, in a suite NEWER than the real\n"
+                "run's, and branch protection reads the newest suite. Since\n"
+                f"`{name}` is a required context on `main`, that leaves every\n"
+                "labelled PR green-looking and permanently unmergeable. Drop the\n"
+                "guard; the shared label concurrency group keeps the cost to one\n"
+                "run per PR."
             )
 
     for name in sorted(set(classified) - set(found)):
