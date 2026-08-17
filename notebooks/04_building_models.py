@@ -310,7 +310,7 @@ print("─" * 70)
 # Build AGN dict using composable factories (do NOT build full SEDModel here)
 agn_dict = builders.agn.composable(
     defaults=FREE,
-    log_lbol=Uniform(43.0, 47.0),
+    log_lbol=Uniform(9.42, 13.42),
     disc=builders.agn.disc.multicolor(defaults=FREE),
     torus=builders.agn.torus.skirtor(defaults=FIXED),
     nlr=builders.agn.nlr.analytic(),
