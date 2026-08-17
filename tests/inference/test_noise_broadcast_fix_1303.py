@@ -53,7 +53,7 @@ def test_population_fit_with_free_noise_frac_cal_runs(synthetic_ssp, simple_obse
         sfh_dpl_alpha=Fixed(1.5),
         sfh_dpl_beta=Fixed(1.0),
         sfh_dpl_tau_gyr=Fixed(2.0),
-        sfh_dpl_log_total_mass=Uniform(-1.0, 3.0),
+        sfh_dpl_log_total_mass=Uniform(9.0, 11.0),
         redshift=Fixed(0.05),
         # The one ingredient that matters for #1303: a free noise parameter
         # switches build_jit_engine onto the variable-noise branch.
