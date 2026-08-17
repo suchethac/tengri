@@ -865,7 +865,7 @@ class Catalog:
             line_defs = self._resolve_line_defs(tuple(lines))
 
             def _measure(params):
-                return self.fwd.measure_line_fluxes(params, line_defs, fast=True)
+                return self.fwd.measure_line_fluxes(params, line_defs, approx=True)
 
             # The tag carries the line set: a different set is a different
             # program, and reusing one cache entry across them would be wrong.
