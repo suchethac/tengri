@@ -54,6 +54,15 @@ class _MockSpec:
     def resolve_mirrors(self, params):
         return params
 
+    def sample(self, key):
+        """Return a dict of default parameter values for all free parameters.
+
+        Matches the contract of Parameters.sample: takes a PRNG key and returns
+        a dict mapping parameter names to sampled values. For the mock, we return
+        a default value (1.0) for each free parameter.
+        """
+        return {name: jnp.asarray(1.0) for name in self._free_names}
+
 
 class _DualPathModel:
     """Model exposing both legacy and orchestrator photometry/spectrum paths.
@@ -116,7 +125,9 @@ def test_default_routes_through_legacy_path():
     fitter, model = _make_fitter(use_components=False)
     loglik = build_loglikelihood_fn(fitter)
     _ = loglik({"flux_scale": 1.0}, fitter._data_args)
-    assert model.legacy_calls == 1
+    # build_loglikelihood_fn calls predict once during channel-scale pre-check,
+    # then the returned function calls predict once during evaluation (total: 2).
+    assert model.legacy_calls == 2
     assert model.orchestrator_calls == 0
 
 
@@ -124,8 +135,10 @@ def test_use_components_routes_through_component_path():
     fitter, model = _make_fitter(use_components=True)
     loglik = build_loglikelihood_fn(fitter)
     _ = loglik({"flux_scale": 1.0}, fitter._data_args)
+    # build_loglikelihood_fn calls predict once during channel-scale pre-check,
+    # then the returned function calls predict once during evaluation (total: 2).
     assert model.legacy_calls == 0
-    assert model.orchestrator_calls == 1
+    assert model.orchestrator_calls == 2
 
 
 def _make_spectroscopy_fitter(*, use_components: bool):
