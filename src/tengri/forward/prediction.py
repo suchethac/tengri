@@ -364,7 +364,7 @@ class EmissionLines(NamedTuple):
     .. code-block:: python
 
         pred = model.predict(params)
-        lines = pred.lines  # EmissionLines NamedTuple
+        lines = pred.lines  # LineProperties accessor with .get() method
         print(float(lines.halpha))  # H-alpha luminosity [erg/s]
         print(float(lines.oiii_5007))  # [OIII] 5007 Å luminosity [erg/s]
         # BPT diagram
@@ -1394,6 +1394,83 @@ class LineProperties(_CachedBase):
         """
         self._pred._ensure_lines()
         return self._pred.properties["balmer_decrement"]
+
+    @property
+    def all_waves(self):
+        """Rest-frame vacuum wavelengths of all cataloged lines [Angstrom].
+
+        Returns
+        -------
+        jnp.ndarray, shape (n_lines,)
+            Wavelengths published by the active nebular backend. Empty array
+            when the backend does not expose a discrete catalog (BakedIn, Shock).
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+        """
+        self._pred._ensure_lines()
+        return self._pred._cache.get("line_waves", jnp.array([]))
+
+    @property
+    def all_lums(self):
+        """Luminosities at all_waves [erg/s].
+
+        Returns
+        -------
+        jnp.ndarray, shape (n_lines,)
+            Line luminosities in the same dust regime as the headline fields
+            (attenuated by the active dust model when present). Empty array
+            when the backend does not expose a discrete catalog.
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+        """
+        self._pred._ensure_lines()
+        return self._pred._cache.get("line_lums", jnp.array([]))
+
+    def get(self, wavelength: float, tol_aa: float = 2.0) -> jnp.ndarray:
+        """Return the luminosity at the species nearest *wavelength* Å.
+
+        Matches the semantics of :meth:`EmissionLines.get` for parity between
+        the deprecated and new prediction surfaces (#1889).
+
+        Parameters
+        ----------
+        wavelength : float
+            Rest-frame vacuum wavelength to look up [Angstrom].
+        tol_aa : float, optional
+            Acceptable distance to the nearest cataloged line [Angstrom].
+            Returns ``nan`` if the nearest line is further than this. Default 2.0.
+
+        Returns
+        -------
+        jnp.ndarray
+            Luminosity at the matched line [erg/s], or ``nan`` if no line
+            is within ``tol_aa``. Returns ``nan`` if the active backend
+            did not publish a discrete catalog.
+
+        Notes
+        -----
+        **JIT-compatible**: no — Python property accessor. Use in postprocessing,
+        not inside :func:`jax.jit`.
+
+        Examples
+        --------
+        >>> pred = model.predict(params)
+        >>> halpha_lum = pred.lines.get(6564.61)  # match H-alpha
+        >>> heii_1640 = pred.lines.get(1640.42)  # match He II
+        """
+        all_waves = self.all_waves
+        all_lums = self.all_lums
+        if all_waves.size == 0:
+            return jnp.asarray(jnp.nan)
+        diff = jnp.abs(all_waves - jnp.asarray(wavelength))
+        idx = jnp.argmin(diff)
+        return jnp.where(diff[idx] <= tol_aa, all_lums[idx], jnp.asarray(jnp.nan))
 
 
 # ── Radio properties (lazy) ───────────────────────────────────────
