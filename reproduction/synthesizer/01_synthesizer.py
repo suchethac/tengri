@@ -23,16 +23,12 @@
 # laws, Madau/Inoue IGM, and `UnifiedAGN` black-hole emission (disc + narrow
 # and broad line regions + dusty torus).
 #
-# This notebook places that forward model next to tengri at matched
-# parameters. tengri and Synthesizer are independent codes; the emphasis is
-# the AGN model (§9), reproduced component by component.
+# tengri and Synthesizer are independent codes; the emphasis here is the AGN
+# model (§9), reproduced component by component.
 #
 # **What sits on each side.** Synthesizer on the left; tengri on the right.
-# For stellar populations (§1) both read the same templates (Synthesizer's
-# stellar grid re-shaped into tengri's form), so the §1 residual is
-# interpolation alone. For AGN line regions (§9c, §9d) tengri reads the
-# *same* `/spectra/nebular` array that Synthesizer's `UnifiedAGN` extracts,
-# through the public grammar (`nlr={'type': 'synthesizer_spectra'}`).
+# Where both read the same templates — the stellar grid (§1) and the AGN
+# line-region arrays (§9c, §9d) — the residual is interpolation alone.
 #
 # **Grids.** This notebook uses Synthesizer's *test* grids
 # (`synthesizer-download --stellar-test-grids --agn-test-grids
@@ -127,9 +123,9 @@ def _assert_comparable(arr_ref, arr_t, *, name: str) -> None:
 # %% [markdown]
 # ## Common stellar grid
 #
-# Both codes read identical templates: Synthesizer's stellar grid is
-# re-shaped once into tengri's form (cached locally, not committed), so the
-# §1 agreement is a numerical statement.
+# Synthesizer's stellar grid, re-shaped once into tengri's form (cached
+# locally, not committed). The §1 agreement is therefore a numerical
+# statement.
 
 # %%
 _grid_h5 = _HERE / "_drivers" / "data" / "synthesizer_test_grid.h5"
@@ -146,11 +142,9 @@ print(
 # %% [markdown]
 # ## §1 Single stellar populations
 #
-# Single stellar populations at ≈ solar metallicity from 1 Myr to 10 Gyr:
-# Synthesizer (solid) vs tengri (black dashed). The lower panel shows the
-# relative residual. Both sides read identical numbers; the residual sits at
-# the level set by single-precision round-trip through the shared grid (gray
-# line, 1e-6).
+# Single stellar populations at ≈ solar metallicity from 1 Myr to 10 Gyr.
+# Both sides read identical numbers; the residual sits at the level set by
+# single-precision round-trip through the shared grid (gray line, 1e-6).
 
 # %%
 _target_ages_yr = [1e6, 1e7, 1e8, 1e9, 1e10]
@@ -208,10 +202,9 @@ print(f"§1 SSP 1 Gyr optical residual: median {np.median(_res):.2e}, max {_res.
 # ## §2 Star formation history — delayed-τ
 #
 # Synthesizer's `SFH.DelayedExponential` uses `SFR(t) ∝ t · exp(−t/τ)`,
-# peaking at `t = τ`. tengri's `sfh.delayed` is the same closed form. The
-# right panel reads tengri's SFR history from a built model on the log-spaced
-# lookback grid (not a re-evaluated analytic curve). Both normalize to 1 M⊙
-# formed.
+# peaking at `t = τ`. tengri's `sfh.delayed` is the same closed form.
+# tengri's SFR history is read from a built model on the log-spaced lookback
+# grid, not a re-evaluated analytic curve. Both normalize to 1 M⊙ formed.
 
 # %%
 t_s, sfr_s = S.sfh_curve(tau_gyr=TAU_GYR_FIDUCIAL, max_age_gyr=AGE_GYR_FIDUCIAL)
@@ -262,11 +255,11 @@ save_fig("synthesizer_02_sfh_delayed.png")
 # %% [markdown]
 # ## §3 Integrated stellar SED
 #
-# Convolve the τ-delayed SFH with the SSP grid, no dust or nebular. Both form
-# 10^10 M⊙. The printed ~1.09× optical ratio is *not* a normalization error
-# — it is the two codes' independent SFH discretizations: Synthesizer integrates
-# an analytic SFZH onto SSP age-bin edges, while tengri convolves on its
-# log-lookback quadrature (validated against dense code-independent
+# The τ-delayed SFH convolved with the SSP grid, no dust or nebular. Both
+# form 10^10 M⊙. The printed ~1.09× optical ratio is *not* a normalization
+# error — it is the two codes' independent SFH discretizations: Synthesizer
+# integrates an analytic SFZH onto SSP age-bin edges, while tengri convolves
+# on its log-lookback quadrature (validated against dense code-independent
 # convolution, #964). The mild chromatic spread (P5–P95 ≈ 1.05–1.10) follows
 # from different age weighting.
 
@@ -431,11 +424,10 @@ save_fig("synthesizer_05_dust_applied.png")
 # %% [markdown]
 # ## §6 Dust IR re-emission and energy balance
 #
-# Absorbed stellar UV/optical re-emerges in the infrared. Synthesizer re-emits
-# through Draine & Li (2007) templates, enforcing energy balance internally.
-# tengri uses the same DL07 grid with the same energy-balance constraint. We
-# compare isolated dust IR emission at matched `(q_PAH, U_min)` — both peak
-# near ~140 µm for `U_min = 1`.
+# Synthesizer re-emits absorbed stellar UV/optical through Draine & Li (2007)
+# templates, enforcing energy balance internally. tengri uses the same DL07
+# grid with the same energy-balance constraint. Isolated dust IR emission at
+# matched `(q_PAH, U_min)` — both peak near ~140 µm for `U_min = 1`.
 
 # %%
 QPAH_FRAC = 0.025  # Synthesizer fraction; ≈ tengri qpah = 2.5
@@ -651,17 +643,15 @@ save_fig("synthesizer_08_nebular.png")
 # ## §9 AGN — the Unified AGN model
 #
 # Synthesizer's `UnifiedAGN` combines four regions — disc, NLR, BLR, and torus
-# — with disc–torus geometry (inclination-dependent mask). We reproduce each
-# piece, then the combined spectrum and inclination dependence.
+# — with disc–torus geometry (inclination-dependent mask).
 #
 # The AGN Cloudy grid stores disc continuum three ways: **incident** (bare
 # disc), **transmitted** (through gas), and **nebular** (gas re-emission).
 # Covering fractions set how much is reprocessed vs escapes. The torus
 # reprocesses obscured disc luminosity into warm-dust IR. At grazing
 # inclination (`inclination + θ_torus > 90°`) the disc and BLR vanish (Type-2
-# view); the NLR stays visible. This incident/transmitted/escaped accounting
-# per region, gated by the inclination mask, produces the components below
-# (§9a–§9f).
+# view); the NLR stays visible. That per-region accounting, gated by the
+# inclination mask, produces §9a–§9f.
 #
 # The black hole is driven by `(mass, accretion_rate_eddington)`, with
 # `inclination` and `theta_torus` setting geometry. Bolometric luminosity
@@ -755,9 +745,9 @@ def _agn_grammar(disc="kubota_done", torus="simple", nlr="none", blr="none", cos
 # The incident disc from Synthesizer's **test** AGN grid (qsosed, Kubota &
 # Done 2018) vs tengri's `kubota_done` disc. tengri also overlays a broken
 # power-law disc (Feltre et al. 2016) for context. tengri's disc inner
-# temperature follows Novikov-Thorne theory; its peak is set by standard disc
-# physics at given $M_{\rm BH}$ and $\lambda_{\rm Edd}$; the test grid runs
-# cooler. Shape comparison at matched bolometric luminosity.
+# temperature follows Novikov-Thorne theory at given $M_{\rm BH}$ and
+# $\lambda_{\rm Edd}$; the test grid runs cooler. Shape comparison at
+# matched bolometric luminosity.
 
 # %%
 w_disc_s, L_disc_s = agn["disc"]
@@ -831,9 +821,9 @@ print(f"§9a disc peak: Synthesizer {w_disc_s[np.argmax(L_disc_s)]:.0f} Å")
 # %% [markdown]
 # ### §9b Disc transmitted vs escaped
 #
-# Synthesizer splits the observed disc into the unobscured (`disc_escaped`) and the
-# line-region-transmitted (`disc_transmitted`) paths, combined by covering
-# fractions into the observed disc. We show all three to expose the geometry.
+# Synthesizer splits the observed disc into the unobscured (`disc_escaped`)
+# and the line-region-transmitted (`disc_transmitted`) paths, combined by
+# covering fractions into the observed disc. All three are shown.
 
 # %%
 fig, ax = plt.subplots(1, 1, figsize=(8, 5))
@@ -926,7 +916,7 @@ print(
 # 'synthesizer_spectra'}` reads the BLR grid's `/spectra/nebular` array.
 # Synthesizer extracts both line regions isotropically (`cosine_inclination = 0.5`).
 # (tengri's physically Type-2-obscured BLR is the separate `blr`/`blr_synthesizer`
-# path used by `recipes.unified_agn()`; see §9f.)
+# path; see §9f.)
 #
 # **Caveat:** The downloadable test grids don't distinguish NLR from BLR.
 # `test_grid_agn-nlr` and `test_grid_agn-blr` are byte-identical placeholders,
@@ -1032,12 +1022,11 @@ print(
 # %% [markdown]
 # ### §9f Unified spectrum and inclination anisotropy
 #
-# The full unified AGN spectrum. The **top row** shows Synthesizer's `UnifiedAGN`
-# (left) vs tengri's unified AGN (right) — built in a single `SEDModel.build`
-# call: disc + torus + NLR + BLR via the composable grammar and
-# `nlr_blr_synthesizer_spectra` lines block. The disc UV bump, [O III]/Balmer
-# line forest, and torus IR bump stack into the same panchromatic shape on both
-# sides.
+# The **top row**: Synthesizer's `UnifiedAGN` (left) vs tengri's unified AGN
+# (right), built in a single `SEDModel.build` call — disc + torus + NLR + BLR
+# via the composable grammar and `nlr_blr_synthesizer_spectra` lines block.
+# The disc UV bump, [O III]/Balmer line forest, and torus IR bump stack into
+# the same panchromatic shape on both sides.
 #
 # The **bottom panel** shows the decisive geometry difference. Both codes carry
 # Type-1/2 anisotropy on the disc: Synthesizer applies a **hard cut** — the disc
@@ -1311,9 +1300,9 @@ for _p in _agn_free:
 # %% [markdown]
 # ## §12 IGM transmission — Inoue (2014) and Madau (1995)
 #
-# Both Synthesizer and tengri ship Inoue+2014 and Madau+1995 IGM prescriptions.
-# At matched redshift the curves should track closely; the residual is the
-# difference between the two implementations.
+# Both Synthesizer and tengri ship Inoue+2014 and Madau+1995 IGM
+# prescriptions; the residual at matched redshift is the difference between
+# the two implementations.
 
 # %%
 # Inoue14 IGM is public (``tengri.igm_transmission``). The Madau96 variant is not
@@ -1354,9 +1343,9 @@ print(
 #
 # tengri configured to emulate Synthesizer end to end (shared SSP, τ-delayed
 # SFH, Calzetti screen, DL07 IR, Cue nebular) overlaid on Synthesizer's
-# `TotalEmission`. The top panel is the overlay; the bottom is the fractional
-# residual with the ±25 % band shaded. The optical ratio carries the §3
-# SFH-discretization offset, the dominant stellar-continuum difference.
+# `TotalEmission`, with the fractional residual and a ±25 % band below. The
+# optical ratio carries the §3 SFH-discretization offset, the dominant
+# stellar-continuum difference.
 
 # %%
 import chex
@@ -1426,10 +1415,7 @@ plt.show()
 # (§9c, §9d) draw from the same Cloudy grids, though spectra differ in line
 # representation. Where codes use independent physics — accretion disc (§9a),
 # torus (§9e), and disc–torus geometry (§9f, Synthesizer's hard mask vs
-# tengri's smooth sigmoid) — the comparison is shape and amplitude. The §9
-# panels show every piece of the unified AGN: disc, transmitted/escaped split,
-# line regions, torus, and inclination anisotropy — matching Synthesizer where
-# inputs are shared and showing exactly where the codes differ.
+# tengri's smooth sigmoid) — the comparison is shape and amplitude.
 
 # %% [markdown]
 # ## References

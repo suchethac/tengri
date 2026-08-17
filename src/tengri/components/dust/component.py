@@ -162,6 +162,12 @@ class DustAttenuationSEDComponent(TemplateThreading):
                 "exp(-tau_v * k(lambda)) on pipeline wave grid",
             ),
             DerivedKey("sed_dust_attenuated", "erg/s/Hz", "Attenuated stellar SED"),
+            DerivedKey(
+                "log_line_lums_attenuated",
+                "dex",
+                "log10 of the discrete line catalog after this screen; absent when no "
+                "photoionized backend published one (#1867)",
+            ),
         )
 
     def optional_inputs(self) -> tuple[DerivedKey, ...]:
@@ -179,14 +185,31 @@ class DustAttenuationSEDComponent(TemplateThreading):
 
         BakedIn backends publish ``sed_nebular`` as zeros (emission is
         already in the SSP grid), so this is a no-op there. The screen does
-        not read the key directly — it acts on the already-summed
-        ``sed_intrinsic`` — so this is purely an ordering edge.
+        not read that key directly — it acts on the already-summed
+        ``sed_intrinsic`` — so it is purely an ordering edge.
+
+        ``line_waves`` / ``line_lums`` ARE read directly: :meth:`apply`
+        reddens the discrete catalog and publishes ``line_lums_attenuated``
+        (#1867). The ``sed_nebular`` edge already sequences nebular first, so
+        declaring them adds no new constraint — they are declared because
+        ADR-0009 says a component states what it reads. An undeclared read
+        works until someone reorders the pipeline, and then fails silently.
         """
         return (
             DerivedKey(
                 "sed_nebular",
                 "erg/s/Hz",
                 "Nebular continuum folded into sed_intrinsic before the screen",
+            ),
+            DerivedKey(
+                "line_waves",
+                "Angstrom",
+                "Discrete nebular line wavelengths (Cue/CloudyGrid); absent for BakedIn",
+            ),
+            DerivedKey(
+                "log_line_lums",
+                "dex",
+                "INTRINSIC log10 line luminosities to redden (#1867); absent for BakedIn",
             ),
         )
 
@@ -346,6 +369,28 @@ class DustAttenuationSEDComponent(TemplateThreading):
             log_L_ir=log_l_ir,
             sed_dust_attenuated=attenuated,
         )
+
+        # Discrete emission-line catalog, reddened with this component's single
+        # screen (#1867). The two-component component does the same in its §2c;
+        # omitting it here would leave every single-screen model reading
+        # INTRINSIC line luminosities from `pred.lines.*` and
+        # `predict_properties`, which is the half-fix #1867 warns about.
+        #
+        # `curve(line_wave)`, never the cached `k_lambda`: that array is bound
+        # to `state.wave` and means nothing at line wavelengths.
+        #
+        # Reads and publishes the LOG companion, never the linear `line_lums`,
+        # which is `inf` in float32 at ~1e41 erg/s (#1534/#1837). `-tau*k` is a
+        # log-domain quantity already; converting to dex is one division.
+        _line_waves = state.derived.get("line_waves")
+        _log_line_lums = state.derived.get("log_line_lums")
+        if _line_waves is not None and _log_line_lums is not None:
+            line_wave = jnp.asarray(_line_waves)
+            log10_e = 1.0 / jnp.log(10.0)
+            derived_overrides["log_line_lums_attenuated"] = (
+                jnp.asarray(_log_line_lums) - tau_v * curve(line_wave) * log10_e
+            )
+
         filter_eff = state.derived.get("filter_eff_waves")
         if filter_eff is not None:
             # Evaluate the attenuation law at the filter pivots and at a

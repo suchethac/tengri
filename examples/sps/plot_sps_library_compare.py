@@ -59,10 +59,19 @@ DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "t
 
 fig, ax = plt.subplots(figsize=(7.2, 4.6))
 
+plotted = 0
+first_failure: Exception | None = None
+
 for (ssp_name, label), color in zip(LIBRARIES, COLORS):
     try:
         ssp = tengri.load_ssp(ssp_name)
-    except (FileNotFoundError, Exception):
+    except Exception as e:
+        # Was `except (FileNotFoundError, Exception)` — the second member makes
+        # the first redundant, so it caught everything while reading as a
+        # missing-file check. Absent grids are expected (this example is skipped
+        # in CI); a loader bug was being hidden alongside them.
+        if first_failure is None:
+            first_failure = e
         continue
     model = tengri.SEDModel.build(
         ssp,
@@ -78,6 +87,16 @@ for (ssp_name, label), color in zip(LIBRARIES, COLORS):
     if norm > 0:
         nu_l_nu = nu_l_nu / norm
     ax.loglog(wave, nu_l_nu, color=color, lw=1.4, label=label)
+    plotted += 1
+
+# The Lyman-limit and Lyalpha reference lines below are drawn unconditionally, so
+# an empty comparison still yields a plausible-looking annotated axes.
+if plotted == 0:
+    raise RuntimeError(
+        f"none of the {len(LIBRARIES)} SSP libraries loaded, so there is "
+        f"nothing to compare. First failure: "
+        f"{type(first_failure).__name__}: {first_failure}"
+    ) from first_failure
 
 ax.axvline(1216, color="0.55", lw=0.6, ls=":")
 ax.text(1216, 0.012, r"Ly$\alpha$", color="0.4", fontsize=8, rotation=90, va="bottom", ha="right")

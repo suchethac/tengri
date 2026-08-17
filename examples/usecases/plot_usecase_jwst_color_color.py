@@ -30,14 +30,17 @@ warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
 ssp = tengri.load_ssp()
 
-# Build JWST filter observation
-try:
-    obs = tengri.Observation(
-        photometry=tengri.Photometry.from_names(["jwst_f150w", "jwst_f277w", "jwst_f444w"])
-    )
-except Exception:
-    # Fallback if filter names differ
-    obs = None
+# Build JWST filter observation.
+#
+# There is deliberately no fallback. This used to catch and set ``obs = None``,
+# which ``SEDModel.build`` accepts -- so a filter-name change would have built
+# three models with no photometry and produced a JWST color-color diagram
+# with no JWST filters in it. These three bands are not incidental to the
+# example; they *are* the example, so failing to load them is fatal by
+# construction.
+obs = tengri.Observation(
+    photometry=tengri.Photometry.from_names(["jwst_f150w", "jwst_f277w", "jwst_f444w"])
+)
 
 # Generate three galaxy classes
 key = jax.random.PRNGKey(123)
