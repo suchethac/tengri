@@ -1466,6 +1466,9 @@ _PLOT_HELPERS: tuple[tuple[str, str], ...] = (
 )
 
 
+_PLOT_HINT_CACHE: dict[str, str] = {}
+
+
 def _plot_call_hint(name: str) -> str:
     """A ``use:`` hint for one plot helper, naming the arguments it requires.
 
@@ -1491,7 +1494,15 @@ def _plot_call_hint(name: str) -> str:
 
     Derived rather than written down, so a helper that gains or loses a
     required argument cannot leave a stale hint behind.
+
+    Memoized to avoid repeated import attempts at deep recursion depths, which
+    can cause RecursionError when calling from describe() at high stack levels.
+    Helpers' signatures are static at runtime, so a single derivation per
+    session suffices (#853).
     """
+    if name in _PLOT_HINT_CACHE:
+        return _PLOT_HINT_CACHE[name]
+
     import inspect
 
     try:
@@ -1499,16 +1510,20 @@ def _plot_call_hint(name: str) -> str:
 
         fn = getattr(_plot, name)
         params = inspect.signature(fn).parameters.values()
-    except Exception:  # pragma: no cover - defensive; a helper always resolves
-        return f"tengri.plot.{name}(...)"
+    except (ImportError, AttributeError):
+        result = f"tengri.plot.{name}(...)"
+    else:
+        required = [
+            p.name
+            for p in params
+            if p.default is inspect.Parameter.empty
+            and p.kind
+            in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+        ]
+        result = f"tengri.plot.{name}({', '.join(required)})"
 
-    required = [
-        p.name
-        for p in params
-        if p.default is inspect.Parameter.empty
-        and p.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
-    ]
-    return f"tengri.plot.{name}({', '.join(required)})"
+    _PLOT_HINT_CACHE[name] = result
+    return result
 
 
 def list_plots() -> _RegistryTable:
@@ -2181,6 +2196,13 @@ def _every_menu_lister() -> tuple:
     export_only = sorted(set(tengri.__all__) - set(dir(tengri)))
     for attr in (*curated, *export_only):
         if not attr.startswith("list_") or attr in seen:
+            continue
+        # Exclude meta-listers: list_all calls _every_menu_lister, creating
+        # circular recursion when _every_menu_lister tries to discover list_all
+        # as a menu lister (#853). They return dicts, not lists of dicts,
+        # so they fail the shape check below anyway, but be explicit to avoid
+        # calling them during discovery.
+        if attr in ("list_all", "list_properties"):
             continue
         fn = getattr(tengri, attr, None)
         if not callable(fn):
