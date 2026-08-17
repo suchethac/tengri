@@ -65,25 +65,7 @@ from collections.abc import Callable
 import jax
 import jax.numpy as jnp
 
-# ── Template search paths (resolved once, reused for all models) ──
-
-
-def _find_data_file(filename: str) -> str | None:
-    """Search standard data directories for a template file.
-
-    Walks the CWD's parents so notebooks and scripts running from a
-    subdirectory (e.g. ``reproduction/prospector/``) still resolve
-    ``<repo>/data/``.
-
-    This previously tried a static package-anchored list *before* falling back
-    to the shared locator, which put ``$TENGRI_DATA_DIR`` last: a stale copy in
-    the source tree outranked the directory the user had configured. The shared
-    locator is a superset of that list and orders it correctly (#1431).
-    """
-    from tengri._data_setup import find_data_str
-
-    return find_data_str(filename)
-
+from tengri._data_setup import find_data_str
 
 # ── Dust emission model catalog ──────────────────────────────────
 
@@ -471,7 +453,7 @@ def _make_lazy_loader(
             # Try v2 HDF5 first (improved grid), then canonical HDF5
             stem = template_filename.rsplit(".", 1)[0]
             v2_name = stem + "_v2.h5"
-            path = _find_data_file(v2_name) or _find_data_file(template_filename)
+            path = find_data_str(v2_name, template_filename)
             if path is not None:
                 loader = globals()[loader_fn_name]
                 try:
@@ -525,23 +507,11 @@ def _make_lazy_loader(
     return _lazy_wrapper
 
 
-def _find_dl07_templates() -> str | None:
-    """Find DL07 template files, preferring the v2 grid.
-
-    ``find_data_str`` is name-major -- the first *filename* that exists
-    anywhere wins -- which is exactly the preference this used to hand-roll
-    (#1431).
-    """
-    from tengri._data_setup import find_data_str
-
-    return find_data_str("dl07_templates_v2.h5", "dl07_templates.h5")
-
-
 def _dl07_lazy_wrapper(*args, **kwargs):
     """Draine & Li (2007) — auto-loads tabulated templates on first call."""
     if "draine_li2007" not in _resolved:
         _resolved.add("draine_li2007")
-        path = _find_dl07_templates()
+        path = find_data_str("dl07_templates_v2.h5", "dl07_templates.h5")
         if path is not None:
             from tengri.components.dust.emission_templates import create_dl07_from_grid
 
@@ -647,7 +617,7 @@ def _load_dl14_fn():
     from tengri.components.dust.emission_templates import create_dl14_from_grid
 
     for fname in ("dl14_templates_v2.h5", "dl14_templates.h5"):
-        path = _find_data_file(fname)
+        path = find_data_str(fname)
         if path is not None:
             return create_dl14_from_grid(path)
     raise FileNotFoundError(

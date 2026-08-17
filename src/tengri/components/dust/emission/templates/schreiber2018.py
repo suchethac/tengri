@@ -71,11 +71,11 @@ class Schreiber2018IRSEDComponent(EmissionComponent):
         **JIT-compatible**: no, deliberately — runs at build time.
         """
         del wave
-        from tengri.components.dust.emission.emission import _find_data_file
+        from tengri._data_setup import find_data_str
         from tengri.components.dust.emission_templates import load_schreiber2018_templates
 
         for fname in ("schreiber2018_templates_v2.h5", "schreiber2018_templates.h5"):
-            path = _find_data_file(fname)
+            path = find_data_str(fname)
             if path is not None:
                 return load_schreiber2018_templates(path)
         return None
