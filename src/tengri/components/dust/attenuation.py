@@ -77,6 +77,7 @@ from tengri.components.dust.laws._registry import (
     _HEADLINE_LAWS as _HEADLINE_LAWS,
     DUST_LAWS as DUST_LAWS,
     DustLawRegistryEntry as DustLawRegistryEntry,
+    _calzetti_kprime_unnormalized as _calzetti_kprime_unnormalized,
     _calzetti_l02_kprime as _calzetti_l02_kprime,
     _drude_profile as _drude_profile,
     list_laws as list_laws,
@@ -437,13 +438,17 @@ def kriek_conroy(
     wave_um = wavelength / 1e4
     e_b = dust_bump_strength * (0.85 - 1.9 * dust_delta)  # KC13 Eqn 3
 
-    k_calz = calzetti(wavelength)
+    # Use unnormalized Calzetti base to avoid double normalization (#1731).
+    # _calzetti_kprime_unnormalized returns k'(λ) without R_V or k(5500) normalization.
+    k_calz_kprime = _calzetti_kprime_unnormalized(wavelength)
+    k_calz = k_calz_kprime / R_V
     slope_mod = (wavelength / V_BAND_ANGSTROM) ** dust_delta
     k_unnorm = (k_calz + e_b * _drude_profile(wave_um) / R_V) * slope_mod
 
     # Normalize to k(5500 Å) = 1 (slope_mod = 1 at V band).
     v_band_um = V_BAND_ANGSTROM / 1e4
-    k_calz_v = calzetti(jnp.array([V_BAND_ANGSTROM]))[0]
+    k_calz_kprime_v = _calzetti_kprime_unnormalized(jnp.array([V_BAND_ANGSTROM]))[0]
+    k_calz_v = k_calz_kprime_v / R_V
     bump_v = e_b * _drude_profile(jnp.array([v_band_um]))[0] / R_V
     k_at_v = k_calz_v + bump_v
 
