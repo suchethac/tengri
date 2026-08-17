@@ -218,7 +218,7 @@ def compute_errors(
             interpolate_ztable_smooth(
                 ztable.ssp_phot_table,
                 ztable.eff_waves_rest_table,
-                ztable.flux_scale_table,
+                ztable.log10_flux_scale_table,
                 ztable.z_grid,
                 z_test,
                 scatter,
@@ -240,7 +240,7 @@ def compute_errors(
             interpolate_ztable_smooth(
                 ztable.ssp_phot_table,
                 ztable.eff_waves_rest_table,
-                ztable.flux_scale_table,
+                ztable.log10_flux_scale_table,
                 ztable.z_grid,
                 float(z_test),
                 scatter,
