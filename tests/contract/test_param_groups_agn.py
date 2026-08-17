@@ -200,7 +200,7 @@ class TestAGNParameterRouting:
                 "disc": {
                     "type": "powerlaw",
                     "*": FREE,
-                    "log_lbol": Fixed(44.0),  # Per-disc-param override
+                    "log_lbol": Fixed(10.42),  # Per-disc-param override
                 },
             },
             redshift=Fixed(0.1),
@@ -266,7 +266,7 @@ class TestAGNProvenance:
             agn={
                 "*": FIXED,  # Fix shared params
                 "disc": {"type": "powerlaw", "*": FIXED},
-                "log_lbol": Fixed(45.0),  # Override shared param at agn level
+                "log_lbol": Fixed(11.42),  # Override shared param at agn level
             },
             redshift=Fixed(0.1),
         )
