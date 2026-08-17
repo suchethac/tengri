@@ -80,6 +80,7 @@ from typing import NamedTuple
 
 import jax.numpy as jnp
 
+from tengri._deprecated import UNSET, resolve_renamed_flag
 from tengri._mapping import ReadOnlyPropertyMapping
 
 
@@ -149,7 +150,7 @@ def _warn_runtime_photometry_once():
             "(full SED integration) and is slower than build-time filters. "
             "For repeated calls with the same filters, cache the result. "
             "For significantly faster photometry, rebuild the model with "
-            "approx=WavePrecomp() and use pred.photometry(fast=True).",
+            "approx=WavePrecomp() and use pred.photometry(approx=True).",
             UserWarning,
             stacklevel=4,
         )
@@ -2147,20 +2148,25 @@ class Prediction:
         self._ensure_sed()
         return self._cache["sed_total"]
 
-    def photometry(self, filters=None, fast=False):
+    def photometry(self, filters=None, approx=False, *, fast=UNSET):
         r"""Observed-frame photometric flux densities.
 
         Integrates the model SED through each filter and applies the cosmological
         dimming, returning :math:`F_\nu` in the observer frame. For the same
         quantity as AB magnitudes, see :meth:`magnitudes`.
 
-        **Exact by default, fast by choice.** The default integrates the full SED
-        — including on a model built with ``approx=WavePrecomp(...)``, where the
-        lean :meth:`~tengri.SEDModel.predict_photometry` would instead read the
-        lookup table. That is deliberate: ``pred.photometry()`` must mean the same
-        thing on every model. The LUT is an approximation carrying real error (of
-        order a few percent at high redshift), so you reach it only by asking for
-        it, with ``fast=True``.
+        **Exact by default, approximate by choice.** The default integrates the
+        full SED — including on a model built with ``approx=WavePrecomp(...)``,
+        where the lean :meth:`~tengri.SEDModel.predict_photometry` would instead
+        read the lookup table. That is deliberate: ``pred.photometry()`` must mean
+        the same thing on every model. The LUT is an approximation carrying real
+        error, so you reach it only by asking for it, with ``approx=True``.
+
+        The keyword is spelled ``approx`` because it selects exactly the object
+        installed at build time by ``SEDModel.build(..., approx=WavePrecomp(...))``
+        — one mechanism, one name at both ends. It was called ``fast`` until
+        2026-08, which named the benefit and hid the cost; that spelling still
+        works and emits a ``DeprecationWarning``.
 
         Parameters
         ----------
@@ -2168,11 +2174,13 @@ class Prediction:
             Filter names (e.g., ``["jwst_f356w", "jwst_f444w"]``) or
             :class:`~tengri.observation.photometry.FilterCurve` objects.
             If None, uses the filters configured at model build time.
+        approx : bool, optional
+            If True, use the build-time WavePrecomp LUT (20–50× faster, and an
+            approximation). Only valid when the model was built with
+            ``approx=WavePrecomp(...)``. If `filters` is also provided, raises
+            ValueError. Default: False (exact path).
         fast : bool, optional
-            If True, use the build-time WavePrecomp LUT (20–50× faster).
-            Only valid when the model was built with ``approx=WavePrecomp(...)``.
-            If `filters` is also provided, raises ValueError.
-            Default: False (exact path).
+            Deprecated spelling of `approx`. Removed in v1.0.
 
         Returns
         -------
@@ -2183,9 +2191,12 @@ class Prediction:
         ------
         ValueError
             If the model was not built with ``approx=WavePrecomp(...)`` but
-            ``fast=True`` is requested, or if both `filters` and `fast=True`.
+            ``approx=True`` is requested, or if both `filters` and ``approx=True``.
         ValueError
             If no photometry is configured on the model.
+        TypeError
+            If both `approx` and the deprecated `fast` are passed with
+            contradictory values.
 
         Notes
         -----
@@ -2198,10 +2209,21 @@ class Prediction:
         already cached, so it costs the filter integration and not a second
         forward pass.
 
-        **Fast path** (``fast=True``): Uses the precomputed photometric LUT
-        (filter effective wavelengths × SSP grid). Requires
+        **Approximate path** (``approx=True``): Uses the precomputed photometric
+        LUT (filter effective wavelengths × SSP grid). Requires
         ``approx=WavePrecomp(...)`` at model build time. Runtime cost is
         ~150 μs per forward model (20–50× speedup for typical models).
+
+        **How wrong is it?** Measured against this exact path on a 12-band
+        tsnorm + two-component-dust model, worst band per redshift: 0.085 % at
+        z = 0.05, 1.5 % at z = 1, 10.4 % at z = 1.5, 83 % at z = 3 — but the
+        large numbers are all GALEX FUV, which by z = 2 is below the Lyman
+        break and carries 1e-7 of the g-band flux. On bands carrying flux the
+        error is 1e-4 to 1e-2 (sdss_g is 1.38 % at z = 3). The error is set by
+        :class:`~tengri.WavePrecomp`'s ``band_integration``, not by ``n_z``
+        (measured: 250 -> 1000 nodes moves it by nothing). It is a *bias*, so
+        per #1671 it enters the posterior gradient multiplied by SNR.
+        Full numbers: ``bench/reports/2026-08-17_wave_precomp_accuracy.md``.
 
         **Runtime filters** (``filters=...``): Constructs a runtime Photometry
         object from filter names or objects. Cached on ``self._photometry_cache``
@@ -2218,10 +2240,10 @@ class Prediction:
         >>> phot.shape
         (8,)
 
-        **Fast path (requires WavePrecomp):**
+        **Approximate path (requires WavePrecomp):**
 
-        >>> phot_fast = pred.photometry(fast=True)  # ≈ same result, 20–50× faster
-        >>> jnp.allclose(phot, phot_fast, rtol=1e-12)
+        >>> phot_lut = pred.photometry(approx=True)  # 20-50x faster, approximate
+        >>> bool(jnp.allclose(phot, phot_lut, rtol=1e-2))
         True
 
         **Runtime filter set:**
@@ -2230,6 +2252,13 @@ class Prediction:
         >>> phot_custom.shape
         (2,)
         """
+        approx = resolve_renamed_flag(
+            approx,
+            fast,
+            old_name="fast",
+            new_name="approx",
+            caller="Prediction.photometry",
+        )
         # A model built without an observation is a valid rest-frame-only model
         # (pred.rest_sed(), pred.stellar_mass, ... all work), but has nothing to
         # project photometry onto. Name the fix instead of crashing with a bare
@@ -2243,9 +2272,9 @@ class Prediction:
                 "(pred.rest_sed(), pred.stellar_mass, ...) are available."
             )
         # Validate arguments
-        if fast and filters is not None:
+        if approx and filters is not None:
             raise ValueError(
-                "fast=True and filters=[...] are mutually exclusive. "
+                "approx=True and filters=[...] are mutually exclusive. "
                 "A LUT built for one filter set cannot cover filters it was never built for."
             )
 
@@ -2256,14 +2285,14 @@ class Prediction:
         # WavePrecomp is that XLA dead-code-eliminates the full-resolution SED
         # einsum when only the LUT is consumed — and ``_ensure_state`` materializes
         # that state eagerly, so the einsum runs and the saving is already spent.
-        # Going through the state made ``fast=True`` *slower* than the exact
+        # Going through the state made ``approx=True`` *slower* than the exact
         # default (measured 0.7-0.8x) while also returning an approximation: the
         # worst of both. ``predict_photometry`` is the same LUT to ~1 ULP and keeps
         # the elision, so it is both faster and the number the fit itself sees.
-        if fast:
+        if approx:
             if not self._model._approx.get("wave_precomp"):
                 raise ValueError(
-                    "fast=True requires the model to be built with approx=WavePrecomp(...). "
+                    "approx=True requires the model to be built with approx=WavePrecomp(...). "
                     "Rebuild the model with approx=WavePrecomp() and try again."
                 )
             return self._model.predict_photometry(self._params)
@@ -2307,8 +2336,8 @@ class Prediction:
         # ``approx=WavePrecomp(...)`` it returns the LUT. Routing the default
         # here through it would make ``pred.photometry()`` silently mean "exact"
         # on one model and "approximate" on another, which is precisely the
-        # ambiguity the exact-by-default rule exists to kill. The fast path is
-        # reachable — but only by asking for it, with ``fast=True``.
+        # ambiguity the exact-by-default rule exists to kill. The LUT path is
+        # reachable — but only by asking for it, with ``approx=True``.
         if self._model.observation.photometry is None:
             raise ValueError(
                 "No photometry is configured on the model. "
@@ -2320,7 +2349,7 @@ class Prediction:
             self._ensure_state(), self._params, self._model.observation.photometry
         )
 
-    def magnitudes(self, filters=None, fast=False):
+    def magnitudes(self, filters=None, approx=False, *, fast=UNSET):
         r"""AB magnitudes through filters.
 
         Computes AB magnitudes by converting observed flux densities from
@@ -2331,11 +2360,14 @@ class Prediction:
         filters : sequence of str or FilterCurve, optional
             Filter names or :class:`~tengri.observation.photometry.FilterCurve`
             objects. If None, uses the filters configured at model build time.
+        approx : bool, optional
+            If True, use the build-time WavePrecomp LUT (20–50× faster, and an
+            approximation). Only valid when the model was built with
+            ``approx=WavePrecomp(...)``. If `filters` is also provided, raises
+            ValueError. Default: False (exact path). See :meth:`photometry` for
+            the measured size of the approximation.
         fast : bool, optional
-            If True, use the build-time WavePrecomp LUT (20–50× faster).
-            Only valid when the model was built with ``approx=WavePrecomp(...)``.
-            If `filters` is also provided, raises ValueError.
-            Default: False (exact path).
+            Deprecated spelling of `approx`. Removed in v1.0.
 
         Returns
         -------
@@ -2346,9 +2378,12 @@ class Prediction:
         ------
         ValueError
             If the model was not built with ``approx=WavePrecomp(...)`` but
-            ``fast=True`` is requested, or if both `filters` and `fast=True`.
+            ``approx=True`` is requested, or if both `filters` and ``approx=True``.
         ValueError
             If no photometry is configured on the model.
+        TypeError
+            If both `approx` and the deprecated `fast` are passed with
+            contradictory values.
 
         Notes
         -----
@@ -2356,7 +2391,7 @@ class Prediction:
         Use in postprocessing, not inside :func:`jax.jit`.
 
         **Semantics**: Computes :meth:`photometry` in the requested mode
-        (exact, fast, or runtime filters), then converts flux densities to
+        (exact, approximate, or runtime filters), then converts flux densities to
         AB magnitudes via:
 
         .. math::
@@ -2378,10 +2413,19 @@ class Prediction:
         """
         from tengri.utils.magnitudes import fnu_to_ab_mag
 
-        fnu = self.photometry(filters=filters, fast=fast)
+        # Resolved here rather than forwarded, so the DeprecationWarning names
+        # ``magnitudes`` (what the user called) and not ``photometry``.
+        approx = resolve_renamed_flag(
+            approx,
+            fast,
+            old_name="fast",
+            new_name="approx",
+            caller="Prediction.magnitudes",
+        )
+        fnu = self.photometry(filters=filters, approx=approx)
         return fnu_to_ab_mag(fnu)
 
-    def spectrum(self, wave_obs=None, fast=False):
+    def spectrum(self, wave_obs=None, approx=False, *, fast=UNSET):
         r"""Instrument-grid, LSF-convolved spectrum.
 
         Computes the observed-frame spectrum at the instrument wavelength grid,
@@ -2392,10 +2436,13 @@ class Prediction:
         wave_obs : ndarray, optional
             Custom observed-frame wavelength grid [Angstrom]. If None, uses
             the grid configured in the spectroscopy setup at model build time.
-        fast : bool, optional
+        approx : bool, optional
             If True, use the build-time ``SpectrumPrecomp`` LUT. Only valid when
             the model was built with ``approx=SpectrumPrecomp(...)``.
-            Default False — the exact projector.
+            Default False — the exact projector. Named for the object it
+            selects, which is the same word the build takes.
+        fast : bool, optional
+            Deprecated spelling of `approx`. Removed in v1.0.
 
         Returns
         -------
@@ -2405,8 +2452,11 @@ class Prediction:
         Raises
         ------
         ValueError
-            If no spectroscopy is configured on the model, or if ``fast=True``
+            If no spectroscopy is configured on the model, or if ``approx=True``
             on a model not built with ``approx=SpectrumPrecomp(...)``.
+        TypeError
+            If both `approx` and the deprecated `fast` are passed with
+            contradictory values.
 
         Notes
         -----
@@ -2429,6 +2479,13 @@ class Prediction:
         >>> spec.shape
         (2048,)
         """
+        approx = resolve_renamed_flag(
+            approx,
+            fast,
+            old_name="fast",
+            new_name="approx",
+            caller="Prediction.spectrum",
+        )
         if self._model.observation is None or self._model.observation.spectroscopy is None:
             raise ValueError(
                 "No spectroscopy is configured on the model. "
@@ -2440,10 +2497,10 @@ class Prediction:
         # ``pred.spectrum()`` mean "exact" on one model and "approximate" on another
         # — measured 5-7% apart on a SpectrumPrecomp model, the same order as the
         # photometry LUT error, and not a rounding difference.
-        if fast:
+        if approx:
             if not self._model._approx.get("spectrum_precomp"):
                 raise ValueError(
-                    "fast=True requires the model to be built with "
+                    "approx=True requires the model to be built with "
                     "approx=SpectrumPrecomp(...). Rebuild the model with "
                     "approx=SpectrumPrecomp() and try again."
                 )

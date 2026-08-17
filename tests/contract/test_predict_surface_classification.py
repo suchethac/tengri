@@ -50,7 +50,21 @@ def _live_predict_methods() -> set[str]:
 
 
 def _is_deprecated(name: str) -> bool:
-    return "deprecat" in (getattr(SEDModel, name).__doc__ or "").lower()
+    """True when the *method* is deprecated — by its Sphinx directive.
+
+    This asks for ``.. deprecated::``, the marker every deprecated shim in
+    this class carries and the one autodoc renders. It used to ask whether
+    the substring ``"deprecat"`` appeared anywhere in the docstring, which
+    cannot tell a deprecated method from a live method that documents a
+    deprecated *parameter*. When ``fast=`` was renamed to ``approx=`` in
+    2026-08, the two surfaces that gained a "Deprecated spelling of `approx`"
+    parameter note — ``predict_spectral_indices`` and ``measure_line_fluxes``
+    — were promptly misfiled as deprecated methods.
+
+    The strict form is not a loosening: it selects exactly the sixteen shims
+    this module's docstring names, where the substring form selected eighteen.
+    """
+    return ".. deprecated::" in (getattr(SEDModel, name).__doc__ or "").lower()
 
 
 def _autodoc_exclusions() -> set[str]:

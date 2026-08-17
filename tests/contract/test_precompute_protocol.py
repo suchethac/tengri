@@ -128,7 +128,7 @@ class TestRegistryCompleteness:
             # win — see the module ``.. warning::``). It is not a kernel adapter
             # (no AXIS_PARAMS / build_lookup); the live FeaturePrecomp fast path is
             # the window-LUT (measure_line_fluxes / predict_spectral_indices
-            # fast=True), cached on the model. See ``nebular/line_precompute.py``.
+            # approx=True), cached on the model. See ``nebular/line_precompute.py``.
             "tengri.components.nebular.line_precompute",
             # nebular_grid_precompute: the #950 adaptive-axis per-Q_H nebular grid
             # (photometry + lines, variable logU/gas-Z). LIVE, but consumed directly

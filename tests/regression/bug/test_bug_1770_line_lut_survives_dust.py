@@ -109,7 +109,7 @@ def _line_flux_setup(ssp, phot_obs, *, dust: bool):
     base = _model(ssp, phot_obs, WavePrecomp(), dust=dust)
     truth = base.spec.sample(jax.random.PRNGKey(0))
     phot = np.asarray(base.predict_photometry(truth))
-    lf = np.asarray(base.measure_line_fluxes(truth, fast=False))[:3]
+    lf = np.asarray(base.measure_line_fluxes(truth, approx=False))[:3]
     obs = Observation(
         photometry=phot_obs.photometry,
         line_fluxes=LineFluxData(

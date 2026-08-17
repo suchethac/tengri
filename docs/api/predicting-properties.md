@@ -271,24 +271,24 @@ If the model was built with a precomputation (`approx=WavePrecomp(...)`), you ca
 
 ```python
 # ONLY valid if the model was built with approx=WavePrecomp()
-photometry_fast = pred.photometry(fast=True)  # uses precomputed LUT
-spectrum_fast = pred.spectrum(wave_obs=..., fast=True)  # interpolates precomputed LUT
+photometry_fast = pred.photometry(approx=True)  # uses precomputed LUT
+spectrum_fast = pred.spectrum(wave_obs=..., approx=True)  # interpolates precomputed LUT
 ```
 
 ### When to use fast
 
 - **During inference**: Fitting uses the approximation that was baked in at build time. Set it with `approx=` at build (or `model.with_approx(...)`, which returns a clone); read it back with `model.approx`, which reports the LUTs that actually resolved.
-- **Post-fit inspection**: Use `fast=True` to match inference exactly.
+- **Post-fit inspection**: Use `approx=True` to match inference exactly.
 - **Speed-critical analysis**: e.g., generating a mock catalog of 1 million galaxies.
 
 ### When NOT to use fast
 
-- **Changing filters at runtime** (`pred.photometry(filters=[...])`): incompatible with `fast=True` — raises `ValueError`.
+- **Changing filters at runtime** (`pred.photometry(filters=[...])`): incompatible with `approx=True` — raises `ValueError`.
 - **Exact science**: Analysis grids where pre-computed filters would bias the results.
 
 ### The principle
 
-A speed knob must never silently change the physics. If you pass `fast=True`, you are explicitly saying *"use the approximation baked into the model"*. Changing filters invalidates the precomputation, so it is forbidden.
+A speed knob must never silently change the physics. If you pass `approx=True`, you are explicitly saying *"use the approximation baked into the model"*. Changing filters invalidates the precomputation, so it is forbidden.
 
 ## Mock catalogs: batch prediction from arbitrary parameters
 
