@@ -90,6 +90,7 @@ true_params = {
 }
 
 sigmas = {}
+first_failure: Exception | None = None
 for fname, filters in FILTER_SETS.items():
     try:
         obs = tengri.Observation(
@@ -111,10 +112,19 @@ for fname, filters in FILTER_SETS.items():
         errs = np.where(np.isfinite(errs) & (errs > 0), errs, 5.0)
         sigmas[fname] = np.minimum(errs, 5.0)
     except Exception as e:
+        if first_failure is None:
+            first_failure = e
         print(f"[{fname}] skipped: {e}")
 
+# This guard was already here and is the pattern the other examples now follow.
+# It only gains the cause: "check filter availability" was a guess at why, and
+# when the reason was something else (a dust-law KeyError, say) it sent the
+# reader looking in the wrong place.
 if not sigmas:
-    raise RuntimeError("Fisher computation failed — check filter availability")
+    raise RuntimeError(
+        f"Fisher computation failed for every filter set. First failure: "
+        f"{type(first_failure).__name__}: {first_failure}"
+    ) from first_failure
 
 x = np.arange(len(fisher_params))
 width = 0.22
