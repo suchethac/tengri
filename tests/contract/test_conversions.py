@@ -114,84 +114,58 @@ class TestSpectralDensityConversions:
         assert_allclose(flambda / fnu, llambda / lnu, rtol=1e-10)
 
 
+#: (label, cgs -> unit, unit -> cgs, the CGS value of one unit).
+#:
+#: Every one of these is a pure multiplicative rescaling of F_nu, so the three
+#: tests each pair used to have -- forward reference, inverse reference,
+#: roundtrip -- are the same three assertions with two names substituted. As a
+#: table they stay three tests instead of twelve, and adding a fifth unit is one
+#: row rather than three more functions.
+_FLUX_UNITS = [
+    ("jy", fnu_to_jy, jy_to_fnu, 1e-23),
+    ("ujy", fnu_to_ujy, ujy_to_fnu, 1e-29),
+    ("njy", fnu_to_njy, njy_to_fnu, 1e-32),
+    ("maggies", fnu_to_maggies, maggies_to_fnu, MAGGIES_ZP_CGS),
+]
+
+
 class TestFluxDensityUnits:
-    """Test flux density unit conversions: Jy, μJy, nJy, maggies."""
+    """F_nu unit conversions, as a table."""
 
-    def test_fnu_to_jy_reference_value(self):
-        """Test that 1e-23 erg/s/cm²/Hz = 1 Jy."""
-        fnu_cgs = jnp.array(1e-23)
-        fnu_jy = fnu_to_jy(fnu_cgs)
-        assert_allclose(fnu_jy, 1.0, rtol=1e-10)
+    @pytest.mark.parametrize(
+        ("label", "to_unit", "from_unit", "cgs_per_unit"), _FLUX_UNITS, ids=lambda v: v
+    )
+    def test_one_unit_is_its_defined_cgs_value(self, label, to_unit, from_unit, cgs_per_unit):
+        """The zero point, in the forward direction: cgs_per_unit -> 1.0."""
+        assert_allclose(to_unit(jnp.array(cgs_per_unit)), 1.0, rtol=1e-10)
 
-    def test_jy_to_fnu_reference_value(self):
-        """Test that 1 Jy = 1e-23 erg/s/cm²/Hz."""
-        fnu_jy = jnp.array(1.0)
-        fnu_cgs = jy_to_fnu(fnu_jy)
-        assert_allclose(fnu_cgs, 1e-23, rtol=1e-10)
+    @pytest.mark.parametrize(
+        ("label", "to_unit", "from_unit", "cgs_per_unit"), _FLUX_UNITS, ids=lambda v: v
+    )
+    def test_the_inverse_returns_that_same_cgs_value(
+        self, label, to_unit, from_unit, cgs_per_unit
+    ):
+        """And in the inverse direction: 1.0 -> cgs_per_unit.
 
-    def test_fnu_to_jy_roundtrip(self):
-        """Test round-trip: CGS → Jy → CGS."""
-        fnu_cgs_orig = jnp.array([1e-23, 5e-23, 1e-22])
-        fnu_jy = fnu_to_jy(fnu_cgs_orig)
-        fnu_cgs_recovered = jy_to_fnu(fnu_jy)
-        assert_allclose(fnu_cgs_recovered, fnu_cgs_orig, rtol=1e-10)
+        Pinned against the absolute constant rather than against the forward
+        function, so a pair that agreed with each other on a *wrong* constant
+        still fails here.
+        """
+        assert_allclose(from_unit(jnp.array(1.0)), cgs_per_unit, rtol=1e-10)
 
-    def test_fnu_to_ujy_reference_value(self):
-        """Test that 1e-29 erg/s/cm²/Hz = 1 μJy."""
-        fnu_cgs = jnp.array(1e-29)
-        fnu_ujy = fnu_to_ujy(fnu_cgs)
-        assert_allclose(fnu_ujy, 1.0, rtol=1e-10)
+    @pytest.mark.parametrize(
+        ("label", "to_unit", "from_unit", "cgs_per_unit"), _FLUX_UNITS, ids=lambda v: v
+    )
+    def test_roundtrip_over_a_range(self, label, to_unit, from_unit, cgs_per_unit):
+        """cgs -> unit -> cgs across three decades.
 
-    def test_ujy_to_fnu_reference_value(self):
-        """Test that 1 μJy = 1e-29 erg/s/cm²/Hz."""
-        fnu_ujy = jnp.array(1.0)
-        fnu_cgs = ujy_to_fnu(fnu_ujy)
-        assert_allclose(fnu_cgs, 1e-29, rtol=1e-10)
-
-    def test_fnu_to_ujy_roundtrip(self):
-        """Test round-trip: CGS → μJy → CGS."""
-        fnu_cgs_orig = jnp.array([1e-29, 5e-29, 1e-28])
-        fnu_ujy = fnu_to_ujy(fnu_cgs_orig)
-        fnu_cgs_recovered = ujy_to_fnu(fnu_ujy)
-        assert_allclose(fnu_cgs_recovered, fnu_cgs_orig, rtol=1e-10)
-
-    def test_fnu_to_njy_reference_value(self):
-        """Test that 1e-32 erg/s/cm²/Hz = 1 nJy."""
-        fnu_cgs = jnp.array(1e-32)
-        fnu_njy = fnu_to_njy(fnu_cgs)
-        assert_allclose(fnu_njy, 1.0, rtol=1e-10)
-
-    def test_njy_to_fnu_reference_value(self):
-        """Test that 1 nJy = 1e-32 erg/s/cm²/Hz."""
-        fnu_njy = jnp.array(1.0)
-        fnu_cgs = njy_to_fnu(fnu_njy)
-        assert_allclose(fnu_cgs, 1e-32, rtol=1e-10)
-
-    def test_fnu_to_njy_roundtrip(self):
-        """Test round-trip: CGS → nJy → CGS."""
-        fnu_cgs_orig = jnp.array([1e-32, 5e-32, 1e-31])
-        fnu_njy = fnu_to_njy(fnu_cgs_orig)
-        fnu_cgs_recovered = njy_to_fnu(fnu_njy)
-        assert_allclose(fnu_cgs_recovered, fnu_cgs_orig, rtol=1e-10)
-
-    def test_fnu_to_maggies_reference_value(self):
-        """Test that AB zeropoint 3.631e-20 erg/s/cm²/Hz = 1 maggie."""
-        fnu_cgs = jnp.array(MAGGIES_ZP_CGS)
-        maggies = fnu_to_maggies(fnu_cgs)
-        assert_allclose(maggies, 1.0, rtol=1e-10)
-
-    def test_maggies_to_fnu_reference_value(self):
-        """Test inverse: 1 maggie = 3.631e-20 erg/s/cm²/Hz."""
-        maggies = jnp.array(1.0)
-        fnu_cgs = maggies_to_fnu(maggies)
-        assert_allclose(fnu_cgs, MAGGIES_ZP_CGS, rtol=1e-10)
-
-    def test_fnu_to_maggies_roundtrip(self):
-        """Test round-trip: CGS → maggies → CGS."""
-        fnu_cgs_orig = jnp.array([1e-20, 1e-21, 1e-22])
-        maggies = fnu_to_maggies(fnu_cgs_orig)
-        fnu_cgs_recovered = maggies_to_fnu(maggies)
-        assert_allclose(fnu_cgs_recovered, fnu_cgs_orig, rtol=1e-10)
+        Largely implied by the two reference tests for a pure scaling -- if the
+        pair used mismatched constants the inverse test above already fails --
+        but it costs one line per unit and covers array input and a span rather
+        than the single point they pin.
+        """
+        original = jnp.array([1.0, 5.0, 10.0]) * cgs_per_unit
+        assert_allclose(from_unit(to_unit(original)), original, rtol=1e-10)
 
 
 class TestLuminosityConversions:

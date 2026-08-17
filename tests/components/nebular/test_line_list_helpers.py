@@ -24,143 +24,90 @@ from tengri.observation.line_list import (
 
 pytestmark = pytest.mark.bounds
 
-# ── _parse_cloudy_species ─────────────────────────────────────────
+# ── three predicate helpers, as tables ────────────────────────────
+#
+# 26 one-assertion tests become 3 parametrized ones. Each was a single call and
+# a single `assert ... is True/False`, differing only in the argument -- the
+# shape a table expresses better than 26 function definitions, and each case
+# keeps its own id so a failure still names exactly which input broke.
+#
+# Two of the 26 did not survive as-is:
+#
+# * `test_empty_string_fallback` asserted only `isinstance(result, str)`, under
+#   a docstring that reasoned aloud without reaching an answer ("Actually empty
+#   string.split() == [] so name.split()[0] raises IndexError? Let's verify the
+#   actual behavior"). Measured: whitespace-in is returned unchanged, and `""`
+#   returns `""`. Both are pinned below, so the question the comment was asking
+#   is now answered by the test.
+# * `test_returns_string` looped over four names asserting each result was a
+#   `str`. Every case below asserts exact string equality, which implies it.
 
 
-class TestParseCloudySpecies:
-    def test_hydrogen_lyman(self):
-        """'H  1 1215.67A' → 'H1'."""
-        assert _parse_cloudy_species("H  1 1215.67A") == "H1"
-
-    def test_oxygen_iii(self):
-        """'O  3 5006.84A' → 'O3'."""
-        assert _parse_cloudy_species("O  3 5006.84A") == "O3"
-
-    def test_nitrogen_ii(self):
-        """'N  2 6583.45A' → 'N2'."""
-        assert _parse_cloudy_species("N  2 6583.45A") == "N2"
-
-    def test_simple_name_fallback(self):
-        """Non-CLOUDY name like 'Halpha' falls back to first token."""
-        result = _parse_cloudy_species("Halpha")
-        assert result == "Halpha"
-
-    def test_single_token_fallback(self):
-        """Name with a single word and no digit second token falls back."""
-        result = _parse_cloudy_species("Lya")
-        assert result == "Lya"
-
-    def test_element_with_non_digit_second_part(self):
-        """Name where second token is not a digit falls back to raw first token."""
-        result = _parse_cloudy_species("Fe II")
-        # Second token 'II' is not a digit so falls back
-        assert result == "Fe"
-
-    def test_empty_string_fallback(self):
-        """Empty string returns empty string without raising."""
-        result = _parse_cloudy_species("   ")
-        # strip().split() on whitespace gives []
-        # falls through to name.split()[0] branch, but split on whitespace is []
-        # Actually empty string.split() == [] so name.split()[0] raises IndexError?
-        # Let's verify the actual behavior: "" -> strip -> "" -> split -> []
-        # The condition `name.strip()` is falsy, so returns `name` which is "   "
-        assert isinstance(result, str)
-
-    def test_returns_string(self):
-        """Always returns a string."""
-        for name in ["H  1 1215.67A", "O  3 5006.84A", "Halpha", "  "]:
-            assert isinstance(_parse_cloudy_species(name), str)
+#: (input, expected species). CLOUDY format is "<element> <ion> <wavelength>A";
+#: anything else falls back to the first whitespace token, and a blank or
+#: whitespace-only name is returned unchanged rather than raising.
+_SPECIES_CASES = [
+    ("H  1 1215.67A", "H1"),
+    ("O  3 5006.84A", "O3"),
+    ("N  2 6583.45A", "N2"),
+    ("Halpha", "Halpha"),
+    ("Lya", "Lya"),
+    ("Fe II", "Fe"),  # second token is not a digit -> first token only
+    ("   ", "   "),  # falsy after strip -> returned unchanged
+    ("", ""),
+]
 
 
-# ── _is_balmer_line ───────────────────────────────────────────────
+@pytest.mark.parametrize(("name", "expected"), _SPECIES_CASES, ids=lambda v: repr(v))
+def test_parse_cloudy_species(name, expected):
+    """The species parser, including both fallbacks and the blank-name path."""
+    assert _parse_cloudy_species(name) == expected
 
 
-class TestIsBalmerLine:
-    def test_halpha_is_balmer(self):
-        assert _is_balmer_line("Halpha", "H1") is True
-
-    def test_hbeta_is_balmer(self):
-        assert _is_balmer_line("Hbeta", "H1") is True
-
-    def test_hgamma_is_balmer(self):
-        assert _is_balmer_line("Hgamma", "H1") is True
-
-    def test_hdelta_is_balmer(self):
-        assert _is_balmer_line("Hdelta", "H1") is True
-
-    def test_lya_is_not_balmer_by_keyword(self):
-        """Lya doesn't match any Balmer keyword — returns False via keyword check."""
-        # "lya" contains no balmer_keywords match, but species is H1
-        # Falls to CLOUDY wavelength check: "Lya" has 1 token → len(parts)<3 → returns False
-        assert _is_balmer_line("Lya", "H1") is False
-
-    def test_oiii_not_balmer(self):
-        """Non-H1 species is never Balmer."""
-        assert _is_balmer_line("OIII_5007", "O3") is False
-
-    def test_nii_not_balmer(self):
-        assert _is_balmer_line("NII_6584", "N2") is False
-
-    def test_cloudy_balmer_wavelength(self):
-        """CLOUDY-format H1 line in Balmer wavelength range → True."""
-        # Hbeta at 4861 Å: within [3646, 6563]
-        assert _is_balmer_line("H  1 4861.33A", "H1") is True
-
-    def test_cloudy_lyman_wavelength(self):
-        """CLOUDY-format H1 line in Lyman range → True."""
-        # Lya at 1216 Å: within [912, 1216]
-        assert _is_balmer_line("H  1 1215.67A", "H1") is True
-
-    def test_cloudy_outside_balmer_and_lyman(self):
-        """CLOUDY-format H1 line outside both ranges → False."""
-        # Paschen series at 18751 Å — outside Balmer and Lyman ranges
-        assert _is_balmer_line("H  1 18751.0A", "H1") is False
-
-    def test_cloudy_bad_wavelength_string_returns_false(self):
-        """Malformed CLOUDY wavelength string falls through to False."""
-        assert _is_balmer_line("H  1 BADWA", "H1") is False
+#: (name, species, is_balmer). H1 lines match either by keyword or, for
+#: CLOUDY-format names, by falling in the Balmer [3646, 6563] or Lyman
+#: [912, 1216] A window. A non-H1 species is never Balmer.
+_BALMER_CASES = [
+    ("Halpha", "H1", True),
+    ("Hbeta", "H1", True),
+    ("Hgamma", "H1", True),
+    ("Hdelta", "H1", True),
+    ("H  1 4861.33A", "H1", True),  # CLOUDY Hbeta, inside the Balmer window
+    ("H  1 1215.67A", "H1", True),  # CLOUDY Lya, inside the Lyman window
+    ("H  1 18751.0A", "H1", False),  # Paschen, outside both windows
+    ("H  1 BADWA", "H1", False),  # malformed wavelength falls through
+    ("Lya", "H1", False),  # no keyword match, and too few tokens to parse
+    ("OIII_5007", "O3", False),
+    ("NII_6584", "N2", False),
+]
 
 
-# ── _is_broad_candidate ───────────────────────────────────────────
+@pytest.mark.parametrize(("name", "species", "expected"), _BALMER_CASES)
+def test_is_balmer_line(name, species, expected):
+    """Balmer classification by keyword, by CLOUDY wavelength, and by species."""
+    assert _is_balmer_line(name, species) is expected
 
 
-class TestIsBroadCandidate:
-    def test_h1_species_is_broad(self):
-        """Any H1 line is a broad candidate."""
-        assert _is_broad_candidate("Halpha", "H1") is True
+#: (name, species, is_broad_candidate). Broad by species (H1 and the permitted
+#: high-ionization ions) or by a keyword in the name, which is what lets an
+#: unknown species still be flagged.
+_BROAD_CASES = [
+    ("Halpha", "H1", True),
+    ("CIV_1549", "C4", True),
+    ("MgII_2796", "Mg2", True),
+    ("CIII_1908", "C3", True),
+    ("OIII_5007", "O3", False),
+    ("NII_6584", "N2", False),
+    ("SII_6717", "S2", False),
+    ("Halpha_broad", "XX", True),  # keyword wins over an unknown species
+    ("civ_line", "XX", True),
+]
 
-    def test_c4_species_is_broad(self):
-        """CIV (C4 species) is a broad candidate."""
-        assert _is_broad_candidate("CIV_1549", "C4") is True
 
-    def test_mg2_species_is_broad(self):
-        """MgII (Mg2 species) is a broad candidate."""
-        assert _is_broad_candidate("MgII_2796", "Mg2") is True
-
-    def test_c3_species_is_broad(self):
-        """CIII] (C3 species) is a broad candidate."""
-        assert _is_broad_candidate("CIII_1908", "C3") is True
-
-    def test_oiii_not_broad(self):
-        """[OIII] 5007 is not a broad candidate."""
-        assert _is_broad_candidate("OIII_5007", "O3") is False
-
-    def test_nii_not_broad(self):
-        """[NII] is not a broad candidate."""
-        assert _is_broad_candidate("NII_6584", "N2") is False
-
-    def test_sii_not_broad(self):
-        assert _is_broad_candidate("SII_6717", "S2") is False
-
-    def test_keyword_halpha_match(self):
-        """Name containing 'halpha' triggers broad via keyword even for unknown species."""
-        assert _is_broad_candidate("Halpha_broad", "XX") is True
-
-    def test_keyword_civ_match(self):
-        assert _is_broad_candidate("civ_line", "XX") is True
-
-    def test_keyword_mgii_match(self):
-        assert _is_broad_candidate("some_mgii_feature", "XX") is True
+@pytest.mark.parametrize(("name", "species", "expected"), _BROAD_CASES)
+def test_is_broad_candidate(name, species, expected):
+    """Broad-line candidacy by species and by name keyword."""
+    assert _is_broad_candidate(name, species) is expected
 
 
 # ── _get_doublet_ratio_by_wavelength ──────────────────────────────
