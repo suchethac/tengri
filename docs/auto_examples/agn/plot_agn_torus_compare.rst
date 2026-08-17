@@ -49,9 +49,9 @@ near 9.7 and 18 μm.
 
  .. code-block:: none
 
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/agn/plot_agn_torus_compare.py:95: UserWarning: Glyph 246 (\N{LATIN SMALL LETTER O WITH DIAERESIS}) missing from font(s) cmr10.
+    /tengri/examples/agn/plot_agn_torus_compare.py:95: UserWarning: Glyph 246 (\N{LATIN SMALL LETTER O WITH DIAERESIS}) missing from font(s) cmr10.
       fig.tight_layout()
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/agn/plot_agn_torus_compare.py:96: UserWarning: Glyph 246 (\N{LATIN SMALL LETTER O WITH DIAERESIS}) missing from font(s) cmr10.
+    /tengri/examples/agn/plot_agn_torus_compare.py:96: UserWarning: Glyph 246 (\N{LATIN SMALL LETTER O WITH DIAERESIS}) missing from font(s) cmr10.
       plt.savefig("plot_agn_torus_compare.png", dpi=150, bbox_inches="tight")
 
 

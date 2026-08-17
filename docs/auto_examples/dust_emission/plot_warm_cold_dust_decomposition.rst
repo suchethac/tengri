@@ -68,9 +68,9 @@ References
 
  .. code-block:: none
 
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/dust_emission/plot_warm_cold_dust_decomposition.py:228: UserWarning: Glyph 956 (\N{GREEK SMALL LETTER MU}) missing from font(s) cmr10.
+    /tengri/examples/dust_emission/plot_warm_cold_dust_decomposition.py:228: UserWarning: Glyph 956 (\N{GREEK SMALL LETTER MU}) missing from font(s) cmr10.
       fig.tight_layout()
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/dust_emission/plot_warm_cold_dust_decomposition.py:229: UserWarning: Glyph 956 (\N{GREEK SMALL LETTER MU}) missing from font(s) cmr10.
+    /tengri/examples/dust_emission/plot_warm_cold_dust_decomposition.py:229: UserWarning: Glyph 956 (\N{GREEK SMALL LETTER MU}) missing from font(s) cmr10.
       plt.savefig("plot_warm_cold_dust_decomposition.png", dpi=150, bbox_inches="tight")
 
 

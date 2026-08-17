@@ -44,21 +44,21 @@ Riess et al. 2022, ApJL, 934, L7 (local H₀ measurement).
 
  .. code-block:: none
 
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/src/tengri/forward/sed_model.py:8270: WildcardPartialFreeWarning: 'all_params: FREE' freed 6 of 8 parameters in group 'sfh'. These have no declared prior, only Fixed defaults, so they stay pinned:
+    /tengri/src/tengri/forward/sed_model.py:8270: WildcardPartialFreeWarning: 'all_params: FREE' freed 6 of 8 parameters in group 'sfh'. These have no declared prior, only Fixed defaults, so they stay pinned:
       met_alpha_fe, met_logzsol_scatter
     The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. sfh={'met_alpha_fe': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
       spec = parse_groups(**groups)
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/usecases/plot_usecase_cosmology_distance_modulus.py:112: UserWarning: Glyph 8320 (\N{SUBSCRIPT ZERO}) missing from font(s) cmr10.
+    /tengri/examples/usecases/plot_usecase_cosmology_distance_modulus.py:112: UserWarning: Glyph 8320 (\N{SUBSCRIPT ZERO}) missing from font(s) cmr10.
       fig.tight_layout()
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/usecases/plot_usecase_cosmology_distance_modulus.py:112: UserWarning: Glyph 916 (\N{GREEK CAPITAL LETTER DELTA}) missing from font(s) cmr10.
+    /tengri/examples/usecases/plot_usecase_cosmology_distance_modulus.py:112: UserWarning: Glyph 916 (\N{GREEK CAPITAL LETTER DELTA}) missing from font(s) cmr10.
       fig.tight_layout()
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/usecases/plot_usecase_cosmology_distance_modulus.py:112: UserWarning: Glyph 956 (\N{GREEK SMALL LETTER MU}) missing from font(s) cmr10.
+    /tengri/examples/usecases/plot_usecase_cosmology_distance_modulus.py:112: UserWarning: Glyph 956 (\N{GREEK SMALL LETTER MU}) missing from font(s) cmr10.
       fig.tight_layout()
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/usecases/plot_usecase_cosmology_distance_modulus.py:113: UserWarning: Glyph 8320 (\N{SUBSCRIPT ZERO}) missing from font(s) cmr10.
+    /tengri/examples/usecases/plot_usecase_cosmology_distance_modulus.py:113: UserWarning: Glyph 8320 (\N{SUBSCRIPT ZERO}) missing from font(s) cmr10.
       plt.savefig("plot_usecase_cosmology_distance_modulus.png", dpi=150, bbox_inches="tight")
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/usecases/plot_usecase_cosmology_distance_modulus.py:113: UserWarning: Glyph 916 (\N{GREEK CAPITAL LETTER DELTA}) missing from font(s) cmr10.
+    /tengri/examples/usecases/plot_usecase_cosmology_distance_modulus.py:113: UserWarning: Glyph 916 (\N{GREEK CAPITAL LETTER DELTA}) missing from font(s) cmr10.
       plt.savefig("plot_usecase_cosmology_distance_modulus.png", dpi=150, bbox_inches="tight")
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/usecases/plot_usecase_cosmology_distance_modulus.py:113: UserWarning: Glyph 956 (\N{GREEK SMALL LETTER MU}) missing from font(s) cmr10.
+    /tengri/examples/usecases/plot_usecase_cosmology_distance_modulus.py:113: UserWarning: Glyph 956 (\N{GREEK SMALL LETTER MU}) missing from font(s) cmr10.
       plt.savefig("plot_usecase_cosmology_distance_modulus.png", dpi=150, bbox_inches="tight")
 
 

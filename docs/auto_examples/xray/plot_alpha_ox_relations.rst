@@ -56,9 +56,9 @@ References
 
  .. code-block:: none
 
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/xray/plot_alpha_ox_relations.py:106: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
+    /tengri/examples/xray/plot_alpha_ox_relations.py:106: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
       fig.tight_layout()
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/xray/plot_alpha_ox_relations.py:107: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
+    /tengri/examples/xray/plot_alpha_ox_relations.py:107: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
       plt.savefig("plot_alpha_ox_relations.png", dpi=150, bbox_inches="tight")
 
 

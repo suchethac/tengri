@@ -47,9 +47,9 @@ Allen et al. 2008, ApJS, 178, 20 (MAPPINGS V shocks).
 
  .. code-block:: none
 
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/nebular/plot_bpt_diagram_population.py:264: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
+    /tengri/examples/nebular/plot_bpt_diagram_population.py:264: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
       fig.tight_layout()
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/nebular/plot_bpt_diagram_population.py:265: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
+    /tengri/examples/nebular/plot_bpt_diagram_population.py:265: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
       plt.savefig("plot_bpt_diagram_population.png", dpi=150, bbox_inches="tight")
 
 

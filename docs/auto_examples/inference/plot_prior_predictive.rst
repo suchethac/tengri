@@ -43,7 +43,7 @@ Reference: Gelman+2020 (Bayesian Workflow).
 
  .. code-block:: none
 
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/inference/plot_prior_predictive.py:104: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
+    /tengri/examples/inference/plot_prior_predictive.py:104: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
       fig.savefig("plot_prior_predictive.png", dpi=150, bbox_inches="tight")
 
 

@@ -57,9 +57,9 @@ References:
 
  .. code-block:: none
 
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/usecases/plot_usecase_tully_fisher_relation.py:208: RankWarning: Polyfit may be poorly conditioned
+    /tengri/examples/usecases/plot_usecase_tully_fisher_relation.py:208: RankWarning: Polyfit may be poorly conditioned
       z_fit = np.polyfit(log_v_circs, m_r_abs, 1)
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/usecases/plot_usecase_tully_fisher_relation.py:219: UserWarning: Attempting to set identical low and high xlims makes transformation singular; automatically expanding.
+    /tengri/examples/usecases/plot_usecase_tully_fisher_relation.py:219: UserWarning: Attempting to set identical low and high xlims makes transformation singular; automatically expanding.
       ax.set_xlim(log_v_circs.min() - x_margin, log_v_circs.max() + x_margin)
 
 

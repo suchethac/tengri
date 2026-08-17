@@ -59,21 +59,21 @@ References
 
  .. code-block:: none
 
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:228: UserWarning: Glyph 197 (\N{LATIN CAPITAL LETTER A WITH RING ABOVE}) missing from font(s) cmr10.
+    /tengri/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:228: UserWarning: Glyph 197 (\N{LATIN CAPITAL LETTER A WITH RING ABOVE}) missing from font(s) cmr10.
       fig.tight_layout()
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:228: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
+    /tengri/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:228: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
       fig.tight_layout()
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:228: UserWarning: Glyph 956 (\N{GREEK SMALL LETTER MU}) missing from font(s) cmr10.
+    /tengri/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:228: UserWarning: Glyph 956 (\N{GREEK SMALL LETTER MU}) missing from font(s) cmr10.
       fig.tight_layout()
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:228: UserWarning: Glyph 8857 (\N{CIRCLED DOT OPERATOR}) missing from font(s) cmr10.
+    /tengri/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:228: UserWarning: Glyph 8857 (\N{CIRCLED DOT OPERATOR}) missing from font(s) cmr10.
       fig.tight_layout()
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:229: UserWarning: Glyph 197 (\N{LATIN CAPITAL LETTER A WITH RING ABOVE}) missing from font(s) cmr10.
+    /tengri/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:229: UserWarning: Glyph 197 (\N{LATIN CAPITAL LETTER A WITH RING ABOVE}) missing from font(s) cmr10.
       plt.savefig("plot_usecase_sfr_uv_ir_consistency.png", dpi=150, bbox_inches="tight")
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:229: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
+    /tengri/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:229: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
       plt.savefig("plot_usecase_sfr_uv_ir_consistency.png", dpi=150, bbox_inches="tight")
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:229: UserWarning: Glyph 956 (\N{GREEK SMALL LETTER MU}) missing from font(s) cmr10.
+    /tengri/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:229: UserWarning: Glyph 956 (\N{GREEK SMALL LETTER MU}) missing from font(s) cmr10.
       plt.savefig("plot_usecase_sfr_uv_ir_consistency.png", dpi=150, bbox_inches="tight")
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:229: UserWarning: Glyph 8857 (\N{CIRCLED DOT OPERATOR}) missing from font(s) cmr10.
+    /tengri/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:229: UserWarning: Glyph 8857 (\N{CIRCLED DOT OPERATOR}) missing from font(s) cmr10.
       plt.savefig("plot_usecase_sfr_uv_ir_consistency.png", dpi=150, bbox_inches="tight")
 
 

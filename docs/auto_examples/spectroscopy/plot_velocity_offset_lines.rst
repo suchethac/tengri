@@ -40,9 +40,9 @@ km/s — above that the two lines merge into the wing of Hα.
 
  .. code-block:: none
 
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/spectroscopy/plot_velocity_offset_lines.py:95: UserWarning: Glyph 945 (\N{GREEK SMALL LETTER ALPHA}) missing from font(s) cmr10.
+    /tengri/examples/spectroscopy/plot_velocity_offset_lines.py:95: UserWarning: Glyph 945 (\N{GREEK SMALL LETTER ALPHA}) missing from font(s) cmr10.
       fig.tight_layout()
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/spectroscopy/plot_velocity_offset_lines.py:96: UserWarning: Glyph 945 (\N{GREEK SMALL LETTER ALPHA}) missing from font(s) cmr10.
+    /tengri/examples/spectroscopy/plot_velocity_offset_lines.py:96: UserWarning: Glyph 945 (\N{GREEK SMALL LETTER ALPHA}) missing from font(s) cmr10.
       plt.savefig("plot_velocity_offset_lines.png", dpi=150, bbox_inches="tight")
 
 

@@ -262,7 +262,7 @@ whereas one row at a time peaks near 3 GB.
 
  .. code-block:: none
 
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/inference/plot_photoz_chi2_grid.py:140: UserWarning: Log scale: values of z <= 0 have been masked
+    /tengri/examples/inference/plot_photoz_chi2_grid.py:140: UserWarning: Log scale: values of z <= 0 have been masked
       im = ax.contourf(
 
 

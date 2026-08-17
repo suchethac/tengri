@@ -55,17 +55,17 @@ References:
 
  .. code-block:: none
 
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/usecases/plot_usecase_lensed_galaxy_magnification.py:212: UserWarning: Glyph 956 (\N{GREEK SMALL LETTER MU}) missing from font(s) cmr10.
+    /tengri/examples/usecases/plot_usecase_lensed_galaxy_magnification.py:212: UserWarning: Glyph 956 (\N{GREEK SMALL LETTER MU}) missing from font(s) cmr10.
       fig.tight_layout()
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/usecases/plot_usecase_lensed_galaxy_magnification.py:212: UserWarning: Glyph 964 (\N{GREEK SMALL LETTER TAU}) missing from font(s) cmr10.
+    /tengri/examples/usecases/plot_usecase_lensed_galaxy_magnification.py:212: UserWarning: Glyph 964 (\N{GREEK SMALL LETTER TAU}) missing from font(s) cmr10.
       fig.tight_layout()
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/usecases/plot_usecase_lensed_galaxy_magnification.py:212: UserWarning: Glyph 963 (\N{GREEK SMALL LETTER SIGMA}) missing from font(s) cmr10.
+    /tengri/examples/usecases/plot_usecase_lensed_galaxy_magnification.py:212: UserWarning: Glyph 963 (\N{GREEK SMALL LETTER SIGMA}) missing from font(s) cmr10.
       fig.tight_layout()
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/usecases/plot_usecase_lensed_galaxy_magnification.py:213: UserWarning: Glyph 956 (\N{GREEK SMALL LETTER MU}) missing from font(s) cmr10.
+    /tengri/examples/usecases/plot_usecase_lensed_galaxy_magnification.py:213: UserWarning: Glyph 956 (\N{GREEK SMALL LETTER MU}) missing from font(s) cmr10.
       plt.savefig("plot_usecase_lensed_galaxy_magnification.png", dpi=150, bbox_inches="tight")
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/usecases/plot_usecase_lensed_galaxy_magnification.py:213: UserWarning: Glyph 964 (\N{GREEK SMALL LETTER TAU}) missing from font(s) cmr10.
+    /tengri/examples/usecases/plot_usecase_lensed_galaxy_magnification.py:213: UserWarning: Glyph 964 (\N{GREEK SMALL LETTER TAU}) missing from font(s) cmr10.
       plt.savefig("plot_usecase_lensed_galaxy_magnification.png", dpi=150, bbox_inches="tight")
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/usecases/plot_usecase_lensed_galaxy_magnification.py:213: UserWarning: Glyph 963 (\N{GREEK SMALL LETTER SIGMA}) missing from font(s) cmr10.
+    /tengri/examples/usecases/plot_usecase_lensed_galaxy_magnification.py:213: UserWarning: Glyph 963 (\N{GREEK SMALL LETTER SIGMA}) missing from font(s) cmr10.
       plt.savefig("plot_usecase_lensed_galaxy_magnification.png", dpi=150, bbox_inches="tight")
 
 

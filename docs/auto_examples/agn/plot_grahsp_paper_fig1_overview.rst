@@ -52,7 +52,7 @@ emission (green).
 
  .. code-block:: none
 
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/agn/plot_grahsp_paper_fig1_overview.py:123: RuntimeWarning: divide by zero encountered in divide
+    /tengri/examples/agn/plot_grahsp_paper_fig1_overview.py:123: RuntimeWarning: divide by zero encountered in divide
       "top", functions=(lambda x: C_AA_HZ / 1e4 / x, lambda nu: C_AA_HZ / 1e4 / nu)
 
 

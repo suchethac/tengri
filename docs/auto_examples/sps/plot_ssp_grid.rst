@@ -38,9 +38,9 @@ Z☉ = 0.0190, PARSEC Z☉ = 0.0152, BASTI Z☉ = 0.0200.
 
  .. code-block:: none
 
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/sps/plot_ssp_grid.py:150: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
+    /tengri/examples/sps/plot_ssp_grid.py:150: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
       fig.tight_layout()
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/sps/plot_ssp_grid.py:151: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
+    /tengri/examples/sps/plot_ssp_grid.py:151: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
       plt.savefig("plot_ssp_grid.png", dpi=150, bbox_inches="tight")
 
 

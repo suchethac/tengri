@@ -57,9 +57,9 @@ References
 
  .. code-block:: none
 
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/xray/plot_xray_agn.py:109: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
+    /tengri/examples/xray/plot_xray_agn.py:109: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
       fig.tight_layout()
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/xray/plot_xray_agn.py:110: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
+    /tengri/examples/xray/plot_xray_agn.py:110: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
       plt.savefig("plot_xray_agn.png", dpi=150, bbox_inches="tight")
 
 

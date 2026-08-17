@@ -42,13 +42,13 @@ References: Kauffmann+2003; Martin+2007.
 
  .. code-block:: none
 
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.545 Gyr at peak sfh_tsnorm_peak_lbt_gyr=4 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.545 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.545 Gyr at peak sfh_tsnorm_peak_lbt_gyr=4 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.545 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/workflows/plot_workflow_quenching_diagnostics.py:125: UserWarning: Glyph 8212 (\N{EM DASH}) missing from font(s) cmr10.
+    /tengri/examples/workflows/plot_workflow_quenching_diagnostics.py:125: UserWarning: Glyph 8212 (\N{EM DASH}) missing from font(s) cmr10.
       plt.savefig("plot_workflow_quenching_diagnostics.png", dpi=150, bbox_inches="tight")
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/workflows/plot_workflow_quenching_diagnostics.py:125: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
+    /tengri/examples/workflows/plot_workflow_quenching_diagnostics.py:125: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
       plt.savefig("plot_workflow_quenching_diagnostics.png", dpi=150, bbox_inches="tight")
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/workflows/plot_workflow_quenching_diagnostics.py:125: UserWarning: Glyph 8776 (\N{ALMOST EQUAL TO}) missing from font(s) cmr10.
+    /tengri/examples/workflows/plot_workflow_quenching_diagnostics.py:125: UserWarning: Glyph 8776 (\N{ALMOST EQUAL TO}) missing from font(s) cmr10.
       plt.savefig("plot_workflow_quenching_diagnostics.png", dpi=150, bbox_inches="tight")
 
 

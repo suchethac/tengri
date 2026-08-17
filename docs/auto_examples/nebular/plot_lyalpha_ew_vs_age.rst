@@ -44,13 +44,13 @@ Schaerer 2003, A&A, 397, 527 (ionizing photon production in massive starburst po
 
  .. code-block:: none
 
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/nebular/plot_lyalpha_ew_vs_age.py:113: UserWarning: Glyph 945 (\N{GREEK SMALL LETTER ALPHA}) missing from font(s) cmr10.
+    /tengri/examples/nebular/plot_lyalpha_ew_vs_age.py:113: UserWarning: Glyph 945 (\N{GREEK SMALL LETTER ALPHA}) missing from font(s) cmr10.
       fig.tight_layout()
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/nebular/plot_lyalpha_ew_vs_age.py:113: UserWarning: Glyph 197 (\N{LATIN CAPITAL LETTER A WITH RING ABOVE}) missing from font(s) cmr10.
+    /tengri/examples/nebular/plot_lyalpha_ew_vs_age.py:113: UserWarning: Glyph 197 (\N{LATIN CAPITAL LETTER A WITH RING ABOVE}) missing from font(s) cmr10.
       fig.tight_layout()
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/nebular/plot_lyalpha_ew_vs_age.py:114: UserWarning: Glyph 945 (\N{GREEK SMALL LETTER ALPHA}) missing from font(s) cmr10.
+    /tengri/examples/nebular/plot_lyalpha_ew_vs_age.py:114: UserWarning: Glyph 945 (\N{GREEK SMALL LETTER ALPHA}) missing from font(s) cmr10.
       plt.savefig("plot_lyalpha_ew_vs_age.png", dpi=150, bbox_inches="tight")
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/nebular/plot_lyalpha_ew_vs_age.py:114: UserWarning: Glyph 197 (\N{LATIN CAPITAL LETTER A WITH RING ABOVE}) missing from font(s) cmr10.
+    /tengri/examples/nebular/plot_lyalpha_ew_vs_age.py:114: UserWarning: Glyph 197 (\N{LATIN CAPITAL LETTER A WITH RING ABOVE}) missing from font(s) cmr10.
       plt.savefig("plot_lyalpha_ew_vs_age.png", dpi=150, bbox_inches="tight")
 
 

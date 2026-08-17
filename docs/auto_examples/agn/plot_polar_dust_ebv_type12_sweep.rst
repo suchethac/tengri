@@ -55,11 +55,11 @@ References
  .. code-block:: none
 
     Building shared AGN model (polar_ebv and cos_inc FREE)...
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/agn/plot_polar_dust_ebv_type12_sweep.py:128: UserWarning: This figure includes Axes that are not compatible with tight_layout, so results might be incorrect.
+    /tengri/examples/agn/plot_polar_dust_ebv_type12_sweep.py:128: UserWarning: This figure includes Axes that are not compatible with tight_layout, so results might be incorrect.
       fig.tight_layout()
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/agn/plot_polar_dust_ebv_type12_sweep.py:128: UserWarning: Glyph 952 (\N{GREEK SMALL LETTER THETA}) missing from font(s) cmr10.
+    /tengri/examples/agn/plot_polar_dust_ebv_type12_sweep.py:128: UserWarning: Glyph 952 (\N{GREEK SMALL LETTER THETA}) missing from font(s) cmr10.
       fig.tight_layout()
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/agn/plot_polar_dust_ebv_type12_sweep.py:129: UserWarning: Glyph 952 (\N{GREEK SMALL LETTER THETA}) missing from font(s) cmr10.
+    /tengri/examples/agn/plot_polar_dust_ebv_type12_sweep.py:129: UserWarning: Glyph 952 (\N{GREEK SMALL LETTER THETA}) missing from font(s) cmr10.
       plt.savefig("plot_polar_dust_ebv_type12_sweep.png", dpi=150, bbox_inches="tight")
     Saved: plot_polar_dust_ebv_type12_sweep.png
 
