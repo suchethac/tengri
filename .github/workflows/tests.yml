@@ -48,9 +48,21 @@ on:
 # commit. That costs runner minutes; a `main` whose green means nothing costs
 # more.
 #
-# `labeled` PR events also get a unique group, so a label add never aborts the
-# real opened/synchronize run. (Their jobs also skip via the per-job `if:`
-# below, so the unique-group run is a near-instant no-op.)
+# `labeled` PR events get their OWN group, shared among themselves. Two
+# properties, and both are load-bearing:
+#
+#   * it is not the opened/synchronize group, so a label add never aborts the
+#     real run mid-matrix;
+#   * it IS shared across label adds, so labelling a PR with four labels — four
+#     `labeled` webhooks — collapses to roughly one surviving run instead of
+#     four. It used to key on `github.run_id`, which made every label its own
+#     run. That was harmless while those runs were no-ops; it is not harmless
+#     now that the four always-run gates actually execute on a label event
+#     (see below), because four labels would mean four times the work.
+#
+# The survivor is the newest run, so it is also the newest check suite, which
+# is the one branch protection reads. Cancelled predecessors sit in older
+# suites where nothing consults them.
 #
 # Everything else (PR opened/synchronize/reopened, schedule, workflow_dispatch)
 # keys on `github.event_name`, so a newer event of the SAME kind supersedes the
@@ -62,9 +74,10 @@ on:
 concurrency:
   group: >-
     tests-${{ github.ref }}-${{
-      (github.event_name == 'push'
-        || (github.event_name == 'pull_request' && github.event.action == 'labeled'))
-      && github.run_id || github.event_name }}
+      github.event_name == 'push' && github.run_id
+      || (github.event_name == 'pull_request' && github.event.action == 'labeled')
+         && 'pull_request_labeled'
+      || github.event_name }}
   cancel-in-progress: true
 
 # Supply a version for the `dsps` build. The published dsps sdists use
@@ -76,12 +89,43 @@ concurrency:
 env:
   SETUPTOOLS_SCM_PRETEND_VERSION_FOR_DSPS: "0.4.7"
 
-# Skip the heavy jobs on bare `labeled` PR events. GitHub fires one `labeled`
+# Skip the HEAVY jobs on bare `labeled` PR events. GitHub fires one `labeled`
 # webhook PER label added, so labelling a PR with N labels used to spawn N
 # duplicate workflow runs that immediately cancelled each other under
 # `cancel-in-progress` (and occasionally killed the surviving run mid-suite).
-# Only the `slow` job cares about labels (`run-slow-tests`); everything else
-# should run on push / opened / synchronize / reopened, not on label adds.
+# The shared label concurrency group above is what fixes that now; the per-job
+# `if:` below keeps the expensive tiers from running N times regardless.
+#
+# THE FOUR ALWAYS-RUN GATES DO NOT CARRY THAT GUARD, and must not.
+#
+# `tier`, `lint`, `security` and `smoke` are `ALL_PR_JOBS` in
+# `tools/check_ci_pr_coverage.py`: "jobs that run for EVERY pull request,
+# whatever its base". They used to carry the `labeled` guard anyway, which
+# contradicted that bucket and — once `main` got branch protection on
+# 2026-08-16 — silently made every labelled PR unmergeable.
+#
+# The mechanism, measured on PR #1856 against PR #1852 as the control (same
+# four labels, both fully green, one CLEAN and one BLOCKED):
+#
+#   1. CLAUDE.md mandates labelling every PR, so label events are guaranteed.
+#   2. A `labeled` run whose jobs are skipped by `if:` still PUBLISHES a check
+#      run per job — with conclusion `skipped`.
+#   3. Those runs live in a check suite created AFTER the real one, and branch
+#      protection resolves a required context to the newest suite that carries
+#      that name.
+#   4. A `skipped` run does not satisfy a required context. Result:
+#      `mergeStateStatus: BLOCKED` with `statusCheckRollup: SUCCESS` — green
+#      to every human-facing view, permanently unmergeable, forever, because
+#      nothing further will ever run on that SHA.
+#
+# #1852 escaped only by accident: it was pushed again hours after being
+# labelled, so its real suite happened to be the newest one.
+#
+# Letting these four run on a label event costs ~8 runner-minutes per PR
+# (collapsed to one run by the shared group) and makes the newest suite carry
+# a real success for every required context. `check_ci_pr_coverage.py` asserts
+# the guard stays off them, because reintroducing it is invisible until a
+# merge is attempted, and by then the SHA is unfixable without a dummy push.
 jobs:
   # Announces what this run does NOT cover. The #1806/#1810 failure was not that
   # a stacked PR ran less — it was that a green tick on a stacked PR looked
@@ -105,7 +149,6 @@ jobs:
   tier:
     runs-on: ubuntu-latest
     timeout-minutes: 2
-    if: ${{ github.event_name != 'pull_request' || github.event.action != 'labeled' }}
     steps:
       - name: Say what this run covers
         env:
@@ -137,7 +180,6 @@ jobs:
 
   lint:
     runs-on: ubuntu-latest
-    if: ${{ github.event_name != 'pull_request' || github.event.action != 'labeled' }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -319,7 +361,6 @@ jobs:
   # that finds nothing.
   security:
     runs-on: ubuntu-latest
-    if: ${{ github.event_name != 'pull_request' || github.event.action != 'labeled' }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -488,7 +529,6 @@ jobs:
     # 3m30s, so 5 minutes left little headroom, and a guard that trips the job's
     # own timeout under load reports as a failure of the thing it guards.
     timeout-minutes: 8
-    if: ${{ github.event_name != 'pull_request' || github.event.action != 'labeled' }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
