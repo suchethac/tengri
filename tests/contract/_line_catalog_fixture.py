@@ -91,7 +91,7 @@ def build_two_galaxy_catalog(
         wavelengths=[halpha_wave],
         names=line_names,
     )
-    measured_halpha_base = float(model.measure_line_fluxes(truth, line_defs, fast=False)[0])
+    measured_halpha_base = float(model.measure_line_fluxes(truth, line_defs, approx=False)[0])
 
     # Sanity check: the measured Halpha must be finite and non-zero
     # (even a "smooth continuum" model should have finite stellar continuum
@@ -146,7 +146,7 @@ def build_two_galaxy_catalog(
         wavelengths=[halpha_wave],
         names=line_names,
     )
-    measured_final = float(model.measure_line_fluxes(truth, line_defs_final, fast=False)[0])
+    measured_final = float(model.measure_line_fluxes(truth, line_defs_final, approx=False)[0])
 
     # Sanity check: chi-squared at truth should be O(1)
     # chi2_g0 = ((obs_g0 - pred_g0) / err)**2 = ((base - base) / err)**2 = 0
