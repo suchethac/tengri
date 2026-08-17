@@ -4843,11 +4843,34 @@ class SEDModel:
             all_waves = jnp.asarray(state.derived["line_waves"])
             all_lums = jnp.asarray(state.derived["line_lums"])
 
-        # Dust-redden the lines at their wavelengths (single-sourced with the
-        # interactive .lines path). The backend publishes INTRINSIC line_lums, so
-        # without this the observed flux omits the line reddening entirely.
+        # Dust-redden the lines at their wavelengths. Reads the catalog the dust
+        # component published (#1867) rather than computing its own, so this
+        # surface and the `.lines` / `predict_properties` / `predict_line_ratios`
+        # surfaces are on ONE screen. "Single-sourced" is what the previous
+        # comment here claimed; it was not, and the two differed.
+        #
+        # `_attenuate_line_catalog` routes through
+        # `emission_helpers.attenuate_emission`, whose signature names only
+        # `dust_slope` and `dust_bump_strength` — it cannot thread `dust_delta`
+        # or `dust_Rv` at all, and forces the bump to the spec's Fixed(0.0)
+        # over any law's own default (#1858). Measured on the Balmer decrement,
+        # property surface against this one: `calzetti` (which reads no shape
+        # parameter) agreed to 4e-15, while `narayanan_z` (bump 1.0, delta -0.2)
+        # disagreed by 1.1e-3 rising to 2.5e-3. The law that cannot see the
+        # defect agreeing to machine precision is what identifies the shape
+        # parameters as the whole of it.
+        #
+        # The fallback keeps `redden=True` meaningful for a chain that publishes
+        # no attenuated catalog — no dust component, or a backend with no
+        # discrete lines.
         if redden:
-            all_lums = self._attenuate_line_catalog(params, all_waves, all_lums)
+            _log_atten = state.derived.get("log_line_lums_attenuated")
+            if _log_atten is None:
+                all_lums = self._attenuate_line_catalog(params, all_waves, all_lums)
+            else:
+                from tengri.utils.scale import pow10
+
+                all_lums = pow10(jnp.asarray(_log_atten))
 
         if target_wavelengths is not None:
             target_wavelengths = jnp.asarray(target_wavelengths)
@@ -6532,28 +6555,41 @@ class SEDModel:
             # No discrete catalog; nothing to attenuate.
             return lines
 
-        # Apply dust attenuation at line wavelengths in the same regime
-        # the continuum sees. Charlot & Fall 2000: lines from young
-        # populations (HII regions) experience BC + diffuse; single-
-        # component dust applies the BC law twice (degenerate fallback).
-        tau_bc = jnp.asarray(params.get("dust_tau_bc", params.get("dust_tau_v", 0.0)))
-        tau_diff = jnp.asarray(params.get("dust_tau_diff", 0.0))
-        dust_kw = dict(
-            dust_slope=jnp.asarray(params.get("dust_slope", -0.7)),
-            dust_bump_strength=jnp.asarray(params.get("dust_bump_strength", 0.0)),
-        )
-        _is_single = self._dust_model == "single_component"
-        atten_lums = attenuate_emission(
-            lines.all_lums,
-            lines.all_waves,
-            self._neb_dust_mode,
-            tau_bc,
-            tau_diff,
-            self._dust_law_bc_fn,
-            self._dust_law_diff_fn if not _is_single else self._dust_law_bc_fn,
-            neb_bc_fn=self._neb_dust_law_bc_fn,
-            **dust_kw,
-        )
+        # Prefer the catalog the dust component published (#1867), so this
+        # deprecated surface is on the SAME screen as `.lines`,
+        # `predict_properties`, `predict_line_fluxes` and `predict_line_ratios`.
+        # A deprecated method that disagrees with its replacement is worse than
+        # one that is merely old — and this is the surface #313's regression
+        # test drives, so it would have gone on asserting the right physics via
+        # the one path that still had #1858's defect.
+        _log_atten = state.derived.get("log_line_lums_attenuated")
+        if _log_atten is not None:
+            from tengri.utils.scale import pow10
+
+            atten_lums = pow10(jnp.asarray(_log_atten))
+        else:
+            # Fallback for a chain that published no attenuated catalog. Charlot
+            # & Fall 2000: lines from young populations (HII regions) experience
+            # BC + diffuse; single-component dust applies the BC law twice
+            # (degenerate fallback).
+            tau_bc = jnp.asarray(params.get("dust_tau_bc", params.get("dust_tau_v", 0.0)))
+            tau_diff = jnp.asarray(params.get("dust_tau_diff", 0.0))
+            dust_kw = dict(
+                dust_slope=jnp.asarray(params.get("dust_slope", -0.7)),
+                dust_bump_strength=jnp.asarray(params.get("dust_bump_strength", 0.0)),
+            )
+            _is_single = self._dust_model == "single_component"
+            atten_lums = attenuate_emission(
+                lines.all_lums,
+                lines.all_waves,
+                self._neb_dust_mode,
+                tau_bc,
+                tau_diff,
+                self._dust_law_bc_fn,
+                self._dust_law_diff_fn if not _is_single else self._dust_law_bc_fn,
+                neb_bc_fn=self._neb_dust_law_bc_fn,
+                **dust_kw,
+            )
 
         # Re-extract the headline scalars from the attenuated catalog
         # so EmissionLines.halpha / .hbeta / etc. reflect dust.

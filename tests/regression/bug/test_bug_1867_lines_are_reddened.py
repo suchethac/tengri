@@ -270,3 +270,121 @@ def test_the_log_companion_is_itself_reddened(model, sweep):
         f"log_halpha did not dim under dust ({v_lo} -> {v_hi} dex); "
         "the log catalog is still intrinsic"
     )
+
+
+def test_the_decrement_matches_the_curve_computed_by_hand(model, sweep):
+    """First-principles control: the decrement follows exp(-Δτ) off the raw law.
+
+    Load-bearing for the rest of this module. ``predict_line_fluxes(redden=True)``
+    used to be an *independent* reddening computation and served as the live
+    control here; since #1867 routed it through the same published catalog as
+    the property surfaces, it can no longer vouch for them — every surface would
+    agree even if the published screen were wrong.
+
+    This asserts against ``calzetti`` evaluated directly, outside the pipeline
+    entirely. For ``law_bc == law_diff`` in the birth-cloud regime the screen is
+    ``tau_line(λ) = (tau_bc + tau_diff)·k(λ)``, so
+
+        decrement_reddened / decrement_intrinsic
+            = exp(-(tau_bc + tau_diff)·(k(Hα) − k(Hβ)))
+
+    and k(Hα) < k(Hβ), which is why dust *raises* the decrement.
+
+    The curve is evaluated at the **catalog's own** line wavelengths, not at the
+    nominal constants above. Cue's grid does not sit exactly on them, and
+    ``KEY_LINES`` itself carries Hβ at 4862.76 against the 4862.71 used for
+    target matching here. Evaluating 0.05 Å away moved this assertion by 1.3e-5
+    — small, and comfortably outside the 1e-6 tolerance a control this direct
+    deserves. Reading the wavelengths back keeps the control first-principles
+    (the law is still evaluated by hand, outside the pipeline) without
+    comparing two slightly different wavelengths.
+    """
+    from tengri.components.dust.attenuation import calzetti
+
+    lo, hi = sweep
+    # Read the axis off the forward state. `pred.lines` is a `LineProperties`
+    # accessor, which exposes the named lines only -- no `all_waves`, `all_lums`
+    # or `.get`, despite `prediction.py`'s own example calling `lines.get(...)`.
+    all_waves = np.asarray(model.predict_state(lo).derived["line_waves"])
+
+    def _catalog_wave(target):
+        return float(all_waves[int(np.argmin(np.abs(all_waves - target)))])
+
+    w_ha, w_hb = _catalog_wave(HALPHA_AA), _catalog_wave(HBETA_AA)
+    k_ha = float(np.asarray(calzetti(np.asarray([w_ha])))[0])
+    k_hb = float(np.asarray(calzetti(np.asarray([w_hb])))[0])
+    assert k_ha < k_hb, "Calzetti must attenuate Hβ more than Hα; the fixture is upside down"
+
+    intrinsic = _decrement_from_fluxes(model, lo, redden=False)
+    for label, params in (("tau_lo", lo), ("tau_hi", hi)):
+        tau_total = float(params["dust_tau_bc"]) + float(params["dust_tau_diff"])
+        expected = intrinsic * np.exp(-tau_total * (k_ha - k_hb))
+        pred = model.predict(params)
+        got = float(np.asarray(pred.lines.halpha / pred.lines.hbeta))
+        assert got == pytest.approx(expected, rel=1e-6), (
+            f"[{label}] pred.lines decrement {got} does not match the Calzetti "
+            f"curve evaluated by hand ({expected}); the published screen is not "
+            "the law it claims to be"
+        )
+
+
+@pytest.mark.parametrize("law", ["calzetti", "narayanan_z"])
+def test_every_public_line_surface_shares_one_screen(ssp_bare, observation, law):
+    """All public line surfaces must agree, including for a law with shape params.
+
+    The agreement test above uses the module fixture, which is ``calzetti`` --
+    a law that reads NO shape parameter. That makes it structurally unable to
+    see a disagreement *about* shape parameters: with nothing to thread, every
+    binding produces the same curve. A fixture can be right for one question and
+    blind to another.
+
+    ``narayanan_z`` carries a non-zero bump (1.0) AND a non-zero delta (-0.2),
+    so it is exposed to both. Measured before this was fixed, on the Balmer
+    decrement, property surface against ``predict_line_fluxes``::
+
+        calzetti      4.104e-15   (machine precision -- cannot see it)
+        narayanan_z   1.140e-03 rising to 2.525e-03
+
+    ``predict_line_fluxes`` was computing its own reddening through
+    ``attenuate_emission``, which cannot thread ``dust_delta`` or ``dust_Rv``
+    and forces the bump to ``Fixed(0.0)`` over the law's own default (#1858).
+    It now reads the same published catalog as everything else.
+    """
+    model = SEDModel.build(
+        ssp_data=ssp_bare,
+        observation=observation,
+        sfh={
+            "type": "const",
+            "all_params": FIXED,
+            "log_total_mass": 10.0,
+            "start_gyr": 10.0,
+            "end_gyr": 0.0,
+        },
+        dust={
+            "type": "two_component",
+            "law_bc": law,
+            "law_diff": law,
+            "tau_bc": Uniform(0.1, 1.0),
+            "tau_diff": Uniform(0.1, 3.0),
+        },
+        neb={"type": "cue", "all_params": FIXED},
+        redshift=Fixed(0.05),
+    )
+    params = dict(model.spec.sample(jax.random.PRNGKey(0)))
+    params["dust_tau_bc"] = np.asarray(0.6)
+    params["dust_tau_diff"] = np.asarray(_TAU_HI)
+
+    pred = model.predict(params)
+    d_lines = float(np.asarray(pred.lines.halpha / pred.lines.hbeta))
+    d_fluxes = _decrement_from_fluxes(model, params, redden=True)
+    props = model.predict_properties(params, names=("balmer_decrement",))
+    d_property = float(np.asarray(props["balmer_decrement"]))
+
+    assert d_fluxes == pytest.approx(d_lines, rel=1e-6), (
+        f"[{law}] predict_line_fluxes {d_fluxes} disagrees with pred.lines "
+        f"{d_lines}; they are on different screens"
+    )
+    assert d_property == pytest.approx(d_lines, rel=1e-6), (
+        f"[{law}] balmer_decrement property {d_property} disagrees with "
+        f"pred.lines {d_lines}; _line_lums_for_ratios is on a different screen"
+    )
