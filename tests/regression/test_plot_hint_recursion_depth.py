@@ -19,10 +19,16 @@ Regression: describe sweep + plot-module health check.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
+
+#: Repo root derived from this file, so the fresh interpreter imports the same
+#: tree under test wherever the checkout lives (no machine-specific paths).
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 
 pytestmark = [pytest.mark.regression_bug, pytest.mark.contract]
 
@@ -68,10 +74,11 @@ print(f"matplotlib_healthy:{mpl_healthy}")
         capture_output=True,
         text=True,
         env={
+            **os.environ,
             "JAX_PLATFORMS": "cpu",
-            "PYTHONPATH": "src",  # relative to wt
+            "PYTHONPATH": str(_REPO_ROOT / "src"),
         },
-        cwd="/Users/suchethacooray/.claude/jobs/076b9494/tmp/wt-f5",
+        cwd=str(_REPO_ROOT),
     )
 
     # Print diagnostics
