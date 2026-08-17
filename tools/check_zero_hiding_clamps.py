@@ -110,7 +110,21 @@ import sys
 #: division is gone from the source, not hoisted into a shared name with its
 #: clamp left behind. The guard scans for clamped *denominators*, and after the
 #: rewrite there is no denominator.
-EXPECTED_SITES = 99
+#:
+#: 99 -> 97 with #1860: ``compute_mass_weighted_age`` and
+#: ``compute_mass_weighted_metallicity`` now select the denominator *before*
+#: dividing — ``x / jnp.where(ok, total, 1.0)`` rather than
+#: ``x / jnp.maximum(total, 1e-30)`` — so neither has a clamped denominator any
+#: more. The clamp did not move; it stopped existing, because the degenerate
+#: branch supplies 1.0 instead of a floor.
+#:
+#: That rewrite was not cosmetic. An outer ``jnp.where`` selecting NaN does not
+#: protect the reverse pass: both branches are differentiated, and a 1e-30
+#: denominator squares to exactly 0.0 in float32, so the discarded branch
+#: contributed ``0 * inf = NaN`` to the survivor. Raising the floor would have
+#: kept the clamp and kept this count at 99 while fixing nothing — the count
+#: falling is a *consequence* of the right fix, not the goal of it.
+EXPECTED_SITES = 97
 
 SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "tengri"
 

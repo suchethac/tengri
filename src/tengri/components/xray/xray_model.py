@@ -133,6 +133,7 @@ class XRayAirdSEDComponent(SEDModelComponent):
 
     name: str = "xray_aird"
     parameter_prefix: str = "xray_"
+    requires_template_data: ClassVar[bool] = False
 
     #: Cross-component reads with a documented fallback. The base ``apply``
     #: forwards a declared key from ``state.derived`` when some upstream

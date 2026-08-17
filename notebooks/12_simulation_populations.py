@@ -597,30 +597,20 @@ for n in (256, 1024, 4096):
     print(f"{n:8d}{dt:8.2f}s{1e3 * dt / n:11.3f}{n / dt:13.0f}")
 
 # %% [markdown]
-# Per-galaxy cost is flat in *N* to within measurement scatter, so a bigger
-# catalog is just proportionally more wall clock. `chunk_size` trades memory for
-# throughput **linearly** — each vmapped galaxy carries its own SFH and Z(t)
-# through the SSP machinery, and the default of 1024 was enough to exhaust
-# memory on the laptop this was written on. If a run dies with no Python
-# traceback, turn it down first.
+# Per-galaxy cost is flat in *N*, so a bigger catalog is just proportionally
+# more wall clock. `chunk_size` trades memory for throughput **linearly** —
+# each vmapped galaxy carries its own SFH and Z(t) through the SSP machinery.
+# Section 4 measured that trade exactly, so size the chunk from your memory
+# budget rather than bisecting until something dies. If a run dies with no
+# Python traceback, memory is the first thing to suspect.
 #
-# "Turn it down first" is unsatisfying advice when section 4 already computed
-# the ceiling exactly: `scratch_mb_per_galaxy` reads it off the compiled
-# program, so you can pick a chunk from your memory budget instead of bisecting
-# until something dies.
-#
-# **What that ceiling deliberately does not tell you is where throughput peaks.**
-# Measured on a quiet machine, per-galaxy wall clock here falls to about
-# 180 microseconds at *N* = 1024 and then rises again at 4096. Measured while
-# three other test suites were running on the same laptop, the same sweep put
-# the optimum somewhere else entirely and disagreed with itself between
-# repeats — while the per-galaxy *work* stayed flat to 0.3 % across the whole
-# range (1.917 to 1.923 MFLOP/galaxy from *N* = 256 to 8192). The work is a
-# property of your model; the optimum is a property of your machine on the day.
-#
-# So: size the batch from `memory_analysis`, confirm the work is flat with
-# `cost_analysis`, and only then tune wall clock — with the A/A control from
-# section 5d, on a machine you are not sharing.
+# **The ceiling does not tell you where throughput peaks**, and that optimum is
+# a property of your machine rather than of your model. Per-galaxy *work* is
+# flat to 0.3 % from *N* = 256 to 8192 (1.917 to 1.923 MFLOP/galaxy); the
+# wall-clock optimum moves with cache size and with whatever else the machine
+# is running. Size the batch from `memory_analysis`, confirm the work is flat
+# with `cost_analysis`, and tune wall clock last — with the A/A control from
+# section 5d.
 #
 # ### 5d. `float32`
 #
@@ -636,17 +626,12 @@ for n in (256, 1024, 4096):
 # to come **before** the build. A model built under float64 keeps its float64
 # tables no matter what you set afterwards.
 #
-# There are two routes to it, and until recently only one of them worked.
-# `JAX_ENABLE_X64=0` in the environment — the documented JAX way — was silently
-# discarded by `import tengri`, so a float32 run started that way quietly ran in
-# float64 and reported float32 as healthy. That is fixed: the variable is now
-# honored, and choosing float32 warns once, naming the `d_L^2` hazard above. In
-# a notebook, where the import has already happened, the route is still the
-# `jax.config.update` below.
-#
-# Either way, **check the dtype you got rather than the dtype you asked for** —
-# the cell prints it. A precision measurement that cannot fail is not a
-# measurement, and this one could fail silently for two years.
+# Two routes set it: `JAX_ENABLE_X64=0` in the environment *before* importing
+# tengri, or `jax.config.update` afterwards. In a notebook the import has
+# already happened, so it is the second one — the cell below. Either way,
+# **check the dtype you got rather than the dtype you asked for**; the cell
+# prints it, because a precision measurement that cannot fail is not a
+# measurement.
 #
 # Rebuilding then emits a `UserWarning` per table — *"Explicitly requested dtype
 # float64 ... will be truncated to float32"*. That is JAX reporting the thing you
@@ -736,15 +721,11 @@ print(f"\n  agreement with float64: median {np.median(dmag):.0e} mag, worst {dma
 # either way, but `0.0` turns a color or a log into `-inf`. Above z ~ 4, stay in
 # float64 or mask the dropouts deliberately.
 #
-# This failure mode is why float32 is a maintained property of the codebase
-# rather than a happy accident. float32's smallest subnormal is 1.4e-45, so any
-# smaller constant *is* zero there — and a zero that multiplies is not a
-# rounding error, it is a wrong answer. Two CI guards exist for exactly this
-# (`tools/check_representable_floors.py` for guard floors,
-# `tools/check_float32_representable_constants.py` for computed constants), and
-# `tengri.utils.scale.representable_floor` is the fix at a live site: it lifts a
-# floor to the working dtype's smallest normal and leaves float64 alone. If you
-# write your own float32 path, use it instead of a bare literal.
+# float32's smallest subnormal is 1.4e-45, so any constant below that *is* zero
+# there — and a zero that multiplies is not a rounding error, it is a wrong
+# answer. If you write your own float32 path, reach for
+# `tengri.utils.scale.representable_floor` rather than a bare literal: it lifts
+# a floor to the working dtype's smallest normal and leaves float64 alone.
 #
 # **Grid edges stop being exact.** `Z_FLOOR` above is read off the SSP
 # metallicity grid and clipped *to* it. In float32 that edge is only good to

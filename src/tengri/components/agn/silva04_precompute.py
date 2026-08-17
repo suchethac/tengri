@@ -29,17 +29,17 @@ import numpy as np
 from tengri.components._collapsed_lookup import interp_collapsed
 from tengri.components.agn.silva04 import _load_silva04_arrays
 from tengri.forward.precompute.templates import (
+    collapse_fixed_axes,
     precompute_template_photometry,
 )
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
     interp_nd_triweight,
-    slice_fixed_axes,
 )
 from tengri.utils.interpolation import edges_for_grid
 
 # Silva+04 grid parametrized by hydrogen column density only.
-AXIS_PARAMS: tuple[str, ...] = ("silva04_log_NH",)
+AXIS_PARAMS: tuple[str, ...] = ("agn_log_nh_silva",)
 
 
 def precompute_silva04_photometry(
@@ -160,7 +160,7 @@ def build_silva04_photometry_lookup(precomp: dict):
     callable
         Function with signature::
 
-            fn(agn_log_lbol, silva04_log_NH, agn_torus_frac)
+            fn(agn_log_lbol, agn_log_nh_silva, agn_torus_frac)
                 -> ndarray, shape (n_filters,)
 
         Returns torus L_ν [erg/s/Hz]. Caller applies
@@ -191,7 +191,7 @@ def build_silva04_photometry_lookup(precomp: dict):
     @jax.jit
     def silva04_phot(
         agn_log_lbol,
-        silva04_log_NH,
+        agn_log_nh_silva,
         agn_torus_frac,
     ):
         """Compute Silva+04 torus photometry via triweight interpolation on 1D grid.
@@ -201,7 +201,7 @@ def build_silva04_photometry_lookup(precomp: dict):
         # grid_phot stores L_ν [erg/s/Hz] per L_sun of L_bol (unit torus fraction)
         # Return: L_bol_lsun [L_sun] * torus_frac * phot [erg/s/Hz/L_sun] = L_ν [erg/s/Hz]
         l_bol_lsun = 10.0**agn_log_lbol
-        point = (silva04_log_NH,)
+        point = (agn_log_nh_silva,)
         phot_per_lsun = interp_nd_triweight(grid_phot, axes, edges, point)
         return l_bol_lsun * agn_torus_frac * phot_per_lsun
 
@@ -253,21 +253,14 @@ def precompute(
     result = precompute_silva04_photometry(
         grid_path, filter_waves, filter_trans, redshift=redshift
     )
-    if parameters is None:
-        return result
-
     preint: PreintegratedGrid = result["_preint"]
-    fixed_values = parameters.get_fixed_values()
-    fixed: dict[int, float] = {}
-    for i, pname in enumerate(AXIS_PARAMS):
-        if pname in fixed_values:
-            fixed[i] = float(fixed_values[pname])
+    collapsed, remaining_axes, fixed = collapse_fixed_axes(
+        preint, AXIS_PARAMS, parameters, origin="silva04_precompute"
+    )
     if not fixed:
         return result
 
-    collapsed = slice_fixed_axes(preint, fixed)
     # Rebuild dict view; drop the axes that were collapsed
-    remaining_axes = tuple(ax for i, ax in enumerate(result["axes"]) if i not in fixed)
     return {
         "grid_phot": collapsed.phot,
         "axes": remaining_axes,

@@ -8,9 +8,9 @@ three X-ray emitters in :mod:`tengri.components.xray.xray`:
    and Gilfanov+2004 calibrations.  Free axes: ``xray_gamma_hmxb``,
    ``xray_gamma_lmxb``.
 2. **xray_corona** — AGN corona via the α_OX relation (Lusso+2010 / Just+2007).
-   Free axes: ``xray_gamma``, ``xray_delta_alpha_ox``.
+   Free axes: ``xray_gamma_agn``, ``xray_delta_alpha_ox``.
 3. **xray_corona_lopez24** — AGN corona via the α_IRX relation (López+2024,
-   Yang+2022 anisotropy).  Free axes: ``xray_gamma``, ``xray_alpha_irx``.
+   Yang+2022 anisotropy).  Free axes: ``xray_gamma_agn``, ``xray_alpha_irx``.
 
 Each model is L-linear in its scalar luminosity input (SFR×stellar_mass for
 XRBs; L_agn_bol for corona; l_12um for the López24 corona).  Auto-collapses
@@ -58,16 +58,14 @@ from tengri.components.xray.xray import (
 )
 from tengri.forward.precompute.templates import (
     build_template_photometry_lookup,
+    collapse_fixed_axes,
     precompute_template_photometry,
 )
-from tengri.utils.grid_interp import (
-    PreintegratedGrid,
-    slice_fixed_axes,
-)
+from tengri.utils.grid_interp import PreintegratedGrid
 
 AXIS_PARAMS_XRB = ("xray_gamma_hmxb", "xray_gamma_lmxb")
-AXIS_PARAMS_CORONA = ("xray_gamma", "xray_delta_alpha_ox")
-AXIS_PARAMS_CORONA_LOPEZ24 = ("xray_gamma", "xray_alpha_irx")
+AXIS_PARAMS_CORONA = ("xray_gamma_agn", "xray_delta_alpha_ox")
+AXIS_PARAMS_CORONA_LOPEZ24 = ("xray_gamma_agn", "xray_alpha_irx")
 
 AXIS_PARAMS: dict[str, tuple[str, ...]] = {
     "xray_xrb": AXIS_PARAMS_XRB,
@@ -275,21 +273,12 @@ def precompute(
         "_preint": preint,
     }
 
-    axis_params = AXIS_PARAMS[model]
-    if parameters is None or not axis_params:
-        return result
-
-    fixed_values = parameters.get_fixed_values()
-    fixed: dict[int, float] = {}
-    for i, pname in enumerate(axis_params):
-        if pname in fixed_values:
-            fixed[i] = float(fixed_values[pname])
-
+    collapsed, remaining, fixed = collapse_fixed_axes(
+        preint, AXIS_PARAMS[model], parameters, origin=f"xray_precompute[{model}]"
+    )
     if not fixed:
         return result
 
-    collapsed = slice_fixed_axes(preint, fixed)
-    remaining = tuple(ax for i, ax in enumerate(result["axes"]) if i not in fixed)
     return {
         "grid_phot": collapsed.phot,
         "axes": remaining,
