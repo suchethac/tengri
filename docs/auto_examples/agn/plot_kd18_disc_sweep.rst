@@ -53,12 +53,24 @@ References
 
  .. code-block:: none
 
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-805/src/tengri/parameters/groups.py:948: UserWarning: agn_log_ledd has no effect on the 'kubota_done' disc: the Eddington ratio is now derived from agn_log_lbol and agn_log_mbh (lambda_Edd = L_bol / L_Edd, #846). Set the AGN luminosity via agn_log_lbol and remove agn_log_ledd.
+    /tengri/src/tengri/parameters/groups.py:972: UserWarning: agn_log_ledd has no effect on the 'kubota_done' disc: the Eddington ratio is now derived from agn_log_lbol and agn_log_mbh (lambda_Edd = L_bol / L_Edd, #846). Set the AGN luminosity via agn_log_lbol and remove agn_log_ledd.
       final_params = Parameters(**resolved_kwargs)
-    /Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit__where': FileNotFoundError: [Errno 2] No such file or directory: '/Users/suchethacooray/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_trapezoid': FileNotFoundError: [Errno 2] No such file or directory: '/Users/suchethacooray/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
+    /tengri/src/tengri/parameters/groups.py:972: UserWarning: agn_log_ledd has no effect on the 'kubota_done' disc: the Eddington ratio is now derived from agn_log_lbol and agn_log_mbh (lambda_Edd = L_bol / L_Edd, #846). Set the AGN luminosity via agn_log_lbol and remove agn_log_ledd.
+      final_params = Parameters(**resolved_kwargs)
+    /tengri/src/tengri/parameters/groups.py:972: UserWarning: agn_log_ledd has no effect on the 'kubota_done' disc: the Eddington ratio is now derived from agn_log_lbol and agn_log_mbh (lambda_Edd = L_bol / L_Edd, #846). Set the AGN luminosity via agn_log_lbol and remove agn_log_ledd.
+      final_params = Parameters(**resolved_kwargs)
+    /tengri/src/tengri/parameters/groups.py:972: UserWarning: agn_log_ledd has no effect on the 'kubota_done' disc: the Eddington ratio is now derived from agn_log_lbol and agn_log_mbh (lambda_Edd = L_bol / L_Edd, #846). Set the AGN luminosity via agn_log_lbol and remove agn_log_ledd.
+      final_params = Parameters(**resolved_kwargs)
+    /tengri/src/tengri/parameters/groups.py:972: UserWarning: agn_log_ledd has no effect on the 'kubota_done' disc: the Eddington ratio is now derived from agn_log_lbol and agn_log_mbh (lambda_Edd = L_bol / L_Edd, #846). Set the AGN luminosity via agn_log_lbol and remove agn_log_ledd.
+      final_params = Parameters(**resolved_kwargs)
+    /tengri/src/tengri/parameters/groups.py:972: UserWarning: agn_log_ledd has no effect on the 'kubota_done' disc: the Eddington ratio is now derived from agn_log_lbol and agn_log_mbh (lambda_Edd = L_bol / L_Edd, #846). Set the AGN luminosity via agn_log_lbol and remove agn_log_ledd.
+      final_params = Parameters(**resolved_kwargs)
+    /tengri/src/tengri/parameters/groups.py:972: UserWarning: agn_log_ledd has no effect on the 'kubota_done' disc: the Eddington ratio is now derived from agn_log_lbol and agn_log_mbh (lambda_Edd = L_bol / L_Edd, #846). Set the AGN luminosity via agn_log_lbol and remove agn_log_ledd.
+      final_params = Parameters(**resolved_kwargs)
+    /tengri/src/tengri/parameters/groups.py:972: UserWarning: agn_log_ledd has no effect on the 'kubota_done' disc: the Eddington ratio is now derived from agn_log_lbol and agn_log_mbh (lambda_Edd = L_bol / L_Edd, #846). Set the AGN luminosity via agn_log_lbol and remove agn_log_ledd.
+      final_params = Parameters(**resolved_kwargs)
+    /tengri/src/tengri/parameters/groups.py:972: UserWarning: agn_log_ledd has no effect on the 'kubota_done' disc: the Eddington ratio is now derived from agn_log_lbol and agn_log_mbh (lambda_Edd = L_bol / L_Edd, #846). Set the AGN luminosity via agn_log_lbol and remove agn_log_ledd.
+      final_params = Parameters(**resolved_kwargs)
 
 
 
@@ -182,7 +194,7 @@ References
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 10.088 seconds)
+   **Total running time of the script:** (0 minutes 4.695 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_kd18_disc_sweep.py:
