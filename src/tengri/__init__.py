@@ -112,10 +112,60 @@ import jax
 
 _X64_REQUEST = _os.environ.get("JAX_ENABLE_X64")
 
+_x64_guard_installed = False
+
+
+def _install_x64_guard() -> None:
+    """Hold ``jax_enable_x64`` off for the duration of tengri's own import (#1880).
+
+    Restoring the flag at the end of the import is not enough. Five DSPS modules
+    flip x64 on early and transitively, and every module-scope ``jnp`` constant
+    evaluated after that point is allocated as **float64** — 70 of them, tree
+    wide. :func:`_reassert_x64_preference` puts the flag back but cannot
+    un-allocate an array.
+
+    On CPU that is only a doubled footprint: with x64 off, JAX's promotion caps
+    results at float32 regardless of a float64 operand, so the numbers are
+    unaffected. On a backend with **no** float64 the allocation itself raises
+    (``MLX does not support float64``), and ``import tengri`` fails outright —
+    measured on Apple MPS via ``jax-mps``.
+
+    So while the user has explicitly asked for float32, refuse to turn x64 on at
+    all. Only the enabling direction is blocked; anything turning it *off*, and
+    every other config key, passes through untouched.
+    """
+    global _x64_guard_installed
+    if _x64_guard_installed:
+        return
+    _original_update = jax.config.update
+
+    def _guarded_update(name, value, *args, **kwargs):
+        if name == "jax_enable_x64" and value:
+            return  # the user asked for float32; keep the import in float32
+        return _original_update(name, value, *args, **kwargs)
+
+    jax.config.update = _guarded_update
+    _guarded_update._tengri_original = _original_update  # type: ignore[attr-defined]
+    _x64_guard_installed = True
+
+
+def _remove_x64_guard() -> None:
+    """Restore ``jax.config.update`` once tengri's import has finished."""
+    global _x64_guard_installed
+    if not _x64_guard_installed:
+        return
+    original = getattr(jax.config.update, "_tengri_original", None)
+    if original is not None:
+        jax.config.update = original
+    _x64_guard_installed = False
+
+
 if _X64_REQUEST is None:
     jax.config.update("jax_enable_x64", True)
 elif _X64_REQUEST.strip().lower() in {"0", "false", "no", "off"}:
     import warnings as _warnings
+
+    _install_x64_guard()
 
     _warnings.warn(
         f"JAX_ENABLE_X64={_X64_REQUEST}: tengri is honoring your request for "
@@ -952,4 +1002,7 @@ def _reassert_x64_preference() -> None:
         _jax.config.update("jax_enable_x64", False)
 
 
+# Order matters: drop the guard FIRST so the reassert below can still call
+# through to the real jax.config.update, then restore the flag (#1880, #1840).
+_remove_x64_guard()
 _reassert_x64_preference()
