@@ -339,60 +339,6 @@ class _DescribeRecord(dict):
         return "\n".join(lines)
 
     def _repr_html_(self) -> str:
-        """Jupyter HTML repr — renders as a real HTML table in notebooks."""
-        if not self:
-            return "<i>(empty)</i>"
-        cols = self._columns()
-        head = "".join(f"<th style='text-align:left'>{k}</th>" for k in cols)
-        body = "".join(
-            "<tr>"
-            + "".join(f"<td style='text-align:left'>{d.get(k, '')}</td>" for k in cols)
-            + "</tr>"
-            for d in self
-        )
-        kinds = {d.get("kind", "entry") for d in self}
-        kind_label = next(iter(kinds)) if len(kinds) == 1 else "mixed"
-        return (
-            f"<table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>"
-            f"<i>{len(self)} result{'s' if len(self) != 1 else ''} — {kind_label}</i>"
-        )
-
-
-class _DescribeRecord(dict):
-    """A `dict` that prints as a labeled block. Plain dict otherwise."""
-
-    def __repr__(self) -> str:
-        if not self:
-            return "(empty)"
-        # Render every field except param_details first; render that last
-        # as an indented sub-table since it's a list-of-dicts.
-        non_details = [(k, v) for k, v in self.items() if k != "param_details"]
-        width = max((len(k) for k, _ in non_details), default=0) + 2
-        lines: list[str] = []
-        for k, v in non_details:
-            if isinstance(v, list) and v and all(isinstance(x, str) for x in v):
-                if len(v) <= 4:
-                    lines.append(f"  {k.ljust(width)}{', '.join(v)}")
-                else:
-                    lines.append(f"  {k.ljust(width)}{v[0]}")
-                    for item in v[1:]:
-                        lines.append(f"  {' ' * width}{item}")
-            else:
-                lines.append(f"  {k.ljust(width)}{v}")
-
-        # Sub-table for parameter defaults and descriptions.
-        details = self.get("param_details")
-        if details:
-            name_w = max(len(d["name"]) for d in details)
-            def_w = max(len(d["default"]) for d in details)
-            lines.append("")
-            lines.append("  param_details (free-parameter priors):")
-            for d in details:
-                desc = d.get("description", "")
-                lines.append(f"    {d['name'].ljust(name_w)}  {d['default'].ljust(def_w)}  {desc}")
-        return "\n".join(lines)
-
-    def _repr_html_(self) -> str:
         def _fmt(v):
             if isinstance(v, list) and v and all(isinstance(x, str) for x in v):
                 return "<br>".join(v)
