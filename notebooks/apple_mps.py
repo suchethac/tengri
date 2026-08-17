@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.19.5
+#       jupytext_version: 1.19.1
 #   kernelspec:
 #     display_name: .venv
 #     language: python
@@ -137,10 +137,14 @@ print("dtype  :", jnp.zeros(1).dtype)
 # Nothing about the model API changes. Build and predict exactly as on CPU.
 
 # %%
-from tengri import FIXED, FREE, SEDModel, Uniform, load_ssp_data
+from tengri import FIXED, FREE, SEDModel, Uniform, load_ssp
 from tengri.observation import Observation, Photometry
 
-ssp = load_ssp_data("data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5")
+# load_ssp resolves a short alias and walks parent dirs for data/, so this works
+# whatever the working directory is. Do not hand-build a "data/..." path in a
+# notebook: it only resolves from the repo root, and the executor runs from
+# notebooks/.
+ssp = load_ssp("prsc_miles_chabrier_wNE")
 obs = Observation(
     photometry=Photometry.from_names(
         ["galex_fuv", "sdss_u", "sdss_g", "sdss_r", "wise_w1", "wise_w4"]
@@ -188,7 +192,9 @@ def grad_one(p):
     return jax.grad(lambda q: jnp.sum(model.predict_photometry(q)))(p)
 
 
-for n in (1, 32, 256):
+# A smoke check, not the measurement: batch 256 needs several GB and will kill
+# the kernel on a loaded machine. The tables below carry the full sweep.
+for n in (1, 32):
     batch = {k: jnp.broadcast_to(v, (n, *jnp.shape(v))) for k, v in params.items()}
     ms = timed(jax.vmap(grad_one), batch) if n > 1 else timed(grad_one, params)
     print(f"batch={n:4d}  total={ms:7.2f} ms   per galaxy={ms / n:6.3f} ms")
@@ -347,10 +353,10 @@ fitter = Fitter(
 print("resolved approx:", fitter.model.approx)  # expect wave_precomp=True, ztable=True
 
 # Run three times: the first includes XLA compilation, the rest do not.
-for i in (1, 2, 3):
+for i in (1, 2):
     t0 = time.perf_counter()
-    posterior = fitter.run("map", n_steps=300, verbose=False)
-    print(f"  MAP run {i}: {time.perf_counter() - t0:6.2f} s")
+    posterior = fitter.run("map", n_steps=100, verbose=False)
+    print(f"  MAP run {i}: {time.perf_counter() - t0:6.2f} s  (100 steps)")
 
 # %% [markdown]
 # ### Measured: single-galaxy MAP, 300 ADAM steps
