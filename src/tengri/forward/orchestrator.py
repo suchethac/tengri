@@ -33,6 +33,7 @@ from tengri.protocols.component import (
 )
 
 __all__ = [
+    "default_params_dict",
     "merge_declared_parameters",
     "run_components",
     "sample_params_dict",
@@ -236,6 +237,7 @@ _CANONICAL_UNITS: dict[str, str] = {
     "dust_attenuation_factor": "",
     "sed_dust_attenuated": "erg/s/Hz",
     "sed_dust_ir": "erg/s/Hz",
+    "L_ir_emission": "erg/s",
     # AGN outputs
     "L_agn_bol": "erg/s",
     "L_agn_torus": "erg/s",
@@ -256,6 +258,13 @@ _CANONICAL_UNITS: dict[str, str] = {
     # Nebular — photometry LUT (only non-BakedIn backends
     # publish, when ``approx=WavePrecomp()`` is set).
     "nebular_phot_lnu_precomp": "erg/s/Hz",
+    # The same bucket with the young-limit screen integrated THROUGH each band,
+    # published by the dust component from the reddened continuum (#1738). Replaces
+    # the lambda_eff screening of the key above rather than adding to it — the
+    # ``_attenuated_`` infix is what keeps it out of the ``*_phot_lnu_precomp``
+    # summation sweep in ``predict_via_precomp``.
+    "nebular_phot_lnu_attenuated_precomp": "erg/s/Hz",
+    "nebular_restband_lnu_attenuated_precomp": "erg/s/Hz",
     # Shock (MAPPINGS V) — filter LUT. A separate additive component from the
     # photoionized nebular backend (#851), so it carries its own key (#1375).
     "shock_phot_lnu_precomp": "erg/s/Hz",
@@ -731,6 +740,147 @@ def sample_params_dict(
     return out
 
 
+def default_params_dict(
+    components: Iterable[SEDComponent],
+    overrides: Mapping[str, Any] | None = None,
+) -> dict[str, jnp.ndarray]:
+    r"""Build one params dict from each component's declared *defaults*.
+
+    The deterministic sibling of :func:`sample_params_dict`: same loop
+    ``[components] -> declarations -> params dict -> run_components``, but
+    each value is read off the prior's ``default`` instead of drawn from it.
+
+    Use it wherever a params dict is wanted for the whole of a component
+    chain — pipeline tests, notebook demos, a forward pass at the declared
+    fiducial. The alternative is a literal, and a literal is a copy of the
+    declaration that cannot follow it: eight fixtures listed the ``xray_*``
+    parameters by hand and broke the day ``xray_det_hmxb`` gained a reader,
+    because that one is declared ``Uniform(-2, 2, default=0.0)`` -- free, so
+    absent from ``spec.get_fixed_values()`` -- while the siblings they *had*
+    listed are ``Fixed`` (#1832). Reading the declaration treats free and
+    fixed alike, and reaches the ones nobody thought to copy.
+
+    Parameters
+    ----------
+    components : iterable of SEDComponent
+        Adapters whose declared defaults should be collected.
+    overrides : mapping, optional
+        Values that replace the declared default. Also the only way to
+        supply a :data:`BARE_NAME_ALLOWLIST` name (typically ``redshift``),
+        which no component declares.
+
+    Returns
+    -------
+    dict mapping str -> jnp.ndarray
+        Parameter name -> declared default, ready to feed
+        :func:`run_components`.
+
+    Raises
+    ------
+    ValueError
+        If a declared prior carries no ``default`` to read. Loudly, and
+        naming the parameter: silently omitting it would hand back a dict
+        missing a key the owning component indexes, which is the failure
+        this function exists to prevent.
+
+    Notes
+    -----
+    **JIT-compatible**: not applicable -- builds a dict of concrete scalars,
+    intended to be constructed outside any transform and passed in.
+
+    Deliberately *not* an auto-fill inside :func:`run_components`. A
+    parameter nobody supplies must still raise: ``xray_det_hmxb`` and
+    ``xray_det_lmxb`` were declared, free, and read by nothing for as long
+    as they were because a neutral default made the missing handoff look
+    wired (#1706). Asking for the declared defaults is an explicit request;
+    being handed them behind your back is the bug.
+
+    See Also
+    --------
+    sample_params_dict : the same loop, drawing from the priors instead.
+    tengri.protocols.component.declared_default : one parameter, for a
+        function signature default.
+    """
+    merged = merge_declared_parameters(components)
+    overrides = overrides or {}
+    out: dict[str, jnp.ndarray] = {}
+    for name, prior in merged.items():
+        if name in overrides:
+            out[name] = jnp.asarray(overrides[name])
+            continue
+        default = getattr(prior, "default", None)
+        if default is None:
+            raise ValueError(
+                f"{name!r} is declared with {type(prior).__name__} but carries no "
+                f"default to read, so no value can be supplied for it. Give the "
+                f"declaration a `default=`, or pass overrides={{{name!r}: ...}}."
+            )
+        out[name] = jnp.asarray(default)
+    # Bare-name allowlist entries that no component declared but the
+    # caller still wants threaded through (typically redshift).
+    for bare in BARE_NAME_ALLOWLIST:
+        if bare in overrides and bare not in out:
+            out[bare] = jnp.asarray(overrides[bare])
+    return out
+
+
+def _name_missing_parameter(
+    component: SEDComponent,
+    sliced: Mapping[str, Any],
+    exc: KeyError,
+) -> KeyError | None:
+    """A ``KeyError`` naming the parameter and its owner, or ``None`` to re-raise.
+
+    A component reads its parameters by indexing (``params["xray_det_hmxb"]``),
+    deliberately: a ``.get(..., 0.0)`` default is what let two declared knobs go
+    unread for months, because a dict missing them looked complete (#1706). The
+    cost is that the omission surfaces as a bare ``KeyError: 'xray_det_hmxb'``
+    from wherever the component happened to read first — which is what all fifty
+    of #1832's failures looked like.
+
+    Returns ``None`` — meaning "not mine, re-raise unchanged" — unless the key is
+    a parameter this component *declares* and the sliced dict genuinely lacks. A
+    guard that relabels every internal dict lookup would turn real bugs into
+    confident wrong explanations, which is worse than the bare message.
+
+    Parameters
+    ----------
+    component : SEDComponent
+        The component whose ``apply`` raised.
+    sliced : mapping
+        The prefix-sliced params the component was given.
+    exc : KeyError
+        The original exception.
+
+    Returns
+    -------
+    KeyError or None
+        The replacement to raise ``from exc``, or ``None`` to re-raise.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — a missing key fails at trace time, before any
+    array work, so this runs under ``jax.jit`` exactly as it does eagerly.
+
+    The type stays ``KeyError``: :meth:`SEDModel.predict` already raises one
+    carrying a full message for the same condition, and callers catch it.
+    """
+    key = exc.args[0] if exc.args else None
+    if not isinstance(key, str) or key in sliced:
+        return None
+    declared = getattr(component, "declared_parameters", None)
+    names = {d.name for d in declared()} if callable(declared) else set()
+    if key not in names:
+        return None
+    return KeyError(
+        f"Component {getattr(component, 'name', type(component).__name__)!r} requires "
+        f"parameter {key!r}, which is not in the params dict. The component declares "
+        f"it, and it is free by default, so supplying a value is the caller's job. "
+        f"Pass it explicitly, or take every declared default at once with "
+        f"tengri.pipeline.default_params_dict([...])."
+    )
+
+
 def run_components(
     components: Iterable[SEDComponent],
     state: ForwardState,
@@ -791,7 +941,13 @@ def run_components(
 
     for component in components:
         sliced = slice_params_for_component(component, params)
-        state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
+        try:
+            state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
+        except KeyError as exc:
+            named = _name_missing_parameter(component, sliced, exc)
+            if named is None:
+                raise
+            raise named from exc
 
     # ADR-0007 Phase 4 invariant — strict typed-only writes (#64
     # added the same check at the snapshot-test boundary; this one

@@ -24,6 +24,7 @@ def test_namespace_exports_protocol_and_orchestrator():
     assert pipeline.run_components is not None
     assert pipeline.merge_declared_parameters is not None
     assert pipeline.slice_params_for_component is not None
+    assert pipeline.default_params_dict is not None
     assert pipeline.BARE_NAME_ALLOWLIST == ("redshift",)
 
 
@@ -66,32 +67,12 @@ def test_full_five_adapter_chain_via_public_api():
             or name in pipeline.BARE_NAME_ALLOWLIST
         ), name
 
-    # Concrete parameter values for a single forward pass.
-    params = {
-        "redshift": 1.5,
-        # radio
-        "radio_q_ir": 2.64,
-        "radio_alpha_sf": 0.8,
-        "radio_loudness": 0.0,
-        "radio_alpha_agn": 0.7,
-        "radio_T_e": 1e4,
-        "radio_alpha_ff": -0.1,
-        # dust attenuation + emission
-        "dust_tau_v": 0.4,
-        "dust_T": 30.0,
-        "dust_beta_ir": 1.8,
-        # xray
-        "xray_log_nh": 20.0,
-        "xray_gamma_hmxb": 2.0,
-        "xray_gamma_lmxb": 1.6,
-        "xray_gamma_agn": 1.8,
-        "xray_E_cut": 300.0,
-        "xray_delta_alpha_ox": -1.4,
-        # igm
-        "igm_z_mid": 7.0,
-        "igm_dz": 0.5,
-        "igm_log_nhi": 20.0,
-    }
+    # Concrete parameter values for a single forward pass, read off the same
+    # declarations ``merge_declared_parameters`` just walked. The literal that
+    # stood here spelled out twenty keys and was complete when written; it went
+    # stale the day ``xray_det_hmxb`` gained a reader (#1832), which is the
+    # failure a user-perspective test should be the last place to reproduce.
+    params = pipeline.default_params_dict(chain, overrides={"redshift": 1.5})
 
     wave = jnp.logspace(2, 8, 1024)
     state = pipeline.ForwardState(

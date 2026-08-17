@@ -189,7 +189,8 @@ class Schreiber2016IRSEDComponent(SEDModelComponent):
         tuple[ndarray, dict]
 
             - ``sed_out``: Updated SED in erg/s/Hz.
-            - ``published``: Dict with ``{"L_ir_emission": scalar}``.
+            - ``published``: Dict with ``{"L_ir_emission": erg/s,
+              "sed_dust_ir": erg/s/Hz}``.
 
         Notes
         -----
@@ -200,13 +201,50 @@ class Schreiber2016IRSEDComponent(SEDModelComponent):
         """
         L_ir = inputs["L_ir"]
 
-        # Skip if templates were not loaded
-        if not hasattr(self, "data") or self.data is None:
-            # Return input SED unchanged
-            return sed_in, {}
+        # Try precomputed data first; if unavailable, lazy-load at trace time
+        if hasattr(self, "data") and self.data is not None:
+            templates = self.data
+        else:
+            # Lazy-load templates like architecture A (module-level closure).
+            # Ensures component works both with precomputation (self.data set)
+            # and without (approx=None, default builds). Loads inside a trace
+            # via jax.ensure_compile_time_eval() to avoid tracer leakage.
+            import warnings
 
-        # Load template grid from precomputed state
-        templates = self.data
+            from tengri.components.dust.emission_templates import (
+                _find_data_file,
+                load_schreiber2016_templates,
+            )
+
+            template_path = self.config.template_path
+            if template_path is None:
+                for fname in ("schreiber2016_templates.h5",):
+                    template_path = _find_data_file(fname)
+                    if template_path is not None:
+                        break
+
+            if template_path is None:
+                warnings.warn(
+                    f"Schreiber2016IR component {self.name!r}: template file not found. "
+                    "Component will skip. For science use, provide template_path "
+                    "via Schreiber2016IRConfig.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+                return sed_in, {}
+
+            try:
+                templates = load_schreiber2016_templates(template_path)
+            except Exception as e:
+                warnings.warn(
+                    f"Schreiber2016IR component {self.name!r}: failed to load templates: {e}. "
+                    "Component will skip.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+                return sed_in, {}
+
+        # Load template grid from precomputed state or just-loaded data
         continuum = templates["continuum"]  # (n_tdust, n_wave)
         pah = templates["pah"]  # (n_tdust, n_wave)
         tmpl_wave = templates["wavelength_aa"]
@@ -237,7 +275,11 @@ class Schreiber2016IRSEDComponent(SEDModelComponent):
         # Scale by absorbed luminosity
         sed_emission = L_ir * sed
 
-        # Return updated SED and published luminosity
+        # Return updated SED and published outputs
         sed_out = sed_in + sed_emission
+        published = {
+            "L_ir_emission": L_ir,
+            "sed_dust_ir": sed_emission,
+        }
 
-        return sed_out, {}
+        return sed_out, published

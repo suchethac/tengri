@@ -19,7 +19,7 @@ import pytest
 
 from tengri.components.xray.component import XRaySEDComponent
 from tengri.components.xray.xray import xray_total
-from tengri.forward.orchestrator import run_components
+from tengri.forward.orchestrator import default_params_dict, run_components
 from tengri.protocols import ForwardState
 
 REL_TOL = 1e-10
@@ -45,15 +45,13 @@ def test_orchestrator_matches_direct_call(z, sfr, stellar_mass, L_agn_bol):
         derived={"sfr": sfr, "log_mstar": jnp.log10(stellar_mass), "L_agn_bol": L_agn_bol},
     )
 
-    params = {
-        "redshift": z,
-        "xray_gamma_hmxb": 2.0,
-        "xray_gamma_lmxb": 1.6,
-        "xray_gamma_agn": 1.8,
-        "xray_E_cut": 300.0,
-        "xray_delta_alpha_ox": -1.4,
-        "xray_log_nh": 20.0,
-    }
+    # Declared defaults, with the one deliberate departure spelled out. The
+    # literal this replaces named six xray_* keys and was complete when written;
+    # it broke the day xray_det_hmxb gained a reader (#1832).
+    params = default_params_dict(
+        [XRaySEDComponent()],
+        overrides={"redshift": z, "xray_delta_alpha_ox": -1.4},
+    )
 
     final = run_components([XRaySEDComponent()], initial_state, params)
 
@@ -62,17 +60,22 @@ def test_orchestrator_matches_direct_call(z, sfr, stellar_mass, L_agn_bol):
     # passes the xray_delta_alpha_ox offset through as delta_alpha_ox. Replicate
     # both so the equivalence contract holds (#722/#746: the old expected used
     # L_agn_bol=/alpha_ox= kwargs that xray_total silently swallows).
+    #
+    # Read the spectral parameters off ``params`` rather than repeating them:
+    # this test is about the orchestrator agreeing with the direct call, not
+    # about any particular photon index, and a second literal is a second thing
+    # to forget.
     l_2500 = L_agn_bol / (5.15 * 1.199e15)
     expected = xray_total(
         wave,
         sfr=sfr,
         stellar_mass=stellar_mass,
         l_2500_30deg=l_2500,
-        gamma_hmxb=2.0,
-        gamma_lmxb=1.6,
-        gamma_agn=1.8,
-        E_cut=300.0,
-        delta_alpha_ox=-1.4,
+        gamma_hmxb=float(params["xray_gamma_hmxb"]),
+        gamma_lmxb=float(params["xray_gamma_lmxb"]),
+        gamma_agn=float(params["xray_gamma_agn"]),
+        E_cut=float(params["xray_E_cut"]),
+        delta_alpha_ox=float(params["xray_delta_alpha_ox"]),
     )
 
     assert jnp.allclose(final.sed_intrinsic, expected, rtol=REL_TOL, atol=0.0)
@@ -87,15 +90,10 @@ def test_xray_no_agn_upstream_falls_back_to_zero():
     state = ForwardState(wave=wave, sed_intrinsic=jnp.zeros_like(wave))
     xray = XRaySEDComponent()
 
-    params = {
-        "redshift": 0.0,
-        "xray_gamma_hmxb": 2.0,
-        "xray_gamma_lmxb": 1.6,
-        "xray_gamma_agn": 1.8,
-        "xray_E_cut": 300.0,
-        "xray_delta_alpha_ox": -1.4,
-        "xray_log_nh": 20.0,
-    }
+    params = default_params_dict(
+        [xray],
+        overrides={"redshift": 0.0, "xray_delta_alpha_ox": -1.4},
+    )
     out = xray.apply(state, params)
 
     expected = xray_total(
@@ -126,15 +124,10 @@ def test_xray_pipeline_preserves_input_state_immutability():
     _ = run_components(
         [XRaySEDComponent()],
         initial,
-        {
-            "redshift": 1.0,
-            "xray_gamma_hmxb": 2.0,
-            "xray_gamma_lmxb": 1.6,
-            "xray_gamma_agn": 1.8,
-            "xray_E_cut": 300.0,
-            "xray_delta_alpha_ox": -1.4,
-            "xray_log_nh": 20.0,
-        },
+        default_params_dict(
+            [XRaySEDComponent()],
+            overrides={"redshift": 1.0, "xray_delta_alpha_ox": -1.4},
+        ),
     )
 
     assert jnp.array_equal(initial.sed_intrinsic, snapshot_intrinsic)
@@ -174,33 +167,22 @@ def test_three_adapter_chain_runs_end_to_end():
     # Use z high enough that IGM produces non-trivial attenuation
     # (reionization midpoint igm_z_mid=7.0 → galaxies AT z=8 see real
     # transmission < 1).
-    params = {
-        "redshift": 8.0,
-        # radio
-        "radio_q_ir": 2.64,
-        "radio_alpha_sf": 0.8,
-        "radio_loudness": 0.0,
-        "radio_alpha_agn": 0.7,
-        "radio_T_e": 1e4,
-        "radio_alpha_ff": -0.1,
-        # igm
-        "igm_z_mid": 7.0,
-        "igm_dz": 0.5,
-        "igm_log_nhi": 20.0,
-        # xray
-        "xray_gamma_hmxb": 2.0,
-        "xray_gamma_lmxb": 1.6,
-        "xray_gamma_agn": 1.8,
-        "xray_E_cut": 300.0,
-        "xray_delta_alpha_ox": -1.4,
-        "xray_log_nh": 20.0,
-    }
+    chain = [RadioSEDComponent(), XRaySEDComponent(), IGMSEDComponent()]
 
-    final = run_components(
-        [RadioSEDComponent(), XRaySEDComponent(), IGMSEDComponent()],
-        state,
-        params,
+    # Everything at its declared default except the four the test chose
+    # deliberately: z=8 above the reionization midpoint, and the IGM knobs the
+    # comment above pins.
+    params = default_params_dict(
+        chain,
+        overrides={
+            "redshift": 8.0,
+            "igm_z_mid": 7.0,
+            "igm_dz": 0.5,
+            "xray_delta_alpha_ox": -1.4,
+        },
     )
+
+    final = run_components(chain, state, params)
 
     assert final.sed_intrinsic is not None
     chex.assert_tree_all_finite(final.sed_intrinsic)

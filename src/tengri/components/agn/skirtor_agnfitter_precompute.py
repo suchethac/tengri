@@ -33,21 +33,21 @@ from tengri.components._collapsed_lookup import interp_collapsed
 from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL
 from tengri.components.agn.skirtor_agnfitter import _load_skirtor_agnfitter_arrays
 from tengri.forward.precompute.templates import (
+    collapse_fixed_axes,
     precompute_template_photometry,
 )
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
     interp_nd_pchip,
-    slice_fixed_axes,
 )
 from tengri.utils.physics_constants import L_SUN as _LSUN_ERG
 
 # SKIRTOR_mean_3p grid parametrized by three independent axes:
 # oa (half-opening angle), incl (inclination), tv (optical depth).
 AXIS_PARAMS: tuple[str, ...] = (
-    "skirtor_agnfitter_oa",
-    "skirtor_agnfitter_incl",
-    "skirtor_agnfitter_tv",
+    "agn_oa_skirtor",
+    "agn_incl_skirtor",
+    "agn_tv_skirtor",
 )
 
 
@@ -281,20 +281,13 @@ def precompute(
     result = precompute_skirtor_agnfitter_photometry(
         grid_path, filter_waves, filter_trans, redshift=redshift
     )
-    if parameters is None:
-        return result
-
     preint: PreintegratedGrid = result["_preint"]
-    fixed_values = parameters.get_fixed_values()
-    fixed: dict[int, float] = {}
-    for i, pname in enumerate(AXIS_PARAMS):
-        if pname in fixed_values:
-            fixed[i] = float(fixed_values[pname])
+    collapsed, remaining_axes, fixed = collapse_fixed_axes(
+        preint, AXIS_PARAMS, parameters, origin="skirtor_agnfitter_precompute"
+    )
     if not fixed:
         return result
 
-    collapsed = slice_fixed_axes(preint, fixed)
-    remaining_axes = tuple(ax for i, ax in enumerate(result["axes"]) if i not in fixed)
     return {
         "grid_phot": collapsed.phot,
         "axes": remaining_axes,

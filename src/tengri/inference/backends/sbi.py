@@ -308,8 +308,11 @@ class SBIPosterior:
         if not filepath.is_file():
             raise FileNotFoundError(f"Pre-trained posterior not found: {path}")
 
+        # B301: a pre-trained posterior the caller points at explicitly.
+        # Unpickling executes arbitrary code, so only load files you produced
+        # or otherwise trust; there is no way to validate one before it runs.
         with open(filepath, "rb") as f:
-            state = pickle.load(f)
+            state = pickle.load(f)  # nosec B301
 
         if isinstance(state, dict):
             return cls(

@@ -47,7 +47,7 @@ from typing import Any, ClassVar
 import jax.numpy as jnp
 
 from tengri.components.sed_model_component import SEDModelComponent
-from tengri.components.xray.xray import xray_total
+from tengri.components.xray.xray import metallicity_from_history, xray_total
 from tengri.parameters.priors import Uniform
 from tengri.protocols.component import (
     ParamDeclaration,
@@ -104,9 +104,19 @@ class XRayAirdSEDComponent(SEDModelComponent):
     -----
     **JIT-compatible**: yes.
 
-    **Optional inputs**: reads sfr, log_mstar, metallicity_z, stellar_age_gyr,
-    L_2500_30deg with sensible defaults. Component gracefully handles missing
-    AGN/stellar inputs and defaults to XRB + hot gas only.
+    **Optional inputs**: reads ``log_metallicity_history``, the only
+    cross-component key this class declares.
+
+    ``predict`` also *looks up* ``sfr``, ``log_mstar``, ``stellar_age_gyr`` and
+    ``L_2500_30deg``, but none of them is declared, and the base ``apply``
+    builds its keyword arguments purely from the declared sets — so all four
+    take their literal fallbacks on every call regardless of what the rest of
+    the model computed, and the corona term is identically zero. That is a live
+    defect, tracked separately, not a description of intended behavior; the
+    prose here used to claim the reads happen, which is how #1755 survived as
+    long as it did. Prefer the default ``yang20``
+    (:class:`tengri.components.xray.component.XRaySEDComponent`), which wires
+    all of them.
 
     **Models**:
 
@@ -123,6 +133,23 @@ class XRayAirdSEDComponent(SEDModelComponent):
 
     name: str = "xray_aird"
     parameter_prefix: str = "xray_"
+    requires_template_data: ClassVar[bool] = False
+
+    #: Cross-component reads with a documented fallback. The base ``apply``
+    #: forwards a declared key from ``state.derived`` when some upstream
+    #: component publishes it, and substitutes a 0-d ``0.0`` when none does —
+    #: which :func:`metallicity_from_history` reads as "absent" and answers with
+    #: ``Z_SUN``.
+    #:
+    #: Only the metallicity is declared here, and that is not an oversight but a
+    #: deliberate boundary: this class declared *nothing*, so every read in
+    #: ``predict`` below — ``sfr``, ``log_mstar``, ``stellar_age_gyr``,
+    #: ``L_2500_30deg`` — also silently takes its default, no matter what the
+    #: rest of the model computed. Wiring those changes the SFR from a fixed
+    #: 1.0 Msun/yr to the galaxy's own and moves every X-ray prediction on this
+    #: component, so it is its own change with its own tests. #1755 is the
+    #: metallicity; the remaining four are tracked separately.
+    optional_inputs: ClassVar[dict[str, str]] = {"log_metallicity_history": "dex"}
 
     #: Publish into the shared ``xray`` domain rather than under the registry
     #: key. ``DerivedState`` declares ``xray_phot_lnu_precomp`` /
@@ -228,11 +255,17 @@ class XRayAirdSEDComponent(SEDModelComponent):
         **inputs : ndarray
             Opportunistic cross-component reads:
 
-            - sfr [Msun/yr] (default: 1.0)
-            - log_mstar [log10(Msun)] (default: 10.0)
-            - metallicity_z [mass fraction] (default: 0.02 = solar)
-            - stellar_age_gyr [Gyr] (default: 1.0)
-            - L_2500_30deg [erg/s/Hz] (default: 0.0 = no AGN)
+            - log_metallicity_history [dex, absolute log10(Z)] — declared, so
+              genuinely read when stellar publishes it; its present-day bin
+              drives the HMXB term (absent: Z_SUN = 0.0142)
+
+            The four below are looked up but **not declared**, so they are
+            always the value in brackets — see the class docstring:
+
+            - sfr [Msun/yr] — always 1.0
+            - log_mstar [log10(Msun)] — always 10.0
+            - stellar_age_gyr [Gyr] — always 1.0
+            - L_2500_30deg [erg/s/Hz] — always 0.0, i.e. no AGN corona
 
         Returns
         -------
@@ -246,7 +279,13 @@ class XRayAirdSEDComponent(SEDModelComponent):
         sfr = jnp.asarray(inputs.get("sfr", 1.0))
         log_mstar = jnp.asarray(inputs.get("log_mstar", 10.0))
         stellar_mass = 10.0**log_mstar
-        metallicity_z = jnp.asarray(inputs.get("metallicity_z", 0.02))
+        # Absolute log10(Z) per SFH bin; index 0 is the present-day value, so
+        # this is the metallicity the young HMXB population was born with. The
+        # same reduction the nebular component uses. Until #1755 this read a
+        # "metallicity_z" key that nothing publishes, so the fallback was the
+        # only value the Lehmer+2016 quartic ever saw and the fitted metallicity
+        # had no effect on the HMXB term at all.
+        metallicity_z = metallicity_from_history(inputs.get("log_metallicity_history"))
         stellar_age_gyr = jnp.asarray(inputs.get("stellar_age_gyr", 1.0))
         l_2500_30deg = jnp.asarray(inputs.get("L_2500_30deg", 0.0))
 

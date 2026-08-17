@@ -32,7 +32,7 @@ from tengri import (
     WavePrecomp,
     load_ssp_data,
 )
-from tengri.components.nebular.line_precompute import _four_pi_dl2
+from tengri.components.nebular.line_precompute import _log10_four_pi_dl2
 from tengri.components.nebular.nebular_grid_precompute import (
     precompute_nebular_grid,
     reconstruct_nebular_line_lums,
@@ -40,6 +40,7 @@ from tengri.components.nebular.nebular_grid_precompute import (
     reconstruct_nebular_phot,
 )
 from tengri.observation.line_flux_data import LineFluxData
+from tengri.utils.scale import apply_log10_scale
 
 pytestmark = pytest.mark.contract
 
@@ -352,7 +353,8 @@ def test_snapped_met_axis_beats_uniform_on_a_dense_sweep():
         nion = _nion(m, p)
         for tag, table in (("snapped", snapped), ("uniform", uniform)):
             got = np.asarray(reconstruct_nebular_line_lums(nion, p, table))[o3]
-            got = got / _four_pi_dl2(float(p["redshift"]))  # luminosity -> observed flux
+            # luminosity -> observed flux; the ~1e57 divisor stays an exponent (#1859)
+            got = np.asarray(apply_log10_scale(got, -_log10_four_pi_dl2(float(p["redshift"]))))
             worst[tag] = max(worst[tag], abs(got - exact) / max(abs(exact), 1e-40))
 
     assert worst["snapped"] < worst["uniform"], (

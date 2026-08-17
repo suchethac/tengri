@@ -184,7 +184,11 @@ def _load_emline_template_arrays():
     # $TENGRI_DATA_DIR (#1431); the /tmp path is the upstream drop location.
     candidates = [
         find_data("qsogen_emline_template.dat"),
-        Path("/tmp/qsogen/qsosed_emlines_20210625.dat"),
+        # B108: a read-only fallback, tried only after find_data() and
+        # $TENGRI_DATA_DIR miss. Nothing is written here; this is where the
+        # upstream qsogen distribution drops the template, so it is a
+        # convenience for anyone who ran that installer.
+        Path("/tmp/qsogen/qsosed_emlines_20210625.dat"),  # nosec B108
     ]
     for path in candidates:
         if path is None:
