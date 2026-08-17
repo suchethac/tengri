@@ -391,6 +391,11 @@ class DerivedState:
     # ("_extras is non-empty") the moment the photometry LUT ran, i.e. on every
     # inference call. Typed here so the shock LUT rides the same contract.
     shock_phot_lnu_precomp: jnp.ndarray | None = None
+    # Shock photometry attenuated by dust (#1434): rest-frame Lν per filter,
+    # dust-reddened by the young-limit screen (tau_bc·k_bc + tau_diff·k_diff).
+    # Published by the two-component dust component under WavePrecomp when shock
+    # is present. Observed by predict_via_precomp in the dust-attenuable bucket.
+    shock_phot_lnu_attenuated_precomp: jnp.ndarray | None = None
 
     # Spectrum LUT (published only when approx=SpectrumPrecomp()
     # is set). Per-pixel rest-frame Lν contributions from each component

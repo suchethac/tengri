@@ -72,6 +72,45 @@ def _batched_cache_for(fwd):
     return cache
 
 
+def _component_chain_for(fwd):
+    """The built component chain from *fwd*, memoized in _batched_cache_for (#1769).
+
+    The chain is expensive to build (traverses the SED graph and constructs
+    copies of component instances), so memoizing it prevents redundant rebuilds
+    when multiple helpers need to inspect the same model (e.g.
+    Catalog.from_histories calls _stellar_config, _nebular_backend, and
+    _ssp_lgmet all from one place). Each would formerly call
+    _build_component_chain independently.
+
+    Returns
+    -------
+    list or None
+        The component chain, or None if the chain cannot be built (see
+        _stellar_component and _nebular_backend for the contracts).
+
+    Notes
+    -----
+    Memoization lives in _batched_cache_for under the reserved key
+    ``"_component_chain"`` (leading underscore to avoid collisions with user
+    cache tags). The cache is per-ForwardModel, so it survives across multiple
+    Catalogs and outlives the Catalog itself.
+    """
+    cache = _batched_cache_for(fwd)
+    reserved_key = "_component_chain"
+
+    if reserved_key in cache:
+        return cache[reserved_key]
+
+    # Build the chain once and memoize it
+    try:
+        chain = fwd.populations[0].sed._build_component_chain()
+    except (AttributeError, IndexError):
+        chain = None
+
+    cache[reserved_key] = chain
+    return chain
+
+
 def _stellar_component(fwd):
     """The StellarSEDComponent off a built ForwardModel, or None.
 
@@ -82,9 +121,8 @@ def _stellar_component(fwd):
     """
     from tengri.components.stellar.component import StellarSEDComponent
 
-    try:
-        chain = fwd.populations[0].sed._build_component_chain()
-    except (AttributeError, IndexError):
+    chain = _component_chain_for(fwd)
+    if chain is None:
         return None
     return next((c for c in chain if isinstance(c, StellarSEDComponent)), None)
 
@@ -156,9 +194,8 @@ def _nebular_backend(fwd):
     """
     from tengri.components.nebular.component import NebularSEDComponent
 
-    try:
-        chain = fwd.populations[0].sed._build_component_chain()
-    except (AttributeError, IndexError):
+    chain = _component_chain_for(fwd)
+    if chain is None:
         return None
     neb = next((c for c in chain if isinstance(c, NebularSEDComponent)), None)
     if neb is None:
@@ -828,7 +865,7 @@ class Catalog:
             line_defs = self._resolve_line_defs(tuple(lines))
 
             def _measure(params):
-                return self.fwd.measure_line_fluxes(params, line_defs, fast=True)
+                return self.fwd.measure_line_fluxes(params, line_defs, approx=True)
 
             # The tag carries the line set: a different set is a different
             # program, and reusing one cache entry across them would be wrong.

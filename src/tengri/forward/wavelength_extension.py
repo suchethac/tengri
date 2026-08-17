@@ -34,22 +34,9 @@ from collections.abc import Iterable
 
 import numpy as np
 
+from tengri._data_setup import find_data_str
+
 logger = logging.getLogger(__name__)
-
-
-# ── Data file resolution ──────────────────────────────────────────
-
-
-def _find_data_file(filename: str) -> str | None:
-    """Locate a data file in the standard ``data/`` directories.
-
-    Honors ``$TENGRI_DATA_DIR`` ahead of the package's own tree (#1431). The
-    previous candidate list also bound ``Path.cwd()`` at *import*, so a process
-    that changed directory afterwards kept searching the old one.
-    """
-    from tengri._data_setup import find_data_str
-
-    return find_data_str(filename)
 
 
 # ── Schema declarations ───────────────────────────────────────────
@@ -160,7 +147,7 @@ def _read_wavelength(filename: str, dataset_path: str, unit_to_aa: float) -> np.
     Cue's ``cue_weights.npz`` which carries ``cont_wav`` alongside the NN
     parameters); everything else → HDF5 via h5py (the original code path).
     """
-    path = _find_data_file(filename)
+    path = find_data_str(filename)
     if path is None:
         logger.debug("Template file %s not found in data dirs", filename)
         return None

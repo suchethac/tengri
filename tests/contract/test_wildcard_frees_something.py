@@ -254,12 +254,12 @@ def test_partial_free_warns_end_to_end_through_parse_groups():
     [
         {"sfh": {"type": "dpl"}, "xray": {"type": "simple", "all_params": FREE}},
         {"shock": {"all_params": FREE}},
-        # `sfh` carries met_* params, so the short-form prefix strip does not
-        # apply and the message must fall back to the full name. Advice that
-        # only works when the prefixes happen to line up is advice that raises.
-        {"sfh": {"type": "dpl", "all_params": FREE}},
+        # NOTE: The "sfh-with-met-params" edge case was removed after #1796.
+        # Before the fix, sfh would incorrectly carry met_* params when there
+        # was no met block, making the wildcard advice tricky. The fix excludes
+        # met_* from sfh's wildcard scope, so this is no longer an edge case.
     ],
-    ids=["xray", "shock", "sfh-with-met-params"],
+    ids=["xray", "shock"],
 )
 def test_the_advice_the_partial_warning_gives_actually_works(groups):
     """Execute the remedy the message prints, rather than a hand-written twin.

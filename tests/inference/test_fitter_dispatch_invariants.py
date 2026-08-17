@@ -214,6 +214,7 @@ class TestAutoDispatchRouting:
 
         mock_spec = MagicMock()
         mock_spec.n_free = _AUTO_D_THRESHOLD + 5
+        mock_spec.n_latent = _AUTO_D_THRESHOLD + 5
         mock_spec.free_params = [f"p{i}" for i in range(_AUTO_D_THRESHOLD + 5)]
         mock_model = _make_mock_model(mock_spec, n_filters=3)
         noise = jnp.ones(3) * 1e-19
@@ -313,6 +314,7 @@ class TestMcmcDispatchRouting:
 
         mock_spec = MagicMock()
         mock_spec.n_free = _MCMC_AUTO_D_THRESHOLD + 5
+        mock_spec.n_latent = _MCMC_AUTO_D_THRESHOLD + 5
         mock_spec.free_params = [f"p{i}" for i in range(_MCMC_AUTO_D_THRESHOLD + 5)]
         mock_model = _make_mock_model(mock_spec, n_filters=3)
         noise = jnp.ones(3) * 1e-19

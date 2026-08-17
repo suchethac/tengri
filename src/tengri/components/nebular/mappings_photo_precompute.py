@@ -49,6 +49,12 @@ AXIS_PARAMS: tuple[str, ...] = (
     "neb_logn",
 )
 
+# "log_age" and "neb_logn" are internal grid-axis labels, not declared user
+# parameters. They are set at precompute time (log_age from the SSP grid; neb_logn
+# from the precompute config or as defaults passed by the backend). They should
+# never be collapsed by user declaration. See issue #1827.
+INTERNAL_AXES: frozenset[str] = frozenset({"log_age", "neb_logn"})
+
 
 def precompute(
     filter_waves: list,
