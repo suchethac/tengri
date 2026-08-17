@@ -52,12 +52,17 @@ def _cue_model(ssp, obs, **extra):
     Two axes matter here. The concatenation this module guards reassembles a flat
     per-node array and *reshapes* it onto the grid, so a one-axis grid would make
     a transposed or mis-ordered reshape indistinguishable from a correct one.
+
+    Note: after #1796 (#1915), sfh wildcards no longer free met_* without an
+    explicit met block. This fixture opts in to metallicity freedom (#1926 pattern)
+    to restore the two-axis grid that the chunking assertions depend on.
     """
     return SEDModel.build(
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "dpl", "all_params": FREE},
         dust={"type": "none"},
+        met={"logzsol": FREE},
         redshift=0.05,
         neb={"type": "cue", "all_params": FIXED, "logU": Uniform(-3.5, -1.5)},
         **extra,

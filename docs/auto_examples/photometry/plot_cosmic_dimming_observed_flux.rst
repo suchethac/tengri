@@ -22,7 +22,7 @@ Cosmic dimming and K-correction with redshift
 ==============================================
 
 How does the observed photometric flux of a FIXED-luminosity galaxy decline with
-redshift? We track a star-forming galaxy (log M* = 10.5, SFR = 10 Msun/yr) across
+redshift? We track a star-forming galaxy (log M* = 10.5, SFR = 10 M☉/yr) across
 z = 0.1 to 6 in three optical/infrared bands (SDSS r, JWST J, JWST H), visualizing
 the three physical effects:
 
@@ -206,7 +206,7 @@ surface brightness; Sandage (1988) on K-corrections as pedagogical tools.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 14.742 seconds)
+   **Total running time of the script:** (0 minutes 5.058 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_cosmic_dimming_observed_flux.py:
