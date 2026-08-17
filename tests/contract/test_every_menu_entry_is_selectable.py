@@ -55,6 +55,17 @@ ALLOWED_REFUSALS = (
     "At least one additive (smooth) SFH component required",
 )
 
+#: Wordings that mark a ``ValueError`` as *absent data* rather than a refusal.
+#: The CLOUDY nebular backend reports a missing grid this way instead of with
+#: ``FileNotFoundError``, so the branch below cannot catch it by type -- it
+#: builds fine on a machine that has the grid and fails in CI, which ships none.
+#:
+#: Both substrings are required, and the second is the point: "Searched <dirs>"
+#: is the backend reporting where it looked and came up empty. Matching on
+#: "needs a grid file" alone would also swallow a build that *has* the grid and
+#: rejects it for some other reason, which is a real defect and must still fail.
+MISSING_DATA_MARKERS = ("needs a grid file", "Searched ")
+
 
 def _names(menu) -> list[str]:
     if isinstance(menu, dict):
@@ -185,6 +196,8 @@ def test_menu_entry_builds_or_refuses_clearly(menu, entry, kwargs, bare_stellar_
     try:
         SEDModel.build(ssp_data=bare_stellar_ssp, observation=observation, **kwargs)
     except ValueError as exc:
+        if all(marker in str(exc) for marker in MISSING_DATA_MARKERS):
+            pytest.skip(f"{menu} '{entry}' needs an external grid that is not installed: {exc}")
         if not any(reason in str(exc) for reason in ALLOWED_REFUSALS):
             pytest.fail(
                 f"{menu} '{entry}' is offered by its list_* menu but refuses to build "
