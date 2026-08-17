@@ -60,7 +60,7 @@ from tengri.protocols.component import (
     SEDComponentState,
 )
 from tengri.utils.physics_constants import C_AA
-from tengri.utils.scale import pow10
+from tengri.utils.scale import log10_magnitude, pow10
 
 __all__ = [
     "DustSEDComponent",
@@ -282,9 +282,9 @@ class DustSEDComponent(TemplateThreading):
             ),
             DerivedKey("sed_dust_attenuated", "erg/s/Hz", "Attenuated stellar SED"),
             DerivedKey(
-                "line_lums_attenuated",
-                "erg/s",
-                "Discrete line catalog after the nebular screen; absent when no "
+                "log_line_lums_attenuated",
+                "dex",
+                "log10 of the discrete line catalog after the nebular screen; absent when no "
                 "photoionized backend published one (#1867)",
             ),
         )
@@ -322,9 +322,9 @@ class DustSEDComponent(TemplateThreading):
                 "Discrete nebular line wavelengths (Cue/CloudyGrid); absent for BakedIn",
             ),
             DerivedKey(
-                "line_lums",
-                "erg/s",
-                "INTRINSIC discrete line luminosities to redden (#1867); absent for BakedIn",
+                "log_line_lums",
+                "dex",
+                "INTRINSIC log10 line luminosities to redden (#1867); absent for BakedIn",
             ),
         )
 
@@ -668,17 +668,26 @@ class DustSEDComponent(TemplateThreading):
         # at 2.7886 across a tau_diff sweep of 0.8 -> 2.5 on which
         # `predict_line_fluxes(redden=True)` correctly ran 4.3282 -> 7.3814.
         #
-        # A model with no dust component publishes nothing here and
-        # `_line_luminosity_helper` falls back to the intrinsic catalog, which
-        # is the right answer there — so the fallback is not a silent failure.
+        # A model with no dust component publishes nothing here and every
+        # consumer falls back to the intrinsic catalog, which is the right
+        # answer there — so the fallback is not a silent failure.
+        #
+        # Reads and publishes the LOG companion, never the linear `line_lums`.
+        # Line luminosities are ~1e40-1e43 erg/s, past float32's 3.4e38 ceiling
+        # (#1534/#1837), so the linear array is already `inf` there and a screen
+        # applied to it produces `inf * 0.3`. `log_line_lums` is exact in
+        # float32. `tests/regression/precision/test_no_raw_erg_s_derived_read.py`
+        # holds this line, and caught the first draft of this block reading the
+        # linear key.
+        #
         # Computed here, beside the bindings it shares; published with the rest
         # of `derived_overrides` further down, which is where that dict is
-        # built. Kept as a local rather than written early on purpose --
-        # `derived_overrides` does not exist yet at this point in `apply`.
+        # built. Kept as a local on purpose -- `derived_overrides` does not
+        # exist yet at this point in `apply`.
         _line_waves = state.derived.get("line_waves")
-        _line_lums = state.derived.get("line_lums")
-        line_lums_attenuated = None
-        if _line_waves is not None and _line_lums is not None:
+        _log_line_lums = state.derived.get("log_line_lums")
+        log_line_lums_attenuated = None
+        if _line_waves is not None and _log_line_lums is not None:
             line_wave = jnp.asarray(_line_waves)
             k_bc_line = _lyman_clip(
                 _resolve_law(neb_law)(line_wave, **neb_bc_params),
@@ -694,9 +703,11 @@ class DustSEDComponent(TemplateThreading):
                 jnp.asarray(params["dust_tau_bc"]) * k_bc_line
                 + jnp.asarray(params["dust_tau_diff"]) * k_diff_line
             )
-            line_lums_attenuated = jnp.asarray(_line_lums) * (
-                _f_obsc + (1.0 - _f_obsc) * jnp.exp(-tau_line)
-            )
+            # Transmission is O(1) and dimensionless, so its log10 is
+            # representable in float32 for any tau. A fully opaque screen gives
+            # -inf, the catalog's existing "genuinely dark line" sentinel.
+            transmission = _f_obsc + (1.0 - _f_obsc) * jnp.exp(-tau_line)
+            log_line_lums_attenuated = jnp.asarray(_log_line_lums) + log10_magnitude(transmission)
 
         # ── 3. Energy balance: ∫ (L_nu_intrinsic - L_nu_attenuated) dν ──
         # ν = c/λ. trapezoid(integrand, x=ν) with ν descending returns a
@@ -829,10 +840,10 @@ class DustSEDComponent(TemplateThreading):
         )
         # Discrete emission-line catalog, reddened in 2c with the same screen
         # as the nebular continuum above (#1867). Absent when no photoionized
-        # backend published a catalog; `_line_luminosity_helper` then falls back
-        # to the intrinsic `line_lums`.
-        if line_lums_attenuated is not None:
-            derived_overrides["line_lums_attenuated"] = line_lums_attenuated
+        # backend published a catalog; consumers then fall back to the
+        # intrinsic `log_line_lums`.
+        if log_line_lums_attenuated is not None:
+            derived_overrides["log_line_lums_attenuated"] = log_line_lums_attenuated
         filter_eff = state.derived.get("filter_eff_waves")
         if filter_eff is not None:
             from tengri.components.dust.attenuation import resolve_dust_law

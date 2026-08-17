@@ -2102,7 +2102,13 @@ class Prediction:
             # never consults this cache. So the reddening was recomputed on
             # every access and discarded, and both public line surfaces were
             # intrinsic while documented as observed.
-            self._cache["line_lums"] = jnp.asarray(derived.get("line_lums_attenuated", lums))
+            _log_atten = derived.get("log_line_lums_attenuated")
+            if _log_atten is None:
+                self._cache["line_lums"] = lums
+            else:
+                from tengri.utils.scale import pow10
+
+                self._cache["line_lums"] = pow10(jnp.asarray(_log_atten))
         else:
             self._cache["line_waves"] = jnp.array([])
             self._cache["line_lums"] = jnp.array([])

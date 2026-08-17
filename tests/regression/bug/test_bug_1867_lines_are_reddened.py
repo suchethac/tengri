@@ -208,3 +208,65 @@ def test_prediction_lines_agree_with_predict_line_fluxes(model, sweep):
             f"predict_line_fluxes(redden=True) {d_fluxes}; both are documented "
             "as observed and single-sourced through _attenuate_line_catalog"
         )
+
+
+def test_the_published_balmer_decrement_property_rises(model, sweep):
+    """#1867: the ``balmer_decrement`` PROPERTY must move, not just a hand ratio.
+
+    Distinct from the assertions above, which divide ``halpha`` by ``hbeta``
+    themselves. The published diagnostics — ``balmer_decrement``, ``bpt_nii``,
+    ``r23``, ``o32`` — come from ``_line_lums_for_ratios``, a *different*
+    reader of the catalog. The first draft of this fix updated the line
+    accessors and left that one intrinsic, so every hand-computed ratio here
+    went green while the property a user actually reads stayed pinned at its
+    Case-B value. Asserting the hand ratio is not asserting the property.
+    """
+    lo, hi = sweep
+    d_lo = float(
+        np.asarray(model.predict_properties(lo, names=("balmer_decrement",))["balmer_decrement"])
+    )
+    d_hi = float(
+        np.asarray(model.predict_properties(hi, names=("balmer_decrement",))["balmer_decrement"])
+    )
+    assert d_hi - d_lo > _MOVED, (
+        f"published balmer_decrement did not move under dust ({d_lo} -> {d_hi}); "
+        "_line_lums_for_ratios is still reading the intrinsic catalog"
+    )
+
+
+def test_the_log_companion_follows_its_linear_sibling(model, sweep):
+    """#1867: ``log_halpha`` must stay ``log10(halpha)`` once dust is applied.
+
+    Line luminosities are ~1e41 erg/s, past float32's ceiling, so the catalog
+    carries a ``log_line_lums`` companion (#1534). Reddening the linear array
+    and not the companion makes them disagree — which the first draft of this
+    fix did, and which
+    ``tests/regression/precision/test_log_line_properties.py`` caught. That is
+    the same defect class as #1867 itself: a value updated in one place and not
+    in its sibling. Pinned here too, against a dusty model specifically, since
+    the precision test does not sweep dust.
+    """
+    lo, hi = sweep
+    for label, params in (("tau_lo", lo), ("tau_hi", hi)):
+        out = model.predict_properties(params, names=("halpha", "hbeta", "log_halpha"))
+        linear = float(np.asarray(out["halpha"]))
+        log_companion = float(np.asarray(out["log_halpha"]))
+        assert log_companion == pytest.approx(np.log10(linear), rel=1e-9), (
+            f"[{label}] log_halpha = {log_companion} but log10(halpha) = "
+            f"{np.log10(linear)}; the companion is not the log of its linear sibling"
+        )
+
+
+def test_the_log_companion_is_itself_reddened(model, sweep):
+    """#1867: ``log_halpha`` must respond to dust, not merely agree with ``halpha``.
+
+    Agreement alone is satisfiable by leaving BOTH intrinsic, so the previous
+    test cannot stand on its own.
+    """
+    lo, hi = sweep
+    v_lo = float(np.asarray(model.predict_properties(lo, names=("log_halpha",))["log_halpha"]))
+    v_hi = float(np.asarray(model.predict_properties(hi, names=("log_halpha",))["log_halpha"]))
+    assert v_lo - v_hi > 0.05, (
+        f"log_halpha did not dim under dust ({v_lo} -> {v_hi} dex); "
+        "the log catalog is still intrinsic"
+    )

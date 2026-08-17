@@ -163,9 +163,9 @@ class DustAttenuationSEDComponent(TemplateThreading):
             ),
             DerivedKey("sed_dust_attenuated", "erg/s/Hz", "Attenuated stellar SED"),
             DerivedKey(
-                "line_lums_attenuated",
-                "erg/s",
-                "Discrete line catalog after this screen; absent when no "
+                "log_line_lums_attenuated",
+                "dex",
+                "log10 of the discrete line catalog after this screen; absent when no "
                 "photoionized backend published one (#1867)",
             ),
         )
@@ -207,9 +207,9 @@ class DustAttenuationSEDComponent(TemplateThreading):
                 "Discrete nebular line wavelengths (Cue/CloudyGrid); absent for BakedIn",
             ),
             DerivedKey(
-                "line_lums",
-                "erg/s",
-                "INTRINSIC discrete line luminosities to redden (#1867); absent for BakedIn",
+                "log_line_lums",
+                "dex",
+                "INTRINSIC log10 line luminosities to redden (#1867); absent for BakedIn",
             ),
         )
 
@@ -378,12 +378,17 @@ class DustAttenuationSEDComponent(TemplateThreading):
         #
         # `curve(line_wave)`, never the cached `k_lambda`: that array is bound
         # to `state.wave` and means nothing at line wavelengths.
+        #
+        # Reads and publishes the LOG companion, never the linear `line_lums`,
+        # which is `inf` in float32 at ~1e41 erg/s (#1534/#1837). `-tau*k` is a
+        # log-domain quantity already; converting to dex is one division.
         _line_waves = state.derived.get("line_waves")
-        _line_lums = state.derived.get("line_lums")
-        if _line_waves is not None and _line_lums is not None:
+        _log_line_lums = state.derived.get("log_line_lums")
+        if _line_waves is not None and _log_line_lums is not None:
             line_wave = jnp.asarray(_line_waves)
-            derived_overrides["line_lums_attenuated"] = jnp.asarray(_line_lums) * jnp.exp(
-                -tau_v * curve(line_wave)
+            log10_e = 1.0 / jnp.log(10.0)
+            derived_overrides["log_line_lums_attenuated"] = (
+                jnp.asarray(_log_line_lums) - tau_v * curve(line_wave) * log10_e
             )
 
         filter_eff = state.derived.get("filter_eff_waves")

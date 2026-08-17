@@ -5103,7 +5103,24 @@ class SEDModel:
                 "BakedIn bakes lines into the SSP and cannot report ratios."
             )
         all_waves = jnp.asarray(state.derived["line_waves"])
-        all_lums = jnp.asarray(state.derived["line_lums"])
+        # Dust-reddened catalog when a dust component published one (#1867).
+        # This surface used to read the INTRINSIC catalog while the data it is
+        # fitted against — observed Balmer decrements, BPT positions — are
+        # reddened, so a line-ratio fit compared two different things. The
+        # comment here said "same fix as predict_line_fluxes"; that method's
+        # unit hygiene was copied across and its reddening was not.
+        #
+        # Reading the published key rather than calling
+        # ``_attenuate_line_catalog`` keeps this on the same screen as the
+        # ``balmer_decrement`` / ``bpt_nii`` properties, which is the agreement
+        # #1867 exists to establish.
+        _log_atten = state.derived.get("log_line_lums_attenuated")
+        if _log_atten is None:
+            all_lums = jnp.asarray(state.derived["line_lums"])
+        else:
+            from tengri.utils.scale import pow10
+
+            all_lums = pow10(jnp.asarray(_log_atten))
         dl_cm = self._get_dl_cm(params)
         # ``line_lums`` are erg/s (DerivedKey contract) — same fix as
         # ``predict_line_fluxes``. The scale cancels in every ratio, so

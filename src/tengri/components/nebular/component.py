@@ -1060,7 +1060,12 @@ def _line_lums_for_ratios(derived):
     from tengri.utils.scale import pow10
 
     line_waves = jnp.asarray(derived["line_waves"])
-    log_lums = derived.get("log_line_lums")
+    # Reddened catalog when a dust component published one (#1867). This is the
+    # surface BPT / R23 / O32 / the Balmer decrement are computed from, so
+    # reading the intrinsic catalog here pins the Balmer decrement at its
+    # Case-B value however much dust the model has -- which is the single most
+    # visible symptom of #1867, and the one a ratio diagnostic exists to show.
+    log_lums = derived.get("log_line_lums_attenuated", derived.get("log_line_lums"))
     if log_lums is None:
         return line_waves, jnp.asarray(derived["line_lums"])
     log_lums = jnp.asarray(log_lums)
@@ -1087,6 +1092,7 @@ def _line_luminosity_helper(state, params, line_key):
     however hard dust was varied. Reddening in the accessor instead would have
     fixed only the interactive path and left the fit surface wrong.
     """
+    from tengri.utils.scale import pow10
     from tengri.utils.sed_quantities import KEY_LINES, extract_line_luminosity
 
     derived = state.derived
@@ -1096,8 +1102,13 @@ def _line_luminosity_helper(state, params, line_key):
         return nan_scalar
 
     line_waves = jnp.asarray(derived["line_waves"])
-    lums_key = "line_lums_attenuated" if "line_lums_attenuated" in derived else "line_lums"
-    line_lums = jnp.asarray(derived[lums_key])
+    log_atten = derived.get("log_line_lums_attenuated")
+    # ``pow10`` of the reddened log catalog rather than a linear
+    # ``line_lums_attenuated``: dust publishes only the log form, because the
+    # linear array is ``inf`` in float32 at ~1e41 erg/s. These 11 properties are
+    # absolute erg/s by contract (#1206 §3), so the exponentiation happens here,
+    # at the one surface that has to return the linear value.
+    line_lums = jnp.asarray(derived["line_lums"]) if log_atten is None else pow10(log_atten)
     return extract_line_luminosity(line_waves, line_lums, KEY_LINES[line_key])
 
 
@@ -1390,9 +1401,18 @@ def _log_line_luminosity_helper(state, params, line_key):
     if "line_waves" not in derived or "log_line_lums" not in derived:
         return jnp.asarray(jnp.nan)
 
+    # Prefer the dust-reddened catalog, exactly as `_line_luminosity_helper`
+    # does. These two MUST agree: `log_civ_1549` is asserted to equal
+    # `log10(civ_1549)` by
+    # `tests/regression/precision/test_log_line_properties.py`, and reddening
+    # one without the other broke that assertion in the first draft of #1867 --
+    # a companion left behind, which is the same defect class #1867 is.
+    log_key = (
+        "log_line_lums_attenuated" if "log_line_lums_attenuated" in derived else "log_line_lums"
+    )
     return extract_log_line_luminosity(
         jnp.asarray(derived["line_waves"]),
-        jnp.asarray(derived["log_line_lums"]),
+        jnp.asarray(derived[log_key]),
         KEY_LINES[line_key],
     )
 
