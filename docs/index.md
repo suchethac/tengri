@@ -153,6 +153,7 @@ and [NOTICE](https://github.com/suchethac/tengri/blob/main/NOTICE).
    :hidden:
 
    forward_model
+   components
    api/index
    method_selection
    performance/index

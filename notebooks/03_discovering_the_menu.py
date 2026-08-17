@@ -209,6 +209,107 @@ recipes.star_forming_photometry()
 tengri.list_inference_methods()
 
 # %% [markdown]
+# ## All registries at a glance
+#
+# `list_all()` returns the master catalog of every registry in tengri.
+
+# %%
+tengri.list_all()
+
+# %% [markdown]
+# ### Star-formation history models
+#
+# Thirty-five SFH variants span parametric (exponentials, delayed-τ, power-laws)
+# and non-parametric (spline, Dirichlet, dense basis) families. **Eight of these
+# are marked `status='unvalidated'`: they are registered but not yet validated
+# against the DSPS forward path.** Attempting to use an unvalidated SFH raises
+# `ValueError("SFH type '...' is registered but not yet validated against the
+# DSPS forward path, so it is not available via the builder...")`. Use the
+# `status` column to filter the menu.
+
+# %%
+tengri.list_sfh_models()
+
+# %% [markdown]
+# ### Metallicity modes
+#
+# Per-bin, continuity-aware, chemical evolution, gas regulator, and tabulated Z(t).
+
+# %%
+tengri.list_metallicity_modes()
+
+# %% [markdown]
+# ### Intergalactic absorption (IGM)
+
+# %%
+tengri.list_igm_models()
+
+# %% [markdown]
+# ### X-ray emission
+
+# %%
+tengri.list_xray_models()
+
+# %% [markdown]
+# ### Radio emission and blocks
+
+# %%
+tengri.list_radio_models()
+
+# %%
+tengri.list_radio_blocks()
+
+# %% [markdown]
+# ### Shock nebular emission
+
+# %%
+tengri.list_shock_models()
+
+# %% [markdown]
+# ### Dust emission templates
+
+# %%
+tengri.list_dust_models()
+
+# %% [markdown]
+# ### Age integration kernels
+#
+# Cloud-in-cell (default, default, dense integrand) and DSPS histogram kernel for SFH→CSP composition.
+
+# %%
+tengri.list_age_kernels()
+
+# %% [markdown]
+# ### All SED components
+
+# %%
+tengri.list_components()
+
+# %% [markdown]
+# ### All instruments and filters
+#
+# Instruments group filters by survey or facility; 249 filter curves span UV to radio.
+# Display sample surveys:
+
+# %%
+tengri.list_instruments()
+
+# %%
+tengri.list_filters().filter(survey="SDSS")
+
+# %% [markdown]
+# ### Diagnostic and publication plots
+
+# %%
+tengri.list_plots()
+
+# %% [markdown]
+# ### Recipes — full registry
+
+# %%
+tengri.list_recipes()
+
+# %% [markdown]
 # ## Parameter and physics provenance
 #
 # Two introspection surfaces close the loop:

@@ -1,0 +1,111 @@
+"""
+X-ray model family: five names, two prescriptions
+=================================================
+
+Every X-ray model tengri registers, on one host galaxy, with only the ``xray``
+block changing. At default parameters they collapse onto two curves, and that
+is the point of the figure rather than a defect in it:
+
+- ``simple``, ``yang20``, ``xray_aird`` and ``agn_xray_corona`` all normalize
+  the corona through alpha_ox(L_2500) and land on top of each other to the last
+  digit. ``yang20`` is documented as a CIGALE-parity alias of ``simple``.
+- ``lopez24`` ties the corona to the nuclear 12 μm luminosity via alpha_IRX
+  instead, which is the appropriate normalization for obscured or IR-selected
+  AGN, and sits ~13% lower here.
+- ``none`` is the control: the same galaxy with X-rays off.
+
+So the name to choose is a choice of *normalization*, not of five different
+SEDs — and picking among the four aliases changes nothing until you change
+their parameters. Measured at 2 keV: 2.61e43 erg/s for all four, 2.27e43 for
+``lopez24``.
+
+Read the wavelength axis backwards from the usual: 124 A is 0.1 keV and 1.24 A
+is 10 keV, so harder X-rays are to the left.
+
+The list comes from the registry, so a newly registered model joins this figure
+rather than quietly missing it.
+
+Reference: Yang+2020 (alpha_ox corona); Lopez+2024, Asmus+2015 (alpha_IRX).
+"""
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
+import warnings
+
+import jax
+import matplotlib.pyplot as plt
+import numpy as np
+
+import tengri
+from tengri.analysis.plotting import setup_style
+from tengri.utils.physics_constants import C_AA
+
+setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+warnings.filterwarnings("ignore", message=".*experimental.*")
+
+# One host galaxy for every model: only the xray block below changes.
+SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": 10.5}
+DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.4, "tau_bc": 0.5}
+AGN = {
+    "type": "composable",
+    "all_params": tengri.FIXED,
+    "disc": {"type": "qsogen", "all_params": tengri.FIXED},
+    "torus": {"type": "skirtor", "all_params": tengri.FIXED},
+    "log_lbol": 11.5,  # log10(L_bol / L_sun) at API level, never erg/s
+}
+KEV_TO_AA = C_AA * 4.135667696e-18  # h [keV s] * c [A/s] -> A at 1 keV
+
+ssp = tengri.load_ssp("fsps_prsc_miles_chabrier", download=True)
+models = [row["name"] for row in tengri.list_xray_models()]
+
+fig, ax = plt.subplots(figsize=(7.0, 4.4))
+colors = plt.get_cmap("viridis")(np.linspace(0.05, 0.95, len(models)))
+
+for name, color in zip(models, colors):
+    model = tengri.SEDModel.build(
+        ssp_data=ssp,
+        sfh=SFH,
+        dust=DUST,
+        agn=AGN,
+        xray={"type": name, "all_params": tengri.FIXED},
+        redshift=tengri.Fixed(0.05),
+    )
+    # Nothing is free, so the draw is the declared values and the host is
+    # identical for every model. Asserted rather than assumed: a model that
+    # later declares a free parameter would silently turn this into a
+    # comparison of different galaxies.
+    assert not model.spec.free_params, f"{name} left {model.spec.free_params} free"
+    pred = model.predict(model.spec.sample(jax.random.PRNGKey(0)))
+    wave = np.asarray(pred.wave_rest)
+    nu_l_nu = (C_AA / wave) * np.asarray(pred.rest_sed())
+
+    band = wave < 200.0
+    ax.loglog(wave[band], nu_l_nu[band], color=color, lw=1.4, label=name)
+
+for kev in (0.5, 2.0, 10.0):
+    lam = KEV_TO_AA / kev
+    ax.axvline(lam, color="0.75", lw=0.4, ls=":")
+    ax.text(
+        lam,
+        0.98,
+        f"{kev:g} keV",
+        transform=ax.get_xaxis_transform(),
+        fontsize=7,
+        color="0.5",
+        ha="center",
+        va="top",
+        rotation=90,
+    )
+
+ax.set(
+    ylim=(1e38, 1e45),
+    xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
+    ylabel=r"$\nu L_\nu$ [erg s$^{-1}$]",
+)
+ax.legend(frameon=False, fontsize=8, loc="lower right")
+
+fig.tight_layout()
+fig.savefig("plot_xray_model_family_compare.png", dpi=150, bbox_inches="tight")

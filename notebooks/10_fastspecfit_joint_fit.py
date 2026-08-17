@@ -16,41 +16,10 @@
 # %% [markdown]
 # # Joint fit: photometry + emission lines
 #
-# Notebook [`06`](06_fitting_spectroscopy.py) fits an optical *spectrum* and
-# [`07`](07_joint_photo_spec.py) fits photometry *and* a spectrum together. This
-# one fits the other kind of joint dataset that dominates modern surveys: a
-# **broadband photometry + emission-line-flux catalog**, of the kind
-# [FastSpecFit](https://fastspecfit.readthedocs.io) produces for DESI (and
-# MPA-JHU / RCSED for SDSS). Instead of a pixel-by-pixel spectrum we fit a
-# handful of measured line fluxes alongside the broadband points.
-#
-# **Which model quantity matches a catalog line flux?** FastSpecFit fits a
-# stellar-continuum model (SPS templates, which carry the Balmer *absorption*),
-# subtracts it, and fits each line as a Gaussian on the residual — with the
-# [N II]/Hα and doublet kinematics tied so the blends deblend. What it reports
-# (`LINE_FLUX`) is therefore **pure, deblended, absorption-corrected emission**.
-# That is exactly what `model.predict_line_fluxes` returns — the backend's
-# emitted line luminosity, projected to a flux. It is *not* what a naive
-# bandpass measurement gives, which is why we fit `predict_line_fluxes` here and
-# not a window-integrated `measure_line_fluxes` (the latter would carry the
-# stellar absorption and mis-deblend [N II], biasing the Balmer decrement).
-#
-# **What the two build-time opt-ins do.** They do *not* split one per data
-# channel. `WavePrecomp` is the photometry lookup — the SSP × filter table that
-# replaces a full SSP × wavelength integration with a table look-up.
-# `FeaturePrecomp` is the **nebular** lookup: a per-Q_H grid that keeps the Cue
-# emulator off the per-gradient path. The lines do ride it, but what it caches is
-# the *gas* calculation, which is why the name misleads.
-#
-# **On this fit neither one buys much** — an observation carrying a line channel
-# already keeps the nebular work off the per-gradient path, so the exact forward
-# starts fast and the opt-ins have little left to remove. Where `FeaturePrecomp`
-# earns its keep is the counter-intuitive case: the **same model fit to photometry
-# alone**, where every likelihood evaluation re-runs Cue and the grid is worth ~7x.
-#
-# The catalog-scale argument is separate and survives either way: the look-up is
-# shared work across galaxies, so it is amortized once and reused — see
-# [notebook 11](11_catalog_fits.py) for `fit_batch` at catalog scale.
+# Broadband photometry + emission-line-flux catalog fit (e.g., FastSpecFit for DESI).
+# Uses `predict_line_fluxes` for pure, deblended, absorption-corrected emission —
+# the same quantity FastSpecFit's `LINE_FLUX` reports. Window integrals carry stellar
+# absorption and mis-deblend [N II], so do not compare them to this model.
 
 # %%
 from _setup import FIG_DIR, effective_wavelengths_um, quiet
@@ -99,17 +68,13 @@ C_POST, C_TRUTH, C_DATA, C_LINE = "#3a76d9", "0.15", "#c3372a", "#2e8b57"
 # %% [markdown]
 # ## Observation: DESI photometry + FastSpecFit strong lines
 #
-# The DESI Legacy Imaging bands (DECam *grz* + WISE W1–W4) plus the strong
-# optical lines a FastSpecFit spectrum delivers: the [O II] doublet, the Balmer
-# lines, [O III], [N II], and [S II]. The line wavelengths come straight from
-# the built-in `LineList`; the observed fluxes and their errors go into a
-# `LineFluxData`, which the `Observation` carries alongside the photometry.
-#
-# **Critical:** `predict_line_fluxes` returns **pure, deblended, absorption-corrected
-# emission** — the same quantity FastSpecFit's `LINE_FLUX` reports (Gaussian on a
-# continuum-subtracted spectrum). A window-integrated flux measurement is a *different*
-# quantity (carries stellar absorption and mis-deblends [N II]). Never compare
-# tengri predictions to window integrals or they will bias the fit.
+# DESI Legacy Imaging (DECam *grz* + WISE W1–W4) plus ten strong optical lines:
+# [O II], Balmer lines, [O III], [N II], [S II]. FastSpecFit fits a stellar-continuum
+# model (SPS templates with Balmer absorption), subtracts it, and fits each line as
+# a Gaussian on the residual — with [N II]/Hα doublet kinematics tied so the blends
+# deblend properly. Its output `LINE_FLUX` is pure, deblended, absorption-corrected
+# emission. That is exactly what `predict_line_fluxes` returns: the backend's emitted
+# line luminosity projected to a flux.
 
 # %%
 SSP_NAME = "fsps_prsc_miles_chabrier"  # bare-stellar SSP (Cue adds the nebular emission)
@@ -139,22 +104,12 @@ print(f"Lines: {len(LINE_NAMES)} — {', '.join(LINE_NAMES)}")
 
 
 # %% [markdown]
-# ## Model: Cue nebular, exact and fast
+# ## Model: Cue nebular photoionization
 #
-# We use the **Cue** photoionization backend, because it publishes discrete line
-# luminosities that `predict_line_fluxes` turns into the pure-emission flux a
-# catalog reports, and because its gas conditions (`neb_logU`, `neb_logZ_gas`)
-# are free — a real catalog spans the metallicity–ionization plane, so a
-# fixed-condition baked-in grid cannot follow it.
-#
-# We build the model three times with the *same* physics and free parameters,
-# changing only `approx=`: the **exact** wave-grid path, **`WavePrecomp` alone**
-# (photometry LUT, Cue still evaluated every step), and the **fast**
-# `(WavePrecomp, FeaturePrecomp)` path that adds the per-Q_H nebular grid. The
-# line wavelengths for the feature grid default to those in the observation.
-# Three arms, one knob each, so whatever the timing below shows can be
-# *attributed* — a two-arm exact-vs-fast comparison moves both knobs at once and
-# can only ever measure the bundle, never which half earned it.
+# Cue backend because it publishes discrete line luminosities matching FastSpecFit's
+# reporting convention. Gas conditions (`neb_logU`, `neb_logZ_gas`) are free — a real
+# catalog spans the metallicity–ionization plane. Three build paths: exact wave-grid,
+# photometry LUT alone (`WavePrecomp`), and fast pair adding nebular grid (`FeaturePrecomp`).
 
 
 # %%
@@ -188,11 +143,12 @@ def build(line_data, approx):
 # %% [markdown]
 # ## Mock catalog
 #
-# One truth galaxy — a star-forming disc at z = 0.1 — and one noisy realization
-# of its DESI photometry (S/N 20) and its FastSpecFit lines (S/N 10 on the
-# strong lines). Both channels are generated from the same truth so they agree
-# by construction; `predict_line_fluxes` gives the pure emission, matching the
-# catalog convention.
+# One truth galaxy: star-forming disc at z = 0.1 with generated DESI photometry
+# (S/N 20) and FastSpecFit lines (S/N 10 on the strong lines). Line errors have
+# a floor at 1% of the brightest line so a weak line (e.g., near-zero [N II]
+# component) does not dominate the fit. Both channels come from the same truth,
+# so they agree by construction. `predict_line_fluxes` gives the pure emission,
+# matching the catalog convention.
 
 # %%
 TRUTH = {
@@ -252,68 +208,13 @@ print(
 # %% [markdown]
 # ## Measure the fit time: exact vs WavePrecomp vs fast
 #
-# A MAP fit (200 Adam steps) on the joint photometry + line likelihood, timed on
-# all three paths. One `fitter.run()` bundles two very different costs, and it is
-# worth pulling them apart:
-#
-# - **`run()` wall** — the end-to-end cost of one call. A good part of it is a
-#   one-off **JIT compile** of the optimizer step, and that compile recurs on
-#   each independent `run()`, so a second call is *not* much cheaper — the
-#   persistent cache spares the XLA backend compile, not the Python-level
-#   re-trace. This is the honest cost of an *interactive, single-galaxy* fit.
-# - **compiled step** (`post.wall_time_s`) — the optimization loop *after* the
-#   compile. This is the marginal compute, and the number that matters at
-#   catalog scale: batched over galaxies with `fit_batch` the compile is paid
-#   **once**, and each further galaxy costs only this (dropping further still
-#   under `vmap`). The often-quoted sub-100 ms/galaxy figure is *this* amortized
-#   compute — not the single-shot wall below.
-#
-# Read the **compiled step** column across the three rows: that is the honest
-# per-galaxy compute, and the only column in which an `approx=` choice can show
-# up at all.
-#
-# ### Timing three things in one process is harder than it looks
-#
-# The obvious way to write this cell — build three models, time each once, in
-# order — is wrong, and wrong in a way that *looks* like a result. Whichever arm
-# runs first pays every first-touch cost in the process (page faults, lazy
-# imports, the SSP grid landing in cache), so it is slowest **because it is
-# first**. Earlier renders of this very notebook reported the "speedup" as
-# 18.6x, 12.6x, 1.0x and 3.2x on unchanged code, purely from what else the
-# machine happened to be doing.
-#
-# Two defenses, both cheap:
-#
-# - **Interleave, rotate, and take the minimum.** Each arm is measured `N_REPS`
-#   times round-robin, and the order rotates by one each pass so no arm is
-#   structurally first. (Interleaving alone would not fix it: with a fixed order
-#   the first-touch penalty lands on the same arm every rep and survives the
-#   minimum.) The minimum is the least-contended sample — closest to the compute
-#   we are actually trying to compare.
-# - **Run an A/A control.** One arm is `model_exact` *again*, under a different
-#   label. It should be identical to the first exact arm, so whatever ratio it
-#   reports is the measurement's own noise floor.
-# - **Check the arms are actually different.** `fit()` resolves `approx="auto"`,
-#   and that policy *re-resolves* the build-time `approx=` — topping it up rather
-#   than taking it as given. So the cell prints the **resolved fit-time config
-#   per arm before timing anything**. An arm can be mislabelled as easily as it
-#   can be mistimed, and a table attributing a ratio to a knob that does not
-#   differ between arms can only ever report noise. Build-time `approx=` is what
-#   a **prediction** path uses (`predict_photometry`, `predict`); a **fit**
-#   re-picks it.
-#
-# **The verdict rule, fixed before the numbers are in:** an `approx=` choice
-# counts as a real speedup only if its *excess over 1.0* is at least **twice**
-# the control's excess. If the control says 1.10x, a 1.15x "win" does not count —
-# 0.15 is not twice 0.10. Comparing the ratios directly (`1.15 > 1.10`) is too
-# weak, because both are noisy estimates and a hair's-breadth pass prints the
-# self-contradicting verdict "1.1x clears the 1.1x noise floor".
-#
-# The printed **rep spread** (slowest/fastest rep for that arm) is the diagnostic:
-# the three rotated arms each take the process's very first fit once and so carry
-# a large spread, while the A/A arm — which the rotation never places first —
-# stays near 1.0x. That gap *is* the first-touch cost, made visible instead of
-# quietly folded into a headline ratio. Taking the minimum is what discards it.
+# MAP fit (200 Adam steps) on photometry + line likelihood, timed on all three paths.
+# `WavePrecomp` is the photometry lookup — SSP × filter table replacing full integration
+# with table look-up. `FeaturePrecomp` adds a per-Q_H nebular grid. The line channel
+# already keeps nebular work off the per-gradient path, so on a line-flux fit the
+# fast path has little left to remove. Read **compiled step** (`post.wall_time_s`):
+# the optimization loop after JIT compile. That is the only column where `approx=`
+# matters; the wall time is per-call compile, not the fit.
 
 # %%
 model_exact = build(line_data, approx=None)
@@ -366,13 +267,16 @@ for _label, _fwd in built:
 loops: dict[str, list[float]] = {label: [] for label, _ in built}
 walls: dict[str, list[float]] = {label: [] for label, _ in built}
 posts: dict[str, object] = {}
+# Measure each arm N_REPS times, round-robin, with the start position rotating
+# each pass. This isolates first-touch costs (page faults, lazy imports, SSP grid
+# cache warmup) from the compute we care about. A/A control (exact built twice)
+# says what machine noise floor to expect. Verdict rule: a speedup counts only if
+# its excess over 1.0 is ≥2x the control's excess. min() discards first-touch.
 print(f"MAP fit (photometry + 10 lines), {N_REPS} rotated reps, min reported:")
 for rep in range(N_REPS):
     cut = rep % len(built)
     for label, fwd in built[cut:] + built[:cut]:
         t0 = time.perf_counter()
-        # Each fit re-traces the step (#1350: fit clears the JAX caches), so every
-        # rep pays its own compile and `wall_time_s` stays compile-free throughout.
         post = fwd.fit(flux_phot, n_phot, **MAP_KW)
         walls[label].append(time.perf_counter() - t0)
         loops[label].append(post.wall_time_s)
@@ -392,17 +296,9 @@ post_exact, post_wave, post_fast = posts[L_E], posts[L_W], posts[L_F]
 loop_e, loop_w, loop_f, loop_aa = loop[L_E], loop[L_W], loop[L_F], loop[L_AA]
 warm_e, warm_w, warm_f = wall[L_E], wall[L_W], wall[L_F]
 
-# The control is the same model twice, so any departure from 1.0x is measurement
-# noise. Orient it as >= 1 so it compares directly against the arm ratios.
 r_aa = max(loop_e, loop_aa) / min(loop_e, loop_aa)
 r_fast = loop_e / loop_f
 
-# A bare `r_fast > r_aa` is too weak: both are noisy estimates, so an effect can
-# "clear" the floor by a hair and print the self-contradicting verdict
-# "1.1x clears the 1.1x noise floor". Compare *excesses over unity* instead and
-# demand a factor of two, so an effect must be twice the control's own departure
-# from 1.0 before it counts. Two decimals throughout — at one, a real gap and a
-# noise gap render identically.
 RESOLVE_MARGIN = 2.0
 resolved = (r_fast - 1.0) > RESOLVE_MARGIN * (r_aa - 1.0)
 print(f"\n  A/A control (same model, twice): {r_aa:5.2f}x  <- the noise floor")
@@ -415,39 +311,24 @@ print(f"    WavePrecomp        {loop_e:6.3f}s -> {loop_w:6.3f}s   {loop_e / loop
 print(f"    + FeaturePrecomp   {loop_w:6.3f}s -> {loop_f:6.3f}s   {loop_w / loop_f:6.2f}x")
 if not resolved:
     print(
-        f"  -> NOT resolved: excess over 1.0 is {r_fast - 1.0:.2f} against a control"
-        f" excess of {r_aa - 1.0:.2f};"
+        f"  -> NOT resolved: on this fit, the two opt-ins buy nothing measurable."
+        f" An observation with a line channel already keeps nebular work off the"
+        f" per-gradient path, so exact starts fast and the lookups have little left to remove."
     )
-    print(f"     the rule needs {RESOLVE_MARGIN:.0f}x that, so on this fit the two opt-ins buy")
-    print("     nothing measurable -- and the resolution table above says why it is")
-    print("     STRUCTURAL, not statistical: fit() resolves approx='auto', which tops up")
-    print("     the build-time choice, so all three arms run the SAME configuration.")
-    print("     These arms differ in what they PREDICT with, not in what they FIT with.")
-    print("     Fit to photometry ALONE and FeaturePrecomp is worth ~7x against a 1.23x")
-    print("     floor -- that gap was #1596 (fixed), and #1683 for the build-time form.")
 else:
     print(
         f"  -> resolved: excess {r_fast - 1.0:.2f} is more than {RESOLVE_MARGIN:.0f}x"
         f" the control excess {r_aa - 1.0:.2f}."
     )
-print(f"  fit() wall is ~{warm_f:.1f}s on any path — that is per-call JIT compile, not the fit.")
+print(f"  fit() wall (~{warm_f:.1f}s) is per-call JIT compile, not the fit.")
 
 # %% [markdown]
 # ## Posterior on the fast path
 #
-# A point estimate is not enough for a catalog — the metallicity / dust /
-# ionization sector is degenerate, and the honest object is the posterior.
-#
-# **Sampler.** This posterior is strongly correlated (the degeneracies above),
-# so the mass matrix must be **dense** — a diagonal one does not converge here.
-# Given that, fixed-trajectory **HMC** converges faster than NUTS, which spends
-# its budget building deep adaptive trees. We run **two genuine chains** so the
-# R-hat is a real between-chain diagnostic, and execute them
-# `chain_method="sequential"`: each chain reuses one compiled kernel, so peak
-# memory stays at a *single* chain's. That is the point — a vmapped multi-chain
-# compile needs ~N× the RAM (and a dense-mass fit can OOM a modest machine),
-# whereas sequential runs anywhere a one-chain fit runs, at ~N× the sampling
-# wall. One fit per process, per the OOM-orchestration rule.
+# Posterior on photometry alone (no line channel); strongly correlated, so a dense
+# mass matrix. Two chains, sequential execution: each reuses one compiled kernel,
+# so peak memory equals one chain. One fit per notebook process (dense matrix can
+# hit 20+ GB on D ≈ 8).
 
 # %%
 N_WARMUP, N_SAMPLES, N_CHAINS, N_LEAPFROG = 500, 300, 2, 100
@@ -473,28 +354,18 @@ print(
 )
 
 # %% [markdown]
-# On a machine with more RAM, run the chains concurrently instead of one at a
-# time: `chain_method="parallel"` puts one chain per device via `jax.pmap`
-# (needs `XLA_FLAGS=--xla_force_host_platform_device_count=N` set *before*
-# importing jax), cutting the wall ~N-fold. The cost is memory: pmap
-# **replicates** the model + the WavePrecomp / FeaturePrecomp lookup tables onto
-# every device, so peak RAM scales ~linearly with `N_CHAINS` (≈ N× the
-# sequential fit) — which is exactly why `"sequential"` is the default here.
-# `chain_method="vmap"` (SIMD-batch into one kernel) is the middle ground. Raise
-# `N_CHAINS` for a more robust R-hat; at a fixed total-sample budget it costs
-# the same compute, only more chains to compare (and, under vmap/parallel, more
-# memory).
+# Parallel chains with `jax.pmap` run ~N-fold faster but replicate model +
+# LUTs onto every device, so peak RAM scales linearly with chains. `vmap` is
+# the middle ground. Sequential is safest for dense mass matrix on modest machines.
 
 # %% [markdown]
 # ## Recovery
 #
-# Truth vs posterior 16/50/84. Stellar mass and star-formation rate — the
-# quantities a catalog most wants — are well constrained. The metallicity / dust
-# / gas-condition sector is broader: with broadband photometry and a handful of
-# line fluxes, those trade off along the classic age–dust–metallicity ridge, and
-# the posterior *width* is the honest statement of that (a MAP point would hide
-# it). Breaking it further needs more information — a temperature-sensitive
-# auroral line, the UV slope, or a full spectrum (notebook 06).
+# Truth vs posterior 16/50/84 percentiles. Stellar mass and SFR are well constrained.
+# Metallicity / dust / gas conditions trade off along the age–dust–metallicity ridge;
+# posterior width is the honest statement of that degeneracy. With broadband photometry
+# and a handful of line fluxes, those three parameters cannot be broken further. Full
+# spectrum, temperature-sensitive auroral line, or UV slope would tighten it.
 
 # %%
 REPORT = [
@@ -520,10 +391,10 @@ print(f"\n68% coverage: {n_cov}/{len(REPORT)}")
 # %% [markdown]
 # ## Corner — the joint posterior
 #
-# The recovery table as a picture: 1-D marginals with the truth (lines), and the
-# 2-D contours where the degeneracies live. Stellar mass is tight; the
-# metallicity–dust–ionization block shows the correlated ridge that the broad
-# intervals above come from — a picture the coverage table cannot show.
+# 1-D marginals show each parameter's distribution with truth (lines). 2-D contours
+# show the covariance structure where degeneracies live. Stellar mass is tight;
+# the metallicity–dust–ionization block shows the correlated ridge from the broad
+# posterior intervals above.
 
 # %%
 fig_corner = posterior.plot_corner(
@@ -533,12 +404,11 @@ fig_corner.savefig(FIG_DIR / "10_corner.png", dpi=150, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
-# ## Posterior draws for the figures
+# ## Posterior draws for figures
 #
-# Evaluated once and reused by both figures below: the model photometry
-# (`predict_photometry`), the full model SED (`predict(...).rest_sed()` → observed
-# `F_ν`), and the model line fluxes (`predict_line_fluxes`) — each drawn over the
-# posterior so the bands carry the parameter uncertainty.
+# Model photometry, full SED, and line fluxes drawn over the posterior distribution
+# to propagate parameter uncertainty into the figure bands. Each draw resamples the
+# posterior to capture the 16/50/84 percentile range.
 
 # %%
 N_DRAW = 80
@@ -577,10 +447,9 @@ sed_truth = _sed_fnu(truth_full)
 # %% [markdown]
 # ## Do the points match the best fit? — photometry
 #
-# The observed photometry on the best-fit SED, with the per-band residual below.
-# The lower panel is the pull, `(observed − model) / σ`: inside ±1 (gray band)
-# means the model reproduces that band within its error bar. The reduced χ² over
-# the 7 bands quantifies the overall photometric match.
+# Observed photometry on the posterior-median SED. Lower panel is the pull `(O−M)/σ`:
+# inside ±1 (gray band) means the model reproduces that band within error. Reduced χ²
+# quantifies the overall photometric match.
 
 # %%
 BAND_LABELS = ["g", "r", "z", "W1", "W2", "W3", "W4"]
@@ -650,10 +519,9 @@ plt.show()
 # %% [markdown]
 # ## Do the points match the best fit? — emission lines
 #
-# The same test for the line channel: observed line fluxes (points) against the
-# posterior-predictive `predict_line_fluxes` (band + median), with the per-line
-# pull below. Lines are categorical, so they are *not* joined by a curve — each is
-# an independent measurement. The reduced χ² is over the ten lines.
+# Observed line fluxes against posterior-predictive predictions. Lines are categorical,
+# so no curve joins them — each is an independent measurement. Lower panel: pull over
+# the ten lines. Reduced χ² quantifies the line match.
 
 # %%
 line_draws = np.stack(
@@ -717,15 +585,14 @@ plt.show()
 # %% [markdown]
 # ## Measured times, together
 #
-# Two columns, because they answer different questions. **`fit() wall`** is the
-# single-galaxy interactive cost, which carries the per-call JIT compile.
-# **`compiled step`** is the optimization once compiled: the marginal per-galaxy
-# compute a catalog pays after amortizing the compile (via `fit_batch`), and the
-# only place an `approx=` choice can show up. Three rows, so the middle one
-# separates the two opt-ins instead of bundling them.
-#
-# Every ratio below is quoted against the A/A control, because a ratio without
-# its noise floor is not a measurement — see the note under the timing cell.
+# **`fit() wall`**: end-to-end cost of one call, including per-call JIT compile.
+# This is the honest interactive cost for a single galaxy.
+# **`compiled step`** (`post.wall_time_s`): optimization loop after compile. This is the
+# marginal per-galaxy compute that a catalog pays after amortizing the compile via `fit_batch`.
+# It is the only metric where an `approx=` choice can show up. Rep spread
+# (slowest/fastest) reveals first-touch costs; the A/A arm (exact built twice) stays near
+# 1.0x. Ratios below are quoted against that control — a ratio without a noise floor
+# is not a measurement.
 
 # %%
 print(f"{'fit':<34}{'fit() wall':>13}{'compiled step':>15}")
@@ -754,34 +621,18 @@ print(
 # %% [markdown]
 # ## Summary
 #
-# - A **FastSpecFit-style catalog** — broadband photometry + emission-line
-#   fluxes — is fit through one `Observation` carrying both, with the lines in a
-#   `LineFluxData`. No extra wiring: the fit picks up the line likelihood.
-# - Model a catalog line flux with **`predict_line_fluxes`** — pure, deblended,
-#   absorption-corrected emission, the same quantity FastSpecFit's `LINE_FLUX`
-#   reports (Gaussian on a continuum-subtracted spectrum). A window-integrated
-#   `measure_line_fluxes` is a *different* quantity (it carries stellar
-#   absorption and mis-deblends [N II]) and should not be compared to a catalog.
-# - The **`(WavePrecomp, FeaturePrecomp)`** fast path turns each likelihood
-#   evaluation into a table look-up, reproducing the exact forward to sub-percent
-#   on the strong lines. Its win at catalog scale is real and separate: batched
-#   over galaxies with `fit_batch`, the look-up is built once and shared.
-# - **On this particular fit it buys little or nothing — read the verdict line
-#   printed above, not this sentence.** Do not assume an `approx=` choice is
-#   helping, and do not trust a bare ratio: the cell quotes an A/A control (the
-#   same model timed twice) so a "speedup" that fails to clear the machine's own
-#   noise can be recognized as one. An observation carrying a line channel
-#   already keeps the nebular work off the per-gradient path, so the exact
-#   forward starts out fast and the lookups have little left to remove.
-# - The two opt-ins are **not one per data channel**. `FeaturePrecomp` caches the
-#   *nebular* calculation, not the line channel: with `neb_logU` and
-#   `neb_logZ_gas` free, a likelihood evaluation without it can re-run Cue
-#   every step. That is why it rescues the counter-intuitive case: the **same
-#   model fit to photometry alone**, worth roughly an order of magnitude.
+# - Fit FastSpecFit photometry + line fluxes through one `Observation` carrying both
+#   in `LineFluxData`. The fit automatically activates the line likelihood.
+# - Use `predict_line_fluxes` for pure, deblended, absorption-corrected emission
+#   (Gaussian on continuum-subtracted spectrum) matching `FastSpecFit.LINE_FLUX`.
+#   Window integrals are different: they carry stellar absorption and mis-deblend [N II].
+# - Build-time `WavePrecomp` and `FeaturePrecomp` are lookup tables; their win at catalog
+#   scale (batched `fit_batch`) is real and separate — the build is shared across galaxies.
+#   A line-channel observation already keeps nebular work off the per-gradient path, so
+#   on this fit the fast path buys little.
 # - Stellar mass and SFR are well constrained. Metallicity / dust / gas conditions
-#   trade off along a broad, degenerate ridge — the posterior *width* is the honest
-#   statement of that. More information (a full spectrum, an auroral line, or the
-#   UV slope) narrows it.
-# - When fitting real catalogs, account for: the nebular model floor (Cue reproduces
-#   Cloudy to ~10%, ~30% for [S II]), and the fiber aperture (line fluxes are
-#   aperture-limited; photometry is total).
+#   degenerate along the age–dust–metallicity ridge; the posterior width is the honest
+#   statement of that. Tighter constraints need a full spectrum, auroral line, or UV slope.
+# - Real catalogs: account for Cue's systematics (reproduces Cloudy to ~10%, ~30% for [S II]),
+#   fiber-aperture effects (line fluxes aperture-limited; photometry total), and dense mass
+#   matrix RAM cost (one fit per notebook process).

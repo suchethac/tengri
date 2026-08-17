@@ -2977,6 +2977,23 @@ Star formation (free-free and synchrotron) and AGN (radio-loud) components. Far-
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="The radio group is two independent choices — a star-forming block tied to the FIR-radio correlation, and an AGN block — so this compares them one at a time on the same galaxy.">
+
+.. only:: html
+
+  .. image:: /auto_examples/radio/images/thumb/sphx_glr_plot_radio_model_family_compare_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/radio/plot_radio_model_family_compare`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Radio blocks: which q_IR calibration, and which AGN synchrotron shape</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="At fixed host (constant SFR = 3 M☉/yr, Condon-92 synchrotron + free-free) we sweep the composable AGN&#x27;s bolometric luminosity agn_log_lbol from 9 to 13 (in log L_sun). The host alone produces a power-law GHz continuum; the AGN superposes a flatter-spectrum jet component that takes over above log L_bol ≳ 11.5 — the classic radio-loud / radio-quiet division emerges from this competition.">
 
 .. only:: html
@@ -3165,6 +3182,23 @@ X-ray binaries (HMXB, LMXB) scaled with SFR and stellar mass. AGN coronae: lumin
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">AGN X-ray spectral hardness: photon index γ controls power-law steepness</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Every X-ray model tengri registers, on one host galaxy, with only the xray block changing. At default parameters they collapse onto two curves, and that is the point of the figure rather than a defect in it:">
+
+.. only:: html
+
+  .. image:: /auto_examples/xray/images/thumb/sphx_glr_plot_xray_model_family_compare_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/xray/plot_xray_model_family_compare`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">X-ray model family: five names, two prescriptions</div>
     </div>
 
 

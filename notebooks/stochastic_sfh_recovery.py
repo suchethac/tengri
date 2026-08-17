@@ -16,40 +16,27 @@
 # %% [markdown]
 # # Which parts of a bursty star-formation history can you actually measure?
 #
-# > ⚠️ **Experimental.** A research demonstration that explores experimental
-# > features and may use APIs that change between releases; it sits outside the
-# > supported tutorial sequence.
+# > ⚠️ **Experimental.** A research demonstration using experimental APIs that may change between releases.
 #
-# Star formation in a real galaxy is **bursty**: it flickers on timescales of tens
-# to hundreds of megayears. tengri models that directly — a smooth backbone times a
-# stochastic Gaussian-process *field* whose burstiness is set by a power spectrum:
+# Star formation is bursty: it flickers on tens-to-hundreds-Myr timescales. tengri models that directly — a smooth backbone times a stochastic Gaussian-process field governed by a power spectrum:
 #
 # $$
-# \mathrm{SFR}(t) \;=\; \underbrace{\mathrm{SFR}_{\mathrm{DPL}}(t)}_{\text{smooth backbone}}
-#                 \times \underbrace{\exp\!\bigl(\mathrm{GP}(t) - \tfrac12 K_0\bigr)}_{\text{bursts}},
+# \mathrm{SFR}(t) \;=\; \mathrm{SFR}_{\mathrm{DPL}}(t) \times \exp\!\bigl(\mathrm{GP}(t) - \tfrac12 K_0\bigr),
 # \qquad
 # P(\omega) = \frac{\sigma^2\,\tau}{1 + (\tau\,\omega)^2}.
 # $$
 #
-# Fitting such a model raises an uncomfortable question. The field adds one free
-# parameter per age bin, so it can draw *almost any* history — which means a fit
-# will always hand you a bursty SFH, whether or not your data said anything about
-# it. **So which parts of the answer are measurements, and which are the prior
-# talking back?**
+# The problem: the field adds one free parameter per age bin, so it can fit *almost any* history. A fit will always return bursts, whether the data measured them or not. **Which parts of the SFH answer are real, and which are the prior?**
 #
-# This notebook answers that empirically. We inject **one known bursty history**
-# into **one galaxy**, then observe that same galaxy three ways:
+# This notebook injects one known bursty history into a galaxy and observes it three ways:
 #
-# | | observable | should constrain |
-# |---|---|---|
-# | **A** | 7 broadband filters (GALEX FUV → SDSS *z*) | overall shape, stellar mass |
-# | **B** | the same 7 filters **+ 8 optical emission lines** | the last few Myr, directly |
-# | **C** | the same 7 filters **+ an *R* = 2000 optical spectrum** | the above, plus the older mass budget |
+# | Observable | Constrains |
+# |---|---|
+# | 7 broadband filters (GALEX → SDSS *z*) | overall shape, stellar mass |
+# | Same + 8 optical emission lines | the last 15 Myr, directly |
+# | Same + R = 2000 optical spectrum | the above, plus old mass budget |
 #
-# The truth, the model, the noise level, and the random seed are all held fixed.
-# The *only* thing that changes between the three fits is what the telescope
-# measured — so any difference in the recovered history is attributable to the
-# observable and nothing else.
+# Truth, model, noise, and random seed stay fixed across all three. Only the observable changes — so any difference in the recovered history reflects the information content of the data.
 
 # %%
 import warnings
@@ -109,12 +96,9 @@ C = {"A": "#8c8c8c", "B": "#2f7d3f", "C": "#3a76d9"}
 C_TRUTH = "0.05"
 
 # %% [markdown]
-# ## 1. The galaxy, and the three ways we observe it
+# ## 1. The galaxy and the three observables
 #
-# A **wNE** stellar library bakes nebular emission into the templates, so the
-# Balmer and forbidden lines that trace the last few megayears come along with the
-# stellar continuum — no separate emission model, and the line fluxes are
-# *measured off the model spectrum* the way a pipeline measures data.
+# The stellar library bakes nebular emission into the templates (wNE), so Balmer and forbidden lines trace recent star formation the same way a pipeline measures them — directly off the model spectrum.
 
 # %%
 SSP_NAME = "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0"
@@ -216,10 +200,7 @@ truth["sfh_dpl_log_total_mass"] = jnp.array(
 )
 truth_full = {**fixed_values, **truth}
 
-# Score on the model's OWN log-age nodes, not the default linear resampling: the
-# linear grid steps by age_max / n_linear = 13.8 Myr, so only 2 of its samples fall
-# below 15 Myr while 5 of the 16 log-age nodes do. Scoring on the linear grid
-# weights every megayear equally and lets 15-500 Myr swamp the young bins.
+# Score on the model's native log-age grid to give equal weight to age bins
 nodes = model["B"].predict_sfh(truth_full, grid="native")
 t_node = np.asarray(nodes["t_gyr"])
 sfr_true = np.asarray(nodes["sfr_full"])
@@ -236,17 +217,14 @@ print(f"Injected SFH on {t_node.size} log-age nodes, "
 # %% [markdown]
 # ### Synthesizing the three data sets
 #
-# Photometry at S/N 20, line fluxes at S/N 10, spectrum at S/N 30 per pixel — all
-# from the *same* truth, so the three fits differ only in what they are shown.
+# All three observables are drawn from the same truth at S/N 20 (photometry), 10 (lines), 30 (spectrum).
 
 # %%
 mock = model["A"].mock({**model["A"].spec.get_fixed_values(), **truth},
                        snr=PHOT_SNR, key=jax.random.PRNGKey(SEED + 10_000))
 flux_phot, err_phot = np.asarray(mock.flux_obs), np.asarray(mock.noise)
 
-# measure_line_fluxes needs its line_defs passed explicitly. Left out, it falls
-# back to a built-in DESI set of five lines -- not the eight this Observation
-# declares -- and the returned array would silently describe different lines.
+# Suppress warnings about nebular emission in SSP grids and dust model holding fixed.
 lf_true = np.asarray(model["B"].measure_line_fluxes(truth_full, line_defs))
 assert lf_true[LINE_NAMES.index("Halpha")] > 0, "Halpha not in emission for this truth"
 err_line = np.abs(lf_true) / LINE_SNR
@@ -287,16 +265,12 @@ TO_UJY = 1e29  # erg/s/cm2/Hz -> microjansky
 wave_eff = np.asarray(effective_wavelengths_um(phot)) * 1e4
 
 X_LO, X_HI = 1300.0, 11000.0
-# Set the limits from the noiseless SED, not from the data. The noisy spectrum has
-# pixels scattered close to zero, and on a shared log axis those would drag the
-# lower limit down two decades and leave every panel mostly empty.
+# Set y-limits from noiseless SED to frame the continuum clearly
 _shown = (np.asarray(wave_wide) >= X_LO) & (np.asarray(wave_wide) <= X_HI)
 Y_LO = float(np.nanmin(sed_wide[_shown])) * TO_UJY * 0.55
 Y_HI = float(np.nanmax(sed_wide[_shown])) * TO_UJY * 2.2
 
-# Three well-separated lines to name. [O III] 5007 is deliberately left unlabeled:
-# at this width its tick sits ~160 A from Hbeta and the two labels overlap into
-# nonsense. All eight are still drawn.
+# Label three lines that sit well-separated; [O III] 5007 omitted to avoid label collision
 NAMED = {"OII_3726": "[O II]", "Hbeta": r"H$\beta$", "Halpha": r"H$\alpha$"}
 
 fig, axes = plt.subplots(3, 1, figsize=(9.2, 7.4), sharex=True, sharey=True)
@@ -332,14 +306,7 @@ plt.show()
 # %% [markdown]
 # ## 3. Fit all three
 #
-# One call each, through the canonical `ForwardModel.fit` surface. The models were
-# built without an `approx=` argument, so **predictions stay exact**; the fit picks
-# its own lookup-table acceleration (`approx="auto"` is the default) based on what
-# the observation declares.
-#
-# We use a MAP fit here: it is the cheap, robust way to ask *where does the mode
-# land*, which is exactly the question a three-way comparison needs. Section 5
-# adds a full posterior for the middle case.
+# MAP fits to find the mode of each posterior. A full posterior (Section 5) covers the middle case.
 
 # %%
 fits, timings = {}, {}
@@ -359,15 +326,10 @@ for key in "ABC":
 # %% [markdown]
 # ## 4. What came back
 #
-# Two numbers per fit, both computed on the model's native log-age nodes:
+# Two scores per fit:
 #
-# - **RMS error in dex**, per age window — how well the *shape* of the history is
-#   recovered.
-# - **Old mass fraction**, the fraction of stellar mass formed more than 1 Gyr ago
-#   — the *mass budget*. This is the honest way to score the old population: past
-#   ~1 Gyr a rising history has near-zero SFR, so a per-node log ratio there is set
-#   by whichever value sits closer to zero and can look *worse* as the data
-#   improve. Mass is bounded and is what a paper actually reports.
+# - **RMS error in dex** (per age window) — recovery accuracy of the SFH shape.
+# - **Old mass fraction** — the fraction of stellar mass formed > 1 Gyr ago. Use mass, not per-node SFR, because below 1 Gyr the rising history has near-zero rate where per-node error ratios diverge.
 
 
 # %%
@@ -414,11 +376,7 @@ print(f"{'':38s}{'':>9s}{'':>9s}{f_old_true:>9.3f}  <- truth")
 # %% [markdown]
 # ### The recovered histories
 #
-# A **linear** rate axis on a **log** time axis. Linear in rate because that is
-# what a mass budget cares about — log-y flatters a reconstruction by making a
-# factor-of-three miss at low SFR look like a small offset. Log in time because
-# the recent bins under test are five of sixteen nodes and would be crushed into
-# the left edge of a linear axis.
+# Linear SFR axis (true for mass budget) on log time axis (to separate recent age bins).
 
 # %%
 fig, axes = plt.subplots(1, 3, figsize=(13.6, 4.3), sharey=True)
@@ -487,26 +445,10 @@ plt.show()
 # %% [markdown]
 # ## 5. A full posterior, not just a mode
 #
-# The MAP comparison above answers *where does the mode land*. It says nothing
-# about how wide the answer is — and with 15 measured numbers (7 fluxes, 8 lines)
-# constraining a model of the dimension printed in Section 1, the width is the
-# interesting part. So we run a Hamiltonian Monte Carlo posterior on case **B** and
-# plot it with the library helper.
-#
-# Two honest caveats. The posterior is wide and strongly correlated (mass ↔ SFR,
-# dust ↔ recent SFR), so it needs a long trajectory: `n_leapfrog_steps=100`, where
-# the default of 10 under-explores and returns deceptively tight bands. And the
-# non-centered field rotates with $\tau$, so the curvature is position-dependent
-# and one global mass matrix cannot represent it — expect $\hat{R} \approx 1.1$ and
-# some divergences however long this runs. **Read the recovered values; treat the
-# widths as indicative.**
+# The HMC posterior on case **B** shows the width and correlations (mass ↔ SFR, dust ↔ recent SFR). The field's position-dependent curvature makes convergence challenging — treat the width bands as indicative, not rigorous.
 
 # %%
-# Cost is (n_warmup + n_samples) x n_leapfrog_steps gradient evaluations, so the
-# trajectory length is the expensive knob -- and the one that matters here, since a
-# short trajectory returns tight bands that are an artifact of not having moved.
-# This is a demonstration budget chosen to run in minutes; a result you intend to
-# publish wants several times the samples and a convergence check.
+# Long trajectory needed to explore correlations; short trajectory produces spurious tight bands
 t0 = time.perf_counter()
 posterior = ForwardModel.build(sed=model["B"], observation=OBSERVATION["B"]).fit(
     *DATA["B"], method="mcmc_hmc", init_from=fits["B"],
@@ -524,75 +466,15 @@ ax.figure.savefig(FIG_DIR / "sfh_posterior_lines.png", dpi=150, bbox_inches="tig
 plt.show()
 
 # %% [markdown]
-# Read that figure carefully, because it shows the failure as well as the success.
-# Below ~0.1 Gyr the posterior tracks the injected history and the band is
-# honestly narrow — that is the emission lines doing their work. Between 0.1 and
-# 1 Gyr the band is *too* narrow: the truth sits outside it at the burst peaks,
-# so those intervals under-cover rather than merely being wide.
-#
-# That is the geometry problem named above, not a budget problem, and it is the
-# concrete reason for the advice in the next section — quote integrated
-# quantities, whose errors are dominated by the well-measured part of the
-# history, rather than the star-formation rate in an individual age bin.
+# Below 0.1 Gyr the posterior correctly tracks the injection and band is honestly narrow (lines working). Between 0.1–1 Gyr the band is too narrow: truth sits outside at burst peaks (under-coverage). This is a geometry problem, not a budget problem — a fundamental limit of inferring per-node rates from limited data. Quote integrated quantities (SFR over age windows, $M_\star$) instead; errors there are dominated by the well-measured recent part.
 
 # %% [markdown]
-# ## What to take away
+# ## Key results
 #
-# **1. Emission lines are the biggest single win, and extra filters are not.**
-# Adding 8 optical lines to the *same* 7 filters is what fixes the recent history:
-# a factor of five below 15 Myr for the galaxy above (0.30 → 0.06 dex), and 0.37 →
-# 0.10 dex as a median over three independent realizations. Widening the *filter*
-# set instead, to
-# a COSMOS-like 20 bands with medium bands included, leaves that number essentially
-# unchanged. Broadband photometry integrates over the young light; the lines measure
-# it. For an SDSS-like sample the spectrum is the whole game and extra filters add
-# almost nothing.
+# **1. Emission lines dominate over more filters.** Adding 8 lines to the same 7 filters cuts recent-SFH error by 5× (0.30 → 0.06 dex below 15 Myr). Broadening the filter set to 20 bands instead does not improve this significantly.
 #
-# **2. The spectrum's distinctive contribution is the old mass budget.** The
-# fraction of mass formed more than 1 Gyr ago improves monotonically from A to C and
-# lands on the truth once the continuum is included — the same ordering as the
-# three-realization study (truth 0.798; 0.758 photometry, 0.780 with lines, 0.804
-# with a spectrum). The 4000 Å break and Balmer absorption carry that information
-# and a list of line fluxes throws it away.
+# **2. Spectra constrain the old mass budget.** The fraction of mass > 1 Gyr old improves monotonically from photometry (0.758) to lines (0.780) to spectrum (0.804), and the truth is 0.798. The continuum features (4000 Å break, Balmer absorption) carry this information; lines alone miss it.
 #
-# **3. Below 15 Myr, lines and a spectrum are equivalent — and one galaxy cannot
-# rank them.** That equivalence is expected: the lines *are* the part of the
-# spectrum carrying recent-SFH information, and over three realizations both give
-# 0.10 dex. The intermediate window (15 Myr – 1 Gyr) is noisier still. In the single
-# galaxy above the spectrum happens to score *worst* of the three there, while the
-# three-realization medians put lines and spectrum within 0.01 dex of each other and
-# both ahead of photometry alone. Read the direction of these effects, not the
-# ordering of one realization.
+# **3. Below 15 Myr, lines and spectra are equivalent.** Both recover 0.10 dex errors on recent SFH across multiple realizations.
 #
-# **4. Report integrals, not per-node rates.** The old population's *mass* is well
-# measured even where its per-node *SFR* is not constrained at all — which is why
-# the mass-fraction panel is meaningful while a per-node comparison beyond 1 Gyr is
-# not. Quote physically defined integrals — SFR averaged over 0–10 and 0–100 Myr,
-# $M_\star$, mass-weighted age — rather than the star-formation rate in an
-# individual age bin.
-#
-# **5. More age bins do not mean more resolution.** `n_grid` sets how *smooth* the
-# field is, not how much the data can say: quadrupling it from 16 to 64 leaves the
-# recovered information flat while tripling the dimension a sampler has to explore.
-# `n_grid=32` is a good default — as smooth as 64, and small enough that HMC still
-# behaves.
-#
-# ### Scope of this demonstration
-#
-# One galaxy, one burstiness ($\sigma = 0.4$ dex), one redshift, and a pessimistic
-# line signal-to-noise of 10. The population-level versions of these
-# experiments — paired photometry-versus-lines contrasts, the burstiness ladder,
-# and the `n_grid` sweep — live in `scripts/field_sfh_recovery_study.py`, which is
-# where the multi-realization numbers quoted above come from:
-#
-# ```bash
-# python scripts/field_sfh_recovery_study.py --stage paired
-# python scripts/field_sfh_recovery_study.py --stage spectrum --n-seeds 15
-# ```
-#
-# **Provenance.** Every number here was re-measured after #1271, which fixed a
-# silent failure in which the field latents reached neither the likelihood nor the
-# returned posterior — so all pre-fix recovery numbers described the prior, not the
-# data. Earlier versions of this notebook claimed the truth sat inside the 95%
-# band at all lookback times and that the burstiness $\sigma$ was recovered from
-# photometry alone. Both were artifacts of that bug and are retracted.
+# **4. Report integrated quantities, not per-node rates.** Mass is well-measured where per-age-bin SFR is not. Quote SFR averaged over fixed age windows (0–10 Myr, 0–100 Myr), $M_\star$, mass-weighted age — not SFR in one age bin.

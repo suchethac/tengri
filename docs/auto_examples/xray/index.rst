@@ -157,6 +157,23 @@ X-ray binaries (HMXB, LMXB) scaled with SFR and stellar mass. AGN coronae: lumin
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="Every X-ray model tengri registers, on one host galaxy, with only the xray block changing. At default parameters they collapse onto two curves, and that is the point of the figure rather than a defect in it:">
+
+.. only:: html
+
+  .. image:: /auto_examples/xray/images/thumb/sphx_glr_plot_xray_model_family_compare_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/xray/plot_xray_model_family_compare`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">X-ray model family: five names, two prescriptions</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="The line-of-sight column density N_H reshapes the AGN X-ray spectrum in two regimes: photoelectric absorption (``zphabs``) suppresses the soft band roughly as \exp(-\sigma(E)\,N_H) with cross-section \sigma \propto E^{-3}, while Compton down-scattering (``cabs``) adds an energy-independent suppression \exp(-\sigma_T\,N_H) that becomes dominant once log N_H ≳ 24 (the Compton-thick boundary). A constant warm-electron scattered fraction (~1 % of the intrinsic continuum) is added back, which is the only flux observable in the soft band for nearly opaque columns and explains why Compton-thick AGN are still marginally detectable in soft-band stacks (Matsumoto et al. 2026 Fig. 11/12).">
 
 .. only:: html
@@ -241,6 +258,7 @@ X-ray binaries (HMXB, LMXB) scaled with SFR and stellar mass. AGN coronae: lumin
    /auto_examples/xray/plot_xray_alpha_ox_nh
    /auto_examples/xray/plot_xray_component_decomposition
    /auto_examples/xray/plot_xray_gamma_sweep
+   /auto_examples/xray/plot_xray_model_family_compare
    /auto_examples/xray/plot_xray_nh_sweep
    /auto_examples/xray/plot_xray_pexrav_compton_hump
    /auto_examples/xray/plot_xray_sf
