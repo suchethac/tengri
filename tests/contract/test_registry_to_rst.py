@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Test the _RegistryTable.to_rst() method.
 
 Ensures reStructuredText output is well-formed and suitable for Sphinx
