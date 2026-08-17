@@ -43,7 +43,7 @@ References:
 - Papovich et al. 2001, AJ, 122, 1
 - Poggianti & Barbaro 1997, A&A, 325, 1025
 
-.. GENERATED FROM PYTHON SOURCE LINES 28-308
+.. GENERATED FROM PYTHON SOURCE LINES 28-331
 
 
 
@@ -53,8 +53,21 @@ References:
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /tengri/src/tengri/forward/orchestrator.py:794: SFHBeforeBigBangWarning: Star formation history forms 63% of its stellar mass before the Big Bang at z=1.00 (cosmic age 5.87 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
+    /tengri/src/tengri/forward/orchestrator.py:794: SFHBeforeBigBangWarning: Star formation history forms 89% of its stellar mass before the Big Bang at z=1.50 (cosmic age 4.28 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -171,13 +184,28 @@ References:
 
     # Bisection helper to find log_total_mass that produces target r-band magnitude
     def _bisect_log_total_mass(model, sfh_param_name, baseline, m_r_target, lo=-1.0, hi=3.0):
-        """Binary search for log_total_mass that produces m_r = m_r_target."""
+        """Binary search for log_total_mass that produces m_r = m_r_target.
+
+        Raises
+        ------
+        RuntimeError
+            If no iteration produced a usable magnitude. Without this the search
+            would treat every failure as "flux too high", drive ``hi`` down thirty
+            times, and return a finite number close to ``lo`` -- a normalization
+            derived from zero successful evaluations, indistinguishable in the
+            figure from a converged one. A plausible wrong number is worse than a
+            crash: the plot still renders and the degeneracy it claims to show is
+            an artifact of the failure.
+        """
+        evaluated = 0
+        first_failure: Exception | None = None
         for _iteration in range(30):
             mid = 0.5 * (lo + hi)
             params = {**baseline, sfh_param_name: mid}
             try:
                 photo = model.predict_photometry(params)
                 flux_array = np.asarray(photo)
+                evaluated += 1
                 if np.any(flux_array <= 0) or np.any(np.isnan(flux_array)):
                     hi = mid  # Too high
                     continue
@@ -188,9 +216,17 @@ References:
                     lo = mid  # Flux too low, need higher SFR
                 else:
                     hi = mid  # Flux too high, need lower SFR
-            except Exception:
+            except Exception as e:
+                if first_failure is None:
+                    first_failure = e
                 hi = mid
                 continue
+        if evaluated == 0:
+            raise RuntimeError(
+                f"bisection for {sfh_param_name} never evaluated the model, so its "
+                f"returned normalization would be meaningless. First failure: "
+                f"{type(first_failure).__name__}: {first_failure}"
+            ) from first_failure
         return 0.5 * (lo + hi)
 
 
@@ -342,7 +378,7 @@ References:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.519 seconds)
+   **Total running time of the script:** (1 minutes 5.880 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_age_dust_redshift_degeneracy.py:
