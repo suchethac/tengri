@@ -95,7 +95,9 @@ class TestPreintegrateGridBasic:
         chex.assert_shape(result.effective_wavelengths, (n_filters,))
         chex.assert_shape(result.effective_wavelengths_rest, (n_filters,))
         npt.assert_allclose(np.asarray(result.phot), const, rtol=1e-10)
-        assert float(result.flux_scale) > 0.0
+        # Stored as log10 (#1859), so the scale itself is ~-57 dex; the
+        # assertion is that it denotes a positive factor, not that it is one.
+        assert 10.0 ** float(result.log10_flux_scale) > 0.0
 
     def test_photometry_is_linear_and_separable(self, synthetic_template_3d, tophat_filters):
         """Filter integration is linear in L_ν, so a separable template factorizes.
