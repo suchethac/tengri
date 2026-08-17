@@ -436,9 +436,9 @@ class DustSEDComponent(TemplateThreading):
         r"""Age-resolved two-component transmission :math:`T(\lambda, \mathrm{age})`.
 
         The single source of this component's dust screen. :meth:`apply` calls it
-        on the full SSP wave grid; the FeaturePrecomp fast path
-        (:meth:`SEDModel.predict_spectral_indices` with ``fast=True``) calls it at
-        the index window centers — so the fast path applies **exactly** the dust
+        on the full SSP wave grid; the FeaturePrecomp path
+        (:meth:`SEDModel.predict_spectral_indices` with ``approx=True``) calls it at
+        the index window centers — so the LUT path applies **exactly** the dust
         the forward applies, with no second implementation to keep in sync.
 
         Resolves per-component (birth-cloud vs diffuse) law parameters — the

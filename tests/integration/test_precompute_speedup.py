@@ -114,7 +114,7 @@ class TestPrecomputeSpeedup:
         # the speedup is ~3-10x (not the ~30x from precomputed).
         assert speedup > 2.0, (
             f"Gradient speedup {speedup:.1f}x < 2x "
-            f"(fast={t_fast * 1e3:.2f}ms, exact={t_exact * 1e3:.2f}ms)"
+            f"(approx={t_fast * 1e3:.2f}ms, exact={t_exact * 1e3:.2f}ms)"
         )
 
 
