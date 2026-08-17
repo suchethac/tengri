@@ -1182,8 +1182,8 @@ def precompute_for_model(
     if model_name in (None, "modified_blackbody", "casey2012"):
         return None
 
+    from tengri._data_setup import find_data_str
     from tengri.components.dust.emission import (
-        _find_data_file,
         load_astrodust_templates,
         load_bosa_templates,
         load_dl14_templates,
@@ -1193,9 +1193,7 @@ def precompute_for_model(
 
     # DL07 has a bespoke template structure (single_U + power-law + gamma mixing)
     if model_name in ("draine_li2007", "dl07"):
-        from tengri.components.dust.emission import _find_dl07_templates
-
-        path = _find_dl07_templates()
+        path = find_data_str("dl07_templates_v2.h5", "dl07_templates.h5")
         if path is None:
             return None
         templates = load_draine_li_templates(path)
@@ -1238,7 +1236,7 @@ def precompute_for_model(
         candidate_files, loader, precompute_fn = _BESPOKE_LOADERS[model_name]
         path = None
         for fname in candidate_files:
-            candidate = _find_data_file(fname)
+            candidate = find_data_str(fname)
             if candidate is not None:
                 path = candidate
                 break
@@ -1259,7 +1257,7 @@ def precompute_for_model(
         path_str = _os.environ.get("TENGRI_PAHSPEC_PATH")
         if path_str is None:
             for fname in ("pahspec_draine2021.h5",):
-                candidate = _find_data_file(fname)
+                candidate = find_data_str(fname)
                 if candidate is not None:
                     path_str = candidate
                     break

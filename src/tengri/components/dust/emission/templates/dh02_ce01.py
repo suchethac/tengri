@@ -113,10 +113,10 @@ class DH02CE01IRSEDComponent(EmissionComponent):
         **JIT-compatible**: no, deliberately — runs at build time.
         """
         del wave
-        from tengri.components.dust.emission.emission import _find_data_file
+        from tengri._data_setup import find_data_str
         from tengri.components.dust.emission_templates import load_dh02_ce01_lnu_grid
 
-        path = _find_data_file("dh02_ce01_grid.h5")
+        path = find_data_str("dh02_ce01_grid.h5")
         return None if path is None else load_dh02_ce01_lnu_grid(path)
 
     def predict(

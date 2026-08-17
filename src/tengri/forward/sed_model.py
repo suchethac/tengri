@@ -89,7 +89,6 @@ from tengri.observation.photometry import ab_mag_from_flux
 from tengri.parameters.translate import (
     _CUE_GAS_IDENTITY_PARAMS,
     _CUE_IONSPEC_IDENTITY_PARAMS,
-    _EVOLVING_ALPHA_PARAM_MAP,
     LOG10_ZSUN,
     _build_param_map,
     check_missing_free_params,
@@ -2348,6 +2347,11 @@ class SEDModel:
         -------
         dict[str, tuple[str, float, float]]
             Parameter map deltas for metallicity handling.
+
+        Raises
+        ------
+        NotImplementedError
+            If alpha_fe_evolving=True, which is currently not supported (#1767).
         """
         self._met_mode = getattr(spec, "met_mode", "delta")
         # _met_mode checked directly: "ramp" for evolving, "chem_evol" for chemical evolution
@@ -2365,7 +2369,22 @@ class SEDModel:
 
         self._alpha_fe_evolving = getattr(spec, "alpha_fe_evolving", False)
         if self._alpha_fe_evolving:
-            delta.update(_EVOLVING_ALPHA_PARAM_MAP)
+            # #1767: Per-age alpha-enhancement requires wiring compute_alpha_fe_evolving
+            # through the stellar component's SED production pipeline. Currently the
+            # mechanism accepts only a scalar met_alpha_fe, which is applied uniformly
+            # to all ages (either via SSP grid interpolation or effective-metallicity
+            # calculation). Supporting a per-age ramp would require architectural
+            # changes: propagating per-age arrays through the age-weight loop and
+            # modifying effective_metallicity / interpolate_alpha_only to work per-age.
+            raise NotImplementedError(
+                "alpha_fe_evolving=True is not yet supported (#1767). "
+                "The stellar component currently accepts only a scalar "
+                "met_alpha_fe [alpha/Fe] applied uniformly to all ages. "
+                "To model alpha enhancement, use alpha_fe_evolving=False "
+                "(the default) and set met_alpha_fe to a Fixed or free scalar value. "
+                "Per-age alpha ramping from alpha_fe_old to alpha_fe_young requires "
+                "architectural extensions currently under development."
+            )
 
         return delta
 
@@ -2595,6 +2614,9 @@ class SEDModel:
             self._neb_dust_law_bc_fn = self._dust_law_bc_fn
 
         self._dust_emission_model = getattr(spec, "dust_emission", None)
+        # Astrodust+PAH configuration: now always exists as a structural setting.
+        self._astrodust_spinning_dust = bool(spec.astrodust_spinning_dust)
+        self._astrodust_f_cnm = float(spec.astrodust_f_cnm)
         if self._dust_emission_model == "dl07_tabulated":
             warnings.warn(
                 "'dl07_tabulated' is deprecated. Use 'draine_li2007' instead.",
@@ -3878,6 +3900,13 @@ class SEDModel:
         dust_scheme = str(self._dust_scheme)
         dust_emission_model = str(self._dust_emission_model or "none")
 
+        # Astrodust+PAH (HD23) configuration: spinning dust (AME) enable flag
+        # and cold-neutral-medium filling fraction. These affect the emitted
+        # SED shape without changing the graph structure, so they must be
+        # keyed to prevent silent cache collisions (#1093).
+        astrodust_spinning_dust = bool(getattr(self, "_astrodust_spinning_dust", False))
+        astrodust_f_cnm = float(getattr(self, "_astrodust_f_cnm", 0.28))
+
         # WG00 (dust_type=3) structural selectors. Different geometry / dust
         # curve / local structure tabulate distinct attenuation curves, so each
         # combination must get its own compiled kernel. "none" when unused.
@@ -4250,6 +4279,8 @@ class SEDModel:
             dust_lyman_cutoff_sig,
             dust_lyc_absorb_all_sig,
             dust_eb_include_lyc_sig,
+            astrodust_spinning_dust,
+            astrodust_f_cnm,
             nebular_backend_name,
             uses_igm,
             igm_model,
@@ -7951,6 +7982,8 @@ class SEDModel:
             dust_lyc_absorb_all=getattr(self, "_dust_lyc_absorb_all", False),
             dust_eb_include_lyc=getattr(self, "_dust_eb_include_lyc", False),
             dust_emission_model=getattr(self, "_dust_emission_model", None),
+            astrodust_spinning_dust=bool(getattr(self, "_astrodust_spinning_dust", False)),
+            astrodust_f_cnm=float(getattr(self, "_astrodust_f_cnm", 0.28)),
             use_dust=(getattr(self, "_dust_model", "two_component") != "off"),
             dust_model=getattr(self, "_dust_model", "two_component"),
             wg00_dust_curve=getattr(self, "_wg00_dust_curve", "mw"),

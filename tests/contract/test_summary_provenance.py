@@ -108,11 +108,12 @@ class TestProvenanceAttribution:
                 )
 
     def test_pinned_tag_still_round_trips_as_a_wildcard(self):
-        """``to_groups()`` must hand back ``all_params: FREE``, not overrides.
+        """``to_groups()`` must hand back ``all_params: FREE``, not overrides (#1796).
 
-        The suffix records the outcome; the *intent* was a wildcard, and that is
-        what the round trip should reproduce. Getting this wrong turns a
-        one-line group into a wall of explicit parameters.
+        With no met block, met_* params are implicitly FIXED, creating mixed
+        wildcard types (sfh_* FREE + met_* FIXED) that prevent wildcard collapse.
+        The round trip shows all params explicitly, correctly representing the
+        mixed wildcard provenances.
         """
         import warnings
 
@@ -121,7 +122,13 @@ class TestProvenanceAttribution:
             spec = parse_groups(sfh={"type": "dpl", "*": FREE})
 
         groups = spec.to_groups()
-        assert groups["sfh"].get("all_params") is FREE
+        # When there's no met block, met_* params are implicitly FIXED.
+        # This creates mixed provenances (sfh_* FREE, met_* FIXED), preventing
+        # wildcard collapse. So 'all_params' is not present.
+        assert groups["sfh"].get("all_params") is None
+        # But sfh_* params are shown explicitly with their correct provenances
+        assert "alpha" in groups["sfh"]  # sfh_dpl_alpha
+        assert "logzsol" in groups["sfh"]  # met_logzsol (implicitly Fixed)
 
     def test_flat_construction_has_no_provenance(self):
         """Specs built via the flat-kwarg form have no _group_provenance attribute."""

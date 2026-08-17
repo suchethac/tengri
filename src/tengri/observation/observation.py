@@ -1131,20 +1131,56 @@ class Observation:
         # the filter integration. Whether shocked gas should sit behind the
         # stellar screen is a physics decision, so this is left as measured and
         # bounded in tests/contract/test_precomp_channel_drift.py.
-        shock_phi_for_dust = state.derived.get("shock_phot_lnu_precomp")
-        # Kept SEPARATE from the nebular bucket as well as summed into it. The sum is
-        # what ``unattenuated_phi`` must be built from (it is the whole screened
-        # bucket), but the two halves are no longer screened the same way: nebular has
-        # an exact band-integrated form below and shock does not (#1738). Collapsing
-        # them into one array first would force shock's λ_eff treatment back onto
-        # nebular.
+        # Shock attenuation (#1434): consume the band-integrated attenuated form published
+        # by dust.two_component.apply (lines 963-989). This is the unified seam: both
+        # exact and precomp paths apply the same young-limit dust screen
+        # (tau_bc·k_bc + tau_diff·k_diff). Precomp consumes the band-integrated
+        # product, not re-multiplying at lambda_eff, which prevents drift.
+        #
+        # Shock handling (#1434): depends on whether dust publishes attenuated form.
+        # Two-component dust publishes shock_phot_lnu_attenuated_precomp (band-integrated
+        # attenuated form, consumed by this path). Single-component dust and no-dust models
+        # do not publish this, so shock must be handled via the legacy λ_eff screen.
+        shock_phi_intrinsic = state.derived.get("shock_phot_lnu_precomp")
+        shock_phi_attenuated_precomp = state.derived.get("shock_phot_lnu_attenuated_precomp")
+        consume_attenuated = shock_phi_attenuated_precomp is not None
+        # Detect dust presence: if dust publishes attenuation factors, it is active.
+        dust_is_active = state.derived.get("dust_bc_attenuation_precomp") is not None
+        # Structural gate (two-component only): if shock exists and dust is active,
+        # the attenuated form MUST be published (not a silent failure on key absence).
+        if (
+            shock_phi_intrinsic is not None
+            and dust_is_active
+            and shock_phi_attenuated_precomp is None
+        ):
+            raise KeyError(
+                "#1434: dust component active but shock_phot_lnu_attenuated_precomp "
+                "not published by two_component.apply. Build ordering bug: sed_shock "
+                "must be in optional_inputs() so ShockNebular runs before "
+                "DustSEDComponent, making sed_shock available for dust to read and "
+                "publish the attenuated form."
+            )
+        # Track shock separately for diagnostics (intrinsic form).
         shock_only_phi = (
-            shock_phi_for_dust if shock_phi_for_dust is not None else jnp.zeros_like(total_phi)
+            shock_phi_intrinsic if shock_phi_intrinsic is not None else jnp.zeros_like(total_phi)
         )
-        if shock_phi_for_dust is not None:
-            nebular_phi_for_dust = nebular_phi_for_dust + shock_phi_for_dust
-        dust_attenuable_phi = stellar_phi + nebular_phi_for_dust
-        unattenuated_phi = total_phi - dust_attenuable_phi
+        # Bucket accounting depends on whether attenuated form is available:
+        if consume_attenuated:
+            # Two-component dust (#1434): shock is being replaced by attenuated form.
+            # Subtract intrinsic shock from unattenuated_phi to avoid it leaking through.
+            dust_attenuable_phi = stellar_phi + nebular_phi_for_dust
+            unattenuated_phi = (
+                total_phi - dust_attenuable_phi - shock_only_phi
+                if shock_phi_intrinsic is not None
+                else total_phi - dust_attenuable_phi
+            )
+        else:
+            # Single-component dust or no dust: shock gets λ_eff screen (legacy behavior).
+            # Include shock in nebular_phi_for_dust so it gets screened normally.
+            if shock_phi_intrinsic is not None:
+                nebular_phi_for_dust = nebular_phi_for_dust + shock_only_phi
+            dust_attenuable_phi = stellar_phi + nebular_phi_for_dust
+            unattenuated_phi = total_phi - dust_attenuable_phi
 
         # Two-component (Charlot & Fall) dust LUT.
         # Factorization: T(a, λ) = T_diff(λ) × T_bc(λ)^y(a).
@@ -1238,14 +1274,21 @@ class Observation:
             # inflated the precomp-vs-exact gap by up to 26x over the stellar-only
             # floor, on a bucket carrying just 0.8-3.5 % of the band flux.
             #
-            # Shock stays on the λ_eff screen — it publishes no such term, and it is
-            # a separate additive component (#851). Its own residual is documented
-            # above and is unchanged here.
+            # Shock is attenuated by the same dust screen (#1434). The dust component
+            # publishes shock_phot_lnu_attenuated_precomp — the band-integrated attenuated
+            # form. This is added as-is (not rescreened) to avoid drift from the exact path.
             nebular_exact = state.derived.get("nebular_phot_lnu_attenuated_precomp")
+            shock_attenuated_for_output = (
+                shock_phi_attenuated_precomp
+                if shock_phi_attenuated_precomp is not None
+                else jnp.zeros_like(total_phi)
+            )
             if nebular_exact is not None:
-                nebular_attenuated = nebular_exact + a_diff_lut * a_bc_lut * shock_only_phi
+                nebular_attenuated = nebular_exact + shock_attenuated_for_output
             else:
-                nebular_attenuated = a_diff_lut * a_bc_lut * nebular_phi_for_dust
+                nebular_attenuated = (
+                    a_diff_lut * a_bc_lut * nebular_phi_for_dust + shock_attenuated_for_output
+                )
             total_lnu = stellar_attenuated + nebular_attenuated + unattenuated_phi
 
         # Single-component dust via the Taylor expansion

@@ -98,6 +98,31 @@ class PopulationSpecView:
         return self._template.n_free
 
     @property
+    def n_latent(self) -> int:
+        """Flattened dimensionality of the batched free-parameter sample (#1408).
+
+        Per-galaxy parameters count ``n_galaxies`` times (via
+        :meth:`param_init_shape`) and shared parameters once, plus the
+        stochastic field latent when present — the dimension hierarchical
+        samplers actually operate in. Mirrors the accounting of
+        ``Fitter._initialize_unbounded``; agreement with the engine's
+        ``d_total`` is asserted in
+        ``tests/inference/test_noise_broadcast_fix_1303.py``.
+        """
+        import numpy as np
+
+        total = 0
+        for name in self.free_params:
+            shape = self.param_init_shape(name)
+            total += int(np.prod(shape)) if shape else 1
+        if self.stochastic:
+            psd_shape = getattr(self, "psd_xi_init_shape", None) or (self._template.n_grid,)
+            if callable(psd_shape):
+                psd_shape = psd_shape()
+            total += int(np.prod(psd_shape))
+        return total
+
+    @property
     def stochastic(self) -> bool:
         return self._template.stochastic
 

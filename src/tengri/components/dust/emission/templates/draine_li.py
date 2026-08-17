@@ -78,11 +78,11 @@ class DraineLi2007IRSEDComponent(EmissionComponent):
         **JIT-compatible**: no, deliberately — runs at build time.
         """
         del wave
-        from tengri.components.dust.emission.emission import _find_data_file
+        from tengri._data_setup import find_data_str
         from tengri.components.dust.emission_templates import load_draine_li_templates
 
         for fname in ("dl07_templates_v2.h5", "dl07_templates.h5"):
-            path = _find_data_file(fname)
+            path = find_data_str(fname)
             if path is not None:
                 return load_draine_li_templates(path)
         return None
@@ -189,11 +189,11 @@ class DraineLi2014IRSEDComponent(EmissionComponent):
         arrays reach ``predict`` as a traced argument (#1649).
         """
         del wave
-        from tengri.components.dust.emission.emission import _find_data_file
+        from tengri._data_setup import find_data_str
         from tengri.components.dust.emission_templates import load_dl14_templates
 
         for fname in ("dl14_templates_v2.h5", "dl14_templates.h5"):
-            path = _find_data_file(fname)
+            path = find_data_str(fname)
             if path is not None:
                 return load_dl14_templates(path)
         return None

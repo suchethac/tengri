@@ -764,3 +764,22 @@ def sqrt_power_moderate(d_log_age, drw_params_moderate):
         drw_params_moderate["psd_sigma"],
         drw_params_moderate["psd_tau_yr"],
     )
+
+
+@pytest.fixture
+def missing_data_in(monkeypatch):
+    """Simulate missing data files for ONE module's lookups (#1693).
+
+    Usage: missing_data_in("tengri.components.dust.emission") patches
+    that module's `find_data_str` to return None, isolating the module
+    from the real data-lookup path while keeping all other modules intact.
+    """
+    import importlib
+
+    def _apply(module_path: str):
+        """Patch find_data_str in a specific module to return None."""
+        mod = importlib.import_module(module_path)
+        monkeypatch.setattr(mod, "find_data_str", lambda *a, **k: None)
+        return mod
+
+    return _apply

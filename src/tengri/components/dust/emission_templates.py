@@ -33,6 +33,7 @@ from dataclasses import dataclass
 
 import jax.numpy as jnp
 
+from tengri._data_setup import find_data_str
 from tengri.utils.grid_interp import loglog_integral, resample_template
 from tengri.utils.physics_constants import (
     AA_TO_CM as _AA_TO_CM,
@@ -90,21 +91,6 @@ def _pdr_luminosity_weight(umin, umax, alpha):
         (x - 1.0) / lnx,
         jnp.where(near2, x * lnx / (x - 1.0), general),
     )
-
-
-# ── Template search paths ─────────────────────────────────────────
-
-
-def _find_data_file(filename: str) -> str | None:
-    """Search standard data directories for a template file.
-
-    Delegates to ``tengri._data_setup.find_data``, which is a superset of
-    the package-anchored and cwd-relative candidates this used to hold, and
-    additionally honors ``$TENGRI_DATA_DIR`` (#1431).
-    """
-    from tengri._data_setup import find_data_str
-
-    return find_data_str(filename)
 
 
 # Import DUST_EMISSION_MODELS from emission.py after module initialization
@@ -2618,7 +2604,7 @@ def _make_lazy_loader(
             # Try v2 HDF5 first (improved grid), then canonical HDF5
             stem = template_filename.rsplit(".", 1)[0]
             v2_name = stem + "_v2.h5"
-            path = _find_data_file(v2_name) or _find_data_file(template_filename)
+            path = find_data_str(v2_name, template_filename)
             if path is not None:
                 from . import emission
 
@@ -2646,25 +2632,13 @@ def _make_lazy_loader(
 
 
 # --- DL07: tries v2 HDF5 first, then legacy .h5 ---
-def _find_dl07_templates() -> str | None:
-    """Find DL07 template file, preferring v2 HDF5 over the legacy version.
-
-    ``find_data_str`` is name-major -- the first *filename* that exists
-    anywhere wins -- which is exactly the preference this used to hand-roll
-    (#1431).
-    """
-    from tengri._data_setup import find_data_str
-
-    return find_data_str("dl07_templates_v2.h5", "dl07_templates.h5")
-
-
 def _dl07_lazy_wrapper(*args, **kwargs):
     """Draine & Li (2007) — auto-loads tabulated templates on first call."""
     from . import emission
 
     if "draine_li2007" not in _resolved:
         _resolved.add("draine_li2007")
-        path = _find_dl07_templates()
+        path = find_data_str("dl07_templates_v2.h5", "dl07_templates.h5")
         if path is not None:
             tabulated = create_dl07_from_grid(path)
             emission.DUST_EMISSION_MODELS["draine_li2007"] = tabulated

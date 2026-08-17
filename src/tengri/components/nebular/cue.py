@@ -786,8 +786,10 @@ def predict_all_lines(
     # +51-dex `gas_logq = logU` bug fixed in #477 produced near-physical
     # silently-wrong output rather than blatantly-saturated output.
     exponent = log_lum_sorted - gas_logq + gas_logqion - _LOG_LSUN
-    exponent_safe = jnp.clip(exponent, -50.0, representable_exponent(50.0))
-    luminosities = 10.0**exponent_safe
+    # Double-where guard to prevent NaN/inf propagation through 10.0**clip VJP in f32 (#1719)
+    finite = jnp.isfinite(exponent)
+    exponent_safe = jnp.where(finite, jnp.clip(exponent, -50.0, representable_exponent(50.0)), 0.0)
+    luminosities = jnp.where(finite, 10.0**exponent_safe, 0.0)
 
     return wav_sorted, luminosities
 
@@ -860,7 +862,10 @@ def predict_continuum(
     # from ±100 to ±50 dex in this revision — see predict_all_lines for the
     # full rationale (#477 follow-up).
     exponent = log_spec_sorted - gas_logq + gas_logqion - _LOG_LSUN
-    luminosity = 10.0 ** jnp.clip(exponent, -50.0, representable_exponent(50.0))
+    # Double-where guard to prevent NaN/inf propagation through 10.0**clip VJP in f32 (#1719)
+    finite = jnp.isfinite(exponent)
+    exponent_safe = jnp.where(finite, jnp.clip(exponent, -50.0, representable_exponent(50.0)), 0.0)
+    luminosity = jnp.where(finite, 10.0**exponent_safe, 0.0)
 
     # Zero out wavelengths below Lyman limit (Cue convention)
     luminosity = jnp.where(wav_sorted > 911.6, luminosity, 0.0)

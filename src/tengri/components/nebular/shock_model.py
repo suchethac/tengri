@@ -112,6 +112,18 @@ class ShockNebular(SEDModelComponent):
     screen. A model may run shock alone (``neb={'type':'none'}`` + ``shock``),
     photoionization alone, or both together.
 
+    **Dust attenuation** (#1434): shock emission is attenuated by the two-component
+    dust screen (young-limit: ``tau_bc·k_bc + tau_diff·k_diff``) the same way as
+    nebular continuum. This is defensible for star-formation-linked shocks (``norm='frac'``
+    mode), which originate in young stellar populations behind the birth cloud. For
+    AGN outflow or NLR shocks (``norm='lhalpha'`` mode), the screen geometry is an
+    approximation — MAPPINGS traces often originate in partially or fully unobscured
+    AGN-driven outflows, so the birth-cloud dust in front of them is not the physical
+    situation. Measure the effect with synthetic fixtures before using shock in
+    conjunction with high-optical-depth dust models. Single-component dust models
+    (single-screen attenuation) are unaffected: they screen the total ``sed_intrinsic``
+    and have no separate shocked-gas treatment.
+
     References
     ----------
     .. [1] M. A. Allen et al., "The MAPPINGS III Library of Fast Radiative

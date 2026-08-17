@@ -229,14 +229,14 @@ class TestSchreiber2018NotNoOp:
     component passes ``dust_T=`` / ``dust_f_pah=`` and the knobs move the SED."""
 
     def _component(self):
-        from tengri.components.dust.emission_templates import _find_data_file
+        from tengri._data_setup import find_data_str
         from tengri.components.sed_model_component import _REGISTRY
 
         # Gate on the grid file DIRECTLY (not preload — which is lazy and does
         # not raise on a missing grid; a first predict without the grid leaves
         # the schreiber2018 lazy loader in an inconsistent state that pollutes
         # later tests). Skip before touching the loader when the grid is absent.
-        if _find_data_file("schreiber2018_templates.h5") is None:
+        if find_data_str("schreiber2018_templates.h5") is None:
             pytest.skip("schreiber2018 template grid not available")
         return _REGISTRY["schreiber2018"]()
 

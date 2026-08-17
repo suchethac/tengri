@@ -61,19 +61,6 @@ pytestmark = pytest.mark.contract
 #: make the collapse contract the filter axis. Fix both together.
 DEAD_AXIS_NAMES: dict[str, frozenset[str]] = {
     "tengri.components.agn.qsogen_precompute": frozenset({"agn_plslp1", "agn_ebv"}),
-    "tengri.components.nebular.cb19_precompute": frozenset(
-        {
-            "log_OH_total",
-            "log_age_yr_ssp",
-            "log_U",
-            "log_nH",
-            "log_CO",
-            "dNO",
-            "HbFrac",
-        }
-    ),
-    "tengri.components.nebular.cloudy_precompute": frozenset({"log_age"}),
-    "tengri.components.nebular.mappings_photo_precompute": frozenset({"log_age", "neb_logn"}),
 }
 
 #: Modules whose dead names still collapse, because they pass ``defaults=`` to
@@ -163,9 +150,21 @@ def _modules_with_axes() -> dict[str, tuple[str, ...]]:
 
 
 def _dead_names(module_path: str) -> frozenset[str]:
-    """Declared axis names of ``module_path`` that no ``Parameters`` can hold."""
+    """Declared axis names of ``module_path`` that no ``Parameters`` can hold.
+
+    An axis name is considered dead if it is not in the declarable parameter set
+    AND not in the module's INTERNAL_AXES (intentionally internal grid-axis labels).
+    """
+    import importlib
+
     declarable = _declarable_names()
-    return frozenset(n for n in _modules_with_axes()[module_path] if n not in declarable)
+    axis_names = _modules_with_axes()[module_path]
+
+    # Load the module and check for INTERNAL_AXES
+    mod = importlib.import_module(module_path)
+    internal_axes = getattr(mod, "INTERNAL_AXES", frozenset())
+
+    return frozenset(n for n in axis_names if n not in declarable and n not in internal_axes)
 
 
 def test_the_census_is_not_empty():
@@ -240,3 +239,122 @@ def test_most_modules_resolve_their_axis_names():
         f"only {len(healthy)}/{len(modules)} precompute modules resolve every "
         f"declared axis name: {sorted(set(modules) - set(healthy))} (#1738)"
     )
+
+
+@pytest.mark.contract
+def test_internal_axes_do_not_warn():
+    """Axes declared in INTERNAL_AXES do not trigger DeadPrecomputeAxisWarning.
+
+    Verify that collapse_fixed_axes silently skips internal axes without
+    issuing warnings, even when they don't match valid parameter names.
+    """
+    import warnings
+
+    # Mock a simple PreintegratedGrid with axes
+    import jax.numpy as jnp
+    import numpy as np
+
+    from tengri.config.exceptions import DeadPrecomputeAxisWarning
+    from tengri.forward.precompute.templates import collapse_fixed_axes
+    from tengri.utils.grid_interp import PreintegratedGrid
+
+    axis_vals = (np.array([1.0, 2.0]), np.array([3.0, 4.0, 5.0]))
+    axes = tuple(jnp.asarray(ax) for ax in axis_vals)
+    phot = np.zeros((2, 3, 4))  # Two grid dimensions + 4 filters
+
+    preint = PreintegratedGrid(
+        phot=phot,
+        moment=None,
+        axes=axes,
+        edges=(None, None),
+        effective_wavelengths=jnp.zeros(4),
+        effective_wavelengths_rest=jnp.zeros(4),
+        log10_flux_scale=0.0,
+        n_filters=4,
+    )
+
+    # Mock a Parameters object
+    class MockParams:
+        valid_param_names = frozenset({"some_real_param"})
+        free_params = ()
+
+        def get_fixed_values(self):
+            return {}
+
+    # Collapse with internal_axes: should not warn
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        result = collapse_fixed_axes(
+            preint,
+            ("internal_axis_1", "internal_axis_2"),
+            MockParams(),
+            internal_axes=frozenset({"internal_axis_1", "internal_axis_2"}),
+            origin="test_adapter",
+        )
+        # Should be no warnings when axes are in internal_axes
+        dead_warnings = [x for x in w if issubclass(x.category, DeadPrecomputeAxisWarning)]
+        assert len(dead_warnings) == 0, (
+            f"Expected zero warnings for internal axes, but got {len(dead_warnings)}: "
+            f"{[str(x.message) for x in dead_warnings]}"
+        )
+
+
+@pytest.mark.contract
+def test_partially_dead_axis_params_warn_per_name():
+    """One dead + one live axis parameter → exactly one warning naming the dead one.
+
+    Verify that collapse_fixed_axes warns once PER dead name, not once per
+    module. A mix of live and dead names should warn only for the dead one.
+    """
+    import warnings
+
+    # Mock a simple PreintegratedGrid with axes
+    import jax.numpy as jnp
+    import numpy as np
+
+    from tengri.config.exceptions import DeadPrecomputeAxisWarning
+    from tengri.forward.precompute.templates import collapse_fixed_axes
+    from tengri.utils.grid_interp import PreintegratedGrid
+
+    axis_vals = (np.array([1.0, 2.0]), np.array([3.0, 4.0, 5.0]))
+    axes = tuple(jnp.asarray(ax) for ax in axis_vals)
+    phot = np.zeros((2, 3, 4))  # Two grid dimensions + 4 filters
+
+    preint = PreintegratedGrid(
+        phot=phot,
+        moment=None,
+        axes=axes,
+        edges=(None, None),
+        effective_wavelengths=jnp.zeros(4),
+        effective_wavelengths_rest=jnp.zeros(4),
+        log10_flux_scale=0.0,
+        n_filters=4,
+    )
+
+    # Mock a Parameters object with one valid param
+    class MockParams:
+        valid_param_names = frozenset({"live_param"})
+        free_params = ()
+
+        def get_fixed_values(self):
+            return {}
+
+    # Collapse with one live and one dead name: should warn once for the dead one
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        result = collapse_fixed_axes(
+            preint,
+            ("live_param", "dead_param"),
+            MockParams(),
+            origin="test_adapter",
+        )
+        # Should warn exactly once, for "dead_param"
+        dead_warnings = [x for x in w if issubclass(x.category, DeadPrecomputeAxisWarning)]
+        assert len(dead_warnings) == 1, (
+            f"Expected exactly one warning for one dead name, but got {len(dead_warnings)}: "
+            f"{[str(x.message) for x in dead_warnings]}"
+        )
+        # Verify the warning names the dead parameter
+        assert "dead_param" in str(dead_warnings[0].message), (
+            f"Warning should name the dead parameter 'dead_param', got: {dead_warnings[0].message}"
+        )
