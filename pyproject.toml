@@ -138,6 +138,13 @@ docs = [
     "numpydoc>=1.5",
     "sphinx-copybutton>=0.5",
     "sphinx-design>=0.5",
+    # `docs/conf.py` lists "sphinx_gallery.gen_gallery" in `extensions`, so the
+    # build cannot start without it. This list and docs/requirements.txt were
+    # duplicates of each other and had drifted by exactly this one entry: CI
+    # installs the requirements file and was fine, while anyone following
+    # `pip install -e ".[docs]"` got a docs build that fails on import. The
+    # requirements file now installs this extra rather than restating it.
+    "sphinx-gallery>=0.15",
 ]
 
 [tool.setuptools.packages.find]

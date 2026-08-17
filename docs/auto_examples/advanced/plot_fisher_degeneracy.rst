@@ -29,7 +29,7 @@ metallicity. Adding NIR or MIR bands breaks the degeneracy by factors of
 Reference: Fisher Information Matrix in parameter estimation; see
 Conroy 2013 (ARA&A, 51, 393) for SED fitting context.
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-133
+.. GENERATED FROM PYTHON SOURCE LINES 13-122
 
 
 
@@ -50,7 +50,6 @@ Conroy 2013 (ARA&A, 51, 393) for SED fitting context.
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
-    from pathlib import Path
 
     import jax
     import jax.numpy as jnp
@@ -65,20 +64,12 @@ Conroy 2013 (ARA&A, 51, 393) for SED fitting context.
 
     ssp = tengri.load_ssp()
 
-    _FILTER_DIR = next(
-        (
-            str(d)
-            for d in [
-                Path("data/filters"),
-                Path("../data/filters"),
-                Path("../../data/filters"),
-                Path("../../../data/filters"),
-            ]
-            if d.exists()
-        ),
-        "data/filters",
-    )
-
+    # No cache_dir: tengri resolves each curve across its own data directories, so
+    # an example works from any working directory. This used to guess with a
+    # four-deep relative walk ending in a bare "data/filters" -- the literal #1486
+    # removed from the library for creating a stray cache beside whatever directory
+    # the caller started in. Its first candidate also selected the ten-curve copy
+    # that #1857 deleted, in preference to the 249 in data/filters/.
     FILTER_SETS = {
         "SDSS (5)": ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"],
         "+ NIR (8)": [
@@ -126,9 +117,7 @@ Conroy 2013 (ARA&A, 51, 393) for SED fitting context.
     sigmas = {}
     for fname, filters in FILTER_SETS.items():
         try:
-            obs = tengri.Observation(
-                photometry=tengri.Photometry.from_names(filters, cache_dir=_FILTER_DIR)
-            )
+            obs = tengri.Observation(photometry=tengri.Photometry.from_names(filters))
             mdl = tengri.SEDModel.build(
                 ssp,
                 observation=obs,
@@ -168,7 +157,7 @@ Conroy 2013 (ARA&A, 51, 393) for SED fitting context.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 11.130 seconds)
+   **Total running time of the script:** (0 minutes 4.785 seconds)
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_fisher_degeneracy.py:

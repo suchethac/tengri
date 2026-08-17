@@ -16,7 +16,6 @@ import os
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
 import warnings
-from pathlib import Path
 
 import jax
 import jax.numpy as jnp
@@ -31,24 +30,10 @@ warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
 ssp = tengri.load_ssp()
 
-_FILTER_DIR = next(
-    (
-        str(d)
-        for d in [
-            Path("data/filters"),
-            Path("../data/filters"),
-            Path("../../data/filters"),
-            Path("../../../data/filters"),
-        ]
-        if d.exists()
-    ),
-    "data/filters",
-)
-
-phot = tengri.Photometry.from_names(
-    ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"],
-    cache_dir=_FILTER_DIR,
-)
+# No cache_dir: tengri resolves each curve across its own data directories, so
+# an example works from any working directory. See plot_fisher_degeneracy.py
+# for why the four-deep relative walk this replaces was a hazard.
+phot = tengri.Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
 wave_rest = jnp.linspace(3800.0, 9200.0, 200)
 z = 0.1
 wave_obs = wave_rest * (1 + z)

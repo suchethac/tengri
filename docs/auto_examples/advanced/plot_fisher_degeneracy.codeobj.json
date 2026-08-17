@@ -35,29 +35,6 @@
    "name": "list"
   }
  ],
- "Path": [
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "pathlib",
-   "module_short": "pathlib",
-   "name": "Path"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "pathlib",
-   "module_short": "pathlib",
-   "name": "PurePath"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "pathlib",
-   "module_short": "pathlib",
-   "name": "Path"
-  }
- ],
  "_": [
   {
    "is_class": false,
@@ -65,15 +42,6 @@
    "module": "builtins",
    "module_short": "builtins",
    "name": "list"
-  }
- ],
- "_FILTER_DIR": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "str"
   }
  ],
  "ax": [
