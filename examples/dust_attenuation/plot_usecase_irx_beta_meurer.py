@@ -187,6 +187,12 @@ print(f"\nBuilding {N_MODELS} models with τ_diff ∈ [0, 4]...")
 irx_values = []
 beta_values = []
 tau_diff_used = []
+# Five separate `continue` paths below can drop a τ_diff: the build raising, the
+# predict raising, too few UV-slope points, a non-finite β, and a non-finite
+# IRX. Any one of them skipping a point is fine. All of them together emptying
+# the sweep is not, and the single guard after the loop covers every route --
+# what matters downstream is that there is a curve, not which exit removed it.
+first_failure: Exception | None = None
 
 for tau_diff in TAU_DIFF_VALUES:
     # Build model with this τ_diff
@@ -209,6 +215,8 @@ for tau_diff in TAU_DIFF_VALUES:
             redshift=tengri.Fixed(Z_GALAXY),
         )
     except Exception as e:
+        if first_failure is None:
+            first_failure = e
         print(f"  τ_diff={tau_diff:.2f}: build failed ({str(e)[:50]}...)")
         continue
 
@@ -222,6 +230,8 @@ for tau_diff in TAU_DIFF_VALUES:
         wave_rest = np.asarray(model.wavelengths)
         l_nu_rest = np.asarray(sed_rest.rest_sed())
     except Exception as e:
+        if first_failure is None:
+            first_failure = e
         print(f"  τ_diff={tau_diff:.2f}: predict failed ({str(e)[:50]}...)")
         continue
 
@@ -273,6 +283,18 @@ beta_values = np.array(beta_values)
 tau_diff_used = np.array(tau_diff_used)
 
 print(f"\nComputed {len(irx_values)} models successfully.")
+
+if irx_values.size == 0:
+    detail = (
+        f"First failure: {type(first_failure).__name__}: {first_failure}"
+        if first_failure is not None
+        else "No exception was raised — every point was dropped by a finiteness "
+        "or coverage test; see the per-τ lines above."
+    )
+    raise RuntimeError(
+        f"all {len(TAU_DIFF_VALUES)} τ_diff values were skipped, so there is no "
+        f"IRX-β relation to plot. {detail}"
+    ) from first_failure
 
 # ============================================================================
 # Plot: IRX–β diagram with Meurer+1999 relation overlay

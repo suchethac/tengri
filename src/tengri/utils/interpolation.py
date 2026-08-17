@@ -12,7 +12,7 @@ and should not be replaced.
 References
 ----------
 
-- Hearin et al. 2023, Open J. Astrophysics, 6, 1 (DSPS)
+- Hearin et al. 2023, MNRAS, 521, 1741 (DSPS)
 
 """
 
@@ -293,17 +293,74 @@ def _check_uniform(grid: jnp.ndarray) -> None:
         Candidate grid node values.
     """
     try:
-        g = np.asarray(grid, dtype=float)
+        g0 = np.asarray(grid)
     except Exception:  # a JAX tracer cannot be converted — nothing to check
         return
+    if not np.issubdtype(g0.dtype, np.floating):
+        return
+    g = g0.astype(float)
     if g.ndim != 1 or g.size < 2:
         raise ValueError(f"grid must be 1-D with at least 2 nodes; got shape {g.shape}")
     d = np.diff(g)
-    if d[0] <= 0.0 or not np.allclose(d, d[0], rtol=1e-9, atol=0.0):
+    if d[0] <= 0.0 or not np.allclose(d, d[0], rtol=_uniform_rtol(g0), atol=0.0):
         raise ValueError(
             "compute_grid_window requires a uniform ascending grid; got spacings in "
-            f"[{d.min():.6g}, {d.max():.6g}]. Use compute_grid_weights for a non-uniform axis."
+            f"[{d.min():.6g}, {d.max():.6g}] (tolerance {_uniform_rtol(g0):.3g} for "
+            f"{g0.dtype}). Use compute_grid_weights for a non-uniform axis."
         )
+
+
+def _uniform_rtol(grid: np.ndarray) -> float:
+    r"""Uniformity tolerance for *grid*, derived from its dtype rather than written.
+
+    Parameters
+    ----------
+    grid : ndarray, shape (n,)
+        Grid nodes **in their original dtype** — the tolerance depends on the
+        precision the grid was built in, so this must be called before any
+        upcast to float64.
+
+    Returns
+    -------
+    float
+        Relative tolerance for comparing adjacent spacings [dimensionless].
+
+    Notes
+    -----
+    A ``linspace`` is exactly uniform in exact arithmetic; stored in a finite
+    dtype its nodes carry absolute error up to :math:`\epsilon \max|g|`, so
+    adjacent differences carry up to twice that, and *relative* to the spacing
+    :math:`\Delta` the spread is
+
+    .. math::
+
+        \frac{\delta(\Delta)}{\Delta} \;\lesssim\; \frac{\epsilon \max|g|}{\Delta}
+
+    with :math:`\epsilon` the dtype's machine epsilon (dimensionless),
+    :math:`\max|g|` the largest node magnitude and :math:`\Delta` the nominal
+    spacing (same units as the grid). The factor 8 is headroom over that bound.
+
+    The former hardcoded ``rtol=1e-9`` was a float64 tolerance. Measured on the
+    z-grid ``linspace(0, 4, 494)``: float64 spreads by 5.5e-14 and passes, while
+    **float32 spreads by 2.9e-05 and fails** — so a genuinely uniform grid was
+    rejected in float32 and `compute_grid_window` raised on the default fit path
+    (``Fitter`` resolves ``approx="auto"`` to ``WavePrecomp``, whose z-table
+    reaches this guard). Same class as the float64 literals in
+    :func:`tengri.utils.scale.representable_floor` and its siblings: a numeric
+    constant that encodes an assumption about the number system, written rather
+    than derived (#1206).
+
+    **float64 is unchanged by construction**: the derived bound there is ~1e-13,
+    below the 1e-9 floor this keeps, so float64 grids are judged by exactly the
+    old tolerance.
+    """
+    eps = float(np.finfo(grid.dtype).eps)
+    g = np.asarray(grid, dtype=float)
+    d0 = abs(float(g[1] - g[0]))
+    if d0 == 0.0:
+        return 1e-9
+    scale = float(np.max(np.abs(g)))
+    return max(1e-9, 8.0 * eps * scale / d0)
 
 
 def compute_grid_window(
@@ -390,9 +447,9 @@ def compute_grid_window(
 
     References
     ----------
-    .. [1] Hearin, A. P., Chaves-Montero, J., Becker, M. R., Alarcon, A. 2023,
-       "DSPS: Differentiable stellar population synthesis", The Open Journal of
-       Astrophysics, 6, 1. arXiv:2112.06830. DOI: 10.21105/astro.2112.06830
+    .. [1] Hearin, A. P., Chaves-Montero, J., Alarcon, A., Becker, M. R.,
+       Benson, A. 2023, "DSPS: Differentiable stellar population synthesis",
+       MNRAS, 521, 1741. arXiv:2112.06830. DOI: 10.1093/mnras/stad456
 
     Examples
     --------

@@ -17,10 +17,18 @@ template to copy. Each states its own caveats up front.
   family, stellar isochrone, dust law, and nebular treatment, then combined by
   evidence weight — putting a number on how much the choice of model
   contributes to the error budget.
+- **{doc}`apple_mps`**: running the forward model and fits on the Apple GPU via
+  the community `jax-mps` backend. Needs a JAX version tengri does not pin and
+  runs in pure float32, so it is a feasibility study rather than a
+  recommendation — and it concludes against the GPU for single-galaxy work,
+  which is the useful part. Measured on an M4 Pro: CPU wins by 59x on a
+  gradient and 86x on a MAP fit, batches of a few hundred reach parity, and the
+  run-to-run spread on MPS exceeds the differences between workloads.
 
 ```{toctree}
 :maxdepth: 1
 
 stochastic_sfh_recovery
 multimodel_bma_candels
+apple_mps
 ```

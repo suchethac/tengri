@@ -14,7 +14,7 @@ References
 ----------
 
 - Zacharegkas et al. 2025, arXiv:2506.19919 (photometric precomputation)
-- Hearin et al. 2023, Open J. Astrophysics, 6, 1 (triweight kernel / DSPS)
+- Hearin et al. 2023, MNRAS, 521, 1741 (triweight kernel / DSPS)
 
 """
 

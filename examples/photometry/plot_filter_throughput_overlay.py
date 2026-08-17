@@ -116,6 +116,9 @@ ax_sed.legend(frameon=False, loc="upper right", fontsize=10)
 ax_sed.grid(True, alpha=0.2, which="both")
 
 # Overlay filter transmission curves
+loaded = 0
+first_failure: Exception | None = None
+
 for label, filter_names, color in FILTERS_BY_GROUP:
     for fname in filter_names:
         try:
@@ -128,11 +131,24 @@ for label, filter_names, color in FILTERS_BY_GROUP:
                 alpha=0.35,
                 lw=0,
             )
-        except Exception:
+            loaded += 1
+        except Exception as e:
+            if first_failure is None:
+                first_failure = e
             continue
 
     # Legend handle: one opaque rectangle per group
     ax_filt.fill_between([], [], color=color, alpha=0.6, label=label, edgecolor="none")
+
+# The legend handles above are `fill_between([], [], ...)` -- collections with
+# no data. Every filter failing therefore leaves a panel that still has artists
+# and a complete legend, so only a count of real loads detects it.
+if loaded == 0:
+    raise RuntimeError(
+        "no filter transmission curve could be loaded, so the throughput panel "
+        f"is empty behind a full legend. First failure: "
+        f"{type(first_failure).__name__}: {first_failure}"
+    ) from first_failure
 
 ax_filt.set_ylim(0, 0.8)
 ax_filt.set_xlabel(r"Observed wavelength $\lambda$ [$\mathrm{\AA}$]", fontsize=11)

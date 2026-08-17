@@ -90,6 +90,15 @@
    "name": "builtin_function_or_method"
   }
  ],
+ "abs_mags.size": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "int"
+  }
+ ],
  "ax": [
   {
    "is_class": false,
@@ -711,6 +720,15 @@
    "module": "matplotlib",
    "module_short": "matplotlib",
    "name": "Artist.tight_layout"
+  }
+ ],
+ "first_failure": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "NoneType"
   }
  ],
  "flux_phot": [
