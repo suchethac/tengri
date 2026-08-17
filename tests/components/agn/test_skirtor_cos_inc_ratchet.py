@@ -25,7 +25,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-pytestmark = pytest.mark.unit
+pytestmark = [pytest.mark.unit, pytest.mark.gradient]
 
 # Locate the SKIRTOR grid, or skip if missing
 _SKIRTOR_GRID_DIR = Path(__file__).resolve().parents[3] / "data"
