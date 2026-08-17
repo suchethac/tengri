@@ -2197,12 +2197,12 @@ def _every_menu_lister() -> tuple:
     for attr in (*curated, *export_only):
         if not attr.startswith("list_") or attr in seen:
             continue
-        # Exclude meta-listers: list_all calls _every_menu_lister, creating
-        # circular recursion when _every_menu_lister tries to discover list_all
-        # as a menu lister (#853). They return dicts, not lists of dicts,
-        # so they fail the shape check below anyway, but be explicit to avoid
-        # calling them during discovery.
-        if attr in ("list_all", "list_properties"):
+        # Exclude the one meta-lister: list_all calls _every_menu_lister, so
+        # discovering it as a menu lister recurses until the stack is nearly
+        # exhausted (measured depth 988 of 1000; #853). Every real menu —
+        # list_properties included — must stay in the sweep: describe() resolves
+        # a name only if some swept menu advertises it.
+        if attr == "list_all":
             continue
         fn = getattr(tengri, attr, None)
         if not callable(fn):
