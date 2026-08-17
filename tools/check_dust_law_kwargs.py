@@ -25,6 +25,18 @@ site and no hand-rolled one.
 So this guard enforces the shape. Build the dict with
 ``resolve_bc_diff_law_params`` (or the caller's own resolver) and splat it.
 
+Two forms of the same rule, because a kwargs-only check has an obvious way out —
+fill a dict in by hand and splat *that*, and every call site reads as correct:
+
+1. no call may name a shape parameter as an explicit keyword;
+2. no dict literal may carry one as a key, outside the files that legitimately
+   *enumerate* parameters (registries, priors, name-translation tables).
+
+Rule 2 is not hypothetical. ``attenuate_emission`` splats honestly and is still
+wrong, because the dict it splats is built from a signature that has no
+``dust_delta`` or ``dust_Rv`` to offer (#1858). Rule 1 catches that only at its
+callers; rule 2 catches it where it lives.
+
 Dependencies: standard library only. The ``lint`` job installs ruff and nothing
 else, so this must not import ``yaml`` or ``tengri``. AST rather than grep: a
 call's keywords routinely sit on different lines from its callee, and a
@@ -74,6 +86,17 @@ EXEMPT_FILES: dict[str, str] = {
     ),
 }
 
+# Files that legitimately write shape parameters as dict *keys*: registries,
+# prior declarations and name-translation tables all enumerate the parameters
+# rather than evaluating a law with them. Applies to the dict-literal check
+# only; these files are still checked for hand-bound call kwargs.
+DECLARATION_FILES: dict[str, str] = {
+    "components/dust/laws/_registry.py": "declares which parameters each law accepts",
+    "components/dust/priors.py": "declares the priors, keyed by parameter name",
+    "parameters/translate.py": "maps external parameter names onto tengri's",
+    "presets/synthesizer.py": "a preset's parameter values, not a law evaluation",
+}
+
 # Individual sites that are deliberately hand-bound. Each needs a written
 # reason — a bare 'we know' entry here is how the fourth instance ships.
 #
@@ -97,6 +120,19 @@ ALLOWLIST: dict[str, str] = {
         "mock-generation path: binds `n_slope=` beside a `**dust_kwargs` splat. "
         "Same shape as the real defects and worth folding into the #1858 sweep, "
         "but it drives `analysis/simulate.py` fixtures rather than a fit"
+    ),
+}
+
+# Hand-built parameter dicts that are then splatted. Splatting a dict you filled
+# in by hand is the same defect wearing the correct shape, so the kwargs check
+# above cannot see it; this is where #1858 actually lives.
+DICT_ALLOWLIST: dict[str, str] = {
+    "forward/emission_helpers.py": (
+        "#1858, OPEN — `attenuate_emission` builds `dust_kw` from its own two "
+        "parameters and splats that. The splat is honest; the SIGNATURE is "
+        "partial, so `dust_delta`/`dust_Rv` cannot be threaded at all. This is "
+        "the defect's real location; its callers in `sed_model.py` are the "
+        "symptom. Remove this entry with the signature fix"
     ),
 }
 
@@ -142,6 +178,26 @@ def scan(path: Path) -> list[tuple[int, str, set[str]]]:
     return found
 
 
+def scan_dict_literals(path: Path) -> list[tuple[int, set[str]]]:
+    """Dict literals in one file that carry shape parameters as keys."""
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+    except SyntaxError:
+        return []
+
+    found = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Dict):
+            continue
+        keys = {
+            k.value for k in node.keys if isinstance(k, ast.Constant) and isinstance(k.value, str)
+        }
+        named = keys & SHAPE_KWARGS
+        if named:
+            found.append((node.lineno, named))
+    return found
+
+
 def main() -> int:
     if not SRC.is_dir():
         print(f"ERROR: cannot read {SRC}", file=sys.stderr)
@@ -167,11 +223,47 @@ def main() -> int:
                 "      added later reaches this site too."
             )
 
+    seen_dicts: set[str] = set()
+    for path in sorted(SRC.rglob("*.py")):
+        rel = relpath(path)
+        if rel in EXEMPT_FILES or rel in DECLARATION_FILES:
+            continue
+        for lineno, named in scan_dict_literals(path):
+            if rel in DICT_ALLOWLIST:
+                seen_dicts.add(rel)
+                continue
+            listed = ", ".join(sorted(named))
+            violations.append(
+                f"{rel}:{lineno}  {{{listed}: ...}}\n"
+                "      A hand-built law-parameter dict. Splatting a dict you filled in\n"
+                "      by hand wears the right shape and carries the wrong contents —\n"
+                "      whatever its author remembered. Get it from\n"
+                "      `resolve_bc_diff_law_params`, or add this file to\n"
+                "      DECLARATION_FILES if it enumerates parameters rather than\n"
+                "      evaluating a law with them."
+            )
+
     for key in sorted(set(ALLOWLIST) - seen_allowlist):
         violations.append(
             f"stale allowlist entry `{key}` in {Path(__file__).name}: the site is\n"
             "      gone. Drop the entry so the next real one is not hidden behind it."
         )
+
+    for key in sorted(set(DICT_ALLOWLIST) - seen_dicts):
+        violations.append(
+            f"stale DICT_ALLOWLIST entry `{key}` in {Path(__file__).name}: the\n"
+            "      hand-built dict is gone. Drop the entry."
+        )
+
+    for key in sorted(DECLARATION_FILES):
+        path = SRC / key
+        if not path.exists() or not scan_dict_literals(path):
+            violations.append(
+                f"stale DECLARATION_FILES entry `{key}` in {Path(__file__).name}:\n"
+                "      the file no longer declares shape parameters as dict keys, so the\n"
+                "      exemption now covers nothing and would silently excuse the next\n"
+                "      real one. Drop the entry."
+            )
 
     if violations:
         print("Dust-law shape parameters bound by hand:\n", file=sys.stderr)
@@ -179,9 +271,12 @@ def main() -> int:
             print(f"  - {violation}\n", file=sys.stderr)
         return 1
 
+    n_exempt = len(EXEMPT_FILES) + len(DECLARATION_FILES)
+    n_dicts = len(DICT_ALLOWLIST)
     print(
-        f"OK: every dust-law evaluation splats its parameters "
-        f"({len(ALLOWLIST)} documented exceptions)."
+        f"OK: every dust-law evaluation takes its parameters from a resolved dict "
+        f"({len(ALLOWLIST)} call sites and {n_dicts} hand-built "
+        f"dict{'' if n_dicts == 1 else 's'} allowlisted, {n_exempt} files exempt)."
     )
     return 0
 
