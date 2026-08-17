@@ -64,7 +64,7 @@ def _grid(n_axes: int = 2, *, phot_grid_dims: int | None = None) -> Preintegrate
         edges=tuple(edges_for_grid(a) for a in axes),
         effective_wavelengths=jnp.linspace(4000.0, 8000.0, N_FILT),
         effective_wavelengths_rest=jnp.linspace(4000.0, 8000.0, N_FILT),
-        flux_scale=1.0,
+        log10_flux_scale=0.0,
         n_filters=N_FILT,
     )
 
