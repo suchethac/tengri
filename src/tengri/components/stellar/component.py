@@ -303,7 +303,23 @@ def _apply_gp_field(sfr_history, params, n_grid, log_age_grid, centering: float 
     return sfr_history * jnp.exp(gp_x - k0_half)
 
 
-def _refine_sfh_table_ages(ssp_ages_yr, factor: int = 16):
+#: Dense-integrand sub-samples per SSP age interval for SFH families whose
+#: integrand is piecewise-**constant** (continuity / dirichlet / post-starburst)
+#: or smooth-parametric. Every bin edge is a step, and resolving a step costs
+#: samples; at 16 the quadrature error is already the dominant term in the
+#: photometry budget, so this must not be lowered without re-measuring. See
+#: :func:`_refine_sfh_table_ages` Notes for the numbers.
+INTEGRAND_FACTOR_PARAMETRIC = 16
+
+#: Same, for a **tabulated** history. Half the parametric value: a table is
+#: piecewise-*linear* between nodes that #765 already injects as quadrature
+#: knots, so it converges faster, and at 8 its quadrature error sits below the
+#: ``WavePrecomp`` error that every fit surface accepts anyway (#1747). Worth
+#: 1.47x the FLOPs and 1.61x the bytes of the whole forward model.
+INTEGRAND_FACTOR_TABULATED = 8
+
+
+def _refine_sfh_table_ages(ssp_ages_yr, factor: int = INTEGRAND_FACTOR_PARAMETRIC):
     """Dense log-spaced age grid spanning the SSP template ages [yr] (#758).
 
     Non-parametric SFHs (continuity / dirichlet / post-starburst) are
@@ -344,16 +360,39 @@ def _refine_sfh_table_ages(ssp_ages_yr, factor: int = 16):
 
     Convergence is second order from 32 to 8 (the error falls by ~4x per
     doubling) and then plateaus near 2.6e-3 mag on a separate, saturating
-    error. So ``16`` is not a round number: it is roughly where halving the
-    grid stops being cheap in accuracy. Dropping to ``8`` is a real 1.47x on
-    FLOPs and 1.61x on bytes for ~2 mmag worst case — a science trade, not a
-    free win, which is why it is not the default.
+    error.
 
-    The grid does **not** need to carry the tabulated history's own knots.
-    Merging them (so every kink in the piecewise-linear SFR is a quadrature
-    node) was measured on the same fixture and left the worst-case error
-    unchanged to three significant figures at every factor, while adding
-    parcels. The dominant error is not knot placement.
+    **Why the two families get different factors.** The number to compare
+    against is not zero, it is the error the rest of the pipeline already
+    contributes — chiefly ``WavePrecomp``, which since #1747 is the default on
+    every fit surface. Measured on one fixture, 11 bands, changing one thing at
+    a time (2026-08-17):
+
+    ==================================  ==============  ==============
+    error source                        tabulated       non-parametric
+    ==================================  ==============  ==============
+    WavePrecomp (LUT vs exact), median         6.7e-05         7.6e-05
+    integrand at ``factor=16``, median         8.6e-06         2.3e-04
+    integrand at ``factor=8``, median          2.3e-05         7.3e-04
+    ==================================  ==============  ==============
+
+    For a **tabulated** history, ``factor=8`` sits *below* the LUT error, so the
+    extra refinement buys precision the LUT immediately discards —
+    :data:`INTEGRAND_FACTOR_TABULATED` is 8. For a **non-parametric** family the
+    integrand is already the dominant term at 16, and 8 makes it ~10x the LUT
+    error, so :data:`INTEGRAND_FACTOR_PARAMETRIC` stays 16.
+
+    That asymmetry is a property of the integrands, not a fudge. A tabulated
+    history is piecewise-*linear* between nodes that are themselves injected as
+    quadrature knots (#765), so the only residual is curvature of the CIC hat
+    against the measure. A binned SFH is piecewise-*constant*: every bin edge is
+    a step, and resolving a step costs samples that resolving a kink does not.
+
+    Injecting the tabulated history's own knots is **already done** by #765 in
+    :func:`_cic_integrand` — ``edges_yr = tab_lbt_yr`` — which is why adding
+    them a second time was measured to change the worst-case error not at all.
+    Read that null result as "already handled", not as "knot placement does not
+    matter".
 
     **Age-0 anchor templates** (#1016, #1030): a leading age = 0 template
     (bc03 stelib) would give ``log_lo = -inf`` and collapse the grid to
@@ -505,8 +544,13 @@ def _warn_if_dsps_kernel_truncates_history(ssp_ages_yr, sfh_fn, sfh_kwargs, tab_
     """
     if tab_lbt_yr is None:
         return
+    # Tabulated-only (returns above otherwise), so this must use the tabulated
+    # resolution — the warning has to describe the grid actually integrated.
     fine_age_yr, _top = _extend_integrand_to_history(
-        _refine_sfh_table_ages(ssp_ages_yr), tab_lbt_yr, ssp_ages_yr
+        _refine_sfh_table_ages(ssp_ages_yr, factor=INTEGRAND_FACTOR_TABULATED),
+        tab_lbt_yr,
+        ssp_ages_yr,
+        factor=INTEGRAND_FACTOR_TABULATED,
     )
     _warn_if_history_exceeds_ssp_grid(
         fine_age_yr,
@@ -548,13 +592,20 @@ def _cic_integrand(ssp_ages_yr, sfh_fn, sfh_kwargs, sfh_spec_fn, tab_lbt_yr):
     sfr : ndarray, shape (n,)
         SFR on that grid [Msun/yr].
     """
-    fine_age_yr = _refine_sfh_table_ages(ssp_ages_yr)
+    # Resolution is chosen per family, because their integrands are not the same
+    # shape: a table is piecewise-linear between knots #765 already injects, a
+    # binned family is piecewise-constant with a step at every bin edge. See
+    # :func:`_refine_sfh_table_ages` Notes for the measured error budget.
+    factor = INTEGRAND_FACTOR_TABULATED if tab_lbt_yr is not None else INTEGRAND_FACTOR_PARAMETRIC
+    fine_age_yr = _refine_sfh_table_ages(ssp_ages_yr, factor=factor)
     hi_yr = ssp_ages_yr[-1]
     if tab_lbt_yr is not None:
         # #1522: a table can carry mass older than the oldest template. Parametric
         # families renormalize past the grid edge, so they neither need this nor
         # should get it.
-        fine_age_yr, hi_yr = _extend_integrand_to_history(fine_age_yr, tab_lbt_yr, ssp_ages_yr)
+        fine_age_yr, hi_yr = _extend_integrand_to_history(
+            fine_age_yr, tab_lbt_yr, ssp_ages_yr, factor=factor
+        )
     # #765: inject the SFH's exact bin edges as knots so the step transitions of
     # binned SFHs are represented sharply. A tabulated SFH's own nodes ARE its
     # exact knots. Parametric families have no bin edges (None).

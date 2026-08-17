@@ -120,7 +120,7 @@ def test_composable_default_call_is_minimal() -> None:
 def test_full_composition_produces_grammar_shape() -> None:
     out = builders.agn.composable(
         _=FREE,
-        log_lbol=Uniform(43.0, 47.0),
+        log_lbol=Uniform(9.42, 13.42),
         disc=builders.agn.disc.multicolor(_=FREE),
         torus=builders.agn.torus.skirtor(_=FIXED),
         nlr=builders.agn.nlr.analytic(),
@@ -132,7 +132,7 @@ def test_full_composition_produces_grammar_shape() -> None:
     assert out["all_params"] is FREE
     assert out["disc"] == {"type": "multicolor", "all_params": FREE}
     assert out["torus"] == {"type": "skirtor", "all_params": FIXED}
-    assert out["log_lbol"] == Uniform(43.0, 47.0)
+    assert out["log_lbol"] == Uniform(9.42, 13.42)
 
 
 # ── Validation ────────────────────────────────────────────────────
@@ -145,7 +145,7 @@ def test_sub_block_kwarg_must_be_dict() -> None:
 
 def test_unknown_kwarg_raises_with_valid_lists() -> None:
     with pytest.raises(TypeError, match="composable") as exc:
-        builders.agn.composable(log_lboll=Uniform(43, 47))  # typo
+        builders.agn.composable(log_lboll=Uniform(9.42, 13.42))  # typo
     msg = str(exc.value)
     assert "log_lboll" in msg
     assert "log_lbol" in msg
@@ -169,7 +169,7 @@ def test_composable_round_trips_to_free_log_lbol() -> None:
     spec = parse_groups(
         sfh={"type": "dpl"},
         agn=builders.agn.composable(
-            log_lbol=Uniform(43, 47),
+            log_lbol=Uniform(9.42, 13.42),
             disc=builders.agn.disc.powerlaw(),
             torus=builders.agn.torus.skirtor(),
             nlr=builders.agn.nlr.analytic(),
@@ -296,6 +296,6 @@ def test_top_level_round_trip_makes_log_lbol_free() -> None:
     """Round-trip through parser must recognize top-level factory params."""
     spec = parse_groups(
         sfh={"type": "dpl"},
-        agn=builders.agn.simple(log_lbol=Uniform(43, 47)),
+        agn=builders.agn.simple(log_lbol=Uniform(9.42, 13.42)),
     )
     assert "agn_log_lbol" in spec.free_params

@@ -508,14 +508,14 @@ def test_observables_thins_to_n_draws(posterior, model):
 
 
 def test_observables_fast_is_opt_in_not_default(posterior):
-    """``fast=True`` must be a *different* code path, or the flag is a lie.
+    """``approx=True`` must be a *different* code path, or the flag is a lie.
 
     On a model built with no ``approx=``, the lean path and the exact path
     coincide numerically — so this pins the CONTRACT (both run, both finite,
     same shape) rather than asserting a difference that this model cannot show.
     """
     exact = posterior.observables(n_draws=4, key=jax.random.PRNGKey(2))
-    fast = posterior.observables(n_draws=4, key=jax.random.PRNGKey(2), fast=True)
+    fast = posterior.observables(n_draws=4, key=jax.random.PRNGKey(2), approx=True)
 
     assert exact.shape == fast.shape
     assert np.all(np.isfinite(exact)) and np.all(np.isfinite(fast))
@@ -598,7 +598,7 @@ def test_spectra_without_spectroscopy_raises_clearly(posterior):
 
 
 def test_spectra_fast_is_opt_in_and_not_a_dropped_kwarg(spec_posterior):
-    """``fast=True`` on a model with no SpectrumPrecomp must RAISE, not silently
+    """``approx=True`` on a model with no SpectrumPrecomp must RAISE, not silently
     hand back the exact answer.
 
     A ``fast`` flag that is accepted and then ignored is the dropped-kwarg
@@ -606,7 +606,7 @@ def test_spectra_fast_is_opt_in_and_not_a_dropped_kwarg(spec_posterior):
     they did, and the number says otherwise.
     """
     with pytest.raises(ValueError, match="SpectrumPrecomp"):
-        spec_posterior.spectra(fast=True)
+        spec_posterior.spectra(approx=True)
 
 
 # ── the population topology ──────────────────────────────────────
