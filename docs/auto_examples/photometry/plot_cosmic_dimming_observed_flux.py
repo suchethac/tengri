@@ -37,6 +37,8 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING l
 # sphinx_gallery_thumbnail_number = 1
 
 
+import warnings
+
 import jax
 import matplotlib
 
@@ -50,6 +52,13 @@ import tengri
 from tengri.analysis.plotting import setup_style
 
 setup_style()
+
+# The shipped SSP bakes its nebular emission in at a fixed logU, which this
+# example neither varies nor discusses. Its siblings filter the same warning;
+# left unfiltered it is captured verbatim into the rendered page, absolute
+# source path and all, which is what tools/check_no_local_paths.py exists to
+# stop from reaching the public docs.
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
 
 # Load SSP stellar population synthesis grid

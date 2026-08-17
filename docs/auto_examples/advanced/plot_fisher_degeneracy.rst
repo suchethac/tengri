@@ -157,7 +157,7 @@ Conroy 2013 (ARA&A, 51, 393) for SED fitting context.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.785 seconds)
+   **Total running time of the script:** (0 minutes 12.736 seconds)
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_fisher_degeneracy.py:

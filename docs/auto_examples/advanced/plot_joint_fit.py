@@ -27,6 +27,12 @@ from tengri.analysis.plotting import setup_style
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+# `all_params: FREE` leaves met_alpha_fe and met_logzsol_scatter pinned, since
+# neither declares a prior. That is deliberate here -- this example is about
+# combining photometry with spectroscopy, not about abundance ratios -- and the
+# warning itself says to filter it when so. Unfiltered it lands in the rendered
+# page carrying an absolute source path.
+warnings.filterwarnings("ignore", message=".*all_params: FREE.*")
 
 ssp = tengri.load_ssp()
 

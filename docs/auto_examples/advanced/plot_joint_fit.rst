@@ -29,7 +29,7 @@ breaks photometric degeneracies.
 Reference: Conroy 2013 (ARA&A, 51, 393); Leja et al. 2019 on spectroscopic
 constraints for star formation histories.
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-109
+.. GENERATED FROM PYTHON SOURCE LINES 13-115
 
 
 
@@ -39,21 +39,8 @@ constraints for star formation histories.
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/publishable-cleanup/src/tengri/forward/sed_model.py:8398: WildcardPartialFreeWarning: 'all_params: FREE' freed 4 of 6 parameters in group 'sfh'. These have no declared prior, only Fixed defaults, so they stay pinned:
-      met_alpha_fe, met_logzsol_scatter
-    The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. sfh={'met_alpha_fe': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
-      spec = parse_groups(**groups)
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -74,6 +61,12 @@ constraints for star formation histories.
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+    # `all_params: FREE` leaves met_alpha_fe and met_logzsol_scatter pinned, since
+    # neither declares a prior. That is deliberate here -- this example is about
+    # combining photometry with spectroscopy, not about abundance ratios -- and the
+    # warning itself says to filter it when so. Unfiltered it lands in the rendered
+    # page carrying an absolute source path.
+    warnings.filterwarnings("ignore", message=".*all_params: FREE.*")
 
     ssp = tengri.load_ssp()
 
@@ -157,7 +150,7 @@ constraints for star formation histories.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 45.667 seconds)
+   **Total running time of the script:** (0 minutes 52.438 seconds)
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_joint_fit.py:
