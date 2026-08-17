@@ -824,6 +824,63 @@ def default_params_dict(
     return out
 
 
+def _name_missing_parameter(
+    component: SEDComponent,
+    sliced: Mapping[str, Any],
+    exc: KeyError,
+) -> KeyError | None:
+    """A ``KeyError`` naming the parameter and its owner, or ``None`` to re-raise.
+
+    A component reads its parameters by indexing (``params["xray_det_hmxb"]``),
+    deliberately: a ``.get(..., 0.0)`` default is what let two declared knobs go
+    unread for months, because a dict missing them looked complete (#1706). The
+    cost is that the omission surfaces as a bare ``KeyError: 'xray_det_hmxb'``
+    from wherever the component happened to read first — which is what all fifty
+    of #1832's failures looked like.
+
+    Returns ``None`` — meaning "not mine, re-raise unchanged" — unless the key is
+    a parameter this component *declares* and the sliced dict genuinely lacks. A
+    guard that relabels every internal dict lookup would turn real bugs into
+    confident wrong explanations, which is worse than the bare message.
+
+    Parameters
+    ----------
+    component : SEDComponent
+        The component whose ``apply`` raised.
+    sliced : mapping
+        The prefix-sliced params the component was given.
+    exc : KeyError
+        The original exception.
+
+    Returns
+    -------
+    KeyError or None
+        The replacement to raise ``from exc``, or ``None`` to re-raise.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — a missing key fails at trace time, before any
+    array work, so this runs under ``jax.jit`` exactly as it does eagerly.
+
+    The type stays ``KeyError``: :meth:`SEDModel.predict` already raises one
+    carrying a full message for the same condition, and callers catch it.
+    """
+    key = exc.args[0] if exc.args else None
+    if not isinstance(key, str) or key in sliced:
+        return None
+    declared = getattr(component, "declared_parameters", None)
+    names = {d.name for d in declared()} if callable(declared) else set()
+    if key not in names:
+        return None
+    return KeyError(
+        f"Component {getattr(component, 'name', type(component).__name__)!r} requires "
+        f"parameter {key!r}, which is not in the params dict. The component declares "
+        f"it, and it is free by default, so supplying a value is the caller's job. "
+        f"Pass it explicitly, or take every declared default at once with "
+        f"tengri.pipeline.default_params_dict([...])."
+    )
+
+
 def run_components(
     components: Iterable[SEDComponent],
     state: ForwardState,
@@ -884,7 +941,13 @@ def run_components(
 
     for component in components:
         sliced = slice_params_for_component(component, params)
-        state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
+        try:
+            state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
+        except KeyError as exc:
+            named = _name_missing_parameter(component, sliced, exc)
+            if named is None:
+                raise
+            raise named from exc
 
     # ADR-0007 Phase 4 invariant — strict typed-only writes (#64
     # added the same check at the snapshot-test boundary; this one
