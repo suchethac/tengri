@@ -217,11 +217,9 @@ def compute_grid_weights(
                 if (max_sp - min_sp) > tol:
                     # Non-uniform axis detected at call time. Emit warning.
                     import warnings
+
                     n_pts = len(grid_concrete)
-                    axis_id = (
-                        f"grid[{grid_concrete[0]:.4g}..{grid_concrete[-1]:.4g}] "
-                        f"(n={n_pts})"
-                    )
+                    axis_id = f"grid[{grid_concrete[0]:.4g}..{grid_concrete[-1]:.4g}] (n={n_pts})"
                     warnings.warn(
                         f"Non-uniform axis {axis_id} detected (spacing ratio "
                         f"{max_sp / min_sp:.2f}x). #1851 degeneracy applies: "

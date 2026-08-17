@@ -696,8 +696,11 @@ def interp_nd_triweight(
     weights_per_axis = []
     for i in range(n_dims):
         w = compute_grid_weights(
-            point[i], axes[i], scatter=scatters[i], edges=edges[i],
-            index_space_interp=index_space_interp
+            point[i],
+            axes[i],
+            scatter=scatters[i],
+            edges=edges[i],
+            index_space_interp=index_space_interp,
         )
         weights_per_axis.append(w)
 
@@ -1195,8 +1198,11 @@ def slice_fixed_axes(
 
             # Compute triweight weights at the fixed value
             w = compute_grid_weights(
-                value, ax, scatter=0.5 * float(ax[1] - ax[0]), edges=ed,
-                index_space_interp=index_space_interp
+                value,
+                ax,
+                scatter=0.5 * float(ax[1] - ax[0]),
+                edges=ed,
+                index_space_interp=index_space_interp,
             )
 
             # Contract phot along this axis using einsum-style contraction.
@@ -1256,8 +1262,11 @@ def slice_fixed_axes(
 
             # Compute triweight weights at the fixed value
             w = compute_grid_weights(
-                value, ax, scatter=0.5 * float(ax[1] - ax[0]), edges=ed,
-                index_space_interp=index_space_interp
+                value,
+                ax,
+                scatter=0.5 * float(ax[1] - ax[0]),
+                edges=ed,
+                index_space_interp=index_space_interp,
             )
 
             # Contract line_filter_weights along this axis.

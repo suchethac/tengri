@@ -72,9 +72,7 @@ def test_skirtor_cos_inc_ratchet_40_point_sweep():
     trace_grid = grid_data[tau_idx, p_idx, q_idx, oa_idx, radius_idx, :, :]  # (n_inc, n_wave)
 
     # 40-point sweep over cos_inc
-    cos_inc_sweep = jnp.linspace(
-        float(cos_inc_axis[0]), float(cos_inc_axis[-1]), 40
-    )
+    cos_inc_sweep = jnp.linspace(float(cos_inc_axis[0]), float(cos_inc_axis[-1]), 40)
 
     from tengri.utils.interpolation import compute_grid_weights
 
@@ -83,9 +81,11 @@ def test_skirtor_cos_inc_ratchet_40_point_sweep():
     for cos_inc_val in cos_inc_sweep:
         scatter = 0.5 * (cos_inc_axis[1] - cos_inc_axis[0])
         w = compute_grid_weights(
-            cos_inc_val, cos_inc_axis, scatter=scatter,
+            cos_inc_val,
+            cos_inc_axis,
+            scatter=scatter,
             edges=edges[-1],  # cos_inc axis edges
-            index_space_interp=None  # Use default (physical-space) to match current behavior
+            index_space_interp=None,  # Use default (physical-space) to match current behavior
         )
         interp_val = jnp.dot(w, trace_grid)  # Shape (n_wave,)
         results.append(interp_val)
@@ -131,9 +131,7 @@ def test_skirtor_cos_inc_ratchet_zero_gradient_fraction():
     tau_idx, p_idx, q_idx, oa_idx, radius_idx = fixed_indices
     trace_grid = grid_data[tau_idx, p_idx, q_idx, oa_idx, radius_idx, :, :]
 
-    cos_inc_sweep = jnp.linspace(
-        float(cos_inc_axis[0]), float(cos_inc_axis[-1]), 40
-    )
+    cos_inc_sweep = jnp.linspace(float(cos_inc_axis[0]), float(cos_inc_axis[-1]), 40)
 
     from tengri.utils.interpolation import compute_grid_weights
 
@@ -141,9 +139,7 @@ def test_skirtor_cos_inc_ratchet_zero_gradient_fraction():
     def interp_sum(cos_inc_val):
         scatter = 0.5 * (cos_inc_axis[1] - cos_inc_axis[0])
         w = compute_grid_weights(
-            cos_inc_val, cos_inc_axis, scatter=scatter,
-            edges=edges[-1],
-            index_space_interp=None
+            cos_inc_val, cos_inc_axis, scatter=scatter, edges=edges[-1], index_space_interp=None
         )
         interp_val = jnp.dot(w, trace_grid)
         return jnp.sum(interp_val)

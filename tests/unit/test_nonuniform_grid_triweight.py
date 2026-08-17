@@ -172,11 +172,7 @@ class TestNonuniformTriweight:
         scatter = 0.1 * spacing
 
         for node_idx, node_x in enumerate(uniform_axis):
-            w = compute_grid_weights(
-                node_x, uniform_axis,
-                scatter=scatter,
-                edges=edges
-            )
+            w = compute_grid_weights(node_x, uniform_axis, scatter=scatter, edges=edges)
 
             # Interpolated value at the node
             interp_value = jnp.dot(w, grid_values)
@@ -311,9 +307,7 @@ class TestNonuniformTriweight:
         # They should match within float32 machine epsilon (~1e-7)
         # Use 100x f32 eps to account for accumulated rounding in weight computation
         f32_eps = np.float32(jnp.finfo(jnp.float32).eps)
-        rel_error = np.linalg.norm(w_f64 - w_f32_as_f64) / (
-            np.linalg.norm(w_f64) + 1e-300
-        )
+        rel_error = np.linalg.norm(w_f64 - w_f32_as_f64) / (np.linalg.norm(w_f64) + 1e-300)
         assert rel_error < 100.0 * float(f32_eps), (
             f"Float32 and float64 weights should match within ~100x f32 eps; "
             f"rel error {rel_error:.2e} exceeds threshold {100.0 * float(f32_eps):.2e}. "
