@@ -273,13 +273,12 @@ DECLARED_COINCIDENT: list[dict] = [
         "group": "dust",
         "names": {"leitherer02", "noll09", "salim_sbl18"},
         "reason": (
-            "noll09 applies a UV bump and a slope modification to the "
-            "Calzetti+L02 base as (base + bump) * power_law; salim_sbl18 "
-            "applies the same two as base * power_law + bump. Both "
-            "modifications default to zero in each law's own signature, so at "
-            "default each reduces to the unmodified L02 base -- which is what "
-            "leitherer02 selects. Three parameterized generalizations meeting "
-            "at their common origin.\n\n"
+            "noll09 is Calzetti+L02 with a UV bump and a slope modification "
+            "applied as (base + bump) * power_law; salim_sbl18 applies the same "
+            "two as base * power_law + bump. Both modifications default to zero "
+            "in each law's own signature, so at default each reduces to the "
+            "unmodified L02 base -- which is what leitherer02 selects. Three "
+            "parameterized generalizations meeting at their common origin.\n\n"
             "This was a KNOWN_UNDISTINCT class until #1808 was fixed, on the "
             "grounds that the separating knobs were dead on single_component. "
             "They are live now (dust_delta rel 0.152), so the claim is "
@@ -287,7 +286,24 @@ DECLARED_COINCIDENT: list[dict] = [
         ),
         "separator": (
             {"type": "single_component", "law_bc": "leitherer02"},
-            {"type": "single_component", "law_bc": "noll09", "dust_delta": -0.8},
+            {"type": "single_component", "law_bc": "salim_sbl18", "dust_delta": -0.8},
+        ),
+    },
+    {
+        "group": "dust",
+        "names": {"calzetti", "salim"},
+        "reason": (
+            "salim is an alias to kriek_conroy with defaults dust_bump_strength=0.0 "
+            "and dust_delta=0.0. Under the k(5500)=1 convention (#1731), kriek_conroy "
+            "@defaults reduces exactly to its calzetti base, making it mathematically "
+            "identical to calzetti. The historical 0.052% deviation between them "
+            "(pre-#1731) was purely a normalization artifact, not physics. "
+            "Setting dust_bump_strength=1.0 activates the UV bump and immediately "
+            "separates salim from calzetti."
+        ),
+        "separator": (
+            {"type": "single_component", "law_bc": "calzetti"},
+            {"type": "single_component", "law_bc": "salim", "dust_bump_strength": 1.0},
         ),
     },
     {
