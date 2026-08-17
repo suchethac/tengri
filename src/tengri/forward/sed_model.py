@@ -4918,9 +4918,12 @@ class SEDModel:
         #
         # The fallback keeps `redden=True` meaningful for a chain that publishes
         # no attenuated catalog — no dust component, or a backend with no
-        # discrete lines.
+        # discrete lines. The FAST line-LUT path (#1477) runs stateless by design
+        # and takes the fallback screen.
         if redden:
-            _log_atten = state.derived.get("log_line_lums_attenuated")
+            _log_atten = (
+                state.derived.get("log_line_lums_attenuated") if state is not None else None
+            )
             if _log_atten is None:
                 all_lums = self._attenuate_line_catalog(params, all_waves, all_lums)
             else:
