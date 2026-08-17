@@ -101,7 +101,7 @@ def _trapz_line_flux(m, p, line_def):
 def test_measured_matches_independent_integration(real_ssp_only):
     """The operator matches a hand-rolled trapz integration of the SED (baked-in)."""
     m, p = _model(_WNE, {"type": "none"}, tau=0.5)
-    got = float(m.measure_line_fluxes(p, [_HALPHA], fast=False)[0])
+    got = float(m.measure_line_fluxes(p, [_HALPHA], approx=False)[0])
     ref = _trapz_line_flux(m, p, _HALPHA)
     assert got > 0, "Halpha emission flux must be positive"
     assert abs(got - ref) / ref < 0.05, f"operator {got:.3e} vs trapz {ref:.3e}"
@@ -111,16 +111,16 @@ def test_fast_line_fluxes_bitexact_to_exact(real_ssp_only):
     """Window-LUT line fluxes reproduce the exact-SED measurement (baked-in)."""
     for tau, tol in ((0.0, 1e-9), (0.7, 1e-3)):
         m, p = _model(_WNE, {"type": "none"}, tau=tau)
-        exact = np.asarray(m.measure_line_fluxes(p, DESI_LINES, fast=False))
-        fast = np.asarray(m.measure_line_fluxes(p, DESI_LINES, fast=True))
+        exact = np.asarray(m.measure_line_fluxes(p, DESI_LINES, approx=False))
+        fast = np.asarray(m.measure_line_fluxes(p, DESI_LINES, approx=True))
         rel = np.max(np.abs(exact - fast) / np.maximum(np.abs(exact), 1e-30))
         assert rel < tol, f"tau={tau}: fast vs exact worst rel {rel:.2e}"
 
 
 def test_line_flux_measured_is_jittable():
     m, p = _model(_WNE, {"type": "none"}, tau=0.4)
-    jitted = jax.jit(lambda pp: m.measure_line_fluxes(pp, DESI_LINES, fast=True))
-    eager = np.asarray(m.measure_line_fluxes(p, DESI_LINES, fast=True))
+    jitted = jax.jit(lambda pp: m.measure_line_fluxes(pp, DESI_LINES, approx=True))
+    eager = np.asarray(m.measure_line_fluxes(p, DESI_LINES, approx=True))
     got = np.asarray(jitted(p))
     assert np.all(np.isfinite(got))
     assert np.allclose(got, eager, rtol=1e-10, atol=0.0)
@@ -158,10 +158,10 @@ def test_measured_includes_dust_reddening():
 
 
 def test_fast_line_fluxes_raise_for_additive_nebular():
-    """The window LUT misses additive Cue emission → fast=True must raise."""
+    """The window LUT misses additive Cue emission → approx=True must raise."""
     m, p = _model(_BARE, {"type": "cue", "*": FIXED}, tau=0.0)
     with pytest.raises(ValueError, match=r"baked-in nebular only"):
-        m.measure_line_fluxes(p, DESI_LINES, fast=True)
+        m.measure_line_fluxes(p, DESI_LINES, approx=True)
 
 
 def test_predict_line_fluxes_reddens_by_default():
