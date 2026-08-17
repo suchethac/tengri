@@ -12,36 +12,20 @@ from __future__ import annotations
 import jax.numpy as jnp
 import pytest
 
-pytestmark = pytest.mark.contract
-
-from tengri.components.sed_model_component import SEDModelComponent
+from tengri.components.sed_model_component import _REGISTRY, SEDModelComponent
 from tengri.parameters.priors import Uniform
 from tengri.protocols.component import ForwardState
 
+pytestmark = pytest.mark.contract
 
-class _BareNameTestComponent(SEDModelComponent):
-    """Minimal component that records whether 'redshift' is in params."""
 
-    name = "bare_name_test"
-    parameter_prefix = "test_"
-
-    # One free parameter to satisfy component contract. Needs default= because
-    # this component registers globally in _REGISTRY, and the test_param_defaults
-    # contract iterates every registered component (no default → pollutes it).
-    x = Uniform(0.0, 10.0, description="Test parameter", units="", default=5.0)
-
-    def __init__(self):
-        """Initialize tracking state."""
-        # Track what was passed to predict
-        self.last_p_had_redshift = False
-        self.last_redshift_value = None
-
-    def predict(self, p, sed_in, wave, **inputs):
-        """Record redshift presence in p, then return passthrough SED."""
-        self.last_p_had_redshift = "redshift" in p
-        if "redshift" in p:
-            self.last_redshift_value = float(p["redshift"])
-        return sed_in, {}
+@pytest.fixture(autouse=True)
+def _cleanup_bare_name_registry():
+    """Cleanup registry pollution from auto-registered test components (#853)."""
+    saved_registry = dict(_REGISTRY)
+    yield
+    _REGISTRY.clear()
+    _REGISTRY.update(saved_registry)
 
 
 @pytest.mark.unit
@@ -50,6 +34,31 @@ class TestBareNameAllowlistApply:
 
     def test_redshift_passes_through_to_predict(self):
         """redshift (bare-name) is available in predict() when provided."""
+
+        class _BareNameTestComponent(SEDModelComponent):
+            """Minimal component that records whether 'redshift' is in params."""
+
+            name = "bare_name_test"
+            parameter_prefix = "test_"
+
+            # One free parameter to satisfy component contract. Needs default= because
+            # this component registers globally in _REGISTRY, and the test_param_defaults
+            # contract iterates every registered component (no default → pollutes it).
+            x = Uniform(0.0, 10.0, description="Test parameter", units="", default=5.0)
+
+            def __init__(self):
+                """Initialize tracking state."""
+                # Track what was passed to predict
+                self.last_p_had_redshift = False
+                self.last_redshift_value = None
+
+            def predict(self, p, sed_in, wave, **inputs):
+                """Record redshift presence in p, then return passthrough SED."""
+                self.last_p_had_redshift = "redshift" in p
+                if "redshift" in p:
+                    self.last_redshift_value = float(p["redshift"])
+                return sed_in, {}
+
         comp = _BareNameTestComponent()
 
         # Build minimal ForwardState
@@ -75,6 +84,31 @@ class TestBareNameAllowlistApply:
 
     def test_redshift_absent_when_not_provided(self):
         """redshift is absent in predict() when not provided."""
+
+        class _BareNameTestComponent(SEDModelComponent):
+            """Minimal component that records whether 'redshift' is in params."""
+
+            name = "bare_name_test"
+            parameter_prefix = "test_"
+
+            # One free parameter to satisfy component contract. Needs default= because
+            # this component registers globally in _REGISTRY, and the test_param_defaults
+            # contract iterates every registered component (no default → pollutes it).
+            x = Uniform(0.0, 10.0, description="Test parameter", units="", default=5.0)
+
+            def __init__(self):
+                """Initialize tracking state."""
+                # Track what was passed to predict
+                self.last_p_had_redshift = False
+                self.last_redshift_value = None
+
+            def predict(self, p, sed_in, wave, **inputs):
+                """Record redshift presence in p, then return passthrough SED."""
+                self.last_p_had_redshift = "redshift" in p
+                if "redshift" in p:
+                    self.last_redshift_value = float(p["redshift"])
+                return sed_in, {}
+
         comp = _BareNameTestComponent()
 
         wave = jnp.linspace(1e3, 1e5, 50)
@@ -97,6 +131,31 @@ class TestBareNameAllowlistApply:
 
     def test_redshift_zero_passes_through(self):
         """redshift=0.0 (not redshift=None) is passed correctly."""
+
+        class _BareNameTestComponent(SEDModelComponent):
+            """Minimal component that records whether 'redshift' is in params."""
+
+            name = "bare_name_test"
+            parameter_prefix = "test_"
+
+            # One free parameter to satisfy component contract. Needs default= because
+            # this component registers globally in _REGISTRY, and the test_param_defaults
+            # contract iterates every registered component (no default → pollutes it).
+            x = Uniform(0.0, 10.0, description="Test parameter", units="", default=5.0)
+
+            def __init__(self):
+                """Initialize tracking state."""
+                # Track what was passed to predict
+                self.last_p_had_redshift = False
+                self.last_redshift_value = None
+
+            def predict(self, p, sed_in, wave, **inputs):
+                """Record redshift presence in p, then return passthrough SED."""
+                self.last_p_had_redshift = "redshift" in p
+                if "redshift" in p:
+                    self.last_redshift_value = float(p["redshift"])
+                return sed_in, {}
+
         comp = _BareNameTestComponent()
 
         wave = jnp.linspace(1e3, 1e5, 50)
@@ -140,6 +199,14 @@ class TestEmissionComponentBareNameAllowlist:
     bespoke subclass to avoid polluting ``_REGISTRY`` / the emission menu, and
     to exercise the exact production code path.
     """
+
+    @pytest.fixture(autouse=True)
+    def _registry_cleanup(self):
+        """Ensure registry stays clean across tests."""
+        saved_registry = dict(_REGISTRY)
+        yield
+        _REGISTRY.clear()
+        _REGISTRY.update(saved_registry)
 
     @staticmethod
     def _mbb_component_with_spy():
