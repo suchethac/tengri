@@ -23,7 +23,5 @@ from tengri.components.dust.emission.emission import *  # noqa: F403
 
 # Private module-level symbols that existing call sites and tests import by name.
 from tengri.components.dust.emission.emission import (
-    _find_data_file,
-    _find_dl07_templates,
     _resolved,
 )

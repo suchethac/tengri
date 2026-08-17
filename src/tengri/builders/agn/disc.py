@@ -3,7 +3,7 @@
 
 """AGN disc sub-block factories.
 
-Variants from :data:`tengri.parameters.groups._VALID_AGN_DISC_TYPES`:
+Variants from ``tengri.parameters.groups._VALID_AGN_DISC_TYPES``:
 ``none``, ``powerlaw``, ``multicolor``, ``kubota_done``, ``adaf``,
 ``qsogen``, ``grahsp_sbpl``. The disc-shaping parameters
 (``log_mbh``, ``a_spin``, ``alpha``, …) live in the top-level

@@ -708,7 +708,7 @@ def list_dust_models(*, status: str | None = None) -> _RegistryTable:
     named them, ``describe('two_component')`` raised ``KeyError`` and
     ``search('two_component')`` returned nothing.
 
-    Names are derived from :data:`tengri.parameters.groups._VALID_DUST_TYPES`,
+    Names are derived from ``tengri.parameters.groups._VALID_DUST_TYPES``,
     the same set ``SEDModel.build`` validates against, so this menu cannot
     advertise a type the builder rejects (nor omit one it accepts).
     """
@@ -865,7 +865,7 @@ def list_dust_emission_models(*, status: str | None = None) -> _RegistryTable:
     **attenuation** laws, see :func:`list_dust_laws`.
 
     Calls the ``SEDModel.build`` grammar validator itself
-    (:func:`tengri.parameters.groups._valid_dust_emission_types`) rather than
+    (``tengri.parameters.groups._valid_dust_emission_types``) rather than
     re-deriving what it derives. The ``DUST_EMISSION_MODELS`` loader cache is
     **not** consulted — it is load-only (closes #495).
 
@@ -981,7 +981,7 @@ def list_xray_models(*, status: str | None = None) -> _RegistryTable:
     the whole block.
 
     Names come from the grammar validator itself
-    (:func:`tengri.parameters.groups._valid_xray_types`), which accepts the
+    (``tengri.parameters.groups._valid_xray_types``), which accepts the
     union of :data:`XRAY_MODELS` and the ``SEDModelComponent`` X-ray variants
     in ``_REGISTRY``. Reading only ``XRAY_MODELS`` — as this menu did — hid
     ``xray_aird`` and ``agn_xray_corona`` from every discovery surface from the
@@ -1013,7 +1013,7 @@ def list_radio_models(*, status: str | None = None) -> _RegistryTable:
     the block.
 
     Names come from the grammar validator itself
-    (:func:`tengri.parameters.groups._valid_radio_types`), which accepts the
+    (``tengri.parameters.groups._valid_radio_types``), which accepts the
     union of :data:`RADIO_MODELS` and the ``SEDModelComponent`` radio variants
     in ``_REGISTRY`` — so ``radio_powerlaw`` and ``radio_dpl`` are listed here
     rather than being builder-only. This is the ``radio={'type': ...}`` axis;
@@ -1984,7 +1984,7 @@ def list_inference_methods(
     _RegistryTable
         Rows: ``{name, kind, tier, short_doc, requires, status, use}``.
         ``status`` is one of ``"ok"`` / ``"missing_dep"`` / ``"incompatible"``
-        (see :class:`tengri.inference._strategy.BackendStatus`).
+        (see ``tengri.inference._strategy.BackendStatus``).
     """
     from tengri.inference._backend_registry import all_backends
 
@@ -2070,7 +2070,7 @@ def _every_menu_lister() -> tuple:
     matters as much as deriving the set at all. ``dir(tengri)`` is not the
     public surface: it is curated down to ~30 obvious entry points on purpose
     ("not the 175-item kitchen sink of every public symbol",
-    :mod:`tengri.__init__`). Scanning it alone made the derivation inherit the
+    ``tengri.__init__``). Scanning it alone made the derivation inherit the
     curation — ``list_parameters``, ``list_properties``,
     ``list_filter_conventions`` and ``list_available_ssps`` are exported and
     not curated, so they stayed invisible and **410 further advertised names
@@ -2839,7 +2839,7 @@ def list_all() -> dict[str, _RegistryTable]:
     one that never walked it, returning a hand-written dict of nine literals
     while 25 menus existed. So it showed 9 of 25, and its own ``Returns``
     section named only six of the nine it did return, while
-    :mod:`tengri.__init__` tells readers it "enumerates every registry live".
+    ``tengri.__init__`` tells readers it "enumerates every registry live".
 
     Deriving the keys preserves all nine that were there — every one is its
     lister's name minus the prefix — and adds the sixteen that were missing,

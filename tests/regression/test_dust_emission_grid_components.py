@@ -22,6 +22,14 @@ import pytest
 
 pytestmark = pytest.mark.regression_bug
 
+# Cross-JAX-version XLA drift on JIT-compiled SED goldens is measured at ~1e-7
+# relative (#1763: 9.97e-08 on the PAH golden, jax 0.9.1 -> 0.11.0). Goldens
+# pinned tighter than that test the compiler version, not the physics; a real
+# regression and a JAX upgrade become indistinguishable, and the natural
+# response (re-freeze) would silently absorb a real regression.
+GOLDEN_SED_RTOL = 1e-6  # ~10x margin over measured drift; ~1e5 below physics changes
+GOLDEN_SED_ATOL = 1e-7
+
 
 @pytest.fixture
 def golden_dir() -> Path:
@@ -95,7 +103,7 @@ class TestDale2014GridPort:
         sed_out, _ = comp.predict(p_stripped, sed_in, wave_grid, L_ir=L_ir)
 
         # Assert exact match (same closure)
-        np.testing.assert_allclose(sed_out, golden, rtol=1e-14, atol=1e-15)
+        np.testing.assert_allclose(sed_out, golden, rtol=GOLDEN_SED_RTOL, atol=GOLDEN_SED_ATOL)
 
 
 class TestDale2014CigaleGridPort:
@@ -135,7 +143,7 @@ class TestDale2014CigaleGridPort:
         sed_out, _ = comp.predict(p_stripped, sed_in, wave_grid, L_ir=L_ir)
 
         # Assert exact match (same closure)
-        np.testing.assert_allclose(sed_out, golden, rtol=1e-14, atol=1e-15)
+        np.testing.assert_allclose(sed_out, golden, rtol=GOLDEN_SED_RTOL, atol=GOLDEN_SED_ATOL)
 
 
 class TestDraineLi2007GridPort:
@@ -175,7 +183,7 @@ class TestDraineLi2007GridPort:
         sed_out, _ = comp.predict(p_stripped, sed_in, wave_grid, L_ir=L_ir)
 
         # Assert exact match (same closure)
-        np.testing.assert_allclose(sed_out, golden, rtol=1e-14, atol=1e-15)
+        np.testing.assert_allclose(sed_out, golden, rtol=GOLDEN_SED_RTOL, atol=GOLDEN_SED_ATOL)
 
 
 class TestDraineLi2014GridPort:
@@ -215,7 +223,7 @@ class TestDraineLi2014GridPort:
         sed_out, _ = comp.predict(p_stripped, sed_in, wave_grid, L_ir=L_ir)
 
         # Assert exact match (same closure)
-        np.testing.assert_allclose(sed_out, golden, rtol=1e-14, atol=1e-15)
+        np.testing.assert_allclose(sed_out, golden, rtol=GOLDEN_SED_RTOL, atol=GOLDEN_SED_ATOL)
 
 
 # NOTE (#871): the astrodust component was re-parameterized from the DL07-costume
@@ -262,7 +270,7 @@ class TestBosaGridPort:
         sed_out, _ = comp.predict(p_stripped, sed_in, wave_grid, L_ir=L_ir)
 
         # Assert exact match (same closure)
-        np.testing.assert_allclose(sed_out, golden, rtol=1e-14, atol=1e-15)
+        np.testing.assert_allclose(sed_out, golden, rtol=GOLDEN_SED_RTOL, atol=GOLDEN_SED_ATOL)
 
 
 class TestThemisGridPort:
@@ -302,4 +310,4 @@ class TestThemisGridPort:
         sed_out, _ = comp.predict(p_stripped, sed_in, wave_grid, L_ir=L_ir)
 
         # Assert exact match (same closure)
-        np.testing.assert_allclose(sed_out, golden, rtol=1e-14, atol=1e-15)
+        np.testing.assert_allclose(sed_out, golden, rtol=GOLDEN_SED_RTOL, atol=GOLDEN_SED_ATOL)

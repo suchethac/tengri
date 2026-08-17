@@ -20,6 +20,7 @@ import pathlib
 
 import pytest
 
+from tengri._data_setup import find_data_str
 from tengri.components.dust.emission import emission as E
 
 pytestmark = pytest.mark.regression_bug
@@ -50,7 +51,7 @@ def test_find_data_file_is_cwd_independent(tmp_path, monkeypatch):
     probe_path.write_bytes(b"x")
     try:
         monkeypatch.chdir(tmp_path)  # a CWD with no data/ anywhere above it
-        assert E._find_data_file(probe) == str(probe_path)
+        assert find_data_str(probe) == str(probe_path)
     finally:
         os.unlink(probe_path)
 

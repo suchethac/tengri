@@ -572,6 +572,10 @@ jobs:
       - run: pip install -e ".[dev]"
       - run: python tools/check_param_prefixes.py
       - run: python tools/check_param_defaults.py
+      # The redshift-specific instance of the same rule: a numeric default on
+      # params.get('redshift', …) is unreachable in live paths and silences the
+      # one condition worth hearing about — #1432.
+      - run: python tools/check_redshift_defaults.py
       # The same rule as check_param_defaults, one step later: that guard checks
       # a signature *default* is inside the declared support; this one checks a
       # *call-site prior* still overlaps it. #369 renamed sfh_*_log_peak_sfr to
@@ -680,38 +684,22 @@ jobs:
     # Wall = slowest shard, not the sum, so splitting the small shards is free.
     # That principle is the only durable line in this block: every NUMBER below
     # carries a date, because each has already gone stale at least once.
+    # See #1352 for the measurement history and why hand-maintained timing comments
+    # are a second-source mistake.
     #
-    # Shares of the OLD single-job wall clock, at -n 2. History only — do not
-    # reason from these:
-    #   contract 43% · components 28% · regression 22% · physics 7%
+    # The regression shard (split four ways) holds the long pole, measured at
+    # ~30 min on main @dd2da7acf (run 30864997361, 2026-08-04). Exact durations
+    # drift; re-measure from CI before making major changes to any shard. Splitting
+    # the long pole is free when measured against its budget (50 min in the matrix),
+    # not the wall clock. See #1346 for the re-measure recipe.
     #
-    # MEASURED 2026-07-26, main @1e6575588 (run 30198731485, all green) — the
-    # split as it stands after #1380 + #1385:
-    #   regression-d 19m · components 19m · contract 18m · regression-b1 17m
-    #   regression-b2 9m · regression-a 6m · regression-c 4m · physics 3m
-    #
-    # The wall clock is ~19 min and the top FOUR shards are a 17-19 min near-
-    # tie: there is no single long pole left to attack, and shaving any one of
-    # them buys nothing until its three neighbours come down too. Note what
-    # that corrects — this block used to assert "`contract` (the long pole)
-    # sets the wall clock" directly beneath a paragraph warning that naming
-    # `contract` the long pole was the error it had already made twice. Do not
-    # re-add a long-pole claim without a dated measurement beside it. See the
-    # re-measure recipe on #1346.
-    #
-    # RE-MEASURED 2026-08-04, main @dd2da7acf (run 30864997361, all green). The
-    # near-tie above is GONE and the numbers have gone stale exactly as this block
-    # warns they do — `contract` leads the next shard by 7.3 min:
-    #   contract 30.2m · components 22.9m · regression-d 21.5m · regression-b1 15.7m
-    #   regression-b2 12.6m · regression-a 6.2m · regression-c 5.2m · physics 3.3m
-    #
-    # Dated, per this block's own rule, and not a standing claim. `contract` sits at
-    # 60% of its 50-min budget and sets a ~30 min wall clock, so work landing there
-    # is no longer free. That is why #1498's preconditioning guard was SPLIT rather
-    # than moved in whole: the 53 s four-backend deficit sweep went to
-    # `tests/contract/`, and the 155 s posterior-mean comparison stayed in the
-    # nightly tier as `tests/integration/test_preconditioning_posterior_invariance.py`.
-    # Re-measure before adding to `contract`; `physics` at 3.3m has the headroom.
+    # Why the exact numbers are not repeated here: Contract was once the long pole
+    # at ~43% of the unified job (23 min). It has been overtaken twice, and hand-
+    # maintained percentages kept drifting silently — most recently by two full
+    # years, and then again three weeks after the correction was written. A bound
+    # to a fixed number in CI config is fundamentally broken as a human-updated
+    # second source. Derive the split from actual CI timings (GH API, Codecov
+    # artifacts, or internal logs) instead of restating numbers here.
     #
     # regression and physics were ONE shard until 2026-07. They were split because
     # the paired shard walked back into the 16 GB ceiling: it died at ~21-22 min and

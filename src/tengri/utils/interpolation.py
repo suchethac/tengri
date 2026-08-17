@@ -92,6 +92,7 @@ def compute_grid_weights(
     grid: jnp.ndarray,
     scatter: float = 0.2,
     edges: jnp.ndarray | None = None,
+    index_space_interp: bool | None = None,
 ) -> jnp.ndarray:
     """Smooth triweight-kernel weights over a 1-D grid axis.
 
@@ -100,24 +101,62 @@ def compute_grid_weights(
     sums to 1.  Unlike piecewise-linear interpolation the weights transition
     smoothly through grid nodes, giving C²-continuous gradients.
 
+    For non-uniform axes, automatically detects non-uniformity (max/min spacing
+    ratio > 1 + 1e-6) and optionally maps the query coordinate to index space before
+    computing weights. This ensures smooth interpolation across all intervals,
+    not just those matching the first grid spacing.
+
     Parameters
     ----------
     x : float
         Query point on the axis.
     grid : array, shape (n,)
-        Sorted grid node values (ascending).
+        Sorted grid node values (ascending). May be uniform or non-uniform.
     scatter : float
         Kernel bandwidth (same units as ``grid``).  Smaller values concentrate
         weight near the nearest node; larger values spread across more bins.
         Default 0.2, consistent with the DSPS lgmet_scatter convention.
+        For non-uniform axes, this is interpreted in the physical coordinate space;
+        the mapping to index space is automatic.
     edges : array, shape (n + 1,) or None
         Precomputed bin edges from :func:`edges_for_grid`.  When ``None``
         (default), edges are computed on the fly.
+    index_space_interp : bool or None
+        Whether to use index-space interpolation for non-uniform axes:
+        - ``None`` (default): use pre-#1851 physical-space path, but emit a warning
+          if non-uniformity is detected. This preserves backward compatibility while
+          alerting callers to the #1851 degeneracy.
+        - ``True``: apply index-space interpolation to detected non-uniform axes
+          (see Notes below). Use this for Fritz, Nenkova, and other intentionally
+          non-uniform grids.
+        - ``False``: always use physical-space interpolation (legacy behavior).
 
     Returns
     -------
     array, shape (n,)
         Non-negative weights summing to 1.
+
+    Notes
+    -----
+    **Non-uniform axis handling (I6, #1851)**: When ``index_space_interp=True``
+    and the grid spacing is non-uniform, the query coordinate is mapped to a
+    piecewise-linear index-space coordinate via inverse linear interpolation, then
+    triweight weights are computed in index space where spacing is uniform (=1).
+    The interpolant is **C2 within intervals and C0 at nodes where adjacent
+    spacings differ** — a property of piecewise-linear coordinate mapping (not a
+    bug). The magnitude of the derivative jump at a node equals the ratio of the
+    adjacent spacings. HMC/NUTS samplers and equivalently-robust optimizers tolerate
+    such kinks — they are in the same smoothness class as linear interpolation.
+
+    This eliminates the nearest-neighbor degeneracy (zero gradients over 67.5%
+    of the range) that occurred on non-uniform axes when bandwidth was derived
+    from the first interval alone. Uniform axes remain C² everywhere (value and
+    gradient continuous).
+
+    **Uniformity detection requires concrete (non-traced) axes.** The `grid` parameter
+    must be a concrete array known at call time, not a traced JAX array. Template
+    grids (SKIRTOR, dust libraries, etc.) are static and meet this requirement; this
+    property holds for all static data accessed in ``compute_grid_weights`` calls.
     """
     # Canonicalize to the dtype JAX is currently defaulting to. Template grids
     # (SKIRTOR, dust libraries) are built and cached at import, so their axes stay
@@ -130,22 +169,113 @@ def compute_grid_weights(
     grid = jnp.asarray(grid, dtype=dt)
 
     n = grid.shape[0]
+
+    # Precompute bin edges (used by both paths)
     if edges is None:
-        edges = edges_for_grid(grid)
+        phys_edges = edges_for_grid(grid)
     else:
-        edges = jnp.asarray(edges, dtype=dt)
-    # One CDF evaluation per edge, not two. Bin k's upper edge is bin k+1's
-    # lower edge, so evaluating `edges[:-1]` and `edges[1:]` as separate calls
-    # computes every interior edge twice, from the same expression and the same
-    # operands — 2n calls for n+1 distinct edges. Differencing adjacent entries
-    # of a single evaluation feeds the subtraction exactly the same pair.
-    cuml = tw_cuml_kern(x, edges, scatter)
-    raw = cuml[:-1] - cuml[1:]
-    total = jnp.sum(raw)
-    # Fallback: place all weight on the nearest bin if kernel misses the grid
-    nearest = jnp.argmin(jnp.abs(grid - x))
-    fallback = jnp.zeros(n).at[nearest].set(1.0)
-    return jnp.where(total > 0.0, raw / total, fallback)
+        phys_edges = jnp.asarray(edges, dtype=dt)
+
+    # Detect non-uniformity: use dtype-aware tolerance to avoid false positives on
+    # uniform float32 grids (e.g., linspace(0, 10, 50) in float32 has spacing ratio
+    # ~1.00000465 due to accumulated rounding). Tolerance is 64 * machine epsilon
+    # times the grid magnitude — this catches intentionally non-uniform grids
+    # (e.g. geometric series with ratio 1.3+) while ignoring floating-point noise.
+    # Guard against grids with < 2 elements: diff() creates an empty array, and
+    # min/max would crash.
+    n_spacings = n - 1
+
+    # Guard: treat axes with <=1 nodes as uniform (no spacing reductions possible)
+    if n_spacings <= 0:
+        is_potentially_nonuniform = False
+    else:
+        # Compute non-uniformity detection unconditionally (no Python control flow).
+        # This avoids TracerBoolConversionError when called inside jax.jit.
+        spacings = jnp.diff(grid)
+        min_spacing = jnp.min(spacings)
+        max_spacing = jnp.max(spacings)
+        # Dtype-aware tolerance: 64 eps * grid scale
+        grid_scale = jnp.maximum(jnp.max(jnp.abs(grid)), 1.0)
+        tolerance = 64.0 * jnp.finfo(grid.dtype).eps * grid_scale
+        is_potentially_nonuniform = (max_spacing - min_spacing) > tolerance
+
+    # Decide whether to use index-space interpolation based on the parameter.
+    # The warning for default-None case must be emitted outside JIT (at call time)
+    # and cannot be done in the traced code path.
+    if index_space_interp is None:
+        # Default: physical-space for backward compat, but warn if concrete and non-uniform
+        # Try to detect if we're in a traced context (grid is a tracer)
+        try:
+            # If grid is concrete (not a tracer), check and warn
+            grid_concrete = np.asarray(grid, dtype=float)
+            if grid_concrete.ndim == 1 and grid_concrete.size >= 2:
+                spacings_concrete = np.diff(grid_concrete)
+                min_sp = np.min(spacings_concrete)
+                max_sp = np.max(spacings_concrete)
+                grid_scale_concrete = np.maximum(np.max(np.abs(grid_concrete)), 1.0)
+                tol = 64.0 * np.finfo(grid_concrete.dtype).eps * grid_scale_concrete
+                if (max_sp - min_sp) > tol:
+                    # Non-uniform axis detected at call time. Emit warning.
+                    import warnings
+
+                    n_pts = len(grid_concrete)
+                    axis_id = f"grid[{grid_concrete[0]:.4g}..{grid_concrete[-1]:.4g}] (n={n_pts})"
+                    warnings.warn(
+                        f"Non-uniform axis {axis_id} detected (spacing ratio "
+                        f"{max_sp / min_sp:.2f}x). #1851 degeneracy applies: "
+                        "the triweight kernel will use physical-space interpolation, which "
+                        "produces nearest-neighbor-like behavior over ~67.5% of the range. "
+                        "Pass index_space_interp=True to opt-in to corrected index-space path, "
+                        "or index_space_interp=False to silence this warning.",
+                        stacklevel=3,
+                    )
+        except (TypeError, ValueError):
+            # grid is a tracer or otherwise not convertible to concrete array;
+            # suppress warning to avoid repeated warnings in traced code.
+            pass
+        is_nonuniform = False
+    elif index_space_interp:
+        # Explicit opt-in: use index-space for detected non-uniform axes
+        is_nonuniform = is_potentially_nonuniform
+    else:
+        # Explicit legacy mode: always physical-space, no warning
+        is_nonuniform = False
+
+    # Map query point to index space via piecewise-linear inverse interpolation.
+    # idx_lower = floor(i) where i is the piecewise-linear index.
+    idx_lower = jnp.clip(jnp.searchsorted(grid, x) - 1, 0, n - 2)
+    x_lo = grid[idx_lower]
+    x_hi = grid[idx_lower + 1]
+    dx = x_hi - x_lo
+    # Guard against zero spacing (shouldn't happen, but numerical safety)
+    frac = jnp.where(dx > 0.0, (x - x_lo) / dx, 0.0)
+    # Index-space coordinate: u = idx_lower + frac, lies in [0, n-1]
+    x_index = idx_lower + frac
+
+    # Edge array for the index-space grid (0, 1, 2, ..., n-1)
+    index_grid = jnp.arange(n, dtype=dt)
+    index_edges = edges_for_grid(index_grid)
+    # Index-space bandwidth is always 0.5 (half a cell in index space)
+    index_scatter = jnp.asarray(0.5, dtype=dt)
+
+    # Compute weights: use index space for non-uniform, physical space for uniform.
+    # Both branches are traced but only one result is kept.
+    cuml_phys = tw_cuml_kern(x, phys_edges, scatter)
+    raw_phys = cuml_phys[:-1] - cuml_phys[1:]
+    total_phys = jnp.sum(raw_phys)
+    nearest_phys = jnp.argmin(jnp.abs(grid - x))
+    fallback_phys = jnp.zeros(n).at[nearest_phys].set(1.0)
+    weights_phys = jnp.where(total_phys > 0.0, raw_phys / total_phys, fallback_phys)
+
+    cuml_idx = tw_cuml_kern(x_index, index_edges, index_scatter)
+    raw_idx = cuml_idx[:-1] - cuml_idx[1:]
+    total_idx = jnp.sum(raw_idx)
+    nearest_idx = jnp.argmin(jnp.abs(index_grid - x_index))
+    fallback_idx = jnp.zeros(n).at[nearest_idx].set(1.0)
+    weights_idx = jnp.where(total_idx > 0.0, raw_idx / total_idx, fallback_idx)
+
+    # Select the appropriate result based on uniformity
+    return jnp.where(is_nonuniform, weights_idx, weights_phys)
 
 
 def _check_uniform(grid: jnp.ndarray) -> None:

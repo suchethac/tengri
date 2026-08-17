@@ -58,7 +58,7 @@ _UNSET = object()
 
 
 def _short_form(full_param_name: str) -> str:
-    """Mirror :func:`tengri.parameters.groups._extract_short_name` for SFH.
+    """Mirror ``tengri.parameters.groups._extract_short_name`` for SFH.
 
     The grammar's parser strips ``sfh_`` then splits on the first
     underscore, so ``sfh_dpl_alpha`` becomes ``alpha`` and

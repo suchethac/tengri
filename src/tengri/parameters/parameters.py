@@ -913,6 +913,12 @@ class Parameters:
         self.dust_emission = kwargs.pop("dust_emission", None)
         self.dl07_grid_path = kwargs.pop("dl07_grid_path", None)
 
+        # Astrodust+PAH (HD23) optional configuration: spinning dust (AME) enable flag
+        # and cold-neutral-medium filling fraction. Structural settings, not free
+        # parameters; forwarded to component_factory. See #1093.
+        self.astrodust_spinning_dust = bool(kwargs.pop("astrodust_spinning_dust", False))
+        self.astrodust_f_cnm = float(kwargs.pop("astrodust_f_cnm", 0.28))
+
     def _init_metallicity_config(self, kwargs):
         """Resolve metallicity evolution mode from kwargs.
 
@@ -1280,6 +1286,48 @@ class Parameters:
             Count of all non-fixed parameters available for inference.
         """
         return len(self.free_params)
+
+    @property
+    def n_latent(self) -> int:
+        """Flattened dimensionality of all free parameters (#1408).
+
+        Sum of each free parameter's flattened size, including vector latents
+        (e.g., sfh_field_xi). This is the true sampled dimension for MCMC/VI —
+        what samplers actually see — as opposed to n_free which counts named
+        parameters only.
+
+        Returns
+        -------
+        int
+            Flattened size of the free-parameter pytree. Equals n_free for
+            scalar-only specs; exceeds n_free when vector latents are present
+            (e.g., stochastic SFH fields).
+
+        Notes
+        -----
+        Used by auto-pick methods to choose NUTS vs raytrace (#1408): a field
+        model with few named parameters but hundreds of field latents must
+        route to the high-D sampler, not NUTS (dense mass matrix OOM risk).
+
+        Mirrors the accounting of ``Fitter._initialize_unbounded`` — the two
+        must stay in agreement (asserted against the engine's ``d_total`` in
+        ``tests/inference/test_noise_broadcast_fix_1303.py``). ``sample()``
+        is NOT the right source: its tree carries fixed/default parameters
+        too, and the field latent under a non-free name.
+        """
+        import numpy as np
+
+        get_shape = getattr(self, "param_init_shape", lambda _n: ())
+        total = 0
+        for name in self.free_params:
+            shape = get_shape(name)
+            total += int(np.prod(shape)) if shape else 1
+        if self.stochastic:
+            psd_shape = getattr(self, "psd_xi_init_shape", None) or (self.n_grid,)
+            if callable(psd_shape):
+                psd_shape = psd_shape()
+            total += int(np.prod(psd_shape))
+        return total
 
     @property
     def valid_param_names(self) -> frozenset:

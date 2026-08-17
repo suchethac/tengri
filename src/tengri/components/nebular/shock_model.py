@@ -88,7 +88,7 @@ class ShockNebular(SEDModelComponent):
     r"""MAPPINGS V shock-driven nebular emission (composable, additive).
 
     Reads its free parameters from the ``shock_*`` bucket
-    (:data:`tengri.components.nebular._params.SHOCK_PARAMS`, registered by
+    (``tengri.components.nebular._params.SHOCK_PARAMS``, registered by
     ``Parameters(shock=True)`` / the ``shock`` grammar group) rather than
     auto-declaring them, so it composes with — and never double-declares
     against — the photoionized nebular backend.
@@ -111,6 +111,18 @@ class ShockNebular(SEDModelComponent):
     the two are summed in ``sed_intrinsic`` and both are reddened by the dust
     screen. A model may run shock alone (``neb={'type':'none'}`` + ``shock``),
     photoionization alone, or both together.
+
+    **Dust attenuation** (#1434): shock emission is attenuated by the two-component
+    dust screen (young-limit: ``tau_bc·k_bc + tau_diff·k_diff``) the same way as
+    nebular continuum. This is defensible for star-formation-linked shocks (``norm='frac'``
+    mode), which originate in young stellar populations behind the birth cloud. For
+    AGN outflow or NLR shocks (``norm='lhalpha'`` mode), the screen geometry is an
+    approximation — MAPPINGS traces often originate in partially or fully unobscured
+    AGN-driven outflows, so the birth-cloud dust in front of them is not the physical
+    situation. Measure the effect with synthetic fixtures before using shock in
+    conjunction with high-optical-depth dust models. Single-component dust models
+    (single-screen attenuation) are unaffected: they screen the total ``sed_intrinsic``
+    and have no separate shocked-gas treatment.
 
     References
     ----------

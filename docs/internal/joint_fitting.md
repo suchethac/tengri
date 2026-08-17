@@ -65,7 +65,7 @@ Joint posteriors are higher-dimensional and heavier to compile than
 photometry-only ones. The tutorial uses `mcmc_hmc` with a diagonal mass matrix
 and runs one fit per process — see
 [Choosing an inference method](method_selection) and
-[Known limitations](known_limitations) for the memory rules.
+[Caveats](known_limitations) for the memory rules.
 
 ## Speed: precompute on joint fits
 
@@ -86,4 +86,4 @@ model = SEDModel.build(
 
 The per-pixel continuum LUT does not apply velocity dispersion / LSF
 (`SpectrumPrecomp`'s documented low-to-medium-R domain); use `approx=None` for
-the exact LSF-convolved spectrum. See [Known limitations](known_limitations).
+the exact LSF-convolved spectrum. See [Caveats](known_limitations).

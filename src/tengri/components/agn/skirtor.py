@@ -221,7 +221,16 @@ def _interpolate_and_normalize(
 
     **Citation**: matches CIGALE skirtor2016 processing (see
     ``scripts/download_skirtor_templates.py``).
+
+    **Non-uniform axis note**: The cos_inclination axis is non-uniform
+    (cos of uniform-in-angle nodes, spacing ratio ~11x) and exhibits the
+    #1851 degeneracy: nearest-neighbor-like behavior over ~67.5% of the range.
+    Re-baselining it to the corrected index-space path requires re-validating
+    silicate features, golden-sample photometry, and parity tests against
+    CIGALE — see #1911.
     """
+    # Use default index_space_interp=None (physical-space path) for backward
+    # compatibility. The cos_inc axis carries the #1851 degeneracy — see note above.
     template = interp_nd_triweight(grid_jax, axes, edges, _match_point_to_axes(point, axes))
     # Bolometric integral on the *template* wavelength grid (full UV–FIR
     # coverage). Using the user wave grid would clip the FIR tail and

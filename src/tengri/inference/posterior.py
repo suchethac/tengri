@@ -27,6 +27,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from tengri._deprecated import UNSET, resolve_renamed_flag
 from tengri._mapping import ReadOnlyPropertyMapping
 
 logger = logging.getLogger(__name__)
@@ -1675,13 +1676,17 @@ class Posterior:
 
     # ── Observables over the sample axis ──────────────────────────
 
-    def observables(self, filters=None, n_draws=None, fast=False, key=None, chunk_size=64):
+    def observables(
+        self, filters=None, n_draws=None, approx=False, key=None, chunk_size=64, *, fast=UNSET
+    ):
         r"""Photometry for every posterior draw — the arrays an SED plot needs.
 
         Contract §3, **exact by default**. The default path integrates the model
-        SED through the filters with no approximation, per draw. ``fast=True``
+        SED through the filters with no approximation, per draw. ``approx=True``
         opts into the lean build-time path (the ``approx=`` LUT the model was
-        built with, if any) — much faster, and an approximation.
+        built with, if any) — much faster, and an approximation. The keyword
+        carries the same name as the build-time one because it selects exactly
+        that object; it was spelled ``fast`` until 2026-08.
 
         Parameters
         ----------
@@ -1695,13 +1700,17 @@ class Posterior:
             evaluating. ``None`` uses every draw — which for a large posterior is
             exactly the memory problem :func:`~tengri.vmap_chunked` exists to
             bound, so it is chunked either way.
-        fast : bool, default False
-            Route through the lean ``predict_photometry`` (build-time approx)
-            instead of the exact projector.
+        approx : bool, default False
+            Route through the lean ``predict_photometry`` (whatever build-time
+            ``approx=`` the model carries) instead of the exact projector.
+            On a model built without one this is a no-op, not an error — the
+            lean surface *is* exact there.
         key : PRNGKey, optional
             Used only when ``n_draws`` is given. Defaults to ``PRNGKey(0)``.
         chunk_size : int, default 64
             Draws per compiled kernel.
+        fast : bool, optional
+            Deprecated spelling of `approx`. Removed in v1.0.
 
         Returns
         -------
@@ -1728,6 +1737,13 @@ class Posterior:
         from tengri.observation.photometry_config import resolve_runtime_photometry
         from tengri.utils.batching import vmap_chunked
 
+        approx = resolve_renamed_flag(
+            approx,
+            fast,
+            old_name="fast",
+            new_name="approx",
+            caller="Posterior.observables",
+        )
         if self._model is None:
             raise RuntimeError("No model reference — cannot compute observables")
 
@@ -1744,7 +1760,7 @@ class Posterior:
 
         draws = self._draws_for_lift(n_draws=n_draws, key=key)
 
-        if fast:
+        if approx:
             # The lean hot-loop path: honors whatever `approx=` the model was
             # built with. Faster, and an approximation.
             fn = model.predict_photometry
@@ -1756,15 +1772,17 @@ class Posterior:
 
         return vmap_chunked(fn, chunk_size=chunk_size)(draws)
 
-    def spectra(self, wave_obs=None, n_draws=None, fast=False, key=None, chunk_size=64):
+    def spectra(
+        self, wave_obs=None, n_draws=None, approx=False, key=None, chunk_size=64, *, fast=UNSET
+    ):
         r"""Model spectrum for every posterior draw — the other half of an SED plot.
 
         The spectroscopic counterpart of :meth:`observables`, and the posterior
         lift of :meth:`Prediction.spectrum`. Contract §3, **exact by default**:
         the spectrum is LSF-convolved and calibrated exactly as the likelihood
         sees it, so a posterior band and a posterior spectrum answer the same
-        question as the fit did. ``fast=True`` opts into the build-time
-        ``approx=`` path.
+        question as the fit did. ``approx=True`` opts into the build-time
+        ``approx=`` path — same word at both ends, because it is the same object.
 
         Parameters
         ----------
@@ -1774,13 +1792,15 @@ class Posterior:
         n_draws : int, optional
             Thin to this many draws (resampled with replacement). ``None`` uses
             every draw, chunked either way.
-        fast : bool, default False
-            Route through the lean ``predict_spectrum`` (build-time approx)
-            instead of the exact projector.
+        approx : bool, default False
+            Route through the lean ``predict_spectrum`` (build-time
+            ``SpectrumPrecomp``) instead of the exact projector.
         key : PRNGKey, optional
             Used only when ``n_draws`` is given. Defaults to ``PRNGKey(0)``.
         chunk_size : int, default 64
             Draws per compiled kernel.
+        fast : bool, optional
+            Deprecated spelling of `approx`. Removed in v1.0.
 
         Returns
         -------
@@ -1793,6 +1813,9 @@ class Posterior:
         RuntimeError
             If no model is attached, or the model has no spectroscopy and no
             ``wave_obs`` was given.
+        TypeError
+            If both `approx` and the deprecated `fast` are passed with
+            contradictory values.
 
         Notes
         -----
@@ -1806,6 +1829,13 @@ class Posterior:
         """
         from tengri.utils.batching import vmap_chunked
 
+        approx = resolve_renamed_flag(
+            approx,
+            fast,
+            old_name="fast",
+            new_name="approx",
+            caller="Posterior.spectra",
+        )
         if self._model is None:
             raise RuntimeError("No model reference — cannot compute spectra")
 
@@ -1819,13 +1849,13 @@ class Posterior:
 
         draws = self._draws_for_lift(n_draws=n_draws, key=key)
 
-        if fast:
+        if approx:
             # Mirrors Prediction.spectrum: the LUT is an approximation (measured
             # 5-7% off on a SpectrumPrecomp model), so it is opt-in and must not be
             # silently substituted for the exact answer.
             if not model._approx.get("spectrum_precomp"):
                 raise ValueError(
-                    "fast=True requires the model to be built with "
+                    "approx=True requires the model to be built with "
                     "approx=SpectrumPrecomp(...). Rebuild the model with "
                     "approx=SpectrumPrecomp() and try again."
                 )

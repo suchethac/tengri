@@ -2,7 +2,7 @@
 """Contract: ``approx=FeaturePrecomp()`` serves emission lines from a build-time LUT.
 
 The emission-line precompute existed but no fit could reach it. The likelihood called
-``measure_line_fluxes(params, defs, state=...)`` and never passed ``fast=True``, so the
+``measure_line_fluxes(params, defs, state=...)`` and never passed ``approx=True``, so the
 baked-in window LUT was unreachable from any fit; and it computed ``predict_state`` —
 the full-grid forward — whenever a line channel was active, which is precisely the cost
 the precompute exists to skip. Meanwhile the Cue grid could only be switched on by the
@@ -237,7 +237,7 @@ def test_dust_ir_is_admitted_for_lines(synthetic_ssp_wide):
     """
     m = _build(synthetic_ssp_wide, cue=False, approx=FeaturePrecomp(), emission=True)
     out = m.measure_line_fluxes(
-        _params(m), default_line_defs(np.asarray(_line_waves())), fast=True
+        _params(m), default_line_defs(np.asarray(_line_waves())), approx=True
     )
     assert np.all(np.isfinite(np.asarray(out)))
 
@@ -254,7 +254,7 @@ def test_dust_ir_is_still_barred_from_spectral_indices(synthetic_ssp_wide):
     # Dn4000 is a break: the ratio of two band fluxes, with no sideband subtraction
     # for a smooth IR continuum to cancel against.
     with pytest.raises(ValueError, match="predict_spectral_indices"):
-        m.predict_spectral_indices(_params(m), (STANDARD_INDICES["Dn4000"],), fast=True)
+        m.predict_spectral_indices(_params(m), (STANDARD_INDICES["Dn4000"],), approx=True)
 
 
 # ── physics parity (real SSP only — the synthetic grid is too coarse) ──────
@@ -291,7 +291,7 @@ def test_fast_lines_match_the_exact_path_baked_in():
     ref = np.asarray(m_ex.measure_line_fluxes(_params(m_ex), defs))
 
     m_fa = _build(ssp, cue=False, approx=(WavePrecomp(), FeaturePrecomp()))
-    got = np.asarray(m_fa.measure_line_fluxes(_params(m_fa), defs, fast=True))
+    got = np.asarray(m_fa.measure_line_fluxes(_params(m_fa), defs, approx=True))
 
     strong = np.abs(ref) > 0.05 * np.abs(ref[LINES.index("Halpha")])
     assert strong.sum() >= 3, "too few emitting lines to make this a real test"

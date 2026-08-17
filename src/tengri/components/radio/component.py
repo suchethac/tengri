@@ -183,8 +183,8 @@ class RadioSEDComponent(TemplateThreading):
         r"""Free parameters this component owns.
 
         Returns the canonical :data:`PARAMS` tuple from
-        :mod:`tengri.components.radio._params`. The legacy
-        ``_RADIO_PARAMS`` bucket in :mod:`tengri.parameters._builders`
+        ``tengri.components.radio._params``. The legacy
+        ``_RADIO_PARAMS`` bucket in ``tengri.parameters._builders``
         is derived from the same tuple, so the two registration paths
         are guaranteed to agree.
 
@@ -232,7 +232,7 @@ class RadioSEDComponent(TemplateThreading):
 
     #: Cross-component scalars this emitter reads off ``state.derived``, with two
     #: deliberately distant probe draws. The build-time band-response builder
-    #: (:meth:`tengri.SEDModel._additive_term_band_response`) evaluates
+    #: (``tengri.SEDModel._additive_term_band_response``) evaluates
     #: :meth:`emission_terms` at both and requires every term to come back
     #: *proportional*: a term whose spectral **shape** — not merely its amplitude —
     #: responds to a runtime input is not rank-1, so no constant band response

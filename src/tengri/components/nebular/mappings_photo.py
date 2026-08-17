@@ -418,7 +418,7 @@ class MappingsPhotoStellarBackend:
 
     This backend has ``has_continuum = False`` (MAPPINGS V provides only line
     emission, not nebular continuum).  For applications that need continuum,
-    wrap with :class:`~tengri.components.nebular._shared.NebularContinuumFallback`::
+    wrap with ``tengri.components.nebular._shared.NebularContinuumFallback``::
 
         from tengri.components.nebular._shared import NebularContinuumFallback
 
@@ -889,7 +889,7 @@ class MappingsPhotoAGNBackend:
 
     This backend has ``has_continuum = False``.  For applications that need
     nebular continuum, wrap with
-    :class:`~tengri.components.nebular._shared.NebularContinuumFallback`::
+    ``tengri.components.nebular._shared.NebularContinuumFallback``::
 
         from tengri.components.nebular._shared import NebularContinuumFallback
 

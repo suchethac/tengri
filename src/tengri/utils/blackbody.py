@@ -7,8 +7,8 @@ need it — the AGN torus/polar-dust closures and the dust IR emission closures 
 and ``utils/`` is the layer below both. Importing it from either component
 would invert the layering and couple the two.
 
-Both historical spellings delegate here: :func:`tengri.components.agn._phys.planck_lnu`
-(frequency argument) and :func:`tengri.components.dust.emission._physics.planck_bnu`
+Both historical spellings delegate here: ``tengri.components.agn._phys.planck_lnu``
+(frequency argument) and ``tengri.components.dust.emission._physics.planck_bnu``
 (wavelength argument).
 """
 
@@ -141,7 +141,7 @@ def _planck_core_jvp(
        both differentiate forward. The ``custom_vjp`` spelling would trade a
        silent NaN in one mode for a hard error in a mode that works — the same
        regression this branch already had to undo for
-       :func:`~tengri.components.stellar.component._mass_scale_lnu`.
+       ``tengri.components.stellar.component._mass_scale_lnu``.
     2. A ``custom_vjp`` would have to reduce ``g * dB/dT`` back to the
        temperature's shape by hand, because ``temperature`` is a scalar per
        ring under ``vmap``. That hand-written reduction was the stated reason
@@ -153,7 +153,7 @@ def _planck_core_jvp(
     ``custom_vjp``'s opacity would have: a ``custom_jvp``'s transpose is
     inlined into the backward jaxpr, and without it XLA is free to reassociate
     the cotangent back inside the coefficient and re-form the overflow. See
-    :func:`~tengri.components.stellar.component._mass_scale_lnu`, where the
+    ``tengri.components.stellar.component._mass_scale_lnu``, where the
     same pairing is measured.
     """
     nu_w, x = primals

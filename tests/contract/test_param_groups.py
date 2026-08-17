@@ -107,7 +107,10 @@ class TestEquivalence:
     """Test that grouped form is equivalent to flat form."""
 
     def test_grouped_equals_flat_dpl_minimal(self):
-        """Minimal grouped dpl should equal equivalent flat form."""
+        """Minimal grouped dpl should equal equivalent flat form (#1796).
+
+        When there's no met block, met_* parameters are implicitly FIXED.
+        """
         # When dust group is NOT specified, dust defaults to free params
         grouped = parse_groups(
             sfh={
@@ -131,6 +134,8 @@ class TestEquivalence:
             dust_model="two_component",
             dust_tau_bc=0.0,  # Registry default
             dust_tau_diff=0.0,  # Registry default
+            # met_logzsol is Fixed when no met block is specified (#1796)
+            met_logzsol=Fixed(0.0),
             redshift=Fixed(0.1),
         )
 

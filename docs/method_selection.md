@@ -47,7 +47,7 @@ process, and drop to `dense_mass_matrix=False` or `mcmc_hmc` on D ≥ 8. The
 fitting tutorials ([quickstart](spine/00_quickstart),
 [06](spine/06_fitting_spectroscopy),
 [07](spine/07_joint_photo_spec)) follow these rules; see also
-[Known limitations](known_limitations).
+[Caveats](known_limitations).
 
 ## Speed: build with a precompute table
 
@@ -60,4 +60,4 @@ it. For spectroscopy, `approx=SpectrumPrecomp()` pre-rebins the SSP to the
 spectrum pixels; on a joint observation either opt-in builds both the
 photometry and spectrum tables. See
 [Joint photometry + spectroscopy](spine/07_joint_photo_spec) and
-[Known limitations](known_limitations).
+[Caveats](known_limitations).

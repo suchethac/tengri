@@ -168,11 +168,10 @@ def bolometric_integral_nu(
     **Gradient-safe**: yes.
 
     This is the ``argsort`` formulation and reproduces the historical
-    per-component copies bit-for-bit. It is NOT interchangeable
-    bit-for-bit with :func:`tengri.components.dust.emission._physics.
-    integrate_lnu_over_nu`, which integrates via the
-    :math:`d\ln\nu = -d\ln\lambda` identity and differs in floating-point
-    rounding.
+    per-component copies bit-for-bit. It is NOT interchangeable bit-for-bit
+    with ``tengri.components.dust.emission._physics.integrate_lnu_over_nu``,
+    which integrates via the :math:`d\ln\nu = -d\ln\lambda` identity and
+    differs in floating-point rounding.
     """
     idx_sort = jnp.argsort(nu)
     integral = jnp.trapezoid(lnu[idx_sort], nu[idx_sort])
