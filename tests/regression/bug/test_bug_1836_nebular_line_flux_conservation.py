@@ -166,7 +166,7 @@ def test_a_sub_pixel_line_occupies_one_pixel_not_two():
     """sigma_v -> 0 must still render the NARROWEST line the grid can hold.
 
     The width floor is what decides this. Flooring at the full local spacing
-    doubles the support and lights two pixels per line, which is a real behaviour
+    doubles the support and lights two pixels per line, which is a real behavior
     regression even though flux is still conserved --
     ``tests/components/nebular/test_shock_emission.py`` asserts one pixel per
     line and caught exactly that.
@@ -184,7 +184,7 @@ def test_a_sub_pixel_line_occupies_one_pixel_not_two():
 def test_a_line_exactly_between_two_nodes_is_not_lost():
     """The degenerate case the nearest-pixel fallback exists for.
 
-    A sub-pixel line centered exactly midway puts both neighbours at ``|u| = 1``,
+    A sub-pixel line centered exactly midway puts both neighbors at ``|u| = 1``,
     where the compact-support triweight is *exactly* zero — the profile vanishes
     and the rescale cannot recover it. Pre-#1836 that line was dropped silently.
     """
@@ -207,6 +207,45 @@ def test_line_outside_the_grid_contributes_nothing_and_is_not_nan():
     )
     assert np.all(np.isfinite(sed))
     assert _integral_dnu(sed, _GRID) == pytest.approx(0.0, abs=1e-30)
+
+
+def test_a_degenerate_single_node_grid_stays_finite():
+    """A grid with no extent in nu must return zero flux, never NaN.
+
+    Self-review catch. ``_render_conserving`` divides twice -- by the profile's
+    discrete area, and by the quadrature weight of the nearest node -- and only
+    the first was guarded. A one-node grid has ``quad_w == 0`` identically, so
+    the second division was ``0.0 / 0.0`` and put a NaN on the tape. The
+    velocity path has an explicit ``shape[0] > 1`` branch, so the degenerate
+    grid is a supported input, and pre-#1836 it returned a finite value.
+    """
+    from tengri.components.nebular._shared import place_line_profiles_velocity
+
+    sed = np.asarray(
+        place_line_profiles_velocity(
+            np.array([5000.0]), np.array([1.0e40]), np.array([5000.0]), 100.0
+        )
+    )
+    assert np.all(np.isfinite(sed)), f"single-node grid returned {sed}"
+
+
+def test_delta_mode_places_an_edge_line_on_the_edge_node():
+    """The nearest node is the nearest node, including the first and the last.
+
+    Self-review catch. Delta mode clipped its index to ``[1, n_wave - 2]``, a
+    constraint inherited from the old Delta-nu, which read ``obs[i +/- 1]``. The
+    quadrature weight that replaced it is defined at every node, so the clip
+    only displaced a line landing on either end by a full pixel -- measured at
+    5 A on a 5 A grid.
+    """
+    from tengri.components.nebular._shared import place_line_profiles
+
+    grid = np.linspace(3000.0, 8000.0, 1001)  # 5 A spacing
+    edges = np.array([grid[0], grid[-1]])
+    lums = np.array([1.0e40, 2.0e40])
+    sed = np.asarray(place_line_profiles(edges, lums, grid, 0.0, 0.0))
+    assert np.array_equal(np.nonzero(sed)[0], np.array([0, grid.shape[0] - 1]))
+    assert _integral_dnu(sed, grid) == pytest.approx(lums.sum(), rel=1e-6)
 
 
 def test_jit_and_grad_survive_the_rescale():

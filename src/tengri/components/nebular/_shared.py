@@ -143,6 +143,10 @@ def _render_conserving(
         Half-width beyond which each profile is negligible — exact for the
         compact-support triweight, a 4-sigma convention for the Gaussian. Used
         only to decide containment, never to shape the profile. [Å]
+    nearest : ndarray, shape (n_lines,)
+        Index of the grid node closest to each line, from :func:`_grid_bracket`.
+        Where a profile vanishes on the grid entirely, its luminosity is
+        scattered here instead.
 
     Returns
     -------
@@ -154,8 +158,9 @@ def _render_conserving(
 
     Notes
     -----
-    **JIT-compatible**: yes. **Gradient-safe**: yes — the guarded divisor is
-    never zero, so no NaN reaches the tape.
+    **JIT-compatible**: yes. **Gradient-safe**: yes — *both* divisors are
+    guarded (the profile area and the quadrature weight), so no NaN reaches the
+    tape even on a degenerate single-node grid.
     """
     quad_w = _nu_quadrature_weights(obs_wavelengths)  # (n_wave,) [Hz]
     area = quad_w @ profiles  # (n_lines,)
@@ -185,8 +190,18 @@ def _render_conserving(
     # density whose trapezoid integral is exactly ``L``, so this conserves flux
     # by the same rule the rescale uses. Its ``scaled`` column is all-zero, so
     # there is nothing to double-count.
-    dropped = jnp.where(contained & (area <= 0.0), line_luminosities, 0.0)
-    return sed.at[nearest].add(dropped / quad_w[nearest])
+    #
+    # Both divisors are guarded the same way, and for the same reason: a
+    # single-node grid has zero extent in ν, so ``quad_w`` is identically zero
+    # there and an unguarded ``0/0`` puts a NaN on the tape. Guarding only
+    # ``area`` left that hole — a 1-point grid returned ``nan`` where the
+    # pre-#1836 code returned a finite value. Zero flux is the honest answer: a
+    # grid of one point cannot carry a line, because it has no measure to
+    # integrate over.
+    w_near = quad_w[nearest]  # (n_lines,) [Hz]
+    representable = w_near > 0.0
+    dropped = jnp.where(contained & (area <= 0.0) & representable, line_luminosities, 0.0)
+    return sed.at[nearest].add(dropped / jnp.where(representable, w_near, 1.0))
 
 
 def place_line_profiles(
@@ -318,9 +333,13 @@ def place_line_profiles(
         # Vectorized delta functions: nearest-pixel placement via scatter-add.
         # Via searchsorted, not an (n_wave, n_lines) argmin — see
         # :func:`_grid_bracket` for why that matrix is worth avoiding.
-        indices = jnp.clip(
-            _grid_bracket(obs_wavelengths, line_wavelengths)[1], 1, n_wave - 2
-        )  # (n_lines,)
+        #
+        # NOT clipped to [1, n_wave - 2]. That clip belonged to the old Δν,
+        # which read ``obs[i ± 1]`` and so could not be evaluated at either end;
+        # the quadrature weight below is defined at every node, so the clip is a
+        # dead constraint that only displaces a line by a whole pixel when it
+        # lands on the first or last one (#1836).
+        indices = _grid_bracket(obs_wavelengths, line_wavelengths)[1]  # (n_lines,)
         # Divide by the SAME quadrature weight the caller will integrate with,
         # rather than a separately-derived Δν, so ``sum(w*sed) == sum(L)`` to
         # rounding instead of to the ~1e-4 the two spellings used to differ by
