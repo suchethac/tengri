@@ -10,12 +10,15 @@ Covers:
 
 from __future__ import annotations
 
+import types
+
 import pytest
 
 from tengri.forward.precompute.registry import (
     _REGISTRY,
     registered_components,
     resolve,
+    validate_precompute_module,
 )
 
 pytestmark = pytest.mark.contract
@@ -37,15 +40,20 @@ class TestRegistry:
 
     @pytest.mark.parametrize("name", list(_REGISTRY.keys()))
     def test_every_registered_component_has_protocol_surface(self, name):
-        module = resolve(name)
-        # Must expose AXIS_PARAMS, precompute, build_lookup
-        assert hasattr(module, "AXIS_PARAMS"), f"{name}: module missing AXIS_PARAMS"
-        assert callable(getattr(module, "precompute", None)), (
-            f"{name}: module missing callable precompute()"
-        )
-        assert callable(getattr(module, "build_lookup", None)), (
-            f"{name}: module missing callable build_lookup()"
-        )
+        # Call the shipped validator rather than re-asserting its three checks
+        # here. ``validate_precompute_module`` is exported from
+        # ``forward.precompute`` and had ZERO call sites in src/ or tests/ --
+        # a contract that existed, was public, and had never once run, while
+        # this test hand-rolled the same checks beside it (#1738). Raises
+        # AttributeError naming the missing members.
+        validate_precompute_module(name, resolve(name))
+
+    def test_the_validator_rejects_a_module_missing_the_surface(self):
+        # Guards the test above from going vacuous: if the validator ever
+        # stopped raising, every parametrization would pass on anything.
+        bogus = types.ModuleType("not_a_precompute_module")
+        with pytest.raises(AttributeError, match="build_lookup"):
+            validate_precompute_module("bogus", bogus)
 
 
 class TestAxisParamsShape:

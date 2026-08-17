@@ -35,6 +35,7 @@ import urllib.request
 from collections.abc import Iterable
 from pathlib import Path
 
+from tengri._data_setup import require_remote_url
 from tengri.registry import _RegistryTable
 
 __all__ = [
@@ -81,7 +82,9 @@ def list_remote_ssps() -> _RegistryTable:
     --------
     >>> list_remote_ssps().names()
     """
-    with urllib.request.urlopen(SSP_CATALOG_URL, timeout=30) as resp:
+    # B310: scheme restricted to http/https by require_remote_url.
+    require_remote_url(SSP_CATALOG_URL)
+    with urllib.request.urlopen(SSP_CATALOG_URL, timeout=30) as resp:  # nosec B310
         html = resp.read().decode("utf-8", errors="replace")
     seen: set[str] = set()
     rows: list[dict] = []

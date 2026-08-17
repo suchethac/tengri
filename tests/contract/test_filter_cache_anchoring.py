@@ -99,3 +99,117 @@ def test_no_public_entry_point_defaults_to_a_relative_directory():
         if isinstance(default, str | Path) and not Path(default).is_absolute():
             offenders.append(f"{fn.__qualname__}(cache_dir={default!r})")
     assert not offenders, "cwd-relative filter-cache defaults: " + ", ".join(offenders)
+
+
+# ── A partial cache must not hide a complete one ──────────────────────────
+#
+# #1486 anchored the cache so the *directory* no longer depended on the working
+# directory. That left the harder half: resolution still picked the first
+# ancestor that merely owned a ``filters/`` folder, whether or not it held the
+# curve being asked for. Two committed partial caches -- ten curves under
+# ``examples/advanced/data/filters/``, five under ``examples/inference/`` --
+# therefore shadowed the 249 in ``data/filters/`` for every gallery example,
+# because the runner chdirs into each script's directory. Every band outside
+# those partials was re-fetched from SVO on every CI run, and nothing said so:
+# a miss is indistinguishable from a cold cache, so it failed open.
+
+
+def _seed(directory, *names):
+    """Create ``directory`` and write a minimal two-column curve per name."""
+    directory.mkdir(parents=True, exist_ok=True)
+    for name in names:
+        (directory / name).write_text("1000.0 0.0\n2000.0 1.0\n3000.0 0.0\n")
+    return directory
+
+
+def test_a_partial_cache_does_not_hide_a_complete_one(tmp_path, monkeypatch):
+    """A curve missing from the nearest cache is still found further up.
+
+    ``data_dirs`` is replaced rather than redirected by environment for the
+    reason the fallback test above gives: in a development checkout it also
+    yields the repository's own ``data/filters/``, which holds every curve, so
+    a partial shadow could never be observed to lose.
+    """
+    import tengri._data_setup as ds
+    from tengri.observation.filters import find_cached_filter
+
+    complete = _seed(tmp_path / "root" / "filters", "NEAR.dat", "FAR.dat")
+    partial = _seed(tmp_path / "nested" / "filters", "NEAR.dat")
+    monkeypatch.setattr(ds, "data_dirs", lambda: [partial.parent, complete.parent])
+
+    # The nearer cache still wins for what it actually holds.
+    assert find_cached_filter("NEAR.dat") == partial / "NEAR.dat"
+    # And no longer vetoes what it does not.
+    assert find_cached_filter("FAR.dat") == complete / "FAR.dat"
+    # A curve no cache holds reports honestly rather than guessing a path.
+    assert find_cached_filter("ABSENT.dat") is None
+
+
+def test_a_shadowed_curve_loads_without_reaching_for_the_network(tmp_path, monkeypatch):
+    """The end-to-end claim: a partial cache must not trigger a download.
+
+    Asserting on :func:`find_cached_filter` alone would not catch a
+    ``download_filter`` that ignores it, which is precisely how the original
+    defect survived -- the pieces were each defensible and the composition was
+    not. ``_fetch_from_svo`` is replaced with a detonator so any fetch fails
+    loudly instead of silently succeeding over the network.
+    """
+    import tengri._data_setup as ds
+    import tengri.observation.filters as f
+
+    complete = _seed(tmp_path / "root" / "filters", "GALEX_GALEX_FUV.dat")
+    partial = _seed(tmp_path / "nested" / "filters", "SLOAN_SDSS_u.dat")
+    monkeypatch.setattr(ds, "data_dirs", lambda: [partial.parent, complete.parent])
+
+    def _detonate(svo_id):
+        raise AssertionError(f"reached SVO for {svo_id!r}, which is cached on disk")
+
+    monkeypatch.setattr(f, "_fetch_from_svo", _detonate)
+
+    wave, trans = f.download_filter("GALEX/GALEX.FUV")
+    assert wave.shape == (3,)
+    assert trans.max() == 1.0
+
+
+def test_a_failed_download_leaves_no_empty_cache_behind(tmp_path, monkeypatch):
+    """A fetch that raises must not create the directory it would have written.
+
+    ``download_filter`` ran ``cache_path.mkdir(parents=True)`` before deciding
+    whether it needed to download at all, so a fetch that then failed -- SVO
+    unreachable, or ``astroquery`` simply not installed -- left an *empty*
+    ``filters/`` directory behind. That is the worst residue of the lot: an
+    empty cache holds nothing, yet under directory-level resolution it was
+    still enough to win and hide a populated cache further up. The mkdir now
+    happens only on the path that actually writes a curve.
+    """
+    import tengri.observation.filters as f
+
+    def _unavailable(svo_id):
+        raise ImportError("astroquery is not installed")
+
+    monkeypatch.setattr(f, "_fetch_from_svo", _unavailable)
+    target = tmp_path / "cwd" / "data" / "filters"
+
+    with pytest.raises(ImportError):
+        f.download_filter("GALEX/GALEX.FUV", cache_dir=target)
+
+    assert not target.exists(), "a failed download left an empty cache that can shadow"
+
+
+def test_no_filter_curves_are_shipped_outside_the_canonical_cache():
+    """Duplicate curves under ``examples/`` are what created the shadows.
+
+    All twenty were byte-identical copies of files already in ``data/filters/``,
+    so they bought nothing and cost the resolution bug above. The library fix
+    makes a stray cache harmless; this keeps the duplicates from coming back.
+    """
+    repo = Path(__file__).resolve().parents[2]
+    examples = repo / "examples"
+    if not examples.is_dir():
+        pytest.skip("not a source checkout")
+
+    strays = sorted(str(p.relative_to(repo)) for p in examples.rglob("data/filters/*.dat"))
+    assert not strays, (
+        "filter curves belong in data/filters/ only; these shadow it for any "
+        "example run from their directory: " + ", ".join(strays)
+    )

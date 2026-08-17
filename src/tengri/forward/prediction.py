@@ -2092,11 +2092,24 @@ class Prediction:
             waves = jnp.asarray(derived["line_waves"])
             lums = jnp.asarray(derived["line_lums"])
             self._cache["line_waves"] = waves
-            # Backends publish INTRINSIC line_lums; apply dust reddening so the
-            # interactive catalog is observed-frame, matching predict_line_fluxes
-            # (single-sourced via SEDModel._attenuate_line_catalog). Without this
-            # the .lines catalog is silently intrinsic despite its docstring.
-            self._cache["line_lums"] = model._attenuate_line_catalog(self._params, waves, lums)
+            # Backends publish INTRINSIC line_lums; the dust component publishes
+            # the reddened catalog alongside it (#1867), with the same screen it
+            # applies to the nebular continuum. Read that when present.
+            #
+            # This used to call `model._attenuate_line_catalog(...)` here. The
+            # result was correct and completely dead: every `.lines.*` accessor
+            # calls `_ensure_lines()` and then reads `properties[...]`, which
+            # routes to `_line_luminosity_helper` -> `state.derived[...]` and
+            # never consults this cache. So the reddening was recomputed on
+            # every access and discarded, and both public line surfaces were
+            # intrinsic while documented as observed.
+            _log_atten = derived.get("log_line_lums_attenuated")
+            if _log_atten is None:
+                self._cache["line_lums"] = lums
+            else:
+                from tengri.utils.scale import pow10
+
+                self._cache["line_lums"] = pow10(jnp.asarray(_log_atten))
         else:
             self._cache["line_waves"] = jnp.array([])
             self._cache["line_lums"] = jnp.array([])

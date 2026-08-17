@@ -81,40 +81,28 @@ DATA_LIMIT_MIB = 96.0
 #: Prefixes measured against :data:`DATA_LIMIT_MIB`.
 DATA_PREFIXES = ("data/",)
 
-#: Files already over their limit when this guard was written, with the size
-#: each had at that moment (MiB, rounded up to 0.1). They may stay; they may
-#: not grow. Removing an entry once the file shrinks below the limit is the
-#: intended direction of travel.
+#: **Empty, and that is the finished state.**
 #:
-#: Every entry but the logo is a notebook carrying embedded PNG output. None is
-#: published: ``docs/conf.py`` points sphinx-gallery at ``examples/`` only, and
-#: no toctree references ``notebooks/archive*`` or ``explore/``. Clearing their
-#: outputs, or rebuilding them from their jupytext mirrors, would return several
-#: MiB each.
-# Paths here are exact matches, so a directory move strands every entry it
-# names -- the guard then reports the same files as new and unrecorded, which
-# reads as a regression rather than as a rename. That happened immediately: the
-# five notebook archives were consolidated under notebooks/archive/ in the same
-# window this guard landed, stranding nine of these twelve lines. The sizes are
-# unchanged; only the paths moved.
-#
-# `explore/02_stochastic_performance.ipynb` is gone from this list rather than
-# renamed: `/explore/` is now gitignored, and the guard only reads tracked
-# files, so the entry could never match again.
-INVENTORY: dict[str, float] = {
-    "notebooks/archive/2026-04/fitting/06_advanced_inference.ipynb": 7.1,
-    "notebooks/archive/2026-04/demonstrations/06_advanced_inference.ipynb": 7.1,
-    "notebooks/archive/2026-04/demonstrations/12_advanced_inference.ipynb": 6.9,
-    "notebooks/archive/2026-04/fitting/01_fitting_spectra.ipynb": 5.3,
-    "notebooks/archive/v1/000_quickstart_executed.ipynb": 5.1,
-    # The site logo, at 5 MiB. A PNG this size is a rendering artifact rather
-    # than a design decision; every page that shows it pays for it.
-    "docs/_static/tengri-logo.png": 5.1,
-    "notebooks/archive/migrated_galleries/02_sfh_gallery.ipynb": 5.1,
-    "notebooks/archive/2026-04/quickstart/03_bursty_sfh_recovery.ipynb": 5.0,
-    "notebooks/archive/2026-04/demonstrations/01_spectroscopic_fitting.ipynb": 4.6,
-    "notebooks/archive/2026-04/demonstrations/05_inference_methods.ipynb": 4.2,
-}
+#: It held twelve entries when this guard landed: eleven unpublished notebooks
+#: carrying embedded PNG, and a 5 MiB site logo. All twelve were dealt with
+#: rather than tolerated. The notebooks -- 93 of them across the archive trees
+#: -- were carrying 164 MB of stored output that nothing renders (`docs/conf.py`
+#: sets ``nbsphinx_execute = "never"``, so only the *published* renders need
+#: their outputs, and those are protected); stripping it took 167.4 MB of files
+#: to 3.2 MB. The logo was 3998x3766 serving a favicon and a ~400 px hero, and
+#: is now 1024x965: 5135 KB -> 591 KB.
+#:
+#: An empty inventory means the limits above are a real line rather than a
+#: description of the status quo. Adding an entry is a deliberate act that has
+#: to be argued for in a comment beside it.
+#:
+#: One property to keep in mind if entries ever return: paths here are **exact
+#: matches**, so a directory move strands every entry it names, and the guard
+#: then reports those files as new and unrecorded -- which reads as a regression
+#: rather than as a rename. That happened within days of this guard landing,
+#: when the five notebook archives were consolidated under ``notebooks/archive/``
+#: and nine of the twelve entries had to be re-pointed at unchanged files.
+INVENTORY: dict[str, float] = {}
 
 
 def _tracked_files() -> list[Path]:

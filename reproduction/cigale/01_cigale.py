@@ -17,17 +17,14 @@
 # # Reproducing CIGALE's physics with tengri
 #
 # CIGALE (Boquien et al. 2019, A&A 622, A103) is the workhorse for
-# panchromatic SED fitting. This notebook places its physics modules —
-# `sfhdelayed`, `bc03`, `nebular`, `dustatt_modified_starburst`,
-# `dale2014`, `skirtor2016`, `xray`, `radio`, `redshifting` — next to
-# their tengri equivalents on the same axes, in the same units, at the
-# same parameters. Same parameters in, same SED out: any disagreement is
+# panchromatic SED fitting. This notebook places its physics modules next
+# to their tengri equivalents at the same parameters — the module map below
+# pairs them up. Same parameters in, same SED out: any disagreement is
 # physics, not data or fitting.
 #
-# Both codes consume the same BC03 templates. CIGALE's bundled
-# Chabrier-IMF grid (Bruzual & Charlot 2003) is repackaged into the DSPS
-# HDF5 layout by `_drivers/cigale_ssp_to_dsps.py`, so any §1 residual
-# below floating-point precision is interpolation only.
+# Both codes consume the same BC03 templates: CIGALE's bundled
+# Chabrier-IMF grid (Bruzual & Charlot 2003), repackaged into the DSPS
+# HDF5 layout by `_drivers/cigale_ssp_to_dsps.py`.
 #
 # The fiducial galaxy throughout: τ-delayed SFH with τ = 1 Gyr,
 # age = 5 Gyr; Z = Z☉; modified-starburst dust with E(B−V)_lines = 0.3;
@@ -38,8 +35,7 @@
 # dust IR, X-ray, IGM, and radio synchrotron all match CIGALE to floating
 # point or a fraction of a percent. One block differs by design: the nebular
 # emitter uses Cue (a neural emulator trained on Cloudy 17, Li et al. 2025)
-# rather than CIGALE's Cloudy 13.x grids. Every discrepancy is called out
-# where it appears.
+# rather than CIGALE's Cloudy 13.x grids.
 
 # %% [markdown]
 # ## Setup
@@ -177,9 +173,9 @@ print(
 # %% [markdown]
 # ## Module map
 #
-# Each row shows the CIGALE module on the left, the tengri registry on
-# the right. The tengri side is enumerated live via `tengri.list_*()` so
-# the table reflects what the installed version actually exposes.
+# The CIGALE module on the left, the tengri registry on the right. The
+# tengri side is enumerated live via `tengri.list_*()` so the table reflects
+# what the installed version actually exposes.
 
 
 # %%
@@ -232,11 +228,10 @@ for block, (cig, tng) in registries.items():
 # %% [markdown]
 # ## §1 Stellar populations
 #
-# BC03 Chabrier (Bruzual & Charlot 2003) at Z = 0.02 from 1 Myr to 10 Gyr.
-# CIGALE's `bc03/Z=0.02_imf=chab.pickle` (solid) read directly,
-# against the same templates in tengri's HDF5 (dashed). The lower panel shows
-# the relative residual |tengri − CIGALE| / CIGALE, ~1e-7 from float32
-# round-trip through HDF5 repackaging.
+# BC03 Chabrier (Bruzual & Charlot 2003) at Z = 0.02 from 1 Myr to 10 Gyr:
+# CIGALE's `bc03/Z=0.02_imf=chab.pickle` read directly against the same
+# templates in tengri's HDF5. The relative residual |tengri − CIGALE| /
+# CIGALE is ~1e-7, the float32 round-trip through HDF5 repackaging.
 
 # %%
 import pickle as _pickle
@@ -318,7 +313,7 @@ save_fig("cigale_01_ssp_bc03.png")
 # tengri's `sfh.delayed` is the same τ-delayed shape CIGALE uses in
 # `sfhdelayed`: SFR(t) ∝ t · exp(−t/τ), peak at t = τ. Both integrate to 1 M☉
 # formed by `age` — CIGALE via `normalise=True`, tengri via `log_total_mass = 0.0`.
-# The right panel shows `state.derived["sfr_history"]` on a 256-point log-spaced
+# tengri's curve is `state.derived["sfr_history"]` on a 256-point log-spaced
 # lookback grid; the `∫SFR dt = 1.0000 M☉` check verifies the integral matches
 # the constraint.
 
@@ -402,12 +397,11 @@ save_fig("cigale_02_sfh_tau.png")
 # CIGALE's `sfh2exp(f_burst=0)` and FSPS's `sfh=1` both produce a
 # declining exponential peaking at galaxy formation — a *different*
 # shape from CIGALE's `sfhdelayed` plotted above. tengri intentionally
-# does **not** register this shape as `sfh.tau` — to avoid confusion with
-# the τ-delayed model, which has opposite physics. The
-# `declining_exponential` function remains importable from
-# the `sfh` builder grammar for expert use cases.
-# The only τ-style SFH in the registry is `delayed` (= CIGALE
-# `sfhdelayed`).
+# does **not** register this shape as `sfh.tau`, to avoid confusion with
+# the τ-delayed model, which has opposite physics; `delayed`
+# (= CIGALE `sfhdelayed`) is the only τ-style SFH in the registry. The
+# `declining_exponential` function remains importable from the `sfh`
+# builder grammar for expert use cases.
 
 
 # %% [markdown]
@@ -482,10 +476,9 @@ save_fig("cigale_02_sfh2exp.png")
 # %% [markdown]
 # ## §3 Integrated stellar SED
 #
-# Convolve the τ-delayed SFH with the BC03 SSPs. No dust, no nebular.
-# Both panels show L_ν vs λ_rest; CIGALE is normalized to 1 M☉ formed
-# by construction, tengri's stellar mass formed is reported in the
-# annotation.
+# The τ-delayed SFH convolved with the BC03 SSPs. No dust, no nebular.
+# CIGALE is normalized to 1 M☉ formed by construction; tengri's stellar
+# mass formed is reported in the annotation.
 
 # %%
 sed_c = C.run_chain(
@@ -734,9 +727,9 @@ plt.show()
 # %% [markdown]
 # ## §6 Dust IR re-emission and energy balance
 #
-# Absorbed stellar UV/optical reappears in the IR. CIGALE uses the
-# Dale et al. (2014) template family (α = 2); tengri evaluates the same
-# templates and enforces energy balance,
+# CIGALE re-emits absorbed stellar UV/optical through the Dale et al. (2014)
+# template family (α = 2); tengri evaluates the same templates and enforces
+# energy balance,
 # $L_{\rm IR,\,emitted} \equiv L_{\rm absorbed}$, to floating-point —
 # the residual is annotated on the right panel. The energy anchors agree
 # to 2%: tengri's `L_absorbed` sits above CIGALE's `dust.luminosity` by
@@ -834,8 +827,7 @@ plt.show()
 # %% [markdown]
 # ### Dust-IR model knobs: AGN heating and the radiation-field slope
 #
-# Two further CIGALE dust-IR parameters, same head-to-head as every other
-# panel: **tengri solid, pcigale dotted**.
+# Two further CIGALE dust-IR parameters.
 #
 # **The attenuation must match for the IR to match.** The dust IR is
 # energy-balance-normalized to the *absorbed* starlight, so reproducing
@@ -1061,14 +1053,12 @@ plt.show()
 # swaps to a **τ=300 Myr, age=100 Myr** delayed SFH where Hα and the
 # metal-line forest are physically strong. Only the SFH changes.
 #
-# Each panel shows the stellar baseline (dashed), stellar + nebular
-# (solid), and the nebular component alone (dotted). The two emitters
-# see the same H II region: `logU = −2.0`, `Z_gas = Z_⊙` (Cue's
-# `neb_logZ_gas` is pinned to `log10(0.02/Z_⊙) ≈ +0.149`), `f_esc = 0`,
-# `n_H = 100 cm⁻³` (`gas_logn = 2.0`), solar N/O and C/O
-# (`gas_logno = gas_logco = 0`). The Q_H reaching Cue is the integral of
-# the SSP-convolved ionizing spectrum below 911.76 Å, published by the
-# stellar component on every forward pass.
+# The two emitters see the same H II region: `logU = −2.0`,
+# `Z_gas = Z_⊙` (Cue's `neb_logZ_gas` is pinned to
+# `log10(0.02/Z_⊙) ≈ +0.149`), `f_esc = 0`, `n_H = 100 cm⁻³`
+# (`gas_logn = 2.0`), solar N/O and C/O (`gas_logno = gas_logco = 0`). The
+# Q_H reaching Cue is the integral of the SSP-convolved ionizing spectrum
+# below 911.76 Å, published by the stellar component on every forward pass.
 #
 # **Remaining residual.** The gap lives downstream of the gas knobs. Cue
 # was trained on Cloudy 17 (Li et al. 2025) while CIGALE bundles Cloudy
@@ -1251,9 +1241,7 @@ for _c, _name in [(6563.0, "Hα"), (5007.0, "[O III]"), (4861.0, "Hβ")]:
 #
 # CIGALE's `skirtor2016` AGN package on the left vs tengri's composable
 # AGN on the right, both at the SKIRTOR fiducial (i = 30°, τ_9.7 = 7,
-# oa = 40°, p = q = 1). Each panel shows the stellar + dust baseline
-# (dashed), the full SED with AGN (solid), and the AGN-only component
-# (dotted).
+# oa = 40°, p = q = 1).
 #
 # **`disc.schartmann2005` matches CIGALE's `skirtor2016 disk_type=1`**
 # default: the Schartmann (2005) piecewise power law with the 1200 Å
@@ -1533,16 +1521,13 @@ plt.show()
 #
 # CIGALE's `skirtor2016` offers two analytic discs (`skirtor2016.py`):
 # `disk_type=0` → `skirtor_disk()` and `disk_type=1` →
-# `schartmann2005_disk()`. tengri ships **both, bit-for-bit**:
-# `disc.skirtor` reproduces `skirtor_disk` and `disc.schartmann2005`
-# reproduces `schartmann2005_disk`, each to machine precision (the
-# unit-area disc shapes agree to ~1e-16). The panel above pins the
-# `disk_type=1` pairing; this one swaps to `disc.skirtor` and pairs it
-# against CIGALE `disk_type=0`. The UV–optical disc continuum (where the
-# disc, not the torus, dominates) overlies CIGALE exactly — the
-# shallower SKIRTOR disc with its 1200 Å bend, distinct from the
-# Schartmann disc's shape. The MIR/FIR torus agreement is independent of
-# the disc choice.
+# `schartmann2005_disk()`. tengri ships **both, bit-for-bit**, each to
+# machine precision (the unit-area disc shapes agree to ~1e-16). The panel
+# above pins the `disk_type=1` pairing; this one swaps to `disc.skirtor`.
+# The UV–optical disc continuum (where the disc, not the torus, dominates)
+# overlies CIGALE exactly — the shallower SKIRTOR disc with its 1200 Å
+# bend, distinct from the Schartmann disc's shape. The MIR/FIR torus
+# agreement is independent of the disc choice.
 
 # %%
 sed_skirtor0 = C.run_chain(
@@ -2137,11 +2122,11 @@ save_fig("cigale_12_igm_transmission.png")
 # %% [markdown]
 # ## tengri in CIGALE-mode — the full X-ray → radio party SED
 #
-# Every section above swept one physics block. This is the whole chain at
-# once: shared BC03 SSP, fiducial τ-delayed SFH, modified-starburst
-# attenuation, Dale+2014 IR re-emission, plus §10 X-ray (Yang+2020: XRB + hot
-# gas, no AGN corona in this galaxy-only chain) and §11 radio (Condon 1992 SF
-# synchrotron, `q_IR = 2.5`), overlaid on CIGALE at matched parameters.
+# The whole chain at once: shared BC03 SSP, fiducial τ-delayed SFH,
+# modified-starburst attenuation, Dale+2014 IR re-emission, plus §10 X-ray
+# (Yang+2020: XRB + hot gas, no AGN corona in this galaxy-only chain) and
+# §11 radio (Condon 1992 SF synchrotron, `q_IR = 2.5`), overlaid on CIGALE
+# at matched parameters.
 #
 # **The stellar-to-FIR core reproduces to a few percent.** Optical agreement
 # is reported as a normalization ratio and its 16–84 % spread. With the
@@ -2330,10 +2315,7 @@ plt.show()
 # energy balance, the X-ray corona + binary scalings, the radio
 # synchrotron + free-free composite, and the Meiksin IGM — and differ in
 # the two places they use different physics inputs: the nebular grid (Cue
-# vs CIGALE's Cloudy 13.x, §8) and the SKIRTOR torus shape (§9). The
-# full-SED head-to-head collects the configured chain onto one axis; the
-# per-section scalars printed above are the quantitative record, the
-# figures in `_figs/` the visual one.
+# vs CIGALE's Cloudy 13.x, §8) and the SKIRTOR torus shape (§9).
 
 # %% [markdown]
 # ## References

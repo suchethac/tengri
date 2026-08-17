@@ -50,12 +50,12 @@ from tengri.components.agn.blocks.runner import composable_agn_l_nu
 from tengri.components.agn.grahsp.templates import load_grahsp_templates
 from tengri.forward.precompute.templates import (
     build_template_photometry_lookup,
+    collapse_fixed_axes,
     precompute_template_photometry,
 )
 from tengri.utils.grid_interp import (
     edges_for_grid,
     interp_nd_triweight,
-    slice_fixed_axes,
 )
 
 __all__ = ["AXIS_PARAMS", "build_lookup", "precompute"]
@@ -229,24 +229,17 @@ def precompute(
         "_axis_names": tuple(axis_names),
     }
 
-    if parameters is None:
-        return result
-
     # Auto-collapse Fixed axes (mirror qsogen_precompute).
-    fixed_from_params = parameters.get_fixed_values()
-    free_param_names = set(getattr(parameters, "free_params", []))
-    fixed_indices: dict[int, float] = {}
-    for i, name in enumerate(axis_names):
-        if name in fixed_from_params:
-            fixed_indices[i] = float(fixed_from_params[name])
-        elif name not in free_param_names and name in (fixed_values or {}):
-            fixed_indices[i] = float((fixed_values or {})[name])
-
+    collapsed, remaining_axes, fixed_indices = collapse_fixed_axes(
+        preint,
+        axis_names,
+        parameters,
+        defaults=fixed_values,
+        origin="composable_precompute",
+    )
     if not fixed_indices:
         return result
 
-    collapsed = slice_fixed_axes(preint, fixed_indices)
-    remaining_axes = tuple(ax for i, ax in enumerate(result["axes"]) if i not in fixed_indices)
     return {
         "grid_phot": collapsed.phot,
         "axes": remaining_axes,
