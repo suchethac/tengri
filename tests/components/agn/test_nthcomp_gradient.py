@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Regression tests for nthcomp gradient stability.
 
-Tests the JAX autodiff behavior when division-by-near-zero occurs in where
-clauses, which can produce NaN gradients even when the unselected branch is
-masked. This tests the fix for the double-where safety pattern.
+Covers the JAX autodiff behavior of the trilinear nthcomp lookup: that each of
+its three axes is live where the table supports it, exactly frozen where the
+clamp takes over, and that both autodiff modes survive the cotangent
+magnitudes ``disc.py`` actually produces (#1206, #1822).
 """
 
 import pytest
@@ -32,11 +33,11 @@ class TestNthcompGradientStability:
         grid = jnp.array([1.0, 1.0, 2.0, 3.0, 4.0], dtype=jnp.float32)
         val = jnp.array(1.0, dtype=jnp.float32)
 
+        # This should NOT produce NaN or Inf
         def loss(v):
             _, frac = _clamp_interp_index(v, grid)
             return jnp.sum(frac)
 
-        # This should NOT produce NaN or Inf
         grad = assert_grad_matches_fd(loss, val)
         assert jnp.isfinite(grad), f"Expected finite gradient, got {grad}"
 
@@ -93,8 +94,17 @@ class TestNthcompGradientStability:
     GAMMA_LIVE = (1.7, 2.5, 3.0)
     GAMMA_CLAMPED = (1.0, 1.3, 4.0)
 
+    #: The kTe axis, measured the same way: 15 nodes spanning [0.05, 0.5] keV at
+    #: a spacing of 0.0321. This is RELAGN's *warm* Comptonization region, not a
+    #: hot corona, and ``agn_kt_warm`` is declared ``Uniform(0.1, 0.5)`` --
+    #: entirely inside it. Probes sit off-node: on a node the two one-sided
+    #: derivatives average, so a central difference is referencing something
+    #: else (see the 0.5 pinned above for the clamp's own version of this).
+    KTE_LIVE = (0.12, 0.25, 0.32)
+    KTE_CLAMPED = (0.01, 1.0, 400.0)
+
     @staticmethod
-    def _sum_lnu(gamma, kte=5.0, ktbb=0.1, n_nu=50):
+    def _sum_lnu(gamma, kte=0.25, ktbb=0.1, n_nu=50):
         nu = jnp.linspace(1e12, 1e19, n_nu, dtype=jnp.float32)
         return jnp.sum(
             nthcomp_lnu_interp(
@@ -141,8 +151,8 @@ class TestNthcompGradientStability:
 
         Pinned as measured behavior, not endorsed: a fit initialized out here
         cannot move, because the gradient is exactly 0.0 rather than merely
-        small. Whether the clamp should instead raise is #1822. Asserting it
-        makes the dead zone visible, and makes a future bounds change loud.
+        small. Asserting it makes the dead zone visible, and makes a future
+        bounds change loud.
         """
         clamped_to = 1.5 if gamma_val < 1.5 else 3.5
         frozen = float(self._sum_lnu(jnp.array(clamped_to, dtype=jnp.float32)))
@@ -155,45 +165,96 @@ class TestNthcompGradientStability:
         grad = float(jax.grad(self._sum_lnu)(jnp.array(gamma_val, dtype=jnp.float32)))
         assert grad == 0.0, f"expected an exactly zero gradient in the clamped region, got {grad}"
 
-    @pytest.mark.xfail(
-        reason=(
-            "#1822: nthcomp_lnu_interp ignores kTe_keV. sum(L_nu) is bit-identical "
-            "for kTe in (1, 20, 400) keV at every (gamma, kTbb) corner measured, and "
-            "d/d(kTe) is exactly 0.0 at kTe = 0.5 ... 500. kTe sets the Comptonization "
-            "rollover and the probe band straddles it, so this cannot be physical."
-        ),
-        strict=True,
-    )
-    def test_kte_changes_the_spectrum(self):
-        """kTe must do something. It is an axis of the trilinear table.
+    def test_kte_changes_the_spectrum_inside_the_table(self):
+        """kTe is an axis of the trilinear table, and it does vary the spectrum.
 
-        The test this replaces swept kTe = 1, 2, 5 and asserted only that the
-        gradient was finite. Zero is finite, so it was green on an inert
-        parameter -- the exact failure mode this file's docstring says it exists
-        to catch.
+        #1822 reported the opposite -- "sum(L_nu) is bit-identical for kTe in
+        (1, 20, 400) keV at every (gamma, kTbb) corner measured" -- and that
+        measurement reproduces exactly. But all three probes are above the
+        table's 0.5 keV ceiling, so all three clamp to the same edge and return
+        ``f(0.50)``. That is correct edge-clamping, not an ignored parameter,
+        and this test exists so nobody re-fixes a working interpolation.
+
+        This file previously carried that reading as a ``strict=True`` xfail
+        asserting kTe was inert. It passed -- the probes really are identical --
+        which is the trap: a strict xfail is a claim that something is broken,
+        and one written from a wrong diagnosis stays green while pinning the
+        error in place.
+
+        kTbb is swept alongside as a control. If the response were a global
+        scale rather than a per-axis one, both would move together.
         """
-        cold = float(self._sum_lnu(jnp.array(1.8, dtype=jnp.float32), kte=1.0, ktbb=0.01))
-        hot = float(self._sum_lnu(jnp.array(1.8, dtype=jnp.float32), kte=400.0, ktbb=0.01))
-        assert cold != hot, (
-            f"a 400x change in electron temperature left sum(L_nu) bit-identical at {cold!r}"
+        gamma = jnp.array(2.0, dtype=jnp.float32)
+
+        cold = float(self._sum_lnu(gamma, kte=0.05))
+        hot = float(self._sum_lnu(gamma, kte=0.5))
+        assert hot / cold == pytest.approx(4.5, rel=0.1), (
+            f"measured 4.5x across the kTe axis [0.05, 0.5]; got {hot / cold:.3f} "
+            f"({cold!r} -> {hot!r})"
         )
 
-    def test_kte_is_inert_and_the_neighboring_axis_is_not(self):
-        """Pin #1822 precisely, so the xfail above cannot pass for the wrong reason.
-
-        If ``nthcomp_lnu_interp`` started returning a constant for *everything*,
-        the strict xfail would flip to green and read as a fix. kTbb is the
-        control: it shares the same trilinear interpolation and does respond.
-        """
-        gamma = jnp.array(1.8, dtype=jnp.float32)
-        kte_vals = {float(self._sum_lnu(gamma, kte=k, ktbb=0.01)) for k in (1.0, 20.0, 400.0)}
-        assert len(kte_vals) == 1, "kTe now varies the spectrum -- update #1822 and the xfail"
-
-        ktbb_vals = {float(self._sum_lnu(gamma, kte=5.0, ktbb=b)) for b in (0.001, 0.05, 0.5)}
+        ktbb_vals = {float(self._sum_lnu(gamma, ktbb=b)) for b in (0.001, 0.05, 0.3)}
         assert len(ktbb_vals) == 3, (
-            "kTbb is the live control for the kTe finding; if it too is inert, "
-            "the whole interpolation is frozen and #1822 understates the problem"
+            "kTbb is the control for the kTe measurement above; if it is inert "
+            "too then the interpolation is frozen and neither number means what "
+            "it says"
         )
+
+    @pytest.mark.parametrize("kte_val", KTE_LIVE)
+    def test_kte_gradient_is_live_inside_the_table(self, kte_val):
+        """Inside [0.05, 0.5] keV the kTe gradient must be nonzero AND correct (#1822).
+
+        The ``custom_jvp`` rule unpacked ``_, _, d_gamma, _, _`` and returned
+        ``fd_grad * d_gamma``, discarding the kTe tangent entirely, so
+        ``d/d(agn_kt_warm)`` was exactly 0.0 everywhere -- including across the
+        whole of its declared ``Uniform(0.1, 0.5)`` prior, where the forward
+        response is 4.5x. A gradient fit left it at its initial value and
+        returned the prior as though it had been fitted.
+
+        The test this replaces swept kTe = 1, 2, 5 keV -- all above the ceiling,
+        so all clamped -- and asserted only ``isfinite``. Zero is finite, so it
+        was green on a derivative that was identically zero, which is precisely
+        the failure this file's docstring says it exists to catch.
+
+        Step and tolerance are measured, as for gamma: at h/x = 1e-3 the
+        analytic and central-difference values agree to between 0.1% and 0.7%
+        across these probes, degrading to ~3% by h/x = 1e-4 as float32
+        cancellation takes over.
+        """
+        kte = jnp.array(kte_val, dtype=jnp.float32)
+        grad = assert_grad_matches_fd(
+            lambda k: self._sum_lnu(jnp.array(2.0, dtype=jnp.float32), kte=k),
+            kte,
+            rtol=3e-2,
+            eps=1e-3 * kte_val,
+        )
+        assert float(grad) != 0.0, (
+            f"kTe={kte_val} is inside the table but d/d(kTe) is exactly zero -- "
+            f"the custom_jvp has stopped supplying the kTe tangent (#1822)"
+        )
+
+    @pytest.mark.parametrize("kte_val", KTE_CLAMPED)
+    def test_kte_is_frozen_outside_the_table(self, kte_val):
+        """Outside [0.05, 0.5] keV the spectrum is frozen and the gradient is zero.
+
+        The same dead zone pinned for gamma, and the one the issue's probes
+        landed in. ``agn_kt_warm``'s declared prior does not reach here, so this
+        is documentation of the clamp rather than a fit-reachable regime.
+        """
+        clamped_to = 0.05 if kte_val < 0.05 else 0.5
+        gamma = jnp.array(2.0, dtype=jnp.float32)
+
+        frozen = float(self._sum_lnu(gamma, kte=clamped_to))
+        here = float(self._sum_lnu(gamma, kte=kte_val))
+        assert here == frozen, (
+            f"kTe={kte_val} should return the value at the clamped edge "
+            f"{clamped_to}; got {here} vs {frozen}"
+        )
+
+        grad = float(
+            jax.grad(lambda k: self._sum_lnu(gamma, kte=k))(jnp.array(kte_val, dtype=jnp.float32))
+        )
+        assert grad == 0.0, f"expected an exactly zero gradient in the clamped region, got {grad}"
 
     def test_mock_likelihood_has_a_minimum_a_fit_could_find(self):
         """An integration check on a likelihood that is actually a function of gamma.
@@ -214,7 +275,7 @@ class TestNthcompGradientStability:
 
         def model(gamma):
             return nthcomp_lnu_interp(
-                nu, gamma, jnp.array(5.0, dtype=jnp.float32), jnp.array(0.1, dtype=jnp.float32)
+                nu, gamma, jnp.array(0.25, dtype=jnp.float32), jnp.array(0.1, dtype=jnp.float32)
             )
 
         observed = model(truth)
@@ -296,6 +357,31 @@ class TestNthcompJVPRule:
         assert scaled != 0.0, "large cotangent collapsed to a silent zero gradient"
         assert jnp.isfinite(scaled)
         assert scaled / unit == pytest.approx(1e30, rel=1e-5)
+
+    def test_cotangent_at_the_scale_disc_py_actually_produces(self):
+        """1e30 was not large enough to catch the real failure (#1822).
+
+        ``disc.py`` multiplies this kernel's ~1e-19 shape by a ring luminosity,
+        so the cotangent reverse mode hands back is ~1e66 — six orders past where
+        the test above stops. While the kernel returned float32 regardless of the
+        caller's dtype, that cotangent overflowed float32's 3.4e38 ceiling and
+        ``jax.grad`` through ``kubota_done_disc`` returned **NaN** for
+        ``agn_gamma_warm`` while ``jax.jvp`` returned 5.2e30.
+
+        The sibling test passing at 1e30 is exactly why this went unnoticed: a
+        magnitude sweep that stops short of the caller's real scale reports a
+        healthy kernel.
+        """
+        unit = self._grad_gamma(1.0)
+        assert unit != 0.0, "baseline gradient is zero — test cannot detect the overflow"
+
+        for exponent in (40, 50, 66):
+            scaled = self._grad_gamma(10.0**exponent)
+            assert jnp.isfinite(scaled), (
+                f"cotangent 1e{exponent} produced {scaled} — the kernel is forcing a "
+                "float32 output again, so a realistic ring luminosity overflows"
+            )
+            assert scaled / unit == pytest.approx(10.0**exponent, rel=1e-5)
 
     def test_float32_grid_with_float64_gamma_is_accepted(self):
         """A float32 SED grid with a float64 ``gamma`` must still differentiate.

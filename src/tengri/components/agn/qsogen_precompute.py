@@ -40,12 +40,10 @@ from tengri.components.agn._params import DEFAULT_AGN_LOG_LBOL, DEFAULT_AGN_LUM_
 from tengri.components.agn.qsogen import compute_qsogen_sed as _compute_qsogen_sed
 from tengri.forward.precompute.templates import (
     build_template_photometry_lookup,
+    collapse_fixed_axes,
     precompute_template_photometry,
 )
-from tengri.utils.grid_interp import (
-    PreintegratedGrid,
-    slice_fixed_axes,
-)
+from tengri.utils.grid_interp import PreintegratedGrid
 from tengri.utils.interpolation import edges_for_grid
 
 # ── Axis definitions ──────────────────────────────────────
@@ -224,9 +222,6 @@ def precompute(
     # ``agn_ebv`` untouched: precompute used to keep both axes free, but
     # the kernel only passes ``agn_log_lbol`` → ``IndexError: tuple index
     # out of range`` (BUG-NSS-03 regression test).
-    if parameters is None:
-        return result
-
     from tengri.components.agn.qsogen import _DEFAULT_EBV, _DEFAULT_PLSLP1
 
     _AXIS_DEFAULTS = {
@@ -235,21 +230,16 @@ def precompute(
     }
 
     preint: PreintegratedGrid = result["_preint"]
-    fixed_values = parameters.get_fixed_values()
-    free_param_names = set(parameters.free_params)
-    fixed: dict[int, float] = {}
-    for i, pname in enumerate(AXIS_PARAMS):
-        if pname in fixed_values:
-            fixed[i] = float(fixed_values[pname])
-        elif pname not in free_param_names:
-            # Param not in the spec at all — collapse axis at qsogen default.
-            fixed[i] = float(_AXIS_DEFAULTS[pname])
-
+    collapsed, remaining_axes, fixed = collapse_fixed_axes(
+        preint,
+        AXIS_PARAMS,
+        parameters,
+        defaults=_AXIS_DEFAULTS,
+        origin="qsogen_precompute",
+    )
     if not fixed:
         return result
 
-    collapsed = slice_fixed_axes(preint, fixed)
-    remaining_axes = tuple(ax for i, ax in enumerate(result["axes"]) if i not in fixed)
     return {
         "grid_phot": collapsed.phot,
         "axes": remaining_axes,

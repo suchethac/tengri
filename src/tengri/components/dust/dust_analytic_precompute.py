@@ -46,12 +46,10 @@ from tengri.components.dust.emission import (
 )
 from tengri.forward.precompute.templates import (
     build_template_photometry_lookup,
+    collapse_fixed_axes,
     precompute_template_photometry,
 )
-from tengri.utils.grid_interp import (
-    PreintegratedGrid,
-    slice_fixed_axes,
-)
+from tengri.utils.grid_interp import PreintegratedGrid
 from tengri.utils.physics_constants import C_CGS as _C_CGS
 
 # ── Axis definitions per model ──────────────────────────────────
@@ -383,21 +381,13 @@ def precompute(
         raise ValueError(f"Unknown analytic dust model: {model}")
 
     # Auto-collapse any Fixed axes
-    if parameters is None or not axis_params:
-        return result
-
     preint: PreintegratedGrid = result["_preint"]
-    fixed_values = parameters.get_fixed_values()
-    fixed: dict[int, float] = {}
-    for i, pname in enumerate(axis_params):
-        if pname in fixed_values:
-            fixed[i] = float(fixed_values[pname])
-
+    collapsed, remaining_axes, fixed = collapse_fixed_axes(
+        preint, axis_params, parameters, origin=f"dust_analytic_precompute[{model}]"
+    )
     if not fixed:
         return result
 
-    collapsed = slice_fixed_axes(preint, fixed)
-    remaining_axes = tuple(ax for i, ax in enumerate(result["axes"]) if i not in fixed)
     return {
         "grid_phot": collapsed.phot,
         "axes": remaining_axes,

@@ -321,6 +321,99 @@ def pow10(x):
     return jnp.exp(x * LN10)
 
 
+def log10_four_pi_dl2(dl_cm):
+    r"""``log10(4 pi d_L^2)`` [dex] — the luminosity-to-flux divisor, in log space.
+
+    Parameters
+    ----------
+    dl_cm : array_like
+        Luminosity distance :math:`d_L` [cm].
+
+    Returns
+    -------
+    ndarray
+        :math:`\log_{10}(4\pi d_L^2)` [dex]; ~57.0 at :math:`z=0.5`.
+
+    Notes
+    -----
+    JIT/grad/vmap-safe.
+
+    **The linear form has no safe distance.** :math:`4\pi d_L^2` is 1.1965e40 at
+    the 10-pc :math:`z=0` convention and 8.12e58 at :math:`z=3`, against a float32
+    ceiling of 3.4028e38 — so it is ``inf`` at *every* distance, and a flux
+    divided by it is ``nan``. Only the log form is representable, and only the
+    *applied* result is meant to be: see :func:`apply_log10_scale`.
+
+    Do not spell this ``10**log10_four_pi_dl2(...)`` to recover the linear value.
+    That is a linear form wearing a log hat and is ``inf`` exactly as before
+    (measured, #1859).
+
+    See Also
+    --------
+    log10_flux_scale
+        The same divisor with the :math:`(1+z)` k-correction folded in.
+    """
+    return LOG10_4PI + 2.0 * jnp.log10(jnp.asarray(dl_cm))
+
+
+def log10_flux_scale(redshift, dl_cm):
+    r"""``log10[(1+z) / (4 pi d_L^2)]`` [dex] — the cosmological dimming, in log space.
+
+    The single spelling of a formula that was written longhand at twelve sites,
+    seven correct and five not (#1859).
+
+    .. math::
+
+        \log_{10} \frac{1+z}{4\pi d_L^2}
+        = \log_{10}(1+z) - \log_{10}(4\pi) - 2\log_{10} d_L
+
+    where :math:`z` is redshift [dimensionless] and :math:`d_L` the luminosity
+    distance [cm]; the result is [dex] relative to :math:`\mathrm{cm}^{-2}`.
+
+    Parameters
+    ----------
+    redshift : array_like
+        Redshift :math:`z` [dimensionless].
+    dl_cm : array_like
+        Luminosity distance :math:`d_L` [cm].
+
+    Returns
+    -------
+    ndarray
+        :math:`\log_{10}[(1+z)/(4\pi d_L^2)]` [dex]; ~-56.8 at :math:`z=0.5`.
+
+    Notes
+    -----
+    JIT/grad/vmap-safe. Written in the association ``a - b - c`` rather than
+    ``a - (b + c)`` so that migrating the sites which already spelled it out
+    longhand is bit-exact, not merely close.
+
+    **This is a scale to apply, never a value to hold.** The linear factor is
+    1.4692e-57 at :math:`z=0.5` and 8.3577e-41 even at 10 pc, both below float32's
+    smallest normal (1.1755e-38), so a standalone ``flux_scale`` scalar is exactly
+    ``0.0`` in float32 at every distance. Pass the log offset to
+    :func:`apply_log10_scale` — only the *net* product has to be representable,
+    and it always is (~1e-29 for an ordinary galaxy).
+
+    A stored table of such scales has the same problem one step later: built
+    eagerly in float64 it is correct, and the cast to a float32 array zeroes
+    every entry. Store the log (#1859).
+
+    References
+    ----------
+    .. [1] Hogg, D. W. "Distance measures in cosmology." 1999,
+       arXiv:astro-ph/9905116.
+
+    See Also
+    --------
+    apply_log10_scale
+        Applies this offset without materializing the factor.
+    tengri.utils.conversions.lnu_to_fnu
+        The immediate-application form, for callers holding the luminosity.
+    """
+    return jnp.log10(1.0 + jnp.asarray(redshift)) - LOG10_4PI - 2.0 * jnp.log10(jnp.asarray(dl_cm))
+
+
 def _not_computable(log_value, sign=1.0):
     """True where a log-domain term is ``+inf``/``NaN`` rather than a usable value.
 
@@ -517,6 +610,68 @@ def log10_add(log_a, log_b, *, sign_a=1.0, sign_b=1.0):
     # magnitude poisons ``total`` and lands in the same place.
     corrupt = _not_computable(log_a, sign_a) | _not_computable(log_b, sign_b)
     return jnp.where(corrupt, jnp.inf, summed)
+
+
+def log10_weighted_sum(log_values, weights, axis=-1):
+    r"""``log10(sum_i w_i * 10**log_i)`` — a weighted sum without leaving log space.
+
+    :func:`log10_add` for an arbitrary number of terms, with weights. The seam an
+    *interpolator* over a log-domain table needs: linear interpolation and any
+    kernel-weighted average are both weighted sums, and doing either in the linear
+    domain would reintroduce the out-of-range factor the log form exists to avoid.
+
+    .. math::
+
+        \mathrm{log10\_weighted\_sum}(\ell, w)
+        = \log_{10} \sum_i w_i \, 10^{\ell_i}
+
+    where :math:`\ell_i` are log10 magnitudes [dex] and :math:`w_i` are
+    non-negative weights [dimensionless].
+
+    Parameters
+    ----------
+    log_values : array_like
+        Base-10 log magnitudes [dex]. ``-inf`` denotes an exactly zero term.
+    weights : array_like
+        Non-negative weights, broadcastable against ``log_values``. A weight of
+        exactly zero drops its term exactly, including when that term is ``-inf``.
+    axis : int, optional
+        Axis to reduce over. Default ``-1``.
+
+    Returns
+    -------
+    ndarray
+        ``log10`` of the weighted sum [dex]; ``-inf`` when every contributing
+        term is zero.
+
+    Notes
+    -----
+    JIT/grad/vmap-safe. Implemented as a base-10 ``logsumexp``, which factors out
+    the largest exponent before summing, so no term is exponentiated at its own
+    magnitude.
+
+    **This is a re-spelling, not a re-model, and the distinction is the point.**
+    Interpolating :math:`\log_{10} s` linearly is a *different function* from
+    interpolating :math:`s` linearly — it is the geometric rather than the
+    arithmetic mean at the midpoint. Migrating a stored table to log space with a
+    naive ``lerp`` would therefore silently change float64 results. This
+    reproduces the arithmetic weighted sum exactly (measured: rtol < 1e-12
+    against the linear form it replaces), so the migration is invisible in
+    float64 and merely finite in float32.
+
+    Weights are assumed non-negative; a signed sum needs :func:`log10_add`'s
+    ``sign_a`` / ``sign_b`` treatment, which resolves cancellation explicitly.
+
+    See Also
+    --------
+    log10_add
+        The two-term signed form.
+    """
+    from jax.scipy.special import logsumexp
+
+    log_values = jnp.asarray(log_values)
+    weights = jnp.asarray(weights)
+    return logsumexp(log_values * LN10, b=weights, axis=axis) / LN10
 
 
 # ``max_finite_exponent()`` lived here until 2026-07. It capped x at the

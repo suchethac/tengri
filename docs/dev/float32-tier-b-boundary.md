@@ -102,10 +102,12 @@ Compensated summation (Kahan / pairwise) was **not** used: it addresses lost sig
 - **No SSP grid rescues this.** It is `total_mass` times a constant, with no SSP flux factor to keep it small, so it overflows for *every* galaxy above `3.4e38 / 3.828e33 ≈ 9e4` M⊙. Unlike the SED — where `total_mass × ssp_flux_at_age` lands first and keeps the magnitude in range — this scale has no small factor to hide behind.
 - **Delivered:** the producer already computed `log10_mass_scale` for the log-domain Q_H integral and simply never published it. It is now published alongside the linear key, with a `DerivedKey`, a `DerivedState` field, and a `_CANONICAL_UNITS` entry pinning it to `dex`. The `jnp.log10(mass_scale)` fallback the dust energy balance carried is removed — it would have recovered `inf` rather than the finite value the producer already holds.
 
-**Luminosity distance curvature factor:**
-- Symbol: `4π d_L²` (~1e57 cm²).
-- Function: `_four_pi_dl2` in `src/tengri/components/nebular/line_precompute.py` (line 84) and `src/tengri/measure.py` (line 151). Local variable `four_pi_dl2` (no leading underscore) used in `src/tengri/forward/sed_model.py`.
-- **Tier B decision:** Publish or consume in log form, or reparametrize the line-flux contract to absorb this scaling. (Allowlisted as "deferred" in the flux-scale guard.)
+**Luminosity distance curvature factor — DELIVERED (`log10_four_pi_dl2`):**
+- Symbol: `4π d_L²` (~1e57 cm²), and its reciprocal `(1+z)/(4π d_L²)` (~1e-57).
+- **Both are out of float32 range at every distance**, including the 10-pc `z=0` convention where `4π d_L²` is already 1.1965e40 against a ceiling of 3.4028e38. There is no safe redshift, so no range check can gate the linear form — it has to go.
+- **Delivered (#1859):** one named spelling each, `log10_four_pi_dl2` and `log10_flux_scale` in `src/tengri/utils/scale.py`, applied through `apply_log10_scale`. The formula had been written longhand at **twelve** sites, seven correct and five not; all twelve now call the helper, so the guard's remaining job is to stop a thirteenth.
+- The line-flux contract needed the second half of the fix as well: the `erg/s` line luminosity (~1.4e40) overflows *independently of distance*, so a correct divisor alone still left `inf/inf`. `_line_flux_from_means` now folds the `c/λ_c²·Δλ` conversion and the distance into a single log offset applied to the O(1e28) window mean.
+- A stored table needs the log for a second reason: it builds correctly in float64 and is zeroed by the **cast**, so `flux_scale_table` became `log10_flux_scale_table` and its interpolators moved to `log10_weighted_sum` — which reproduces the arithmetic weighted sum exactly, rather than the geometric one a naive log-lerp would give.
 
 ---
 
@@ -395,14 +397,24 @@ the only item that still blocks a *test*: both surviving pure-float32 `xfail`s n
 `test_linear_observables_pure_float32_cue_only` (linear `q_h` ~1e56 and the erg/s `line_lums` behind
 `balmer_decrement`) and `test_disc_float32_pending[grahsp_sbpl]` (the linear `agn_grahsp_l5100`).
 
-The residue is #1206 item 2's second half: five files still *return* a raw `4π d_L²` (~1e57) and
-remain on the allow-list in `test_no_raw_flux_scale.py` — `utils/grid_interp.py`,
-`components/stellar/sps/precompute.py`, `measure.py`, `components/nebular/line_precompute.py`,
-`forward/sed_model.py`. It is latent rather than live: the *immediate-application* sites were
-converted, and a pure-float32 four-band prediction of a delayed-τ + two-component-dust + Dale 2014
-galaxy at z = 0.5 is finite and within **8.3e-6** relative of float64. So nothing on the measured
-photometry path materializes them — but the scalar is still f32-unrepresentable wherever a caller
-does, and clearing the five entries is what closes item 2.
+~~The residue is #1206 item 2's second half: five files still *return* a raw `4π d_L²`.~~
+**CLOSED by #1859.** The allow-list in `test_no_raw_flux_scale.py` is now empty and all five files
+are converted.
+
+One claim above was wrong and is worth keeping visible, because it is the shape of mistake this
+document exists to prevent. "Latent rather than live" was inferred from the *photometry* path being
+finite — which it is, at 8.3e-6 relative, exactly as measured. But the same five files also feed the
+**line-flux** path, and measuring that instead gives `nan` at every redshift: the `erg/s` line
+luminosity (~1.4e40) is `inf`, the divisor (~1e57) is `inf`, and `inf/inf` is `nan`. A verdict of
+"latent" drawn from one consumer said nothing about the other, and the surviving finite photometry
+number is what made it look safe. Measure the channel you are gating.
+
+The photometry half was genuinely latent — but not for the reassuring reason. The stored
+`flux_scale` scalars had **no reader in `src/` at all**; they were written into
+`PreintegratedGrid`, `PhotometricPrecomputation`, `SpectroscopicPrecomputation` and the z-table and
+never consumed, the live photometry seams having been converted to `apply_log10_scale` under Tier A.
+So that half of #1859 moves no number today and is preventive: it converts dead-but-wrong storage
+into dead-but-right storage, ahead of the first consumer that reads it back.
 
 Separately — *not* a range problem, so item 3 will not close it — reverse-mode **gradient accuracy**
 through the projection seam remains open under #1388; see "Not fixed here: float32 AGN gradient

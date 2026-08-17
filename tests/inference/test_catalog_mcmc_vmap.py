@@ -33,6 +33,19 @@ import pytest
 
 pytestmark = pytest.mark.contract
 
+#: Declared support for ``sfh_dpl_log_total_mass``, named once so the prior, the
+#: injected truths and the recovery check cannot drift apart.
+#:
+#: They did. #369 renamed ``sfh_*_log_peak_sfr`` to ``log_total_mass``, turning
+#: ``log10(SFR)`` into ``log10(M*)``, and c66c0aff0 (#1839) converted this prior
+#: from ``Uniform(-1.0, 2.5)`` to the declared range — but the three truths below
+#: stayed at 0/1/2, every one of them below the new floor. All three galaxies
+#: then clamped to the boundary and the order check read
+#: ``mass not monotonic across slots: [7. 7. 7.]``, which looks like a
+#: batch-routing bug and is not one. ``tools/check_param_ranges.py`` compares
+#: call-site *priors* to the declaration, so injected truths are invisible to it.
+_MASS_LO, _MASS_HI = 7.0, 12.5
+
 
 def _build_model(synthetic_ssp, simple_observation):
     """A small dpl-SFH photometry model with stellar mass as the one free param.
@@ -46,7 +59,7 @@ def _build_model(synthetic_ssp, simple_observation):
     from tengri import Fixed, Parameters, SEDModel, Uniform
 
     spec = Parameters(
-        sfh_dpl_log_total_mass=Uniform(7.0, 12.5),
+        sfh_dpl_log_total_mass=Uniform(_MASS_LO, _MASS_HI),
         sfh_dpl_alpha=Fixed(2.0),  # pin shape params — else degenerate with mass (M/L)
         sfh_dpl_age_gyr=Fixed(5.0),
         sfh_dpl_beta=Fixed(2.0),
@@ -85,10 +98,13 @@ def _catalog_from_truths(model, truths, key, noise_frac=0.02):
 # batch axis — galaxy i sampling galaxy j's data — is caught by an order check.
 # (alpha, the SFH shape, is left free but is only weakly constrained by broadband
 # photometry, so it is not used as a recovery target.)
+#: 1e9 / 1e10 / 1e11 Msun — a decade apart, well inside ``_MASS_LO.._MASS_HI``,
+#: so monotonicity across slots is a routing check and not a prior-clamp artifact.
+_DISTINCT_MASSES = (9.0, 10.0, 11.0)
+
 _DISTINCT_TRUTHS = [
-    {"sfh_dpl_log_total_mass": jnp.array(0.0), "sfh_dpl_alpha": jnp.array(2.0)},
-    {"sfh_dpl_log_total_mass": jnp.array(1.0), "sfh_dpl_alpha": jnp.array(2.0)},
-    {"sfh_dpl_log_total_mass": jnp.array(2.0), "sfh_dpl_alpha": jnp.array(2.0)},
+    {"sfh_dpl_log_total_mass": jnp.array(m), "sfh_dpl_alpha": jnp.array(2.0)}
+    for m in _DISTINCT_MASSES
 ]
 
 
@@ -150,7 +166,9 @@ def test_distinct_galaxies_recovered_in_order(synthetic_ssp, simple_observation)
     # Order preserved: galaxy i's data landed in slot i (not shuffled by the
     # batch axis), and each galaxy recovered near its own injected mass.
     assert mass[0] < mass[1] < mass[2], f"mass not monotonic across slots: {mass}"
-    for i, truth in enumerate([0.0, 1.0, 2.0]):
+    # Read the targets off the truths that were injected, rather than restating
+    # them — a third copy of these numbers is how the first two fell out of step.
+    for i, truth in enumerate(_DISTINCT_MASSES):
         assert abs(mass[i] - truth) < 0.4, f"galaxy {i} mass {mass[i]:.3f} far from truth {truth}"
     assert np.all(np.isfinite(mass))
 

@@ -16,15 +16,178 @@ consistent under the Precompute Protocol.
 
 from __future__ import annotations
 
+import warnings
+from collections.abc import Mapping, Sequence
+from typing import TYPE_CHECKING, Any
+
 import jax
 import numpy as np
 
+from tengri.config.exceptions import DeadPrecomputeAxisWarning
 from tengri.utils.grid_interp import (
     PreintegratedGrid,
+    PreintegratedLines,
     interp_nd_triweight,
     preintegrate_grid,
+    slice_fixed_axes,
 )
 from tengri.utils.physics_constants import AA_TO_CM as _AA_TO_CM, C_CGS as _C_CGS
+
+if TYPE_CHECKING:  # pragma: no cover - annotations only, avoids a build-time cycle
+    from tengri.parameters.parameters import Parameters
+
+
+def collapse_fixed_axes(
+    preint: PreintegratedGrid | PreintegratedLines,
+    axis_params: Sequence[str],
+    parameters: Parameters | None,
+    *,
+    defaults: Mapping[str, float] | None = None,
+    origin: str = "precompute",
+) -> tuple[PreintegratedGrid | PreintegratedLines, tuple[Any, ...], dict[int, float]]:
+    """Collapse every grid axis whose governing parameter is Fixed.
+
+    The auto-collapse step every ``*_precompute.py`` module performs after
+    building its grid: read the model's Fixed parameter values, match them
+    against the module's ``AXIS_PARAMS`` (one name per axis, in axis order),
+    and triweight-interpolate those axes away so runtime interpolation is
+    cheaper and the stored grid smaller.
+
+    Parameters
+    ----------
+    preint : PreintegratedGrid or PreintegratedLines
+        The freshly built grid, before collapse.
+    axis_params : sequence of str
+        Parameter name governing each grid axis, **in axis order**. Position
+        ``i`` in this sequence must be axis ``i`` of ``preint``; the whole
+        mechanism is positional, so a reordering silently collapses the wrong
+        axis at another parameter's value.
+    parameters : Parameters or None
+        The model's parameter specification. ``None`` skips collapse entirely
+        (the caller has no way to know which axes are Fixed).
+    defaults : mapping of str to float, optional
+        Fallback values for axis parameters that are neither declared ``Fixed``
+        nor free. Used by the components that carry their own axis defaults
+        (GRAHSP) or accept caller-supplied ones (the composable AGN block). A
+        name absent from both the model and this mapping leaves its axis alone.
+    origin : str, optional
+        Module or component name, used only in the ``DeadPrecomputeAxisWarning``
+        message so the report names the declaration that needs fixing.
+
+    Returns
+    -------
+    preint_out : PreintegratedGrid or PreintegratedLines
+        The collapsed grid, or ``preint`` unchanged when nothing collapsed.
+    remaining_axes : tuple
+        Axes surviving the collapse, in order — the axes a runtime lookup must
+        still be queried at. Equal to ``preint_out.axes``.
+    collapsed : dict[int, float]
+        Axis index to the value it was collapsed at, empty when nothing
+        collapsed. Callers branch on this to decide whether to rebuild their
+        result dict.
+
+    Warns
+    -----
+    DeadPrecomputeAxisWarning
+        When nothing collapsed *and* no name in ``axis_params`` is a valid
+        parameter for this model, so no assignment could have collapsed
+        anything. A module whose ``defaults`` still collapse its axes is
+        working and stays silent.
+
+    Raises
+    ------
+    ValueError
+        When ``axis_params`` and ``preint.axes`` disagree in length, or the
+        grid's array rank disagrees with its axis count, and a collapse was
+        about to happen. Both make the positional axis index meaningless, and
+        contracting the wrong axis is a silently wrong SED rather than a
+        crash — so this refuses instead of proceeding.
+
+    Notes
+    -----
+    **JIT-compatible**: no — build-time orchestration over NumPy/host values.
+
+    This replaced a byte-identical block copied into eleven precompute modules
+    (issue #1738). The duplication is why the mismatch checks above did not
+    exist: no single copy was the obvious place to put them, and six of the
+    eleven declared axis names that no ``Parameters`` object can ever contain,
+    so their advertised auto-collapse had never once fired.
+    """
+    no_collapse: tuple[Any, ...] = tuple(preint.axes)
+    if parameters is None or not axis_params:
+        return preint, no_collapse, {}
+
+    fixed_values = parameters.get_fixed_values()
+    free_names = set(getattr(parameters, "free_params", ()) or ())
+    defaults = defaults or {}
+
+    collapsed_at: dict[int, float] = {}
+    for i, pname in enumerate(axis_params):
+        if pname in fixed_values:
+            collapsed_at[i] = float(fixed_values[pname])
+        elif pname not in free_names and pname in defaults:
+            collapsed_at[i] = float(defaults[pname])
+
+    if not collapsed_at:
+        # Nothing collapsed. That is ordinary when the axis parameters are free,
+        # and a declaration defect when none of them is a parameter of this model
+        # at all -- then no assignment could ever collapse anything, and the
+        # promised grid reduction is unreachable rather than merely unused.
+        # Only a real name set can convict: ``Parameters.valid_param_names`` is
+        # documented to return a frozenset, and anything else (a stub, a mock,
+        # a caller-supplied duck type) cannot be distinguished from an empty one
+        # -- accusing on that would report a defect the object never claimed.
+        valid = getattr(parameters, "valid_param_names", None)
+        if isinstance(valid, (set, frozenset)) and valid and set(axis_params).isdisjoint(valid):
+            warnings.warn(
+                f"{origin}: none of the declared grid-axis parameters "
+                f"{list(axis_params)} is a parameter of this model, so no axis "
+                f"can ever be collapsed and the grid stays at full size. The "
+                f"names must match what the component declares (check "
+                f"spec.valid_param_names). See issue #1738.",
+                DeadPrecomputeAxisWarning,
+                stacklevel=2,
+            )
+        return preint, no_collapse, {}
+
+    _check_axis_alignment(preint, axis_params, origin)
+
+    out = slice_fixed_axes(preint, collapsed_at)
+    return out, tuple(out.axes), collapsed_at
+
+
+def _check_axis_alignment(
+    preint: PreintegratedGrid | PreintegratedLines,
+    axis_params: Sequence[str],
+    origin: str,
+) -> None:
+    """Refuse to collapse a grid whose axis count contradicts its declaration.
+
+    ``collapse_fixed_axes`` maps a name's position in ``axis_params`` straight
+    onto an axis index, and :func:`slice_fixed_axes` contracts that axis. If the
+    two disagree the contraction still succeeds whenever the shapes happen to
+    line up, and returns an SED built from the wrong axis — no exception, no NaN.
+    """
+    n_axes = len(preint.axes)
+    if len(axis_params) != n_axes:
+        raise ValueError(
+            f"{origin}: AXIS_PARAMS declares {len(axis_params)} axes "
+            f"{list(axis_params)} but the grid has {n_axes}. The axis index is "
+            f"positional, so collapsing would contract an axis the name does not "
+            f"govern and return a silently wrong SED (#1738)."
+        )
+
+    if isinstance(preint, PreintegratedGrid):
+        # phot is (*grid_dims, n_filters): one trailing filter axis.
+        n_grid_dims = np.ndim(preint.phot) - 1
+        if n_grid_dims != n_axes:
+            raise ValueError(
+                f"{origin}: the preintegrated grid carries {n_axes} axes "
+                f"{list(axis_params)} but its photometry array has "
+                f"{n_grid_dims} grid dimensions. Collapsing axis i would "
+                f"contract a different array dimension — for the last declared "
+                f"axis, the filter dimension itself (#1738)."
+            )
 
 
 def precompute_template_photometry(
