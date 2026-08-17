@@ -338,9 +338,27 @@ jobs:
       # every page it rewrites but does not execute (#1236).
       - run: python tools/check_gallery_fresh.py --strict
 
-  # Static security scan + dependency vulnerability check. Informational
-  # for now (continue-on-error) — surfaces findings in the PR check UI
-  # without blocking. Promote to required once the baseline is clean.
+  # Static security scan + dependency vulnerability check.
+  #
+  # These two are NOT treated alike, and the asymmetry is deliberate.
+  #
+  # `bandit` scans code in this repository. Every finding is actionable here,
+  # and the baseline is clean (0 high, 0 medium at -ll), so it now blocks. It
+  # was advisory until the seven medium+ findings were fixed rather than
+  # tolerated: a SHA1 cache key that now says `usedforsecurity=False`, three
+  # `urlopen` calls that now reject non-http(s) schemes, two pickle loads whose
+  # trust model is written down, and a read-only /tmp fallback.
+  #
+  # `pip-audit` scans third-party dependencies, and stays advisory. A CVE can
+  # be disclosed overnight, in a package nobody here controls, with no fixed
+  # version yet published — and blocking on that hands the merge queue to other
+  # projects' disclosure schedules. It reports; a human decides.
+  #
+  # Its invocation was also simply broken: `pip-audit --disable-pip` exits
+  # non-zero with "The --disable-pip flag can only be used with --requirement",
+  # so the step never audited anything, and `continue-on-error` hid that for as
+  # long as it has been there. A scan that cannot run looks exactly like a scan
+  # that finds nothing.
   security:
     runs-on: ubuntu-latest
     steps:
@@ -351,13 +369,15 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
       - run: pip install bandit pip-audit
-      - name: Static security scan (bandit, high severity)
+      - name: Static security scan (bandit, medium+ severity)
         run: bandit -r src/ -ll
-        continue-on-error: true
       - name: Install for dependency audit
         run: pip install -e .
+      # `--skip-editable` because `pip install -e .` above marks astro-tengri
+      # editable and pip-audit cannot resolve such a distribution; auditing the
+      # dependencies is the point. Advisory by design — see the job comment.
       - name: Dependency vulnerability scan (pip-audit)
-        run: pip-audit --disable-pip
+        run: pip-audit --skip-editable
         continue-on-error: true
 
   # Decide whether the gallery below has to run for this change.
