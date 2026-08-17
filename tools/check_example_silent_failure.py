@@ -45,9 +45,11 @@ drawn beside it. So this guard deliberately does **not** claim the examples are
 correct. It guarantees the cheaper, checkable half: when an author does add the
 non-empty guard, the exception needed to explain the failure is still in hand.
 
-There is no allowlist, and that is the point -- all 20 broad handlers in
-``examples/`` satisfy this today. If a genuine exception to the rule appears,
-add the allowlist then, with a reason; do not add it pre-emptively.
+There is no allowlist, and that is the point -- every broad handler in
+``examples/`` satisfies this today, so there is nothing to grandfather. If a
+genuine exception to the rule appears, add the allowlist then, with a reason; do
+not add it pre-emptively. (``--list`` prints the live count and each handler's
+status; a number written here would only rot.)
 
 Usage
 -----
