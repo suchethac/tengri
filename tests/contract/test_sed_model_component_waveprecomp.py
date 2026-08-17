@@ -20,6 +20,13 @@ from tengri.protocols.component import ForwardState
 
 pytestmark = pytest.mark.contract
 
+# Save registry state before SimpleDustComponent and SimpleDustComponentWithTaylor
+# are defined (they auto-register in _REGISTRY via __init_subclass__).
+# This is necessary to prevent pollution of domain_scoping tests under xdist.
+from tengri.components.sed_model_component import _REGISTRY
+
+_SAVED_REGISTRY_BEFORE_COMPONENTS = dict(_REGISTRY)
+
 
 class SimpleDustComponent(SEDModelComponent):
     """Minimal additive dust-emission component for testing WavePrecomp.
@@ -70,6 +77,25 @@ class SimpleDustComponentWithTaylor(SEDModelComponent):
         sed_out = sed_in + emission
         l_ir = jnp.sum(emission)
         return sed_out, {"L_ir": l_ir}
+
+
+# Restore the registry to its pre-component state so domain_scoping tests pass
+# under xdist (which shares _REGISTRY across test workers).
+_REGISTRY.clear()
+_REGISTRY.update(_SAVED_REGISTRY_BEFORE_COMPONENTS)
+
+
+@pytest.fixture(autouse=True)
+def _cleanup_test_waveprecomp_registry():
+    """Cleanup test components registered during test execution.
+
+    While the module-level restoration above prevents cross-test pollution,
+    this fixture ensures each test sees a consistent registry state.
+    """
+    saved_registry = dict(_REGISTRY)
+    yield
+    _REGISTRY.clear()
+    _REGISTRY.update(saved_registry)
 
 
 class TestWavePrecompActivation:

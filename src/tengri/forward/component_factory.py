@@ -99,7 +99,7 @@ _EMISSION_TYPE_ALIASES = {
 # - dust_emission: components with EmissionComponent base (auto-populated)
 # - dust_attenuation: {single_component, two_component, wg00}
 # - nebular: {nebular, shock}
-# - agn: {agn, kd18_disc, powerlaw_disc, cat3d_wind, silva04, skirtor}
+# - agn: {agn, kd18_disc, powerlaw_disc, cat3d_wind, silva04, skirtor, skirtor_agnfitter}
 # - radio: {radio, radio_dpl, radio_powerlaw}
 # - xray: {xray, xray_aird, agn_xray_corona}
 # - igm: {igm}
@@ -124,7 +124,15 @@ def _build_domain_membership_map() -> dict[str, set[str]]:
         "dust_emission": set(),
         "dust_attenuation": {"single_component", "two_component", "wg00"},
         "nebular": {"nebular", "shock"},
-        "agn": {"agn", "kd18_disc", "powerlaw_disc", "cat3d_wind", "silva04", "skirtor"},
+        "agn": {
+            "agn",
+            "kd18_disc",
+            "powerlaw_disc",
+            "cat3d_wind",
+            "silva04",
+            "skirtor",
+            "skirtor_agnfitter",
+        },
         "radio": {"radio", "radio_dpl", "radio_powerlaw"},
         "xray": {"xray", "xray_aird", "agn_xray_corona"},
         "igm": {"igm"},
