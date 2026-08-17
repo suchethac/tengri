@@ -5,6 +5,45 @@ import sys
 
 sys.path.insert(0, os.path.abspath("../src"))
 
+
+def _ensure_nbconvert_templates_visible() -> None:
+    """Put the installed nbconvert's data directory on ``JUPYTER_PATH``.
+
+    nbsphinx exports notebooks through nbconvert, which finds its templates by
+    scanning ``JUPYTER_PATH`` -- not by looking beside the module it imported.
+    When nbconvert resolves outside the environment running sphinx (a venv
+    without its own copy falls through to a system or Anaconda install), that
+    scan misses and the build dies with::
+
+        ValueError: No template sub-directory with name 'rst' found
+
+    which names templates and says nothing about the actual cause. It kills the
+    whole build, after the gallery has already been walked.
+
+    Deriving it here rather than in each caller is deliberate: ``make html``,
+    ``sphinx-autobuild`` and ``tools/regen_gallery.py`` are three entry points
+    and only one of them can be told to remember an environment variable.
+
+    A no-op when nbconvert is absent, when its data directory is not laid out as
+    ``<prefix>/share/jupyter``, or when ``JUPYTER_PATH`` is already set.
+    """
+    if os.environ.get("JUPYTER_PATH"):
+        return
+    try:
+        import nbconvert
+    except ImportError:
+        return
+    import pathlib
+
+    for parent in pathlib.Path(nbconvert.__file__).resolve().parents:
+        candidate = parent / "share" / "jupyter"
+        if (candidate / "nbconvert" / "templates").is_dir():
+            os.environ["JUPYTER_PATH"] = str(candidate)
+            return
+
+
+_ensure_nbconvert_templates_visible()
+
 # -- Project information -----------------------------------------------------
 
 project = "tengri"
