@@ -45,11 +45,11 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from tengri.components.nebular.line_precompute import _four_pi_dl2
+from tengri.components.nebular.line_precompute import _log10_four_pi_dl2
 from tengri.components.stellar.reference_history import reference_history_params
 from tengri.parameters.translate import LOG10_ZSUN
 from tengri.utils.grid_interp import interp_nd_pchip
-from tengri.utils.scale import pow10
+from tengri.utils.scale import apply_log10_scale, pow10
 
 #: Parameters that may become grid axes when free. ``met_logzsol`` sets the
 #: ionizing-spectrum shape; ``neb_logU`` / ``neb_logZ_gas`` are the gas
@@ -509,7 +509,7 @@ def precompute_nebular_grid(
     # which is why a stand-in serves — and why one already has to, since the
     # whole grid is built at a single sampled SFH for parametric models too.
     ref_params = {**reference_history_params(model, redshift=ref_z), **ref_params}
-    ref_divisor = _four_pi_dl2(ref_z)  # observed flux -> luminosity
+    log10_ref_divisor = _log10_four_pi_dl2(ref_z)  # observed flux -> luminosity
 
     axes, axis_kinds = [], []
     for name in axis_names:
@@ -552,7 +552,7 @@ def precompute_nebular_grid(
         flux = model.predict_line_fluxes(
             p, target_wavelengths=wavelengths, redden=False, state=state
         )
-        line_per_qh = jnp.asarray(flux) * ref_divisor * inv_qh
+        line_per_qh = apply_log10_scale(jnp.asarray(flux), log10_ref_divisor) * inv_qh
         if not want_phot:
             return line_per_qh, None, None
         # intrinsic nebular filter-integrated rest-frame L_nu per Q_H (the exact
@@ -694,7 +694,9 @@ def reconstruct_nebular_lines(nion, params, redshift, table) -> jnp.ndarray:
     **JIT-compatible / gradient-safe**: yes — node-exact PCHIP interpolation + a
     scalar multiply + the cosmology divisor.
     """
-    return reconstruct_nebular_line_lums(nion, params, table) / _four_pi_dl2(redshift)
+    return apply_log10_scale(
+        reconstruct_nebular_line_lums(nion, params, table), -_log10_four_pi_dl2(redshift)
+    )
 
 
 def reconstruct_nebular_line_lums(nion, params, table) -> jnp.ndarray:

@@ -147,6 +147,13 @@ class AstrodustIRSEDComponent(EmissionComponent):
     name = "astrodust"
     config: AstrodustIRConfig = AstrodustIRConfig()
 
+    #: ``load`` resamples onto the ``wave`` it is given, so its arrays are
+    #: tracers under a trace and concrete constants outside one. Neither may be
+    #: cached on the instance: the first leaks a tracer, the second bakes 4.97 MB
+    #: into the graph. The build-time resolution pass therefore skips this
+    #: component and ``predict`` resolves per call (#1738).
+    resolves_templates_at_trace_time: ClassVar[bool] = True
+
     # Free parameter (user-facing name, prefix-stripped): starlight intensity.
     lgU = Uniform(
         -3.0,
@@ -340,13 +347,7 @@ class AstrodustIRSEDComponent(EmissionComponent):
         """
         L_ir = jnp.asarray(inputs.get("L_ir", 0.0))
 
-        # Use the precomputed template if precompute() ran; otherwise build it
-        # locally from the process-cached grid. Crucially, do NOT assign the
-        # result to ``self.data`` here: under a JIT trace ``load`` resamples onto
-        # a *traced* ``wave``, so its arrays are tracers — caching them on the
-        # instance would leak them out of the transformation
-        # (UnexpectedTracerError). Kept local, they simply flow into the output.
-        data = getattr(self, "data", None)
+        data = inputs.get("templates")
         if data is None:
             data = self.load(wave)
         if data is None:
