@@ -5,9 +5,12 @@
 Showcase
 ========
 
-Headline demonstrations that exercise the full stack: population-scale
-forward modeling, JAX gradient diagnostics, and end-to-end recipe tours.
+Full-stack demonstrations: population forward modeling, gradient diagnostics, end-to-end workflows.
 
+
+.. raw:: html
+
+  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
 
 
 .. raw:: html
@@ -18,7 +21,7 @@ forward modeling, JAX gradient diagnostics, and end-to-end recipe tours.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The Fisher Information Matrix quantifies which linear combinations of parameters are constrained by data — and which are degenerate. Tengri&#x27;s fully differentiable forward model makes it trivial to compute the Fisher matrix at any point in parameter space.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The Fisher Information Matrix quantifies which parameter combinations are constrained by data and which are degenerate. Age-dust degeneracy: at fixed stellar mass, older stars + more dust produce the same multiwavelength SED as younger stars + less dust.">
 
 .. only:: html
 
@@ -35,7 +38,7 @@ forward modeling, JAX gradient diagnostics, and end-to-end recipe tours.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Every photometric band&#x27;s flux is a differentiable function of model parameters. This example computes sensitivities ∂(log F) / ∂(log θ) — the logarithmic elasticity of each photometric band to changes in four key stellar population parameters: peak star formation rate, metallicity, dust optical depth, and age. Astronomers fitting galaxy SEDs in other codes use finite differences (∂F/∂θ ≈ [F(θ+δ) − F(θ−δ)] / (2δ), slow and numerically fragile); tengri exposes JAX&#x27;s autodiff to compute these sensitivities exactly in one forward and one reverse pass per parameter. This heatmap demonstrates the approach.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Compute logarithmic sensitivities ∂(log F) / ∂(log θ) for each photometric band. Finite-difference methods (∂F/∂θ ≈ [F(θ+δ) − F(θ−δ)] / (2δ)) are slow and fragile; JAX autodiff computes exact sensitivities via one forward and reverse pass per parameter.">
 
 .. only:: html
 
@@ -52,7 +55,7 @@ forward modeling, JAX gradient diagnostics, and end-to-end recipe tours.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Each recipe is a nested-dict configuration — drop-in templates for common galaxy fitting scenarios. This gallery overlays the rest-frame SED of all five shipped recipes, highlighting how model complexity scales from minimal mock-recovery to panchromatic AGN:">
+    <div class="sphx-glr-thumbcontainer" tooltip="Recipes for common science cases">
 
 .. only:: html
 
@@ -63,7 +66,7 @@ forward modeling, JAX gradient diagnostics, and end-to-end recipe tours.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">recipes for common science cases</div>
+      <div class="sphx-glr-thumbnail-title">Recipes for common science cases</div>
     </div>
 
 

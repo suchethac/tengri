@@ -21,27 +21,16 @@
 Dust energy balance: L_IR = L_UV_absorbed across opacity variations
 ===================================================================
 
-A cornerstone of dust modeling is energy conservation: the UV light
-absorbed by dust must be re-radiated in the infrared. This example
-constructs 15 tengri SEDModels with optical depth τ_V ∈ {0, 0.1, ..., 4}
-and validates that integrated infrared luminosity (8–1000 μm) matches
-the absorbed UV (912–3000 Å rest-frame).
-
-The test is performed at z = 0.05 with star-forming galaxy kinematics
-(tsnorm SFH peaking at 0.3 Gyr lookback time) and a two-component dust
-model (Calzetti attenuation + Dale14 IR emission).
-
-**Key Physics:**
-L_UV_absorbed = L_UV_intrinsic − L_UV_attenuated
-
-For any self-consistent dust model:
-L_IR ≈ L_UV_absorbed (within ~5% when using tabulated Dale14 templates)
-
+For any self-consistent dust model: L_IR ≈ L_UV_absorbed. Using tabulated
+Dale14 templates, agreement reaches ~5% across τ_V ∈ {0, 0.1, …, 4}.
 Non-conservation flags calibration issues in the dust emission routing.
 
-Reference: da Cunha et al. 2008, MNRAS, 388, 1595 (energy-balance principle).
+Reference
+---------
 
-.. GENERATED FROM PYTHON SOURCE LINES 25-266
+da Cunha et al. 2008, MNRAS, 388, 1595 (energy-balance principle).
+
+.. GENERATED FROM PYTHON SOURCE LINES 14-255
 
 
 
@@ -336,7 +325,7 @@ Reference: da Cunha et al. 2008, MNRAS, 388, 1595 (energy-balance principle).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 19.313 seconds)
+   **Total running time of the script:** (0 minutes 8.302 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_uv_to_ir_bolometric_balance.py:

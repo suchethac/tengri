@@ -16,7 +16,7 @@ This gallery:
 
 1. Builds ~50 star-forming galaxy models with:
 
-   - Variable dust opacity (tau_diff ∈ [0, 2], tau_bc ∈ [0.1, 1.5])
+   - Variable dust opacity (τ_diff ∈ [0, 2], τ_bc ∈ [0.1, 1.5])
    - Fixed SFH shape (DPL) and redshift (z = 0.1)
    - Fixed dust temperature (35 K, cool)
 

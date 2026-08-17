@@ -126,7 +126,7 @@ sfh_shapes = [
         {"type": "tsnorm", "width_gyr": 0.30, "log_total_mass": 10.0, "skew": 1.5, "trunc": 13.5},
     ),
 ]
-ages_gyr = np.array([0.5, 1.0, 2.0, 4.0, 5.5])  # avoid SSP step at 6 Gyr (#299)
+ages_gyr = np.array([0.5, 1.0, 2.0, 4.0, 5.5])  # avoid SSP age boundary step
 metallicities = np.array([-0.5, 0.0, 0.3])  # log10(Z/Zsun)
 
 n_pop = len(sfh_shapes) * len(ages_gyr) * len(metallicities)
@@ -158,7 +158,7 @@ for shape_i, (_shape_name, sfh_dict) in enumerate(sfh_shapes):
                 sfh=sfh,
                 dust=dust,
                 neb=neb,
-                redshift=tengri.Fixed(0.05),  # avoid #290 (NaN at z=0)
+                redshift=tengri.Fixed(0.05),  # avoid numerical issues at z=0
             )
 
             # Sample baseline parameters

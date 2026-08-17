@@ -16,7 +16,7 @@ References
        Science Institute Technical Report.
 .. [2] Eisenstein et al. (2023). The JADES Survey: First Spectroscopic
        Redshifts. arXiv:2306.02465.
-.. [3] Cameron et al. (2023). The assembly of metals in galaxies at z~3-5.
+.. [3] Cameron et al. (2023). The assembly of metals in galaxies at z~3–5.
        MNRAS (submitted).
 
 """

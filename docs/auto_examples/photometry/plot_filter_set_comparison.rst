@@ -25,7 +25,7 @@ The same star-forming galaxy SED is intercepted by three different filter
 sets — SDSS *ugriz* (optical), 2MASS *JHKs* (near-infrared), and HST ACS
 *F435W/F606W/F814W* (UV-optical). Each panel overlays the survey's
 throughputs on the shared SED so the reader sees, at a glance, which
-spectral features (the 4000-Å break, H-alpha + [N II], the 1.6-um stellar
+spectral features (the 4000-Å break, Hα + [N II], the 1.6-μm stellar
 bump) fall inside each band.
 
 Reference: Conroy 2013, ARA&A, 51, 393.
@@ -136,7 +136,7 @@ Reference: Conroy 2013, ARA&A, 51, 393.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 10.491 seconds)
+   **Total running time of the script:** (0 minutes 28.557 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_filter_set_comparison.py:

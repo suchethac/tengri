@@ -31,7 +31,7 @@ Three traces shown:
 
 - **Host only** (``agn_lum_ratio=0``): Star-forming galaxy, SFH + dust
 - **AGN only** (``agn_lum_ratio=1.0``): Bolometric luminosity fixed
-- **Composite** (``agn_lum_ratio=0.5``): 50-50 mix, physical decomposition
+- **Composite** (``agn_lum_ratio=0.5``): 50–50 mix, physical decomposition
 
 For real data, this three-trace pattern can be extended to a suite of
 ``agn_lum_ratio`` values to fit a composite Seyfert II SED photometrically.
@@ -149,7 +149,7 @@ References
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.053 seconds)
+   **Total running time of the script:** (0 minutes 27.308 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_host_decomposition.py:

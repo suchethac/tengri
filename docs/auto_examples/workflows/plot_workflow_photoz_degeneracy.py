@@ -1,23 +1,12 @@
 """
-The photo-z degeneracy: dusty z≈0.3 vs unobscured z≈3.5
-========================================================
+The photo-z degeneracy: dusty z ≈ 0.3 vs unobscured z ≈ 3.5
+===========================================================
 
-Two galaxies with very different physical properties — a dusty
-star-forming galaxy at z=0.3 and an unobscured Lyman-break galaxy
-at z=3.5 — can produce nearly identical *ugrizY* broadband fluxes.
-The 4000 Å break of the dusty low-z galaxy and the Lyman break of the
-high-z galaxy land at the same observed wavelength, so without
-intermediate bands or IR coverage the photo-z is bimodal.
+Two galaxies with different physical properties can produce nearly
+identical broadband fluxes when the 4000 Å break of a dusty low-z galaxy
+and the Lyman break of a high-z galaxy land at the same observed wavelength.
 
-This is the canonical degeneracy that motivates near-IR photometric
-follow-up (e.g. EUCLID *Y/J/H*) and medium-band surveys for high-z
-galaxy selection.
-
-References:
-
-- Steidel et al. 1996, AJ, 112, 352 (LBG dropout selection)
-- Massarotti, Iovino & Buzzoni 2001, A&A, 368, 74 (photo-z degeneracies)
-
+References: Steidel+1996; Massarotti+2001.
 """
 
 import os

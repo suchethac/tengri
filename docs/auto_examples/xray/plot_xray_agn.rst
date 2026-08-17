@@ -30,7 +30,7 @@ sub-linear alpha_OX relation only steepens the shape at the top of
 the quasar regime.
 
 We sweep ``log L_bol`` from 42 to 46.5 erg/s on a single panel and
-overlay the 2-10 keV band luminosity against L_bol on the right —
+overlay the 2–10 keV band luminosity against L_bol on the right —
 the canonical low-redshift correlation that lets X-ray surveys
 estimate bolometric power from a single broadband flux.
 
@@ -53,8 +53,21 @@ References
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /tengri/examples/xray/plot_xray_agn.py:109: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
+      fig.tight_layout()
+    /tengri/examples/xray/plot_xray_agn.py:110: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
+      plt.savefig("plot_xray_agn.png", dpi=150, bbox_inches="tight")
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -141,6 +154,11 @@ References
 
     fig.tight_layout()
     plt.savefig("plot_xray_agn.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 6.213 seconds)
 
 
 .. _sphx_glr_download_auto_examples_xray_plot_xray_agn.py:

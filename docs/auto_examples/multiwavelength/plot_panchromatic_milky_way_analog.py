@@ -1,7 +1,7 @@
 """
 Panchromatic SED: Milky Way Analog
 
-A nearby Milky Way-mass galaxy (M*~5×10^10 Msun, SFR~2 Msun/yr) across
+A nearby Milky Way-mass galaxy (M*~5×10^10 M☉, SFR~2 M☉/yr) across
 the full electromagnetic spectrum from X-ray (10 Å) to radio (10^9 Å).
 
 Star formation history follows a double power-law with recent sustained
@@ -21,15 +21,15 @@ Reading order: stellar continuum (gray) → dust-attenuated stellar
 
 .. [1] Kennicutt, R. C., & Evans, N. J. (2012).
    *Annu. Rev. Astron. Astrophys.* **50**, 531–608.
-   https://doi.org/10.1146/annurev-astro-081811-146504
+   https://doi.org/10.1146/annurev-astro-081811–146504
 
 .. [2] Bruzual, G., & Charlot, S. (2003).
    *Mon. Not. R. Astron. Soc.* **344**, 1000–1028.
-   https://doi.org/10.1046/j.1365-8711.2003.06897.x
+   https://doi.org/10.1046/j.1365–8711.2003.06897.x
 
 .. [3] Dale, D. A., et al. (2014).
    *Astrophys. J.* **784**, 83.
-   https://doi.org/10.1088/0004-637X/784/1/83
+   https://doi.org/10.1088/0004–637X/784/1/83
 """
 
 import os

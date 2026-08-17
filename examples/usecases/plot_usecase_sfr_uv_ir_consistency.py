@@ -7,7 +7,7 @@ At high dust optical depth, UV-only SFR estimators severely underestimate
 the true SFR because dusty starbursts radiate most energy in the infrared.
 The hybrid SFR(UV+IR) recipe recovers the true SFR by combining both tracers.
 
-This example sweeps dust optical depth tau_V from 0 to 4 across 12 models.
+This example sweeps dust optical depth τ_V from 0 to 4 across 12 models.
 We compare three estimators:
 
 - **SFR(UV)**: UV luminosity at 1500 Å (dust-attenuated; Kennicutt 1998)

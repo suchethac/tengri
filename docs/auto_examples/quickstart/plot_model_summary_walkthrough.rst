@@ -21,13 +21,7 @@
 Understanding model structure through parameter provenance tags
 ===============================================================
 
-The ``model.spec.summary()`` method displays each parameter's source
-through provenance tags: ``[user]`` for explicit overrides, ``[all_params FREE]``
-and ``[all_params FIXED]`` for wildcard expansions, and ``[default]`` for
-registry defaults. We build a model with mixed constraints, display the
-annotated summary as a figure caption, and show the predicted SED.
-
-.. GENERATED FROM PYTHON SOURCE LINES 11-108
+.. GENERATED FROM PYTHON SOURCE LINES 5-102
 
 
 
@@ -37,8 +31,21 @@ annotated summary as a figure caption, and show the predicted SED.
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /tengri/src/tengri/forward/sed_model.py:8270: WildcardPartialFreeWarning: 'all_params: FREE' freed 5 of 7 parameters in group 'sfh'. These have no declared prior, only Fixed defaults, so they stay pinned:
+      met_alpha_fe, met_logzsol_scatter
+    The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. sfh={'met_alpha_fe': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
+      spec = parse_groups(**groups)
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -143,7 +150,7 @@ annotated summary as a figure caption, and show the predicted SED.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.838 seconds)
+   **Total running time of the script:** (0 minutes 6.870 seconds)
 
 
 .. _sphx_glr_download_auto_examples_quickstart_plot_model_summary_walkthrough.py:

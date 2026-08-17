@@ -35,7 +35,7 @@ References
 ----------
 .. [1] M. Stalevski et al., "3D radiative transfer modeling of the dusty
    torus around AGN," MNRAS, 420, 2756 (2012).
-   arXiv:1109.1286. https://doi.org/10.1111/j.1365-2966.2011.19775.x
+   arXiv:1109.1286. https://doi.org/10.1111/j.1365–2966.2011.19775.x
 .. [2] W. Yang et al., "X-CIGALE: fitting AGN/galaxy SEDs from X-ray to radio,"
    MNRAS, 491, 740 (2020). arXiv:1909.09632.
    https://doi.org/10.1093/mnras/stz3001
@@ -55,10 +55,12 @@ References
  .. code-block:: none
 
     Building shared AGN model (polar_ebv and cos_inc FREE)...
-    /tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_interp_nd_triweight': FileNotFoundError: [Errno 2] No such file or directory: '~/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
     /tengri/examples/agn/plot_polar_dust_ebv_type12_sweep.py:128: UserWarning: This figure includes Axes that are not compatible with tight_layout, so results might be incorrect.
       fig.tight_layout()
+    /tengri/examples/agn/plot_polar_dust_ebv_type12_sweep.py:128: UserWarning: Glyph 952 (\N{GREEK SMALL LETTER THETA}) missing from font(s) cmr10.
+      fig.tight_layout()
+    /tengri/examples/agn/plot_polar_dust_ebv_type12_sweep.py:129: UserWarning: Glyph 952 (\N{GREEK SMALL LETTER THETA}) missing from font(s) cmr10.
+      plt.savefig("plot_polar_dust_ebv_type12_sweep.png", dpi=150, bbox_inches="tight")
     Saved: plot_polar_dust_ebv_type12_sweep.png
 
 
@@ -181,7 +183,7 @@ References
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.369 seconds)
+   **Total running time of the script:** (0 minutes 6.013 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_polar_dust_ebv_type12_sweep.py:

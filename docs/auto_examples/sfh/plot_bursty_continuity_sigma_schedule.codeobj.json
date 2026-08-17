@@ -91,22 +91,6 @@
    "name": "SEDModel"
   }
  ],
- "SFH_REGISTRY": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "dict"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "SFH_REGISTRY"
-  }
- ],
  "_": [
   {
    "is_class": false,
@@ -1050,52 +1034,6 @@
    "name": "Artist.text"
   }
  ],
- "bursty_spec": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri.components.stellar.sfh.registry",
-   "module_short": "tengri.components.stellar.sfh.registry",
-   "name": "SFHRegistryEntry"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri.components.stellar.sfh",
-   "module_short": "tengri.components.stellar.sfh",
-   "name": "SFHRegistryEntry"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri.components.stellar",
-   "module_short": "tengri.components.stellar",
-   "name": "SFHRegistryEntry"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri.components",
-   "module_short": "tengri.components",
-   "name": "SFHRegistryEntry"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
-   "name": "SFHRegistryEntry"
-  }
- ],
- "bursty_spec.params": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "dict"
-  }
- ],
  "edges": [
   {
    "is_class": false,
@@ -1340,6 +1278,52 @@
    "module": "numpy",
    "module_short": "numpy",
    "name": "ndarray"
+  }
+ ],
+ "spec": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.parameters.parameters",
+   "module_short": "tengri.parameters.parameters",
+   "name": "Parameters"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.parameters",
+   "module_short": "tengri.parameters",
+   "name": "Parameters"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "Parameters"
+  }
+ ],
+ "spec.get_distribution": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.parameters.parameters",
+   "module_short": "tengri.parameters.parameters",
+   "name": "Parameters.get_distribution"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.parameters",
+   "module_short": "tengri.parameters",
+   "name": "Parameters.get_distribution"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "Parameters.get_distribution"
   }
  ],
  "ssp": [

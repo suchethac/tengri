@@ -28,23 +28,49 @@ tengri. Both read the *same* FSPS MIST + MILES Chabrier templates, so a
 ## Prerequisites
 
 ```bash
-pip install fsps astro-prospector sedpy jupytext jupyter
+git clone https://github.com/cconroy20/fsps.git && git -C fsps checkout a431c59
+export SPS_HOME=$PWD/fsps
+FFLAGS="-DMILES=1 -DC3K_LR=0 -DC3K_HR=0 -DMIST=1" \
+  pip install --no-binary fsps --no-deps 'fsps==0.4.7'
+codesign --force -s - "$(python -c 'import fsps,glob,os;print(glob.glob(os.path.join(os.path.dirname(fsps.__file__),"_fsps*.so"))[0])')"   # Apple Silicon only
+pip install astro-prospector sedpy jupytext jupyter
 ```
 
-`python-fsps` needs the FSPS Fortran tables and the `SPS_HOME`
-environment variable pointing at them:
+Four things, each of which fails silently on its own. The check that they all
+landed is the header the notebook prints:
+`libraries ['mist', 'miles', 'DL07']`, `nwave 5994`, `nz 12`.
 
-```bash
-export SPS_HOME=/path/to/fsps
-```
+**The FFLAGS, in full.** The spectral library is fixed when the Fortran is
+compiled, and `src/sps_vars.f90` guards with `#ifndef`, so `-DMILES` *alone*
+leaves `C3K_LR` defined too and you get a binary carrying both. tengri's grid is
+MIST+MILES; against a C3K build §1's SSP residual reads ~1e-1 instead of
+~1e-9 and every later section moves with it, with nothing raised.
+`prospector_driver` now refuses a non-MILES build outright.
+
+**python-fsps 0.4.7, not newer.** It bundles its own copy of the FSPS Fortran
+and uses `SPS_HOME` for *data only*, so the code and the data have to be of one
+era. 0.4.7 was current on the audit date; 0.5.0 against audit-era data dies with
+`Fortran runtime error: End of file` on `ISOCHRONES/MIST/zlegend.dat`.
+
+**FSPS at `a431c59`.** Commit `05b5e55` ("Remove the now unused, old C3K
+zlegend") landed after the audit and drops a metallicity, so HEAD reports
+`nz 13` and the residual does not return to 1e-9.
+
+**The codesign, on Apple Silicon.** A locally built `_fsps*.so` that is not
+signed is SIGKILLed on import. The crash report says `namespace: CODESIGNING`
+and `EXC_BAD_ACCESS (Code Signature Invalid)`; from the outside it looks exactly
+like the OOM kill you would expect from a 2 GB Fortran build, so check the
+report before blaming memory.
 
 Without `SPS_HOME` the notebook stops at Setup with a message. The
-notebook is built for an FSPS install compiled with **MIST isochrones +
-MILES spectral library** (the `python-fsps` default); `sp.libraries`
-reports the combination your build uses. tengri downloads the matching
-grid automatically (next section) — if your FSPS uses a different
-isochrone or library, swap the catalog name in the "Common SSP grid"
-cell so the two sides use identical inputs.
+notebook needs an FSPS compiled with **MIST isochrones + MILES spectral
+library**; `sp.libraries` reports the combination your build uses, and a
+matching build prints `['mist', 'miles', ...]` with 5994 wavelengths over 12
+metallicities. (MILES was python-fsps's default once; it is not any more.)
+
+tengri downloads the matching grid automatically (next section). If your FSPS
+uses a different isochrone or library, swap the catalog name in the "Common
+SSP grid" cell so the two sides use identical inputs.
 
 ## The SSP grid (downloaded, not shipped)
 

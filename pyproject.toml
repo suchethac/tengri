@@ -122,6 +122,13 @@ dev = [
     # laws (D03/HD23/WD01). Runtime imports inside attenuation.py are guarded,
     # but the test class exercises them directly.
     "dust-extinction>=1.5",
+    # tests/contract/test_registry_to_rst.py parses `_RegistryTable.to_rst()`
+    # output with a real RST parser and counts the columns docutils actually
+    # found. Listed here rather than skipped when absent: the first version of
+    # that test checked line prefixes instead, and passed against a table that
+    # emitted every cell as its own row. A check that cannot see the structure
+    # reports the same "clean" as one that can, so it has to run in CI.
+    "docutils>=0.20",
 ]
 crossval = [
     "bagpipes>=1.0",

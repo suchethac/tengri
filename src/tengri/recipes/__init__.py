@@ -92,6 +92,7 @@ def star_forming_photometry() -> dict:
             law_bc="calzetti",
             emission=builders.dust.emission.dale2014(defaults=FIXED),
         ),
+        met={"logzsol": FREE},
         neb=builders.neb.cue(defaults=FIXED),
         redshift=Uniform(0.01, 6.0),
         apply_igm=True,
@@ -148,6 +149,7 @@ def quiescent_z0() -> dict:
             tau_bc=Uniform(0, 0.5),
             tau_diff=Uniform(0, 0.3),
         ),
+        met={"logzsol": FREE},
         neb=builders.neb.cue(defaults=FIXED),
         redshift=Fixed(0.05),
         approx=WavePrecomp(),
@@ -329,6 +331,7 @@ def agn_panchromatic() -> dict:
             # choice, not something a wildcard should open by default.
             emission=builders.dust.emission.dale2014(defaults=FIXED),
         ),
+        met={"logzsol": FREE},
         neb=builders.neb.cue(defaults=FIXED),
         agn=builders.agn.composable(
             defaults=FREE,
@@ -402,6 +405,7 @@ def composable_agn() -> dict:
             # choice, not something a wildcard should open by default.
             emission=builders.dust.emission.dale2014(defaults=FIXED),
         ),
+        met={"logzsol": FREE},
         neb=builders.neb.cue(defaults=FIXED),
         agn={
             "type": "composable",
@@ -469,6 +473,7 @@ def stochastic_sfh_jwst() -> dict:
             defaults=FREE,
             emission=builders.dust.emission.dale2014(defaults=FIXED),
         ),
+        met={"logzsol": FREE},
         neb=builders.neb.cue(defaults=FIXED),
         redshift=Uniform(0.5, 12.0),
         apply_igm=True,
@@ -520,6 +525,7 @@ def mock_recovery_minimal() -> dict:
             law_bc="calzetti",
             tau_bc=Uniform(0, 1),
         ),
+        met={"logzsol": FREE},
         neb=builders.neb.none(),
         redshift=Fixed(0.05),
         approx=WavePrecomp(),

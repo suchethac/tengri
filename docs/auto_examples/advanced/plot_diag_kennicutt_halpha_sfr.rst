@@ -24,7 +24,7 @@ Hα-to-SFR calibration against Kennicutt (1998)
 Diagnostic: the Hα luminosity traces the ionizing photon rate from young stars,
 which correlates with the instantaneous SFR. Kennicutt (1998, ApJ 498 541, Eq. 2)
 calibrated this relationship for Salpeter IMF; for Chabrier IMF (used by tengri),
-the coefficient is 4.97e-42: SFR / (Msun/yr) = 4.97e-42 × L(Hα) / (erg/s).
+the coefficient is 4.97e-42: SFR / (M☉/yr) = 4.97e-42 × L(Hα) / (erg/s).
 
 This script builds a young, dust-free model with constant SFR over the last ~10 Myr,
 varies the SFR value across a grid, and compares the implied Hα→SFR coefficient
@@ -140,7 +140,7 @@ tengri's Cue nebular emulator correctly maps ionizing photon rates to Hα lumino
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 40.368 seconds)
+   **Total running time of the script:** (0 minutes 2.955 seconds)
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_diag_kennicutt_halpha_sfr.py:

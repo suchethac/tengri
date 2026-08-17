@@ -1,20 +1,6 @@
 """
-recipes for common science cases
-=========================================
-
-Each recipe is a nested-dict configuration — drop-in templates for common galaxy
-fitting scenarios. This gallery overlays the rest-frame SED of all five shipped
-recipes, highlighting how model complexity scales from minimal mock-recovery to
-panchromatic AGN:
-
-- ``star_forming_photometry`` — optical+NIR+MIR photometry of star-forming galaxies
-- ``quiescent_z0`` — low-redshift quiescent sample
-- ``agn_panchromatic`` — multi-wavelength AGN host fitting
-- ``stochastic_sfh_jwst`` — high-redshift burstiness and temporal structure
-- ``mock_recovery_minimal`` — lightweight parameter-recovery benchmarking
-
-All models are sampled at default prior medians to display the characteristic
-SED shape of each recipe.
+Recipes for common science cases
+=================================
 """
 
 import os

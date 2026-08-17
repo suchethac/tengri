@@ -109,6 +109,15 @@ ALLOWED_PHRASES = (
     # reporting it as title drift -- and its test must write the British form to
     # prove the fold works.
     "UV-to-submillimetre spectral energy",
+    # The four strings GitHub Actions reports for `needs.<job>.result`, declared
+    # once as `GITHUB_RESULTS` in tools/ci_ok.py. An upstream API vocabulary, so
+    # it takes the same NAMING_CONTRACT §10 exemption as the Synthesizer HDF5
+    # keys -- but "cancelled" is an ordinary English word, so a token entry would
+    # exempt it repo-wide and blind the guard to real British prose. That is the
+    # exact failure the ALLOWED_TOKENS note above records. Scoped to the tuple
+    # instead, which is also why ci_ok.py declares it once and its test derives
+    # the values rather than repeating them.
+    '"failure", "cancelled", "skipped"',
 )
 
 

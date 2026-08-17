@@ -44,6 +44,23 @@ _BLR_GRID = "test_grid_agn-blr"
 _DUST_GRID = "draine_li_dust_emission_grid_MW_3p1"
 
 
+def synthesizer_version() -> str:
+    """Installed cosmos-synthesizer version, for the grid provenance line.
+
+    The AGN test grids are downloaded, not committed, and they move between
+    releases: §9c's Synthesizer [OIII]5007/Hbeta read 20.9 against the grid
+    current at the audit and 15.6 under 1.2.0, with the tengri side unchanged
+    at 12.8. Printing the version is what separates a grid revision from a
+    physics disagreement.
+
+    Note the distribution is ``cosmos-synthesizer``; the ``synthesizer`` name
+    on PyPI is an unrelated audio package that shadows it if installed.
+    """
+    from importlib.metadata import version
+
+    return version("cosmos-synthesizer")
+
+
 def _grid_dir() -> str:
     """Return the grid directory (env override or Synthesizer's default)."""
     env = os.environ.get("SYNTHESIZER_GRID_DIR")

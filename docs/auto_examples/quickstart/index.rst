@@ -5,11 +5,12 @@
 Quick Start
 ===========
 
-The shortest path into tengri — a first mock fit, a walkthrough of
-``model.summary()`` and the model spec, the anatomy of an SED's
-components, and swapping the nebular backend. Start here, then branch into
-the physics and inference galleries below.
+End-to-end fit walkthrough: from mock data to posterior corner plots and convergence diagnostics.
 
+
+.. raw:: html
+
+  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
 
 
 .. raw:: html
@@ -20,7 +21,7 @@ the physics and inference galleries below.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The simplest end-to-end tengri workflow. We build a model with a truncated-skew-normal SFH and a two-component Calzetti dust attenuation, mock SDSS ugriz photometry at S/N = 20, then run a MAP fit to recover the input parameters. The figure shows the full rest-frame SED behind the five observed bands and the residuals of the MAP fit relative to the noise level.">
+    <div class="sphx-glr-thumbcontainer" tooltip="MAP returns a point estimate; nothing here estimates uncertainty. Six free parameters, which is the validated ceiling for method=&quot;mcmc_nuts&quot;; method=&quot;laplace&quot; is the cheaper route to intervals, from the Hessian at the MAP. vi and mcmc_raytrace target D ≳ 20. See the method-selection page for the full decision table.">
 
 .. only:: html
 
@@ -31,13 +32,13 @@ the physics and inference galleries below.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Recovering a star-forming galaxy from 5-band SDSS photometry</div>
+      <div class="sphx-glr-thumbnail-title">Recovering stellar mass from 5-band SDSS photometry</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The model.spec.summary() method displays each parameter&#x27;s source through provenance tags: [user] for explicit overrides, [all_params FREE] and [all_params FIXED] for wildcard expansions, and [default] for registry defaults. We build a model with mixed constraints, display the annotated summary as a figure caption, and show the predicted SED.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Understanding model structure through parameter provenance tags">
 
 .. only:: html
 
@@ -54,7 +55,7 @@ the physics and inference galleries below.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Build a model with both stellar and dust components. Predict the full SED with attenuation, then predict without dust absorption to isolate the absorbed UV-optical flux. The filled region shows how much light dust removes from the intrinsic stellar continuum.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Dust attenuation across the SED: intrinsic, attenuated, and absorbed">
 
 .. only:: html
 
@@ -71,7 +72,7 @@ the physics and inference galleries below.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Hα and [O III]+Hβ are produced by gas reprocessing the ionizing continuum from O/B stars. Whether they appear in the predicted SED depends entirely on the nebular backend the model is built with.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Hα and [O III]+Hβ are produced by gas reprocessing the ionizing continuum from O/B stars. The SFH is a young starburst (peak age ≈ 30 Myr).">
 
 .. only:: html
 

@@ -16,40 +16,27 @@
 # %% [markdown]
 # # Which parts of a bursty star-formation history can you actually measure?
 #
-# > ⚠️ **Experimental.** A research demonstration that explores experimental
-# > features and may use APIs that change between releases; it sits outside the
-# > supported tutorial sequence.
+# > ⚠️ **Experimental.** A research demonstration using experimental APIs that may change between releases.
 #
-# Star formation in a real galaxy is **bursty**: it flickers on timescales of tens
-# to hundreds of megayears. tengri models that directly — a smooth backbone times a
-# stochastic Gaussian-process *field* whose burstiness is set by a power spectrum:
+# Star formation is bursty: it flickers on tens-to-hundreds-Myr timescales. tengri models that directly — a smooth backbone times a stochastic Gaussian-process field governed by a power spectrum:
 #
 # $$
-# \mathrm{SFR}(t) \;=\; \underbrace{\mathrm{SFR}_{\mathrm{DPL}}(t)}_{\text{smooth backbone}}
-#                 \times \underbrace{\exp\!\bigl(\mathrm{GP}(t) - \tfrac12 K_0\bigr)}_{\text{bursts}},
+# \mathrm{SFR}(t) \;=\; \mathrm{SFR}_{\mathrm{DPL}}(t) \times \exp\!\bigl(\mathrm{GP}(t) - \tfrac12 K_0\bigr),
 # \qquad
 # P(\omega) = \frac{\sigma^2\,\tau}{1 + (\tau\,\omega)^2}.
 # $$
 #
-# Fitting such a model raises an uncomfortable question. The field adds one free
-# parameter per age bin, so it can draw *almost any* history — which means a fit
-# will always hand you a bursty SFH, whether or not your data said anything about
-# it. **So which parts of the answer are measurements, and which are the prior
-# talking back?**
+# The problem: the field adds one free parameter per age bin, so it can fit *almost any* history. A fit will always return bursts, whether the data measured them or not. **Which parts of the SFH answer are real, and which are the prior?**
 #
-# This notebook answers that empirically. We inject **one known bursty history**
-# into **one galaxy**, then observe that same galaxy three ways:
+# This notebook injects one known bursty history into a galaxy and observes it three ways:
 #
-# | | observable | should constrain |
-# |---|---|---|
-# | **A** | 7 broadband filters (GALEX FUV → SDSS *z*) | overall shape, stellar mass |
-# | **B** | the same 7 filters **+ 8 optical emission lines** | the last few Myr, directly |
-# | **C** | the same 7 filters **+ an *R* = 2000 optical spectrum** | the above, plus the older mass budget |
+# | Observable | Constrains |
+# |---|---|
+# | 7 broadband filters (GALEX → SDSS *z*) | overall shape, stellar mass |
+# | Same + 8 optical emission lines | the last 15 Myr, directly |
+# | Same + R = 2000 optical spectrum | the above, plus old mass budget |
 #
-# The truth, the model, the noise level, and the random seed are all held fixed.
-# The *only* thing that changes between the three fits is what the telescope
-# measured — so any difference in the recovered history is attributable to the
-# observable and nothing else.
+# Truth, model, noise, and random seed stay fixed across all three. Only the observable changes — so any difference in the recovered history reflects the information content of the data.
 
 # %%
 import warnings
@@ -255,8 +242,7 @@ print(f"Injected SFH on {t_node.size} log-age nodes, "
 # %% [markdown]
 # ### Synthesizing the three data sets
 #
-# Photometry at S/N 20, line fluxes at S/N 10, spectrum at S/N 30 per pixel — all
-# from the *same* truth, so the three fits differ only in what they are shown.
+# All three observables are drawn from the same truth at S/N 20 (photometry), 10 (lines), 30 (spectrum).
 
 # %%
 mock = model["A"].mock({**model["A"].spec.get_fixed_values(), **truth},
@@ -351,14 +337,7 @@ plt.show()
 # %% [markdown]
 # ## 3. Fit all three
 #
-# One call each, through the canonical `ForwardModel.fit` surface. The models were
-# built without an `approx=` argument, so **predictions stay exact**; the fit picks
-# its own lookup-table acceleration (`approx="auto"` is the default) based on what
-# the observation declares.
-#
-# We use a MAP fit here: it is the cheap, robust way to ask *where does the mode
-# land*, which is exactly the question a three-way comparison needs. Section 5
-# adds a full posterior for the middle case.
+# MAP fits to find the mode of each posterior. A full posterior (Section 5) covers the middle case.
 
 # %%
 fits, timings = {}, {}
@@ -378,15 +357,10 @@ for key in "ABC":
 # %% [markdown]
 # ## 4. What came back
 #
-# Two numbers per fit, both computed on the model's native log-age nodes:
+# Two scores per fit:
 #
-# - **RMS error in dex**, per age window — how well the *shape* of the history is
-#   recovered.
-# - **Old mass fraction**, the fraction of stellar mass formed more than 1 Gyr ago
-#   — the *mass budget*. This is the honest way to score the old population: past
-#   ~1 Gyr a rising history has near-zero SFR, so a per-node log ratio there is set
-#   by whichever value sits closer to zero and can look *worse* as the data
-#   improve. Mass is bounded and is what a paper actually reports.
+# - **RMS error in dex** (per age window) — recovery accuracy of the SFH shape.
+# - **Old mass fraction** — the fraction of stellar mass formed > 1 Gyr ago. Use mass, not per-node SFR, because below 1 Gyr the rising history has near-zero rate where per-node error ratios diverge.
 
 
 # %%
@@ -433,11 +407,7 @@ print(f"{'':38s}{'':>9s}{'':>9s}{f_old_true:>9.3f}  <- truth")
 # %% [markdown]
 # ### The recovered histories
 #
-# A **linear** rate axis on a **log** time axis. Linear in rate because that is
-# what a mass budget cares about — log-y flatters a reconstruction by making a
-# factor-of-three miss at low SFR look like a small offset. Log in time because
-# the recent bins under test are five of sixteen nodes and would be crushed into
-# the left edge of a linear axis.
+# Linear SFR axis (true for mass budget) on log time axis (to separate recent age bins).
 
 # %%
 fig, axes = plt.subplots(1, 3, figsize=(13.6, 4.3), sharey=True)

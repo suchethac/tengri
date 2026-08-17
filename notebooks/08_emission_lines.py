@@ -16,17 +16,12 @@
 # %% [markdown]
 # # Emission lines, BPT, and Hα-SFR
 #
-# The same forward model that produces the continuum also produces
-# discrete line fluxes — the nebular backend handles both. This notebook
-# does three things with that:
+# The nebular backend produces both continuum and discrete line fluxes. This
+# notebook demonstrates three applications:
 #
-# 1. Build forward models for star-forming, composite, and AGN-dominated
-#    galaxies and compare their spectra side by side.
-# 2. Plot the [NII] BPT diagram (Baldwin, Phillips & Terlevich 1981) and
-#    show the three galaxies land on the expected branches.
-# 3. Cross-check Hα → SFR via Kennicutt (1998) against the stellar-component
-#    SFR averaged over the last 10 Myr — a consistency knob built into the
-#    forward model.
+# 1. Forward models for star-forming, composite, and AGN-dominated galaxies.
+# 2. BPT diagram placement under Kauffmann and Kewley demarcation curves.
+# 3. Hα-derived SFR (Kennicutt 1998) consistency with the stellar SFR_10Myr.
 
 # %%
 import os
@@ -140,10 +135,8 @@ print(f"Photometry ({phot_obs.n_filters} bands): {', '.join(phot_obs.names)}")
 # %% [markdown]
 # ## Three galaxies along the BPT plane
 #
-# Three SED models spanning the ionization sequence:
-# 1. **Star-forming:** high recent SFR, young stellar population → below Kauffmann line
-# 2. **Older composite:** mixed-age SFH, intermediate metallicity → between Kauffmann & Kewley
-# 3. **AGN-like:** older stellar population, high dust, lower ionizing flux → varies with metallicity
+# Three SED models spanning the ionization sequence: star-forming (high recent SFR),
+# composite (mixed-age SFH), and AGN-like (older population, higher dust).
 
 # %%
 z_ref = 0.1
@@ -223,8 +216,9 @@ print(f"  Dust (birth cloud): τ={float(params_old['dust_tau_bc']):.2f}")
 # %% [markdown]
 # ## SFR and emission-line fluxes
 #
-# Extract SFR_10Myr from the integrated SFH. Then predict full spectrum
-# to extract emission line fluxes at key wavelengths (Hα, Hβ, [OIII], [NII]).
+# **Emission line wavelengths are vacuum** (Hα = 6564.61 Å, not 6562.8 Å air).
+# Gas-phase metallicity (`neb_logZ_gas`) is separate from stellar metallicity
+# (`met_logzsol`) and does not track it.
 
 # %%
 # Compute integrated SFR quantities
@@ -342,8 +336,7 @@ fig.savefig(FIG_DIR / "08_bpt_diagram.pdf", bbox_inches="tight")
 # %% [markdown]
 # ## Rest-frame line spectrum zoom
 #
-# High-resolution spectrum in the Hα–[NII]–[SII] region (6500–6800 Å rest-frame)
-# showing line profile differences between galaxy types.
+# High-resolution spectrum in the Hα–[NII]–[SII] region (6500–6800 Å rest-frame).
 
 # %%
 # Predict spectra in the red optical (rest-frame)
@@ -546,20 +539,5 @@ if len(sfr_halpha_list) > 1:
     print(f"  Residual:       mean={resid.mean():.2f}, σ={resid.std():.2f}")
 
 # %%
-# Final summary and citations
 print("Emission Lines & BPT: Summary")
-print("Nebular backend: Cue (neural emulator for ionizing spectrum)")
-print("  Supports: discrete line fluxes, AGN ionization, metallicity-dependent widths")
-print("\nFigures generated:")
-print("  - 08_bpt_diagram.png: BPT-NII diagnostic with Kauffmann & Kewley curves")
-print("  - 08_line_spectrum.png: Hα–[NII] complex for three galaxy types")
-print("  - 08_sfr_validation.png: Hα SFR vs SFH consistency validation")
-print("\nKey APIs demonstrated:")
-print("  - model.predict_line_fluxes(params, target_wavelengths)")
-print("  - model.predict_spectrum(params, wave_obs) for continuous profile")
-print("  - model.predict_properties(params, names=('sfr_10myr',))['sfr_10myr']")
-print("  - Parameters.sample_batch(key, n) for batch prior samples")
-
-# %%
-print("\nReferences: Kennicutt (1998, ARA&A 36:189) for Hα SFR calibration.")
-print("Next: 09_dust_emission.py for IR continuum and dust physics")
+print("Cue backend: discrete line fluxes, AGN ionization, metallicity-dependent widths")

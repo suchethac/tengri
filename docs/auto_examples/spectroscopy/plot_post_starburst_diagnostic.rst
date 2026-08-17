@@ -21,32 +21,17 @@
 Post-Starburst K+A Diagnostic: Hδ_A vs Time Since Quench
 =========================================================
 
-A classic post-starburst (PSB) / K+A galaxy signature: strong Balmer
-absorption lines (high Hδ_A) with no emission, visible only in a narrow
-window after a recent burst of star formation has been abruptly quenched.
-
-This example builds 6 tengri models: extended star formation (tsnorm,
-~200 Myr width) at varying lookback times spanning 0.1–1.8 Gyr, simulating
-quench epochs with different elapsed times. We measure Hδ_A absorption at
-each epoch and show how it peaks ~100 Myr post-quench, then decays as
-A-type stars die out.
-
-The signature traces the lifetime of A-type stars (responsible for Balmer
-absorption) and reflects the mechanism by which star formation is rapidly
-shut off in galaxies — a key driver of the red sequence in the local universe.
+Hδ_A peaks ~100 Myr post-quench, then decays as A-type stars die out.
+This absorption index traces the lifetime of A-type stars responsible for
+Balmer absorption, a key driver of galaxy quenching (Worthey & Ottaviani 1997).
 
 References
 ----------
 
-.. [1] Dressler, A., & Gunn, J. E. 1992, ApJS, 78, 1
-       (K+A galaxies in the Coma cluster)
-.. [2] French, K. D., Yang, Y., Zabludoff, A., et al. 2018, ApJ, 862, 2
-       (The molecular gas content and CO line ratios in post-starburst
-       galaxies in the EAGLE simulations)
-.. [3] Worthey, G., & Ottaviani, D. L. 1997, ApJS, 111, 377
-       (Hδ_A window definitions and optical index calibrations)
+Worthey, G., & Ottaviani, D. L. 1997, ApJS, 111, 377
+(Hδ_A index definitions and optical index calibrations).
 
-.. GENERATED FROM PYTHON SOURCE LINES 30-224
+.. GENERATED FROM PYTHON SOURCE LINES 15-209
 
 
 
@@ -56,8 +41,27 @@ References
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.2 Gyr is narrower than the SSP grid spacing 0.243 Gyr at peak sfh_tsnorm_peak_lbt_gyr=1.8 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.243 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/examples/spectroscopy/plot_post_starburst_diagnostic.py:207: UserWarning: Glyph 8776 (\N{ALMOST EQUAL TO}) missing from font(s) cmr10.
+      plt.tight_layout()
+    /tengri/examples/spectroscopy/plot_post_starburst_diagnostic.py:207: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
+      plt.tight_layout()
+    /tengri/examples/spectroscopy/plot_post_starburst_diagnostic.py:208: UserWarning: Glyph 8776 (\N{ALMOST EQUAL TO}) missing from font(s) cmr10.
+      plt.savefig("plot_post_starburst_diagnostic.png", dpi=150, bbox_inches="tight")
+    /tengri/examples/spectroscopy/plot_post_starburst_diagnostic.py:208: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
+      plt.savefig("plot_post_starburst_diagnostic.png", dpi=150, bbox_inches="tight")
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -173,7 +177,7 @@ References
         dust = {"type": "two_component", "all_params": tengri.FIXED, "tau_bc": 0.0, "tau_diff": 0.0}
         neb = {"type": "cue", "all_params": tengri.FIXED}
 
-        # Build model; z=0.05 avoids NaN singularity at z=0 (#290)
+        # Build model; z=0.05 avoids numerical singularities in cosmology at z=0
         model = tengri.SEDModel.build(
             ssp,
             sfh=sfh,

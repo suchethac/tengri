@@ -25,8 +25,8 @@ The iron pseudo-continuum (the "FeII forest") is a defining feature of type-1
 AGN optical/UV spectra. GRAHSP offers two templates: the photoionization
 model of **Bruhweiler & Verner (2008)** (the upstream default) and the
 empirical **Veron-Cetty, Joly & Veron (2004)** template. They differ most in
-the relative strength and shape of the UV (2200-3000 Å) and optical
-(4400-5400 Å) multiplet blends.
+the relative strength and shape of the UV (2200–3000 Å) and optical
+(4400–5400 Å) multiplet blends.
 
 To make the comparison clear we plot the FeII forest **in isolation** (the
 ``feii`` component returned by :func:`evaluate_grahsp_agn`, not buried under
@@ -98,6 +98,11 @@ the accretion-disc continuum), both scaled to the same ``agn_grahsp_a_feii``.
     ax.legend(frameon=False, fontsize=9)
     fig.tight_layout()
     plt.show()
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 13.979 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_grahsp_feii_templates.py:

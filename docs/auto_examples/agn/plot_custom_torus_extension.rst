@@ -27,18 +27,16 @@ and composable with other AGN blocks. The SEDModelComponent pattern is
 the recommended path for any new SED physics — AGN, dust, or stellar.
 
 The toy curve is a graybody (smooth, no features); the SKIRTOR curve
-carries the silicate 9.7 micron feature and inclination-dependent geometry
+carries the silicate 9.7 μm feature and inclination-dependent geometry
 the toy model elides. Both are normalized to the same bolometric luminosity
-and plotted in nu*L_nu space.
-
-For additional examples, see ``docs/dev/sed-model-components.md``.
+and plotted in νL_ν space.
 
 References
 ----------
 .. [1] Stalevski, M., Fritz, J., Baes, M., & Lutz, D. 2012, MNRAS, 420,
    3576 — SKIRTOR library and inclination effects.
 
-.. GENERATED FROM PYTHON SOURCE LINES 22-143
+.. GENERATED FROM PYTHON SOURCE LINES 20-141
 
 
 

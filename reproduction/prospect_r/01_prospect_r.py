@@ -50,6 +50,7 @@ from reproduction.prospect_r._drivers import prospect_driver as P, units as U
 
 import tengri
 from tengri import FIXED, Fixed, SEDModel, load_ssp_data
+from tengri.utils.physics_constants import LOG10_ZSUN
 
 # Force the inline backend so figures embed on (re-)render regardless of the
 # ambient MPLBACKEND. A non-inline backend (e.g. Agg) drops the save_fig()
@@ -75,17 +76,16 @@ print(
 
 # Metallicity pin. ProSpect / BC03 work in absolute metal mass fraction Z with
 # Z⊙ = 0.02 (the BC03 convention); tengri's `logzsol` is log10(Z / Z⊙) with
-# Z⊙ = 10**(-1.848) (Asplund+2009). The two solar conventions differ, so to
-# put both codes at the *same absolute* Z = 0.02 the tengri side needs
-# logzsol = log10(0.02) − (−1.848) = 0.149, not 0. Matching absolute Z (not the
-# label "solar") is what keeps the SED panels honest.
-LOG10_ZSUN_TENGRI = -1.848
+# tengri's Z⊙ is Asplund+2009 (`LOG10_ZSUN`). The two solar conventions differ,
+# so to put both codes at the *same absolute* Z = 0.02 the tengri side needs
+# logzsol = log10(0.02) − LOG10_ZSUN ≈ 0.149, not 0. Matching absolute Z (not
+# the label "solar") is what keeps the SED panels honest.
 Z_SOLAR = 0.02
 
 
 def logzsol_for_Z(z_abs: float) -> float:
     """tengri ``logzsol`` that lands a model at absolute metallicity ``z_abs``."""
-    return float(np.log10(z_abs) - LOG10_ZSUN_TENGRI)
+    return float(np.log10(z_abs) - LOG10_ZSUN)
 
 
 MET_LOGZSOL = logzsol_for_Z(Z_SOLAR)  # ≈ 0.149
@@ -175,6 +175,9 @@ I_ZSUN = int(np.argmin(np.abs(np.asarray(ssp.ssp_lgmet) - np.log10(Z_SOLAR))))
 # and reflect ProSpect's coarse wavelength grid (1221 λ vs 6900 λ); they
 # vanish when both spectra are regridded to the same wavelength mesh.
 
+# %% [markdown]
+# **Verification Status:** CROSSVAL (2 tests — thin) — CSP integral — CIC age kernel (default)
+
 # %%
 _target_ages_yr = [1e6, 1e7, 1e8, 1e9, 1e10]
 _age_idx = [
@@ -238,6 +241,9 @@ print(f"§1 SSP 1 Gyr optical residual: median {np.median(_res):.2e}, max {_res.
 # comparable. Peaks and widths agree; the two `snorm` implementations
 # parametrize the skew slightly differently.
 
+# %% [markdown]
+# **Verification Status:** PARTIAL (11/33) — Parametric SFH family physics
+
 # %%
 t_p_sn, sfr_p_sn = P.sfh_curve(sfh="snorm", **SNORM_FIDUCIAL)
 t_p_dt, sfr_p_dt = P.sfh_curve(sfh="dtau", mSFR=10.0, mpeak=10.0, mtau=3.0)
@@ -246,16 +252,16 @@ t_p_dt, sfr_p_dt = P.sfh_curve(sfh="dtau", mSFR=10.0, mpeak=10.0, mtau=3.0)
 LOG_MASS_SNORM = float(np.log10(PRO_MASS))
 m_sfh = SEDModel.build(
     ssp_data=ssp,
-    met={"logzsol": Fixed(MET_LOGZSOL), "*": FIXED},
+    met={"logzsol": Fixed(MET_LOGZSOL), "all_params": FIXED},
     sfh={
         "type": "snorm",
         "peak_lbt_gyr": Fixed(SNORM_FIDUCIAL["mpeak"]),
         "width_gyr": Fixed(SNORM_FIDUCIAL["mperiod"]),
         "skew": Fixed(SNORM_FIDUCIAL["mskew"]),
         "log_total_mass": Fixed(LOG_MASS_SNORM),
-        "*": FIXED,
+        "all_params": FIXED,
     },
-    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
 s_sfh = m_sfh.predict_state({})
@@ -302,6 +308,9 @@ save_fig("prospect_r_02_sfh.png")
 # cumulative mass fraction `massmap_lin` is a straight line by construction;
 # the half-mass-point ratio confirms the linear case agrees.
 
+# %% [markdown]
+# **Verification Status:** PARTIAL (11/33) — Parametric SFH family physics
+
 # %%
 Z_START, Z_FINAL = 1e-4, Z_SOLAR
 age_pro, Z_lin, cmf_lin = P.metallicity_history(
@@ -318,7 +327,7 @@ m_zmm = SEDModel.build(
         "type": "massmap_lin",
         "met_logzsol_start": Fixed(logzsol_for_Z(Z_START)),
         "met_logzsol_final": Fixed(logzsol_for_Z(Z_FINAL)),
-        "*": FIXED,
+        "all_params": FIXED,
     },
     sfh={
         "type": "snorm",
@@ -326,9 +335,9 @@ m_zmm = SEDModel.build(
         "width_gyr": Fixed(SNORM_FIDUCIAL["mperiod"]),
         "skew": Fixed(SNORM_FIDUCIAL["mskew"]),
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
-        "*": FIXED,
+        "all_params": FIXED,
     },
-    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
 s_zmm = m_zmm.predict_state({})
@@ -354,7 +363,7 @@ m_zmb = SEDModel.build(
         "met_logzsol_start": Fixed(logzsol_for_Z(Z_START)),
         "met_logzsol_final": Fixed(logzsol_for_Z(Z_FINAL)),
         "met_yield": Fixed(0.03),
-        "*": FIXED,
+        "all_params": FIXED,
     },
     sfh={
         "type": "snorm",
@@ -362,9 +371,9 @@ m_zmb = SEDModel.build(
         "width_gyr": Fixed(SNORM_FIDUCIAL["mperiod"]),
         "skew": Fixed(SNORM_FIDUCIAL["mskew"]),
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
-        "*": FIXED,
+        "all_params": FIXED,
     },
-    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
 _Z_box_t = 10.0 ** np.asarray(m_zmb.predict_state({}).derived["log_metallicity_history"])
@@ -419,6 +428,9 @@ print(
 # The fiducial skew-normal SFH convolved with the BC03 library at solar
 # metallicity, no dust or nebular, both scaled to 10^10 M⊙ formed.
 
+# %% [markdown]
+# **Verification Status:** CROSSVAL — Photometry projection
+
 # %%
 sed_stel = P.prospect_sed(
     massfunc="snorm",
@@ -432,16 +444,16 @@ L_p3 = L_p3 * PRO_SCALE
 
 m_stellar = SEDModel.build(
     ssp_data=ssp,
-    met={"logzsol": Fixed(MET_LOGZSOL), "*": FIXED},
+    met={"logzsol": Fixed(MET_LOGZSOL), "all_params": FIXED},
     sfh={
         "type": "snorm",
         "peak_lbt_gyr": Fixed(SNORM_FIDUCIAL["mpeak"]),
         "width_gyr": Fixed(SNORM_FIDUCIAL["mperiod"]),
         "skew": Fixed(SNORM_FIDUCIAL["mskew"]),
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
-        "*": FIXED,
+        "all_params": FIXED,
     },
-    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
 s_stellar = m_stellar.predict_state({})
@@ -489,10 +501,13 @@ print(
 # to `A(λ)/A_V` at 5500 Å; the screen also carries an optional 2175 Å bump,
 # against tengri's `noll09` law.
 
+# %% [markdown]
+# **Verification Status:** CROSSVAL — Attenuation law library
+
 # %%
 from tengri.dust import list_laws
 
-_tengri_laws = list_laws(headline=False).to_dict("fn")
+_tengri_laws = list_laws(headline=False).to_dict('fn')
 wave_law = np.logspace(np.log10(1000.0), np.log10(30000.0), 2000)
 
 
@@ -558,6 +573,9 @@ print(f"§4 A(1500)/A_V: ProSpect CF = {_a_p:.3f}, tengri power_law = {_a_t:.3f}
 # tengri's `two_component` dust maps directly with `τ_bc` and `τ_diff` using
 # the `power_law` law.
 
+# %% [markdown]
+# **Verification Status:** CROSSVAL — Attenuation law library
+
 # %%
 sed_atten = P.prospect_sed(
     massfunc="snorm",
@@ -577,18 +595,18 @@ DUST_FIDUCIAL = {
     "law_diff": "power_law",
     "tau_bc": Fixed(TAU_BIRTH_FIDUCIAL),
     "tau_diff": Fixed(TAU_SCREEN_FIDUCIAL),
-    "*": FIXED,
+    "all_params": FIXED,
 }
 m_d = SEDModel.build(
     ssp_data=ssp,
-    met={"logzsol": Fixed(MET_LOGZSOL), "*": FIXED},
+    met={"logzsol": Fixed(MET_LOGZSOL), "all_params": FIXED},
     sfh={
         "type": "snorm",
         "peak_lbt_gyr": Fixed(SNORM_FIDUCIAL["mpeak"]),
         "width_gyr": Fixed(SNORM_FIDUCIAL["mperiod"]),
         "skew": Fixed(SNORM_FIDUCIAL["mskew"]),
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
-        "*": FIXED,
+        "all_params": FIXED,
     },
     dust=DUST_FIDUCIAL,
     redshift=Fixed(0.0),
@@ -627,6 +645,9 @@ save_fig("prospect_r_05_dust_applied.png")
 # point. At matched hardness (`alpha = 3.0`) both codes produce identical
 # dust IR SEDs.
 
+# %% [markdown]
+# **Verification Status:** CROSSVAL — Dust IR emission physics (MBB, Casey12, CMB)
+
 # %%
 sed_ir = P.prospect_sed(
     massfunc="snorm",
@@ -642,14 +663,14 @@ L_p6 = L_p6 * PRO_SCALE
 
 m_ir = SEDModel.build(
     ssp_data=ssp,
-    met={"logzsol": Fixed(MET_LOGZSOL), "*": FIXED},
+    met={"logzsol": Fixed(MET_LOGZSOL), "all_params": FIXED},
     sfh={
         "type": "snorm",
         "peak_lbt_gyr": Fixed(SNORM_FIDUCIAL["mpeak"]),
         "width_gyr": Fixed(SNORM_FIDUCIAL["mperiod"]),
         "skew": Fixed(SNORM_FIDUCIAL["mskew"]),
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
-        "*": FIXED,
+        "all_params": FIXED,
     },
     dust={
         "type": "two_component",
@@ -657,8 +678,8 @@ m_ir = SEDModel.build(
         "law_diff": "power_law",
         "tau_bc": Fixed(0.0),
         "tau_diff": Fixed(TAU_SCREEN_FIDUCIAL),
-        "emission": {"type": "dale2014", "alpha_dale": Fixed(3.0), "*": FIXED},
-        "*": FIXED,
+        "emission": {"type": "dale2014", "alpha_dale": Fixed(3.0), "all_params": FIXED},
+        "all_params": FIXED,
     },
     redshift=Fixed(0.0),
 )
@@ -712,6 +733,9 @@ print(f"§6 dust IR nu*Lnu peak: ProSpect {_peak_p6 / 1e4:.0f} um, tengri {_peak
 # the far-IR. The percent-level disagreements of the earlier sections stack
 # here.
 
+# %% [markdown]
+# **Verification Status:** CROSSVAL — Photometry projection
+
 # %%
 fig, ax_l, ax_r = U.two_panel_fig(figsize=(13, 5))
 U.panel(ax_l, ax_r, label_l="ProSpect  panchromatic", label_r="tengri  panchromatic")
@@ -731,6 +755,9 @@ save_fig("prospect_r_07_panchromatic.png")
 # Both codes use Inoue et al. (2014) for Lyman-series absorption. The
 # residual is measured over the Lyman-α forest window. (§8–§11 cover
 # nebular, AGN, and radio.)
+
+# %% [markdown]
+# **Verification Status:** CROSSVAL — Inoue+2014 IGM transmission
 
 # %%
 from tengri.igm import igm_transmission as tengri_igm
@@ -781,6 +808,9 @@ print(
 # versus Cue's 0.72 is a genuine Levesque-2010 vs Cloudy-17 difference, not
 # an ionization mismatch. Balmer lines are q-insensitive.
 
+# %% [markdown]
+# **Verification Status:** CROSSVAL — Cloudy grid / Cue vs FSPS baked-in
+
 # %%
 NEB_AGE_GYR = 0.01
 NEB_LOG_MASS = 8.0
@@ -790,17 +820,17 @@ ssp_neb = load_ssp_data(
 )
 m_neb = SEDModel.build(
     ssp_data=ssp_neb,
-    met={"logzsol": Fixed(0.0), "*": FIXED},
+    met={"logzsol": Fixed(0.0), "all_params": FIXED},
     # Confine star formation to the last 10 Myr — a young, ionizing population.
     sfh={
         "type": "const",
         "start_gyr": Fixed(NEB_AGE_GYR),
         "end_gyr": Fixed(0.0),
         "log_total_mass": Fixed(NEB_LOG_MASS),
-        "*": FIXED,
+        "all_params": FIXED,
     },
-    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
-    neb={"type": "cue", "neb_logU": Fixed(-2.0), "neb_logZ_gas": Fixed(0.0), "*": FIXED},
+    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+    neb={"type": "cue", "neb_logU": Fixed(-2.0), "neb_logZ_gas": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
 s_neb = m_neb.predict_state({})
@@ -882,8 +912,8 @@ save_fig("prospect_r_08_nebular.png")
 #
 # The panels show `νL_ν`, where the thermal bump is a true maximum. (In `L_ν`
 # a torus rises into the far-IR simply because `L_ν = νL_ν · λ/c`, easy to
-# misread.) Both the torus (peak 9.3 µm with 10 µm silicate) and the disc
-# shortward of ~1 µm track ProSpect: the disc reads ~0.9× ProSpect at 2000 Å.
+# misread.) Both the torus (peak 9.3 μm with 10 μm silicate) and the disc
+# shortward of ~1 μm track ProSpect: the disc reads ~0.9× ProSpect at 2000 Å.
 # This uses the **`skirtor_stalevski`** model — the published Stalevski (2016)
 # radiative-transfer SED, no analytic-disc substitution, reading the
 # full-coverage SKIRTOR grid on the full `ta,p,q,oa,R,i` axes (fixing v3's two
@@ -894,6 +924,9 @@ save_fig("prospect_r_08_nebular.png")
 # (power-law disc, ~0.28×). The residual to 1.0× is a parameter-convention
 # mismatch (ProSpect's `ct`/`rm` vs SKIRTOR's `oa`/`R`) — not the disc/total
 # treatment.
+
+# %% [markdown]
+# **Verification Status:** CROSSVAL — Nenkova+08 (CLUMPY) torus
 
 # %%
 AGN_LUM_ERG = 1e44
@@ -906,21 +939,21 @@ print(
 # Pin tengri's SKIRTOR to ProSpect's `SKIRTOR_interp` defaults so the two read the
 # *same* point in the Stalevski (2016) library: inclination an=30° (cos_inc=0.866 —
 # a Type-1 sightline that looks into the polar cone and sees the disc), opening angle
-# ct=40°, optical depth ta=1, and p=q=1. ``agn_frac_agn=1`` routes the full bolometric
+# ct=40°, optical depth ta=1, and p=q=1. ``agn_band_frac=1`` routes the full bolometric
 # into the template, matching ProSpect's ``lum`` normalization (tengri otherwise scales
 # the AGN down by ``frac_agn`` as a host-fraction knob).
 m_agn = SEDModel.build(
     ssp_data=ssp,
-    met={"logzsol": Fixed(MET_LOGZSOL), "*": FIXED},
+    met={"logzsol": Fixed(MET_LOGZSOL), "all_params": FIXED},
     sfh={
         "type": "snorm",
         "peak_lbt_gyr": Fixed(SNORM_FIDUCIAL["mpeak"]),
         "width_gyr": Fixed(SNORM_FIDUCIAL["mperiod"]),
         "skew": Fixed(SNORM_FIDUCIAL["mskew"]),
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
-        "*": FIXED,
+        "all_params": FIXED,
     },
-    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
     # Raw-Stalevski SKIRTOR model. ProSpect's `SKIRTOR_interp` reads the
     # SKIRTOR template directly — the disc + torus as Stalevski's radiative
     # transfer computed them. tengri's `skirtor_stalevski` model does the same:
@@ -940,8 +973,8 @@ m_agn = SEDModel.build(
         "agn_tau_skirtor": Fixed(1.0),  # ProSpect ta=1
         "agn_p_skirtor": Fixed(1.0),  # ProSpect p=1
         "agn_q_skirtor": Fixed(1.0),  # ProSpect q=1
-        "agn_frac_agn": Fixed(1.0),  # full L_bol into template (match ProSpect lum)
-        "*": FIXED,
+        "agn_band_frac": Fixed(1.0),  # full L_bol into template (match ProSpect lum)
+        "all_params": FIXED,
     },
     redshift=Fixed(0.0),
 )
@@ -1002,6 +1035,9 @@ print(f"§9 torus νLν peak: ProSpect {_peak_p9 / 1e4:.1f} µm, tengri {_peak_t
 # star-formation radio prescription. The comparison is slope and normalization
 # at matched SFR. (ProSpect has no X-ray component.)
 
+# %% [markdown]
+# **Verification Status:** PARTIAL (3/16) — Radio + X-ray + AGN
+
 # %%
 sed_radio = P.prospect_sed(
     massfunc="snorm",
@@ -1016,14 +1052,14 @@ L_p11 = L_p11 * PRO_SCALE
 
 m_radio = SEDModel.build(
     ssp_data=ssp,
-    met={"logzsol": Fixed(MET_LOGZSOL), "*": FIXED},
+    met={"logzsol": Fixed(MET_LOGZSOL), "all_params": FIXED},
     sfh={
         "type": "snorm",
         "peak_lbt_gyr": Fixed(SNORM_FIDUCIAL["mpeak"]),
         "width_gyr": Fixed(SNORM_FIDUCIAL["mperiod"]),
         "skew": Fixed(SNORM_FIDUCIAL["mskew"]),
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
-        "*": FIXED,
+        "all_params": FIXED,
     },
     dust={
         "type": "two_component",
@@ -1031,10 +1067,10 @@ m_radio = SEDModel.build(
         "law_diff": "power_law",
         "tau_bc": Fixed(TAU_BIRTH_FIDUCIAL),
         "tau_diff": Fixed(TAU_SCREEN_FIDUCIAL),
-        "emission": {"type": "dale2014", "alpha_dale": Fixed(3.0), "*": FIXED},
-        "*": FIXED,
+        "emission": {"type": "dale2014", "alpha_dale": Fixed(3.0), "all_params": FIXED},
+        "all_params": FIXED,
     },
-    radio={"type": "condon92", "*": FIXED},
+    radio={"type": "condon92", "all_params": FIXED},
     redshift=Fixed(0.0),
 )
 s_radio = m_radio.predict_state({})
@@ -1150,6 +1186,10 @@ plt.show()
 # nebular emission (§8), a deliberate disagreement between two photoionization
 # grids. ProSpect's EMILES library and Fritz (2006) torus have no tengri
 # equivalent.
+
+# %% [markdown]
+# **Verification Status:** PARTIAL (68/126) — Absolute SED normalization
+#
 
 # %% [markdown]
 # ## References

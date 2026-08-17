@@ -328,3 +328,47 @@ def _calzetti_l02_kprime(wavelength: jnp.ndarray) -> jnp.ndarray:
     # matching the standalone leitherer02 function; 0.15 um was too conservative.
     k_calz = jnp.where(wave_um >= 0.63, k_ir, k_uv)
     return jnp.where(wave_um <= 0.18, k_l02, k_calz)
+
+
+def _calzetti_kprime_unnormalized(wavelength: jnp.ndarray) -> jnp.ndarray:
+    """Compute k'(lambda) = A(lambda)/E(B-V) using Calzetti (2000) only, unnormalized.
+
+    Returns the raw reddening curve (NOT normalized by R_V or k(5500)).
+    Used internally by kriek_conroy to apply its own normalization logic.
+
+    Parameters
+    ----------
+    wavelength : array_like, shape (n_wave,)
+        Wavelength grid. [Å]
+
+    Returns
+    -------
+    ndarray, shape (n_wave,)
+        Raw reddening curve k'(λ) = A(λ)/E(B-V), unnormalized by R_V. [dimensionless]
+
+    Notes
+    -----
+    **JIT-compatible**: yes — all operations are ``jnp`` primitives.
+
+    Uses piecewise polynomials following Calzetti et al. (2000).
+    This is a pure polynomial evaluation with no normalization applied.
+
+    References
+    ----------
+    .. [1] S. Calzetti et al., "The Dust Content and Opacity of Star-Forming
+       Galaxies," ApJ, 533, 682 (2000).
+       https://doi.org/10.1086/308692
+    """
+    wave_um = wavelength / 1e4
+    x = 1.0 / wave_um
+    rv = 4.05
+
+    # Calzetti UV polynomial (valid 0.12-0.63 um)
+    k_uv = 2.659 * (-2.156 + 1.509 * x - 0.198 * x**2 + 0.011 * x**3) + rv
+
+    # Calzetti IR polynomial (valid 0.63-2.2 um)
+    k_ir = 2.659 * (-1.857 + 1.040 * x) + rv
+
+    # Piecewise selection. Polynomial is extrapolated through the FUV to keep the
+    # dust attenuation defined across the full SED range.
+    return jnp.where(wave_um >= 0.63, k_ir, k_uv)

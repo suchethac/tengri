@@ -5,7 +5,7 @@ Gas metallicity reshapes the optical nebular continuum and line forest
 A 1-D log Z_gas sweep on the SED scale, complementing the 2-D atlas in
 ``plot_cue_parameter_atlas.py`` and the line-ratio projection in
 ``plot_strong_line_metallicity_diagnostics.py``. Reader sees how every
-strong optical line moves together as Z_gas climbs, with [N II]/Halpha
+strong optical line moves together as Z_gas climbs, with [N II]/Hα
 and [O III]/Hbeta the textbook diagnostics.
 
 Reference: Kewley & Ellison 2008, ApJ, 681, 1183.

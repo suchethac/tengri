@@ -4,13 +4,8 @@ Photo-z degeneracy: chi² landscape over redshift and stellar mass
 
 Galaxy photometry is degenerate in redshift and stellar mass — the same
 galaxy can look identical at different redshifts if the mass is adjusted.
-We mock a star-forming galaxy at z=2.5 with known stellar mass, observe it
-in ugrizYJHK bands at S/N=10, then compute χ² on a 2D grid of (z, M*) to
-show the classic photo-z degeneracy valley. The figure maps χ² as a heatmap
-with 1σ/2σ/3σ contours and overlays the true redshift.
 
-Reference: Bolzonella et al. 2000, A&A, 363, 476 (HYPERZ photometric
-redshift); Brammer et al. 2008, ApJ, 686, 1503 (EAZY photometric redshift).
+References: Bolzonella+2000; Brammer+2008.
 """
 
 import os

@@ -14,7 +14,7 @@ Silva) vs phenomenological graybodies.
 ``fritz`` and ``skirtor`` are the two CIGALE production tori — smooth
 (Fritz+2006) versus clumpy (Stalevski+2016) — so contrasting them on
 this panel isolates the smooth-vs-clumpy silicate-feature behavior
-near 9.7 and 18 micron.
+near 9.7 and 18 μm.
 """
 
 import os
@@ -57,10 +57,8 @@ fig, ax = plt.subplots(figsize=(7.2, 4.6))
 
 # `simple` and `two_temperature` are phenomenological graybodies, and tengri
 # deprecates them for science fits (use SKIRTOR or Silva+04 for that). They are
-# on this panel ON PURPOSE — the whole point is to show what a graybody gives up
-# against a real radiative-transfer torus. So the DeprecationWarning they raise
-# is expected here, and only here; suppressing it narrowly keeps the gallery gate
-# (#1146) meaningful everywhere else.
+# on this panel to show what a graybody gives up against a real radiative-transfer
+# torus. The DeprecationWarning is expected here only.
 warnings.filterwarnings("ignore", message=".*is a toy AGN torus model.*")
 
 for (torus, label), color in zip(TORI, COLORS):

@@ -2,14 +2,7 @@
 SFH recovery with MAP: double power-law against mock photometry
 ===============================================================
 
-Simulate a galaxy with a double-power-law (dpl) star formation history, mock
-SDSS photometry at S/N=20, and recover the SFH using MAP optimization. The
-figure compares the true and recovered SFH as a function of time, with the
-bottom panel showing photometric residuals normalized by noise. The recovery
-demonstrates how well the SED fitting posterior reconstructs SFH shape despite
-degeneracies with dust and metallicity.
-
-Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
+Reference: Conroy+2013.
 """
 
 import os

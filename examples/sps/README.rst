@@ -1,5 +1,5 @@
 Stellar Population Synthesis
-=============================
+============================
 
 DSPS-based SSP grids: age, metallicity, and spectral properties.
 

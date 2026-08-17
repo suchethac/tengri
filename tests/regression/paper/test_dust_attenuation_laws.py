@@ -56,7 +56,9 @@ class TestLeitherer02:
 
     def test_reference_values(self):
         """L02 at key UV wavelengths (Av=1). Reference from dust_attenuation."""
-        ref = np.array([3.42720988, 2.94808185, 2.54615821, 2.31222646])
+        # Re-pinned after #1731: normalized to k(5500)=1 exactly.
+        # Pre-fix k(5500) ≈ 0.999479; rescale factor = 1.0 / 0.999479 ≈ 1.0005211
+        ref = np.array([3.4289960193, 2.9496182851, 2.5474851768, 2.3134315081])
         wavs = jnp.array([1000.0, 1200.0, 1500.0, 1800.0])
         tng = np.array(leitherer02(wavs))
         np.testing.assert_allclose(tng, ref, rtol=1e-6)
@@ -112,16 +114,18 @@ class TestNoll09:
 
     def test_reference_no_mods(self):
         """N09 baseline (ampl=0, slope=0) = pure Calzetti+L02."""
+        # Re-pinned after #1731: normalized to k(5500)=1 exactly.
+        # Rescale factor from k(5500)_old ≈ 0.999479: 1.0 / 0.999479 ≈ 1.0005211
         ref = np.array(
             [
-                3.42720988,
-                2.94808185,
-                2.54615821,
-                2.09349184,
-                1.70999069,
+                3.42899602,
+                2.94961829,
+                2.54748518,
+                2.09458290,
+                1.71088188,
                 1.00000000,
-                0.46360420,
-                0.12220173,
+                0.46384581,
+                0.12226542,
             ]
         )
         tng = np.array(noll09(jnp.array(WAVS)))
@@ -129,16 +133,18 @@ class TestNoll09:
 
     def test_reference_with_mods(self):
         """N09 ampl=3, slope=-0.1. Reference from dust_attenuation."""
+        # Re-pinned after #1731: normalized to k(5500)=1 exactly.
+        # Rescale factor from k(5500)_old ≈ 1.00367: 1.0 / 1.00367 ≈ 0.996345
         ref = np.array(
             [
-                4.07188201,
-                3.44669893,
-                2.93559197,
-                3.10975253,
-                1.86173361,
-                1.00367016,
-                0.43764091,
-                0.10760568,
+                4.05699219,
+                3.43409524,
+                2.92485727,
+                3.09838097,
+                1.85492573,
+                1.00000000,
+                0.43604057,
+                0.10721220,
             ]
         )
         tng = np.array(noll09(jnp.array(WAVS), dust_bump_strength=3.0, dust_delta=-0.1))
@@ -206,16 +212,18 @@ class TestSalimSBL18:
 
     def test_reference_no_mods(self):
         """SBL18 baseline (ampl=0, slope=0) = pure Calzetti+L02."""
+        # Re-pinned after #1731: normalized to k(5500)=1 exactly.
+        # Rescale factor from k(5500)_old ≈ 0.999479: 1.0 / 0.999479 ≈ 1.0005211
         ref = np.array(
             [
-                3.42720988,
-                2.94808185,
-                2.54615821,
-                2.09349184,
-                1.70999069,
+                3.42899602,
+                2.94961829,
+                2.54748518,
+                2.09458290,
+                1.71088188,
                 1.00000000,
-                0.46360420,
-                0.12220173,
+                0.46384581,
+                0.12226542,
             ]
         )
         tng = np.array(salim_sbl18(jnp.array(WAVS)))
@@ -223,16 +231,18 @@ class TestSalimSBL18:
 
     def test_reference_with_mods(self):
         """SBL18 ampl=3, slope=-0.1. Reference from dust_attenuation."""
+        # Re-pinned after #1731: normalized to k(5500)=1 exactly.
+        # Rescale factor from k(5500)_old ≈ 1.00367: 1.0 / 1.00367 ≈ 0.996345
         ref = np.array(
             [
-                4.07068075,
-                3.44474637,
-                2.93118586,
-                3.03774403,
-                1.85909357,
-                1.00367016,
-                0.43769885,
-                0.10763381,
+                4.05579532,
+                3.43214982,
+                2.92046727,
+                3.02663578,
+                1.85229535,
+                1.00000000,
+                0.43609830,
+                0.10724022,
             ]
         )
         tng = np.array(salim_sbl18(jnp.array(WAVS), dust_bump_strength=3.0, dust_delta=-0.1))

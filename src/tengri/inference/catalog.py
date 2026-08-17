@@ -37,6 +37,11 @@ _GAS_STELLAR_TOLERANCE_DEX = 0.3
 # second idiom for the same job.
 _BATCHED_CACHES: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
 
+# Memoized component chains, shared by every Catalog over one model.
+# Stored separately from _BATCHED_CACHES to preserve the type invariant:
+# _BATCHED_CACHES holds only jitted channel callables, not component chains.
+_COMPONENT_CHAIN_CACHES: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+
 
 def _batched_cache_for(fwd):
     """The memoized-``jit`` namespace shared by every Catalog over *fwd*.
@@ -73,7 +78,7 @@ def _batched_cache_for(fwd):
 
 
 def _component_chain_for(fwd):
-    """The built component chain from *fwd*, memoized in _batched_cache_for (#1769).
+    """The built component chain from *fwd*, memoized in _COMPONENT_CHAIN_CACHES (#1769).
 
     The chain is expensive to build (traverses the SED graph and constructs
     copies of component instances), so memoizing it prevents redundant rebuilds
@@ -90,16 +95,31 @@ def _component_chain_for(fwd):
 
     Notes
     -----
-    Memoization lives in _batched_cache_for under the reserved key
-    ``"_component_chain"`` (leading underscore to avoid collisions with user
-    cache tags). The cache is per-ForwardModel, so it survives across multiple
-    Catalogs and outlives the Catalog itself.
-    """
-    cache = _batched_cache_for(fwd)
-    reserved_key = "_component_chain"
+    Memoization lives in its own WeakKeyDictionary (_COMPONENT_CHAIN_CACHES)
+    keyed by ForwardModel, separate from _BATCHED_CACHES. This preserves the
+    type invariant: every value in _BATCHED_CACHES is a jitted channel callable,
+    not a component chain. The cache is per-ForwardModel, so it survives across
+    multiple Catalogs and outlives the Catalog itself.
 
-    if reserved_key in cache:
-        return cache[reserved_key]
+    Falls back to an uncached rebuild if a model is ever unhashable: that costs
+    one build per call (slow rather than wrong), which is exactly the pre-#1769
+    behavior, so the failure mode is slow rather than broken.
+    """
+    try:
+        cache = _COMPONENT_CHAIN_CACHES.get(fwd)
+    except TypeError:
+        # Unhashable model: build uncached (slow rather than wrong).
+        try:
+            return fwd.populations[0].sed._build_component_chain()
+        except (AttributeError, IndexError):
+            return None
+    if cache is None:
+        cache = {}
+        _COMPONENT_CHAIN_CACHES[fwd] = cache
+
+    cached_key = "_chain"
+    if cached_key in cache:
+        return cache[cached_key]
 
     # Build the chain once and memoize it
     try:
@@ -107,7 +127,7 @@ def _component_chain_for(fwd):
     except (AttributeError, IndexError):
         chain = None
 
-    cache[reserved_key] = chain
+    cache[cached_key] = chain
     return chain
 
 

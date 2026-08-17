@@ -5,12 +5,12 @@
 Inference Methods
 =================
 
-Fitting posteriors and checking that they mean something — comparing
-samplers and their convergence (split-R-hat, ESS, multi-chain speedups),
-corner plots and prior-vs-posterior comparisons, prior- and
-posterior-predictive checks, photo-z chi-square grids, and hierarchical
-population fits.
+Method selection by dimensionality: `mcmc_nuts` for D ≤ 6, `mcmc_hmc` for D ~ 7–8, `mcmc_raytrace`/`vi` for D >~ 20, `laplace` for cheap intervals from MAP Hessian. `vi` and `native_vi_*` are not posterior-equivalent; both native backends are tier=broken and must never be taught in an example. Convergence diagnostics: split-R-hat, ESS, prior-vs-posterior comparisons, corner plots, posterior-predictive checks.
 
+
+.. raw:: html
+
+  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
 
 
 .. raw:: html
@@ -21,7 +21,7 @@ population fits.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="We fit mock SDSS photometry using MAP (maximum a posteriori) optimization with Adam and recover the input star-formation history. The figure overlays the MAP-recovered SFH against the ground truth, demonstrating convergence on the morphology despite the nonconvex likelihood landscape.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Reference: Conroy+2013.">
 
 .. only:: html
 
@@ -38,7 +38,7 @@ population fits.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Galaxy photometry is degenerate in redshift and stellar mass — the same galaxy can look identical at different redshifts if the mass is adjusted. We mock a star-forming galaxy at z=2.5 with known stellar mass, observe it in ugrizYJHK bands at S/N=10, then compute χ² on a 2D grid of (z, M*) to show the classic photo-z degeneracy valley. The figure maps χ² as a heatmap with 1σ/2σ/3σ contours and overlays the true redshift.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Galaxy photometry is degenerate in redshift and stellar mass — the same galaxy can look identical at different redshifts if the mass is adjusted.">
 
 .. only:: html
 
@@ -55,7 +55,7 @@ population fits.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Before fitting, sample 200 draws from the prior and push each through the forward model. The envelope of predicted photometry is the prior predictive distribution — what the model can produce under our chosen priors, without any conditioning on observations.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The prior predictive envelope — which combinations of parameters the model can produce under the chosen priors, without data — reveals silent pathologies. Coverage: does the envelope contain the data? If not, the posterior will shift to prior boundaries. Width: narrow bands indicate parameters already constrained by the prior alone; data cannot improve estimates there.">
 
 .. only:: html
 
@@ -72,7 +72,7 @@ population fits.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Simulate a galaxy with a double-power-law (dpl) star formation history, mock SDSS photometry at S/N=20, and recover the SFH using MAP optimization. The figure compares the true and recovered SFH as a function of time, with the bottom panel showing photometric residuals normalized by noise. The recovery demonstrates how well the SED fitting posterior reconstructs SFH shape despite degeneracies with dust and metallicity.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Reference: Conroy+2013.">
 
 .. only:: html
 

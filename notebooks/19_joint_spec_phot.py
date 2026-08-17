@@ -184,15 +184,10 @@ print(
 # # fit["spec_fnu"] — scaled by aperture_fraction(Sérsic, fiber)
 # ```
 #
-# Compare this against a flat-slab fit (`SpatialModel(components=[FlatSlab()])`):
-# the two ForwardModels share the same SED chain and observation; only
-# the spatial sub-model differs. Run both, compare recovered stellar
-# masses, and read off the bias the flat-slab approximation would
-# introduce on this dataset.
-#
-# The same machinery generalizes to imaging (resolved 2-D maps via a
-# future `ImagingObservation`) and to IFU spectroscopy — the spatial
-# sub-model is the common substrate.
+# Compare against a flat-slab fit (`SpatialModel(components=[FlatSlab()])`):
+# the two ForwardModels share the same SED chain and observation; only the spatial
+# sub-model differs. Run both and read the bias the flat-slab assumption introduces
+# on this dataset. The same machinery generalizes to imaging and IFU spectroscopy.
 
 # %% [markdown]
 # ## Further reading

@@ -2,17 +2,10 @@
 Emission-line velocity dispersion: narrow [NII] to broad Hα
 ===========================================================
 
-Sweep emission-line velocity dispersion σ_v from 50 km/s (narrow-line region)
-to 5000 km/s (broad-line region) to show how Hα broadens while the [NII]
-doublet becomes buried in the Hα wing. Demonstrates the kinematic signature
-distinguishing AGN BLR from NLR.
-
-.. sphx-glr-precomputed-img:
-
-.. image:: images/sphx_glr_plot_velocity_offset_lines_001.png
-   :alt: plot_velocity_offset_lines
-   :class: sphx-glr-single-img
-
+Narrow-line regions sit at σ_v ≈ 50–300 km/s; a broad Hα component from the
+AGN accretion disk reaches thousands of km/s. The [NII] doublet is separated
+by 35.4 Å (6549.86 and 6585.28 Å vacuum), which corresponds to σ_v ≈ 1600
+km/s — above that the two lines merge into the wing of Hα.
 """
 
 import os

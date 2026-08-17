@@ -5,6 +5,45 @@ import sys
 
 sys.path.insert(0, os.path.abspath("../src"))
 
+
+def _ensure_nbconvert_templates_visible() -> None:
+    """Put the installed nbconvert's data directory on ``JUPYTER_PATH``.
+
+    nbsphinx exports notebooks through nbconvert, which finds its templates by
+    scanning ``JUPYTER_PATH`` -- not by looking beside the module it imported.
+    When nbconvert resolves outside the environment running sphinx (a venv
+    without its own copy falls through to a system or Anaconda install), that
+    scan misses and the build dies with::
+
+        ValueError: No template sub-directory with name 'rst' found
+
+    which names templates and says nothing about the actual cause. It kills the
+    whole build, after the gallery has already been walked.
+
+    Deriving it here rather than in each caller is deliberate: ``make html``,
+    ``sphinx-autobuild`` and ``tools/regen_gallery.py`` are three entry points
+    and only one of them can be told to remember an environment variable.
+
+    A no-op when nbconvert is absent, when its data directory is not laid out as
+    ``<prefix>/share/jupyter``, or when ``JUPYTER_PATH`` is already set.
+    """
+    if os.environ.get("JUPYTER_PATH"):
+        return
+    try:
+        import nbconvert
+    except ImportError:
+        return
+    import pathlib
+
+    for parent in pathlib.Path(nbconvert.__file__).resolve().parents:
+        candidate = parent / "share" / "jupyter"
+        if (candidate / "nbconvert" / "templates").is_dir():
+            os.environ["JUPYTER_PATH"] = str(candidate)
+            return
+
+
+_ensure_nbconvert_templates_visible()
+
 # -- Project information -----------------------------------------------------
 
 project = "tengri"
@@ -418,7 +457,86 @@ def _uniquify_citation_labels(app, what, name, obj, options, lines):
         lines[:] = new.split("\n")
 
 
+# ── Component reference, generated from the live registries ─────────────────
+# `docs/api/discovery.rst` autodocs the ``list_*`` *functions*, so the menu they
+# return is reachable only by running Python. This writes their *contents* into
+# the build, which is the difference between documenting that a catalog exists
+# and publishing the catalog.
+#
+# Generated per build and gitignored, never committed. The worst docs failure
+# this repo has had (#1236, see the filename_pattern note above) is a committed
+# artifact silently rewritten into a hollow one; a page rebuilt from the live
+# registry on every build has no stale state to rot into.
+#
+# The census is *derived* — every ``tengri.list_*`` that exists — rather than a
+# hand-kept list, because a hand-kept list is exactly how a newly registered
+# family goes unpublished without anyone noticing. `_REGISTRY_ORDER` only sets
+# the reading order; anything absent from it is still emitted, at the end.
+_GENERATED_DIR = _pl.Path(__file__).parent / "_generated"
+
+_REGISTRY_ORDER = (
+    "list_components",
+    "list_recipes",
+    "list_sfh_models",
+    "list_metallicity_modes",
+    "list_known_ssps",
+    "list_age_kernels",
+    "list_dust_models",
+    "list_dust_laws",
+    "list_dust_emission_models",
+    "list_nebular_backends",
+    "list_shock_models",
+    "list_agn_models",
+    "list_agn_blocks",
+    "list_xray_models",
+    "list_radio_models",
+    "list_radio_blocks",
+    "list_igm_models",
+    "list_inference_methods",
+    "list_instruments",
+)
+
+# Menus too long to print in full. Named on the page with their size and the
+# call that returns them, rather than dropped: a family missing with no trace is
+# indistinguishable from one that was never registered.
+_TOO_LONG_TO_PRINT = ("list_filters",)
+
+
+def _write_component_reference(app=None):
+    """Render every live registry to ``_generated/component_tables.rst``."""
+    import tengri
+
+    listers = [n for n in dir(tengri) if n.startswith("list_") and n != "list_all"]
+    ordered = [n for n in _REGISTRY_ORDER if n in listers]
+    ordered += sorted(n for n in listers if n not in _REGISTRY_ORDER)
+
+    chunks = []
+    for name in ordered:
+        try:
+            table = getattr(tengri, name)()
+        except Exception as exc:  # a registry that cannot list is a real defect
+            raise RuntimeError(f"tengri.{name}() failed while building the docs: {exc}") from exc
+        if not len(table):
+            continue
+        heading = name.removeprefix("list_").replace("_", " ")
+        chunks.append(f"{heading}\n{'-' * len(heading)}\n\n``tengri.{name}()``\n")
+        if name in _TOO_LONG_TO_PRINT:
+            chunks.append(
+                f"{len(table)} entries — too many to print here. "
+                f"Call ``tengri.{name}()`` for the full table, or narrow it, "
+                f"e.g. ``tengri.{name}().filter(survey='SDSS')``.\n"
+            )
+        else:
+            chunks.append(table.to_rst())
+        chunks.append("")
+
+    _GENERATED_DIR.mkdir(exist_ok=True)
+    (_GENERATED_DIR / "component_tables.rst").write_text("\n".join(chunks), encoding="utf-8")
+
+
 def setup(app):
+    # Before anything is read, so components.md can include the result.
+    app.connect("builder-inited", _write_component_reference)
     # Priority 1000 runs *after* sphinx-gallery's own builder-inited handler.
     app.connect("builder-inited", _fix_gallery_index_toctree, priority=1000)
     # env-before-read-docs fires AFTER sphinx-gallery has generated the
@@ -548,6 +666,10 @@ intersphinx_mapping = {
 
 exclude_patterns = [
     "_build",
+    # Registry tables written by _write_component_reference each build. They
+    # are ``.. include::``-ed into components.md, so as a *source document*
+    # the fragment is an orphan — a warning, which -W makes a build failure.
+    "_generated",
     # Everything contributor-only: agent-authored plans and specs (was
     # `superpowers/{plans,specs}`, needing two entries of its own) plus the six
     # narrative sections listed further down. One rule now covers them and
