@@ -1,17 +1,20 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Render the two precompute schematics shown in ``docs/known_limitations.md``.
 
-Figure 1 (``precompute_schematic.png``) contrasts the exact wavelength-grid
-path with the ``WavePrecomp`` path, showing which work moves to build time.
+Figure 1 (``precompute_schematic.png``) walks a real SSP spectrum through the
+``WavePrecomp`` build: the SED under the GALEX and ugriz bandpasses, one band
+split into sub-bands of equal filter mass, the collapse of each sub-band to a
+single stored number, and the runtime contraction against the dust screen.
 
 Figure 2 (``precompute_subband_error.png``) shows where the residual error
 lives: the screen is evaluated at K quadrature nodes and held piecewise
 constant across each sub-band, so the gap between the true screen and its
 sampled version is the entire approximation.
 
-Panel (a) of Figure 2 uses the real GALEX FUV bandpass, a real SSP template,
-and the real :func:`~tengri.utils.grid_interp.subband_quadrature` partition,
-so the sub-band edges and nodes drawn are the ones the code actually builds.
+Every curve is real. The SED is an SSP template off the shipped grid, the
+bandpasses are the shipped filter curves, and the sub-band edges and nodes
+come from :func:`~tengri.utils.grid_interp.subband_quadrature` itself, so the
+partition drawn is the one the code actually builds.
 
 Run from the repository root::
 
@@ -20,7 +23,6 @@ Run from the repository root::
 
 from __future__ import annotations
 
-from itertools import pairwise
 from pathlib import Path
 
 import matplotlib
@@ -29,7 +31,6 @@ matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
 
 from tengri import load_filter_set, load_ssp_data
 from tengri.components.dust.attenuation import calzetti
@@ -41,9 +42,19 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 OUT_DIR = REPO_ROOT / "docs" / "_static" / "figures"
 SSP_PATH = REPO_ROOT / "data" / "fsps_prsc_miles_chabrier.h5"
 
-#: The band the docs quote as the worst case — the attenuation curve is
-#: steepest across this bandpass, so it is where the quadrature is stressed.
-BAND = "galex_fuv"
+DPI = 110
+
+#: Bandpasses drawn under the SED in panel (a) of Figure 1.
+PANEL_FILTERS = ["galex_fuv", "galex_nuv", "sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
+
+#: The band followed through panels (b)-(d). SDSS u carries the Balmer break
+#: at 3646 A inside the bandpass, so the template's own flux-weighted node
+#: moves noticeably from one sub-band to the next.
+PIPELINE_BAND = "sdss_u"
+
+#: The band Figure 2 stresses — the attenuation curve is steepest across it,
+#: so it is where the quadrature error is worst.
+WORST_BAND = "galex_fuv"
 
 #: Sub-band count. The shipped default (``WavePrecomp(n_subbands=5)``).
 N_SUBBANDS = 5
@@ -66,61 +77,112 @@ BLUE = "#2b6cb0"
 ORANGE = "#c05621"
 GREEN = "#2f6f4f"
 RED = "#a02c2c"
-BUILD_BG = "#eef3f8"
-CALL_BG = "#fdf3ea"
+
+#: One color per bandpass in panel (a), blue-to-red across the set.
+BAND_COLORS = {
+    "galex_fuv": "#6b46c1",
+    "galex_nuv": "#4c51bf",
+    "sdss_u": "#2b6cb0",
+    "sdss_g": "#2f855a",
+    "sdss_r": "#b7791f",
+    "sdss_i": "#c05621",
+    "sdss_z": "#9b2c2c",
+}
+
+
+# ── Data ────────────────────────────────────────────────────────────
+
+
+def _load_template():
+    """One real SSP template: roughly solar metallicity, 100 Myr."""
+    ssp = load_ssp_data(str(SSP_PATH))
+    wave = np.asarray(ssp.ssp_wave, dtype=np.float64)
+    lgmet = np.asarray(ssp.ssp_lgmet)
+    lg_age = np.asarray(ssp.ssp_lg_age_gyr)
+
+    # log10(Zsun) = -1.848 on this grid's absolute-metallicity axis.
+    i_met = int(np.argmin(np.abs(lgmet - (-1.848))))
+    j_age = int(np.argmin(np.abs(lg_age - (-1.0))))
+    flux = np.asarray(ssp.ssp_flux, dtype=np.float64)[i_met, j_age]
+    return wave, flux, float(lgmet[i_met]), float(10.0 ** lg_age[j_age] * 1e3)
+
+
+def _band_grid(band, wave, flux):
+    """Union quadrature grid for one band, exactly as ``preintegrate_grid`` builds it."""
+    filter_waves, filter_trans, _ = load_filter_set([band])
+    fw = np.asarray(filter_waves[0], dtype=np.float64)
+    ft = np.asarray(filter_trans[0], dtype=np.float64)
+
+    grid = np.sort(np.concatenate([wave, fw]))
+    lo = max(np.searchsorted(grid, fw[0]) - 1, 0)
+    hi = min(np.searchsorted(grid, fw[-1], side="right") + 1, grid.size)
+    grid = grid[lo:hi]
+
+    trans = np.interp(grid, fw, ft, left=0.0, right=0.0)
+    tw = trans * _filter_weight_np(grid, "bessell")
+    template = np.interp(grid, wave, flux)
+    return grid, tw, template
+
+
+def _partition(grid, tw, template):
+    """Call the shipped partition so the drawn edges and nodes are the real ones."""
+    denom = float(np.trapezoid(tw, grid))
+    eff_wave = float(np.trapezoid(tw * grid, grid) / denom)
+    integrand = template * tw
+    phi, nodes = subband_quadrature(grid, tw, integrand[None, :], denom, N_SUBBANDS, eff_wave)
+
+    # Edges are the K-quantiles of the cumulative filter weight. Recomputed
+    # here only for drawing the shaded bands.
+    cum_w = np.concatenate([[0.0], np.cumsum(np.diff(grid) * 0.5 * (tw[1:] + tw[:-1]))])
+    edges = np.interp(np.linspace(0.0, cum_w[-1], N_SUBBANDS + 1), cum_w, grid)
+    return phi[0], nodes[0], edges, eff_wave, denom
+
+
+def _screen(wavelength):
+    """Calzetti diffuse-ISM transmission, the way the code applies it."""
+    return np.exp(-TAU_DIFF * np.asarray(calzetti(np.asarray(wavelength, dtype=np.float64))))
 
 
 # ── Shared drawing helpers ──────────────────────────────────────────
 
 
-def _box(ax, x, y, w, h, text, *, face="white", edge=INK, size=8.0, weight="normal"):
-    """Draw a rounded box centered on ``(x, y)`` and return its center."""
-    ax.add_patch(
-        FancyBboxPatch(
-            (x - w / 2, y - h / 2),
-            w,
-            h,
-            boxstyle="round,pad=0.012,rounding_size=0.02",
-            facecolor=face,
-            edgecolor=edge,
-            linewidth=1.0,
-            zorder=3,
-        )
-    )
+def _tag(ax, text, color):
+    """Tag marking a panel as build-time or runtime work.
+
+    Sits just outside the axes, above the top-right corner: inside the frame
+    it competes with data in every panel, and which corner is free differs
+    from panel to panel.
+    """
     ax.text(
-        x,
-        y,
+        1.0,
+        1.015,
         text,
-        ha="center",
-        va="center",
-        fontsize=size,
-        color=INK,
-        zorder=4,
-        weight=weight,
-        linespacing=1.45,
+        transform=ax.transAxes,
+        ha="right",
+        va="bottom",
+        fontsize=6.6,
+        weight="bold",
+        color="white",
+        zorder=9,
+        clip_on=False,
+        bbox=dict(boxstyle="round,pad=0.3", fc=color, ec="none"),
     )
-    return x, y
 
 
-def _arrow(ax, start, end, *, color=INK, style="-|>", lw=1.1):
-    """Draw a connector between two anchor points."""
-    ax.add_patch(
-        FancyArrowPatch(
-            start,
-            end,
-            arrowstyle=style,
-            mutation_scale=11,
-            color=color,
-            linewidth=lw,
-            shrinkA=2,
-            shrinkB=2,
-            zorder=2,
+def _shade_subbands(ax, grid, curve, edges):
+    """Alternating fill so the K sub-bands read as distinct regions."""
+    for k in range(N_SUBBANDS):
+        ax.fill_between(
+            grid,
+            0,
+            curve,
+            where=(grid >= edges[k]) & (grid <= edges[k + 1]),
+            color=BLUE,
+            alpha=0.34 if k % 2 == 0 else 0.14,
+            zorder=1,
         )
-    )
-
-
-def _lane_label(ax, x, y, text, color):
-    ax.text(x, y, text, ha="left", va="center", fontsize=9.5, weight="bold", color=color)
+    for e in edges:
+        ax.axvline(e, color=GREY, lw=0.7, ls=(0, (3, 3)), zorder=2)
 
 
 def _guard_canvas(fig, *, max_inches: float = 40.0) -> None:
@@ -142,249 +204,298 @@ def _guard_canvas(fig, *, max_inches: float = 40.0) -> None:
         )
 
 
-# ── Figure 1: what moves to build time ──────────────────────────────
+# ── Figure 1, panel (a): the SED under the bandpasses ────────────────
 
 
-def _draw_exact_lane(ax):
-    """Top lane — every likelihood call carries the full wavelength grid."""
-    y = 0.845
-    ax.add_patch(
-        FancyBboxPatch(
-            (0.035, y - 0.088),
-            0.93,
-            0.176,
-            boxstyle="round,pad=0.004,rounding_size=0.012",
-            facecolor="#f6f6f6",
-            edgecolor="none",
-            zorder=0,
+def _panel_sed(ax, wave, flux, meta):
+    """The real SSP spectrum with the GALEX and ugriz bandpasses beneath it."""
+    lgmet, age_myr = meta
+    sel = (wave >= 900.0) & (wave <= 30000.0)
+    w, f = wave[sel], flux[sel]
+    ax.plot(w, f / f.max(), color=INK, lw=0.85, zorder=4)
+
+    ax2 = ax.twinx()
+    for band in PANEL_FILTERS:
+        fw, ft, _ = load_filter_set([band])
+        fwv = np.asarray(fw[0], dtype=np.float64)
+        ftv = np.asarray(ft[0], dtype=np.float64)
+        ftv = ftv / ftv.max()
+        color = BAND_COLORS[band]
+        chosen = band == PIPELINE_BAND
+        ax2.fill_between(fwv, 0, ftv, color=color, alpha=0.55 if chosen else 0.22, zorder=2)
+        ax2.plot(fwv, ftv, color=color, lw=1.4 if chosen else 0.8, zorder=3)
+        ax2.text(
+            fwv[np.argmax(ftv)],
+            ftv.max() + 0.06,
+            band.split("_")[-1] if band.startswith("sdss") else band.split("_")[-1].upper(),
+            ha="center",
+            va="bottom",
+            fontsize=6.6,
+            color=color,
+            weight="bold" if chosen else "normal",
+            zorder=5,
         )
+
+    ax2.set_ylim(0, 3.4)
+    ax2.set_yticks([])
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.set_xlim(900, 20000)
+    ax.set_ylim(1.2e-3, 3.0)
+    ax.set_xlabel("rest wavelength  [Å]", fontsize=8.5)
+    ax.set_ylabel("$F_\\nu$  (normalized)", fontsize=8.5)
+    ax.tick_params(labelsize=7.5)
+    ax.set_title(
+        f"(a)  SSP template ({age_myr:.0f} Myr, $\\log_{{10}}Z$ = {lgmet:.2f})\n"
+        "under the GALEX + ugriz bandpasses",
+        fontsize=9,
+        pad=6,
     )
-    _lane_label(ax, 0.05, 0.955, "Exact path   approx=None", GREY)
+    ax.annotate(
+        "the band followed\nin (b)–(d)",
+        xy=(3550, 0.0072),
+        xytext=(3550, 0.0016),
+        fontsize=7.0,
+        color=BLUE,
+        weight="bold",
+        ha="center",
+        va="bottom",
+        arrowprops=dict(arrowstyle="->", color=BLUE, lw=1.1),
+        bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="none", alpha=0.9),
+    )
+    _tag(ax, "BUILD ONCE", BLUE)
 
-    specs = [
-        (0.155, 0.185, "SSP grid  $F_\\nu(Z, t, \\lambda)$\n15 × 93 × 5994", "white"),
-        (0.385, 0.185, "apply screen $A(\\lambda)$\nat all 5994 $\\lambda$", "#fdecec"),
-        (0.600, 0.145, "× filter $T_b(\\lambda)$", "white"),
-        (0.762, 0.105, "$\\int \\mathrm{d}\\lambda$", "white"),
-        (0.900, 0.085, "$f_b$", "#eaeaea"),
-    ]
-    for x, w, text, face in specs:
-        _box(ax, x, y, w, 0.115, text, face=face)
-    for (xa, wa, _, _), (xb, wb, _, _) in pairwise(specs):
-        _arrow(ax, (xa + wa / 2, y), (xb - wb / 2, y))
 
+# ── Figure 1, panel (b): the equal-mass split ────────────────────────
+
+
+def _panel_split(ax, grid, tw, template, edges, nodes):
+    """The chosen band cut into K sub-bands of equal filter mass."""
+    tw_norm = tw / tw.max()
+    _shade_subbands(ax, grid, tw_norm, edges)
+    ax.plot(grid, tw_norm, color=BLUE, lw=1.3, zorder=3)
+
+    for k in range(N_SUBBANDS):
+        ax.text(
+            0.5 * (edges[k] + edges[k + 1]),
+            0.075,
+            "$1/K$",
+            transform=ax.get_xaxis_transform(),
+            ha="center",
+            va="center",
+            fontsize=6.2,
+            color=BLUE,
+            zorder=7,
+            bbox=dict(boxstyle="round,pad=0.14", fc="white", ec="none", alpha=0.85),
+        )
+
+    # Nodes are wavelengths, not SED values — draw them as axis ticks rather
+    # than as markers riding on a curve, where their height means nothing.
+    for node in nodes:
+        ax.plot(
+            [node, node],
+            [0.0, 0.055],
+            transform=ax.get_xaxis_transform(),
+            color=RED,
+            lw=1.6,
+            zorder=8,
+            clip_on=False,
+        )
+    ax.plot([], [], color=RED, lw=1.6, label="node $\\lambda^{\\star}_k$")
+    ax.legend(fontsize=7.0, loc="upper left", framealpha=0.92)
+
+    ax2 = ax.twinx()
+    ax2.plot(grid, template / template.max(), color=INK, lw=1.0, zorder=4)
+    ax2.set_ylabel("$F_\\nu$  (normalized)", fontsize=8.5)
+    ax2.tick_params(labelsize=7.5)
+    ax2.set_ylim(0, 1.25)
+
+    ax.set_xlim(grid[0], grid[-1])
+    ax.set_ylim(0, 1.22)
+    ax.set_xlabel("rest wavelength  [Å]", fontsize=8.5)
+    ax.set_ylabel("filter weight  $T_b w$", fontsize=8.5, color=BLUE)
+    ax.tick_params(axis="y", labelcolor=BLUE, labelsize=7.5)
+    ax.tick_params(axis="x", labelsize=7.5)
+    ax.set_title(
+        "(b)  split into $K = 5$ sub-bands of equal filter mass\n"
+        "(the five shaded areas are equal)",
+        fontsize=9,
+        pad=6,
+    )
+    _tag(ax, "BUILD ONCE", BLUE)
+
+
+# ── Figure 1, panel (c): the collapse ───────────────────────────────
+
+
+def _panel_collapse(ax, grid, tw, template, phi, nodes, edges, denom):
+    """Each sub-band's area under the integrand becomes one stored number."""
+    integrand = template * tw / denom
+    scale = integrand.max()
+    _shade_subbands(ax, grid, integrand / scale, edges)
+    ax.plot(grid, integrand / scale, color=INK, lw=1.1, zorder=4)
+
+    # Bars whose AREA equals Phi_k, so "curve area -> one number" is literal.
+    widths = np.diff(edges)
+    heights = phi / widths / scale
+    ax.bar(
+        edges[:-1],
+        heights,
+        width=widths,
+        align="edge",
+        facecolor="none",
+        edgecolor=ORANGE,
+        lw=1.5,
+        zorder=5,
+    )
+    for k, node in enumerate(nodes):
+        ax.plot([node], [heights[k]], "o", color=RED, ms=4.5, zorder=6)
+        ax.annotate(
+            "",
+            xy=(node, 0),
+            xytext=(node, heights[k]),
+            arrowprops=dict(arrowstyle="-", color=RED, lw=0.8, ls=(0, (2, 2))),
+            zorder=5,
+        )
+    ax.plot([], [], "o", color=RED, ms=4.5, label="node $\\lambda^{\\star}_k$")
+    ax.bar([], [], facecolor="none", edgecolor=ORANGE, lw=1.5, label="stored $\\Phi_k$ (area)")
+    ax.legend(fontsize=7.0, loc="upper left", framealpha=0.92)
+
+    ax.set_xlim(grid[0], grid[-1])
+    ax.set_ylim(0, 1.35)
+    ax.set_xlabel("rest wavelength  [Å]", fontsize=8.5)
+    ax.set_ylabel("$F_\\nu T_b w$  (normalized)", fontsize=8.5)
+    ax.tick_params(labelsize=7.5)
+    ax.set_title(
+        "(c)  each sub-band's area collapses to one number $\\Phi_k$\n"
+        "at the template's own centroid $\\lambda^{\\star}_k$",
+        fontsize=9,
+        pad=6,
+    )
     ax.text(
         0.5,
-        0.727,
-        "per likelihood call: $\\mathcal{O}(n_\\lambda)$ — the whole grid, every call",
+        0.055,
+        f"{grid.size} wavelengths  →  $K$ = {N_SUBBANDS} numbers + {N_SUBBANDS} nodes,"
+        " per (Z, age, band)",
+        transform=ax.transAxes,
         ha="center",
-        va="center",
-        fontsize=8.2,
+        fontsize=7.2,
         style="italic",
-        color=RED,
-    )
-
-
-def _draw_build_row(ax):
-    """Build-time row of the precompute lane — paid once, at model build."""
-    y = 0.520
-    ax.add_patch(
-        FancyBboxPatch(
-            (0.035, y - 0.082),
-            0.93,
-            0.164,
-            boxstyle="round,pad=0.004,rounding_size=0.012",
-            facecolor=BUILD_BG,
-            edgecolor="none",
-            zorder=0,
-        )
-    )
-    ax.text(
-        0.05,
-        y + 0.106,
-        "BUILD ONCE   (SEDModel.build — no free parameters involved)",
-        ha="left",
-        va="center",
-        fontsize=8.2,
-        weight="bold",
-        color=BLUE,
-    )
-
-    specs = [
-        (0.150, 0.180, "SSP grid\n+ filter set"),
-        (0.385, 0.225, "split each band into\n$K$ sub-bands of\nequal filter mass"),
-        (0.633, 0.205, "$\\Phi_{ijbk},\\ \\lambda^{\\star}_{ijbk}$\n15 × 93 × $n_b$ × $K$"),
-        (0.872, 0.190, "fold in IGM\n$T(\\lambda^{\\star}(1{+}z), z)$"),
-    ]
-    for x, w, text in specs:
-        _box(ax, x, y, w, 0.108, text, face="white")
-    for (xa, wa, _), (xb, wb, _) in pairwise(specs):
-        _arrow(ax, (xa + wa / 2, y), (xb - wb / 2, y), color=BLUE)
-    return specs[2][0], y
-
-
-def _draw_call_row(ax, phi_anchor):
-    """Runtime row — all that is left per likelihood call."""
-    y = 0.235
-    ax.add_patch(
-        FancyBboxPatch(
-            (0.035, y - 0.082),
-            0.93,
-            0.164,
-            boxstyle="round,pad=0.004,rounding_size=0.012",
-            facecolor=CALL_BG,
-            edgecolor="none",
-            zorder=0,
-        )
-    )
-    ax.text(
-        0.05,
-        y + 0.108,
-        "PER LIKELIHOOD CALL",
-        ha="left",
-        va="center",
-        fontsize=8.2,
-        weight="bold",
         color=ORANGE,
+        zorder=7,
+        bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="none", alpha=0.9),
+    )
+    _tag(ax, "BUILD ONCE", BLUE)
+
+
+# ── Figure 1, panel (d): the runtime contraction ────────────────────
+
+
+def _panel_contract(ax, grid, tw, template, phi, nodes, edges, denom):
+    """At runtime the screen is evaluated at K nodes and the bars are summed."""
+    widths = np.diff(edges)
+    scale = (phi / widths).max()
+    a_nodes = _screen(nodes)
+
+    ax.bar(
+        edges[:-1],
+        phi / widths / scale,
+        width=widths,
+        align="edge",
+        facecolor="#e8edf3",
+        edgecolor=GREY,
+        lw=0.9,
+        zorder=3,
+        label="$\\Phi_k$  (stored)",
+    )
+    ax.bar(
+        edges[:-1],
+        phi * a_nodes / widths / scale,
+        width=widths,
+        align="edge",
+        facecolor=ORANGE,
+        alpha=0.75,
+        edgecolor=ORANGE,
+        lw=1.0,
+        zorder=4,
+        label="$\\Phi_k \\, A(\\lambda^{\\star}_k)$",
     )
 
-    specs = [
-        (0.180, 0.260, "evaluate $A_{\\rm diff}, A_{\\rm bc}$\nat the $K$ nodes only", 8.0),
-        (
-            0.530,
-            0.350,
-            "contract\n"
-            "$f_b = \\sum_{ij} w_{ij} \\sum_k \\Phi_{ijbk}\\,"
-            "A_{\\rm diff}(\\lambda^{\\star})\\,A_{\\rm bc}(\\lambda^{\\star})^{y_j}$",
-            7.6,
-        ),
-        (0.870, 0.092, "$f_b$", 8.0),
-    ]
-    for i, (x, w, text, size) in enumerate(specs):
-        _box(ax, x, y, w, 0.108, text, face="#eaeaea" if i == 2 else "white", size=size)
-    for (xa, wa, _, _), (xb, wb, _, _) in pairwise(specs):
-        _arrow(ax, (xa + wa / 2, y), (xb - wb / 2, y), color=ORANGE)
+    ax2 = ax.twinx()
+    ax2.plot(grid, _screen(grid), color=RED, lw=1.6, zorder=5, label="screen $A(\\lambda)$")
+    ax2.plot(nodes, a_nodes, "o", color=RED, ms=5, zorder=6)
+    ax2.set_ylabel("screen  $A(\\lambda)$", fontsize=8.5, color=RED)
+    ax2.tick_params(axis="y", labelcolor=RED, labelsize=7.5)
+    lo, hi = float(_screen(grid).min()), float(_screen(grid).max())
+    ax2.set_ylim(lo - 0.55 * (hi - lo), hi + 0.10 * (hi - lo))
 
-    # The build-time tensor drops into the runtime contraction.
-    _arrow(ax, (phi_anchor[0], phi_anchor[1] - 0.056), (0.505, y + 0.056), color=BLUE)
+    # The numbers this panel is claiming: precompute vs the exact integral.
+    exact = float(np.trapezoid(template * _screen(grid) * tw, grid) / denom)
+    precomp = float(np.sum(phi * a_nodes))
+    single = float(np.sum(phi) * _screen(np.array([_eff_wave(grid, tw)]))[0])
     ax.text(
-        0.648,
-        0.372,
-        "build-time constant",
-        ha="left",
-        va="center",
-        fontsize=7.6,
-        style="italic",
-        color=BLUE,
-    )
-
-    ax.text(
-        0.5,
-        0.118,
-        "per likelihood call: $2K$ dust-law evaluations per band — independent of $n_\\lambda$",
-        ha="center",
-        va="center",
-        fontsize=8.2,
-        style="italic",
-        color=GREEN,
-    )
-
-
-def _draw_additive_note(ax):
-    """Additive emitters bypass the quadrature entirely."""
-    ax.add_patch(
-        FancyBboxPatch(
-            (0.035, 0.005),
-            0.93,
-            0.078,
-            boxstyle="round,pad=0.004,rounding_size=0.012",
-            facecolor="#f0f5f1",
-            edgecolor=GREEN,
-            linewidth=0.8,
-            zorder=1,
-        )
-    )
-    ax.text(
-        0.5,
-        0.044,
-        "Additive emitters (dust IR, AGN, radio, X-ray) are rank-one:  "
-        "$L_\\nu = \\sum_k A_k(\\theta) S_k(\\lambda)  \\Rightarrow  "
-        "f_b = \\sum_k A_k(\\theta)\\, R_{kb}$   "
-        "— band responses $R_{kb}$ are exact, no quadrature enters.",
-        ha="center",
-        va="center",
-        fontsize=7.3,
+        0.985,
+        0.235,
+        f"$f_b = \\sum_k \\Phi_k A(\\lambda^{{\\star}}_k)$\n"
+        f"vs exact integral:  {100 * (precomp / exact - 1):+.3f}%\n"
+        f"single $\\lambda_{{\\rm eff}}$ instead:  {100 * (single / exact - 1):+.2f}%",
+        transform=ax.transAxes,
+        ha="right",
+        va="bottom",
+        fontsize=7.2,
         color=INK,
-        zorder=2,
+        zorder=8,
+        bbox=dict(boxstyle="round,pad=0.35", fc="white", ec=GREY, lw=0.6, alpha=0.95),
     )
 
+    handles = ax.get_legend_handles_labels()[0] + ax2.get_legend_handles_labels()[0]
+    labels = ax.get_legend_handles_labels()[1] + ax2.get_legend_handles_labels()[1]
+    ax.legend(handles, labels, fontsize=7.0, loc="upper left", framealpha=0.92)
 
-def render_flow_diagram(out_path: Path) -> None:
-    """Figure 1 — which work moves from the likelihood call to build time."""
-    fig, ax = plt.subplots(figsize=(11.0, 6.2))
-    ax.set_xlim(0, 1)
-    ax.set_ylim(0, 1)
-    ax.axis("off")
+    ax.set_xlim(grid[0], grid[-1])
+    ax.set_ylim(0, 2.15)
+    ax.set_xlabel("rest wavelength  [Å]", fontsize=8.5)
+    ax.set_ylabel("band flux contribution", fontsize=8.5)
+    ax.tick_params(labelsize=7.5)
+    ax.set_title(
+        "(d)  evaluate $A$ at the $K$ nodes,\nscale the stored bars, and sum",
+        fontsize=9,
+        pad=6,
+    )
+    _tag(ax, "PER CALL", ORANGE)
 
-    _draw_exact_lane(ax)
-    _lane_label(ax, 0.05, 0.672, "Precompute path   approx=WavePrecomp()", BLUE)
-    phi_anchor = _draw_build_row(ax)
-    _draw_call_row(ax, phi_anchor)
-    _draw_additive_note(ax)
 
+def _eff_wave(grid, tw):
+    return float(np.trapezoid(tw * grid, grid) / np.trapezoid(tw, grid))
+
+
+def render_pipeline_figure(out_path: Path) -> None:
+    """Figure 1 — a real SED walked through the WavePrecomp build."""
+    wave, flux, lgmet, age_myr = _load_template()
+    grid, tw, template = _band_grid(PIPELINE_BAND, wave, flux)
+    phi, nodes, edges, _eff, denom = _partition(grid, tw, template)
+
+    fig, axes = plt.subplots(2, 2, figsize=(11.4, 7.4))
+    _panel_sed(axes[0, 0], wave, flux, (lgmet, age_myr))
+    _panel_split(axes[0, 1], grid, tw, template, edges, nodes)
+    _panel_collapse(axes[1, 0], grid, tw, template, phi, nodes, edges, denom)
+    _panel_contract(axes[1, 1], grid, tw, template, phi, nodes, edges, denom)
+
+    fig.suptitle(
+        f"Build-time photometric precomputation — {PIPELINE_BAND.replace('_', ' ')}, "
+        f"Calzetti $\\tau_{{\\rm diff}}$ = {TAU_DIFF}",
+        fontsize=10.5,
+        weight="bold",
+        y=0.985,
+    )
+    fig.subplots_adjust(left=0.068, right=0.932, bottom=0.075, top=0.885, wspace=0.42, hspace=0.46)
     _guard_canvas(fig)
-    fig.savefig(out_path, dpi=150, bbox_inches="tight", facecolor="white")
+    fig.savefig(out_path, dpi=DPI, facecolor="white")
     plt.close(fig)
     print(f"wrote {out_path}")
 
 
 # ── Figure 2: where the residual error lives ────────────────────────
-
-
-def _load_band_and_template():
-    """Real bandpass, real SSP template, on the union quadrature grid.
-
-    Returns the same quantities ``preintegrate_grid`` assembles internally,
-    so the partition below is the one the code actually builds.
-    """
-    filter_waves, filter_trans, _ = load_filter_set([BAND])
-    fw = np.asarray(filter_waves[0], dtype=np.float64)
-    ft = np.asarray(filter_trans[0], dtype=np.float64)
-
-    ssp = load_ssp_data(str(SSP_PATH))
-    wave = np.asarray(ssp.ssp_wave, dtype=np.float64)
-    lgmet = np.asarray(ssp.ssp_lgmet)
-    lg_age = np.asarray(ssp.ssp_lg_age_gyr)
-
-    # Roughly solar metallicity (log10 Zsun = -1.848) and a young, FUV-bright
-    # population — 100 Myr.
-    i_met = int(np.argmin(np.abs(lgmet - (-1.848))))
-    j_age = int(np.argmin(np.abs(lg_age - (-1.0))))
-    flux = np.asarray(ssp.ssp_flux, dtype=np.float64)[i_met, j_age]
-
-    # Union grid + Bessell photon-counting weight, as in preintegrate_grid.
-    grid = np.sort(np.concatenate([wave, fw]))
-    lo = max(np.searchsorted(grid, fw[0]) - 1, 0)
-    hi = min(np.searchsorted(grid, fw[-1], side="right") + 1, grid.size)
-    grid = grid[lo:hi]
-
-    trans = np.interp(grid, fw, ft, left=0.0, right=0.0)
-    tw = trans * _filter_weight_np(grid, "bessell")
-    template = np.interp(grid, wave, flux)
-    return grid, tw, template, float(lgmet[i_met]), float(10.0 ** lg_age[j_age] * 1e3)
-
-
-def _partition(grid, tw, template):
-    """Call the shipped partition so the drawn edges/nodes are the real ones."""
-    denom = float(np.trapezoid(tw, grid))
-    eff_wave = float(np.trapezoid(tw * grid, grid) / denom)
-    integrand = template * tw
-    phi, nodes = subband_quadrature(grid, tw, integrand[None, :], denom, N_SUBBANDS, eff_wave)
-    # Edges are the K-quantiles of the cumulative filter weight (Eq. 1 of the
-    # appendix). Recomputed here only for drawing the shaded bands.
-    cum_w = np.concatenate([[0.0], np.cumsum(np.diff(grid) * 0.5 * (tw[1:] + tw[:-1]))])
-    edges = np.interp(np.linspace(0.0, cum_w[-1], N_SUBBANDS + 1), cum_w, grid)
-    return phi[0], nodes[0], edges, eff_wave
 
 
 def _draw_subband_panel(ax, grid, tw, nodes, edges, eff_wave, meta):
@@ -393,19 +504,8 @@ def _draw_subband_panel(ax, grid, tw, nodes, edges, eff_wave, meta):
 
     tw_norm = tw / tw.max()
     ax.plot(grid, tw_norm, color=BLUE, lw=1.3, zorder=3, label="$T_b(\\lambda)\\,w(\\lambda)$")
-
-    # Equal-mass sub-bands: the shaded areas below the curve are equal by
-    # construction, which is the whole content of the partition.
+    _shade_subbands(ax, grid, tw_norm, edges)
     for k in range(N_SUBBANDS):
-        ax.fill_between(
-            grid,
-            0,
-            tw_norm,
-            where=(grid >= edges[k]) & (grid <= edges[k + 1]),
-            color=BLUE,
-            alpha=0.34 if k % 2 == 0 else 0.14,
-            zorder=1,
-        )
         ax.text(
             0.5 * (edges[k] + edges[k + 1]),
             0.135,
@@ -418,8 +518,6 @@ def _draw_subband_panel(ax, grid, tw, nodes, edges, eff_wave, meta):
             zorder=7,
             bbox=dict(boxstyle="round,pad=0.16", fc="white", ec="none", alpha=0.85),
         )
-    for e in edges:
-        ax.axvline(e, color=GREY, lw=0.7, ls=(0, (3, 3)), zorder=2)
 
     ax.set_xlim(grid[0], grid[-1])
     ax.set_ylim(0, 1.32)
@@ -428,40 +526,26 @@ def _draw_subband_panel(ax, grid, tw, nodes, edges, eff_wave, meta):
     ax.tick_params(axis="y", labelcolor=BLUE, labelsize=8)
     ax.tick_params(axis="x", labelsize=8)
 
-    # The screen: true smooth curve vs the piecewise-constant sampled version.
     ax2 = ax.twinx()
-    screen = np.exp(-TAU_DIFF * np.asarray(calzetti(grid)))
+    screen = _screen(grid)
     ax2.plot(grid, screen, color=ORANGE, lw=1.8, zorder=5, label="true screen $A(\\lambda)$")
 
     sampled = np.empty_like(screen)
     for k in range(N_SUBBANDS):
         sel = (grid >= edges[k]) & (grid <= edges[k + 1])
-        sampled[sel] = float(np.exp(-TAU_DIFF * np.asarray(calzetti(np.array([nodes[k]])))[0]))
+        sampled[sel] = float(_screen(np.array([nodes[k]]))[0])
     sampled[grid < edges[0]] = sampled[grid >= edges[0]][0]
     sampled[grid > edges[-1]] = sampled[grid <= edges[-1]][-1]
 
-    ax2.plot(
-        grid,
-        sampled,
-        color=RED,
-        lw=1.3,
-        ls="--",
-        zorder=5,
-        label="sampled at the $K$ nodes",
-    )
+    ax2.plot(grid, sampled, color=RED, lw=1.3, ls="--", zorder=5, label="sampled at the $K$ nodes")
     ax2.fill_between(grid, screen, sampled, color=RED, alpha=0.20, zorder=4)
-
     for node in nodes:
-        a_node = float(np.exp(-TAU_DIFF * np.asarray(calzetti(np.array([node])))[0]))
-        ax2.plot([node], [a_node], "o", color=RED, ms=4.5, zorder=6)
+        ax2.plot([node], [float(_screen(np.array([node]))[0])], "o", color=RED, ms=4.5, zorder=6)
 
     # The retired n_subbands=0 scheme: a first-order Taylor extrapolation of
     # the screen out from lambda_eff, which is what runs away in the rest-UV.
-    a_eff = float(np.exp(-TAU_DIFF * np.asarray(calzetti(np.array([eff_wave])))[0]))
-    h = 1.0
-    slope = (
-        float(np.exp(-TAU_DIFF * np.asarray(calzetti(np.array([eff_wave + h])))[0]) - a_eff) / h
-    )
+    a_eff = float(_screen(np.array([eff_wave]))[0])
+    slope = float(_screen(np.array([eff_wave + 1.0]))[0] - a_eff)
     taylor = a_eff + (grid - eff_wave) * slope
     ax2.plot(
         grid,
@@ -556,15 +640,7 @@ def _draw_convergence_panel(ax):
         ax.text(0.72, err, f"$K{{=}}0$, {label}", fontsize=7.4, color=RED, va="center")
 
     ax.axhspan(0.0035, 0.012, color=GREEN, alpha=0.16, zorder=1)
-    ax.text(
-        8.9,
-        0.0068,
-        "optical / NIR bands",
-        fontsize=7.4,
-        color=GREEN,
-        ha="right",
-        va="center",
-    )
+    ax.text(8.9, 0.0068, "optical / NIR bands", fontsize=7.4, color=GREEN, ha="right", va="center")
 
     ax.set_yscale("log")
     ax.set_xlim(0.2, 9.3)
@@ -583,8 +659,9 @@ def _draw_convergence_panel(ax):
 
 def render_error_figure(out_path: Path) -> None:
     """Figure 2 — the sub-band partition and its convergence."""
-    grid, tw, template, lgmet, age_myr = _load_band_and_template()
-    _, nodes, edges, eff_wave = _partition(grid, tw, template)
+    wave, flux, lgmet, age_myr = _load_template()
+    grid, tw, template = _band_grid(WORST_BAND, wave, flux)
+    _phi, nodes, edges, eff_wave, _denom = _partition(grid, tw, template)
 
     fig, axes = plt.subplots(1, 2, figsize=(11.6, 4.5), gridspec_kw={"width_ratios": [1.5, 1.0]})
     _draw_subband_panel(axes[0], grid, tw, nodes, edges, eff_wave, (lgmet, age_myr))
@@ -592,7 +669,7 @@ def render_error_figure(out_path: Path) -> None:
 
     fig.subplots_adjust(left=0.065, right=0.945, bottom=0.135, top=0.855, wspace=0.42)
     _guard_canvas(fig)
-    fig.savefig(out_path, dpi=150, facecolor="white")
+    fig.savefig(out_path, dpi=DPI, facecolor="white")
     plt.close(fig)
     print(f"wrote {out_path}")
 
@@ -603,11 +680,11 @@ def render_error_figure(out_path: Path) -> None:
 def main() -> None:
     if not SSP_PATH.exists():
         raise FileNotFoundError(
-            f"SSP grid not found at {SSP_PATH}. Panel (a) draws a real template; "
+            f"SSP grid not found at {SSP_PATH}. The figures draw a real template; "
             "download the grid with tengri.download_ssp('fsps_prsc_miles_chabrier')."
         )
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    render_flow_diagram(OUT_DIR / "precompute_schematic.png")
+    render_pipeline_figure(OUT_DIR / "precompute_schematic.png")
     render_error_figure(OUT_DIR / "precompute_subband_error.png")
 
 
