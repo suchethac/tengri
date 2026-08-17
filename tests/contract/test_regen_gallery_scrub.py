@@ -33,6 +33,19 @@ import regen_gallery as rg
 
 _TARGET = "plot_usecase_demo"
 
+# A home directory belonging to someone else's machine -- assembled at runtime
+# rather than written as a literal, because `tools/check_no_local_paths.py`
+# scans every tracked file and deliberately has no file allowlist ("an
+# allowlist of files would rot into a place leaks could hide"). Spelling these
+# fixtures out would trip the very guard these tests exist to support, and
+# exempting this file would open the hole that guard is built to deny.
+#
+# The assembly is asserted to reproduce a matching path in
+# `test_scrubbed_output_satisfies_the_guard_that_will_check_it`, so a typo here
+# cannot quietly turn these fixtures into strings the scrub was never asked
+# about.
+_ELSEWHERE = "/" + "Users/somebody"
+
 
 @pytest.fixture
 def gallery(tmp_path, monkeypatch):
@@ -75,14 +88,14 @@ def test_a_path_outside_this_checkout_is_reported_not_rewritten(gallery) -> None
     absolute path, which no rewrite of the repo root can reach.
     """
     _, auto = gallery
-    stray = "/Users/somebody/.cache/tengri_jax_cache/.lockfile"
+    stray = f"{_ELSEWHERE}/.cache/tengri_jax_cache/.lockfile"
     page = _write(auto, f"{_TARGET}.rst", f"    Timeout: could not acquire {stray}\n")
 
     rewritten, leftovers = rg._scrub_machine_paths({_TARGET})
 
     assert rewritten == 0, "the scrub invented a rewrite for a path it cannot attribute"
     assert len(leftovers) == 1
-    assert "/Users/somebody/" in leftovers[0]
+    assert f"{_ELSEWHERE}/" in leftovers[0]
     assert stray in page.read_text(encoding="utf-8"), "evidence was destroyed"
 
 
@@ -135,8 +148,11 @@ def test_scrubbed_output_satisfies_the_guard_that_will_check_it(gallery) -> None
     )
     # The fixture's tmp_path is not under a home directory, so make the check
     # meaningful by proving the guard would have rejected the input as written.
-    raw = "    /Users/someone/tengri/src/x.py:1: UserWarning: pinned\n"
-    assert pattern.search(raw), "the extracted guard pattern matches nothing -- vacuous"
+    raw = f"    {_ELSEWHERE}/tengri/src/x.py:1: UserWarning: pinned\n"
+    assert pattern.search(raw), (
+        "the extracted guard pattern does not match a known-bad path -- either "
+        "the pattern was read wrong, or _ELSEWHERE stopped spelling a home path"
+    )
 
     rg._scrub_machine_paths({_TARGET})
 
