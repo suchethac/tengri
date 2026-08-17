@@ -53,7 +53,13 @@ class TestDraine2021PAHIRComponent:
         comp = Draine2021PAHIRSEDComponent()
         wave = jnp.logspace(0, 4, 100)
         sed_in = jnp.ones_like(wave)
-        params = {"dust_lgU": jnp.array(2.0)}
+        # ``predict`` receives parameters with the prefix already stripped by
+        # ``slice_params`` -- ``p["lgU"]``, not ``p["dust_lgU"]`` (ADR-0011).
+        # Calling predict directly, as this test does, has to strip it too.
+        # This read ``dust_lgU`` and still passed, because predict returned at
+        # the ``hasattr(self, "data")`` guard before reaching any parameter:
+        # nothing called load(), so the body under test never ran (#1738/#1278).
+        params = {"lgU": jnp.array(2.0)}
         inputs = {"L_ir": jnp.array(1e10)}
 
         with warnings.catch_warnings():

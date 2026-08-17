@@ -756,7 +756,7 @@ class CB19Backend:
             edges=surface_edges,
             effective_wavelengths=jnp.zeros(n_filters),
             effective_wavelengths_rest=jnp.zeros(n_filters),
-            flux_scale=1.0,
+            log10_flux_scale=0.0,  # unit scale; the caller applies the cosmology
             n_filters=n_filters,
         )
 

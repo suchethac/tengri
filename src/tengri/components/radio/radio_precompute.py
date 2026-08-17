@@ -53,12 +53,10 @@ from tengri.components.radio.radio import (
 )
 from tengri.forward.precompute.templates import (
     build_template_photometry_lookup,
+    collapse_fixed_axes,
     precompute_template_photometry,
 )
-from tengri.utils.grid_interp import (
-    PreintegratedGrid,
-    slice_fixed_axes,
-)
+from tengri.utils.grid_interp import PreintegratedGrid
 
 # Each radio sub-model precomputes along one parameter axis.
 AXIS_PARAMS_SYNCHROTRON = ("radio_alpha_sf",)
@@ -230,21 +228,12 @@ def precompute(
         "_preint": preint,
     }
 
-    axis_params = AXIS_PARAMS[model]
-    if parameters is None or not axis_params:
-        return result
-
-    fixed_values = parameters.get_fixed_values()
-    fixed: dict[int, float] = {}
-    for i, pname in enumerate(axis_params):
-        if pname in fixed_values:
-            fixed[i] = float(fixed_values[pname])
-
+    collapsed, remaining_axes, fixed = collapse_fixed_axes(
+        preint, AXIS_PARAMS[model], parameters, origin=f"radio_precompute[{model}]"
+    )
     if not fixed:
         return result
 
-    collapsed = slice_fixed_axes(preint, fixed)
-    remaining_axes = tuple(ax for i, ax in enumerate(result["axes"]) if i not in fixed)
     return {
         "grid_phot": collapsed.phot,
         "axes": remaining_axes,
