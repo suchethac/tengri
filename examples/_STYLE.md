@@ -75,21 +75,49 @@ The very first triple-quoted block is the sphinx-gallery card. Title format:
 What the figure shows: the physics, the knob, the effect
 ========================================================
 
-One sentence: what model, what's being varied, what the reader will see.
-Cite the physics paper if a specific equation drives the plot. Avoid
-mentioning ``tengri`` in the title — the gallery already lives in tengri.
+Title, then stop — unless there is something true that the code below does
+not say. If there is, say it in one or two sentences: the convention, the
+unit, the frame, the value that silently gives a wrong answer, or why this
+approximation is valid. If there is nothing, the title is the whole docstring.
+Do not describe the figure; the reader can see it. Do not narrate the code;
+it is directly below. Write for someone fitting a galaxy, not someone
+maintaining tengri: no issue numbers, no ``docs/dev/`` pointers, no private
+names. Expect these to be wildly uneven in length — a sweep with no trap
+gets fifteen words, one with a real trap gets a hundred and fifty. That
+unevenness is correct; never pad one to match its neighbor.
 """
 ```
 
+Avoid mentioning ``tengri`` in the title — the gallery already lives in tengri.
+
 Bad titles (avoid):
-- `"First Photometric Fit with tengri"`
-- `"DPL alpha sweep"`
-- `"AGN composable demo"`
+- `"First Photometric Fit with tengri"` — describes the demo framework, not the science
+- `"DPL alpha sweep"` — narrates the code structure
+- `"AGN composable demo"` — no physical content
 
 Good titles:
 - `"Recovering stellar mass from 5-band SDSS photometry"`
 - `"Early-time SFH slope α controls the UV continuum"`
 - `"Switching torus library: SKIRTOR vs CAT3D-WIND at fixed L_bol"`
+
+## Docstring body — when it earns its place
+
+Not every title needs a docstring. When the code cannot tell a crucial convention or the physics demands a caveat, write one or two sentences:
+
+> Emission lines are vacuum throughout. `H_alpha = 6564.61 Å`, not
+> 6562.8 Å (which is air).
+
+This states a frame/convention that the code cannot tell visually.
+
+> Measured against the exact path across GALEX→WISE at z ≤ 1.5 with
+> τ_diff = 0.7 / τ_bc = 1.0, the worst band agrees to ≲0.5%, and the
+> optical/NIR bands to ≲0.01%.
+
+This documents an approximation's validity — `WavePrecomp` photometry is fast but introduces systematic error the reader should understand before using it.
+
+## Citations
+
+Cite when a specific equation or calibration from the paper drives the figure or its interpretation. Do not cite to establish that a well-known thing exists. A script that merely uses the default dust law should not cite Calzetti+2000; a script that plots Eq. 4 of it should. Format citations as `Author+YYYY` (e.g., `Calzetti+2000`); multiple citations are `Calzetti+2000; Draine+2007`. Full journal references, DOI, arXiv ID belong in a `Reference:` line or a References section, not inline in the docstring.
 
 ## What NOT to do
 

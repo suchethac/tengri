@@ -799,6 +799,10 @@ def parse_groups(**kwargs) -> Parameters:
     # Collected here and adjudicated by ``_check_wildcard_freed_something``.
     wildcard_free_outcome: dict[str, list[tuple[str, bool]]] = {}
 
+    # Track if we've emitted the met_* suppression warning for this parse (#1796).
+    # Emit once per parse even if multiple met_* params are suppressed.
+    met_suppression_warned = False
+
     for param_name in structural_params.all_params:
         group = param_partition.get(param_name, None)
         if group is None:
@@ -874,6 +878,39 @@ def parse_groups(**kwargs) -> Parameters:
         if not isinstance(group_dict, dict):
             # Group was not a dict (or is a sub-key); use structural default
             continue
+
+        # Special case: met_* parameters in sfh group (no met block) should be
+        # pinned at Fixed defaults, not freed by sfh wildcard (#1796).
+        # These params logically belong to "met" group. When there's an explicit
+        # sfh override (e.g., sfh={'logzsol': Uniform(...)}) honor it with a
+        # migration warning. Otherwise, treat as implicit FIXED wildcard.
+        if group == "sfh" and param_name.startswith("met_"):
+            short_name = _extract_short_name(param_name, group_dict)
+            has_explicit_override = short_name in group_dict or param_name in group_dict
+
+            if not has_explicit_override and group_dict.get("*") is FREE and not has_met_block:
+                # sfh wildcard is FREE, but met_* should not be freed (no met
+                # block means implicit FIXED). Override with FIXED for this param.
+                group_dict = {"*": FIXED}
+
+                # Emit migration warning once per parse (#1796)
+                if not met_suppression_warned:
+                    warnings.warn(
+                        (
+                            "sfh={'all_params': FREE} no longer frees metallicity "
+                            "parameters when there is no explicit met block. "
+                            "Before this change, met_logzsol (and other met_* params) "
+                            "were freed by the sfh wildcard.\n\n"
+                            "To free metallicity parameters explicitly, pass either:\n"
+                            "  met={'all_params': FREE}\n"
+                            "or:\n"
+                            "  met={'logzsol': Uniform(-2, 0.2)}\n\n"
+                            "Issue #1796"
+                        ),
+                        WildcardPartialFreeWarning,
+                        stacklevel=2,
+                    )
+                    met_suppression_warned = True
 
         # A group whose wildcard is scoped to its selected structural variant
         # frees only what that variant reads; a parameter outside the scope
@@ -1451,7 +1488,7 @@ def _agn_active_param_set(structural_kwargs: dict) -> frozenset[str]:
     """Params a group-level AGN wildcard should free, scoped to active blocks.
 
     Thin wrapper over
-    :func:`tengri.components.agn.blocks._consumes.agn_active_param_set`,
+    ``tengri.components.agn.blocks._consumes.agn_active_param_set``,
     lazy-imported to avoid an import cycle (the agn package imports the priors
     layer that ultimately re-exports this module).
     """
@@ -1665,6 +1702,10 @@ def _wildcard_scopes(
             else "shock_frac"
         )
         scopes["shock"] = frozenset(shock_group_params - {unused})
+
+    # Note: sfh scoping is handled differently in parse_groups() —
+    # met_* parameters in sfh (when no met block) skip the group dict to avoid
+    # forcing them through wildcard scoping (see line ~850 for the check).
 
     return scopes
 
@@ -2165,6 +2206,16 @@ def _translate_dust(dust_dict: dict, result: dict) -> None:
                     )
                     raise ValueError(f"Unknown dust emission type '{emission_type}'.{suggest_str}")
                 result["dust_emission"] = emission_type
+
+                # Astrodust+PAH (HD23) optional configuration: spinning dust (AME)
+                # and cold-neutral-medium filling fraction. These are structural
+                # configuration (not free parameters), stored with astrodust_ prefix
+                # to distinguish from parameter registry.
+                if emission_type == "astrodust":
+                    if "spinning_dust" in emission_dict:
+                        result["astrodust_spinning_dust"] = bool(emission_dict["spinning_dust"])
+                    if "f_cnm" in emission_dict:
+                        result["astrodust_f_cnm"] = float(emission_dict["f_cnm"])
 
 
 # Backend *implementations* are named after their physics (BakedInBackend,
@@ -2686,7 +2737,7 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
             "eb_include_lyc",
         }
     ),
-    "dust.emission": frozenset({"type", "*"}),
+    "dust.emission": frozenset({"type", "*", "spinning_dust", "f_cnm"}),
     "neb": frozenset({"type", "*", "full_catalog", "grid"}),
     "shock": frozenset({"type", "*", "norm", "abundance", "component"}),
     "igm": frozenset({"type", "*", "patchy", "dla"}),
@@ -2776,6 +2827,12 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
         _Structural("dust_curve", "dust_wg00_curve", "mw", only_types=("wg00",)),
         _Structural("geometry", "dust_wg00_geometry", "shell", only_types=("wg00",)),
         _Structural("structure", "dust_wg00_structure", "homogeneous", only_types=("wg00",)),
+    ),
+    "dust.emission": (
+        # Astrodust+PAH (HD23): spinning dust (AME) enable + cold-neutral-medium
+        # fraction. Structural config, forwarded to component_factory (#1093).
+        _Structural("spinning_dust", "astrodust_spinning_dust", False, only_types=("astrodust",)),
+        _Structural("f_cnm", "astrodust_f_cnm", 0.28, only_types=("astrodust",)),
     ),
     "neb": (
         _Structural("full_catalog", "cue_full_catalog", False, only_types=("cue",)),

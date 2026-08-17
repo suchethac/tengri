@@ -7,7 +7,7 @@ model components sum to the total emission (black). The AGN side is the
 GRAHSP bending power-law disk/BBB (blue), iron + emission-line forest (red),
 and the dusty torus (yellow dashed), normalized so the disk has
 :math:`L_{5100\\,\\mathrm{\\AA}}^{\\rm AGN}=10^{44}\\,\\mathrm{erg\\,s^{-1}}
-=10^{37}\\,\\mathrm{W}` (blue square); the torus is anchored at 12 µm (yellow
+=10^{37}\\,\\mathrm{W}` (blue square); the torus is anchored at 12 μm (yellow
 diamond). The host is a stellar population (purple) and its reprocessed dust
 emission (green).
 

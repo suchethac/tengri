@@ -5,9 +5,12 @@
 Advanced Topics
 ===============
 
-Hierarchical inference, gradient sensitivity, batch fitting, panchromatic SED
-with radio and X-ray components, and joint photometry + spectroscopy fitting.
+Hierarchical population inference, gradient diagnostics, batch fitting, panchromatic multi-component SEDs, joint photometry + spectroscopy.
 
+
+.. raw:: html
+
+  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
 
 
 .. raw:: html
@@ -69,7 +72,7 @@ with radio and X-ray components, and joint photometry + spectroscopy fitting.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="In the dust-free limit with Case B recombination (T_e=10,000 K, n_e=100 cm^-3), the intrinsic Hα/Hβ ratio is 2.86, nearly independent of ionization parameter and metallicity below ~0.5 Zsun (Storey &amp; Hummer 1995, MNRAS 272, 41). This diagnostic checks that tengri&#x27;s Cue nebular emulator reproduces the canonical value across its (logU, logZ_gas) grid, identifying any library drift or implementation errors.">
+    <div class="sphx-glr-thumbcontainer" tooltip="In the dust-free limit with Case B recombination (T_e=10,000 K, n_e=100 cm^-3), the intrinsic Hα/Hβ ratio is 2.86, nearly independent of ionization parameter and metallicity below ~0.5 Z☉ (Storey &amp; Hummer 1995, MNRAS 272, 41). This diagnostic checks that tengri&#x27;s Cue nebular emulator reproduces the canonical value across its (logU, logZ_gas) grid, identifying any library drift or implementation errors.">
 
 .. only:: html
 
@@ -239,7 +242,7 @@ with radio and X-ray components, and joint photometry + spectroscopy fitting.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Diagnostic: the Hα luminosity traces the ionizing photon rate from young stars, which correlates with the instantaneous SFR. Kennicutt (1998, ApJ 498 541, Eq. 2) calibrated this relationship for Salpeter IMF; for Chabrier IMF (used by tengri), the coefficient is 4.97e-42: SFR / (Msun/yr) = 4.97e-42 × L(Hα) / (erg/s).">
+    <div class="sphx-glr-thumbcontainer" tooltip="Diagnostic: the Hα luminosity traces the ionizing photon rate from young stars, which correlates with the instantaneous SFR. Kennicutt (1998, ApJ 498 541, Eq. 2) calibrated this relationship for Salpeter IMF; for Chabrier IMF (used by tengri), the coefficient is 4.97e-42: SFR / (M☉/yr) = 4.97e-42 × L(Hα) / (erg/s).">
 
 .. only:: html
 
@@ -426,7 +429,7 @@ with radio and X-ray components, and joint photometry + spectroscopy fitting.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="TODO[examples-sweep]: This script uses low-level component orchestration (build_components, run_components) which is experimental Phase II-2.6 API intended for infrastructure use, not recommended for user-facing examples.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Low-level component orchestration using build_components and run_components. For production use, see plot_joint_fit.py and plot_radio_xray.py which use the SEDModel.build() nested-dict grammar.">
 
 .. only:: html
 

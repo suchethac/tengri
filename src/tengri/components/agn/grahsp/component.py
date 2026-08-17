@@ -368,7 +368,7 @@ class GRAHSPSEDComponent:
         Notes
         -----
         Listed as an alternate publisher of ``L_agn_bol`` in
-        :data:`tengri.forward.orchestrator._ALTERNATE_PUBLISHERS` alongside
+        ``tengri.forward.orchestrator._ALTERNATE_PUBLISHERS`` alongside
         :class:`AGNSEDComponent`. The pipeline factory chooses one variant
         by configuration; only one ever runs at a time.
         """

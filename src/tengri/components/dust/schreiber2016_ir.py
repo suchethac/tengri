@@ -126,11 +126,11 @@ class Schreiber2016IRSEDComponent(SEDModelComponent):
         # Auto-locate template file if not explicitly provided
         template_path = self.config.template_path
         if template_path is None:
-            from tengri.components.dust.emission_templates import _find_data_file
+            from tengri._data_setup import find_data_str
 
             # Try standard names
             for fname in ("schreiber2016_templates.h5",):
-                template_path = _find_data_file(fname)
+                template_path = find_data_str(fname)
                 if template_path is not None:
                     break
 
@@ -211,15 +211,13 @@ class Schreiber2016IRSEDComponent(SEDModelComponent):
             # via jax.ensure_compile_time_eval() to avoid tracer leakage.
             import warnings
 
-            from tengri.components.dust.emission_templates import (
-                _find_data_file,
-                load_schreiber2016_templates,
-            )
+            from tengri._data_setup import find_data_str
+            from tengri.components.dust.emission_templates import load_schreiber2016_templates
 
             template_path = self.config.template_path
             if template_path is None:
                 for fname in ("schreiber2016_templates.h5",):
-                    template_path = _find_data_file(fname)
+                    template_path = find_data_str(fname)
                     if template_path is not None:
                         break
 

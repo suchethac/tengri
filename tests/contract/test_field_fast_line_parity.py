@@ -3,7 +3,7 @@
 
 The stochastic GP-field SFH modulates the SFR on the lookback grid; its only effect on a
 line flux is a modulation of the (metallicity, age) SSP weights — exactly what the window-LUT
-contraction consumes. So ``measure_line_fluxes(fast=True)`` must equal ``fast=False`` for a
+contraction consumes. So ``measure_line_fluxes(approx=True)`` must equal ``approx=False`` for a
 field SFH, letting ``FeaturePrecomp`` serve the field instead of raising. This guards the
 unified field-aware ``compute_joint_weights``.
 """
@@ -80,8 +80,8 @@ def test_field_fast_line_matches_exact():
     }
     params = {**model.spec.get_fixed_values(), **p}
 
-    fast = np.asarray(model.measure_line_fluxes(params, ld, fast=True))
-    exact = np.asarray(model.measure_line_fluxes(params, ld, fast=False))
+    fast = np.asarray(model.measure_line_fluxes(params, ld, approx=True))
+    exact = np.asarray(model.measure_line_fluxes(params, ld, approx=False))
     assert np.all(np.isfinite(fast))
     # Same window-LUT-vs-exact agreement the non-field path already meets (#1152).
     np.testing.assert_allclose(fast, exact, rtol=3e-3, atol=0.0)

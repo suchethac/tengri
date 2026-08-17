@@ -5,12 +5,12 @@
 Star Formation Histories
 ========================
 
-How the SFH is parameterized and what the data can recover — parametric
-forms (delayed-exponential, double power law, lognormal), non-parametric
-continuity and the PSD-governed stochastic/bursty priors, quenching
-pathways and double bursts, mass-formed vs mass-observed, and the
-"wrong-model trap" when the assumed form is too rigid.
+Default kernel: CIC (cloud-in-cell). `'dsps'` kernel available for cross-code parity but interpolates in log-space, annihilating the first SSP node (~3.8% mass loss) and shifting age gradients by 43%. Parametric forms (DPL, delayed-exponential, lognormal) and non-parametric (PSD-governed stochastic). Mismatch between true and assumed SFH form can produce unrecognizable posteriors.
 
+
+.. raw:: html
+
+  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
 
 
 .. raw:: html
@@ -140,7 +140,7 @@ pathways and double bursts, mass-formed vs mass-observed, and the
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The peak time of a log-normal SFH controls when most stars formed, shifting the age structure and dramatically affecting UV slope, 4000 Å break strength, and NIR luminosity. Following the Carnall+2018 / BAGPIPES convention (#514), the peak is measured in cosmic time since formation (T = age - lookback); larger peak times therefore correspond to more recent star formation. We vary the peak across its prior range with every other parameter fixed.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The peak time of a log-normal SFH controls when most stars formed, shifting the age structure and dramatically affecting UV slope, 4000 Å break strength, and NIR luminosity. Following Carnall+2018 / BAGPIPES, the peak is measured in cosmic time since formation (T = age - lookback); larger peak times correspond to more recent star formation. We vary the peak across its prior range with every other parameter fixed.">
 
 .. only:: html
 

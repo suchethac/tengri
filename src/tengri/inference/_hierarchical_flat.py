@@ -802,7 +802,7 @@ def run_flat_sampler(
 
     ``dense_mass_matrix`` defaults to False and NUTS at large D still draws the
     shared high-dimension advisory — see
-    :func:`tengri.inference._dimension_guard.warn_if_nuts_high_dim`.
+    ``tengri.inference._dimension_guard.warn_if_nuts_high_dim``.
     """
     import inspect
     import time

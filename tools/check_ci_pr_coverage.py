@@ -51,9 +51,11 @@ WORKFLOW = REPO_ROOT / ".github" / "workflows" / "tests.yml"
 # withholding them would save little and cost the early signal that is the
 # entire reason a stacked PR runs anything at all.
 #
-# "Every pull request" includes `labeled` events, and that is enforced below by
-# `guards_off_labeled` rather than left to the reader -- see its docstring for
-# what a `labeled` guard on one of these does to a protected branch.
+# `labeled` is no longer a pull-request trigger, so no job can stand down on one
+# any more. `guards_off_labeled` is kept and still enforced: it is now a
+# ratchet against reintroducing the guard, which would be inert while the
+# trigger is gone and would silently become load-bearing again the moment
+# anyone restored it.
 ALL_PR_JOBS: dict[str, str] = {
     "tier": "narrates which tier this run got; blocks nothing, so it must run "
     "everywhere in order to be able to say when coverage was withheld",
@@ -61,6 +63,10 @@ ALL_PR_JOBS: dict[str, str] = {
     "security": "bandit + pip-audit; cheap and base-independent",
     "smoke": "import/collection guards; `test` declares `needs: smoke`, so it "
     "cannot be withheld without also disabling the full tier",
+    "ci-ok": "the single aggregate verdict branch protection requires; it must "
+    "run for every pull request because a required context that does not "
+    "report blocks the merge forever. Its own `if: always()` is what makes "
+    "that true even when a dependency goes red -- see tools/ci_ok.py",
 }
 
 # Jobs whose own `if:` tests `github.base_ref`, so they run for push / schedule

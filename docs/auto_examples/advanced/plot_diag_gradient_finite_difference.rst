@@ -41,16 +41,14 @@ parameter. A mismatch (>1e-3) indicates a non-differentiable operation.
 
  .. code-block:: none
 
-    /tengri/src/tengri/forward/sed_model.py:7566: WildcardPartialFreeWarning: 'all_params: FREE' freed 2 of 7 parameters in group 'dust'. These have no declared prior, only Fixed defaults, so they stay pinned:
-      dust_Rv, dust_bump_strength, dust_delta, dust_f_obscuration, dust_slope
-    The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. dust={'Rv': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
+    /tengri/src/tengri/forward/sed_model.py:8484: WildcardPartialFreeWarning: 'all_params: FREE' freed 2 of 3 parameters in group 'dust'. These have no declared prior, only Fixed defaults, so they stay pinned:
+      dust_f_obscuration
+    The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. dust={'f_obscuration': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
       spec = parse_groups(**groups)
-    /tengri/src/tengri/forward/sed_model.py:7566: WildcardPartialFreeWarning: 'all_params: FREE' freed 6 of 8 parameters in group 'sfh'. These have no declared prior, only Fixed defaults, so they stay pinned:
+    /tengri/src/tengri/forward/sed_model.py:8484: WildcardPartialFreeWarning: 'all_params: FREE' freed 6 of 8 parameters in group 'sfh'. These have no declared prior, only Fixed defaults, so they stay pinned:
       met_alpha_fe, met_logzsol_scatter
     The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. sfh={'met_alpha_fe': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
       spec = parse_groups(**groups)
-    /tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit__impl': FileNotFoundError: [Errno 2] No such file or directory: '~/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
 
 
 
@@ -161,7 +159,7 @@ parameter. A mismatch (>1e-3) indicates a non-differentiable operation.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 7.012 seconds)
+   **Total running time of the script:** (0 minutes 5.427 seconds)
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_diag_gradient_finite_difference.py:

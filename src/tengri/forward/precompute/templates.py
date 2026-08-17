@@ -43,6 +43,7 @@ def collapse_fixed_axes(
     parameters: Parameters | None,
     *,
     defaults: Mapping[str, float] | None = None,
+    internal_axes: frozenset[str] | None = None,
     origin: str = "precompute",
 ) -> tuple[PreintegratedGrid | PreintegratedLines, tuple[Any, ...], dict[int, float]]:
     """Collapse every grid axis whose governing parameter is Fixed.
@@ -70,6 +71,12 @@ def collapse_fixed_axes(
         nor free. Used by the components that carry their own axis defaults
         (GRAHSP) or accept caller-supplied ones (the composable AGN block). A
         name absent from both the model and this mapping leaves its axis alone.
+    internal_axes : frozenset of str, optional
+        Axis labels that are deliberately internal grid-axis constructs, not
+        user-facing parameters. Names in this set are skipped silently (no
+        warning, never collapsed). Used for grid axes like ``log_age`` in
+        CLOUDY adapters or ``HbFrac`` in CB19 that are internal bookkeeping
+        and not meant to be user parameters. Default: None. See issue #1827.
     origin : str, optional
         Module or component name, used only in the ``DeadPrecomputeAxisWarning``
         message so the report names the declaration that needs fixing.
@@ -89,10 +96,12 @@ def collapse_fixed_axes(
     Warns
     -----
     DeadPrecomputeAxisWarning
-        When nothing collapsed *and* no name in ``axis_params`` is a valid
-        parameter for this model, so no assignment could have collapsed
-        anything. A module whose ``defaults`` still collapse its axes is
-        working and stays silent.
+        Once per axis name that is neither a valid parameter nor in
+        ``internal_axes`` nor in ``defaults``. Reports the origin/adapter,
+        the axis name, and the two remedies (declare the parameter; or declare
+        the axis internal). When nothing collapsed *and* every name is invalid,
+        a module's ``defaults`` still collapse its axes and is working, so
+        names also in defaults stay silent (issue #1827).
 
     Raises
     ------
@@ -111,7 +120,8 @@ def collapse_fixed_axes(
     (issue #1738). The duplication is why the mismatch checks above did not
     exist: no single copy was the obvious place to put them, and six of the
     eleven declared axis names that no ``Parameters`` object can ever contain,
-    so their advertised auto-collapse had never once fired.
+    so their advertised auto-collapse had never once fired. Issue #1827
+    resolved the third cause: internal grid-axis labels via ``internal_axes``.
     """
     no_collapse: tuple[Any, ...] = tuple(preint.axes)
     if parameters is None or not axis_params:
@@ -120,6 +130,7 @@ def collapse_fixed_axes(
     fixed_values = parameters.get_fixed_values()
     free_names = set(getattr(parameters, "free_params", ()) or ())
     defaults = defaults or {}
+    internal_axes = internal_axes or frozenset()
 
     collapsed_at: dict[int, float] = {}
     for i, pname in enumerate(axis_params):
@@ -128,26 +139,25 @@ def collapse_fixed_axes(
         elif pname not in free_names and pname in defaults:
             collapsed_at[i] = float(defaults[pname])
 
+    # Warn once per dead name (not a valid parameter, not internal, not in defaults).
+    # This replaces the old logic that warned only when nothing collapsed AND every
+    # name was invalid (issue #1827).
+    valid = getattr(parameters, "valid_param_names", None)
+    if isinstance(valid, (set, frozenset)) and valid:
+        for pname in axis_params:
+            if pname not in valid and pname not in internal_axes and pname not in defaults:
+                warnings.warn(
+                    f"{origin}: grid-axis label '{pname}' is not a valid "
+                    f"parameter name and not declared internal. The axis can never "
+                    f"be collapsed by declaration. Either: (1) declare '{pname}' "
+                    f"as a parameter in the component's parameter spec, or "
+                    f"(2) list it in internal_axes to skip it silently. "
+                    f"See issue #1827.",
+                    DeadPrecomputeAxisWarning,
+                    stacklevel=2,
+                )
+
     if not collapsed_at:
-        # Nothing collapsed. That is ordinary when the axis parameters are free,
-        # and a declaration defect when none of them is a parameter of this model
-        # at all -- then no assignment could ever collapse anything, and the
-        # promised grid reduction is unreachable rather than merely unused.
-        # Only a real name set can convict: ``Parameters.valid_param_names`` is
-        # documented to return a frozenset, and anything else (a stub, a mock,
-        # a caller-supplied duck type) cannot be distinguished from an empty one
-        # -- accusing on that would report a defect the object never claimed.
-        valid = getattr(parameters, "valid_param_names", None)
-        if isinstance(valid, (set, frozenset)) and valid and set(axis_params).isdisjoint(valid):
-            warnings.warn(
-                f"{origin}: none of the declared grid-axis parameters "
-                f"{list(axis_params)} is a parameter of this model, so no axis "
-                f"can ever be collapsed and the grid stays at full size. The "
-                f"names must match what the component declares (check "
-                f"spec.valid_param_names). See issue #1738.",
-                DeadPrecomputeAxisWarning,
-                stacklevel=2,
-            )
         return preint, no_collapse, {}
 
     _check_axis_alignment(preint, axis_params, origin)

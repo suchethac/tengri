@@ -5,11 +5,12 @@
 Radio
 =====
 
-Radio continuum from star formation and AGN — synchrotron and free-free
-decomposition, the far-infrared–radio correlation and its scatter, the
-non-thermal spectral slope, radio loudness, and the AGN-vs-star-formation
-crossover.
+Star formation (free-free and synchrotron) and AGN (radio-loud) components. Far-infrared–radio correlation and non-thermal spectral slopes.
 
+
+.. raw:: html
+
+  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
 
 
 .. raw:: html
@@ -88,7 +89,7 @@ crossover.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Radio loudness R = log_10(L_5GHz / L_B) quantifies the ratio of AGN radio to optical luminosity. Radio-quiet AGN have R ≲ 1; radio-loud sources (FR I/II, blazars) reach R ∼ 3–5. Each decade in R corresponds to an order of magnitude increase in jet radio luminosity at fixed bolometric AGN power. We sweep R ∈ [0, 4] at fixed L_bol = 10^44 erg/s (Seyfert-1-like) and α_agn = 0.7.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Radio loudness R = log₁₀(L_5GHz / L_B) quantifies the ratio of AGN radio to optical luminosity. Radio-quiet AGN have R ≲ 1; radio-loud sources (FR I/II, blazars) reach R ∼ 3–5. Each decade in R corresponds to an order of magnitude increase in jet radio luminosity at fixed bolometric AGN power. We sweep R ∈ [0, 4] at fixed L_bol = 10^44 erg/s (Seyfert-1-like) and α_agn = 0.7.">
 
 .. only:: html
 
@@ -105,7 +106,24 @@ crossover.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="At fixed host (constant SFR = 3 M_sun/yr, Condon-92 synchrotron + free-free) we sweep the composable AGN&#x27;s bolometric luminosity agn_log_lbol from 9 to 13 (in log L_sun). The host alone produces a power-law GHz continuum; the AGN superposes a flatter-spectrum jet component that takes over above log L_bol ≳ 11.5 — the classic radio-loud / radio-quiet division emerges from this competition.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The radio group is two independent choices — a star-forming block tied to the FIR-radio correlation, and an AGN block — so this compares them one at a time on the same galaxy.">
+
+.. only:: html
+
+  .. image:: /auto_examples/radio/images/thumb/sphx_glr_plot_radio_model_family_compare_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/radio/plot_radio_model_family_compare`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Radio blocks: which q_IR calibration, and which AGN synchrotron shape</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="At fixed host (constant SFR = 3 M☉/yr, Condon-92 synchrotron + free-free) we sweep the composable AGN&#x27;s bolometric luminosity agn_log_lbol from 9 to 13 (in log L_sun). The host alone produces a power-law GHz continuum; the AGN superposes a flatter-spectrum jet component that takes over above log L_bol ≳ 11.5 — the classic radio-loud / radio-quiet division emerges from this competition.">
 
 .. only:: html
 
@@ -152,6 +170,7 @@ crossover.
    /auto_examples/radio/plot_radio_crossover_frequency
    /auto_examples/radio/plot_radio_lir_relation
    /auto_examples/radio/plot_radio_loudness_sweep
+   /auto_examples/radio/plot_radio_model_family_compare
    /auto_examples/radio/plot_radio_vs_agn_lbol
    /auto_examples/radio/plot_synchrotron_thermal_decomposition
 

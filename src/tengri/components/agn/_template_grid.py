@@ -11,7 +11,7 @@ The reason the grid is a :class:`TorusTemplateGrid` **argument** rather than a
 closed-over array is threading. A closure's captured arrays are concrete at
 trace time, so JAX freezes them into the graph as ``Constant`` ops — the whole
 library, inlined, every time. A pytree passed as an argument becomes a
-``Parameter`` instead. See :func:`tengri.components.agn.blocks._protocol.collect_block_templates`.
+``Parameter`` instead. See ``tengri.components.agn.blocks._protocol.collect_block_templates``.
 """
 
 from __future__ import annotations

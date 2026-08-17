@@ -82,7 +82,7 @@ def joint_setup(synthetic_ssp_wide, synthetic_tophat_obs):
     base = _model(synthetic_ssp_wide, synthetic_tophat_obs, WavePrecomp())
     truth = base.spec.sample(jax.random.PRNGKey(0))
     phot = np.asarray(base.predict_photometry(truth))
-    lf = np.asarray(base.measure_line_fluxes(truth, fast=False))[:3]
+    lf = np.asarray(base.measure_line_fluxes(truth, approx=False))[:3]
 
     obs = Observation(
         photometry=synthetic_tophat_obs.photometry,
@@ -198,7 +198,7 @@ def test_adding_the_line_lut_does_not_move_the_objective(ssp_data_wne, real_ssp_
     base = _model(ssp_data_wne, obs0, WavePrecomp())
     truth = base.spec.sample(jax.random.PRNGKey(0))
     phot = np.asarray(base.predict_photometry(truth))
-    lf = np.asarray(base.measure_line_fluxes(truth, fast=False))[:3]
+    lf = np.asarray(base.measure_line_fluxes(truth, approx=False))[:3]
     assert np.all(np.abs(lf) > 1e-20), f"setup: the line channel must be real, got {lf}"
 
     obs = Observation(

@@ -125,7 +125,7 @@ Reference: Kewley & Dopita 2002 ApJS 142 35; Li et al. 2025, ApJ, 986, 9
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.302 seconds)
+   **Total running time of the script:** (0 minutes 6.417 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_oiii_hbeta_logu_at_fixed_z.py:

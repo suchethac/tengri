@@ -247,7 +247,7 @@ class CloudyELineMarginalizedLikelihood:
     design_matrix_builder : callable, keyword-only
         Closure that takes the params dict and returns a fresh
         ``(n_pixels, n_lines)`` design matrix — typically wraps
-        :func:`tengri.inference.likelihood._build_eline_G_eff`.
+        ``tengri.inference.likelihood._build_eline_G_eff``.
         Per-call rebuild is required because line wavelengths shift
         with redshift.
     line_wavelengths : ndarray, shape (n_lines,)

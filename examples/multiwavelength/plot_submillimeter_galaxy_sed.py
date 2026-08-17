@@ -2,24 +2,16 @@
 Submillimeter galaxy SED: dust-obscured starburst at z=3
 =========================================================
 
-Submillimeter galaxies (SMGs) are the most luminous starbursts in the universe,
-hidden behind massive dust columns. This example constructs a z=3 SMG SED with
-M* = 2×10^11 Msun, SFR = 500 Msun/yr, and τ_V ≈ 3.5 — typical of ALMA-detected
-sources and the SCUBA-2 850 μm parent population.
-
-The rest-frame SED is dominated by dust re-emission (infrared peak), with the
-UV utterly absorbed. When observed at z=3, the 850 μm emission (rest-frame
-far-infrared peak) redshifts to 3.4 mm, landing precisely in the negative
-K-correction sweet spot that makes SMGs so luminous at centimeter wavelengths
-(Blain et al. 2002). Two panels show the contrast: rest-frame physics on the
-left, observer-frame windows on the right.
+Dust-obscured starburst at z = 3 with a heavily attenuated diffuse ISM
+(`tau_diff = 3.0`). The negative K-correction is what makes submillimeter
+selection nearly distance-independent over z ≈ 1–6: as a source recedes, the
+observing band walks up the steep Rayleigh-Jeans side of the dust peak, and the
+two effects very nearly cancel (Blain+2002).
 
 References
 ----------
 
-- Blain et al. 2002, PhR, 369, 111 (SMG demographics and K-corrections)
-- Casey et al. 2014, PhR, 541, 45 (SMG surveys and model comparison)
-
+Blain et al. 2002, PhR, 369, 111 (SMG demographics and K-corrections).
 """
 
 import os

@@ -16,7 +16,7 @@ luminosity through the mass-to-light ratio (M/L), which depends on the star
 formation history, dust attenuation, and stellar population age.
 
 This example constructs a mock survey of 200 galaxies from a Schechter SMF
-(Baldry+2012 z=0 fit: M*=10.78 M_sun, alpha=-1.45, phi*=3.96e-3 Mpc^-3).
+(Baldry+2012 z=0 fit: M*=10.78 M☉, alpha=-1.45, phi*=3.96e-3 Mpc^-3).
 For each galaxy, we build a tengri SEDModel and predict r-band absolute
 magnitudes. Binning in M_r yields a luminosity function, which we compare
 to the Blanton+2003 SDSS LF as a sanity check.

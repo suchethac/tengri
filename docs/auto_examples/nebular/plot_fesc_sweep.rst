@@ -141,6 +141,11 @@ References:
     plt.savefig("plot_fesc_sweep.png", dpi=150, bbox_inches="tight")
 
 
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 9.478 seconds)
+
+
 .. _sphx_glr_download_auto_examples_nebular_plot_fesc_sweep.py:
 
 .. only:: html

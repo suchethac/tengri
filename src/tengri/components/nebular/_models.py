@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Runtime registry of nebular emission backends.
 
-Mirrors :mod:`tengri.components.xray._models`, :mod:`tengri.components.radio._models`,
-and :mod:`tengri.components.igm._models` (#355) and the older
+Mirrors ``tengri.components.xray._models``, ``tengri.components.radio._models``,
+and ``tengri.components.igm._models`` (#355) and the older
 ``SFH_REGISTRY`` / ``AGN_MODELS`` patterns. ``_VALID_NEBULAR_TYPES``
 in :mod:`tengri.parameters.groups` derives from
 :data:`NEBULAR_MODELS.keys()` per ADR-0005 / ADR-0008 (single source of
@@ -26,7 +26,7 @@ class NebularRegistryEntry:
     callable : Callable or None
         The backend class (or any reference). ``None`` for the
         ``'none'`` disable-toggle. Dispatch in
-        :func:`tengri.parameters.groups._translate_neb` still routes
+        ``tengri.parameters.groups._translate_neb`` still routes
         through ``nebular_ssp`` / ``nebular_cue`` / ``nebular`` flags
         on :class:`Parameters`; this field is metadata.
     citation : str

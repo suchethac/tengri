@@ -294,7 +294,8 @@ class TestRegressionValues:
     def test_calzetti_reference_values(self):
         """C00 at key wavelengths (Av=1)."""
         # Reference: C00(Av=1) at [1500, 2175, 3000, 5500, 10000] A
-        ref = np.array([2.55158182, 2.09349184, 1.70999069, 0.99947911, 0.46360420])
+        # Updated (#1731): normalized by k(5500) to ensure k(5500)=1.0
+        ref = np.array([2.55291162, 2.09458290, 1.71088188, 1.00000000, 0.46384581])
         wavs = jnp.array([1500.0, 2175.0, 3000.0, 5500.0, 10000.0])
         tng = np.array(calzetti(wavs))
         np.testing.assert_allclose(tng, ref, rtol=1e-6)
@@ -345,16 +346,17 @@ class TestRegressionValues:
 
     def test_noll09_no_mods_reference(self):
         """N09 baseline (no bump, no slope) at key wavelengths."""
+        # Updated (#1731): normalized by k(5500) to ensure k(5500)=1.0
         ref = np.array(
             [
-                3.42720988,
-                2.94808185,
-                2.54615821,
-                2.09349184,
-                1.70999069,
-                0.99947911,
-                0.46360420,
-                0.12220173,
+                3.42899602,
+                2.94961829,
+                2.54748518,
+                2.09458290,
+                1.71088188,
+                1.00000000,
+                0.46384581,
+                0.05394934,
             ]
         )
         wavs = jnp.array(WAVS_FULL_AA)

@@ -56,7 +56,7 @@ def _require():
         pytest.skip("Cue weights (data/cue_weights.npz) not present")
 
 
-def _build(neb, *, dust_on=True, precomp=True):
+def _build(neb, *, dust_on=True, precomp=True, met=None):
     import warnings
 
     _require()
@@ -80,6 +80,10 @@ def _build(neb, *, dust_on=True, precomp=True):
             neb=neb,
             redshift=Fixed(Z),
             approx=WavePrecomp() if precomp else None,
+            # Omitted by default, so `met_logzsol` takes the grammar's FIXED
+            # default and the grid collapses that axis. A test that needs the
+            # stellar-metallicity axis to EXIST has to free it.
+            **({} if met is None else {"met": met}),
         )
 
 
@@ -184,13 +188,24 @@ def test_predict_spectrum_on_a_fast_model_matches_the_exact_model():
 
 def test_gas_and_stellar_metallicity_are_separate_axes():
     """neb_logZ_gas (gas) and met_logzsol (stellar) are independent grid axes,
-    reconstructed correctly even when they differ strongly."""
+    reconstructed correctly even when they differ strongly.
+
+    ``met`` must be freed explicitly. Without it, `met_logzsol` takes the
+    grammar's FIXED default, the collapse seam drops the axis exactly as it is
+    meant to, and BOTH halves of this test stop testing anything: the axis
+    assertion fails, and the parity check below it becomes vacuous, because a
+    Fixed parameter is supplied by the spec and the ``p["met_logzsol"] = -1.5``
+    written below never reaches either path. The decoupling this test is named
+    for cannot be exercised while the stellar axis is pinned.
+    """
     neb = {"type": "cue", "*": FIXED, "logU": Fixed(-2.5), "logZ_gas": Uniform(-1.0, 0.4)}
-    m_fast = _build(neb)
+    # Range covers the metal-poor value the parity check assigns below.
+    met = {"logzsol": Uniform(-1.8, 0.4)}
+    m_fast = _build(neb, met=met)
     m_fast.enable_fast_nebular(_LW, n_grid=10)
     axes = m_fast._nebular_grid_table.axis_names
     assert "met_logzsol" in axes and "neb_logZ_gas" in axes, axes
-    m_exact = _build(neb)
+    m_exact = _build(neb, met=met)
     p = dict(m_exact.spec.sample(jax.random.PRNGKey(11)))
     p["met_logzsol"] = jnp.asarray(-1.5)  # metal-poor stars
     p["neb_logZ_gas"] = jnp.asarray(0.3)  # metal-rich gas — decoupled

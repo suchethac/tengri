@@ -5,10 +5,12 @@
 Recipes
 =======
 
-Short, focused snippets for common how-to questions — comparing priors,
-loading photometry from CSV, fixing redshift, swapping filter sets, and
-saving/loading a posterior to disk.
+Common workflows: prior comparison, photometry I/O, redshift fixing, filter set swapping, posterior persistence.
 
+
+.. raw:: html
+
+  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
 
 
 .. raw:: html
@@ -19,7 +21,7 @@ saving/loading a posterior to disk.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="tengri.recipes ships several curated starting-point model configs that map common astronomer use-cases onto the nested-dict SEDModel.build grammar. This card overlays the rest-frame SED of every shipped recipe so users can pick by eye:">
+    <div class="sphx-glr-thumbcontainer" tooltip="Six curated recipes span galaxy populations: star-forming at 0–6 (bare-stellar SSP), quiescent at z ≈ 0.05 (bare-stellar, τ_diff-free to trace dust), AGN panchromatic (bare-stellar, full AGN composite with disc+torus+radio+xray), stochastic JWST high-z with burstiness (bare-stellar, DPL+field at 0.5–12), mock-recovery minimal (any SSP, 4–5 free params for benchmarking), and dust-demo (wNE only — baked nebular emission visualized). All use WavePrecomp() except photoz (ztable does not cover z &gt; 12). Use load_ssp(&quot;*.wNE&quot;) only for dust_demo; others silently under-predict if fed wNE.">
 
 .. only:: html
 
@@ -36,7 +38,7 @@ saving/loading a posterior to disk.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="How do I combine a custom photometric filter with standard filters? This recipe generates a synthetic Gaussian filter at 2 μm and pairs it with SDSS optical bands, then predicts the full SED and photometry.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Build a FilterCurve from a Gaussian transmission profile and combine it with standard filters. The Photometry object merges them, then SEDModel predicts photometry on all bands at once — custom filters compose naturally with the standard library.">
 
 .. only:: html
 
@@ -53,7 +55,7 @@ saving/loading a posterior to disk.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The tengri public API ships recipes for common SED fitting scenarios (star-forming, quiescent, AGN). This example showcases the introspection API (``tengri.list_recipes()``, tengri.describe_recipe()) and visually differentiates the rest-frame SED morphology across three representative models: young star-former, quiescent, and AGN-dominated.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Call tengri.list_recipes() to see the shipped menu with SSP requirements (bare-stellar, wNE, or any) and tengri.describe_recipe(name) to fetch a recipe&#x27;s docstring. Three models showcase the morphological diversity: star-forming (DPL+Cue nebular, free z to 6), quiescent at z=0.05 (dexp, lower dust ceiling), and AGN-panchromatic (full composite, z to 6). All require bare-stellar SSP (Cue backend).">
 
 .. only:: html
 
@@ -70,7 +72,7 @@ saving/loading a posterior to disk.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="How do I load measured photometry from a table and fit it? This recipe generates mock photometry for 3 galaxies and fits each one independently with a MAP fit, demonstrating the workflow for catalog-scale SED fitting.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Mock 3 galaxies, fit each independently with MAP. The workflow is: sample true parameters → generate mock fluxes + noise → fit with free SFH/dust and fixed redshift. Demonstrates vectorizing catalog-scale fits when redshift is already known (e.g., spectroscopy).">
 
 .. only:: html
 
@@ -87,7 +89,7 @@ saving/loading a posterior to disk.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="How do I persist a posterior between sessions? This recipe runs a MAP fit, saves the result to HDF5, reloads it, and demonstrates basic analysis. Posterior objects can be checkpointed for long-running fits or multi-stage analysis pipelines.">
+    <div class="sphx-glr-thumbcontainer" tooltip="MAP-fit a model, serialize the Posterior to HDF5 with .save(), reload in a new session with Posterior.load(), and recover the fit parameters and diagnostics. Enables checkpoint-driven analysis pipelines and multi-stage fits.">
 
 .. only:: html
 
@@ -104,7 +106,7 @@ saving/loading a posterior to disk.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="When redshift is known from spectroscopy, the SED fit is more precise than when inferring redshift from photometry alone. This recipe generates mock photometry at a known redshift, then fits it with redshift fixed (spectroscopic) and redshift free (photometric only), showing how redshift degeneracies affect parameter recovery.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Two fits on the same mock data: one with redshift fixed (spectroscopic known, free SFH/dust/met), one with redshift free (photometric only). The fixed-z fit converges to truth; free-z is degenerate with dust and SFH, showing why spectroscopy breaks the age-dust-redshift degeneracies that plague photometry-only fitting.">
 
 .. only:: html
 

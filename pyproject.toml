@@ -122,6 +122,13 @@ dev = [
     # laws (D03/HD23/WD01). Runtime imports inside attenuation.py are guarded,
     # but the test class exercises them directly.
     "dust-extinction>=1.5",
+    # tests/contract/test_registry_to_rst.py parses `_RegistryTable.to_rst()`
+    # output with a real RST parser and counts the columns docutils actually
+    # found. Listed here rather than skipped when absent: the first version of
+    # that test checked line prefixes instead, and passed against a table that
+    # emitted every cell as its own row. A check that cannot see the structure
+    # reports the same "clean" as one that can, so it has to run in CI.
+    "docutils>=0.20",
 ]
 crossval = [
     "bagpipes>=1.0",
@@ -138,6 +145,13 @@ docs = [
     "numpydoc>=1.5",
     "sphinx-copybutton>=0.5",
     "sphinx-design>=0.5",
+    # `docs/conf.py` lists "sphinx_gallery.gen_gallery" in `extensions`, so the
+    # build cannot start without it. This list and docs/requirements.txt were
+    # duplicates of each other and had drifted by exactly this one entry: CI
+    # installs the requirements file and was fine, while anyone following
+    # `pip install -e ".[docs]"` got a docs build that fails on import. The
+    # requirements file now installs this extra rather than restating it.
+    "sphinx-gallery>=0.15",
 ]
 
 [tool.setuptools.packages.find]

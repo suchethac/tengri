@@ -549,7 +549,7 @@ class PopulationFitter:
         wrong at once (#1576):
 
         * It omitted ``"vi"`` — a live ``method_map`` key, and the canonical
-          :data:`~tengri.inference._backend_registry.DEFAULT_METHOD` that every
+          ``tengri.inference._backend_registry.DEFAULT_METHOD`` that every
           other fit surface unified on (#1289). The message left out the single
           most correct answer.
         * It omitted ``"evi_nifty"``, which the branch directly above accepts.
@@ -566,11 +566,11 @@ class PopulationFitter:
         here. Deriving from ``method_map`` alone was complete when this helper
         was written and stopped being so the moment the flat seam landed: it
         would silently under-report every sampler reachable only through
-        :data:`~tengri.inference._hierarchical_flat.FLAT_SAMPLERS` (``map``,
+        ``tengri.inference._hierarchical_flat.FLAT_SAMPLERS`` (``map``,
         ``mcmc_nuts``, ``mcmc_hmc``, …) — the same class of omission this
         helper exists to prevent, one layer further out.
 
-        Names in :data:`~tengri.inference._hierarchical_flat.FLAT_UNSUPPORTED`
+        Names in ``tengri.inference._hierarchical_flat.FLAT_UNSUPPORTED``
         are deliberately *not* listed. ``run`` raises ``NotImplementedError``
         with a per-name reason for those, which is more useful than appearing
         in a list of things that work.
@@ -619,7 +619,7 @@ class PopulationFitter:
             **NIFTy-backed (CorrelatedFieldMaker, native PSD learning)**
 
             - ``"vi"`` — the canonical name, shared with every other fit
-              surface (:data:`~tengri.inference._backend_registry.DEFAULT_METHOD`,
+              surface (``tengri.inference._backend_registry.DEFAULT_METHOD``,
               #1289). Same geoVI runner as ``"vi_nonlinear_fast"``.
             - ``"vi_nonlinear_fast"`` — geoVI via NIFTy ``optimize_kl``
               (default).

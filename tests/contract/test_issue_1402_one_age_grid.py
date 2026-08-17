@@ -2,19 +2,12 @@
 """There is exactly one ``make_log_age_grid`` (#1402).
 
 It was defined twice — in ``utils/grid.py`` and again in
-``components/stellar/sfh/gp_sfh.py`` — and *both* copies had live importers on
-opposite sides of the forward/inference boundary:
-
-===========================================  ===================================
-``utils/grid.py``                            ``inference/standardized.py``
-``components/stellar/sfh/gp_sfh.py``         ``components/stellar/component.py``
-===========================================  ===================================
-
-The copies were numerically identical when this was found (``max|A-B| = 0`` at
-n_grid 16, 64, 256), so nothing was wrong at the time. The hazard was structural:
-this is the SFH age grid, and a correction landing in one copy would have
-silently desynced the forward model's age weights from the grid inference
-standardizes against. Nothing would raise; the fit would just be biased.
+``components/stellar/sfh/gp_sfh.py`` — and the copies had importers on the
+forward model side. The inference side (formerly in ``inference/standardized.py``,
+now inlined in ``loss_functions``) also consumed the grid. The hazard was
+structural: a correction landing in one copy would have silently desynced the
+forward model's age weights from the grid inference used. Nothing would raise;
+the fit would just be biased.
 
 Identity is asserted rather than equality of values. Two copies that agree today
 pass a value comparison, which is exactly how this survived — so the assertion
@@ -46,14 +39,12 @@ def test_every_import_path_yields_the_same_object():
     )
 
 
-def test_the_forward_and_inference_consumers_agree():
-    """Pin the two modules whose disagreement would be the actual bug."""
+def test_the_forward_consumer_uses_canonical():
+    """The forward-model consumer must use the canonical grid (#1402)."""
     from tengri.components.stellar import component as forward_side
-    from tengri.inference import standardized as inference_side
     from tengri.utils.grid import make_log_age_grid as canonical
 
     assert forward_side.make_log_age_grid is canonical
-    assert inference_side.make_log_age_grid is canonical
 
 
 def test_grid_contract_is_unchanged():

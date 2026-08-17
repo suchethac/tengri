@@ -37,6 +37,11 @@ _GAS_STELLAR_TOLERANCE_DEX = 0.3
 # second idiom for the same job.
 _BATCHED_CACHES: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
 
+# Memoized component chains, shared by every Catalog over one model.
+# Stored separately from _BATCHED_CACHES to preserve the type invariant:
+# _BATCHED_CACHES holds only jitted channel callables, not component chains.
+_COMPONENT_CHAIN_CACHES: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+
 
 def _batched_cache_for(fwd):
     """The memoized-``jit`` namespace shared by every Catalog over *fwd*.
@@ -72,6 +77,60 @@ def _batched_cache_for(fwd):
     return cache
 
 
+def _component_chain_for(fwd):
+    """The built component chain from *fwd*, memoized in _COMPONENT_CHAIN_CACHES (#1769).
+
+    The chain is expensive to build (traverses the SED graph and constructs
+    copies of component instances), so memoizing it prevents redundant rebuilds
+    when multiple helpers need to inspect the same model (e.g.
+    Catalog.from_histories calls _stellar_config, _nebular_backend, and
+    _ssp_lgmet all from one place). Each would formerly call
+    _build_component_chain independently.
+
+    Returns
+    -------
+    list or None
+        The component chain, or None if the chain cannot be built (see
+        _stellar_component and _nebular_backend for the contracts).
+
+    Notes
+    -----
+    Memoization lives in its own WeakKeyDictionary (_COMPONENT_CHAIN_CACHES)
+    keyed by ForwardModel, separate from _BATCHED_CACHES. This preserves the
+    type invariant: every value in _BATCHED_CACHES is a jitted channel callable,
+    not a component chain. The cache is per-ForwardModel, so it survives across
+    multiple Catalogs and outlives the Catalog itself.
+
+    Falls back to an uncached rebuild if a model is ever unhashable: that costs
+    one build per call (slow rather than wrong), which is exactly the pre-#1769
+    behavior, so the failure mode is slow rather than broken.
+    """
+    try:
+        cache = _COMPONENT_CHAIN_CACHES.get(fwd)
+    except TypeError:
+        # Unhashable model: build uncached (slow rather than wrong).
+        try:
+            return fwd.populations[0].sed._build_component_chain()
+        except (AttributeError, IndexError):
+            return None
+    if cache is None:
+        cache = {}
+        _COMPONENT_CHAIN_CACHES[fwd] = cache
+
+    cached_key = "_chain"
+    if cached_key in cache:
+        return cache[cached_key]
+
+    # Build the chain once and memoize it
+    try:
+        chain = fwd.populations[0].sed._build_component_chain()
+    except (AttributeError, IndexError):
+        chain = None
+
+    cache[cached_key] = chain
+    return chain
+
+
 def _stellar_component(fwd):
     """The StellarSEDComponent off a built ForwardModel, or None.
 
@@ -82,9 +141,8 @@ def _stellar_component(fwd):
     """
     from tengri.components.stellar.component import StellarSEDComponent
 
-    try:
-        chain = fwd.populations[0].sed._build_component_chain()
-    except (AttributeError, IndexError):
+    chain = _component_chain_for(fwd)
+    if chain is None:
         return None
     return next((c for c in chain if isinstance(c, StellarSEDComponent)), None)
 
@@ -156,9 +214,8 @@ def _nebular_backend(fwd):
     """
     from tengri.components.nebular.component import NebularSEDComponent
 
-    try:
-        chain = fwd.populations[0].sed._build_component_chain()
-    except (AttributeError, IndexError):
+    chain = _component_chain_for(fwd)
+    if chain is None:
         return None
     neb = next((c for c in chain if isinstance(c, NebularSEDComponent)), None)
     if neb is None:
@@ -828,7 +885,7 @@ class Catalog:
             line_defs = self._resolve_line_defs(tuple(lines))
 
             def _measure(params):
-                return self.fwd.measure_line_fluxes(params, line_defs, fast=True)
+                return self.fwd.measure_line_fluxes(params, line_defs, approx=True)
 
             # The tag carries the line set: a different set is a different
             # program, and reusing one cache entry across them would be wrong.

@@ -7,7 +7,7 @@ baryonic mass of disc galaxies and their observed rotation velocity,
 parametrized as M_baryon ∝ V_rot^4 (slope 4.0 on the log-log plane).
 
 This example constructs 30 mock disc-like galaxies spanning stellar masses
-from 1e9 to 1e11 M_sun via a log_total_mass sweep, assigns circular velocity
+from 1e9 to 1e11 M☉ via a log_total_mass sweep, assigns circular velocity
 from the McGaugh+2000 baryonic TF scaling law, and then computes rest-frame
 optical (SDSS r-band) absolute magnitude using tengri.predict_photometry.
 

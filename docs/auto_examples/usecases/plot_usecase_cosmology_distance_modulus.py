@@ -2,26 +2,14 @@
 Hubble Tension: Cosmology-dependent distance modulus
 =====================================================
 
-Observed-frame flux of a rest-frame SED depends on cosmological distances,
-which vary with H0 and Ω_M. This example quantifies the Hubble tension
-(H0 tension between local measurements ~73 km/s/Mpc and CMB measurements
-~67.4 km/s/Mpc) by showing how apparent magnitude shifts by ~0.15 mag
-across cosmic time.
-
-We build a single rest-frame SED model under two cosmologies:
-1. Planck 2018 (H0=67.4 km/s/Mpc, Ω_M=0.315)
-2. Riess et al. 2022 (H0=73 km/s/Mpc, Ω_M=0.30)
-
-Then predict observed-frame SDSS r-band photometry across redshift z=0.05–3
-to show how Δm = m_Riess - m_Planck grows with redshift.
+Planck 2018: H₀ = 67.4 km/s/Mpc, Ω_M = 0.315. Riess et al. 2022:
+H₀ = 73.04 ± 1.04 km/s/Mpc, Ω_M = 0.30. Apparent magnitude shift is ~0.15 mag
+across z = 0.05–3.
 
 References
 ----------
 
-* Planck 2018: Planck Collaboration et al. 2020, A&A, 641, A6
-* Riess et al. 2022: ApJL, 934, L7 (local H0=73.04±1.04 km/s/Mpc)
-* Hubble tension review: Di Valentino et al. 2021, Nature Astron., 5, 629
-
+Riess et al. 2022, ApJL, 934, L7 (local H₀ measurement).
 """
 
 import os

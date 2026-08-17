@@ -11,7 +11,7 @@ sub-linear alpha_OX relation only steepens the shape at the top of
 the quasar regime.
 
 We sweep ``log L_bol`` from 42 to 46.5 erg/s on a single panel and
-overlay the 2-10 keV band luminosity against L_bol on the right —
+overlay the 2–10 keV band luminosity against L_bol on the right —
 the canonical low-redshift correlation that lets X-ray surveys
 estimate bolometric power from a single broadband flux.
 

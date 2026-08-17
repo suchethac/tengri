@@ -2,12 +2,7 @@
 MAP fit recovery: star-formation history from mock photometry
 =============================================================
 
-We fit mock SDSS photometry using MAP (maximum a posteriori) optimization
-with Adam and recover the input star-formation history. The figure overlays
-the MAP-recovered SFH against the ground truth, demonstrating convergence
-on the morphology despite the nonconvex likelihood landscape.
-
-Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
+Reference: Conroy+2013.
 """
 
 import os

@@ -3,7 +3,7 @@ Panchromatic SED: M82 Starburst Analog
 ======================================
 
 M82 (NGC 3034) is a nearby starburst galaxy with intense nuclear star
-formation (SFR ~ 10 Msun/yr), stellar mass M* ~ 1×10^10 Msun, and
+formation (SFR ~ 10 M☉/yr), stellar mass M* ~ 1×10^10 M☉, and
 moderate-to-high dust opacity (τ_V ~ 2 in the starburst core). The
 panchromatic SED spans from UV (young stars) through optical (attenuated
 by dust) to far-infrared (warm dust re-emission at ~50 μm) and radio
@@ -33,7 +33,7 @@ infrared re-emission.
 
 .. [3] Dale, D. A., et al. (2014).
    *Astrophys. J.* **784**, 83.
-   https://doi.org/10.1088/0004-637X/784/1/83
+   https://doi.org/10.1088/0004–637X/784/1/83
 """
 
 import os

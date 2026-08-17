@@ -2,7 +2,7 @@
 """Introspection registry for tengri free parameters.
 
 Walks every per-component ``_params.py`` module under :mod:`tengri.components`,
-:mod:`tengri.observation`, and :mod:`tengri.parameters._shared`, then exposes
+:mod:`tengri.observation`, and ``tengri.parameters._shared``, then exposes
 a single, queryable view of every :class:`~tengri.protocols.component.ParamDeclaration`
 the codebase declares. The underlying data ownership is unchanged — each
 component/module still owns its own ``_params.py`` (the decentralization that
@@ -412,7 +412,7 @@ def as_param_map() -> dict[str, tuple[str, float, float, str]]:
     scale is 1.0, offset is 0.0, and units still documents the parameter.
 
     This function returns the base translation map without SFH-specific
-    logic (which is handled by :func:`tengri.parameters.translate._build_param_map`).
+    logic (which is handled by ``tengri.parameters.translate._build_param_map``).
 
     Returns
     -------

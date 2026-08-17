@@ -22,7 +22,30 @@ on:
   # `tools/check_ci_pr_coverage.py` (lint job) fails the build if this filter
   # comes back.
   pull_request:
-    types: [opened, synchronize, reopened, labeled]
+    # No `labeled`. It cannot coexist with a single aggregate required context.
+    #
+    # On a `labeled` event the heavy tiers stand down by design, so the `ci-ok`
+    # job below would publish either a success claiming tests passed when they
+    # never ran, or a failure reddening a pull request for the crime of being
+    # labelled. Neither is acceptable when that one context is the only thing
+    # branch protection consults.
+    #
+    # #1865 made label runs safe by a different route — it removed the `labeled`
+    # guard from the four always-run gates so they publish real successes rather
+    # than shadowing `skipped`. That works because a skipped MATRIX job publishes
+    # the bare name `test` and never the eight expanded shard contexts, so the
+    # shard results survive in their own suite. A plain job has no such cover:
+    # its name IS its context, and it publishes on every event. Removing the
+    # trigger removes the whole class instead of mitigating it, and saves the
+    # ~8 runner-minutes per labelling that #1865 accepted as its cost — which
+    # matters now that queue capacity, not correctness, is the binding
+    # constraint (53% of open PR jobs are spent on PRs that touch no code).
+    #
+    # `slow` is unaffected: its `if:` reads
+    # `github.event.pull_request.labels.*.name`, the pull request's CURRENT
+    # label set, on ANY pull-request event. So labelling and then pushing still
+    # opts in, and `workflow_dispatch` covers labelling without pushing.
+    types: [opened, synchronize, reopened]
   schedule:
     # Nightly slow-tier run at 04:00 UTC (mid-afternoon Tokyo).
     - cron: "0 4 * * *"
@@ -48,21 +71,10 @@ on:
 # commit. That costs runner minutes; a `main` whose green means nothing costs
 # more.
 #
-# `labeled` PR events get their OWN group, shared among themselves. Two
-# properties, and both are load-bearing:
-#
-#   * it is not the opened/synchronize group, so a label add never aborts the
-#     real run mid-matrix;
-#   * it IS shared across label adds, so labelling a PR with four labels — four
-#     `labeled` webhooks — collapses to roughly one surviving run instead of
-#     four. It used to key on `github.run_id`, which made every label its own
-#     run. That was harmless while those runs were no-ops; it is not harmless
-#     now that the four always-run gates actually execute on a label event
-#     (see below), because four labels would mean four times the work.
-#
-# The survivor is the newest run, so it is also the newest check suite, which
-# is the one branch protection reads. Cancelled predecessors sit in older
-# suites where nothing consults them.
+# `labeled` PR events used to need their own group here, because labelling a PR
+# with four labels fires four webhooks. They no longer trigger this workflow at
+# all (see the `types:` note above), so there is nothing left to group — and the
+# four runs per labelling are not merely collapsed but never started.
 #
 # Everything else (PR opened/synchronize/reopened, schedule, workflow_dispatch)
 # keys on `github.event_name`, so a newer event of the SAME kind supersedes the
@@ -75,8 +87,6 @@ concurrency:
   group: >-
     tests-${{ github.ref }}-${{
       github.event_name == 'push' && github.run_id
-      || (github.event_name == 'pull_request' && github.event.action == 'labeled')
-         && 'pull_request_labeled'
       || github.event_name }}
   cancel-in-progress: true
 
@@ -230,6 +240,15 @@ jobs:
       # inventoried and may stay but not grow; data/ gets its own higher limit
       # for the SSP grids. Stdlib-only.
       - run: python tools/check_file_sizes.py
+      # Git applies ignore rules only to UNTRACKED files, so a file added before
+      # a rule keeps working while the repository declares its directory
+      # disposable -- and every consequence is silent. 41 tracked files were in
+      # that state: `git add -A` would not have recovered any of them after a
+      # delete-and-re-add, ruff skips such files inside a git checkout (#1598 hid
+      # two real defects that way), and 28 duplicate filter curves sat there,
+      # twenty of which made data/filters/ unreachable for the gallery (#1857).
+      # Stdlib-only.
+      - run: python tools/check_tracked_not_ignored.py
       # tengri implements published models and validates against the reference
       # codes; it does not port or copy their source. The wording drifted back
       # twice after being swept by hand, so it is pinned here. Stdlib-only.
@@ -562,6 +581,10 @@ jobs:
       - run: pip install -e ".[dev]"
       - run: python tools/check_param_prefixes.py
       - run: python tools/check_param_defaults.py
+      # The redshift-specific instance of the same rule: a numeric default on
+      # params.get('redshift', …) is unreachable in live paths and silences the
+      # one condition worth hearing about — #1432.
+      - run: python tools/check_redshift_defaults.py
       # The same rule as check_param_defaults, one step later: that guard checks
       # a signature *default* is inside the declared support; this one checks a
       # *call-site prior* still overlaps it. #369 renamed sfh_*_log_peak_sfr to
@@ -670,38 +693,22 @@ jobs:
     # Wall = slowest shard, not the sum, so splitting the small shards is free.
     # That principle is the only durable line in this block: every NUMBER below
     # carries a date, because each has already gone stale at least once.
+    # See #1352 for the measurement history and why hand-maintained timing comments
+    # are a second-source mistake.
     #
-    # Shares of the OLD single-job wall clock, at -n 2. History only — do not
-    # reason from these:
-    #   contract 43% · components 28% · regression 22% · physics 7%
+    # The regression shard (split four ways) holds the long pole, measured at
+    # ~30 min on main @dd2da7acf (run 30864997361, 2026-08-04). Exact durations
+    # drift; re-measure from CI before making major changes to any shard. Splitting
+    # the long pole is free when measured against its budget (50 min in the matrix),
+    # not the wall clock. See #1346 for the re-measure recipe.
     #
-    # MEASURED 2026-07-26, main @1e6575588 (run 30198731485, all green) — the
-    # split as it stands after #1380 + #1385:
-    #   regression-d 19m · components 19m · contract 18m · regression-b1 17m
-    #   regression-b2 9m · regression-a 6m · regression-c 4m · physics 3m
-    #
-    # The wall clock is ~19 min and the top FOUR shards are a 17-19 min near-
-    # tie: there is no single long pole left to attack, and shaving any one of
-    # them buys nothing until its three neighbours come down too. Note what
-    # that corrects — this block used to assert "`contract` (the long pole)
-    # sets the wall clock" directly beneath a paragraph warning that naming
-    # `contract` the long pole was the error it had already made twice. Do not
-    # re-add a long-pole claim without a dated measurement beside it. See the
-    # re-measure recipe on #1346.
-    #
-    # RE-MEASURED 2026-08-04, main @dd2da7acf (run 30864997361, all green). The
-    # near-tie above is GONE and the numbers have gone stale exactly as this block
-    # warns they do — `contract` leads the next shard by 7.3 min:
-    #   contract 30.2m · components 22.9m · regression-d 21.5m · regression-b1 15.7m
-    #   regression-b2 12.6m · regression-a 6.2m · regression-c 5.2m · physics 3.3m
-    #
-    # Dated, per this block's own rule, and not a standing claim. `contract` sits at
-    # 60% of its 50-min budget and sets a ~30 min wall clock, so work landing there
-    # is no longer free. That is why #1498's preconditioning guard was SPLIT rather
-    # than moved in whole: the 53 s four-backend deficit sweep went to
-    # `tests/contract/`, and the 155 s posterior-mean comparison stayed in the
-    # nightly tier as `tests/integration/test_preconditioning_posterior_invariance.py`.
-    # Re-measure before adding to `contract`; `physics` at 3.3m has the headroom.
+    # Why the exact numbers are not repeated here: Contract was once the long pole
+    # at ~43% of the unified job (23 min). It has been overtaken twice, and hand-
+    # maintained percentages kept drifting silently — most recently by two full
+    # years, and then again three weeks after the correction was written. A bound
+    # to a fixed number in CI config is fundamentally broken as a human-updated
+    # second source. Derive the split from actual CI timings (GH API, Codecov
+    # artifacts, or internal logs) instead of restating numbers here.
     #
     # regression and physics were ONE shard until 2026-07. They were split because
     # the paired shard walked back into the 16 GB ceiling: it died at ~21-22 min and
@@ -977,6 +984,59 @@ jobs:
           path: ~/.cache/tengri_jax_cache
           key: ${{ steps.jax_cache.outputs.cache-primary-key }}
 
+  # The ONE context branch protection should require. Everything else advisory.
+  #
+  # Protection currently names eleven contexts, eight of which are the expanded
+  # `test` matrix strings. That has two costs, and the second is why this job
+  # exists at all:
+  #
+  #   1. The shard list is duplicated into a repository setting no file here can
+  #      see. Rename or add a shard and the rule silently desynchronises.
+  #   2. NOTHING CAN BE WITHHELD. A matrix job skipped by `if:` publishes the
+  #      bare name `test`, never the eight expanded shard contexts — so a
+  #      required shard context simply never reports and the PR blocks forever.
+  #      That is why the heavy tiers cannot be path-filtered today, even though
+  #      53% of open PRs (measured 2026-08-17: 8 of 15) touch no importable
+  #      code and cannot change a test outcome, while paying all 8 shards.
+  #
+  # Collapsing to one context unblocks path-filtering. But it is only SAFE if
+  # this context is stricter than "nothing went red": a `skipped` must never
+  # read as approval. `tools/ci_ok.py` holds that policy, mirroring the buckets
+  # in `tools/check_ci_pr_coverage.py` — the always-run gates must be `success`
+  # (skipped is a policy violation there, not an outcome), the heavy tiers may
+  # skip ONLY when the base is not `main`, and `gallery` may skip because
+  # `gallery-changes` decides it.
+  #
+  # The policy is a tested Python module rather than inline shell precisely
+  # because this repo landed three new gates in one day that were themselves
+  # broken (#1717, #1723, #1746). `tests/unit/test_ci_ok.py` asserts it goes RED
+  # for each mistake it exists to catch; the skipped-heavy-job rule was verified
+  # by inverting it and watching the suite fail, not by reading it.
+  #
+  # NOT in `needs`: `coverage`, `slow`, `crossval`. They are schedule/dispatch
+  # or opt-in, so requiring them would block every PR on work no PR owes.
+  ci-ok:
+    name: ci-ok
+    # `always()` so this still runs — and still reports — when a dependency
+    # fails or is skipped. Without it this job would itself be skipped by a red
+    # dependency, publishing `skipped`, which does not satisfy a required
+    # context and would block exactly the PRs it is meant to adjudicate.
+    if: always()
+    needs: [tier, lint, security, smoke, gallery-changes, gallery, test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      # stdlib only, so the runner's preinstalled python3 is enough — no
+      # setup-python, no install. This job must stay seconds, not minutes: it
+      # sits at the end of every run's critical path.
+      - name: Apply the tier policy to this run's results
+        run: python3 tools/ci_ok.py
+        env:
+          CI_OK_RESULTS: ${{ toJSON(needs) }}
+          CI_OK_EVENT: ${{ github.event_name }}
+          CI_OK_BASE_REF: ${{ github.base_ref }}
+
   # Full-suite coverage → Codecov, WITHOUT slowing PR feedback. Runs on
   # push-to-main, the nightly schedule, and manual dispatch — not on PRs.
   #
@@ -1202,8 +1262,17 @@ jobs:
   # Run on:
   #   - nightly schedule
   #   - manual workflow_dispatch
-  #   - PRs labeled `run-slow-tests`
+  #   - PRs carrying the `run-slow-tests` label
   # Skip on regular push/PR to keep fast feedback under 15 min.
+  #
+  # Note the `if:` reads `github.event.pull_request.labels.*.name` — the pull
+  # request's CURRENT label set — not `github.event.label`. So this opts in on
+  # any pull-request event once the label is on, and does NOT need `labeled` to
+  # be a trigger type (it no longer is; see the `types:` note at the top).
+  #
+  # The one behaviour that changed: adding the label to an already-open pull
+  # request no longer starts a run by itself. Push, or use `workflow_dispatch`,
+  # which is listed above precisely for this.
   slow:
     runs-on: ubuntu-latest
     # Split the ~1,270-test tier across two parallel runners (one per suite):

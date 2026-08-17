@@ -18,7 +18,7 @@
 .. _sphx_glr_auto_examples_agn_plot_silva04_nh_sweep.py:
 
 
-Silva+04 torus: Obscuration and the 9.7 micron silicate feature
+Silva+04 torus: Obscuration and the 9.7 μm silicate feature
 ===============================================================
 
 The Silva, Maiolino & Granato (2004) AGN torus templates are empirical
@@ -28,7 +28,7 @@ reprocessed-dust SEDs binned by line-of-sight hydrogen column density
 (:math:`N_\mathrm{H} \sim 10^{25}\,\mathrm{cm^{-2}}`):
 
 - the near-IR continuum is increasingly suppressed, and
-- the **9.7 micron silicate feature** turns from weak emission into deep
+- the **9.7 μm silicate feature** turns from weak emission into deep
   absorption — the classic signature of an edge-on, dusty torus.
 
 The left panel shows the full reprocessed SED; the right panel zooms on the
@@ -39,10 +39,10 @@ References
 ----------
 .. [1] L. Silva, A. Maiolino & G. L. Granato, "Connecting the active galactic
    nucleus and the host galaxy in the infrared," MNRAS 355, 973 (2004).
-   arXiv:astro-ph/0403468. https://doi.org/10.1111/j.1365-2966.2004.08380.x
+   arXiv:astro-ph/0403468. https://doi.org/10.1111/j.1365–2966.2004.08380.x
 .. [2] L. N. Martínez-Ramírez et al., "AGNfitter-rx: Modeling the radio-to-X-ray
    spectral energy distributions of AGNs," A&A 688, A46 (2024).
-   arXiv:2405.12111. https://doi.org/10.1051/0004-6361/202449329
+   arXiv:2405.12111. https://doi.org/10.1051/0004–6361/202449329
 
 .. GENERATED FROM PYTHON SOURCE LINES 28-127
 
@@ -162,7 +162,7 @@ References
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 8.239 seconds)
+   **Total running time of the script:** (0 minutes 4.426 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_silva04_nh_sweep.py:

@@ -1,6 +1,4 @@
 Use Cases
 =========
 
-Paper-style figures and diagnostic plots — UVJ diagram, JWST color-color,
-SFR-indicator comparison, mass completeness, age–dust degeneracy, and
-emission-line Pearson coefficients.
+Paper-style diagnostics: UVJ, JWST color-color, SFR indicators, mass completeness, age–dust degeneracy, emission-line correlations.

@@ -121,7 +121,7 @@ _DEFAULT_CUE_WEIGHTS_PATH = package_or_env_data_path("cue_weights.npz")
 # ``cue`` / ``cloudy`` / ``cb19``) — these are the user contract, so
 # don't rename them. The ``callable`` field carries the backend class
 # where there is one; the actual dispatch still happens in
-# :func:`tengri.parameters.groups._translate_neb`, which sets the
+# ``tengri.parameters.groups._translate_neb``, which sets the
 # ``nebular_ssp`` / ``nebular_cue`` / ``nebular`` flags on
 # :class:`Parameters`. ``_VALID_NEBULAR_TYPES`` is derived from
 # :data:`NEBULAR_MODELS.keys()` (#331 / ADR-0005 / ADR-0008).

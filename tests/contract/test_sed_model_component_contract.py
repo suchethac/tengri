@@ -26,6 +26,23 @@ from tengri.protocols.component import (
 pytestmark = pytest.mark.contract
 
 
+@pytest.fixture(autouse=True)
+def _cleanup_test_registry_entries():
+    """Cleanup test components registered during test execution.
+
+    Fixture saves the registry state before each test and restores it after,
+    ensuring test-created components don't pollute subsequent tests or the
+    domain-scoping census. This is critical for xdist isolation — test
+    components created in one worker pollute the registry for all tests in
+    that worker if not cleaned up.
+    """
+    saved_registry = dict(_REGISTRY)
+    yield
+    # Restore the registry to its pre-test state
+    _REGISTRY.clear()
+    _REGISTRY.update(saved_registry)
+
+
 class TestPriorDiscovery:
     """Test auto-discovery of Distribution-typed class attributes."""
 

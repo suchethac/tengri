@@ -79,10 +79,10 @@ print(
 # %% [markdown]
 # ## The observation: LSST *ugrizy* + Euclid near-IR
 #
-# Rubin LSST measures six broad optical bands, *ugrizy* (0.32–1.0 µm). On its own
+# Rubin LSST measures six broad optical bands, *ugrizy* (0.32–1.0 μm). On its own
 # that constrains a photometric redshift well below z ≈ 1, where the 4000 Å break
 # still sits inside the optical. The Rubin–Euclid overlap adds the Euclid NISP
-# *Y/J/H* near-IR (1.0–2.0 µm), which follows the break to higher redshift and
+# *Y/J/H* near-IR (1.0–2.0 μm), which follows the break to higher redshift and
 # pins the stellar mass — the "other bands that may be there" in a real LSST-era
 # catalog. Nine bands total; the same machinery takes any set your survey has.
 
@@ -162,7 +162,7 @@ print(f"WavePrecomp LUT built in {build_wall:.1f} s (one-time; content-hash-cach
 # ## A mock catalog
 #
 # `N` galaxies spread across redshift and stellar mass, each a noisy realization
-# of its own truth at a fixed depth (SNR 20). The catalog is a list of
+# of its own truth at a fixed depth (S/N 20). The catalog is a list of
 # `{"flux_obs", "noise"}` dicts, stacked into the table `Catalog` ingests. Truths are
 # drawn once so we can score the recovery at the end.
 
@@ -267,21 +267,12 @@ print(
 # %% [markdown]
 # ## The timing, in detail
 #
-# The whole catalog is one compiled program, `O(1)` in the catalog size `N`: the
-# compile is paid **once** (and the persistent JAX cache elides it on re-runs),
-# not once per galaxy.
+# The whole catalog is one compiled program, `O(1)` in catalog size `N`: the compile
+# is paid once (and the persistent JAX cache elides it on re-runs).
 #
-# **Batching speeds up the per-galaxy cost — even on a single CPU.** A 3-D fit with
-# nine bands is a *tiny* problem: run one galaxy at a time and the CPU's vector
-# units and BLAS threads sit mostly idle, with the wall dominated by per-step
-# dispatch overhead. Advancing `K` galaxy-chains *together* makes every array `K`
-# times larger, which actually feeds those units and amortizes the overhead — so
-# the time *per galaxy* falls as `K` grows. The [chunk-size sweep](#The-parallel-speedup:-a-chunk-size-sweep)
-# below measures exactly this. A **GPU** extends the same effect much further —
-# `K` chains across thousands of lanes at once — which is where the largest
-# catalogs are fit; see the throughput benchmark
-# (`bench/scripts/benchmark_catalog_throughput.py`) and the SLURM scripts
-# (`scripts/slurm/`).
+# **Batching speeds up per-galaxy cost** even on a single CPU. Advancing `K`
+# galaxy-chains together makes every array `K` times larger, which feeds vector units
+# and amortizes per-step overhead.
 
 # %%
 backend = jax.devices()[0].platform.upper()
@@ -363,24 +354,17 @@ plt.show()
 # %% [markdown]
 # ## Did the parallel fit recover the truth?
 #
-# Speed is worthless if the posteriors are wrong. Every galaxy in the
-# `CatalogPosterior` is a full `Posterior` (`catalog.posteriors[i]`), carrying its
-# own chain in `.samples`. We stack the three free parameters over the galaxy axis,
-# take the 16/50/84 percentiles per galaxy, and compare to the injected truth. The
-# **photometric redshift**, the **stellar mass**, and the **dust optical depth**
-# all track the 1:1 line — the standard photo-z scatter `sigma_NMAD` of `dz/(1+z)`,
-# the mass offset, and the dust offset are all small.
+# Each galaxy in the `CatalogPosterior` is a full `Posterior` (`catalog.posteriors[i]`),
+# carrying its own chain in `.samples`. The three free parameters are stacked over the
+# galaxy axis, 16/50/84 percentiles computed per galaxy, and compared to the injected
+# truth.
 #
-# Because dust is *fit* here (not fixed), the fit marginalizes the strongest
-# nuisance–redshift degeneracy, so the intervals are more honest than a dust-fixed
-# model would report — but they are still *conditional* on the fixed SFH shape,
-# metallicity, and the SSP's baked-in nebular logU/escape-fraction, so they can
-# under-cover somewhat. The dust–redshift degeneracy also widens the photo-z
-# posterior relative to a dust-fixed fit: that extra scatter is the honest cost of
-# not knowing the dust. A fully flexible SFH and a *fitted* nebular backend are in
+# The dust fit (rather than fixed) marginalizes the redshift–dust degeneracy,
+# so the intervals are more honest than a dust-fixed model would report. They remain
+# *conditional* on the fixed SFH shape, metallicity, and the SSP's baked-in nebular
+# logU/escape-fraction. A fully flexible SFH and a *fitted* nebular backend are in
 # notebooks [`05`](05_fitting_photometry.py) and
-# [`10`](10_fastspecfit_joint_fit.py); the point of this notebook is the parallel
-# machinery and the throughput.
+# [`10`](10_fastspecfit_joint_fit.py); this notebook is the parallel machinery and throughput.
 
 
 # %%

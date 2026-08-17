@@ -38,12 +38,9 @@ scenarios = [
             "type": "const",
             "all_params": tengri.FIXED,
             "log_total_mass": 10.64,
-            # start_gyr is the lookback to SF ONSET and end_gyr to SF CESSATION,
-            # so start_gyr is the LARGER number: forming stars from 13.8 Gyr ago
-            # until 0.1 Gyr ago. Written the other way round this window is empty
-            # and the curve is identically zero -- which is what this example
-            # plotted until #1277 made the ordering an error rather than a silent
-            # zero-mass galaxy.
+            # start_gyr is lookback time to SF onset (larger number);
+            # end_gyr is lookback time to SF cessation (smaller number).
+            # Star formation from 13.8 Gyr ago until 0.1 Gyr ago.
             "start_gyr": 13.8,
             "end_gyr": 0.1,
         },

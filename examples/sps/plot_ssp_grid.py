@@ -2,12 +2,8 @@
 SSP Grid: Age and Metallicity Evolution
 =======================================
 
-Four-panel overview of the DSPS SSP grid: age evolution at fixed metallicity,
-metallicity evolution at fixed age, monochromatic flux vs age, and color-color
-diagram across the full grid. Shows how stellar populations age from UV-hot
-to IR-red as they cool.
-
-Reference: DSPS SSP grid (Conroy et al. 2009).
+Per-SSP-library solar metallicity differs: MIST Z☉ = 0.0142, BC03/Padova
+Z☉ = 0.0190, PARSEC Z☉ = 0.0152, BASTI Z☉ = 0.0200.
 """
 
 import os

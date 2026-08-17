@@ -2,7 +2,7 @@
 X-ray SED response to AGN bolometric luminosity
 ================================================
 
-At fixed host (constant SFR = 3 M_sun/yr, Mineo+12 HMXB contribution)
+At fixed host (constant SFR = 3 M☉/yr, Mineo+12 HMXB contribution)
 we sweep the composable AGN's bolometric luminosity ``agn_log_lbol``
 from 9 to 13 (in log L_sun). The host XRB component is a flat
 power-law below ~10 keV; the AGN corona contributes a much harder

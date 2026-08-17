@@ -77,6 +77,7 @@ from tengri.components.dust.laws._registry import (
     _HEADLINE_LAWS as _HEADLINE_LAWS,
     DUST_LAWS as DUST_LAWS,
     DustLawRegistryEntry as DustLawRegistryEntry,
+    _calzetti_kprime_unnormalized as _calzetti_kprime_unnormalized,
     _calzetti_l02_kprime as _calzetti_l02_kprime,
     _drude_profile as _drude_profile,
     list_laws as list_laws,
@@ -282,7 +283,13 @@ def calzetti(
     # need the curve there. (CIGALE's ``a_vs_ebv`` clips at 912 Å on
     # the assumption that H ionization handles those photons separately;
     # tengri leaves the choice to the user.)
-    return jnp.clip((k_prime + rv) / rv, 0.0)
+    k = (k_prime + rv) / rv
+    # Normalize by k(5500) to ensure k(5500) = 1.0 (#1731: pre-fix value 0.999479)
+    # Compute k(5500): at 5500 Å (0.55 μm), use UV formula (< 0.63)
+    x_5500 = 1.0 / 0.55
+    k_uv_5500 = 2.659 * (-2.156 + 1.509 * x_5500 - 0.198 * x_5500**2 + 0.011 * x_5500**3)
+    k_5500 = (k_uv_5500 + rv) / rv
+    return jnp.clip(k / k_5500, 0.0)
 
 
 @register_dust_law(
@@ -349,7 +356,13 @@ def reddy15(
 
     rv = 2.505
     k_prime = jnp.where(wave_um < 0.60, k_low, k_high) + rv
-    return jnp.clip(k_prime / rv, 0.0)
+    k = k_prime / rv
+    # Normalize by k(5500) to ensure k(5500) = 1.0 (#1731: pre-fix value 0.997113)
+    # Compute k(5500): at 5500 Å (0.55 μm), use low-wavelength segment (< 0.60)
+    x_5500 = 1.0 / 0.55
+    k_5500_unnorm = -5.726 + 4.004 * x_5500 - 0.525 * x_5500**2 + 0.029 * x_5500**3
+    k_5500 = (k_5500_unnorm + rv) / rv
+    return jnp.clip(k / k_5500, 0.0)
 
 
 @register_dust_law(
@@ -425,13 +438,17 @@ def kriek_conroy(
     wave_um = wavelength / 1e4
     e_b = dust_bump_strength * (0.85 - 1.9 * dust_delta)  # KC13 Eqn 3
 
-    k_calz = calzetti(wavelength)
+    # Use unnormalized Calzetti base to avoid double normalization (#1731).
+    # _calzetti_kprime_unnormalized returns k'(λ) without R_V or k(5500) normalization.
+    k_calz_kprime = _calzetti_kprime_unnormalized(wavelength)
+    k_calz = k_calz_kprime / R_V
     slope_mod = (wavelength / V_BAND_ANGSTROM) ** dust_delta
     k_unnorm = (k_calz + e_b * _drude_profile(wave_um) / R_V) * slope_mod
 
     # Normalize to k(5500 Å) = 1 (slope_mod = 1 at V band).
     v_band_um = V_BAND_ANGSTROM / 1e4
-    k_calz_v = calzetti(jnp.array([V_BAND_ANGSTROM]))[0]
+    k_calz_kprime_v = _calzetti_kprime_unnormalized(jnp.array([V_BAND_ANGSTROM]))[0]
+    k_calz_v = k_calz_kprime_v / R_V
     bump_v = e_b * _drude_profile(jnp.array([v_band_um]))[0] / R_V
     k_at_v = k_calz_v + bump_v
 
@@ -792,7 +809,14 @@ def cardelli(
         jnp.where(x < 3.3, b_opt, jnp.where(x < 8.0, b_uv, b_fuv)),
     )
 
-    return jnp.clip(a + b / dust_Rv, 0.0)
+    k = a + b / dust_Rv
+    # Normalize by k(5500) to ensure k(5500) = 1.0 (#1731: pre-fix default dust_Rv=3.1 value 0.998850)
+    # Compute k(5500) for the current dust_Rv value
+    x_5500 = 1.0 / 0.55  # 5500 Å = 0.55 μm
+    a_5500 = 1.0 + 0.17699 * (x_5500 - 1.82) - 0.50447 * (x_5500 - 1.82) ** 2
+    b_5500 = 1.41338 * (x_5500 - 1.82) + 2.28305 * (x_5500 - 1.82) ** 2
+    k_5500 = a_5500 + b_5500 / dust_Rv
+    return jnp.clip(k / k_5500, 0.0)
 
 
 @register_dust_law(
@@ -1003,7 +1027,13 @@ def leitherer02(
     # attenuation defined across the full UV grid. CIGALE clips at
     # 912 Å on the assumption that H ionization handles Lyman-continuum
     # photons separately; tengri leaves the choice to the user.
-    return jnp.clip(k_prime / rv, 0.0)
+    k = k_prime / rv
+    # Normalize by k(5500) to ensure k(5500) = 1.0 (#1731: pre-fix value 0.999479)
+    # Compute k(5500): at 5500 Å (0.55 μm), use UV formula (< 0.63)
+    x_5500 = 1.0 / 0.55
+    k_uv_5500 = 2.659 * (-2.156 + 1.509 * x_5500 - 0.198 * x_5500**2 + 0.011 * x_5500**3) + rv
+    k_5500 = k_uv_5500 / rv
+    return jnp.clip(k / k_5500, 0.0)
 
 
 @register_dust_law(
@@ -1084,7 +1114,17 @@ def noll09(
     k_prime = (k_base + bump) * slope_mod
 
     # Normalize by fixed Rv (package convention, NOT by k_prime(V))
-    return jnp.clip(k_prime / rv, 0.0)
+    k = k_prime / rv
+    # Normalize by k(5500) to ensure k(5500) = 1.0 (#1731: pre-fix value 0.999479)
+    # Compute k(5500): k_base(5500) uses UV formula since 5500 Å < 0.63 μm
+    wave_5500 = jnp.asarray(5500.0)
+    k_base_5500 = _calzetti_l02_kprime(wave_5500)
+    bump_5500 = dust_bump_strength * _drude_profile(
+        jnp.asarray(0.55), x0=dust_bump_x0, gamma=dust_bump_gamma
+    )
+    k_prime_5500 = (k_base_5500 + bump_5500) * 1.0  # slope_mod(5500) = 1 for any dust_delta
+    k_5500 = k_prime_5500 / rv
+    return jnp.clip(k / k_5500, 0.0)
 
 
 @register_dust_law(
@@ -1162,7 +1202,17 @@ def salim_sbl18(
     k_prime = k_base * slope_mod + bump
 
     # Normalize by fixed Rv (package convention)
-    return jnp.clip(k_prime / rv, 0.0)
+    k = k_prime / rv
+    # Normalize by k(5500) to ensure k(5500) = 1.0 (#1731: pre-fix value 0.999479)
+    # Compute k(5500): k_base(5500) uses UV formula since 5500 Å < 0.63 μm
+    wave_5500 = jnp.asarray(5500.0)
+    k_base_5500 = _calzetti_l02_kprime(wave_5500)
+    bump_5500 = dust_bump_strength * _drude_profile(
+        jnp.asarray(0.55), x0=dust_bump_x0, gamma=dust_bump_gamma
+    )
+    k_prime_5500 = k_base_5500 * 1.0 + bump_5500  # slope_mod(5500) = 1 for any dust_delta
+    k_5500 = k_prime_5500 / rv
+    return jnp.clip(k / k_5500, 0.0)
 
 
 @register_dust_law(

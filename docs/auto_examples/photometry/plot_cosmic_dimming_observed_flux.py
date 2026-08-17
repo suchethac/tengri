@@ -3,7 +3,7 @@ Cosmic dimming and K-correction with redshift
 ==============================================
 
 How does the observed photometric flux of a FIXED-luminosity galaxy decline with
-redshift? We track a star-forming galaxy (log M* = 10.5, SFR = 10 Msun/yr) across
+redshift? We track a star-forming galaxy (log M* = 10.5, SFR = 10 M☉/yr) across
 z = 0.1 to 6 in three optical/infrared bands (SDSS r, JWST J, JWST H), visualizing
 the three physical effects:
 
@@ -36,7 +36,8 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING l
 
 # sphinx_gallery_thumbnail_number = 1
 
-from pathlib import Path
+
+import warnings
 
 import jax
 import matplotlib
@@ -52,33 +53,26 @@ from tengri.analysis.plotting import setup_style
 
 setup_style()
 
-
-def _find_filters():
-    """Find filter cache directory in standard locations."""
-    for p in [
-        Path("data/filters"),
-        Path("../data/filters"),
-        Path("../../data/filters"),
-        Path("../../../data/filters"),
-    ]:
-        if p.exists():
-            return str(p)
-    return "data/filters"
+# The shipped SSP bakes its nebular emission in at a fixed logU, which this
+# example neither varies nor discusses. Its siblings filter the same warning;
+# left unfiltered it is captured verbatim into the rendered page, absolute
+# source path and all, which is what tools/check_no_local_paths.py exists to
+# stop from reaching the public docs.
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
 
 # Load SSP stellar population synthesis grid
 ssp = tengri.load_ssp()
 
-# Locate filter cache
-filter_dir = _find_filters()
-
 # Define the observation: three bands sampling optical to near-infrared
 # SDSS r: rest-frame optical, samples Balmer continuum at low z
 # 2MASS J, H: rest-frame near-IR, sample stellar continuum longward of 1 µm
+#
+# No cache_dir: tengri resolves each curve across its own data directories, so
+# an example works from any working directory. See plot_fisher_degeneracy.py
+# for why the four-deep relative walk this replaces was a hazard.
 filter_names = ["sdss_r", "2mass_j", "2mass_h"]
-obs = tengri.Observation(
-    photometry=tengri.Photometry.from_names(filter_names, cache_dir=filter_dir)
-)
+obs = tengri.Observation(photometry=tengri.Photometry.from_names(filter_names))
 
 # Build a FIXED star-forming galaxy: constant SFR = 10 Msun/yr, age = 0.5 Gyr
 # This matches a starburst or ongoing star-forming main-sequence galaxy.

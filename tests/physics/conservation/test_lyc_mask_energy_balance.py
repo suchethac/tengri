@@ -197,8 +197,9 @@ class TestGoldenValues:
     # mass onto younger nodes). Previous capture (2026-07-05, pre-#964):
     # two_component 5.697121948709991e59, single_screen 7.149162290344824e59,
     # wg00 6.745997586687046e59.
+    # Re-pinned after #1731: dust laws renormalized to k(5500)=1; rescale ~+0.031%.
     GOLDEN_L_ABSORBED: ClassVar[dict[str, float]] = {
-        "two_component": 5.836943966100233e59,
+        "two_component": 5.838762e59,
         "single_screen": 7.32462266124103e59,
         "wg00": 6.911563171933806e59,
     }

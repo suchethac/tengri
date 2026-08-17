@@ -95,11 +95,10 @@ obs = Observation(photometry=Photometry.from_names(FILTERS))
 # %% [markdown]
 # ## Build the model
 #
-# A truncated skew-normal SFH and two-component Calzetti dust attenuation,
-# nebular off, redshift fixed at z = 0.05. Seven free parameters. Kept minimal
-# on purpose — dust IR re-emission, nebular, and AGN are shown in
-# `02_sed_anatomy.py`. `model.summary()` prints the assembled pipeline;
-# `citations.print_citations` pulls the bibliography straight from the registry.
+# Truncated-skew-normal SFH with two-component Calzetti dust attenuation,
+# nebular off, redshift fixed at z = 0.05: seven free parameters. Kept minimal
+# on purpose. Dust IR re-emission, nebular emission, and AGN are covered in
+# `02_sed_anatomy.py`.
 
 # %%
 sed_model = SEDModel.build(
@@ -128,7 +127,7 @@ citations.print_citations(sed_model)
 # ## Mock observation
 #
 # One draw from the prior is the truth. `generate_mock` returns the
-# noiseless model fluxes, Gaussian uncertainties at the requested SNR,
+# noiseless model fluxes, Gaussian uncertainties at the requested S/N,
 # and a noisy realization.
 
 # %%
@@ -146,11 +145,10 @@ wave_eff_um = effective_wavelengths_um(phot)
 # %% [markdown]
 # ## One-time JIT compile
 #
-# First touch of the photometric forward kernel and its gradient triggers
-# XLA compilation against the precomputed SSP × filter LUT (the
-# `WavePrecomp` knob set above). Cold cache is a few seconds; warm cache
-# (`~/.cache/tengri_jax_cache`) is milliseconds. Subsequent calls are
-# pure numeric throughput — no Python in the hot path.
+# First call to the forward kernel and its gradient triggers XLA compilation
+# against the precomputed SSP × filter LUT (the `WavePrecomp` knob above).
+# Cold compile is a few seconds; warm cache is milliseconds. The difference
+# between first and second call below shows the cost of compilation alone.
 
 # %%
 import time
@@ -279,21 +277,19 @@ def draw_dicts(n):
 
 
 DERIVED_KEYS = ("stellar_mass", "sfr_100myr", "sfr_10myr", "ssfr")
-samples = {k: [] for k in DERIVED_KEYS}
-for p in draw_dicts(N_DRAWS):
-    # Use predict_properties for ~4× speedup vs predict().properties
-    d = sed_model.predict_properties(p, names=DERIVED_KEYS)
-    for k in DERIVED_KEYS:
-        v = d.get(k)
-        samples[k].append(float("nan") if v is None else float(v))
 
+# `posterior.properties` is the property catalog lifted over the sample axis:
+# the same names a `Prediction` uses, one axis wider, evaluated in memory-bounded
+# chunks. It reads every draw the chain produced rather than the 200 resampled
+# here, and `.ci()` returns the 16/50/84 interval directly — so the whole block
+# below used to be a Python loop re-deriving what the object already exposes.
 truth_full = {**fixed, **truth}
-pred_truth = sed_model.predict(truth_full)
-truth_derived = pred_truth.properties
+truth_derived = sed_model.predict(truth_full).properties
+
 print(f"{'quantity':<14}{'truth':>14}{'p16':>14}{'p50':>14}{'p84':>14}")
 print("-" * 70)
 for k in DERIVED_KEYS:
-    lo, med, hi = np.percentile(samples[k], [16, 50, 84])
+    lo, med, hi = posterior.properties.ci(k)
     t = truth_derived.get(k)
     tstr = "—" if t is None else f"{float(t):.3e}"
     print(f"{k:<14}{tstr:>14}{lo:>14.3e}{med:>14.3e}{hi:>14.3e}")

@@ -1,15 +1,6 @@
 """
 JWST NIRCam color-color diagnostics for high-z galaxy classification
 ====================================================================
-
-Generates 150 mock galaxies spanning star-forming (z=1-7), passive (z=1-3),
-and dusty/AGN (z=2-4) populations. Computes JWST NIRCam F150W-F277W vs
-F277W-F444W colors and plots the diagnostic plane. Shows how JWST color-color
-diagnostics separate spectral types and enable redshift estimation in the
-rest-frame UV-to-IR with minimal prior knowledge.
-
-Reference: Whitaker et al. 2011, ApJ, 735, 86 (high-z color selection);
-Conroy 2013, ARA&A, 51, 393 (SED fitting).
 """
 
 import os

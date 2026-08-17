@@ -97,6 +97,7 @@ class TestPerAxisReachesTheBuilder:
             sfh={"type": "dpl", "all_params": FREE},
             dust={"type": "none"},
             redshift=0.05,
+            met={"logzsol": FREE},
             neb={
                 "type": "cue",
                 "all_params": FIXED,

@@ -319,6 +319,14 @@ def _build_param_map(mean_sfh_type, dust_model="two_component"):
     else:
         result.update(_NON_SFH_PARAM_MAP)
 
+    # Add manual metallicity param maps that carry unit conversions.
+    # These MUST come before auto-derivation so they take precedence.
+    # _EVOLVING_ALPHA_PARAM_MAP renames met_alpha_fe_old/young (public)
+    # to alpha_fe_old/young (internal), which would otherwise conflict
+    # with identity auto-derivation (#1767).
+    result.update(_EVOLVING_MET_PARAM_MAP)
+    result.update(_EVOLVING_ALPHA_PARAM_MAP)
+
     # Auto-derive identity entries from the parameter registry (ADR-0008).
     # The registry walks every ``components/*/_params.py`` directly and reads
     # the static ``ParamDeclaration`` tuples — it does not instantiate

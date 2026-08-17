@@ -58,7 +58,7 @@ def _require():
         pytest.skip("Cue weights (data/cue_weights.npz) not present")
 
 
-def _model(neb, sfh_wild=FREE):
+def _model(neb, sfh_wild=FREE, met=None):
     import warnings
 
     _require()
@@ -66,7 +66,7 @@ def _model(neb, sfh_wild=FREE):
     obs = Observation(photometry=Photometry.from_names(["des_g", "des_r"]), line_fluxes=_LINE_DATA)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        return SEDModel.build(
+        kwargs = dict(
             ssp_data=ssp,
             observation=obs,
             sfh={"type": "dpl", "*": sfh_wild},
@@ -74,6 +74,9 @@ def _model(neb, sfh_wild=FREE):
             neb=neb,
             redshift=Fixed(Z),
         )
+        if met is not None:
+            kwargs["met"] = met
+        return SEDModel.build(**kwargs)
 
 
 def _nion(m, p):
@@ -87,7 +90,7 @@ def _log_nion(m, p):
 _BANDS = ["galex_fuv", "galex_nuv", "des_g", "des_r", "des_i", "des_z", "wise_w1", "wise_w2"]
 
 
-def _wave_model(neb, sfh_wild=FREE):
+def _wave_model(neb, sfh_wild=FREE, met=None):
     """WavePrecomp Cue model with dust off — so it publishes nebular_phot_lnu_precomp."""
     import warnings
 
@@ -96,7 +99,7 @@ def _wave_model(neb, sfh_wild=FREE):
     obs = Observation(photometry=Photometry.from_names(_BANDS), line_fluxes=_LINE_DATA)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        return SEDModel.build(
+        kwargs = dict(
             ssp_data=ssp,
             observation=obs,
             sfh={"type": "dpl", "*": sfh_wild},
@@ -111,19 +114,25 @@ def _wave_model(neb, sfh_wild=FREE):
             redshift=Fixed(Z),
             approx=WavePrecomp(),
         )
+        if met is not None:
+            kwargs["met"] = met
+        return SEDModel.build(**kwargs)
 
 
 def test_axes_adapt_to_free_ionization():
     """The grid axes are exactly the free {met, logU, logZ_gas}, in order."""
     # both gas params fixed, SFH free -> met-only axis
-    t0 = precompute_nebular_grid(_model({"type": "cue", "*": FIXED}), _LW, n_grid=3)
+    t0 = precompute_nebular_grid(
+        _model({"type": "cue", "*": FIXED}, met={"logzsol": FREE}), _LW, n_grid=3
+    )
     assert t0.axis_names == ("met_logzsol",), t0.axis_names
     # met + logU + logZ_gas all free -> 3 axes. The gas axes sit at exactly n_grid;
     # the met axis is n_grid uniform points PLUS the interior SSP metallicity nodes
     # (#1020), so it is larger and its length depends on the SSP grid, not on a
     # hard-coded factor.
     m3 = _model(
-        {"type": "cue", "*": FIXED, "logU": Uniform(-4.0, -1.0), "logZ_gas": Uniform(-1.0, 0.4)}
+        {"type": "cue", "*": FIXED, "logU": Uniform(-4.0, -1.0), "logZ_gas": Uniform(-1.0, 0.4)},
+        met={"logzsol": FREE},
     )
     t3 = precompute_nebular_grid(m3, _LW, n_grid=3)
     assert t3.axis_names == ("met_logzsol", "neb_logU", "neb_logZ_gas"), t3.axis_names
@@ -254,7 +263,11 @@ def test_unsnapped_met_axis_warns_and_snapped_one_does_not():
     """
     import warnings as _w
 
-    m = _model({"type": "cue", "*": FIXED, "logU": Uniform(-4.0, -1.0)}, sfh_wild=FREE)
+    m = _model(
+        {"type": "cue", "*": FIXED, "logU": Uniform(-4.0, -1.0)},
+        sfh_wild=FREE,
+        met={"logzsol": FREE},
+    )
 
     with _w.catch_warnings(record=True) as rec:
         _w.simplefilter("always")
@@ -282,7 +295,11 @@ def test_met_axis_snaps_to_ssp_nodes_and_interpolates_linearly():
     """
     from tengri.components.nebular.nebular_grid_precompute import _ssp_met_nodes
 
-    m = _model({"type": "cue", "*": FIXED, "logU": Uniform(-4.0, -1.0)}, sfh_wild=FREE)
+    m = _model(
+        {"type": "cue", "*": FIXED, "logU": Uniform(-4.0, -1.0)},
+        sfh_wild=FREE,
+        met={"logzsol": FREE},
+    )
     t = precompute_nebular_grid(m, _LW, n_grid=4)
 
     assert t.axis_names[0] == "met_logzsol"

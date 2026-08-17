@@ -16,7 +16,7 @@ References
 ----------
 .. [1] M. Stalevski et al., "3D radiative transfer modeling of the dusty
    torus around AGN," MNRAS, 420, 2756 (2012).
-   arXiv:1109.1286. https://doi.org/10.1111/j.1365-2966.2011.19775.x
+   arXiv:1109.1286. https://doi.org/10.1111/j.1365–2966.2011.19775.x
 .. [2] W. Yang et al., "X-CIGALE: fitting AGN/galaxy SEDs from X-ray to radio,"
    MNRAS, 491, 740 (2020). arXiv:1909.09632.
    https://doi.org/10.1093/mnras/stz3001

@@ -29,35 +29,31 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import tengri
-from tengri import SFH_REGISTRY, Parameters, SEDModel
+from tengri import Parameters, SEDModel
 from tengri.analysis.plotting import setup_style
 from tengri.sfh import DEFAULT_BIN_EDGES_GYR
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
-# ``bursty_continuity`` is registered but not yet validated against the DSPS
-# *flux* forward path, so it is intentionally gated out of the high-level
-# ``SEDModel.build`` grammar. We only need its star-formation *history* here, so
-# we construct it through the expert flat-kwarg ``Parameters(...)`` escape hatch
-# (documented in CLAUDE.md) and call ``predict_sfh`` — which evaluates the SFH
-# alone and is unaffected by the flux-path gate. The prior shape it draws is the
-# whole point of this example.
+# ``bursty_continuity`` is available for SFH sampling and the prior shape
+# it draws is the whole point of this example. Build it via the flat-kwarg
+# ``Parameters(mean_sfh_type=...)`` form and call ``predict_sfh`` to evaluate
+# the star-formation history alone.
 N_DRAWS = 60
 
 # ── σ schedule ────────────────────────────────────────────────────
 edges = np.asarray(DEFAULT_BIN_EDGES_GYR)
-bursty_spec = SFH_REGISTRY["bursty_continuity"]
 sigmas = []
+spec = Parameters(mean_sfh_type="bursty_continuity", redshift=0.0)
 for i in range(6):
-    prior = bursty_spec.params[f"sfh_burstcont_ratio_{i}"].default
-    # StudentT prints as 'StudentT(mu=0.0, sigma=X, df=2.0)'; use the
-    # attribute directly through repr-parsing-free path:
+    prior = spec.get_distribution(f"sfh_burstcont_ratio_{i}")
+    # StudentT exposes no sigma attribute; it prints as
+    # StudentT(mu=0.0, sigma=X, df=2.0).
     sigmas.append(float(repr(prior).split("sigma=")[1].split(",")[0]))
 sigmas = np.asarray(sigmas)
 
-# ── prior draws (via predict_sfh, with the gated SFH built through the
-#    expert escape hatch) ───────────────────────────────────────────
+# ── prior draws (via predict_sfh) ───────────────────────────────────────
 ssp = tengri.load_ssp()
 key0 = jax.random.PRNGKey(13)
 

@@ -75,7 +75,7 @@ class ThemisIRSEDComponent(EmissionComponent):
         reach ``predict`` as a traced argument (#1649).
         """
         del wave
-        from tengri.components.dust.emission.emission import _find_data_file
+        from tengri._data_setup import find_data_str
         from tengri.components.dust.emission_templates import (
             _normalize_dl07_like_grid,
             _qhac_axis_to_cigale,
@@ -83,7 +83,7 @@ class ThemisIRSEDComponent(EmissionComponent):
         )
 
         for fname in ("themis_templates_v2.h5", "themis_templates.h5"):
-            path = _find_data_file(fname)
+            path = find_data_str(fname)
             if path is None:
                 continue
             grid = dict(load_themis_templates(path))

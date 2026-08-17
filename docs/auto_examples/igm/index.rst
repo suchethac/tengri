@@ -5,11 +5,12 @@
 IGM
 ===
 
-Intergalactic-medium absorption on observed SEDs — Madau vs Inoue
-prescriptions, the Lyman-alpha forest and damped-Lyman-alpha systems, the
-redshift evolution of the transmission, and the Lyman-break/dropout
-signature that drives high-z photometric selection.
+Intergalactic-medium absorption: Madau vs Inoue prescriptions, Lyα forest, damped Lyα systems. Lyman-break/dropout signature in high-z photometric selection. IGM `igm_transmission(wave_obs, z)` takes observed-frame wavelengths (not rest-frame).
 
+
+.. raw:: html
+
+  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
 
 
 .. raw:: html
