@@ -71,6 +71,12 @@ AXIS_PARAMS: tuple[str, ...] = (
     "HbFrac",
 )
 
+# All seven axes are internal grid-axis labels, not user-facing parameters.
+# The real grid decision is blocked by #1737 (placeholder tokenization).
+# These are declared as internal to prevent spurious warnings when they
+# don't match valid parameter names. See issue #1827.
+INTERNAL_AXES: frozenset[str] = frozenset(AXIS_PARAMS)
+
 
 def precompute(
     filter_waves: list,
@@ -193,7 +199,11 @@ def precompute(
 
     # Auto-collapse: identify Fixed axes
     collapsed, remaining_axes, fixed = collapse_fixed_axes(
-        preint, AXIS_PARAMS, parameters, origin="cb19_precompute"
+        preint,
+        AXIS_PARAMS,
+        parameters,
+        internal_axes=INTERNAL_AXES,
+        origin="cb19_precompute",
     )
 
     if fixed:
