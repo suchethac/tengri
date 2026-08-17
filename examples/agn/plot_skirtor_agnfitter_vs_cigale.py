@@ -73,6 +73,7 @@ fig, ax = plt.subplots(figsize=(7.5, 4.8))
 # test the variant when the component is available.
 
 torus_models = []
+first_failure: Exception | None = None
 try:
     model_cigale = tengri.SEDModel.build(
         ssp,
@@ -93,6 +94,7 @@ try:
     )
     torus_models.append(("skirtor (X-CIGALE full grid)", model_cigale, "C0"))
 except Exception as e:
+    first_failure = e
     print(f"Warning: X-CIGALE model unavailable ({e})")
 
 try:
@@ -115,6 +117,8 @@ try:
     )
     torus_models.append(("skirtor_agnfitter (averaged grid)", model_agnfitter, "C1"))
 except Exception as e:
+    if first_failure is None:
+        first_failure = e
     print(f"Warning: AGNfitter-averaged model unavailable ({e})")
 
 # The whole point of this example is the *comparison*. One side missing is worth
@@ -122,9 +126,9 @@ except Exception as e:
 # the runner would otherwise score as a pass.
 if not torus_models:
     raise RuntimeError(
-        "neither torus model built, so there is nothing to compare — see the "
-        "two warnings above for the underlying failures"
-    )
+        f"neither torus model built, so there is nothing to compare. First "
+        f"failure: {type(first_failure).__name__}: {first_failure}"
+    ) from first_failure
 
 # Plot each model
 for label, model, color in torus_models:
