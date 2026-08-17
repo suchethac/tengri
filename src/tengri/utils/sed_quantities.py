@@ -50,7 +50,7 @@ from jax.scipy.special import logsumexp
 
 from tengri.utils.magnitudes import fnu_to_ab_mag, lnu_to_absolute_ab_mag
 from tengri.utils.physics_constants import C_AA, L_SUN, PC_CM
-from tengri.utils.scale import LN10, log10_magnitude, pow10
+from tengri.utils.scale import LN10, log10_magnitude, pow10, representable_denominator
 
 # Re-export for convenience
 __all__ = [
@@ -125,10 +125,16 @@ def compute_mass_weighted_age(weights: jnp.ndarray, ssp_ages_yr: jnp.ndarray) ->
     alone would yield a finite ``0.0`` here, which reads as "every star just
     formed" — a plausible-looking answer for a model with no stellar mass at all.
     """
+    # Select the denominator BEFORE dividing, not the quotient after. The outer
+    # ``where`` picks NaN on the degenerate branch but does not protect the
+    # reverse pass: both branches are differentiated, the quotient's VJP carries
+    # -num/den**2, and a 1e-30 denominator squares to exactly 0.0 in float32
+    # (below tiny = 1.18e-38), so the discarded branch contributes 0 * inf = NaN
+    # to the surviving one (#1860).
     total = jnp.sum(weights)
-    return jnp.where(
-        total > 1e-20, jnp.sum(weights * ssp_ages_yr) / jnp.maximum(total, 1e-30) / 1e9, jnp.nan
-    )
+    ok = total > 1e-20
+    safe_total = jnp.where(ok, total, 1.0)
+    return jnp.where(ok, jnp.sum(weights * ssp_ages_yr) / safe_total / 1e9, jnp.nan)
 
 
 def compute_mass_weighted_metallicity(
@@ -183,10 +189,12 @@ def compute_mass_weighted_metallicity(
     log_z_per_bin = log_z_final + (log_z_initial - log_z_final) * t_frac
     z_linear = 10.0**log_z_per_bin
     total_w = jnp.sum(weights)
-    # NaN, not 0.0, when there is no mass to weight by (#1404).
-    mean_z = jnp.where(
-        total_w > 1e-20, jnp.sum(weights * z_linear) / jnp.maximum(total_w, 1e-30), jnp.nan
-    )
+    # NaN, not 0.0, when there is no mass to weight by (#1404). Denominator
+    # selected before the divide — see compute_mass_weighted_age for why the
+    # outer ``where`` alone leaves the reverse pass NaN in float32 (#1860).
+    ok = total_w > 1e-20
+    safe_total_w = jnp.where(ok, total_w, 1.0)
+    mean_z = jnp.where(ok, jnp.sum(weights * z_linear) / safe_total_w, jnp.nan)
     return jnp.log10(jnp.maximum(mean_z, 1e-30))
 
 
@@ -433,8 +441,10 @@ def _mean_flux_in_band(sed, wave, lam_lo, lam_hi):
     sed_masked = jnp.where(mask, sed, 0.0)
     num = jnp.trapezoid(sed_masked, wave)
     den = jnp.trapezoid(w, wave)
-    # Return NaN if the band has no wavelength coverage (den ≈ 0)
-    return jnp.where(den > 1e-20, num / jnp.maximum(den, 1e-30), jnp.nan)
+    # Return NaN if the band has no wavelength coverage (den ≈ 0). Denominator
+    # selected before the divide — see compute_mass_weighted_age (#1860).
+    ok = den > 1e-20
+    return jnp.where(ok, num / jnp.where(ok, den, 1.0), jnp.nan)
 
 
 def compute_dn4000(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
@@ -464,7 +474,9 @@ def compute_dn4000(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
     """
     red = _mean_flux_in_band(sed, wave, 4000.0, 4100.0)
     blue = _mean_flux_in_band(sed, wave, 3850.0, 3950.0)
-    return red / jnp.maximum(blue, 1e-30)
+    # Denominator floor sized for its derivative, not its value: 1e-30 squares
+    # to exactly 0.0 in float32 so the quotient's VJP divides by zero (#1860).
+    return red / jnp.maximum(blue, representable_denominator(1e-30))
 
 
 def compute_balmer_break(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
@@ -493,7 +505,8 @@ def compute_balmer_break(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
     """
     red = _mean_flux_in_band(sed, wave, 4000.0, 4100.0)
     blue = _mean_flux_in_band(sed, wave, 3620.0, 3720.0)
-    return red / jnp.maximum(blue, 1e-30)
+    # Derivative-sized denominator floor — see compute_dn4000 (#1860).
+    return red / jnp.maximum(blue, representable_denominator(1e-30))
 
 
 def compute_uv_slope_beta(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
@@ -533,10 +546,17 @@ def compute_uv_slope_beta(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:
     sxx = jnp.sum(w * log_wave**2)
     sxy = jnp.sum(w * log_wave * log_fnu)
 
-    denom = sxx - sx**2 / jnp.maximum(sw, 1e-30)
-    slope_fnu = (sxy - sx * sy / jnp.maximum(sw, 1e-30)) / jnp.maximum(denom, 1e-30)
+    # Three denominators, all previously floored at 1e-30 — derivative-unsafe in
+    # float32, where 1e-60 flushes to 0.0 and the quotient VJP divides by zero.
+    # ``sw`` is selected before the divide (the trailing ``where`` guards the
+    # value, not the reverse pass); ``denom`` can vanish on a genuinely
+    # degenerate fit, so it takes a derivative-sized floor instead (#1860).
+    ok = sw > 1.0
+    safe_sw = jnp.where(ok, sw, 1.0)
+    denom = sxx - sx**2 / safe_sw
+    slope_fnu = (sxy - sx * sy / safe_sw) / jnp.maximum(denom, representable_denominator(1e-30))
     # Return NaN if no wavelength points in the 1250-2600 Å window
-    return jnp.where(sw > 1.0, slope_fnu - 2.0, jnp.nan)
+    return jnp.where(ok, slope_fnu - 2.0, jnp.nan)
 
 
 def compute_fuv_flux(sed: jnp.ndarray, wave: jnp.ndarray) -> jnp.ndarray:

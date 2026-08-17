@@ -59,7 +59,9 @@ class TestPowerlawDiscPrecomputeConsumer:
         lookup = adapter.build_lookup(result, model="powerlaw_disc")
 
         # Test JIT compilation
-        # powerlaw_disc has 1 axis: agn_alpha_pl (power-law index)
+        # powerlaw_disc has 1 axis: agn_alpha (power-law index). The adapter
+        # declared this axis as ``agn_alpha_pl``, a name no Parameters can hold,
+        # so it could never collapse (#1738).
         phot = assert_jit_matches_eager(lookup, jnp.float64(10.5), jnp.float64(-1.0))
 
         assert phot.shape == (len(waves),), f"Expected shape ({len(waves)},), got {phot.shape}"
@@ -178,9 +180,9 @@ class TestCat3dPrecomputeConsumer:
         phot = assert_jit_matches_eager(
             lookup,
             jnp.float64(10.5),
-            jnp.float64(0.5),  # cat3d_cos_inc
-            jnp.float64(0.5),  # cat3d_a
-            jnp.float64(0.3),  # cat3d_fwd
+            jnp.float64(0.5),  # agn_cos_inc
+            jnp.float64(0.5),  # agn_a_cat3d
+            jnp.float64(0.3),  # agn_fwd_cat3d
             agn_torus_frac=jnp.float64(0.5),
         )
 
