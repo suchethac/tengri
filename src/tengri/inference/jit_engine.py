@@ -756,6 +756,13 @@ def build_jit_engine(fitter, pos_dict):
                 raise ValueError(f"Unknown data_type: {data_type}")
             f_cal = params.get("noise_frac_cal", 0.0)
             noise = data_args["noise"]
+            # Broadcast per-galaxy (N_gal,) to (N_gal, 1) for (N_gal, n_data)
+            # compatibility. The documented contract for compute_std_inv is scalar
+            # f_cal against (n_data,) data (single-galaxy). Population fits pass
+            # (N_gal,) f_cal with (N_gal, n_data) data, requiring a trailing axis
+            # (#1303).
+            if noise.ndim == 2 and jnp.ndim(f_cal) == 1:
+                f_cal = f_cal[:, None]
             std_inv = compute_std_inv(noise, predicted, f_cal)
             return predicted, std_inv
 
@@ -808,6 +815,10 @@ def build_jit_engine(fitter, pos_dict):
             params = _primals_to_params(primals)
             pred = signal_response(primals)
             f_cal = params.get("noise_frac_cal", 0.0)
+            # Broadcast per-galaxy (N_gal,) to (N_gal, 1) for (N_gal, n_data)
+            # compatibility (#1303).
+            if noise.ndim == 2 and jnp.ndim(f_cal) == 1:
+                f_cal = f_cal[:, None]
             return variable_noise_hamiltonian(
                 data, noise, pred, f_cal, dof=noise_dof
             ) + 0.5 * jnp.sum(xi**2)

@@ -432,6 +432,9 @@ class TestMcmcAutoDispatch:
     class _Spec:
         def __init__(self, n_free):
             self.n_free = n_free
+            # The dispatcher compares n_latent since #1408; scalar-only stubs
+            # have no vector latents, so the two counts coincide.
+            self.n_latent = n_free
 
     class _Ctx:
         def __init__(self, n_free):

@@ -68,7 +68,7 @@ def _mcmc_auto_pick(context, *, key, init_from=None, precondition=None, **kw):
     from tengri.inference._backend_registry import check_capabilities, get_backend
     from tengri.inference.fitter import _MCMC_AUTO_D_THRESHOLD
 
-    if context.spec.n_free <= _MCMC_AUTO_D_THRESHOLD:
+    if context.spec.n_latent <= _MCMC_AUTO_D_THRESHOLD:
         return _ctx_run_nuts(
             context, key=key, init_from=init_from, precondition=precondition, **kw
         )
