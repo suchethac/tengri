@@ -12,7 +12,7 @@ The grammar nests the emission model inside the dust group:
 ... }
 
 Each emission variant returned by
-:func:`tengri.parameters.groups._valid_dust_emission_types` gets a
+``tengri.parameters.groups._valid_dust_emission_types`` gets a
 factory in this module. That helper derives directly from the live
 ``DUST_EMISSION_MODELS`` registry (plus a closed set of lazy-loadable
 names like ``dl07_tabulated``) so the validator path and the factory

@@ -975,7 +975,7 @@ def _adaptation_cache_key(fitter, method_key):
     reuses one model hands every galaxy the first galaxy's step size and mass
     matrix: adaptation tuned on another target's posterior geometry.
 
-    This is the defect :func:`~tengri.inference._sample_utils._data_fingerprint`
+    This is the defect ``tengri.inference._sample_utils._data_fingerprint``
     was written for (issue #1529), where the *MAP* cache seeded every fit from
     the first galaxy's optimum and killed six of eight NUTS fits. The
     adaptation cache is that cache's sibling and was never given the same

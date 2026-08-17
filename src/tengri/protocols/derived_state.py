@@ -40,7 +40,7 @@ _MISSING = object()  # sentinel for .get(name) without default — match dict.ge
 class DerivedState:
     r"""Typed container for cross-component derived data.
 
-    Fields mirror :data:`tengri.forward.orchestrator._CANONICAL_UNITS`
+    Fields mirror ``tengri.forward.orchestrator._CANONICAL_UNITS``
     one-for-one — every canonical derived key has a field with the same
     name. ``None`` means "not populated by any upstream component".
 

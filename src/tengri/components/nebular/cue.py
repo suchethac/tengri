@@ -1757,7 +1757,7 @@ class CueBackend:
         **Escape fraction**: When ``neb_fesc > 0``, ionizing photons escape
         without photoionizing nebular gas. The continuum is suppressed by the
         CIGALE ionizing-budget k-factor
-        :func:`~tengri.components.nebular._recombination_coeffs.lyc_dust_escape_factor`
+        ``tengri.components.nebular._recombination_coeffs.lyc_dust_escape_factor``
         ``(neb_fesc, neb_fdust)``, which → 0 as ``neb_fesc + neb_fdust → 1``
         (no surviving nebular emission when all ionizing photons are lost).
 

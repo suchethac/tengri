@@ -43,7 +43,7 @@ def _publish_map_init_cache(context, posterior):
     data.
 
     Publishing here closes that. The entry is stamped with
-    :func:`~tengri.inference._sample_utils._data_fingerprint`, the same guard
+    ``tengri.inference._sample_utils._data_fingerprint``, the same guard
     the sampler's own writes use, so it can never seed a different target
     (issue #1529) — and a user's MAP is typically the better starting point
     anyway, being run at their chosen ``n_steps`` / ``n_restarts`` rather than

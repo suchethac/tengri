@@ -3,7 +3,7 @@
 
 """AGN polar-dust attenuation sub-block factories.
 
-Variants from :data:`tengri.parameters.groups._VALID_AGN_ATTEN_TYPES`:
+Variants from ``tengri.parameters.groups._VALID_AGN_ATTEN_TYPES``:
 ``none``, ``smc_prevot``, ``polar_dust``, ``grahsp_biatten``,
 ``qsogen_smc``. Shared params under ``agn.atten``: ``polar_ebv``,
 ``polar_oa``.

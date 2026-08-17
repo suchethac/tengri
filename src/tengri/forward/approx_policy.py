@@ -96,7 +96,7 @@ class ApproxPolicy(Mapping):
     Notes
     -----
     ``band_integration``, ``taylor_correction`` and ``n_subbands`` are resolved
-    into mutual agreement by :meth:`tengri.WavePrecomp.__post_init__` before
+    into mutual agreement by ``tengri.WavePrecomp.__post_init__`` before
     they reach here; this class stores the settled values. It does not
     re-derive them, so that there is one resolution site rather than two that
     can disagree — which is the defect that motivated this type.

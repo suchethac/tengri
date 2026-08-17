@@ -1042,7 +1042,7 @@ class Observation:
         - **Additive emitters** (dust IR, radio, X-ray, AGN) — exact via the
           rank-1/rank-K band response where the emitter factorizes, else a dense
           band integral, else a single :math:`\lambda_{\rm eff}` sample; see
-          :func:`~tengri.components._band_projection.project_additive_onto_photometry`
+          ``tengri.components._band_projection.project_additive_onto_photometry``
           for which branch a given component takes.
 
         Re-measure rather than quoting these: every figure above is a property

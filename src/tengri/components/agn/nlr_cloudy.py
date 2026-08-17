@@ -128,7 +128,7 @@ def get_feltre_backend(grid_path: str | None = None) -> FeltreNLRBackend:
     ----------
     grid_path : str or None, optional
         Path to ``feltre_grid.h5``. If ``None``, uses the package default
-        from :data:`tengri.components.nebular.agn_nebular._DEFAULT_FELTRE_GRID_PATH`.
+        from ``tengri.components.nebular.agn_nebular._DEFAULT_FELTRE_GRID_PATH``.
 
     Returns
     -------

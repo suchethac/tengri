@@ -40,7 +40,7 @@ def composable(
     r"""Composable AGN — registered AGN_MODELS entry.
 
     Thin wrapper around :func:`composable_agn_l_nu`; see that function
-    and :mod:`tengri.components.agn.blocks._protocol` for the full
+    and ``tengri.components.agn.blocks._protocol`` for the full
     contract.
 
     Parameters

@@ -108,7 +108,7 @@ def run_hmc(
         Target acceptance rate for step size adaptation.
     dense_mass_matrix : bool or None, default None
         ``None`` (auto) switches to diagonal at D >= 8, the same policy NUTS
-        uses (:func:`~tengri.inference.backends.mcmc.nuts._resolve_dense_mass_matrix`,
+        uses (``tengri.inference.backends.mcmc.nuts._resolve_dense_mass_matrix``,
         #319). ``True`` / ``False`` force the choice.
 
         This used to default to ``True``, which combined with the

@@ -1488,7 +1488,7 @@ def _agn_active_param_set(structural_kwargs: dict) -> frozenset[str]:
     """Params a group-level AGN wildcard should free, scoped to active blocks.
 
     Thin wrapper over
-    :func:`tengri.components.agn.blocks._consumes.agn_active_param_set`,
+    ``tengri.components.agn.blocks._consumes.agn_active_param_set``,
     lazy-imported to avoid an import cycle (the agn package imports the priors
     layer that ultimately re-exports this module).
     """
