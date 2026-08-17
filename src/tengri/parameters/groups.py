@@ -799,6 +799,10 @@ def parse_groups(**kwargs) -> Parameters:
     # Collected here and adjudicated by ``_check_wildcard_freed_something``.
     wildcard_free_outcome: dict[str, list[tuple[str, bool]]] = {}
 
+    # Track if we've emitted the met_* suppression warning for this parse (#1796).
+    # Emit once per parse even if multiple met_* params are suppressed.
+    met_suppression_warned = False
+
     for param_name in structural_params.all_params:
         group = param_partition.get(param_name, None)
         if group is None:
@@ -874,6 +878,39 @@ def parse_groups(**kwargs) -> Parameters:
         if not isinstance(group_dict, dict):
             # Group was not a dict (or is a sub-key); use structural default
             continue
+
+        # Special case: met_* parameters in sfh group (no met block) should be
+        # pinned at Fixed defaults, not freed by sfh wildcard (#1796).
+        # These params logically belong to "met" group. When there's an explicit
+        # sfh override (e.g., sfh={'logzsol': Uniform(...)}) honor it with a
+        # migration warning. Otherwise, treat as implicit FIXED wildcard.
+        if group == "sfh" and param_name.startswith("met_"):
+            short_name = _extract_short_name(param_name, group_dict)
+            has_explicit_override = short_name in group_dict or param_name in group_dict
+
+            if not has_explicit_override and group_dict.get("*") is FREE and not has_met_block:
+                # sfh wildcard is FREE, but met_* should not be freed (no met
+                # block means implicit FIXED). Override with FIXED for this param.
+                group_dict = {"*": FIXED}
+
+                # Emit migration warning once per parse (#1796)
+                if not met_suppression_warned:
+                    warnings.warn(
+                        (
+                            "sfh={'all_params': FREE} no longer frees metallicity "
+                            "parameters when there is no explicit met block. "
+                            "Before this change, met_logzsol (and other met_* params) "
+                            "were freed by the sfh wildcard.\n\n"
+                            "To free metallicity parameters explicitly, pass either:\n"
+                            "  met={'all_params': FREE}\n"
+                            "or:\n"
+                            "  met={'logzsol': Uniform(-2, 0.2)}\n\n"
+                            "Issue #1796"
+                        ),
+                        WildcardPartialFreeWarning,
+                        stacklevel=2,
+                    )
+                    met_suppression_warned = True
 
         # A group whose wildcard is scoped to its selected structural variant
         # frees only what that variant reads; a parameter outside the scope
@@ -1665,6 +1702,10 @@ def _wildcard_scopes(
             else "shock_frac"
         )
         scopes["shock"] = frozenset(shock_group_params - {unused})
+
+    # Note: sfh scoping is handled differently in parse_groups() —
+    # met_* parameters in sfh (when no met block) skip the group dict to avoid
+    # forcing them through wildcard scoping (see line ~850 for the check).
 
     return scopes
 
