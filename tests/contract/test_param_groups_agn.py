@@ -80,13 +80,13 @@ class TestAGNParameterRouting:
             agn={
                 "disc": {"type": "powerlaw", "*": FIXED},
                 "*": FREE,  # Free all shared agn params
-                "log_lbol": Uniform(43, 47),  # Override with explicit prior
+                "log_lbol": Uniform(9.42, 13.42),  # Override with explicit prior
             },
             redshift=Fixed(0.1),
         )
         # agn_log_lbol should have the user-provided Uniform prior
         dist = params.get_distribution("agn_log_lbol")
-        assert dist.bounds == (43.0, 47.0)
+        assert dist.bounds == (9.42, 13.42)
 
     def test_sub_block_param_routing_torus_skirtor(self):
         """agn.torus 'tau_skirtor' override routes to agn_tau_skirtor."""
@@ -517,7 +517,7 @@ class TestAGNCrossLevelPlacement:
         params = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
             agn={
-                "disc": {"type": "qsogen", "*": FIXED, "log_lbol": Uniform(43, 47)},
+                "disc": {"type": "qsogen", "*": FIXED, "log_lbol": Uniform(9.42, 13.42)},
                 "torus": {"type": "none"},
                 "lines": {"type": "none"},
                 "feii": {"type": "none"},
@@ -527,7 +527,7 @@ class TestAGNCrossLevelPlacement:
         )
         dist = params.get_distribution("agn_log_lbol")
         assert not dist.is_fixed
-        assert dist.bounds == (43.0, 47.0)
+        assert dist.bounds == (9.42, 13.42)
 
 
 class TestUniversalKeyValidator:
