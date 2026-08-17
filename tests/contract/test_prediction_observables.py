@@ -6,7 +6,7 @@ observables as uniform callables with defaults:
 
     pred.photometry()                       # build-time filters, EXACT
     pred.photometry(filters=["jwst_f356w"]) # arbitrary filters, EXACT, warns once
-    pred.photometry(fast=True)              # explicit opt-in to the WavePrecomp LUT
+    pred.photometry(approx=True)              # explicit opt-in to the WavePrecomp LUT
     pred.magnitudes(...)                    # AB mags, same signature
     pred.spectrum()                         # instrument grid, LSF-convolved, calibrated
     pred.rest_sed() / pred.obs_sed()            # panchromatic model-grid arrays
@@ -105,7 +105,7 @@ def test_photometry_default_matches_the_exact_reference(exact):
 def test_default_stays_exact_on_a_waveprecomp_model(ssp, exact):
     """The regression that matters: a WavePrecomp build must NOT change the default.
 
-    ``pred.photometry()`` must integrate the SED; only ``fast=True`` may read the
+    ``pred.photometry()`` must integrate the SED; only ``approx=True`` may read the
     LUT. If the default were routed through ``model.predict_photometry``, this
     model would silently return the LUT instead — and at z=3 that is a ~6% error,
     not a rounding difference.
@@ -117,14 +117,14 @@ def test_default_stays_exact_on_a_waveprecomp_model(ssp, exact):
     pred = fast_model.predict(_params(fast_model))
 
     default = np.asarray(pred.photometry())
-    lut = np.asarray(pred.photometry(fast=True))
+    lut = np.asarray(pred.photometry(approx=True))
 
     np.testing.assert_allclose(default, ref, rtol=1e-10)
     # ...and the LUT really is a different number, so the assertion above has teeth.
     assert not np.array_equal(default, lut)
     assert np.max(np.abs(lut / ref - 1.0)) > 1e-6
 
-    # fast=True is the same LUT the lean inference shortcut uses on this model:
+    # approx=True is the same LUT the lean inference shortcut uses on this model:
     # the fit and the exploration surface must agree about what "fast" means.
     # Not rtol=0 — the two reach the same LUT by different accumulation orders
     # (jitted kernel vs eager accessor), so they agree to ~1 ULP, not to the bit.
@@ -239,14 +239,14 @@ def test_arbitrary_filters_warn_exactly_once(exact):
 def test_fast_without_waveprecomp_raises(exact):
     model, params = exact
     with pytest.raises(ValueError, match="WavePrecomp"):
-        model.predict(params).photometry(fast=True)
+        model.predict(params).photometry(approx=True)
 
 
 def test_fast_with_arbitrary_filters_raises(ssp):
     """A LUT cannot cover filters it was never built for — loud, never a fallback."""
     model = _model(ssp, approx=WavePrecomp())
     with pytest.raises(ValueError):
-        model.predict(_params(model)).photometry(fast=True, filters=[_EXTRA])
+        model.predict(_params(model)).photometry(approx=True, filters=[_EXTRA])
 
 
 def test_magnitudes_are_ab_mags_of_the_photometry(exact):
@@ -363,7 +363,7 @@ def test_spectrum_default_stays_exact_on_a_spectrumprecomp_model(ssp):
     pred = lut_model.predict(_params(lut_model))
 
     default = np.asarray(pred.spectrum())
-    lut = np.asarray(pred.spectrum(fast=True))
+    lut = np.asarray(pred.spectrum(approx=True))
 
     np.testing.assert_allclose(default, reference, rtol=1e-10)
     # ...and the LUT is genuinely a different spectrum, so the assertion has teeth.
@@ -377,11 +377,11 @@ def test_spectrum_fast_without_spectrum_precomp_raises(ssp):
         spectroscopy=Spectroscopy(wave_obs=jnp.linspace(4000.0, 9000.0, 100), resolution=1000.0),
     )
     with pytest.raises(ValueError, match="SpectrumPrecomp"):
-        model.predict(_params(model)).spectrum(fast=True)
+        model.predict(_params(model)).spectrum(approx=True)
 
 
 def test_fast_photometry_does_not_materialize_the_forward_state(ssp):
-    """``fast=True`` must not be slower than exact — pinned structurally.
+    """``approx=True`` must not be slower than exact — pinned structurally.
 
     WavePrecomp's saving is that XLA dead-code-eliminates the full-resolution SED
     einsum when only the LUT is consumed. Reaching the LUT via
@@ -396,8 +396,10 @@ def test_fast_photometry_does_not_materialize_the_forward_state(ssp):
     pred = model.predict(_params(model))
 
     assert "_state" not in pred._cache
-    pred.photometry(fast=True)
-    assert "_state" not in pred._cache, "fast=True built the ForwardState — the LUT saving is gone"
+    pred.photometry(approx=True)
+    assert "_state" not in pred._cache, (
+        "approx=True built the ForwardState — the LUT saving is gone"
+    )
 
     # The exact path, by contrast, legitimately needs it.
     pred.photometry()
