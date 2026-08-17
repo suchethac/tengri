@@ -1530,14 +1530,14 @@ class _CatalogFitterOriginal:
             pad_z = jnp.full((n_pad_extra,), all_redshift_orig[0], dtype=all_data_orig.dtype)
             all_redshift = jnp.concatenate([all_redshift_orig, pad_z], axis=0)
             # Padded rows for line fluxes: zeros (discarded after).
+            # Unconditionally pad to shape (n_padded, n_line_cols), even if n_line_cols==0.
+            # All eight arrays (all_data, all_noise, all_presence, all_redshift,
+            # all_line_flux, all_line_err, plus the rest) must share leading dim n_padded
+            # for jax.lax.map to work. A (n_pad_extra, 0) block is well-formed.
             n_line_cols = all_line_flux_orig.shape[1] if all_line_flux_orig.ndim > 1 else 0
-            if n_line_cols > 0:
-                pad_line = jnp.zeros((n_pad_extra, n_line_cols), dtype=all_data_orig.dtype)
-                all_line_flux = jnp.concatenate([all_line_flux_orig, pad_line], axis=0)
-                all_line_err = jnp.concatenate([all_line_err_orig, pad_line], axis=0)
-            else:
-                all_line_flux = all_line_flux_orig
-                all_line_err = all_line_err_orig
+            pad_line = jnp.zeros((n_pad_extra, n_line_cols), dtype=all_data_orig.dtype)
+            all_line_flux = jnp.concatenate([all_line_flux_orig, pad_line], axis=0)
+            all_line_err = jnp.concatenate([all_line_err_orig, pad_line], axis=0)
         else:
             all_data, all_noise, all_presence, all_redshift = (
                 all_data_orig,
