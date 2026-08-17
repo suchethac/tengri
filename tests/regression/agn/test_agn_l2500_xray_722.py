@@ -32,7 +32,7 @@ def _composable_agn(disc, *, torus="none"):
         "feii": {"type": "none"},
         "torus": {"type": torus},
         "atten": {"type": "none"},
-        "agn_log_lbol": Fixed(45.0),
+        "agn_log_lbol": Fixed(11.42),
         "*": FIXED,
     }
 
@@ -149,7 +149,12 @@ class TestEndToEndPublish:
             redshift=Fixed(0.05),
         )
         L_bol = float(model.predict_state({}).derived["L_agn_bol"])
-        assert np.isclose(L_bol, 10.0**45.0 * L_SUN, rtol=1e-6)
+        # Read log_lbol off the spec rather than repeating the fixture's
+        # literal. The two copies previously drifted together and hid a units
+        # error: both said 45, which is a log10(erg/s) magnitude, so the test
+        # confirmed a 3.8e78 erg/s AGN against itself and passed.
+        log_lbol = float(model.spec.get_distribution("agn_log_lbol").value)
+        assert np.isclose(L_bol, 10.0**log_lbol * L_SUN, rtol=1e-6)
 
     def test_disc_none_publishes_zero(self, synthetic_ssp_wide):
         model = SEDModel.build(
