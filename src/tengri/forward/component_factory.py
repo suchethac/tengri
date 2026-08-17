@@ -93,6 +93,58 @@ _EMISSION_TYPE_ALIASES = {
 }
 
 
+# Domain → component-names mapping for error suggestion scoping.
+#
+# Derivation:
+# - dust_emission: components with EmissionComponent base (auto-populated)
+# - dust_attenuation: {single_component, two_component, wg00}
+# - nebular: {nebular, shock}
+# - agn: {agn, kd18_disc, powerlaw_disc, cat3d_wind, silva04, skirtor}
+# - radio: {radio, radio_dpl, radio_powerlaw}
+# - xray: {xray, xray_aird, agn_xray_corona}
+# - igm: {igm}
+#
+# Note: draine2021_pah_ir and schreiber2016_ir do not route through
+# _resolve_registry_component and are not included here.
+def _build_domain_membership_map() -> dict[str, set[str]]:
+    """Build the domain → component-names map.
+
+    Called once at module initialization to classify all registered
+    components by their domain. dust_emission components are identified
+    by their EmissionComponent base class; other domains are explicit.
+
+    Notes
+    -----
+    EmissionComponent import is unconditional: both are in the same package
+    (tengri.components) and a failure here is a real error, not a fallback case.
+    """
+    from tengri.components.dust.emission._component_base import EmissionComponent
+
+    domain_membership: dict[str, set[str]] = {
+        "dust_emission": set(),
+        "dust_attenuation": {"single_component", "two_component", "wg00"},
+        "nebular": {"nebular", "shock"},
+        "agn": {"agn", "kd18_disc", "powerlaw_disc", "cat3d_wind", "silva04", "skirtor"},
+        "radio": {"radio", "radio_dpl", "radio_powerlaw"},
+        "xray": {"xray", "xray_aird", "agn_xray_corona"},
+        "igm": {"igm"},
+    }
+
+    # Auto-populate dust_emission by base class
+    for name, cls in _REGISTRY.items():
+        try:
+            if issubclass(cls, EmissionComponent):
+                domain_membership["dust_emission"].add(name)
+        except TypeError:
+            # issubclass raises TypeError if cls is not a class
+            pass
+
+    return domain_membership
+
+
+_DOMAIN_MEMBERSHIP = _build_domain_membership_map()
+
+
 def _resolve_registry_component(
     domain: str,
     type_str: str,
@@ -125,26 +177,54 @@ def _resolve_registry_component(
     ------
     ValueError
         If ``type_str`` (after aliasing) is not found in ``_REGISTRY``. The
-        error message lists every registered name, **not** only those valid for
-        ``domain`` — so a mistyped ``dust_emission`` type is answered with
-        ``igm``, ``radio`` and ``xray`` among the suggestions. Narrowing it
-        needs a domain-to-base-class map covering all seven domains; tracked
-        separately rather than guessed at here.
+        error message lists only component names valid for ``domain`` (e.g.,
+        a mistyped ``dust_emission`` component receives dust_emission
+        suggestions, not igm/radio/xray). Close matches are suggested
+        via :func:`difflib.get_close_matches` (cutoff=0.6).
 
     Notes
     -----
     This seam is construction-time only, never traced through JAX. Template
     HDF5 loading (for grid components) happens on first ``apply()`` invocation.
+
+    **Contract marker**: #1521 — domain-scoped error messages.
     """
     # Resolve grammar type → registry key via alias map
     registry_key = _EMISSION_TYPE_ALIASES.get(type_str, type_str)
 
     if registry_key not in _REGISTRY:
-        # Collect available components and format a helpful error
-        available = sorted(_REGISTRY.keys())
+        # Collect available components **for this domain only**
+        import difflib
+
+        domain_names = sorted(_DOMAIN_MEMBERSHIP.get(domain, set()))
+
+        # Try close matches first (typos, abbreviations)
+        close_matches = difflib.get_close_matches(registry_key, domain_names, n=3, cutoff=0.6)
+
+        # Build the error message
+        if close_matches:
+            suggestions = close_matches
+        else:
+            # No close matches; show the full domain list
+            suggestions = domain_names
+
+        # Special case: check if the name exists in DUST_EMISSION_MODELS
+        # (template loader cache) but not in the registry. This means it's
+        # available as a template loader but not as a forward component.
+        extra_note = ""
+        if domain == "dust_emission":
+            from tengri.components.dust.emission import DUST_EMISSION_MODELS
+
+            if registry_key in DUST_EMISSION_MODELS and registry_key not in _REGISTRY:
+                extra_note = (
+                    f" Note: {registry_key!r} exists in DUST_EMISSION_MODELS "
+                    "(template loader cache) but is not a selectable forward component."
+                )
+
         raise ValueError(
             f"{domain} component {registry_key!r} (resolved from grammar type "
-            f"{type_str!r}) not found in registry. Available names: {available}"
+            f"{type_str!r}) not found in registry. "
+            f"Available {domain} names: {suggestions}{extra_note}"
         )
 
     # Instantiate the registered component class
