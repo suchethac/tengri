@@ -913,6 +913,12 @@ class Parameters:
         self.dust_emission = kwargs.pop("dust_emission", None)
         self.dl07_grid_path = kwargs.pop("dl07_grid_path", None)
 
+        # Astrodust+PAH (HD23) optional configuration: spinning dust (AME) enable flag
+        # and cold-neutral-medium filling fraction. Structural settings, not free
+        # parameters; forwarded to component_factory. See #1093.
+        self.astrodust_spinning_dust = bool(kwargs.pop("astrodust_spinning_dust", False))
+        self.astrodust_f_cnm = float(kwargs.pop("astrodust_f_cnm", 0.28))
+
     def _init_metallicity_config(self, kwargs):
         """Resolve metallicity evolution mode from kwargs.
 

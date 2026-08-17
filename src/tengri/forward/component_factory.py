@@ -278,6 +278,8 @@ def build_components(
     dust_lyc_absorb_all: bool = False,
     dust_eb_include_lyc: bool = False,
     dust_emission_model: str = "modified_blackbody",
+    astrodust_spinning_dust: bool = False,
+    astrodust_f_cnm: float = 0.28,
     use_dust: bool = True,
     # Single-component dust (Calzetti-style screen). Picks
     # ``DustAttenuationSEDComponent`` instead of the two-component
@@ -470,7 +472,25 @@ def build_components(
         # it after attenuation. Route through the same single dispatch seam. WG00
         # keeps its historical behavior of appending no separate emission component.
         if atten_type != "wg00" and dust_emission_model is not None:
-            components.append(_resolve_registry_component("dust_emission", dust_emission_model))
+            # Astrodust+PAH (HD23) supports optional spinning-dust (AME) emission
+            # and phase-mix configuration. Other dust-emission models do not.
+            emission_config = None
+            emission_kwargs = {}
+            if dust_emission_model == "astrodust":
+                from tengri.components.dust.emission.templates.astrodust import (
+                    AstrodustIRConfig,
+                )
+
+                emission_config = AstrodustIRConfig(
+                    spinning_dust=astrodust_spinning_dust,
+                    f_cnm=astrodust_f_cnm,
+                )
+
+            components.append(
+                _resolve_registry_component(
+                    "dust_emission", dust_emission_model, config=emission_config, **emission_kwargs
+                )
+            )
 
     # 3. Nebular (optional)
     if nebular_backend is not None:
