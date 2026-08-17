@@ -19,6 +19,8 @@ from tengri.forward.component_factory import (
     _resolve_registry_component,
 )
 
+pytestmark = pytest.mark.contract
+
 # Components that never route through _resolve_registry_component.
 # Each entry names a component and why it is not domain-scoped.
 _NOT_ROUTED = frozenset(
