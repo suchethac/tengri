@@ -281,7 +281,8 @@ def _panel_sed(ax, wave, flux_2d, lg_age_gyr):
             fontsize=6.4,
             color=color,
             weight="bold" if chosen else "normal",
-            zorder=5,
+            zorder=6,
+            bbox=dict(boxstyle="round,pad=0.14", fc="white", ec="none", alpha=0.8),
         )
 
     ax2.set_ylim(0, 3.6)
@@ -289,12 +290,21 @@ def _panel_sed(ax, wave, flux_2d, lg_age_gyr):
     ax.set_xscale("log")
     ax.set_yscale("log")
     ax.set_xlim(900, 20000)
-    ax.set_ylim(8e-4, 3.0)
+    # Headroom above the spectra for a single-row legend; at the lower right
+    # it sat on top of the i and z bandpasses.
+    ax.set_ylim(8e-4, 20.0)
     ax.set_xlabel("rest wavelength  [Å]", fontsize=8)
     ax.set_ylabel("$F_\\nu$  (normalized)", fontsize=8)
     ax.tick_params(labelsize=7)
     ax.legend(
-        fontsize=6.4, loc="lower right", framealpha=0.92, title="SSP age", title_fontsize=6.4
+        fontsize=5.8,
+        loc="upper center",
+        ncol=5,
+        framealpha=0.92,
+        handlelength=1.0,
+        columnspacing=0.7,
+        handletextpad=0.4,
+        borderpad=0.35,
     )
     ax.set_title(
         "(a)  the SSP grid — one spectrum per age bin —\nunder the GALEX + ugriz bandpasses",
@@ -488,10 +498,14 @@ def _panel_contract(ax, grid, tw, templates, phi, nodes, weights, lg_age_gyr):
     per_age_bare = np.sum(phi, axis=1)
     per_age_screened = np.sum(phi * a_nodes, axis=1)
 
+    # Plot normalized: the absolute scale is per unit formed mass and carries
+    # no meaning here, while leaving it raw puts a 1e-18 exponent in the
+    # corner next to the legend.
+    norm = float(np.max(weights * per_age_bare))
     ax.fill_between(
         age_gyr,
         0,
-        weights * per_age_bare,
+        weights * per_age_bare / norm,
         color=GREY,
         alpha=0.30,
         zorder=2,
@@ -500,13 +514,13 @@ def _panel_contract(ax, grid, tw, templates, phi, nodes, weights, lg_age_gyr):
     ax.fill_between(
         age_gyr,
         0,
-        weights * per_age_screened,
+        weights * per_age_screened / norm,
         color=ORANGE,
         alpha=0.65,
         zorder=3,
         label="$w_j \\sum_k \\Phi_{jk} A(\\lambda^{\\star}_{jk})$",
     )
-    ax.plot(age_gyr, weights * per_age_screened, color=ORANGE, lw=1.1, zorder=4)
+    ax.plot(age_gyr, weights * per_age_screened / norm, color=ORANGE, lw=1.1, zorder=4)
 
     f_b = float(np.sum(weights * per_age_screened))
     screen_grid = _screen(grid)
@@ -518,9 +532,9 @@ def _panel_contract(ax, grid, tw, templates, phi, nodes, weights, lg_age_gyr):
 
     ax.set_xscale("log")
     ax.set_xlim(1e-4, 12.0)
-    ax.set_ylim(0, float(np.max(weights * per_age_bare)) * 1.55)
+    ax.set_ylim(0, 1.55)
     ax.set_xlabel("SSP age bin  [Gyr]", fontsize=8)
-    ax.set_ylabel("contribution to $f_b$", fontsize=8)
+    ax.set_ylabel("contribution to $f_b$  (normalized)", fontsize=8)
     ax.tick_params(labelsize=7)
     ax.legend(fontsize=6.8, loc="upper left", framealpha=0.92)
     ax.text(
