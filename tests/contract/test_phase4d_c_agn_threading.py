@@ -73,7 +73,7 @@ def _skirtor_spec():
         redshift=Fixed(0.1),
         dust_tau_bc=Fixed(0.0),
         dust_tau_diff=Fixed(0.0),
-        agn_log_lbol=Fixed(44.0),
+        agn_log_lbol=Fixed(10.42),
         agn_torus_frac=Fixed(0.5),
         apply_igm=False,
     )
