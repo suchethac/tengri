@@ -64,7 +64,11 @@ def _grid(n_axes: int = 2, *, phot_grid_dims: int | None = None) -> Preintegrate
         edges=tuple(edges_for_grid(a) for a in axes),
         effective_wavelengths=jnp.linspace(4000.0, 8000.0, N_FILT),
         effective_wavelengths_rest=jnp.linspace(4000.0, 8000.0, N_FILT),
-        flux_scale=1.0,
+        # log10 of the linear scale this used to pass as ``flux_scale=1.0``.
+        # #1859/#1878 renamed the field because the linear form has no
+        # representable float32 value; log10(1.0) = 0.0 keeps the fixture's
+        # meaning (an unscaled grid) exactly.
+        log10_flux_scale=0.0,
         n_filters=N_FILT,
     )
 
