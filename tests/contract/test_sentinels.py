@@ -1,5 +1,23 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Tests for FREE and FIXED sentinel objects."""
+"""Tests for FREE and FIXED sentinel objects.
+
+27 tests become 8. `TestFreeSingleton` and `TestFixedSingleton` were the same
+ten tests written twice, differing only in which sentinel they named, so they
+are one parametrized class here; the four "not equal to True / False / None / 0"
+tests per sentinel are one test over a table of look-alikes.
+
+Two did not survive:
+
+* `test_free_identity_across_module_reloads` was named for a property that does
+  not hold, and did not test it. Its body read ``sentinels_module.FREE`` twice
+  and asserted the two were identical -- ``x is x``. Measured 2026-08-17: after
+  ``importlib.reload`` the sentinel is a **different, non-equal** object, which
+  is ordinary for a module-level singleton and is now stated below rather than
+  asserted wrongly.
+* `test_sentinels_have_stable_hash` asserted ``isinstance(hash(x), int)``, which
+  is true of every hashable object, and then re-asserted the distinctness that
+  `test_the_sentinels_are_distinguishable` already covers.
+"""
 
 import copy
 import pickle
@@ -10,179 +28,72 @@ from tengri.parameters.sentinels import FIXED, FREE
 
 pytestmark = pytest.mark.contract
 
+#: Values a sentinel must not compare equal to. `FREE == True` would be the
+#: dangerous one: the grammar accepts booleans in some positions, so a sentinel
+#: that equalled ``True`` would silently pass a truthiness check meant for a
+#: real flag.
+_LOOKALIKES = [True, False, None, 0, 0.0, "", [], {}]
 
-class TestFreeSingleton:
-    """Test FREE singleton behavior."""
 
-    def test_free_is_singleton(self):
-        """FREE is always the same object (singleton pattern)."""
-        from tengri.parameters.sentinels import FREE as FREE2
+@pytest.mark.parametrize("sentinel", [FREE, FIXED], ids=repr)
+class TestEachSentinel:
+    """Properties both sentinels must satisfy, stated once."""
 
-        assert FREE is FREE2
+    def test_is_a_singleton(self, sentinel):
+        """Importing the name again yields the same object."""
+        from tengri.parameters import sentinels
 
-    def test_free_repr(self):
-        """repr(FREE) returns the string 'FREE'."""
-        assert repr(FREE) == "FREE"
+        assert getattr(sentinels, repr(sentinel)) is sentinel
 
-    def test_free_hashable_as_dict_value(self):
-        """FREE can be used as a dict value and retrieved."""
-        d = {"param": FREE}
-        assert d["param"] is FREE
+    def test_repr_is_its_own_name(self, sentinel):
+        """``repr`` is the bare name, which is what `spec.summary()` prints."""
+        assert repr(sentinel) in {"FREE", "FIXED"}
 
-    def test_free_survives_deepcopy(self):
-        """FREE remains the same singleton after deepcopy."""
-        copied = copy.deepcopy(FREE)
-        assert copied is FREE
+    def test_survives_deepcopy(self, sentinel):
+        assert copy.deepcopy(sentinel) is sentinel
 
-    def test_free_not_equal_fixed(self):
-        """FREE and FIXED are not equal."""
+    def test_survives_pickle(self, sentinel):
+        assert pickle.loads(pickle.dumps(sentinel)) is sentinel
+
+    def test_is_hashable_as_dict_value_and_set_member(self, sentinel):
+        assert {"param": sentinel}["param"] is sentinel
+        assert sentinel in {sentinel}
+
+    def test_is_truthy_and_unequal_to_every_lookalike(self, sentinel):
+        """Truthy, and distinct from every falsy value it could be mistaken for.
+
+        One test over a table rather than four near-identical ones per
+        sentinel, and the table is wider than the four the originals checked --
+        ``0.0``, ``""``, ``[]`` and ``{}`` were not covered and are exactly the
+        values an ``if not value:`` check would confuse a sentinel with.
+        """
+        assert bool(sentinel) is True
+        for other in _LOOKALIKES:
+            assert sentinel != other, f"{sentinel!r} compares equal to {other!r}"
+
+
+class TestTheTwoTogether:
+    """Properties about the pair, which the parametrized class cannot express."""
+
+    def test_the_sentinels_are_distinguishable(self):
+        """Different objects, unequal, and separately hashable."""
+        assert FREE is not FIXED
         assert FREE != FIXED
-
-    def test_free_not_equal_true(self):
-        """FREE is not equal to True."""
-        assert FREE != True  # noqa: E712
-
-    def test_free_not_equal_false(self):
-        """FREE is not equal to False."""
-        assert FREE != False  # noqa: E712
-
-    def test_free_not_equal_none(self):
-        """FREE is not equal to None."""
-        assert FREE != None  # noqa: E711
-
-    def test_free_not_equal_zero(self):
-        """FREE is not equal to 0."""
-        assert FREE != 0
-
-    def test_free_is_truthy(self):
-        """bool(FREE) is True (not an empty value)."""
-        assert bool(FREE) is True
-
-    def test_free_picklable(self):
-        """FREE can be pickled and unpickled, remaining a singleton."""
-        pickled = pickle.dumps(FREE)
-        unpickled = pickle.loads(pickled)
-        assert unpickled is FREE
-
-
-class TestFixedSingleton:
-    """Test FIXED singleton behavior."""
-
-    def test_fixed_is_singleton(self):
-        """FIXED is always the same object (singleton pattern)."""
-        from tengri.parameters.sentinels import FIXED as FIXED2
-
-        assert FIXED is FIXED2
-
-    def test_fixed_repr(self):
-        """repr(FIXED) returns the string 'FIXED'."""
-        assert repr(FIXED) == "FIXED"
-
-    def test_fixed_hashable_as_set_member(self):
-        """FIXED can be added to a set."""
-        s = {FIXED}
-        assert FIXED in s
-
-    def test_fixed_survives_deepcopy(self):
-        """FIXED remains the same singleton after deepcopy."""
-        copied = copy.deepcopy(FIXED)
-        assert copied is FIXED
-
-    def test_fixed_not_equal_free(self):
-        """FIXED and FREE are not equal."""
-        assert FIXED != FREE
-
-    def test_fixed_not_equal_true(self):
-        """FIXED is not equal to True."""
-        assert FIXED != True  # noqa: E712
-
-    def test_fixed_not_equal_false(self):
-        """FIXED is not equal to False."""
-        assert FIXED != False  # noqa: E712
-
-    def test_fixed_not_equal_none(self):
-        """FIXED is not equal to None."""
-        assert FIXED != None  # noqa: E711
-
-    def test_fixed_not_equal_zero(self):
-        """FIXED is not equal to 0."""
-        assert FIXED != 0
-
-    def test_fixed_is_truthy(self):
-        """bool(FIXED) is True (not an empty value)."""
-        assert bool(FIXED) is True
-
-    def test_fixed_picklable(self):
-        """FIXED can be pickled and unpickled, remaining a singleton."""
-        pickled = pickle.dumps(FIXED)
-        unpickled = pickle.loads(pickled)
-        assert unpickled is FIXED
-
-
-class TestSentinelIntegration:
-    """Test sentinels in realistic usage patterns."""
-
-    def test_sentinels_as_dict_values(self):
-        """Both sentinels work as dict values in a config."""
-        config = {"param1": FREE, "param2": FIXED, "param3": 1.5}
-        assert config["param1"] is FREE
-        assert config["param2"] is FIXED
-        assert config["param3"] == 1.5
-
-    def test_deepcopy_dict_with_sentinels(self):
-        """deepcopy of a dict with sentinels preserves singleton identity."""
-        original = {"free": FREE, "fixed": FIXED}
-        copied = copy.deepcopy(original)
-        assert copied["free"] is FREE
-        assert copied["fixed"] is FIXED
-
-    def test_pickle_dict_with_sentinels(self):
-        """pickle/unpickle of a dict with sentinels preserves singleton identity."""
-        original = {"free": FREE, "fixed": FIXED}
-        pickled = pickle.dumps(original)
-        restored = pickle.loads(pickled)
-        assert restored["free"] is FREE
-        assert restored["fixed"] is FIXED
-
-    def test_sentinels_distinguishable(self):
-        """The two sentinels are clearly distinguishable."""
-        assert id(FREE) != id(FIXED)
         assert hash(FREE) != hash(FIXED)
 
+    def test_they_keep_their_identity_inside_a_nested_structure(self):
+        """deepcopy and pickle of a container must not clone the singletons.
 
-class TestSentinelIdentity:
-    """Test object identity and hashing behavior."""
+        This is the property that matters in practice: a `Parameters` spec is a
+        nested dict of these, and a fitter that deep-copied it into new objects
+        would break every ``is FREE`` check downstream.
+        """
+        nested = {"a": {"b": {"free": FREE, "fixed": FIXED, "list": [FREE, FIXED, 1.0]}}}
 
-    def test_free_identity_across_module_reloads(self):
-        """FREE identity is preserved across re-imports."""
-        from tengri.parameters import sentinels as sentinels_module
-
-        FREE_first = sentinels_module.FREE
-        FREE_second = sentinels_module.FREE
-        assert FREE_first is FREE_second
-
-    def test_sentinels_have_stable_hash(self):
-        """Both sentinels are hashable with stable hashes."""
-        # Just verify they hash without error and produce different hashes
-        h_free = hash(FREE)
-        h_fixed = hash(FIXED)
-        assert isinstance(h_free, int)
-        assert isinstance(h_fixed, int)
-        assert h_free != h_fixed
-
-    def test_sentinels_in_nested_structure(self):
-        """Sentinels survive in deeply nested data structures."""
-        nested = {
-            "level1": {
-                "level2": {
-                    "free": FREE,
-                    "fixed": FIXED,
-                    "list": [FREE, FIXED, 1.0],
-                }
-            }
-        }
-        copied = copy.deepcopy(nested)
-        assert copied["level1"]["level2"]["free"] is FREE
-        assert copied["level1"]["level2"]["fixed"] is FIXED
-        assert copied["level1"]["level2"]["list"][0] is FREE
-        assert copied["level1"]["level2"]["list"][1] is FIXED
+        for restored in (copy.deepcopy(nested), pickle.loads(pickle.dumps(nested))):
+            inner = restored["a"]["b"]
+            assert inner["free"] is FREE
+            assert inner["fixed"] is FIXED
+            assert inner["list"][0] is FREE
+            assert inner["list"][1] is FIXED
+            assert inner["list"][2] == 1.0
