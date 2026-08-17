@@ -76,7 +76,7 @@ plot.setup_style()
 #
 # `recipes.mock_recovery_minimal()` is the cheapest stable model — a
 # truncated-skew-normal SFH, single dust optical depth, no nebular
-# physics. Five free parameters; tractable in seconds.
+# physics. Seven free parameters; tractable in seconds.
 
 # %%
 ssp = tengri.load_ssp("fsps_prsc_miles_chabrier", download=True)
@@ -243,8 +243,9 @@ t_batch = perf_counter() - t0
 t0 = perf_counter()
 # Timing demonstration (not a converged posterior).
 # A real inference run needs more samples to assess convergence (see notebook 05).
-# This is just enough to show that NUTS sampling on a 5-D model happens in seconds,
-# not hours.
+# This is just enough to show that NUTS sampling on a 7-D model happens in seconds,
+# not hours. Seven is also the emcee comparison's dimensionality, so the two
+# bars below are like-for-like rather than tengri solving a smaller problem.
 posterior = ForwardModel.build(sed=model).fit(
     flux_obs, noise,
     method="mcmc_nuts",
@@ -257,7 +258,7 @@ t_nuts = perf_counter() - t0
 bars = {
     "single forward\n(JIT warm)": t_single,
     f"vmap of {n_batch}\nforwards": t_batch,
-    "single NUTS\nposterior (5-D)": t_nuts,
+    "single NUTS\nposterior (7-D)": t_nuts,
     "emcee, 7-D\ngalaxy (lit.)": 3600.0,
 }
 fig2, ax = plt.subplots(figsize=(6.8, 4.0))

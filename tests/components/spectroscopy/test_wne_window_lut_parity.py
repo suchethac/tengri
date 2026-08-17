@@ -417,7 +417,7 @@ def test_compute_joint_weights_supports_field_sfh():
     assert float(tm) > 0.0, "total formed mass must be positive"
 
 
-# ── public routing: predict_spectral_indices(fast=True) ────────────
+# ── public routing: predict_spectral_indices(approx=True) ────────────
 
 _INDEX_SET = (
     STANDARD_INDICES["Dn4000"],
@@ -428,7 +428,7 @@ _INDEX_SET = (
 
 
 def test_predict_spectral_indices_fast_matches_exact(real_ssp_only):
-    """fast=True reproduces the exact predict_spectral_indices, dust on and off.
+    """approx=True reproduces the exact predict_spectral_indices, dust on and off.
 
     The public surface must route through the window LUT and land on the same
     values as the full-grid path: bit-exact with no dust, <1e-3 with the
@@ -439,8 +439,8 @@ def test_predict_spectral_indices_fast_matches_exact(real_ssp_only):
         p = dict(m.spec.sample(jax.random.PRNGKey(1)))
         p["dust_tau_diff"] = jnp.asarray(tau)
         p["dust_tau_bc"] = jnp.asarray(1.5 * tau)
-        exact = np.asarray(m.predict_spectral_indices(p, _INDEX_SET, fast=False))
-        fast = np.asarray(m.predict_spectral_indices(p, _INDEX_SET, fast=True))
+        exact = np.asarray(m.predict_spectral_indices(p, _INDEX_SET, approx=False))
+        fast = np.asarray(m.predict_spectral_indices(p, _INDEX_SET, approx=True))
         rel = np.max(np.abs(exact - fast) / np.maximum(np.abs(exact), 1e-9))
         assert rel < tol, f"tau={tau}: fast vs exact worst rel {rel:.2e} >= {tol}"
 
@@ -451,8 +451,8 @@ def test_predict_spectral_indices_fast_is_jittable():
     p = dict(m.spec.sample(jax.random.PRNGKey(2)))
     p["dust_tau_diff"] = jnp.asarray(0.5)
     p["dust_tau_bc"] = jnp.asarray(0.9)
-    jitted = jax.jit(lambda pp: m.predict_spectral_indices(pp, _INDEX_SET, fast=True))
-    eager = np.asarray(m.predict_spectral_indices(p, _INDEX_SET, fast=True))
+    jitted = jax.jit(lambda pp: m.predict_spectral_indices(pp, _INDEX_SET, approx=True))
+    eager = np.asarray(m.predict_spectral_indices(p, _INDEX_SET, approx=True))
     got = np.asarray(jitted(p))
     assert np.all(np.isfinite(got))
     assert np.allclose(got, eager, rtol=1e-10, atol=0.0)
@@ -479,10 +479,10 @@ def test_window_lut_survives_joint_then_standalone_trace(real_ssp_only):
     fx = {k: v for k, v in p.items() if k not in fr}
 
     def _lines(q):
-        return jnp.sum(m.measure_line_fluxes({**fx, **q}, line_defs, fast=True))
+        return jnp.sum(m.measure_line_fluxes({**fx, **q}, line_defs, approx=True))
 
     def _idx(q):
-        return jnp.sum(m.predict_spectral_indices({**fx, **q}, _INDEX_SET, fast=True))
+        return jnp.sum(m.predict_spectral_indices({**fx, **q}, _INDEX_SET, approx=True))
 
     jax.jit(jax.grad(lambda q: _lines(q) + _idx(q)))(fp)  # caches built mid-trace
     gl = jax.jit(jax.grad(_lines))(fp)  # standalone traces reuse the caches
@@ -501,8 +501,8 @@ def test_predict_spectral_indices_fast_fills_slope_from_exact(real_ssp_only):
     p = dict(m.spec.sample(jax.random.PRNGKey(3)))
     p["dust_tau_diff"] = jnp.asarray(0.4)
     p["dust_tau_bc"] = jnp.asarray(0.7)
-    fast = np.asarray(m.predict_spectral_indices(p, defs, fast=True))
-    exact = np.asarray(m.predict_spectral_indices(p, defs, fast=False))
+    fast = np.asarray(m.predict_spectral_indices(p, defs, approx=True))
+    exact = np.asarray(m.predict_spectral_indices(p, defs, approx=False))
     assert np.all(np.isfinite(fast)), "slope slot left as NaN"
     # the slope slot must come from the exact path (bit-exact), the break from LUT
     assert abs(fast[1] - exact[1]) / max(abs(exact[1]), 1e-9) < 1e-9
@@ -510,7 +510,7 @@ def test_predict_spectral_indices_fast_fills_slope_from_exact(real_ssp_only):
 
 
 def test_predict_spectral_indices_fast_matches_exact_field_sfh():
-    """fast=True on a GP-field SFH now MATCHES the exact path (field-aware weights, #1204).
+    """approx=True on a GP-field SFH now MATCHES the exact path (field-aware weights, #1204).
 
     The field only reweights the (met, age) SSP distribution, so the window-LUT index
     measurement reconstructs the same continuum as the full-grid path (bit-exact with no
@@ -531,14 +531,14 @@ def test_predict_spectral_indices_fast_matches_exact_field_sfh():
             redshift=Fixed(0.05),
         )
     p = dict(m.spec.sample(jax.random.PRNGKey(0)))
-    fast = np.asarray(m.predict_spectral_indices(p, _INDEX_SET, fast=True))
-    exact = np.asarray(m.predict_spectral_indices(p, _INDEX_SET, fast=False))
+    fast = np.asarray(m.predict_spectral_indices(p, _INDEX_SET, approx=True))
+    exact = np.asarray(m.predict_spectral_indices(p, _INDEX_SET, approx=False))
     assert np.all(np.isfinite(fast)), "field index fast path returned NaN"
     np.testing.assert_allclose(fast, exact, rtol=1e-3, atol=0.0)
 
 
 def test_predict_spectral_indices_fast_raises_on_additive_nebular():
-    """fast=True with an additive (Cue) nebular backend raises — its emission is
+    """approx=True with an additive (Cue) nebular backend raises — its emission is
     not in the SSP window integrals, so the LUT would be silently wrong."""
     import warnings
 
@@ -564,4 +564,4 @@ def test_predict_spectral_indices_fast_raises_on_additive_nebular():
         )
     p = dict(m.spec.sample(jax.random.PRNGKey(0)))
     with pytest.raises(ValueError, match=r"baked-in nebular only"):
-        m.predict_spectral_indices(p, _INDEX_SET, fast=True)
+        m.predict_spectral_indices(p, _INDEX_SET, approx=True)

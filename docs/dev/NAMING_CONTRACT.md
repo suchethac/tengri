@@ -204,9 +204,9 @@ pred.rest_sed()             # L_nu, rest-frame axis            [erg/s/Hz]
 pred.rest_sed(wave)         # resampled onto YOUR rest-frame grid   [Angstrom]
 pred.obs_sed()              # L_nu, observed-frame axis + IGM  [erg/s/Hz]  <- still L_nu!
 pred.obs_sed(wave_obs)      # resampled onto YOUR observed-frame grid
-pred.photometry(filters=None, fast=False)   # F_nu  [erg/s/cm2/Hz]
-pred.magnitudes(filters=None, fast=False)   # AB mag
-pred.spectrum(wave_obs=None)                # F_nu  [erg/s/cm2/Hz]
+pred.photometry(filters=None, approx=False) # F_nu  [erg/s/cm2/Hz]
+pred.magnitudes(filters=None, approx=False) # AB mag
+pred.spectrum(wave_obs=None, approx=False)  # F_nu  [erg/s/cm2/Hz]
 ```
 
 ### 4b.3b Units: the distance is applied at PROJECTION, not on the SED
@@ -242,17 +242,26 @@ Never reconstruct the observed axis by hand as `wave * (1 + params["redshift"])`
 
 This is the general rule, not a one-off: **a public accessor that can be misused must raise, not fail open.** This package has shipped enough silent NaN-and-carry-on bugs (the `silent-failure` label) to have earned the paranoia.
 
-### 4b.4 Exact vs fast
+### 4b.4 Exact vs approximate
 
 Analysis and post-fit prediction is **EXACT by default** using the full wave grid.
 
-The fast path is a build-time optimization (e.g., `approx=WavePrecomp(...)`) that LUTs photometry and routes `predict_photometry` through precomputed sub-band weights. The fast path is **opted into explicitly** with a keyword argument at BUILD time. A speed knob must **never silently change the physics**.
+The approximate path is a build-time optimization (`approx=WavePrecomp(...)`, `approx=SpectrumPrecomp(...)`, `approx=FeaturePrecomp(...)`) that LUTs the observable and routes the lean `predict_*` surfaces through precomputed weights. It is **opted into explicitly**. A speed knob must **never silently change the physics**.
+
+**One mechanism, one word, at both ends.** The keyword is `approx=` at build time *and* at call time:
+
+```python
+model = SEDModel.build(..., approx=WavePrecomp(...))   # configure it
+pred.photometry(approx=True)                            # use it
+```
+
+It was spelled `fast=` at call time until 2026-08. That was the same mechanism under a second name, and it named the *benefit* while hiding the *cost* — which is what let `pred.photometry(fast=True)`'s own docstring ship a `rtol=1e-12` agreement claim that measurement puts at `8.5e-4` (z = 0.05) to `1.4e-2` (sdss_g, z = 3). `fast=` still works, emits `DeprecationWarning`, and is removed in v1.0. Passing both with contradictory values raises `TypeError` (§4b.3a).
 
 **Contract:**
 - Default `model.predict_photometry(params)` uses exact wave-grid integration
-- Fast path `model_fast = SEDModel.build(..., approx=WavePrecomp(...))` precomputes filters and returns results via LUT
-- Accuracy difference is bounded: approx-vs-exact tolerance is documented in the `approx` class docstring
-- User can never accidentally call the fast path; it must be explicit at model construction
+- Approximate path `model = SEDModel.build(..., approx=WavePrecomp(...))` precomputes filters and returns results via LUT
+- Accuracy difference is bounded and **measured, not asserted**: see the `approx` class docstring and `bench/reports/2026-08-17_wave_precomp_accuracy.md`
+- User can never accidentally get the approximate answer from a `Prediction` / `Posterior` accessor; it must be asked for by name at both build and call
 
 ### 4b.5 The two prediction surfaces
 
