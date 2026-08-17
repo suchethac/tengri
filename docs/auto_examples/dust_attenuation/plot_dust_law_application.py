@@ -78,6 +78,9 @@ wave = np.asarray(ref_model.wavelengths)
 nu = C_AA_PER_S / wave
 ax.loglog(wave, nu * sed_ref, color="0.05", lw=2.0, label="intrinsic", zorder=10, ls="--")
 
+plotted = 0
+first_failure: Exception | None = None
+
 for (law, label), color in zip(LAWS, COLORS):
     try:
         model = tengri.SEDModel.build(
@@ -92,11 +95,24 @@ for (law, label), color in zip(LAWS, COLORS):
             },
             redshift=tengri.Fixed(0.05),
         )
-    except Exception:
+    except Exception as e:
+        if first_failure is None:
+            first_failure = e
         continue
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
     sed = np.asarray(model.predict(p).rest_sed())
     ax.loglog(wave, nu * sed, color=color, lw=1.4, label=label)
+    plotted += 1
+
+# The intrinsic reference curve is drawn above, outside the loop, so the axes
+# is never literally empty and no figure-level "is it blank" check can see this.
+# Only the loop knows it produced nothing.
+if plotted == 0:
+    raise RuntimeError(
+        f"none of the {len(LAWS)} dust laws built, so only the intrinsic "
+        f"reference is drawn. First failure: "
+        f"{type(first_failure).__name__}: {first_failure}"
+    ) from first_failure
 
 ax.set(
     xlim=(900, 3e4),

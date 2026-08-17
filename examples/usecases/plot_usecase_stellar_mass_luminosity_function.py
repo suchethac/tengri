@@ -170,6 +170,10 @@ params_template = dict(model.spec.sample(key_params))
 
 # Store results
 abs_mags = []
+# Keep the first exception, not just its str(). Every galaxy here fails for the
+# same reason when it fails at all, and re-raising it below is what makes the
+# failure legible -- see the guard after the loop.
+first_failure: Exception | None = None
 
 print("\nPredicting r-band absolute magnitudes...")
 for i, log_m_star in enumerate(log_mstar_samples):
@@ -200,11 +204,28 @@ for i, log_m_star in enumerate(log_mstar_samples):
             print(f"  {i + 1}/{n_gal}: log10(M*)={log_m_star:.2f}, m_r={m_app:.2f}, M_r={M_r:.2f}")
 
     except Exception as e:
+        if first_failure is None:
+            first_failure = e
         print(f"Warning: galaxy {i} failed ({e}), skipping")
         continue
 
 abs_mags = np.array(abs_mags)
 print(f"\nComputed {len(abs_mags)} absolute magnitudes")
+
+# Skipping *some* galaxies is tolerable; skipping all of them is a broken model,
+# not a thin sample. Without this guard the failure surfaced as
+# ``ValueError: zero-size array to reduction operation minimum`` on the line
+# below -- an error naming neither the cause nor the place. That is exactly how
+# it presented when the dust attenuation LUT raised ``KeyError: 'n_slope'`` for
+# all 200 galaxies (#1848): 200 swallowed warnings, then one uninterpretable
+# crash. Re-raising the first real exception restores the diagnostic.
+if abs_mags.size == 0:
+    raise RuntimeError(
+        f"all {n_gal} galaxies failed to predict, so there is no luminosity "
+        f"function to build. First failure: "
+        f"{type(first_failure).__name__}: {first_failure}"
+    ) from first_failure
+
 print(f"  M_r range: {abs_mags.min():.2f} to {abs_mags.max():.2f}")
 
 # ============================================================================

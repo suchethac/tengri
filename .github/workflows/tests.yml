@@ -305,6 +305,17 @@ jobs:
       # same as the guard above.
       - run: python tools/check_zero_hiding_clamps.py
       - run: python tools/check_representable_floors.py
+      # The same hazard one directory over: a gallery example that catches
+      # `Exception` per iteration and drops it. Per iteration that is correct;
+      # when EVERY iteration fails the example carries on with nothing and
+      # renders a figure that still looks populated — reference curves and
+      # `fill_between([], [], label=...)` legend handles are drawn outside the
+      # try — so `run_gallery_examples.py` scores it green. That is the #1145
+      # hole the gallery job exists to close. Retention is the checkable half:
+      # Python deletes the `as e` binding at the end of the block, so an author
+      # who later adds the non-empty guard still has the cause to report.
+      # No allowlist; all 24 broad handlers satisfy it. Stdlib-only.
+      - run: python tools/check_example_silent_failure.py
       # `tools/` is where this repo keeps its own gates and probes, and almost
       # none of them are invoked by CI — so a rename under src/ breaks them
       # silently and there is no run to go red. Seven of 34 were dead on arrival

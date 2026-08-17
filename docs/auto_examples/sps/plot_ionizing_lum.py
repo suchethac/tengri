@@ -75,14 +75,33 @@ def _q_h_per_age(ssp) -> tuple[np.ndarray, np.ndarray]:
 
 
 fig, ax = plt.subplots(figsize=(6.6, 4.4))
+
+# `except (FileNotFoundError, Exception)` used to guard this: a tuple whose
+# second member subsumes the first, so it read as "handle a missing grid" while
+# catching everything. Missing grids are the expected case here -- this example
+# is skipped in CI precisely because the libraries it compares are not shipped
+# -- but a corrupt file or a loader bug was being skipped just as quietly.
+plotted = 0
+first_failure: Exception | None = None
+
 for (ssp_name, label), color in zip(GRIDS, COLORS):
     try:
         ssp = tengri.load_ssp(ssp_name)
-    except (FileNotFoundError, Exception):
+    except Exception as e:
+        if first_failure is None:
+            first_failure = e
         continue
     ages, q_h = _q_h_per_age(ssp)
     ok = np.isfinite(q_h) & (q_h > 0)
     ax.loglog(ages[ok] / 1.0e6, q_h[ok], color=color, lw=1.6, label=label)
+    plotted += 1
+
+if plotted == 0:
+    raise RuntimeError(
+        f"none of the {len(GRIDS)} SSP grids loaded, so this comparison is "
+        f"empty — see the example header for which grids it needs. First "
+        f"failure: {type(first_failure).__name__}: {first_failure}"
+    ) from first_failure
 
 ax.set_xlim(0.5, 5e3)
 ax.set_ylim(1e42, 1e48)
