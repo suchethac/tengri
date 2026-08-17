@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+# SPDX-License-Identifier: BSD-3-Clause
 """Regression test for issue #1767 - alpha_fe_evolving=True raises NotImplementedError.
 
 #1767: `alpha_fe_evolving=True` is a documented setting that cannot build a
