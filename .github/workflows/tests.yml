@@ -22,7 +22,30 @@ on:
   # `tools/check_ci_pr_coverage.py` (lint job) fails the build if this filter
   # comes back.
   pull_request:
-    types: [opened, synchronize, reopened, labeled]
+    # No `labeled`. It cannot coexist with a single aggregate required context.
+    #
+    # On a `labeled` event the heavy tiers stand down by design, so the `ci-ok`
+    # job below would publish either a success claiming tests passed when they
+    # never ran, or a failure reddening a pull request for the crime of being
+    # labelled. Neither is acceptable when that one context is the only thing
+    # branch protection consults.
+    #
+    # #1865 made label runs safe by a different route — it removed the `labeled`
+    # guard from the four always-run gates so they publish real successes rather
+    # than shadowing `skipped`. That works because a skipped MATRIX job publishes
+    # the bare name `test` and never the eight expanded shard contexts, so the
+    # shard results survive in their own suite. A plain job has no such cover:
+    # its name IS its context, and it publishes on every event. Removing the
+    # trigger removes the whole class instead of mitigating it, and saves the
+    # ~8 runner-minutes per labelling that #1865 accepted as its cost — which
+    # matters now that queue capacity, not correctness, is the binding
+    # constraint (53% of open PR jobs are spent on PRs that touch no code).
+    #
+    # `slow` is unaffected: its `if:` reads
+    # `github.event.pull_request.labels.*.name`, the pull request's CURRENT
+    # label set, on ANY pull-request event. So labelling and then pushing still
+    # opts in, and `workflow_dispatch` covers labelling without pushing.
+    types: [opened, synchronize, reopened]
   schedule:
     # Nightly slow-tier run at 04:00 UTC (mid-afternoon Tokyo).
     - cron: "0 4 * * *"
@@ -48,21 +71,10 @@ on:
 # commit. That costs runner minutes; a `main` whose green means nothing costs
 # more.
 #
-# `labeled` PR events get their OWN group, shared among themselves. Two
-# properties, and both are load-bearing:
-#
-#   * it is not the opened/synchronize group, so a label add never aborts the
-#     real run mid-matrix;
-#   * it IS shared across label adds, so labelling a PR with four labels — four
-#     `labeled` webhooks — collapses to roughly one surviving run instead of
-#     four. It used to key on `github.run_id`, which made every label its own
-#     run. That was harmless while those runs were no-ops; it is not harmless
-#     now that the four always-run gates actually execute on a label event
-#     (see below), because four labels would mean four times the work.
-#
-# The survivor is the newest run, so it is also the newest check suite, which
-# is the one branch protection reads. Cancelled predecessors sit in older
-# suites where nothing consults them.
+# `labeled` PR events used to need their own group here, because labelling a PR
+# with four labels fires four webhooks. They no longer trigger this workflow at
+# all (see the `types:` note above), so there is nothing left to group — and the
+# four runs per labelling are not merely collapsed but never started.
 #
 # Everything else (PR opened/synchronize/reopened, schedule, workflow_dispatch)
 # keys on `github.event_name`, so a newer event of the SAME kind supersedes the
@@ -75,8 +87,6 @@ concurrency:
   group: >-
     tests-${{ github.ref }}-${{
       github.event_name == 'push' && github.run_id
-      || (github.event_name == 'pull_request' && github.event.action == 'labeled')
-         && 'pull_request_labeled'
       || github.event_name }}
   cancel-in-progress: true
 
@@ -974,6 +984,59 @@ jobs:
           path: ~/.cache/tengri_jax_cache
           key: ${{ steps.jax_cache.outputs.cache-primary-key }}
 
+  # The ONE context branch protection should require. Everything else advisory.
+  #
+  # Protection currently names eleven contexts, eight of which are the expanded
+  # `test` matrix strings. That has two costs, and the second is why this job
+  # exists at all:
+  #
+  #   1. The shard list is duplicated into a repository setting no file here can
+  #      see. Rename or add a shard and the rule silently desynchronises.
+  #   2. NOTHING CAN BE WITHHELD. A matrix job skipped by `if:` publishes the
+  #      bare name `test`, never the eight expanded shard contexts — so a
+  #      required shard context simply never reports and the PR blocks forever.
+  #      That is why the heavy tiers cannot be path-filtered today, even though
+  #      53% of open PRs (measured 2026-08-17: 8 of 15) touch no importable
+  #      code and cannot change a test outcome, while paying all 8 shards.
+  #
+  # Collapsing to one context unblocks path-filtering. But it is only SAFE if
+  # this context is stricter than "nothing went red": a `skipped` must never
+  # read as approval. `tools/ci_ok.py` holds that policy, mirroring the buckets
+  # in `tools/check_ci_pr_coverage.py` — the always-run gates must be `success`
+  # (skipped is a policy violation there, not an outcome), the heavy tiers may
+  # skip ONLY when the base is not `main`, and `gallery` may skip because
+  # `gallery-changes` decides it.
+  #
+  # The policy is a tested Python module rather than inline shell precisely
+  # because this repo landed three new gates in one day that were themselves
+  # broken (#1717, #1723, #1746). `tests/unit/test_ci_ok.py` asserts it goes RED
+  # for each mistake it exists to catch; the skipped-heavy-job rule was verified
+  # by inverting it and watching the suite fail, not by reading it.
+  #
+  # NOT in `needs`: `coverage`, `slow`, `crossval`. They are schedule/dispatch
+  # or opt-in, so requiring them would block every PR on work no PR owes.
+  ci-ok:
+    name: ci-ok
+    # `always()` so this still runs — and still reports — when a dependency
+    # fails or is skipped. Without it this job would itself be skipped by a red
+    # dependency, publishing `skipped`, which does not satisfy a required
+    # context and would block exactly the PRs it is meant to adjudicate.
+    if: always()
+    needs: [tier, lint, security, smoke, gallery-changes, gallery, test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      # stdlib only, so the runner's preinstalled python3 is enough — no
+      # setup-python, no install. This job must stay seconds, not minutes: it
+      # sits at the end of every run's critical path.
+      - name: Apply the tier policy to this run's results
+        run: python3 tools/ci_ok.py
+        env:
+          CI_OK_RESULTS: ${{ toJSON(needs) }}
+          CI_OK_EVENT: ${{ github.event_name }}
+          CI_OK_BASE_REF: ${{ github.base_ref }}
+
   # Full-suite coverage → Codecov, WITHOUT slowing PR feedback. Runs on
   # push-to-main, the nightly schedule, and manual dispatch — not on PRs.
   #
@@ -1199,8 +1262,17 @@ jobs:
   # Run on:
   #   - nightly schedule
   #   - manual workflow_dispatch
-  #   - PRs labeled `run-slow-tests`
+  #   - PRs carrying the `run-slow-tests` label
   # Skip on regular push/PR to keep fast feedback under 15 min.
+  #
+  # Note the `if:` reads `github.event.pull_request.labels.*.name` — the pull
+  # request's CURRENT label set — not `github.event.label`. So this opts in on
+  # any pull-request event once the label is on, and does NOT need `labeled` to
+  # be a trigger type (it no longer is; see the `types:` note at the top).
+  #
+  # The one behaviour that changed: adding the label to an already-open pull
+  # request no longer starts a run by itself. Push, or use `workflow_dispatch`,
+  # which is listed above precisely for this.
   slow:
     runs-on: ubuntu-latest
     # Split the ~1,270-test tier across two parallel runners (one per suite):
