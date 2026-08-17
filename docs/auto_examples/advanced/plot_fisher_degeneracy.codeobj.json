@@ -615,6 +615,15 @@
    "name": "ArrayImpl"
   }
  ],
+ "first_failure": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "NoneType"
+  }
+ ],
  "fisher_parameter_errors": [
   {
    "is_class": false,

@@ -39,7 +39,7 @@ reddening and star formation rate indicators in galaxies. Here we:
 - Reddy et al. (2018) ApJ 869, 92. z~2 IRX–β scatter and implications for
   UV-to-IR conversions in high-z star-forming galaxies.
 
-.. GENERATED FROM PYTHON SOURCE LINES 24-386
+.. GENERATED FROM PYTHON SOURCE LINES 24-408
 
 
 
@@ -58,9 +58,9 @@ reddening and star formation rate indicators in galaxies. Here we:
     Building 25 models with τ_diff ∈ [0, 4]...
       τ_diff=0.00: β=-2.41, IRX=-2.44
       τ_diff=0.17: β=-2.20, IRX=-0.20
-      τ_diff=0.33: β=-1.99, IRX=+0.20
+      τ_diff=0.33: β=-1.99, IRX=+0.21
       τ_diff=0.50: β=-1.78, IRX=+0.49
-      τ_diff=0.67: β=-1.57, IRX=+0.73
+      τ_diff=0.67: β=-1.57, IRX=+0.74
       τ_diff=0.83: β=-1.36, IRX=+0.95
       τ_diff=1.00: β=-1.15, IRX=+1.15
       τ_diff=1.17: β=-0.95, IRX=+1.34
@@ -73,14 +73,14 @@ reddening and star formation rate indicators in galaxies. Here we:
       τ_diff=2.33: β=+0.52, IRX=+2.53
       τ_diff=2.50: β=+0.73, IRX=+2.69
       τ_diff=2.67: β=+0.94, IRX=+2.85
-      τ_diff=2.83: β=+1.14, IRX=+3.00
+      τ_diff=2.83: β=+1.14, IRX=+3.01
       τ_diff=3.00: β=+1.35, IRX=+3.16
       τ_diff=3.17: β=+1.56, IRX=+3.31
       τ_diff=3.33: β=+1.77, IRX=+3.46
       τ_diff=3.50: β=+1.98, IRX=+3.61
       τ_diff=3.67: β=+2.19, IRX=+3.76
       τ_diff=3.83: β=+2.40, IRX=+3.91
-      τ_diff=4.00: β=+2.61, IRX=+4.05
+      τ_diff=4.00: β=+2.61, IRX=+4.06
 
     Computed 25 models successfully.
 
@@ -90,7 +90,7 @@ reddening and star formation rate indicators in galaxies. Here we:
     VERIFICATION SUMMARY
     ======================================================================
     β range:        -2.41 to +2.61
-    IRX range:      -2.44 to +4.05
+    IRX range:      -2.44 to +4.06
     τ_diff range:   0.00 to 4.00
 
     Physical interpretation:
@@ -99,7 +99,7 @@ reddening and star formation rate indicators in galaxies. Here we:
       → Points lie above Meurer+1999 (expected for young starbursts)
 
     Measured (τ_diff=0):   β=-2.41, IRX=-2.44 ✓
-    Measured (τ_diff=4):   β=+2.61, IRX=+4.05 ✓
+    Measured (τ_diff=4):   β=+2.61, IRX=+4.06 ✓
     ======================================================================
 
 
@@ -277,6 +277,12 @@ reddening and star formation rate indicators in galaxies. Here we:
     irx_values = []
     beta_values = []
     tau_diff_used = []
+    # Five separate `continue` paths below can drop a τ_diff: the build raising, the
+    # predict raising, too few UV-slope points, a non-finite β, and a non-finite
+    # IRX. Any one of them skipping a point is fine. All of them together emptying
+    # the sweep is not, and the single guard after the loop covers every route --
+    # what matters downstream is that there is a curve, not which exit removed it.
+    first_failure: Exception | None = None
 
     for tau_diff in TAU_DIFF_VALUES:
         # Build model with this τ_diff
@@ -299,6 +305,8 @@ reddening and star formation rate indicators in galaxies. Here we:
                 redshift=tengri.Fixed(Z_GALAXY),
             )
         except Exception as e:
+            if first_failure is None:
+                first_failure = e
             print(f"  τ_diff={tau_diff:.2f}: build failed ({str(e)[:50]}...)")
             continue
 
@@ -312,6 +320,8 @@ reddening and star formation rate indicators in galaxies. Here we:
             wave_rest = np.asarray(model.wavelengths)
             l_nu_rest = np.asarray(sed_rest.rest_sed())
         except Exception as e:
+            if first_failure is None:
+                first_failure = e
             print(f"  τ_diff={tau_diff:.2f}: predict failed ({str(e)[:50]}...)")
             continue
 
@@ -363,6 +373,18 @@ reddening and star formation rate indicators in galaxies. Here we:
     tau_diff_used = np.array(tau_diff_used)
 
     print(f"\nComputed {len(irx_values)} models successfully.")
+
+    if irx_values.size == 0:
+        detail = (
+            f"First failure: {type(first_failure).__name__}: {first_failure}"
+            if first_failure is not None
+            else "No exception was raised — every point was dropped by a finiteness "
+            "or coverage test; see the per-τ lines above."
+        )
+        raise RuntimeError(
+            f"all {len(TAU_DIFF_VALUES)} τ_diff values were skipped, so there is no "
+            f"IRX-β relation to plot. {detail}"
+        ) from first_failure
 
     # ============================================================================
     # Plot: IRX–β diagram with Meurer+1999 relation overlay
@@ -473,6 +495,11 @@ reddening and star formation rate indicators in galaxies. Here we:
         f"IRX={irx_values[idx_max_tau]:+.2f} ✓"
     )
     print("=" * 70)
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 15.190 seconds)
 
 
 .. _sphx_glr_download_auto_examples_dust_attenuation_plot_usecase_irx_beta_meurer.py:

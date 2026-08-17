@@ -43,11 +43,29 @@ pytestmark = pytest.mark.regression_bug
 
 _PARAMS = {"sfh_delayed_log_total_mass": 10.0, "sfh_delayed_tau_gyr": 1.0}
 
-#: Brings the synthetic per-Msun flux down to a real grid's regime, so the
-#: ~1e41 erg/s line luminosities and ~1e45 L_age are physical rather than an
-#: artifact of an unnormalized fixture. Same constant, same reason, as
-#: ``_SSP_FLUX_SCALE`` in ``test_float32_boundary_inventory.py``.
-_SSP_FLUX_SCALE = 1.0e-17
+#: Brings the synthetic per-Msun flux down to a real grid's regime, so the line
+#: luminosities and ``L_age`` are physical rather than an artifact of an
+#: unnormalized fixture.
+#:
+#: **Deliberately smaller than ``_SSP_FLUX_SCALE`` in
+#: ``test_float32_boundary_inventory.py``**, which this used to match at 1e-17.
+#: That file has no nebular block; this one does, and a rendered emission line
+#: puts its whole luminosity into roughly one grid cell, so ``L_nu = L / dnu``
+#: on the 0.72 %-spaced ``synthetic_ssp_wide`` grid is enormous. At 1e-17 the
+#: nebular SED peaks at 1.099e45 and **four pixels go to inf in float32** — and
+#: then the energy balance reports ``+inf`` by the #1527 corrupt contract
+#: ("no answer exists"), which is correct but makes *every* companion below look
+#: decorative no matter where its log was taken. The sweep would be asserting on
+#: an un-integrable input rather than on where the log was taken, which is the
+#: one thing it exists to measure.
+#:
+#: 1e-26 keeps the SED at 1.099e36 — 300x under the float32 ceiling — while
+#: ``L_ir`` and 6 of 128 ``line_lums`` still overflow, so the sweep is exercised
+#: exactly as before. Measured on this fixture: ``log_L_ir`` is then 45.0941
+#: while ``L_ir`` is ``inf``, i.e. the companion demonstrably works, which is the
+#: result 1e-17 was hiding once nebular lines stopped being silently dropped
+#: (#1836).
+_SSP_FLUX_SCALE = 1.0e-26
 
 
 def _model(ssp):
