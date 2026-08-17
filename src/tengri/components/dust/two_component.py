@@ -528,6 +528,14 @@ class DustSEDComponent(TemplateThreading):
             dict(self.config.diff_law_overrides),
             self.config.live_shape_params,
         )
+        # The ONE binding for every curve evaluation in this method. Hoisted to
+        # method scope on purpose: the photometry LUT and the spectroscopy pixel
+        # block are siblings (a spectroscopy-only model has ``filter_eff is
+        # None``), so a binding built inside either one is not reliably in scope
+        # for the other. #1833 is what happens when two evaluations of "the same"
+        # screen are bound separately -- do not re-derive these locally.
+        bc_kw = {k: jnp.asarray(v) for k, v in bc_law_params.items()}
+        diff_kw = {k: jnp.asarray(v) for k, v in diff_law_params.items()}
         transmission = self._transmission_from_law_params(
             params, wave, ssp_ages_yr, bc_law_params, diff_law_params
         )  # (n_age, n_wave), in [0, 1]
@@ -773,9 +781,8 @@ class DustSEDComponent(TemplateThreading):
             # and the nebular screen below) passes the whole dict; this one is
             # now consistent with them. Found by #1833's exact-vs-precompute
             # test, which the narrowing turned from a silent divergence into a
-            # loud KeyError.
-            bc_kw = {k: jnp.asarray(v) for k, v in bc_law_params.items()}
-            diff_kw = {k: jnp.asarray(v) for k, v in diff_law_params.items()}
+            # loud KeyError. ``bc_kw`` / ``diff_kw`` are bound once at method
+            # scope above, shared with the spectroscopy block below.
             law_bc_fn = resolve_dust_law(self.config.law_bc)
             law_diff_fn = resolve_dust_law(self.config.law_diff)
             d_lambda = jnp.asarray(1.0)
@@ -797,6 +804,58 @@ class DustSEDComponent(TemplateThreading):
             derived_overrides["dust_bc_attenuation_slope_precomp"] = a_bc_slope
             derived_overrides["dust_diff_attenuation_precomp"] = a_diff
             derived_overrides["dust_diff_attenuation_slope_precomp"] = a_diff_slope
+
+            # The nebular bucket's screen, integrated THROUGH the band rather than
+            # sampled at λ_eff (#1738). ``A(λ_eff)·Φ_neb`` is only correct where the
+            # screen is flat across the filter, and nebular emission is line-dominated:
+            # a line sits where it sits, not at λ_eff, so the sampled screen is wrong
+            # by the screen's own variation across the band. Measured on a real FSPS
+            # SSP through SDSS griz, that error inflated the precomp-vs-exact gap by up
+            # to 26x over the stellar-only floor while nebular carried only 0.8-3.5 %
+            # of the band flux.
+            #
+            # This is EXACT, not the K-point convergent form the stellar continuum
+            # uses (#1122): ``sed_neb_attenuated`` is the reddened continuum on the
+            # full grid, so its band integral is the answer ``predict()`` computes.
+            # Affordable for the same reason it is needed — a dusty model already
+            # materializes the nebular continuum (``DustSEDComponent`` declares
+            # ``sed_nebular`` an input, which is what disarms the fast nebular grid,
+            # #1281/#1748), so the dense array is already live in the compiled graph
+            # and no dead-code elimination is given up. Where it is NOT materialized
+            # there is no dust consumer, hence no screen, hence nothing to correct.
+            # Guarded on the bucket this term REPLACES, not on the continuum it reads.
+            # A ``neb={'type': 'none'}`` model still publishes ``sed_nebular`` — as
+            # zeros — so keying off the continuum does not discriminate, and the
+            # projection READS the dense grid: on a dust-only model it resurrects the
+            # full-resolution chain XLA had eliminated, measured at 197,365 ->
+            # 1,285,037 gradient FLOPs (6.5x). That elimination is the entire point of
+            # the LUT (#1109), and spending it to integrate zeros is the worst
+            # available trade. ``nebular_phot_lnu_precomp`` is absent exactly when
+            # there is no λ_eff screening to correct — including BakedIn nebular,
+            # whose emission is already inside the stellar LUT.
+            _neb_phot = state.derived.get("nebular_phot_lnu_precomp")
+            if _neb_phot is not None and _sed_neb is not None:
+                from tengri.components._band_projection import (
+                    project_additive_onto_photometry,
+                )
+                from tengri.parameters.resolve import require_redshift
+
+                z_neb = jnp.asarray(
+                    require_redshift(params, "components.dust.two_component.apply")
+                )
+                fw_pad = state.derived.get("phot_filter_waves_padded")
+                ft_pad = state.derived.get("phot_filter_trans_padded")
+                derived_overrides["nebular_phot_lnu_attenuated_precomp"] = (
+                    project_additive_onto_photometry(
+                        None,  # no band response: a multiplicative screen is not rank-1
+                        sed_neb_attenuated,
+                        wave,
+                        filter_eff,
+                        fw_pad,
+                        ft_pad,
+                        z_neb,
+                    )
+                )
             # Log-derivatives d(ln A)/dλ = −τ·k'(λ_eff), published directly (no
             # division by A) so the two-component Taylor projection (#617) is
             # NaN-safe where A → 0 (e.g. X-ray/UV bands far off the dust curve):
@@ -841,6 +900,24 @@ class DustSEDComponent(TemplateThreading):
                 derived_overrides["dust_diff_restband_attenuation_precomp"] = jnp.exp(
                     -tau_diff * law_diff_fn(rb_eff, **diff_kw)
                 )
+            # The rest-frame twin of the band-integrated nebular screen above (#1738).
+            # Emitted HERE, beside its observed-frame partner, because emitting only
+            # one is #1665: every rest-frame consumer silently kept the λ_eff screen
+            # and 13/13 spectral indices moved with nothing raised. ``redshift=0``
+            # puts the filter in the rest frame, where ``phot_rest_fnu`` projects.
+            if rb_eff is not None and _neb_phot is not None and _sed_neb is not None:
+                derived_overrides["nebular_restband_lnu_attenuated_precomp"] = (
+                    project_additive_onto_photometry(
+                        None,
+                        sed_neb_attenuated,
+                        wave,
+                        rb_eff,
+                        fw_pad,
+                        ft_pad,
+                        jnp.zeros_like(z_neb),
+                    )
+                )
+
             rb_sub_waves = state.derived.get("stellar_restband_subband_waves_precomp")
             if rb_sub_waves is not None:
                 derived_overrides["dust_bc_restband_attenuation_subband_precomp"] = jnp.exp(
@@ -877,11 +954,16 @@ class DustSEDComponent(TemplateThreading):
 
             tau_bc = jnp.asarray(params["dust_tau_bc"])
             tau_diff = jnp.asarray(params["dust_tau_diff"])
-            n_slope = jnp.asarray(params.get("dust_slope", -0.7))
+            # Same binding as the full-grid screen and the photometry LUT. This
+            # block used to build its own ``n_slope`` from
+            # ``params.get("dust_slope", -0.7)`` and pass nothing else, so a
+            # spectroscopic fit reddened its pixels with a different curve from
+            # the one attenuating the model it was fitting -- the #1833 defect
+            # on the SpectrumPrecomp path.
             law_bc_fn = resolve_dust_law(self.config.law_bc)
             law_diff_fn = resolve_dust_law(self.config.law_diff)
-            t_bc_pix = jnp.exp(-tau_bc * law_bc_fn(spec_eff, n_slope=n_slope))
-            t_diff_pix = jnp.exp(-tau_diff * law_diff_fn(spec_eff, n_slope=n_slope))
+            t_bc_pix = jnp.exp(-tau_bc * law_bc_fn(spec_eff, **bc_kw))
+            t_diff_pix = jnp.exp(-tau_diff * law_diff_fn(spec_eff, **diff_kw))
             derived_overrides["dust_spec_bc_transmission_precomp"] = t_bc_pix
             derived_overrides["dust_spec_diff_transmission_precomp"] = t_diff_pix
 

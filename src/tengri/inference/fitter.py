@@ -2964,8 +2964,13 @@ class Fitter:
         import pickle
         from pathlib import Path as _Path
 
+        # B301: `path` is a cache this process wrote via save_cache().
+        # Unpickling executes arbitrary code, so the contract is that the
+        # caller supplies their own file; the fingerprint check below is a
+        # correctness guard against a *stale* cache, not a security boundary,
+        # and it runs after the payload has already been deserialized.
         with _Path(path).open("rb") as f:
-            payload = pickle.load(f)
+            payload = pickle.load(f)  # nosec B301
         if payload.get("spec_fingerprint") != self._spec_fingerprint():
             raise ValueError(
                 f"Adaptation cache at {path} was written for a different model "
@@ -2987,7 +2992,11 @@ class Fitter:
         """
         import hashlib
 
-        h = hashlib.sha1()
+        # A cache key over (free names, fixed values), not a security digest:
+        # it decides whether a stored fit may be reused, and nothing trusts it
+        # against a forged input. `usedforsecurity=False` says so to the reader,
+        # to bandit (B324), and to FIPS builds, where a plain sha1() raises.
+        h = hashlib.sha1(usedforsecurity=False)
         for name in self._free_names:
             h.update(name.encode())
         for name, val in sorted(self._fixed_values.items()):

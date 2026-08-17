@@ -45,6 +45,7 @@ import jax
 import jax.numpy as jnp
 
 from tengri.components.stellar.reference_history import reference_history_params
+from tengri.utils.scale import apply_log10_scale
 
 #: Nebular ionization parameters that MUST be fixed for the table to be valid —
 #: they change ``line_per_qh`` (line ratios), so a free one would make the
@@ -83,12 +84,18 @@ def _nion_of_state(state) -> jnp.ndarray:
     return jnp.sum(nion) if jnp.ndim(nion) else nion
 
 
-def _four_pi_dl2(redshift) -> jnp.ndarray:
-    """4 pi d_L(z)^2 [cm^2] — the line luminosity → observed flux divisor."""
+def _log10_four_pi_dl2(redshift) -> jnp.ndarray:
+    """log10(4 pi d_L(z)^2) [dex] — the line luminosity → observed flux divisor.
+
+    Log, not linear: the divisor is ~1e57 and ``inf`` in float32 at every
+    distance, so it is applied with :func:`~tengri.utils.scale.apply_log10_scale`
+    rather than materialized (#1859).
+    """
     from tengri.cosmology import luminosity_distance
+    from tengri.utils.scale import log10_four_pi_dl2
 
     dl_cm = jnp.asarray(luminosity_distance(jnp.asarray(redshift))).reshape(())
-    return 4.0 * jnp.pi * dl_cm**2
+    return log10_four_pi_dl2(dl_cm)
 
 
 def precompute_line_per_qh(
@@ -166,7 +173,7 @@ def precompute_line_per_qh(
     # observed flux L / (4 pi d_L(z_ref)^2); multiply by the reference divisor
     # so the stored table carries L_line / nion, valid at any evaluation z.
     ref_z = ref_params.get("redshift", 0.0)
-    ref_divisor = _four_pi_dl2(ref_z)
+    log10_ref_divisor = _log10_four_pi_dl2(ref_z)
 
     met_grid = jnp.linspace(met_lo, met_hi, n_met)
     rows = []
@@ -179,7 +186,8 @@ def precompute_line_per_qh(
         # defaults on in predict_line_fluxes) is applied downstream, not baked in.
         flux = model.predict_line_fluxes(p, target_wavelengths=wavelengths, redden=False)
         nion = _nion_of_state(model.predict_state(p))
-        lum = jnp.asarray(flux) * ref_divisor  # observed flux → line luminosity
+        # observed flux → line luminosity, without materializing the ~1e57 divisor
+        lum = apply_log10_scale(jnp.asarray(flux), log10_ref_divisor)
         rows.append(lum / jnp.maximum(nion, 1e-30))
     return LinePerQHTable(
         met_grid=met_grid,
@@ -231,4 +239,5 @@ def reconstruct_line_lums(
     # per-line linear interpolation across the metallicity grid → L_line / nion
     lpq = jax.vmap(lambda col: jnp.interp(mz, table.met_grid, col), in_axes=1)(table.line_per_qh)
     lum = jnp.asarray(nion) * lpq  # line luminosity [erg/s]
-    return lum / _four_pi_dl2(redshift)  # → observed flux at THIS redshift
+    # → observed flux at THIS redshift; the divisor stays an exponent (#1859)
+    return apply_log10_scale(lum, -_log10_four_pi_dl2(redshift))

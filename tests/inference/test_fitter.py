@@ -48,7 +48,12 @@ def model_and_mock(ssp_data_wne, sdss_filters):
         "sfh_dpl_alpha": 1.2,
         "sfh_dpl_beta": 1.0,
         "sfh_dpl_tau_gyr": 4.0,
-        "sfh_dpl_log_total_mass": 0.9,  # log10(8 Msun/yr)
+        # 1e10 Msun. Was 0.9 with the comment "log10(8 Msun/yr)" — an SFR, this
+        # name's pre-#369 meaning. c66c0aff0 (#1839) converted the prior above to
+        # the declared Uniform(7.0, 12.5) and left the truth behind, so the fit
+        # ran on an 8 Msun galaxy under a prior admitting nothing below 1e7. It
+        # stayed green because the assertions here check finiteness, not recovery.
+        "sfh_dpl_log_total_mass": 10.0,
         # free (it carries a prior) but never given a truth value — the forward
         # used to substitute the spec default silently. Say it out loud (#1021).
         "sfh_dpl_age_gyr": float(spec.get_distribution("sfh_dpl_age_gyr").default),

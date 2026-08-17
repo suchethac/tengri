@@ -285,7 +285,8 @@ class Draine2021PAHIRSEDComponent(SEDModelComponent):
         tuple[ndarray, dict]
 
             - ``sed_out``: Updated SED in erg/s/Hz.
-            - ``published``: Dict with ``{"L_ir_emission": scalar}``.
+            - ``published``: Dict with ``{"L_ir_emission": erg/s,
+              "sed_dust_ir": erg/s/Hz}``.
 
         Notes
         -----
@@ -296,13 +297,80 @@ class Draine2021PAHIRSEDComponent(SEDModelComponent):
         """
         L_ir = inputs["L_ir"]
 
-        # Skip if templates were not loaded
-        if not hasattr(self, "data") or self.data is None:
-            # Return input SED unchanged
-            return sed_in, {}
+        # Try precomputed data first; if unavailable, lazy-load at trace time
+        if hasattr(self, "data") and self.data is not None:
+            precomp = self.data
+        else:
+            # Lazy-load templates like architecture A (module-level closure).
+            # Ensures component works both with precomputation (self.data set)
+            # and without (approx=None, default builds). Loads inside a trace
+            # via jax.ensure_compile_time_eval() to avoid tracer leakage.
+            import warnings
 
-        # Load template grid from precomputed state
-        precomp = self.data
+            from tengri.components.dust.draine2021_pah import (
+                load_pahspec_or_raise,
+                resample_lnu_on_aa_grid,
+                select_pahspec_axes,
+            )
+
+            template_path = self.config.template_path
+            if template_path is None:
+                import os
+
+                from tengri.components.dust.draine2021_pah import (
+                    DRAINE2021_PAH_DEFAULT_PATH,
+                    PAHSPEC_PATH_ENV,
+                )
+                from tengri.components.dust.emission_templates import _find_data_file
+
+                template_path = os.environ.get(PAHSPEC_PATH_ENV)
+                if template_path is None:
+                    template_path = _find_data_file(os.path.basename(DRAINE2021_PAH_DEFAULT_PATH))
+
+            if template_path is None:
+                warnings.warn(
+                    f"Draine2021PAHIR component {self.name!r}: template file not found. "
+                    "Set TENGRI_PAHSPEC_PATH or provide template_path via config. "
+                    "Component will skip.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+                return sed_in, {}
+
+            try:
+                templates = load_pahspec_or_raise(template_path)
+                starlight = self._resolve_starlight()
+                nu_pnu_um = select_pahspec_axes(
+                    templates,
+                    starlight=starlight,
+                    ionization=self.config.ionization,
+                    size_distribution=self.config.size_distribution,
+                    slab=self.config.slab,
+                )
+                wave_aa = jnp.asarray(wave)
+                lnu_template = resample_lnu_on_aa_grid(
+                    nu_pnu_um=nu_pnu_um,
+                    wave_um=templates.wavelength_um,
+                    wave_aa=wave_aa,
+                )
+                from tengri.components.dust.emission._physics import integrate_lnu_over_nu
+
+                norms = integrate_lnu_over_nu(lnu_template, wave_aa)
+                precomp = {
+                    "lgU_grid": jnp.asarray(templates.lgU),
+                    "lnu_template": lnu_template,
+                    "norm_per_lgU": norms,
+                }
+            except Exception as e:
+                warnings.warn(
+                    f"Draine2021PAHIR component {self.name!r}: failed to load templates: {e}. "
+                    "Component will skip.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+                return sed_in, {}
+
+        # Load template grid from precomputed state or just-loaded data
         lgU_grid = precomp["lgU_grid"]
         lnu_template = precomp["lnu_template"]  # (n_lgU, n_wave)
         norm_per_lgU = precomp["norm_per_lgU"]
@@ -323,7 +391,19 @@ class Draine2021PAHIRSEDComponent(SEDModelComponent):
         scale = jnp.where(norm_at_lgU > 0, L_ir / norm_at_lgU, 0.0)
         sed_emission = L_nu_shape * scale
 
-        # Return updated SED and published luminosity
-        sed_out = sed_in + sed_emission
+        # Report the luminosity actually re-radiated, which is L_ir only when the
+        # template carried a usable normalization. A degenerate norm zeroes
+        # ``scale`` above, so publishing a bare ``L_ir`` here would claim the full
+        # absorbed luminosity was re-emitted while ``sed_dust_ir`` contributes
+        # nothing -- two published values contradicting each other, the
+        # zero-hiding shape tracked in #1404.
+        l_ir_emitted = jnp.where(norm_at_lgU > 0, L_ir, 0.0)
 
-        return sed_out, {}
+        # Return updated SED and published outputs
+        sed_out = sed_in + sed_emission
+        published = {
+            "L_ir_emission": l_ir_emitted,
+            "sed_dust_ir": sed_emission,
+        }
+
+        return sed_out, published

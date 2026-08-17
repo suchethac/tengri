@@ -16,6 +16,15 @@ Each `components/<component>/<name>_precompute.py` file defines:
   user-facing parameter for each grid axis. Empty tuple means no grid axes
   (scalar template, e.g. a fixed-shape IR template scaled by L_absorbed only).
 
+  Each entry must be a name the component actually declares — the *full*
+  prefixed parameter (``agn_cos_inc``, not ``cat3d_cos_inc`` and not the bare
+  ``cos_inc``), because it is matched against ``Parameters.get_fixed_values()``
+  keys. Nothing forces the two namespaces to agree, so a rename on either side
+  severs the link silently: no axis collapses, and nothing is raised. Six
+  modules shipped exactly that (#1738). The order is equally load-bearing:
+  entry ``i`` must be axis ``i`` of the grid, since the position *is* the axis
+  index passed to the collapse.
+
 - ``precompute(filter_waves, filter_trans, redshift, parameters, **kwargs)``:
   build the preintegrated grid.  The function is responsible for:
 
@@ -25,8 +34,12 @@ Each `components/<component>/<name>_precompute.py` file defines:
        :func:`tengri.forward.precompute.grid.preintegrate_grid` (or the
        component-specific equivalent — K&D has its own dataclass).
     4. Auto-collapsing axes whose corresponding parameter in ``parameters`` is
-       :class:`~tengri.parameters.priors.Fixed`, via
-       :func:`tengri.forward.precompute.grid.slice_fixed_axes` (or equivalent).
+       :class:`~tengri.parameters.priors.Fixed`, by calling
+       :func:`tengri.forward.precompute.templates.collapse_fixed_axes`. Do not
+       hand-roll this step: it was copied into eleven modules, which is how six
+       of them came to declare axis names that could never match and how two
+       shipped declarations that disagree with their own grid, with no error in
+       either case (#1738). The shared helper carries both checks.
     5. Returning a precompute result (``PreintegratedGrid`` or component
        dataclass such as ``KDPreintegratedData``).
 
@@ -143,7 +156,9 @@ class PrecomputeModule(Protocol):
         **JIT-compatible**: no — factory function, runs at model-init time outside JIT.
 
         Implementations must auto-collapse grid axes whose parameters are Fixed
-        in ``parameters``, reducing dimensionality and lookup cost.
+        in ``parameters``, reducing dimensionality and lookup cost, by calling
+        :func:`tengri.forward.precompute.templates.collapse_fixed_axes` rather
+        than reimplementing the step (#1738).
         """
         ...
 

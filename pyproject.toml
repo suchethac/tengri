@@ -41,7 +41,6 @@ dependencies = [
     "dsps>=0.4.6,<0.4.8",  # Lower bound: 0.4.6 is the first version with CosmoParams in flat_wcdm. Upper bound re-pinned 2026-06-22: the dsps 0.4.8 PyPI sdist breaks setuptools-scm version detection at install time (CI build step dies with LookupError); 0.4.7 is the last good release. The 0.4.8.dev git build works (has version metadata) — only the published 0.4.8 sdist is affected.
     "h5py>=3.0",
     "nifty8[re]>=8.5",
-    "astroquery>=0.4",
     "tomli>=2.0; python_version < '3.11'",
     # JAX gates `jax_compilation_cache_max_size` behind filelock: set the cap
     # without it and JAX raises on EVERY persistent-cache read, which disables the
@@ -66,6 +65,19 @@ optax = ["optax>=0.2"]
 # Grain-model attenuation laws (wd01_*, d03_*, hd23_*) wrap the
 # dust-extinction package rather than reimplementing the profiles.
 grain-dust = ["dust-extinction>=1.0"]
+# Downloading filter curves from the SVO Filter Profile Service. Optional
+# because `_fetch_from_svo` was already written as an optional import --
+# `try: from astroquery.svo_fps import SvoFps / except ImportError: raise
+# ImportError("astroquery is required ...")` -- while pyproject listed it as a
+# hard dependency, so that error could never fire and every user paid for it.
+#
+# It is not a small toll. astroquery is the only mandatory route to astropy in
+# this dependency graph (nifty8 needs astropy only under its `util` extra, and
+# tengri requests `nifty8[re]`), so it uniquely pulls 87 MB: astropy 46,
+# astroquery 28, pyvo 4.6, plus requests/keyring/beautifulsoup4/html5lib.
+# That is 13% of a 657 MB install, for a feature most users never reach --
+# every filter tengri ships resolves from the local registry without it.
+filters = ["astroquery>=0.4"]
 # Hardware-accelerator extras. JAX is installed by default with CPU support;
 # these extras pull the matching jax/jaxlib build for the target backend.
 # Linux x86_64 with CUDA 12: pip install -e ".[gpu]"
@@ -81,6 +93,8 @@ all = [
     # Grain-model attenuation laws (wd01_*, d03_*, hd23_*) need this; without
     # it those laws raise ImportError at predict time, so "[all]" must ship it.
     "dust-extinction>=1.0",
+    # SVO filter downloads; see the `filters` extra above.
+    "astroquery>=0.4",
 ]
 dev = [
     "pytest>=7.0",
