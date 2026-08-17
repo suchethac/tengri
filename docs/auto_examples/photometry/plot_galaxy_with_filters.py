@@ -86,17 +86,34 @@ vis = (wave_obs > 1.0e3) & (wave_obs < 2e6)
 ax_sed.loglog(wave_obs[vis], nu_l_nu[vis], color="0.15", lw=1.2)
 ax_sed.set(ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]", ylim=(1e40, 5e44))
 
+loaded = 0
+first_failure: Exception | None = None
+
 for label, names, color in FILTERS_BY_GROUP:
     for name in names:
         try:
             f = load_filter(name)
-        except Exception:
+        except Exception as e:
+            if first_failure is None:
+                first_failure = e
             continue
         ax_filt.fill_between(
             np.asarray(f.wave), 0, np.asarray(f.trans), color=color, alpha=0.4, lw=0
         )
+        loaded += 1
     # one transparent rectangle for the legend handle
     ax_filt.fill_between([], [], color=color, alpha=0.6, label=label)
+
+# Note the legend handle above: `fill_between([], [], label=...)` adds a
+# collection carrying no data, one per group. So with every filter failing to
+# load, the panel still holds artists and a full legend -- it looks populated
+# and is empty. Count what actually loaded instead.
+if loaded == 0:
+    raise RuntimeError(
+        "no filter transmission curve could be loaded, so the filter panel is "
+        f"empty behind a full legend. First failure: "
+        f"{type(first_failure).__name__}: {first_failure}"
+    ) from first_failure
 
 ax_filt.set(
     ylim=(0, 0.7), xlabel=r"Observed wavelength $\lambda$ [$\mathrm{\AA}$]", ylabel="transmission"

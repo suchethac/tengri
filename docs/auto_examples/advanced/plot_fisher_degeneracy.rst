@@ -29,7 +29,7 @@ metallicity. Adding NIR or MIR bands breaks the degeneracy by factors of
 Reference: Fisher Information Matrix in parameter estimation; see
 Conroy 2013 (ARA&A, 51, 393) for SED fitting context.
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-133
+.. GENERATED FROM PYTHON SOURCE LINES 13-143
 
 
 
@@ -124,6 +124,7 @@ Conroy 2013 (ARA&A, 51, 393) for SED fitting context.
     }
 
     sigmas = {}
+    first_failure: Exception | None = None
     for fname, filters in FILTER_SETS.items():
         try:
             obs = tengri.Observation(
@@ -145,10 +146,19 @@ Conroy 2013 (ARA&A, 51, 393) for SED fitting context.
             errs = np.where(np.isfinite(errs) & (errs > 0), errs, 5.0)
             sigmas[fname] = np.minimum(errs, 5.0)
         except Exception as e:
+            if first_failure is None:
+                first_failure = e
             print(f"[{fname}] skipped: {e}")
 
+    # This guard was already here and is the pattern the other examples now follow.
+    # It only gains the cause: "check filter availability" was a guess at why, and
+    # when the reason was something else (a dust-law KeyError, say) it sent the
+    # reader looking in the wrong place.
     if not sigmas:
-        raise RuntimeError("Fisher computation failed — check filter availability")
+        raise RuntimeError(
+            f"Fisher computation failed for every filter set. First failure: "
+            f"{type(first_failure).__name__}: {first_failure}"
+        ) from first_failure
 
     x = np.arange(len(fisher_params))
     width = 0.22
@@ -168,7 +178,7 @@ Conroy 2013 (ARA&A, 51, 393) for SED fitting context.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 11.130 seconds)
+   **Total running time of the script:** (0 minutes 8.880 seconds)
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_fisher_degeneracy.py:
