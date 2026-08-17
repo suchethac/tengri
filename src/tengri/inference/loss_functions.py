@@ -264,7 +264,7 @@ def _build_prediction(
             # model spectrum the way a pipeline does (measure_line_fluxes). With
             # FeaturePrecomp the measurement runs against the SSP window LUT.
             prediction["line_fluxes"] = model.measure_line_fluxes(
-                params, measured_line_defs, fast=fast_lines, state=feature_state
+                params, measured_line_defs, approx=fast_lines, state=feature_state
             )
         else:
             prediction["line_fluxes"] = model.predict_line_fluxes(
