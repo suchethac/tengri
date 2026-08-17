@@ -294,26 +294,16 @@ def test_fritz_axis_is_differentiable(
 
 
 @pytest.mark.gradient
-@pytest.mark.xfail(
-    reason=(
-        "#1851: agn_fritz_tau is the only one of the six Fritz axes that is not "
-        "interpolated. A 40-point uniform sweep of [0.1, 10] returns 18 "
-        "distinct values with an exactly zero gradient at 67.5% of samples; "
-        "every other axis returns 40/40 distinct with 0% zero. The output "
-        "plateaus sit on the node values and switch at 4.5 and 8.0, the "
-        "midpoints of [3,6] and [6,10] -- nearest-neighbor selection."
-    ),
-    strict=True,
-)
+@pytest.mark.contract
 def test_fritz_tau_is_interpolated_like_every_other_axis(
     fritz_grid_path: Path, wavelength_aa: jnp.ndarray
 ) -> None:
-    """Ratchet: flips to a pass the moment the tau axis is interpolated.
+    """Verify smooth interpolation across the non-uniform tau axis.
 
-    A dead axis is invisible to every other test in this file. The forward
-    value still moves -- tau reshapes the SED by 71% end to end, so
-    ``test_fritz_axis_moves_the_sed`` passes -- while any fit that starts at
-    tau > 3 sits on a plateau and receives no gradient at all.
+    The tau axis [0.1, 0.3, 0.6, 1.0, 2.0, 3.0, 6.0, 10.0] is non-uniform.
+    A 40-point uniform sweep should return 40 distinct SEDs with zero-gradient
+    fraction at 0%, confirming that the triweight kernel is computing weights
+    in index space (not physical space). This fixes #1851.
     """
     path = str(fritz_grid_path)
     lo, hi, _, _ = _FRITZ_AXES["agn_fritz_tau"]
