@@ -98,7 +98,7 @@ def _pdr_luminosity_weight(umin, umax, alpha):
 def _find_data_file(filename: str) -> str | None:
     """Search standard data directories for a template file.
 
-    Delegates to :func:`tengri._data_setup.find_data`, which is a superset of
+    Delegates to ``tengri._data_setup.find_data``, which is a superset of
     the package-anchored and cwd-relative candidates this used to hold, and
     additionally honors ``$TENGRI_DATA_DIR`` (#1431).
     """

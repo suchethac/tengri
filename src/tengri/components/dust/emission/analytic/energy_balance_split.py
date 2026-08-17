@@ -53,7 +53,7 @@ class EnergyBalanceSplitIRSEDComponent(EmissionComponent):
     **Parameters are declared globally**, not on this class: the warm/cold and
     AGN-IR knobs (``dust_T_warm``, ``dust_T_cold``, ``dust_f_cold``,
     ``dust_beta_warm``, ``dust_beta_cold``, ``dust_L_agn_ir``) live in
-    :mod:`tengri.components.dust._params` because ``dust_eta_balance`` and the
+    ``tengri.components.dust._params`` because ``dust_eta_balance`` and the
     energy-balance bookkeeping are shared with the attenuator. Re-declaring them
     here would raise a duplicate-declaration error, so ``predict`` reads them
     from the sliced parameter dict instead.

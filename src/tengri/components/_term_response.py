@@ -5,7 +5,7 @@ An additive emitter (dust IR, X-ray, radio) is a *sum of rank-1 terms* — each 
 scalar amplitude times a spectral shape fixed by the emitter's shape parameters.
 Because the filter integral is linear, each term's per-filter response is a
 build-time constant and the band flux collapses to ``sum_k A_k * R_kf``. The
-response is built once in :meth:`tengri.SEDModel._additive_term_band_response`
+response is built once in ``tengri.SEDModel._additive_term_band_response``
 and threaded into the JIT as ``template_data``; this module is the single reader,
 so the namespace key cannot drift between the producer and its consumers.
 

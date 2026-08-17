@@ -83,7 +83,7 @@ def _young_indicator(
     oldest.
 
     This is the single definition. It is the same function
-    :func:`~tengri.components.dust._apply.two_component_dust` uses for the screen
+    ``tengri.components.dust._apply.two_component_dust`` uses for the screen
     itself, so the stars that sit behind the birth cloud, the stars whose Lyman
     continuum is reprocessed, and the stars the photometry LUT reddens are all the
     same stars. Two other spellings — ``1 / (1 + 10**u)`` — existed here and in the
@@ -332,7 +332,7 @@ class DustSEDComponent(TemplateThreading):
         """Free parameters this component owns (attenuation-only).
 
         Mirrors the canonical ``dust_*`` attenuation priors in
-        :mod:`tengri.parameters._builders`. Users may override any
+        ``tengri.parameters._builders``. Users may override any
         entry as :class:`Fixed` to drop it from the prior.
 
         Emission-specific parameters (dust_T, dust_beta_ir, dust_alpha_dale,

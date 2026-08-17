@@ -3,7 +3,7 @@
 
 """AGN broad-line region (BLR) sub-block factories.
 
-Variants from :data:`tengri.parameters.groups._VALID_AGN_BLR_TYPES`:
+Variants from ``tengri.parameters.groups._VALID_AGN_BLR_TYPES``:
 ``none``, ``analytic``, ``synthesizer``, ``synthesizer_spectra``, ``grahsp``,
 ``qsogen``. Shared params under ``agn.blr`` partition include ``blr_cf``,
 ``alpha_ion``.

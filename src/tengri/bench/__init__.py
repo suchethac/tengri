@@ -119,7 +119,7 @@ def _human_bytes(n: int) -> str:
 def _find_ssp() -> Path | None:
     """Locate any DSPS-format SSP grid tengri can see.
 
-    Shares :func:`tengri._data_setup.find_ssp_files` with ``tengri.doctor()``,
+    Shares ``tengri._data_setup.find_ssp_files`` with ``tengri.doctor()``,
     so the benchmark and the diagnostic never disagree about whether an install
     has an SSP grid.
     """

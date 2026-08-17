@@ -204,7 +204,7 @@ class PopulationSEDModel:
         field tuple, but ``galaxies`` is a tuple of ``Mapping``s
         whose contents are JAX arrays / dicts — unhashable. The cache
         machinery (:class:`weakref.WeakKeyDictionary` in
-        :mod:`tengri.inference._model_cache`) uses object identity
+        ``tengri.inference._model_cache``) uses object identity
         anyway, so identity-hash is functionally equivalent and
         sidesteps the unhashable-field problem.
 

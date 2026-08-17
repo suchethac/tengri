@@ -11,7 +11,7 @@ independent of which distribution each free parameter was given.
 Production inference currently routes through
 :class:`tengri.Fitter` + :func:`tengri.inference.loss_functions.build_loss_fn`,
 which implements the same standardization inline (the
-:func:`~tengri.inference.loss_functions._unstandardize_parameters` helper).
+``tengri.inference.loss_functions._unstandardize_parameters`` helper).
 :class:`StandardizedForwardModel` here is the standalone, sampler-agnostic
 encapsulation — used by the unit tests as the canonical reference for the
 ξ-mapping math, and by future backends (Ray Tracing, vanilla MAP/Pathfinder)

@@ -118,7 +118,7 @@ def load_cat3d_wind_grid(grid_path: str) -> TorusTemplateGrid:
     Notes
     -----
     **JIT-compatible**: no — performs HDF5 I/O. Call outside the trace and
-    pass the result in as an argument; see :mod:`tengri.components.agn._template_grid`.
+    pass the result in as an argument; see ``tengri.components.agn._template_grid``.
     """
     raw = _load_cat3d_arrays(grid_path)
 

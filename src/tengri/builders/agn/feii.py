@@ -3,7 +3,7 @@
 
 """AGN FeII sub-block factories.
 
-Variants from :data:`tengri.parameters.groups._VALID_AGN_FEII_TYPES`:
+Variants from ``tengri.parameters.groups._VALID_AGN_FEII_TYPES``:
 ``none``, ``grahsp``, ``qsogen_balmer``. Shared param under
 ``agn.feii``: ``fe2_strength``.
 """

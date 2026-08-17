@@ -143,7 +143,7 @@ class IGMSEDComponent(TemplateThreading):
         r"""Free parameters this component owns.
 
         Returns the canonical :data:`PARAMS` tuple from
-        :mod:`tengri.components.igm._params` — the CGM damping-wing
+        ``tengri.components.igm._params`` — the CGM damping-wing
         knobs read by :func:`igm_transmission`. The bare ``redshift``
         parameter is read via :data:`BARE_NAME_ALLOWLIST` and not
         declared here.
@@ -631,7 +631,7 @@ class IGMSEDComponent(TemplateThreading):
         :math:`T` folded in at each node — so the projection captures
         :math:`\langle S T \rangle` rather than :math:`\langle S \rangle
         \langle T \rangle`. For a mean-IGM model that tensor is a build-time
-        constant (:func:`~tengri.forward.sed_model._fold_igm_into_subbands`,
+        constant (``tengri.forward.sed_model._fold_igm_into_subbands``,
         #1135). Patchy reionization and DLAs read free parameters, so it is not,
         and the tensor is absent — leaving the projector to band-average
         :math:`\langle T \rangle` over the whole flux. Across a Lyman-break band

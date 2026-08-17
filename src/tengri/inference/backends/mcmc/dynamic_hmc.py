@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 #: from plain HMC window adaptation at this fixed trajectory length; the
 #: dynamic kernel then draws its own per-step length while sampling. Must stay
 #: equal to the ``num_integration_steps`` in
-#: :func:`~tengri.inference.backends.mcmc._shared._dynamic_hmc_full_scan`,
+#: ``tengri.inference.backends.mcmc._shared._dynamic_hmc_full_scan``,
 #: which the prewarm, hierarchical and catalog paths still call — the two
 #: disagreeing would mean a cached adaptation tuned against a different
 #: trajectory length than the fused path produces.

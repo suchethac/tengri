@@ -3,7 +3,7 @@
 
 """Callable factories for nebular emission config dicts.
 
-Variants come from :data:`tengri.components.nebular._models.NEBULAR_MODELS`:
+Variants come from ``tengri.components.nebular._models.NEBULAR_MODELS``:
 
 - ``none`` — no nebular contribution.
 - ``ssp`` — embedded in the SSP grid (no free params; selects the SSP
@@ -13,7 +13,7 @@ Variants come from :data:`tengri.components.nebular._models.NEBULAR_MODELS`:
 - ``cb19`` — Charlot & Bruzual 2019 templates.
 
 The free-parameter set is **shared** between ``cloudy`` / ``cue`` /
-``cb19`` (per :mod:`tengri.parameters._builders`), with ``cb19``
+``cb19`` (per ``tengri.parameters._builders``), with ``cb19``
 adding a handful of extras. ``none`` and ``ssp`` carry no free
 parameters.
 

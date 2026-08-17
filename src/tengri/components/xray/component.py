@@ -122,8 +122,8 @@ class XRaySEDComponent(TemplateThreading):
         r"""Free parameters this component owns.
 
         Returns the canonical :data:`PARAMS` tuple from
-        :mod:`tengri.components.xray._params`. The legacy ``_XRAY_PARAMS``
-        bucket in :mod:`tengri.parameters._builders` is a derived view
+        ``tengri.components.xray._params``. The legacy ``_XRAY_PARAMS``
+        bucket in ``tengri.parameters._builders`` is a derived view
         of the same tuple, so the two registration paths agree by
         construction.
         """
@@ -314,7 +314,7 @@ class XRaySEDComponent(TemplateThreading):
 
     #: Cross-component scalars this emitter reads off ``state.derived``, with two
     #: deliberately distant probe draws — see
-    #: :meth:`tengri.SEDModel._additive_term_band_response`. Every term must come back
+    #: ``tengri.SEDModel._additive_term_band_response``. Every term must come back
     #: *proportional* between the two, or it is not rank-1 and earns no constant band
     #: response. Every value is nonzero on purpose, so a term that stays identically
     #: zero across both draws is zero for a structural reason, not a probe artifact.
