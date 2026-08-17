@@ -89,7 +89,6 @@ from tengri.observation.photometry import ab_mag_from_flux
 from tengri.parameters.translate import (
     _CUE_GAS_IDENTITY_PARAMS,
     _CUE_IONSPEC_IDENTITY_PARAMS,
-    _EVOLVING_ALPHA_PARAM_MAP,
     LOG10_ZSUN,
     _build_param_map,
     check_missing_free_params,
@@ -2348,6 +2347,11 @@ class SEDModel:
         -------
         dict[str, tuple[str, float, float]]
             Parameter map deltas for metallicity handling.
+
+        Raises
+        ------
+        NotImplementedError
+            If alpha_fe_evolving=True, which is currently not supported (#1767).
         """
         self._met_mode = getattr(spec, "met_mode", "delta")
         # _met_mode checked directly: "ramp" for evolving, "chem_evol" for chemical evolution
@@ -2365,7 +2369,22 @@ class SEDModel:
 
         self._alpha_fe_evolving = getattr(spec, "alpha_fe_evolving", False)
         if self._alpha_fe_evolving:
-            delta.update(_EVOLVING_ALPHA_PARAM_MAP)
+            # #1767: Per-age alpha-enhancement requires wiring compute_alpha_fe_evolving
+            # through the stellar component's SED production pipeline. Currently the
+            # mechanism accepts only a scalar met_alpha_fe, which is applied uniformly
+            # to all ages (either via SSP grid interpolation or effective-metallicity
+            # calculation). Supporting a per-age ramp would require architectural
+            # changes: propagating per-age arrays through the age-weight loop and
+            # modifying effective_metallicity / interpolate_alpha_only to work per-age.
+            raise NotImplementedError(
+                "alpha_fe_evolving=True is not yet supported (#1767). "
+                "The stellar component currently accepts only a scalar "
+                "met_alpha_fe [alpha/Fe] applied uniformly to all ages. "
+                "To model alpha enhancement, use alpha_fe_evolving=False "
+                "(the default) and set met_alpha_fe to a Fixed or free scalar value. "
+                "Per-age alpha ramping from alpha_fe_old to alpha_fe_young requires "
+                "architectural extensions currently under development."
+            )
 
         return delta
 
