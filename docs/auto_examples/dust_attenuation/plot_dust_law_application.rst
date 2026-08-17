@@ -36,7 +36,7 @@ Laws cover starburst (Calzetti, Conroy+10, Salim+18, Narayanan+18,
 TEA), extinction-curve (Cardelli MW, SMC, LMC, Pei 1992),
 grain-physics (Draine 2003, WD01), and birth-cloud (Wild+07).
 
-.. GENERATED FROM PYTHON SOURCE LINES 20-113
+.. GENERATED FROM PYTHON SOURCE LINES 20-129
 
 
 
@@ -46,19 +46,8 @@ grain-physics (Draine 2003, WD01), and birth-cloud (Wild+07).
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
-      return load_ssp_data(str(candidate))
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -123,6 +112,9 @@ grain-physics (Draine 2003, WD01), and birth-cloud (Wild+07).
     nu = C_AA_PER_S / wave
     ax.loglog(wave, nu * sed_ref, color="0.05", lw=2.0, label="intrinsic", zorder=10, ls="--")
 
+    plotted = 0
+    first_failure: Exception | None = None
+
     for (law, label), color in zip(LAWS, COLORS):
         try:
             model = tengri.SEDModel.build(
@@ -137,11 +129,24 @@ grain-physics (Draine 2003, WD01), and birth-cloud (Wild+07).
                 },
                 redshift=tengri.Fixed(0.05),
             )
-        except Exception:
+        except Exception as e:
+            if first_failure is None:
+                first_failure = e
             continue
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
         sed = np.asarray(model.predict(p).rest_sed())
         ax.loglog(wave, nu * sed, color=color, lw=1.4, label=label)
+        plotted += 1
+
+    # The intrinsic reference curve is drawn above, outside the loop, so the axes
+    # is never literally empty and no figure-level "is it blank" check can see this.
+    # Only the loop knows it produced nothing.
+    if plotted == 0:
+        raise RuntimeError(
+            f"none of the {len(LAWS)} dust laws built, so only the intrinsic "
+            f"reference is drawn. First failure: "
+            f"{type(first_failure).__name__}: {first_failure}"
+        ) from first_failure
 
     ax.set(
         xlim=(900, 3e4),
@@ -159,7 +164,7 @@ grain-physics (Draine 2003, WD01), and birth-cloud (Wild+07).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 5.514 seconds)
+   **Total running time of the script:** (0 minutes 7.310 seconds)
 
 
 .. _sphx_glr_download_auto_examples_dust_attenuation_plot_dust_law_application.py:

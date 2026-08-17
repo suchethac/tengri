@@ -30,7 +30,7 @@ floating-point behavior.
 Reference: JAX JIT compilation is semantically transparent and should not alter
 floating-point results beyond ~1e-14 unit roundoff (IEEE 754 double precision).
 
-.. GENERATED FROM PYTHON SOURCE LINES 14-182
+.. GENERATED FROM PYTHON SOURCE LINES 14-196
 
 
 
@@ -44,13 +44,17 @@ floating-point results beyond ~1e-14 unit roundoff (IEEE 754 double precision).
 
  .. code-block:: none
 
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 8% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+    /tengri/src/tengri/forward/sed_model.py:8398: WildcardPartialFreeWarning: 'all_params: FREE' freed 6 of 8 parameters in group 'sfh'. These have no declared prior, only Fixed defaults, so they stay pinned:
+      met_alpha_fe, met_logzsol_scatter
+    The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. sfh={'met_alpha_fe': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
+      spec = parse_groups(**groups)
+    /tengri/src/tengri/forward/orchestrator.py:794: SFHBeforeBigBangWarning: Star formation history forms 8% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
       state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 4% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+    /tengri/src/tengri/forward/orchestrator.py:794: SFHBeforeBigBangWarning: Star formation history forms 4% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
       state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 2% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+    /tengri/src/tengri/forward/orchestrator.py:794: SFHBeforeBigBangWarning: Star formation history forms 2% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
       state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-fix/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 1% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+    /tengri/src/tengri/forward/orchestrator.py:794: SFHBeforeBigBangWarning: Star formation history forms 1% of its stellar mass before the Big Bang at z=0.10 (cosmic age 12.47 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
       state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
 
 
@@ -143,6 +147,7 @@ floating-point results beyond ~1e-14 unit roundoff (IEEE 754 double precision).
     # Predict and compare emission lines (Cue model)
     # ============================================================================
     diffs_lines = []
+    _line_failure: Exception | None = None
     # The emission lines are catalog properties, and ``predict_properties`` is the
     # single JIT/vmap-safe surface for them (NAMING_CONTRACT §4b.5). Stack them into
     # one array so the eager-vs-jit comparison below is a plain elementwise diff.
@@ -182,8 +187,21 @@ floating-point results beyond ~1e-14 unit roundoff (IEEE 754 double precision).
                 rel_diff = jnp.abs(fluxes_jit - fluxes_eager) / jnp.abs(safe_eager)
                 max_rel_diff = float(jnp.max(rel_diff))
                 diffs_lines.append(max_rel_diff)
-            except Exception:
-                pass
+            except Exception as e:
+                if _line_failure is None:
+                    _line_failure = e
+
+    # `diffs_lines` empty is read below as "this build has no Cue lines" and the
+    # figure quietly drops to one panel. That reading is only true when `has_cue` is
+    # False. With Cue present and every sample failing, the same empty list hides a
+    # broken JIT path -- and this example exists precisely to detect broken JIT
+    # paths, so failing open here defeats its purpose.
+    if has_cue and not diffs_lines:
+        raise RuntimeError(
+            f"Cue lines are available but all {n_samples} eager-vs-jit comparisons "
+            f"failed, so the line panel would be silently dropped. First failure: "
+            f"{type(_line_failure).__name__}: {_line_failure}"
+        ) from _line_failure
 
     # ============================================================================
     # Plot histograms
@@ -234,7 +252,7 @@ floating-point results beyond ~1e-14 unit roundoff (IEEE 754 double precision).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 16.839 seconds)
+   **Total running time of the script:** (0 minutes 8.177 seconds)
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_diag_jit_concrete_identity.py:

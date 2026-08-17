@@ -52,16 +52,34 @@ RECIPE_FNS = [
 
 fig, ax = plt.subplots(figsize=(7.4, 4.8))
 
+plotted = 0
+first_failure: Exception | None = None
+
 for name, recipe_fn, color in RECIPE_FNS:
     try:
         model = tengri.SEDModel.build(ssp_data=SSPS[name], **recipe_fn())
-    except Exception:
+    except Exception as e:
+        # A recipe that needs an SSP flavor this box does not have is a real
+        # skip. Every recipe failing is not — see the guard below.
+        if first_failure is None:
+            first_failure = e
         continue
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
     out = model.predict(p)
     wave = np.asarray(model.wavelengths)
     nu_l_nu = C_AA_PER_S / wave * np.asarray(out.rest_sed())
     ax.loglog(wave, nu_l_nu, color=color, lw=1.4, label=name)
+    plotted += 1
+
+# Without this, a build break in every recipe renders an empty axes and the
+# gallery runner reports the example as passing -- the exact hole the runner
+# exists to close (#1145). Swallowing per-recipe is fine; swallowing all of
+# them means the figure shows nothing it claims to compare.
+if plotted == 0:
+    raise RuntimeError(
+        f"none of the {len(RECIPE_FNS)} recipes built, so this comparison is "
+        f"empty. First failure: {type(first_failure).__name__}: {first_failure}"
+    ) from first_failure
 
 ax.set(
     xlim=(700, 5e6),

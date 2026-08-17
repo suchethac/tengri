@@ -26,8 +26,6 @@
 # orthogonal tracers that break the infrared–ultraviolet degeneracies that
 # limited the original submm-to-UV AGNfitter.
 #
-# This notebook places AGNfitter-rX's model libraries next to tengri's on the
-# same axes and in the same units (erg/s/Hz), with focus on the AGN block.
 # The headline comparisons are the two model *face-offs* that drive the
 # paper's conclusions: **§9a** — accretion-disk libraries R06, SN12, KD18, THB21.
 # THB21 wins (Bayes factor ≈10⁵·¹ over R06) because it alone carries the
@@ -37,14 +35,8 @@
 # dust addresses the 1.5–5 μm near-IR excess pure equatorial tori cannot.
 #
 # Tengri's `cat3d_wind`, `silva04`, `skirtor_agnfitter`, `slone_netzer`,
-# and `schreiber2018` blocks evaluate the same template libraries AGNfitter-rX
-# publishes; those panels are direct checks of tengri implementations. Every
-# claim of agreement prints the number that backs it — peak-normalized residual,
-# attenuation in magnitudes, a slope — next to its panel. Every tengri model
-# is built through the public `SEDModel.build` grammar (disc/torus/atten
-# sub-blocks, radio and X-ray groups), so the notebook doubles as an end-to-end
-# test that every AGNfitter-rX-parity parameter is actually wired through the
-# public API.
+# and `schreiber2018` blocks evaluate the same template libraries AGNFITTER-RX
+# publishes; those panels are direct checks of tengri implementations.
 
 # %% [markdown]
 # ## Setup
@@ -127,10 +119,8 @@ def norm_peak(L):
 #
 # Both codes build on the Bruzual & Charlot (2003) stellar populations with a
 # Chabrier (2003) initial mass function (IMF). Tengri reads a BC03 + Chabrier
-# grid in the DSPS layout; AGNfitter-rX ships the same library as
-# IR-luminosity-tagged τ-model templates. Because the underlying SSPs are
-# identical published models, the host comparison below is a sanity check on
-# the basic setup, not the scientific focus.
+# grid in the DSPS layout; AGNFITTER-RX ships the same library as
+# IR-luminosity-tagged τ-model templates.
 
 # %%
 _SSP_CANDIDATES = [
@@ -397,14 +387,11 @@ save_fig("agnfitter_03_stellar_sed.png")
 # is the more physical one — it matches both Prevot+1984's measured SMC R_V and
 # AGNfitter-rX's own declared value.
 #
-# A note on provenance: this analytic fit is AGNfitter-rX's *own* SMC
-# approximation for reddening the finished BBB template. The qsogen code that
-# builds the THB21 disc (Temple+2021, ``qsosed.py``) reddens with a different,
-# *tabulated* curve (``pl_ext_comp_03.sph``, stored as E(λ−V)/E(B−V) and applied
-# as ``A_λ = E(B−V)·[E(λ−V)/E(B−V) + R]``, R settable, default 3.1) whose UV
-# slope differs from the analytic fit. §4 therefore compares tengri to
-# AGNfitter-rX's ``BBBred_Prevot`` — the ``EBVbbb`` free parameter both codes
-# expose — not to qsogen's internal reddening.
+# This analytic fit is AGNFITTER-RX's *own* SMC approximation for reddening the
+# finished BBB template. qsogen, which builds the THB21 disc, reddens with a
+# different tabulated curve (``pl_ext_comp_03.sph``) — see §4b. §4 therefore
+# compares tengri to AGNFITTER-RX's ``BBBred_Prevot``, the ``EBVbbb`` free
+# parameter both codes expose.
 #
 # The right panel leads with the payoff — tengri at the convention-matched
 # ``E(B−V)/1.102`` lies exactly on AGNfitter-rX's band (identical *law*), with
@@ -672,17 +659,17 @@ print(
 #   qsogen reference (4.68 — cross-checked below against the committed
 #   `qsogen_detailed_reference`), while AGNfitter-rX's stored THB21 template
 #   reads only 2.45. That gap is not a tengri error; it is two compounding
-#   effects in the vendored template, both quantified in the ladder printed
-#   under the figure: (1) its 1024-point common grid samples Hα every ~104 Å —
-#   wider than the broad line itself (~66 Å FWHM) — so point-sampling tengri's
-#   own native qsogen onto that grid drops its Hα/2500 from 4.5 to ~2.8, most of
-#   the way to AGNfitter-rX's value; and (2) the stored template is weaker still
-#   (2.45), a small residual from AGNfitter-rX's particular luminosity/Baldwin
-#   realization. tengri evaluates qsogen at native
-#   resolution, reproducing the full spectral line. The near-IR hot-dust inflection
-#   that Temple+2021 fold into their *composite* template is, in both codes'
-#   decomposition, the torus's job (§9c) — which is why the disc panels here
-#   agree in the continuum and near-IR and diverge only at the lines.
+#   effects in the vendored template: (1) its 1024-point common grid samples Hα
+#   every ~104 Å — wider than the broad line itself (~66 Å FWHM) — so
+#   point-sampling tengri's own native qsogen onto that grid drops its Hα/2500
+#   from 4.5 to ~2.8, most of the way to AGNFITTER-RX's value; and (2) the
+#   stored template is weaker still (2.45), a small residual from
+#   AGNFITTER-RX's particular luminosity/Baldwin realization. tengri evaluates
+#   qsogen at native resolution, so it recovers the full line. The near-IR
+#   hot-dust inflection that Temple+2021 fold into their *composite* template
+#   is, in both codes' decomposition, the torus's job (§9c) — which is why the
+#   disc panels here agree in the continuum and near-IR and diverge only at the
+#   lines.
 # * **SN12 — reproduced** by the `slone_netzer` block. It interpolates the
 #   108-template grid with node-exact bilinear interpolation, so the SN12 peak
 #   lands on AGNfitter-rX's at every grid node (the peak shifts strongly with
@@ -697,29 +684,21 @@ print(
 #   L_bol = λ_Edd · L_Edd(M_BH), computed below from the same physical
 #   constants tengri uses. At the matched node the two realizations agree
 #   across the UV–optical to ≤0.07 dex (the residual box quantifies the
-#   1000 Å–1 μm disc window), and diverge only in the wings: tengri sits
-#   slightly *above* AGNfitter-rX in the near-IR (> 1 μm) and the far-UV. That
-#   is not a tengri error — tengri integrates its outer disc out to the physical
-#   self-gravity (Toomre) radius (Laor & Netzer 1989; the qsosed-canonical
-#   R_out ≈ 1300 R_g at this node), so it carries the coolest outer annuli that
-#   AGNfitter-rX's stored template truncates. The residual is the documented
-#   spread between a precomputed qsosed template grid (AGNfitter-rX) and tengri's
-#   from-scratch three-zone integration, whose warm-Comptonization proxy is a
-#   documented approximation; the far-IR / X-ray tails (hot corona, seed-photon
-#   rollover) the two codes treat differently and are not compared here.
+#   1000 Å–1 µm disc window), and diverge only in the wings: tengri sits
+#   slightly *above* AGNFITTER-RX in the near-IR (> 1 µm) and the far-UV,
+#   because it integrates its outer disc out to the physical self-gravity
+#   (Toomre) radius (Laor & Netzer 1989; the qsosed-canonical R_out ≈ 1300 R_g
+#   at this node) and so carries the coolest outer annuli that AGNFITTER-RX's
+#   stored template truncates. The far-IR / X-ray tails (hot corona,
+#   seed-photon rollover) the two codes treat differently and are not compared
+#   here.
 # * **R06 — the same template.** Both sides use the identical Richards+2006
 #   composite; the only subtlety is carriage. tengri's `richards2006` returns
 #   the physical L_ν, while AGNfitter-rX stores the published νL_ν array
 #   directly (it never divides by ν). Left uncorrected the two would sit a
 #   factor of ν apart. The panel puts AGNfitter-rX's R06 onto the same L_ν
 #   axis (divides by ν) so it shows the *same template* — the two curves then
-#   overlay to a median 0.0002 dex over 0.15–3 μm (printed below).
-#
-# Throughout this panel AGNfitter-rX is drawn as a thick, semi-transparent band
-# and tengri as a thin line on top, so the two stay distinguishable even where
-# they lie exactly on each other.
-#
-# **Verification Status:** CROSSVAL — Richards+06 / QSOgen SED
+#   overlay to a median 0.0002 dex over 0.15–3 µm (printed below).
 
 # %%
 from tengri.utils.physics_constants import C_CGS, G_GRAV, L_SUN, M_PROTON, M_SUN, SIGMA_T
@@ -920,15 +899,14 @@ else:
 # tengri's `agn_ebv_disc` applies the same curve to whatever disc is configured.
 # The attenuation ratio ``L(E(B−V)) / L(0)`` removes the underlying template
 # from both sides, so this panel compares the reddening laws themselves,
-# end-to-end. tengri's dashed curves sit **below** AGNfitter-rX's solid ones at
-# matched E(B−V): tengri applies the physical R_V = 2.72 (Prevot 1984) while
-# AGNfitter-rX's `function_prevot` silently ignores its declared R_V and applies
-# the bare fit (effective R_V = 2.468), so tengri attenuates 1.102× more (§4).
-# The convention is fully resolved — it is a pure normalization, not a shape
-# difference: the black dotted curve is tengri at E(B−V) = 0.3/1.102 = 0.272 and
-# it lands exactly on AGNfitter-rX's 0.3 solid. So E(B−V)_tengri = E(B−V)_AF/1.102
-# reproduces AGNfitter-rX bit-for-bit; the offset below is only because the same
-# nominal E(B−V) means 1.102× more extinction under the more physical R_V.
+# end-to-end.
+#
+# tengri's dashed curves sit **below** AGNFITTER-RX's solid ones at matched
+# E(B−V) — the §4 convention, 1.102× more extinction under the more physical
+# R_V. It is a pure normalization, not a shape difference: the black dotted
+# curve is tengri at E(B−V) = 0.3/1.102 = 0.272 and it lands exactly on
+# AGNFITTER-RX's 0.3 solid, so E(B−V)_tengri = E(B−V)_AF/1.102 reproduces
+# AGNFITTER-RX bit-for-bit.
 
 # %%
 fig, ax = plt.subplots(figsize=(7.5, 4.8))
@@ -1202,18 +1180,17 @@ save_fig("agnfitter_09c3_cat3d_fwd_sweep.png")
 # ## §9d Best combination — CAT3D-Wind + THB21, full radio-to-X-ray SED
 #
 # The paper's winning model for 67% of its sample: the CAT3D-Wind torus on the
-# THB21 disk. tengri's side is its *actual* ``SEDModel.build`` output as ONE
-# model spanning radio to hard X-ray — `disc = qsogen` (with lines + FeII, the
-# full THB21 analog) plus `torus = cat3d_wind` at the pipeline's **energy
-# balance** (covering fraction f ~ 0.4), the α_ox X-ray corona, and the DPL
-# radio jet — plotted here in **νL_ν** and **decomposed** into its components
-# (disc+torus, α_ox corona, DPL jet) so the winning model's full composition is
-# visible. AGNfitter-rX is placed on the same physical scales: THB21 disc
-# anchored at 2500 Å, CAT3D torus energy-balanced to tengri's torus IR peak,
-# X-ray via its own disc extension, the same jet. In νL_ν the big blue bump
-# leads with the mid-IR torus bump comparable; the EUV/soft-X-ray band is the
-# model-dependent bridge discussed at the capstone. Carrying the disc's emission
-# lines is what puts the 0.7 μm forest on top of the torus hump.
+# THB21 disk. tengri's side spans radio to hard X-ray in one build —
+# `disc = qsogen` (with lines + FeII, the full THB21 analog) plus
+# `torus = cat3d_wind` at the pipeline's **energy balance** (covering fraction
+# f ~ 0.4), the α_ox X-ray corona, and the DPL radio jet — plotted in **νL_ν**
+# and **decomposed** into its components (disc+torus, α_ox corona, DPL jet).
+# AGNFITTER-RX is placed on the same physical scales: THB21 disc anchored at
+# 2500 Å, CAT3D torus energy-balanced to tengri's torus IR peak, X-ray via its
+# own disc extension, the same jet. In νL_ν the big blue bump leads with the
+# mid-IR torus bump comparable; the EUV/soft-X-ray band is the model-dependent
+# bridge discussed at the capstone. Carrying the disc's emission lines is what
+# puts the 0.7 µm forest on top of the torus hump.
 
 # %%
 # Matched CAT3D-Wind node on both sides: incl 0 deg, a = -2, f_wd = 1.75.
@@ -1718,23 +1695,21 @@ print(
 #   the textbook radio-quiet value tengri's build reproduces); its CAT3D torus
 #   energy-balanced to the disc's IR reprocessing; the same DPL jet.
 #
-# The α_ox anchoring is the physical replacement for the hand-set X-ray fraction
-# used in earlier drafts. The residual differences are then genuine — the qsogen
-# emission lines, the torus silicate profile, and, in the far UV → X-ray, the
-# **soft/EUV bridge**: both codes anchor 2 keV with the *same* Just+2007 α_ox
-# relation (so they agree there and across the hard X-ray), but the EUV
-# (13.6–200 eV) is a deliberate *hole* in both — AGNfitter-rX's ``XRAYS`` builds
-# its power law only above 200 eV ("with a hole between BB template and X-Rays"),
-# and tengri's simple corona is a bare Γ = 1.8 power law with **no soft X-ray
-# excess** (warm Comptonization). The complete soft-excess physics lives in
-# tengri's ``kubota_done`` disc (the KD18 3-zone model of §9a), not in the simple
-# α_ox corona used here for AGNfitter-rX parity.
+# The residual differences are genuine — the qsogen emission lines, the torus
+# silicate profile, and, in the far UV → X-ray, the **soft/EUV bridge**: both
+# codes anchor 2 keV with the *same* Just+2007 α_ox relation (so they agree
+# there and across the hard X-ray), but the EUV (13.6–200 eV) is a deliberate
+# *hole* in both — AGNFITTER-RX's ``XRAYS`` builds its power law only above
+# 200 eV ("with a hole between BB template and X-Rays"), and tengri's simple
+# corona is a bare Γ = 1.8 power law with **no soft X-ray excess** (warm
+# Comptonization). The complete soft-excess physics lives in tengri's
+# ``kubota_done`` disc (the KD18 3-zone model of §9a), not in the simple α_ox
+# corona used here for AGNFITTER-RX parity.
 #
-# Everything on tengri's curve is a *single* ``SEDModel.build`` — host stars and
-# dust, the qsogen disc with its lines and FeII, the CAT3D-Wind torus, the α_ox
-# corona and the DPL jet — and every AGNfitter-rX-parity knob used in this
-# notebook (``agn_ebv_disc``, the torus axes, the DPL turnover/cutoff) is a
-# regular parameter of that one model, free to fit.
+# Everything on tengri's curve is a *single* ``SEDModel.build``, and every
+# AGNFITTER-RX-parity knob used in this notebook (``agn_ebv_disc``, the torus
+# axes, the DPL turnover/cutoff) is a regular parameter of that one model, free
+# to fit.
 
 # %%
 # Common observer grid spanning X-ray (~0.05 keV) to meter-wave radio.

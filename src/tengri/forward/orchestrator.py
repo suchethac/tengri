@@ -255,6 +255,12 @@ _CANONICAL_UNITS: dict[str, str] = {
     "sed_shock": "erg/s/Hz",
     "line_waves": "Angstrom",
     "line_lums": "erg/s",
+    "log_line_lums": "dex",
+    # ``log_line_lums`` after the dust screen, published by whichever dust
+    # component ran (#1867). The log form is the published one because line
+    # luminosities are ~1e40-1e43 erg/s and the linear array is already ``inf``
+    # in float32 (#1534/#1837).
+    "log_line_lums_attenuated": "dex",
     # Nebular — photometry LUT (only non-BakedIn backends
     # publish, when ``approx=WavePrecomp()`` is set).
     "nebular_phot_lnu_precomp": "erg/s/Hz",

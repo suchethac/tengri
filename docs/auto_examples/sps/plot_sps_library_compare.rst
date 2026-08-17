@@ -36,7 +36,7 @@ into the grid at fixed ``log U``) and bare-stellar variants; we use
 bare-stellar wherever available so the differences trace stellar
 physics, not nebular treatment.
 
-.. GENERATED FROM PYTHON SOURCE LINES 20-96
+.. GENERATED FROM PYTHON SOURCE LINES 20-115
 
 
 
@@ -50,21 +50,13 @@ physics, not nebular treatment.
 
  .. code-block:: none
 
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-805/src/tengri/forward/sed_model.py:1303: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.122 Gyr at peak sfh_tsnorm_peak_lbt_gyr=1 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.122 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.122 Gyr at peak sfh_tsnorm_peak_lbt_gyr=1 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.122 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
-    /Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit__einsum': FileNotFoundError: [Errno 2] No such file or directory: '/Users/suchethacooray/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_trapezoid': FileNotFoundError: [Errno 2] No such file or directory: '/Users/suchethacooray/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_multiply': FileNotFoundError: [Errno 2] No such file or directory: '/Users/suchethacooray/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-805/src/tengri/forward/sed_model.py:1303: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.259 Gyr at peak sfh_tsnorm_peak_lbt_gyr=1 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.259 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.122 Gyr at peak sfh_tsnorm_peak_lbt_gyr=1 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.122 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
-    /Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_exp': FileNotFoundError: [Errno 2] No such file or directory: '/Users/suchethacooray/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_sigmoid': FileNotFoundError: [Errno 2] No such file or directory: '/Users/suchethacooray/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-805/src/tengri/forward/sed_model.py:1303: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.124 Gyr at peak sfh_tsnorm_peak_lbt_gyr=1 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.124 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.259 Gyr at peak sfh_tsnorm_peak_lbt_gyr=1 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.259 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/src/tengri/forward/sed_model.py:1539: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.124 Gyr at peak sfh_tsnorm_peak_lbt_gyr=1 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.124 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
 
 
@@ -118,10 +110,19 @@ physics, not nebular treatment.
 
     fig, ax = plt.subplots(figsize=(7.2, 4.6))
 
+    plotted = 0
+    first_failure: Exception | None = None
+
     for (ssp_name, label), color in zip(LIBRARIES, COLORS):
         try:
             ssp = tengri.load_ssp(ssp_name)
-        except (FileNotFoundError, Exception):
+        except Exception as e:
+            # Was `except (FileNotFoundError, Exception)` — the second member makes
+            # the first redundant, so it caught everything while reading as a
+            # missing-file check. Absent grids are expected (this example is skipped
+            # in CI); a loader bug was being hidden alongside them.
+            if first_failure is None:
+                first_failure = e
             continue
         model = tengri.SEDModel.build(
             ssp,
@@ -137,6 +138,16 @@ physics, not nebular treatment.
         if norm > 0:
             nu_l_nu = nu_l_nu / norm
         ax.loglog(wave, nu_l_nu, color=color, lw=1.4, label=label)
+        plotted += 1
+
+    # The Lyman-limit and Lyalpha reference lines below are drawn unconditionally, so
+    # an empty comparison still yields a plausible-looking annotated axes.
+    if plotted == 0:
+        raise RuntimeError(
+            f"none of the {len(LIBRARIES)} SSP libraries loaded, so there is "
+            f"nothing to compare. First failure: "
+            f"{type(first_failure).__name__}: {first_failure}"
+        ) from first_failure
 
     ax.axvline(1216, color="0.55", lw=0.6, ls=":")
     ax.text(1216, 0.012, r"Ly$\alpha$", color="0.4", fontsize=8, rotation=90, va="bottom", ha="right")
@@ -156,7 +167,7 @@ physics, not nebular treatment.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 13.166 seconds)
+   **Total running time of the script:** (1 minutes 31.902 seconds)
 
 
 .. _sphx_glr_download_auto_examples_sps_plot_sps_library_compare.py:

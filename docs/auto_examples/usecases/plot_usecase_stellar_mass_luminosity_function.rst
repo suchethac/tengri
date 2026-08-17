@@ -34,7 +34,7 @@ luminosity through the mass-to-light ratio (M/L), which depends on the star
 formation history, dust attenuation, and stellar population age.
 
 This example constructs a mock survey of 200 galaxies from a Schechter SMF
-(Baldry+2012 z=0 fit: M*=10.78 M☉, alpha=-1.45, phi*=3.96e-3 Mpc^-3).
+(Baldry+2012 z=0 fit: M*=10.78 M_sun, alpha=-1.45, phi*=3.96e-3 Mpc^-3).
 For each galaxy, we build a tengri SEDModel and predict r-band absolute
 magnitudes. Binning in M_r yields a luminosity function, which we compare
 to the Blanton+2003 SDSS LF as a sanity check.
@@ -48,7 +48,7 @@ References:
 - Baldry et al. 2012, MNRAS, 421, 621 (Schechter fit z~0)
 - Blanton et al. 2003, ApJ, 592, 819 (SDSS luminosity function)
 
-.. GENERATED FROM PYTHON SOURCE LINES 34-318
+.. GENERATED FROM PYTHON SOURCE LINES 34-339
 
 
 
@@ -66,11 +66,11 @@ References:
     Sampled 200 galaxies from Schechter SMF
       M* range: 6.36e+07 – 8.28e+10 M_sun
       log10(M*) range: 7.80 – 10.92
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/src/tengri/forward/sed_model.py:8270: WildcardPartialFreeWarning: 'all_params: FREE' freed 2 of 3 parameters in group 'dust'. These have no declared prior, only Fixed defaults, so they stay pinned:
+    /tengri/src/tengri/forward/sed_model.py:8398: WildcardPartialFreeWarning: 'all_params: FREE' freed 2 of 3 parameters in group 'dust'. These have no declared prior, only Fixed defaults, so they stay pinned:
       dust_f_obscuration
     The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. dust={'f_obscuration': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
       spec = parse_groups(**groups)
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/src/tengri/forward/sed_model.py:8270: WildcardPartialFreeWarning: 'all_params: FREE' freed 6 of 8 parameters in group 'sfh'. These have no declared prior, only Fixed defaults, so they stay pinned:
+    /tengri/src/tengri/forward/sed_model.py:8398: WildcardPartialFreeWarning: 'all_params: FREE' freed 6 of 8 parameters in group 'sfh'. These have no declared prior, only Fixed defaults, so they stay pinned:
       met_alpha_fe, met_logzsol_scatter
     The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. sfh={'met_alpha_fe': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
       spec = parse_groups(**groups)
@@ -232,6 +232,10 @@ References:
 
     # Store results
     abs_mags = []
+    # Keep the first exception, not just its str(). Every galaxy here fails for the
+    # same reason when it fails at all, and re-raising it below is what makes the
+    # failure legible -- see the guard after the loop.
+    first_failure: Exception | None = None
 
     print("\nPredicting r-band absolute magnitudes...")
     for i, log_m_star in enumerate(log_mstar_samples):
@@ -262,11 +266,28 @@ References:
                 print(f"  {i + 1}/{n_gal}: log10(M*)={log_m_star:.2f}, m_r={m_app:.2f}, M_r={M_r:.2f}")
 
         except Exception as e:
+            if first_failure is None:
+                first_failure = e
             print(f"Warning: galaxy {i} failed ({e}), skipping")
             continue
 
     abs_mags = np.array(abs_mags)
     print(f"\nComputed {len(abs_mags)} absolute magnitudes")
+
+    # Skipping *some* galaxies is tolerable; skipping all of them is a broken model,
+    # not a thin sample. Without this guard the failure surfaced as
+    # ``ValueError: zero-size array to reduction operation minimum`` on the line
+    # below -- an error naming neither the cause nor the place. That is exactly how
+    # it presented when the dust attenuation LUT raised ``KeyError: 'n_slope'`` for
+    # all 200 galaxies (#1848): 200 swallowed warnings, then one uninterpretable
+    # crash. Re-raising the first real exception restores the diagnostic.
+    if abs_mags.size == 0:
+        raise RuntimeError(
+            f"all {n_gal} galaxies failed to predict, so there is no luminosity "
+            f"function to build. First failure: "
+            f"{type(first_failure).__name__}: {first_failure}"
+        ) from first_failure
+
     print(f"  M_r range: {abs_mags.min():.2f} to {abs_mags.max():.2f}")
 
     # ============================================================================
@@ -381,7 +402,7 @@ References:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 18.586 seconds)
+   **Total running time of the script:** (0 minutes 15.882 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_stellar_mass_luminosity_function.py:

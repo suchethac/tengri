@@ -37,11 +37,18 @@ RECIPES = [
 
 fig, ax = plt.subplots(figsize=(8, 5.2))
 
+plotted = 0
+first_failure: Exception | None = None
+
 for name, recipe_fn, color in RECIPES:
     try:
         # Build model from recipe
         model = tengri.SEDModel.build(ssp_data=BARE, **recipe_fn())
-    except Exception:
+    except Exception as e:
+        # One recipe needing an SSP flavor BARE does not carry is a real skip;
+        # all of them failing is a broken build path — see the guard below.
+        if first_failure is None:
+            first_failure = e
         continue
 
     # Sample at prior medians for canonical SED shape
@@ -53,6 +60,13 @@ for name, recipe_fn, color in RECIPES:
     nu_l_nu = C_AA_PER_S / wave * np.asarray(out.rest_sed())
 
     ax.loglog(wave, nu_l_nu, color=color, lw=1.6, label=name)
+    plotted += 1
+
+if plotted == 0:
+    raise RuntimeError(
+        f"none of the {len(RECIPES)} recipes built, so this gallery is empty. "
+        f"First failure: {type(first_failure).__name__}: {first_failure}"
+    ) from first_failure
 
 ax.set(
     xlim=(500, 1e7),

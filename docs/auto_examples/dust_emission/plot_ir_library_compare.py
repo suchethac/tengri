@@ -146,6 +146,9 @@ for lam_um, name in [(8, "PAH"), (24, "MIPS 24"), (100, "FIR peak"), (850, "subm
 # --- Bottom panel: L_IR-normalized SEDModel comparison ---
 ax_lir = fig.add_subplot(212)
 
+plotted = 0
+first_failure: Exception | None = None
+
 for (lib, label), color in zip(LIBS, COLORS):
     try:
         model = tengri.SEDModel.build(
@@ -160,7 +163,9 @@ for (lib, label), color in zip(LIBS, COLORS):
             },
             redshift=tengri.Fixed(0.05),
         )
-    except Exception:
+    except Exception as e:
+        if first_failure is None:
+            first_failure = e
         continue
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
     out = model.predict(p)
@@ -176,6 +181,17 @@ for (lib, label), color in zip(LIBS, COLORS):
     if l_ir > 0:
         nu_l_nu = nu_l_nu / l_ir
     ax_lir.loglog(wave, nu_l_nu, color=color, lw=1.4, label=label)
+    plotted += 1
+
+# Two exits skip a library here: the build raising, and the `ir.sum() < 5`
+# wavelength-coverage test. One guard covers both — what matters downstream is
+# that the panel has curves, not which exit emptied it.
+if plotted == 0:
+    raise RuntimeError(
+        f"none of the {len(LIBS)} IR libraries produced a curve, so the "
+        f"L_IR-normalized panel is empty. First build failure: "
+        f"{type(first_failure).__name__}: {first_failure}"
+    ) from first_failure
 
 ax_lir.set(
     xlim=(1e4, 1e7),

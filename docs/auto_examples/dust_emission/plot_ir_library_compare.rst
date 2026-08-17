@@ -32,7 +32,7 @@ the SED *shape* — peak wavelength (T_dust proxy), PAH-feature amplitude in the
   - Templates: Draine & Li 2007, Draine+2014, Dale+2014
 
 (Bottom) Seven-library L_IR-normalized comparison via full SEDModel with
-constant SFH and dust parameters (τ_diff=1, τ_bc=1.5):
+constant SFH and dust parameters (tau_diff=1, tau_bc=1.5):
 
 - ``dale2014``  — Dale+2014 SFR-driven template family
 - ``dl07``      — Draine & Li 2007 grain mixture
@@ -46,7 +46,7 @@ The L_IR normalization isolates the shape differences; combined with the fixed-L
 view, both perspectives reveal the diversity of grain models and their physical
 implications.
 
-.. GENERATED FROM PYTHON SOURCE LINES 30-196
+.. GENERATED FROM PYTHON SOURCE LINES 30-212
 
 
 
@@ -56,21 +56,8 @@ implications.
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/dust_emission/plot_ir_library_compare.py:194: UserWarning: Glyph 956 (\N{GREEK SMALL LETTER MU}) missing from font(s) cmr10.
-      fig.tight_layout()
-    /Users/suchethacooray/Projects/tengri/.claude/worktrees/docs-de-flatten-prose/examples/dust_emission/plot_ir_library_compare.py:195: UserWarning: Glyph 956 (\N{GREEK SMALL LETTER MU}) missing from font(s) cmr10.
-      plt.savefig("plot_ir_library_compare.png", dpi=150, bbox_inches="tight")
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -193,6 +180,9 @@ implications.
     # --- Bottom panel: L_IR-normalized SEDModel comparison ---
     ax_lir = fig.add_subplot(212)
 
+    plotted = 0
+    first_failure: Exception | None = None
+
     for (lib, label), color in zip(LIBS, COLORS):
         try:
             model = tengri.SEDModel.build(
@@ -207,7 +197,9 @@ implications.
                 },
                 redshift=tengri.Fixed(0.05),
             )
-        except Exception:
+        except Exception as e:
+            if first_failure is None:
+                first_failure = e
             continue
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
         out = model.predict(p)
@@ -223,6 +215,17 @@ implications.
         if l_ir > 0:
             nu_l_nu = nu_l_nu / l_ir
         ax_lir.loglog(wave, nu_l_nu, color=color, lw=1.4, label=label)
+        plotted += 1
+
+    # Two exits skip a library here: the build raising, and the `ir.sum() < 5`
+    # wavelength-coverage test. One guard covers both — what matters downstream is
+    # that the panel has curves, not which exit emptied it.
+    if plotted == 0:
+        raise RuntimeError(
+            f"none of the {len(LIBS)} IR libraries produced a curve, so the "
+            f"L_IR-normalized panel is empty. First build failure: "
+            f"{type(first_failure).__name__}: {first_failure}"
+        ) from first_failure
 
     ax_lir.set(
         xlim=(1e4, 1e7),
@@ -244,7 +247,7 @@ implications.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (3 minutes 13.886 seconds)
+   **Total running time of the script:** (0 minutes 50.103 seconds)
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_ir_library_compare.py:
