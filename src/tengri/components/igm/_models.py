@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """Runtime registry of IGM transmission models.
 
-Same shape as :mod:`tengri.components.xray._models` /
-:mod:`tengri.components.radio._models`. ``_VALID_IGM_TYPES`` derives
+Same shape as ``tengri.components.xray._models`` /
+``tengri.components.radio._models``. ``_VALID_IGM_TYPES`` derives
 from the registry keys per ADR-0005 / ADR-0008.
 """
 

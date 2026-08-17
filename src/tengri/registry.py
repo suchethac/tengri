@@ -206,24 +206,102 @@ class _RegistryTable(list):
             )
         return {d["name"]: d[value] for d in self}
 
-    def _repr_html_(self) -> str:
-        """Jupyter HTML repr — renders as a real HTML table in notebooks."""
+    def to_rst(self, *, title: str | None = None) -> str:
+        """Render as reStructuredText list-table directive.
+
+        Returns a well-formed ``.. list-table::`` directive suitable for
+        inclusion in Sphinx documentation. Escapes cell content safely:
+        replaces newlines with spaces and wraps values containing
+        reStructuredText-special leading characters. Empty cells emit
+        ``-`` to maintain list structure.
+
+        Parameters
+        ----------
+        title : str, optional
+            Optional title for the directive (appears as table caption).
+
+        Returns
+        -------
+        str
+            reStructuredText list-table directive, or a ``.. note::``
+            message if the table is empty.
+
+        Notes
+        -----
+        Column choice follows this strategy: always include ``use`` and
+        ``status`` columns even though ``_columns()`` hides ``use`` on
+        single-kind tables (the documentation page needs both). Otherwise
+        reuse the ``_columns()`` logic so all four renderings
+        (text/HTML/RST/``describe()``) stay synchronized when a new field
+        is added: the ``_PREFERRED_COLS`` and ``_ALWAYS_HIDDEN`` class
+        attributes are the single source of truth.
+
+        List-table is chosen over grid-table because cell values contain
+        commas, pipes, and backticks (e.g. ``use`` holds code like
+        ``SEDModel.build(..., dust={'type': 'calzetti'})``), which cannot
+        be escaped safely in a grid-table markup.
+        """
         if not self:
-            return "<i>(empty)</i>"
-        cols = self._columns()
-        head = "".join(f"<th style='text-align:left'>{k}</th>" for k in cols)
-        body = "".join(
-            "<tr>"
-            + "".join(f"<td style='text-align:left'>{d.get(k, '')}</td>" for k in cols)
-            + "</tr>"
-            for d in self
-        )
-        kinds = {d.get("kind", "entry") for d in self}
-        kind_label = next(iter(kinds)) if len(kinds) == 1 else "mixed"
-        return (
-            f"<table><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table>"
-            f"<i>{len(self)} result{'s' if len(self) != 1 else ''} — {kind_label}</i>"
-        )
+            return ".. note::\n\n   The registry is empty."
+
+        # Column strategy: start with _columns() logic but force 'use' visible.
+        kinds = {d.get("kind") for d in self}
+        hidden = set(self._ALWAYS_HIDDEN)
+        if len(kinds) <= 1:
+            hidden.add("kind")
+            # Do NOT add 'use' to hidden — keep it visible for RST output.
+        all_keys = list(self[0].keys())
+        cols = [k for k in self._PREFERRED_COLS if k in all_keys and k not in hidden]
+        cols += [k for k in all_keys if k not in cols and k not in hidden]
+
+        # Characters docutils reads as inline markup anywhere in a cell, not
+        # just at its start. ``**`` is the one that actually bit: every recipe's
+        # ``use`` column is ``SEDModel.build(ssp_data=ssp, **recipe)``, and
+        # Python's kwargs unpacking is RST's strong-emphasis opener, so the page
+        # built with ten "Inline strong start-string without end-string"
+        # warnings -- which the docs build turns into a failure via ``-W``.
+        _INLINE_MARKUP = ("*", "|", "`", "_")
+
+        def _escape_cell(v: Any) -> str:
+            """Escape and normalize cell content for an RST list-table."""
+            s = "" if v is None else str(v)
+            # Newlines would end the list item early.
+            s = s.replace("\n", " ")
+            # An empty item breaks list-table parsing; a dash is a real cell.
+            if not s or s.isspace():
+                return "-"
+            # Inline literal is the only escape that covers markup *inside* a
+            # value, and these cells are code or citations rather than prose, so
+            # rendering them literally is also what they should look like.
+            if any(c in s for c in _INLINE_MARKUP):
+                if "`" in s:
+                    # Double backticks cannot contain a backtick; escape instead.
+                    return s.replace("\\", "\\\\").replace("`", "\\`").replace("*", "\\*")
+                return f"``{s}``"
+            return s
+
+        def _emit(cells: list[str]) -> list[str]:
+            """One table row: ``* -`` opens it, ``  -`` continues it.
+
+            The distinction is the whole grammar of a list-table. Emitting
+            ``* -`` for every cell is silently wrong rather than an error --
+            docutils reads it as N single-column rows and renders a tall,
+            one-column list, so a check that only looks at line prefixes sees
+            nothing amiss.
+            """
+            return [f"   * - {cells[0]}"] + [f"     - {c}" for c in cells[1:]]
+
+        # The title is the directive *argument*. `list-table` has no
+        # ``:caption:`` option; passing one raises an "unknown option" warning,
+        # which is a build failure under the ``-W`` the docs build with.
+        lines: list[str] = [f".. list-table:: {title}" if title else ".. list-table::"]
+        lines += ["   :header-rows: 1", "   :widths: auto", ""]
+        lines += _emit([_escape_cell(c) for c in cols])
+        for row in self:
+            lines.append("")
+            lines += _emit([_escape_cell(row.get(col, "")) for col in cols])
+
+        return "\n".join(lines)
 
 
 class _DescribeRecord(dict):
@@ -708,7 +786,7 @@ def list_dust_models(*, status: str | None = None) -> _RegistryTable:
     named them, ``describe('two_component')`` raised ``KeyError`` and
     ``search('two_component')`` returned nothing.
 
-    Names are derived from :data:`tengri.parameters.groups._VALID_DUST_TYPES`,
+    Names are derived from ``tengri.parameters.groups._VALID_DUST_TYPES``,
     the same set ``SEDModel.build`` validates against, so this menu cannot
     advertise a type the builder rejects (nor omit one it accepts).
     """
@@ -865,7 +943,7 @@ def list_dust_emission_models(*, status: str | None = None) -> _RegistryTable:
     **attenuation** laws, see :func:`list_dust_laws`.
 
     Calls the ``SEDModel.build`` grammar validator itself
-    (:func:`tengri.parameters.groups._valid_dust_emission_types`) rather than
+    (``tengri.parameters.groups._valid_dust_emission_types``) rather than
     re-deriving what it derives. The ``DUST_EMISSION_MODELS`` loader cache is
     **not** consulted — it is load-only (closes #495).
 
@@ -981,7 +1059,7 @@ def list_xray_models(*, status: str | None = None) -> _RegistryTable:
     the whole block.
 
     Names come from the grammar validator itself
-    (:func:`tengri.parameters.groups._valid_xray_types`), which accepts the
+    (``tengri.parameters.groups._valid_xray_types``), which accepts the
     union of :data:`XRAY_MODELS` and the ``SEDModelComponent`` X-ray variants
     in ``_REGISTRY``. Reading only ``XRAY_MODELS`` — as this menu did — hid
     ``xray_aird`` and ``agn_xray_corona`` from every discovery surface from the
@@ -1013,7 +1091,7 @@ def list_radio_models(*, status: str | None = None) -> _RegistryTable:
     the block.
 
     Names come from the grammar validator itself
-    (:func:`tengri.parameters.groups._valid_radio_types`), which accepts the
+    (``tengri.parameters.groups._valid_radio_types``), which accepts the
     union of :data:`RADIO_MODELS` and the ``SEDModelComponent`` radio variants
     in ``_REGISTRY`` — so ``radio_powerlaw`` and ``radio_dpl`` are listed here
     rather than being builder-only. This is the ``radio={'type': ...}`` axis;
@@ -1984,7 +2062,7 @@ def list_inference_methods(
     _RegistryTable
         Rows: ``{name, kind, tier, short_doc, requires, status, use}``.
         ``status`` is one of ``"ok"`` / ``"missing_dep"`` / ``"incompatible"``
-        (see :class:`tengri.inference._strategy.BackendStatus`).
+        (see ``tengri.inference._strategy.BackendStatus``).
     """
     from tengri.inference._backend_registry import all_backends
 
@@ -2070,7 +2148,7 @@ def _every_menu_lister() -> tuple:
     matters as much as deriving the set at all. ``dir(tengri)`` is not the
     public surface: it is curated down to ~30 obvious entry points on purpose
     ("not the 175-item kitchen sink of every public symbol",
-    :mod:`tengri.__init__`). Scanning it alone made the derivation inherit the
+    ``tengri.__init__``). Scanning it alone made the derivation inherit the
     curation — ``list_parameters``, ``list_properties``,
     ``list_filter_conventions`` and ``list_available_ssps`` are exported and
     not curated, so they stayed invisible and **410 further advertised names
@@ -2839,7 +2917,7 @@ def list_all() -> dict[str, _RegistryTable]:
     one that never walked it, returning a hand-written dict of nine literals
     while 25 menus existed. So it showed 9 of 25, and its own ``Returns``
     section named only six of the nine it did return, while
-    :mod:`tengri.__init__` tells readers it "enumerates every registry live".
+    ``tengri.__init__`` tells readers it "enumerates every registry live".
 
     Deriving the keys preserves all nine that were there — every one is its
     lister's name minus the prefix — and adds the sixteen that were missing,

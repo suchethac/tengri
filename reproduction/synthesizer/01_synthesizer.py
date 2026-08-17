@@ -14,7 +14,7 @@
 # ---
 
 # %% [markdown]
-# # Reproducing Synthesizer's physics with tengri
+# # Synthesizer physics: partial parity audit (3/16)
 #
 # Synthesizer (Lovell et al. 2025, OJA; Roper et al. 2026, JOSS) is a
 # forward-modeling package for synthetic galaxy observables. It builds
@@ -135,7 +135,8 @@ ssp = load_ssp_data(str(_grid_h5))
 print(
     f"Synthesizer test_grid (repackaged): {ssp.ssp_wave.shape[0]} wavelengths, "
     f"{ssp.ssp_lgmet.shape[0]} metallicities, {ssp.ssp_lg_age_gyr.shape[0]} age bins; "
-    f"λ up to {ssp.ssp_wave.max():.1e} Å."
+    f"λ up to {ssp.ssp_wave.max():.1e} Å.\n"
+    f"grids from cosmos-synthesizer {S.synthesizer_version()}"
 )
 
 
@@ -145,6 +146,9 @@ print(
 # Single stellar populations at ≈ solar metallicity from 1 Myr to 10 Gyr.
 # Both sides read identical numbers; the residual sits at the level set by
 # single-precision round-trip through the shared grid (gray line, 1e-6).
+
+# %% [markdown]
+# **Verification Status:** PARTIAL (3/16) — Synthesizer parity
 
 # %%
 _target_ages_yr = [1e6, 1e7, 1e8, 1e9, 1e10]
@@ -206,6 +210,9 @@ print(f"§1 SSP 1 Gyr optical residual: median {np.median(_res):.2e}, max {_res.
 # tengri's SFR history is read from a built model on the log-spaced lookback
 # grid, not a re-evaluated analytic curve. Both normalize to 1 M⊙ formed.
 
+# %% [markdown]
+# **Verification Status:** PARTIAL (11/33) — Parametric SFH family physics
+
 # %%
 t_s, sfr_s = S.sfh_curve(tau_gyr=TAU_GYR_FIDUCIAL, max_age_gyr=AGE_GYR_FIDUCIAL)
 t_s_cosmic_gyr = AGE_GYR_FIDUCIAL - t_s / 1e9
@@ -218,9 +225,9 @@ _m_sfh = SEDModel.build(
         "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
         "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
         "log_total_mass": Fixed(0.0),
-        "*": FIXED,
+        "all_params": FIXED,
     },
-    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
 _state_sfh = _m_sfh.predict_state({})
@@ -263,6 +270,9 @@ save_fig("synthesizer_02_sfh_delayed.png")
 # convolution, #964). The mild chromatic spread (P5–P95 ≈ 1.05–1.10) follows
 # from different age weighting.
 
+# %% [markdown]
+# **Verification Status:** CROSSVAL — Photometry projection
+
 # %%
 w_s3, L_s3 = S.stellar_sed(
     tau_gyr=TAU_GYR_FIDUCIAL,
@@ -278,9 +288,9 @@ m_stellar = SEDModel.build(
         "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
         "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
-        "*": FIXED,
+        "all_params": FIXED,
     },
-    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
 s_stellar = m_stellar.predict_state({})
@@ -324,10 +334,13 @@ print(
 # and `power_law` laws, both normalized to `A(λ)/A_V` at 5500 Å. Direct
 # analytic evaluation, no SSP-convolution noise.
 
+# %% [markdown]
+# **Verification Status:** CROSSVAL — Attenuation law library
+
 # %%
 from tengri.dust import list_laws
 
-_tengri_laws = list_laws(headline=False).to_dict("fn")
+_tengri_laws = list_laws(headline=False).to_dict('fn')
 wave_law = np.logspace(np.log10(1000.0), np.log10(30000.0), 2000)
 
 
@@ -372,7 +385,10 @@ save_fig("synthesizer_04_dust_attenuation.png")
 # The fiducial galaxy with and without dust. Synthesizer applies Calzetti
 # screen at A_V = 1; tengri matches with full A_V on the diffuse component
 # (attenuates all ages equally), birth-cloud off — the single-screen mapping
-# from Prospector/Bagpipes notebooks.
+# from Prospector/BAGPIPES notebooks.
+
+# %% [markdown]
+# **Verification Status:** CROSSVAL — Attenuation law library
 
 # %%
 TAU_DIFF = AV_FIDUCIAL / 1.086
@@ -385,7 +401,7 @@ m_d = SEDModel.build(
         "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
         "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
-        "*": FIXED,
+        "all_params": FIXED,
     },
     dust={
         "type": "two_component",
@@ -393,7 +409,7 @@ m_d = SEDModel.build(
         "law_diff": "calzetti",
         "tau_bc": Fixed(0.0),
         "tau_diff": Fixed(TAU_DIFF),
-        "*": FIXED,
+        "all_params": FIXED,
     },
     redshift=Fixed(0.0),
 )
@@ -451,7 +467,7 @@ m_ir = SEDModel.build(
         "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
         "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
-        "*": FIXED,
+        "all_params": FIXED,
     },
     dust={
         "type": "two_component",
@@ -464,9 +480,9 @@ m_ir = SEDModel.build(
             "qpah": Fixed(2.5),
             "umin": Fixed(UMIN),
             "gamma_dl": Fixed(0.05),
-            "*": FIXED,
+            "all_params": FIXED,
         },
-        "*": FIXED,
+        "all_params": FIXED,
     },
     redshift=Fixed(0.0),
 )
@@ -507,6 +523,9 @@ print(f"§6 dust IR far-IR peak: Synthesizer {_pk_s / 1e4:.0f} µm, tengri {_pk_
 # Synthesizer test grid has coarse far-IR nebular continuum that lifts
 # mid-IR — a 2-node test grid property, not physics.)
 
+# %% [markdown]
+# **Verification Status:** CROSSVAL — Photometry projection
+
 # %%
 w_full_s, L_full_s = _te["total"]
 
@@ -517,7 +536,7 @@ m_full = SEDModel.build(
         "tau_gyr": Fixed(TAU_GYR_FIDUCIAL),
         "age_gyr": Fixed(AGE_GYR_FIDUCIAL),
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
-        "*": FIXED,
+        "all_params": FIXED,
     },
     dust={
         "type": "two_component",
@@ -530,11 +549,11 @@ m_full = SEDModel.build(
             "qpah": Fixed(2.5),
             "umin": Fixed(UMIN),
             "gamma_dl": Fixed(0.05),
-            "*": FIXED,
+            "all_params": FIXED,
         },
-        "*": FIXED,
+        "all_params": FIXED,
     },
-    neb={"type": "cue", "neb_logU": Fixed(-2.0), "neb_logZ_gas": Fixed(0.0), "*": FIXED},
+    neb={"type": "cue", "neb_logU": Fixed(-2.0), "neb_logZ_gas": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
 s_full = m_full.predict_state({})
@@ -565,6 +584,9 @@ save_fig("synthesizer_07_panchromatic.png")
 # so lines differ accordingly. The panel reports integrated, continuum-subtracted
 # line luminosity (width- and grid-independent).
 
+# %% [markdown]
+# **Verification Status:** CROSSVAL — Cloudy grid / Cue vs FSPS baked-in
+
 # %%
 NEB_AGE = 0.01  # Gyr — young constant-SFR population
 NEB_LOGMASS = 9.0
@@ -578,10 +600,10 @@ m_neb = SEDModel.build(
         "start_gyr": Fixed(NEB_AGE),
         "end_gyr": Fixed(0.0),
         "log_total_mass": Fixed(NEB_LOGMASS),
-        "*": FIXED,
+        "all_params": FIXED,
     },
-    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
-    neb={"type": "cue", "neb_logU": Fixed(-2.0), "neb_logZ_gas": Fixed(0.0), "*": FIXED},
+    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+    neb={"type": "cue", "neb_logU": Fixed(-2.0), "neb_logZ_gas": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
 s_neb = m_neb.predict_state({})
@@ -657,6 +679,9 @@ save_fig("synthesizer_08_nebular.png")
 # `inclination` and `theta_torus` setting geometry. Bolometric luminosity
 # maps to tengri's `agn_log_lbol = log10(L_bol / L⊙)`.
 
+# %% [markdown]
+# **Verification Status:** CROSSVAL — Nenkova+08 (CLUMPY) torus
+
 # %%
 import jax.numpy as jnp
 
@@ -711,9 +736,9 @@ def _agn_grammar(disc="kubota_done", torus="simple", nlr="none", blr="none", cos
             "tau_gyr": Fixed(1.0),
             "age_gyr": Fixed(5.0),
             "log_total_mass": Fixed(0.0),
-            "*": FIXED,
+            "all_params": FIXED,
         },
-        dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+        dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
         agn={
             "type": "composable",
             "disc": {"type": disc},
@@ -731,7 +756,7 @@ def _agn_grammar(disc="kubota_done", torus="simple", nlr="none", blr="none", cos
             "agn_cos_inc": Fixed(cos_inc),
             "agn_theta_torus": Fixed(THETA_TORUS),
             "agn_torus_frac": Fixed(_TORUS_FRAC),
-            "*": FIXED,
+            "all_params": FIXED,
         },
         redshift=Fixed(0.0),
     )
@@ -765,9 +790,9 @@ for disc_type, _ in _disc_models:
             "tau_gyr": Fixed(1.0),
             "age_gyr": Fixed(5.0),
             "log_total_mass": Fixed(0.0),
-            "*": FIXED,
+            "all_params": FIXED,
         },
-        dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+        dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
         agn={
             "type": "composable",
             "disc": {"type": disc_type},
@@ -779,7 +804,7 @@ for disc_type, _ in _disc_models:
             # disc runs at tengri's default 1e7 M⊙ — hotter and ~0.75x in peak.
             "agn_log_mbh": Fixed(float(np.log10(BH_MASS))),
             "agn_log_ledd": Fixed(float(np.log10(BH_EDD))),
-            "*": FIXED,
+            "all_params": FIXED,
         },
         redshift=Fixed(0.0),
     )
@@ -971,16 +996,16 @@ for torus_type in ("nenkova", "two_temperature"):
             "tau_gyr": Fixed(1.0),
             "age_gyr": Fixed(5.0),
             "log_total_mass": Fixed(0.0),
-            "*": FIXED,
+            "all_params": FIXED,
         },
-        dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+        dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
         agn={
             "type": "composable",
             "disc": {"type": "none"},
             "torus": {"type": torus_type},
             "lines": {"type": "none"},
             "agn_log_lbol": Fixed(agn_log_lbol),
-            "*": FIXED,
+            "all_params": FIXED,
         },
         redshift=Fixed(0.0),
     )
@@ -1138,9 +1163,9 @@ _m_vis = SEDModel.build(
         "tau_gyr": Fixed(1.0),
         "age_gyr": Fixed(5.0),
         "log_total_mass": Fixed(0.0),
-        "*": FIXED,
+        "all_params": FIXED,
     },
-    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
     agn={
         "type": "composable",
         "disc": {"type": "kubota_done"},
@@ -1148,7 +1173,7 @@ _m_vis = SEDModel.build(
         "agn_log_lbol": Fixed(agn_log_lbol),
         "agn_cos_inc": Uniform(0.0, 1.0),
         "agn_theta_torus": Fixed(THETA_TORUS),
-        "*": FIXED,
+        "all_params": FIXED,
     },
     redshift=Fixed(0.0),
 )
@@ -1222,9 +1247,9 @@ def _unified_phot(approx):
             "tau_gyr": Fixed(1.0),
             "age_gyr": Fixed(5.0),
             "log_total_mass": Fixed(0.0),
-            "*": FIXED,
+            "all_params": FIXED,
         },
-        dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+        dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
         agn={
             "type": "composable",
             "disc": {"type": "kubota_done"},
@@ -1237,7 +1262,7 @@ def _unified_phot(approx):
             "agn_cos_inc": Fixed(BH_COS_INC),
             "agn_theta_torus": Fixed(THETA_TORUS),
             "agn_torus_frac": Fixed(_TORUS_FRAC),
-            "*": FIXED,
+            "all_params": FIXED,
         },
         redshift=Fixed(0.05),
     )
@@ -1265,7 +1290,7 @@ print(f"§9g precompute vs exact photometry: max |Δ|/exact = {float(_rel.max())
 # ### §9h What a fit would free
 #
 # The same composable AGN with the block-scoped wildcard flipped to `FREE`.
-# `'*': FREE` frees only the parameters the active disc/torus/nlr/blr blocks
+# `'all_params': FREE` frees only the parameters the active disc/torus/nlr/blr blocks
 # consume; every freed parameter is guaranteed to move `predict()` (contract:
 # `tests/contract/test_agn_block_consumes.py`).
 
@@ -1277,9 +1302,9 @@ _m_free = SEDModel.build(
         "tau_gyr": Fixed(1.0),
         "age_gyr": Fixed(5.0),
         "log_total_mass": Fixed(0.0),
-        "*": FIXED,
+        "all_params": FIXED,
     },
-    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
     agn={
         "type": "composable",
         "disc": {"type": "kubota_done"},
@@ -1287,12 +1312,12 @@ _m_free = SEDModel.build(
         "nlr": {"type": "synthesizer_spectra"},
         "blr": {"type": "synthesizer_spectra"},
         "agn_log_lbol": Fixed(agn_log_lbol),
-        "*": FREE,
+        "all_params": FREE,
     },
     redshift=Fixed(0.0),
 )
 _agn_free = sorted(str(_p) for _p in _m_free.spec.free_params if str(_p).startswith("agn_"))
-print(f"§9h '*': FREE frees {len(_agn_free)} AGN parameters:")
+print(f"§9h 'all_params': FREE frees {len(_agn_free)} AGN parameters:")
 for _p in _agn_free:
     print("   ", _p)
 
@@ -1303,6 +1328,9 @@ for _p in _agn_free:
 # Both Synthesizer and tengri ship Inoue+2014 and Madau+1995 IGM
 # prescriptions; the residual at matched redshift is the difference between
 # the two implementations.
+
+# %% [markdown]
+# **Verification Status:** CROSSVAL — Inoue+2014 IGM transmission
 
 # %%
 # Inoue14 IGM is public (``tengri.igm_transmission``). The Madau96 variant is not
@@ -1416,6 +1444,11 @@ plt.show()
 # representation. Where codes use independent physics — accretion disc (§9a),
 # torus (§9e), and disc–torus geometry (§9f, Synthesizer's hard mask vs
 # tengri's smooth sigmoid) — the comparison is shape and amplitude.
+
+# %% [markdown]
+# **Verification Status:** PARTIAL (3/16) — Synthesizer parity
+#
+#
 
 # %% [markdown]
 # ## References

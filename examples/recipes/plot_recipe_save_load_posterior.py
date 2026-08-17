@@ -2,10 +2,9 @@
 Save and load a posterior to disk
 ==================================
 
-How do I persist a posterior between sessions? This recipe runs a MAP fit,
-saves the result to HDF5, reloads it, and demonstrates basic analysis.
-Posterior objects can be checkpointed for long-running fits or multi-stage
-analysis pipelines.
+MAP-fit a model, serialize the Posterior to HDF5 with ``.save()``, reload
+in a new session with `Posterior.load()`, and recover the fit parameters and
+diagnostics. Enables checkpoint-driven analysis pipelines and multi-stage fits.
 """
 
 import os

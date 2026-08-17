@@ -5,9 +5,12 @@
 Workflows
 =========
 
-End-to-end fitting workflows — BPT classification, dust Monte-Carlo
-resampling, high-z LBG fits, method comparison, and post-starburst recovery.
+End-to-end workflows: BPT classification, dust resampling, high-z LBG fits, method comparison, post-starburst recovery.
 
+
+.. raw:: html
+
+  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
 
 
 .. raw:: html
@@ -18,7 +21,7 @@ resampling, high-z LBG fits, method comparison, and post-starburst recovery.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="If the data is informative the MAP estimate sits at the likelihood maximum and the choice of prior barely matters. If the data is uninformative the MAP slides toward the prior mode.">
+    <div class="sphx-glr-thumbcontainer" tooltip="If data is informative, the MAP estimate sits at the likelihood maximum and prior choice barely matters. If data is uninformative, the MAP slides toward the prior mode. At low S/N, the posterior shifts away from truth when the prior is strong; at high S/N both priors converge.">
 
 .. only:: html
 
@@ -35,7 +38,7 @@ resampling, high-z LBG fits, method comparison, and post-starburst recovery.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates BPT ([OIII]/Hβ vs [NII]/Hα) line ratios computed directly from the model&#x27;s rest-frame SED via continuum-subtracted boxcar integration around each line center, swept across a stellar metallicity grid. The Kewley+2001 and Kauffmann+2003 demarcation lines are overlaid for context.">
+    <div class="sphx-glr-thumbcontainer" tooltip="BPT ([OIII]/Hβ vs [NII]/Hα) line ratios computed directly from the rest-frame SED via continuum-subtracted boxcar integration around each line center, swept across a stellar metallicity grid. The Kewley+2001 and Kauffmann+2003 demarcation lines distinguish star-forming galaxies from AGN.">
 
 .. only:: html
 
@@ -52,7 +55,7 @@ resampling, high-z LBG fits, method comparison, and post-starburst recovery.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates dust attenuation effects and how fitting uncertainty propagates to the recovered SED. A galaxy with free dust parameters (tau_bc and tau_diff) is fit with MAP, showing the best-fit SED plus mock perturbation envelopes to illustrate the uncertainty range from photometric noise.">
+    <div class="sphx-glr-thumbcontainer" tooltip="References: Calzetti+2000; Conroy+2013.">
 
 .. only:: html
 
@@ -69,7 +72,7 @@ resampling, high-z LBG fits, method comparison, and post-starburst recovery.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Fits a z=4 young, dust-free star-forming galaxy using JWST (F150W/F200W/F277W) and HST (F814W) broadband photometry. The characteristic Lyman-break signature (sharp UV dropout at observed ~4 micron) constrains age and metallicity even with just 4 bands. Demonstrates recovery of the young starburst component from the dropout depth.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The Lyman-break signature (sharp UV dropout at observed ≈ 4 μm) constrains age and metallicity even with just 4 bands.">
 
 .. only:: html
 
@@ -86,7 +89,7 @@ resampling, high-z LBG fits, method comparison, and post-starburst recovery.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates the simplest inference workflow: building a flexible SFH model with free dust parameters, generating mock photometry at S/N = 20, then running MAP to recover the input star formation history and dust attenuation. The figure shows the recovered SFH (dashed) against the ground truth (solid).">
+    <div class="sphx-glr-thumbcontainer" tooltip="Reference: Conroy+2013.">
 
 .. only:: html
 
@@ -103,7 +106,7 @@ resampling, high-z LBG fits, method comparison, and post-starburst recovery.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Two galaxies with very different physical properties — a dusty star-forming galaxy at z=0.3 and an unobscured Lyman-break galaxy at z=3.5 — can produce nearly identical ugrizY broadband fluxes. The 4000 Å break of the dusty low-z galaxy and the Lyman break of the high-z galaxy land at the same observed wavelength, so without intermediate bands or IR coverage the photo-z is bimodal.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Two galaxies with different physical properties can produce nearly identical broadband fluxes when the 4000 Å break of a dusty low-z galaxy and the Lyman break of a high-z galaxy land at the same observed wavelength.">
 
 .. only:: html
 
@@ -114,13 +117,13 @@ resampling, high-z LBG fits, method comparison, and post-starburst recovery.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">The photo-z degeneracy: dusty z≈0.3 vs unobscured z≈3.5</div>
+      <div class="sphx-glr-thumbnail-title">The photo-z degeneracy: dusty z ≈ 0.3 vs unobscured z ≈ 3.5</div>
     </div>
 
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="A post-starburst galaxy shows a recent burst followed by quenching. When fit with smooth tau-model (incorrect), the fit biases the recovered SFH. This workflow compares two models on the same mock data to show how model flexibility directly impacts star formation history inference.">
+    <div class="sphx-glr-thumbcontainer" tooltip="A post-starburst galaxy shows a recent burst followed by quenching. When fit with a smooth exponential (incorrect), the fit biases the recovered SFH.">
 
 .. only:: html
 
@@ -137,7 +140,7 @@ resampling, high-z LBG fits, method comparison, and post-starburst recovery.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="When did star formation in a galaxy stop? Optical-only color, the 4000 Å break, and Hα equivalent width respond on different timescales: NUV − r reddens within ~100 Myr of quenching (loss of O/B stars), D_n(4000) continues to rise over 1–3 Gyr as A stars evolve, and Hα EW drops fastest of all (within ~10 Myr) since it tracks only the youngest ionizing photons.">
+    <div class="sphx-glr-thumbcontainer" tooltip="When did star formation stop? Optical color, the 4000 Å break, and Hα equivalent width respond on different timescales: NUV − r reddens within ~100 Myr (loss of O/B stars); D_n(4000) rises over 1–3 Gyr (A-star evolution); Hα EW drops fastest (≲10 Myr, youngest ionizing photons only).">
 
 .. only:: html
 
@@ -154,7 +157,7 @@ resampling, high-z LBG fits, method comparison, and post-starburst recovery.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="A hydro simulation or semi-analytic model hands you two tables per galaxy — SFR(t) and the metallicity of the gas it formed from, Z(t). Catalog takes both as records and returns photometry for the whole population in one compile.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Replacing metallicity history Z(t) with its mass-weighted mean introduces 10–23% flux errors in u and 1–6% in z. The SED is a nonlinear mass-weighted sum of SSP templates; young metal-rich stars (dominant in UV) and old metal-poor stars do not average.">
 
 .. only:: html
 

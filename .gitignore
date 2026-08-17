@@ -153,7 +153,15 @@ docs/build.log
 # Notebook runtime data caches (SVO filter pulls, etc.)
 notebooks/data/
 examples/*/data/filters/
-examples/*/data/
+# Contents, not the directory itself. Git cannot re-include a file whose parent
+# directory is excluded -- it never descends far enough to see the negation --
+# so `examples/*/data/` would make the exception below silently inert.
+examples/*/data/**
+# The one committed input under that tree: an example reads this NED SED, so it
+# is not a cache. Eight filter curves under notebooks/data/filters/ were tracked
+# the same way -- byte-identical copies of data/filters/, deleted rather than
+# re-included, for the reason the twenty under examples/ were (#1857).
+!examples/dust_attenuation/data/haro11_ned_sed.txt
 arxiv_library/
 _galrun/
 
@@ -200,6 +208,45 @@ _galrun/
 !data/schreiber2018_templates.h5
 !data/bpss_stars_c3k_a_chabrier.h5
 !data/flury2024_grids.h5
+# ── The rest of the tracked data/, which these rules had never re-included ──
+#
+# Every file below was committed on purpose and is read at runtime or by the
+# crossvals, yet `data/*.h5` and `*.npz` above matched all of them and nothing
+# negated it. Git only applies ignore rules to *untracked* files, so they
+# survived on the accident of having been added before the rule -- delete and
+# re-add one, or regenerate the tree, and `git add -A` silently drops it. The
+# nested data/.gitignore already carried the intent as a prose comment
+# ("cue_weights.npz is tracked ... the Cue backend needs it out of the box")
+# without ever expressing it as a rule, which is the same gap written down.
+#
+# `tools/check_tracked_not_ignored.py` now fails on any tracked file its own
+# .gitignore would exclude, so this list cannot silently fall behind again.
+!data/agnfitter_cold_dust_reference.h5
+!data/agnfitter_torus_reference.h5
+!data/astrodust_templates.h5
+!data/bosa_templates.h5
+!data/cigale_radio_reference.npz
+!data/cigale_themis_reference.npz
+!data/cue_reference_outputs.npz
+!data/cue_weights.npz
+!data/dale2014_templates.h5
+!data/dale2014_templates_cigale.h5
+!data/dl07_templates_v2.h5
+!data/dl14_templates.h5
+!data/fsps_mass_remaining_chabrier.h5
+!data/fsps_nebular_reference.npz
+!data/fsps_spectrum_reference.npz
+!data/qsogen_cont_bb_only.npz
+!data/qsogen_lines_reference.npz
+!data/qsogen_manual_cont_bb.npz
+!data/qsogen_reference.npz
+!data/schreiber2016_templates.h5
+!data/skirtor_templates_v2.h5
+!data/themis_templates.h5
+
+# Vendored test fixtures. Small, deterministic, and committed on purpose; the
+# blanket *.npz / *.h5 rules above are aimed at generated arrays, not at these.
+!tests/fixtures/**
 
 # scratch logs from local recovery runs
 *_run.log
@@ -219,3 +266,9 @@ psd_bank*/
 n_sweep_results*.json
 longer_chains.log
 run[0-9].log
+
+# Isolated docs-build venv (matplotlib pinned; see docs/requirements.txt)
+.venv-docs/
+
+# Component tables rendered from the live registries each build (docs/conf.py)
+docs/_generated/

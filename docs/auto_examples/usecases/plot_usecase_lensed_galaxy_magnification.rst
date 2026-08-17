@@ -24,7 +24,7 @@ Strong-lensing magnification: EoR galaxy SEDs at μ = 1, 5, 20, 100
 Demonstrates how strong gravitational lensing elevates intrinsically-faint
 high-redshift (z=7) galaxies above the JWST NIRCam 5σ detection threshold.
 
-A z=7 star-forming galaxy with log10(M*/Msun)=9 and young burst (peak_lbt_gyr=0.05 Gyr,
+A z=7 star-forming galaxy with log10(M*/M☉)=9 and young burst (peak_lbt_gyr=0.05 Gyr,
 typical of early reionization epoch Lyman-alpha emitters per Schaerer+2003) is
 intrinsically too faint to detect individually. Strong lensing magnifications μ ∈ {1, 5, 20, 100}
 (arc regime; Refsdal 1964) scale observed-frame fluxes by μ, progressively lifting
@@ -51,8 +51,29 @@ References:
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /tengri/examples/usecases/plot_usecase_lensed_galaxy_magnification.py:212: UserWarning: Glyph 956 (\N{GREEK SMALL LETTER MU}) missing from font(s) cmr10.
+      fig.tight_layout()
+    /tengri/examples/usecases/plot_usecase_lensed_galaxy_magnification.py:212: UserWarning: Glyph 964 (\N{GREEK SMALL LETTER TAU}) missing from font(s) cmr10.
+      fig.tight_layout()
+    /tengri/examples/usecases/plot_usecase_lensed_galaxy_magnification.py:212: UserWarning: Glyph 963 (\N{GREEK SMALL LETTER SIGMA}) missing from font(s) cmr10.
+      fig.tight_layout()
+    /tengri/examples/usecases/plot_usecase_lensed_galaxy_magnification.py:213: UserWarning: Glyph 956 (\N{GREEK SMALL LETTER MU}) missing from font(s) cmr10.
+      plt.savefig("plot_usecase_lensed_galaxy_magnification.png", dpi=150, bbox_inches="tight")
+    /tengri/examples/usecases/plot_usecase_lensed_galaxy_magnification.py:213: UserWarning: Glyph 964 (\N{GREEK SMALL LETTER TAU}) missing from font(s) cmr10.
+      plt.savefig("plot_usecase_lensed_galaxy_magnification.png", dpi=150, bbox_inches="tight")
+    /tengri/examples/usecases/plot_usecase_lensed_galaxy_magnification.py:213: UserWarning: Glyph 963 (\N{GREEK SMALL LETTER SIGMA}) missing from font(s) cmr10.
+      plt.savefig("plot_usecase_lensed_galaxy_magnification.png", dpi=150, bbox_inches="tight")
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 

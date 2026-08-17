@@ -2,13 +2,11 @@
 UVJ diagram: rest-frame colors separate star-forming from quiescent
 ===================================================================
 
-Generates a mock star-forming and quiescent galaxy population and plots
-each on the rest-frame UVJ color-color plane (U-V vs V-J). The Williams+2009
-quiescent wedge (z < 1) marks the boundary between dusty star-forming and
-passive galaxies — a key degeneracy-breaking diagnostic.
+Rest-frame U−V vs V−J colors separate star-forming from quiescent galaxies.
+The Williams+2009 quiescent wedge marks the boundary between dusty
+star-forming and passive systems.
 
-Reference: Williams et al. 2009, ApJ, 691, 1879 (UVJ color-color diagram);
-Wuyts et al. 2007, ApJ, 655, 51.
+Reference: Williams et al. 2009, ApJ, 691, 1879; Wuyts et al. 2007, ApJ, 655.
 """
 
 import os

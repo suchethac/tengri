@@ -2,13 +2,7 @@
 Dust attenuation: uncertainty in SED from dust parameter estimation
 ===================================================================
 
-Demonstrates dust attenuation effects and how fitting uncertainty propagates
-to the recovered SED. A galaxy with free dust parameters (tau_bc and tau_diff)
-is fit with MAP, showing the best-fit SED plus mock perturbation envelopes
-to illustrate the uncertainty range from photometric noise.
-
-Reference: Calzetti et al. 2000, ApJ, 533, 682 (attenuation law);
-Conroy 2013, ARA&A, 51, 393 (SED fitting uncertainties).
+References: Calzetti+2000; Conroy+2013.
 """
 
 import os

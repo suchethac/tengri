@@ -20,73 +20,111 @@ and register it with the model.
 
 ## Adding a custom component
 
-The canonical way to extend tengri is by subclassing `SEDModelComponent` — a base
-class that handles registration, prior management, and integration with `SEDModel.build()`.
+`SEDModelComponent` is the root base class, but **you rarely subclass it
+directly**. Each physics block ships its own base class that already declares
+that block's inputs/outputs contract, and subclassing the right one is what
+makes your model reachable from the build grammar.
 
-Any component that has free parameters, a wavelength-dependent transform, and
-(optionally) a pre-computed library — custom SFH parametrizations, dust laws,
-nebular models, AGN templates — follows the same one-file pattern.
+This matters because `SEDModel.build()` does not accept a `type` string merely
+because a class registered. Each validator in `parameters/groups.py`
+(`_valid_dust_emission_types`, `_valid_nebular_types`, …) derives its accepted
+set from a live registry, and most of them apply a *structural* test. For dust
+emission the test is "does this component publish `sed_dust_ir`?" — not a name
+lookup. A component that registers but fails the structural test is rejected
+with `Unknown dust emission type '...'`, which reads like a typo but is a
+contract mismatch.
 
 ### Example: Custom modified blackbody dust emission
 
 ```python
 import jax.numpy as jnp
-from tengri.components.sed_model_component import SEDModelComponent
 from tengri import Uniform
+from tengri.components.dust.emission._component_base import EmissionComponent
 
-class CustomBlackbody(SEDModelComponent):
-    name = "custom_blackbody"         # registry key for SEDModel.build()
-    parameter_prefix = "custom_bb_"   # auto-prefixes free parameters
+class CustomBlackbody(EmissionComponent):
+    # Registry key used in
+    # SEDModel.build(dust={'emission': {'type': 'custom_blackbody'}})
+    name = "custom_blackbody"
 
-    # Class-level priors auto-discovered by __init_subclass__
+    # No `inputs`, `outputs` or `parameter_prefix` here: EmissionComponent
+    # already declares optional_inputs={"L_ir": "erg/s"},
+    # outputs={"sed_dust_ir": "erg/s/Hz"} and parameter_prefix="dust_".
+    # Re-declaring them with names of your own is the most common way to
+    # write a component that registers but is never reachable.
+
+    # Class-level priors auto-discovered by __init_subclass__. These reuse
+    # the canonical dust-emission parameter names from
+    # components/dust/_params.py — see "Parameter names" below.
     T = Uniform(20.0, 80.0, "temperature", units="K")
-    beta = Uniform(1.0, 3.0, "emissivity index", units="")
-
-    # Declare inputs from upstream and outputs published downstream
-    inputs = {"L_absorbed": "erg/s"}
-    outputs = {"L_ir": "erg/s"}
+    beta_ir = Uniform(1.0, 3.0, "emissivity index", units="")
 
     def load(self, wave):
         """Optional: load pre-computed library. Return None if not needed."""
         return None
 
-    def predict(self, p, sed_in, wave, *, L_absorbed):
+    def predict(self, p, sed_in, wave, *, L_ir):
         """Physics: transform SED and publish derived quantities.
 
         Parameters
         ----------
         p : dict
-            Parameter dict with keys like "T", "beta" (prefix stripped).
+            Parameter dict with keys "T", "beta_ir" (prefix stripped).
         sed_in : array
             Rest-frame L_ν from upstream [erg/s/Hz]; zeros if first component.
         wave : array
             Rest-frame wavelength grid [Angstrom].
-        **inputs : dict
-            Keyword args from upstream (auto-supplied).
+        L_ir : float
+            Energy-balance luminosity from the upstream attenuation
+            component [erg/s]. The keyword name is the block's contract.
 
         Returns
         -------
         sed_out : array
             New SED to pass downstream [erg/s/Hz].
         published : dict
-            Derived quantities matching the `outputs` keys.
+            Must contain "sed_dust_ir" — the key the block declares.
         """
-        # Implement the physics: modified blackbody emission
-        # scaled by absorbed luminosity
-        ...
-        return sed_out, {"L_ir": jnp.sum(sed_out)}
+        shape = wave ** (-p["beta_ir"]) * planck_nu(wave, p["T"])
+        sed = L_ir * shape / trapz_freq(shape, wave)
+        return sed_in + sed, {"sed_dust_ir": sed}
 ```
 
 **Key points:**
 
-- `name` is the key you use in `SEDModel.build(dust={'type': 'custom_blackbody'})`.
-- Class-level `Uniform`, `LogNormal`, etc. priors auto-flow to inference.
-- `inputs`/`outputs` dicts declare what your component consumes and publishes.
-- `predict(p, sed_in, wave, **inputs)` is the physics — pure JAX, fully differentiable.
-- `__init_subclass__` auto-registers the component with `_REGISTRY` (no extra boilerplate).
+- `name` is the key used in
+  `SEDModel.build(dust={'emission': {'type': 'custom_blackbody'}})`. Note the
+  nesting: `dust={'type': ...}` selects the dust *model*
+  (`single_component` / `two_component` / `wg00`), not the emission model.
+- Subclass the **block's** base class, not `SEDModelComponent`, and do not
+  re-declare `inputs`/`outputs` — that is what the validator tests.
+- Class-level `Uniform`, `LogNormal`, etc. priors flow to inference, provided
+  the parameter names already exist (see below).
+- `predict(p, sed_in, wave, **inputs)` is the physics — pure JAX, fully
+  differentiable. Guard `expm1`-style expressions: an unclipped
+  `nu**3 / expm1(x)` overflows at optical wavelengths and returns a `nan`
+  gradient. See `components/dust/emission/analytic/_closures.py`.
+- `__init_subclass__` auto-registers the component with `_REGISTRY` (no extra
+  boilerplate).
+
+**Parameter names.** There are two registries with two different lifetimes:
+
+| Registry | Populated by | Sees runtime-defined classes? |
+|---|---|---|
+| `_REGISTRY` (dispatch) | `__init_subclass__`, at class-definition time | yes |
+| parameter map | static scan of `components/*/_params.py` in the *installed package* (ADR-0008) | no |
+
+So a component defined at runtime (in a notebook or a user script) is
+dispatchable but **cannot introduce a new parameter name** — an unknown name is
+silently dropped from the build, and `tengri.Parameters(...)` later rejects it
+with `Unknown parameter`. To add a genuinely new parameter, add its
+`ParamDeclaration` to the block's `_params.py` in a checkout and reinstall.
+(`tengri.register_component` looks like the seam for this, but it is vestigial:
+`_get_registered_components()` has no live callers — the static scan replaced
+it.)
 
 **Place your component in:**
-- Custom dust laws: `src/tengri/components/dust/`
+- Custom dust laws: `src/tengri/components/dust/laws/`
+- Custom dust emission: `src/tengri/components/dust/emission/`
 - Custom nebular models: `src/tengri/components/nebular/`
 - Custom AGN templates: `src/tengri/components/agn/`
 - Or anywhere else — as long as it's imported before `SEDModel.build()` runs.
@@ -94,124 +132,106 @@ class CustomBlackbody(SEDModelComponent):
 **Verify it works:**
 
 ```python
-from tengri import SEDModel, load_ssp_data, Observation, Photometry, Fixed
+from tengri import SEDModel, load_ssp, Observation, Photometry, Fixed, Uniform
+from tengri.components.sed_model_component import _REGISTRY
+from tengri.parameters.groups import _valid_dust_emission_types
 
-# After your component is defined and imported:
+# Registration and acceptance are different questions — check both.
+assert "custom_blackbody" in _REGISTRY                      # dispatch
+assert "custom_blackbody" in _valid_dust_emission_types()   # validator
+
 model = SEDModel.build(
-    ssp_data=load_ssp_data("data/fsps_prsc_miles_chabrier.h5"),
+    ssp_data=load_ssp("ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0"),
     observation=Observation(photometry=Photometry.from_names(["sdss_u", "sdss_g"])),
-    dust={'type': 'custom_blackbody'},  # ← your component is available
+    dust={
+        'type': 'single_component',
+        'law_bc': 'calzetti',
+        'emission': {'type': 'custom_blackbody',   # ← your component
+                     'T': Uniform(20.0, 80.0),
+                     'beta_ir': Uniform(1.0, 3.0)},
+    },
     redshift=Fixed(0.1),
 )
 print(f"Free params: {model.spec.free_params}")
+# → ['dust_T', 'dust_beta_ir']
 ```
 
 ## Adding a custom dust law
 
-Dust attenuation laws follow the `SEDModelComponent` pattern. A dust law component
-computes attenuation (τ_λ) and optionally emits IR:
+A dust attenuation law is **not** an `SEDModelComponent` — it is a plain
+function registered with the `@register_dust_law` decorator. It returns the
+attenuation curve `k(λ)` [dimensionless]; the framework applies it, handles the
+τ_V scaling, and runs the energy balance. This is a much smaller thing to write
+than a component:
 
 ```python
-import jax.numpy as jnp
-from tengri.components.sed_model_component import SEDModelComponent
-from tengri import Uniform
+from tengri.components.dust.attenuation import register_dust_law
 
-class MyDustLaw(SEDModelComponent):
-    name = "my_dust_law"
-    parameter_prefix = "dust_"
-
-    tau_v = Uniform(0.0, 5.0, "V-band optical depth", units="")
-    delta = Uniform(0.0, 2.0, "power-law index", units="")
-
-    inputs = {}  # dust laws don't consume upstream quantities
-    outputs = {}
-
-    def predict(self, p, sed_in, wave, **inputs):
-        """Compute attenuation and apply to SED."""
-        # Power-law attenuation: τ_λ = τ_V * (λ / 0.55 μm)^(-delta)
-        wave_micron = wave / 1e4
-        tau_lambda = p["tau_v"] * (wave_micron / 0.55) ** (-p["delta"])
-
-        # Attenuate the SED
-        sed_out = sed_in * jnp.exp(-tau_lambda)
-        return sed_out, {}
+@register_dust_law("my_powerlaw")
+def my_powerlaw_dust(wavelength, n_slope=-0.7, **kwargs):
+    """Power-law attenuation curve, normalized at 5500 Å."""
+    return (wavelength / 5500.0) ** n_slope
 ```
 
-Register by importing it before `SEDModel.build()`, then use:
-`SEDModel.build(..., dust={'type': 'my_dust_law'})`
+Import it before `SEDModel.build()`, then select it as a **law**, not a type:
+
+```python
+model = SEDModel.build(
+    ...,
+    dust={'type': 'single_component',   # the dust *model*
+          'law_bc': 'my_powerlaw',      # ← your law
+          'tau_v': Fixed(0.4)},
+)
+```
+
+`dust={'type': ...}` accepts only `single_component`, `two_component` or
+`wg00` — passing a law name there is rejected. The accepted law names come
+from `_valid_dust_laws()`, a direct view of `DUST_LAWS`, which the decorator
+populates at import time. The full protocol (accepted signature, expected
+return) is documented in `components/dust/_protocol.py`.
 
 ## Adding a custom nebular model
 
-Nebular emission components follow `SEDModelComponent`. Write a component that
-takes the ionizing photon rate (Q_H) from stellar/AGN and gas-phase metallicity,
-returning nebular line and continuum emission:
+Like dust laws, a nebular backend is registered with a decorator rather than
+written as an `SEDModelComponent` subclass:
 
 ```python
-import jax.numpy as jnp
-from tengri.components.sed_model_component import SEDModelComponent
-from tengri import Uniform
+from tengri.components.nebular._models import register_nebular_model
 
-class MyNebularBackend(SEDModelComponent):
-    name = "my_nebular"
-    parameter_prefix = "neb_"
-
-    logU = Uniform(-4.0, -2.0, "ionization parameter", units="")
-
-    inputs = {"Q_H": "photons/s", "log_met_gas": ""}
-    outputs = {"L_nebular": "erg/s"}
-
-    def load(self, wave):
-        # Load nebular template grids or emulator weights
-        return None
-
-    def predict(self, p, sed_in, wave, *, Q_H, log_met_gas):
-        """Return nebular spectrum."""
-        # Look up or compute emission given Q_H, metallicity, and logU
-        nebular_sed = self._nebular_fn(wave, Q_H, log_met_gas, p["logU"])
-        sed_out = sed_in + nebular_sed
-        return sed_out, {"L_nebular": jnp.sum(nebular_sed)}
+@register_nebular_model("my_nebular", short_doc="...")
+def my_nebular_backend(...):
+    ...
 ```
 
-Register and use: `SEDModel.build(..., neb={'type': 'my_nebular'})`
+`neb={'type': 'my_nebular'}` is then accepted, because `_valid_nebular_types()`
+is a direct view of `NEBULAR_MODELS`, which the decorator populates. Read
+`components/nebular/_protocol.py` for the callable's expected signature, and
+`components/nebular/baked_in.py` or `cloudy_grid.py` for worked examples.
 
 ## Adding a custom AGN template
 
-AGN components follow `SEDModelComponent`. Load a template library and interpolate:
+AGN sub-blocks (disc, torus, BLR, NLR) are registered with
+`@register_agn_block` from `components/agn/blocks/_protocol.py`, which populates
+`AGN_BLOCKS`. The validator (`_agn_block_types`) derives the accepted names from
+that registry, so registration is what makes a block selectable. See the shipped
+blocks under `components/agn/blocks/` for the shape.
 
-```python
-import jax.numpy as jnp
-from tengri.components.sed_model_component import SEDModelComponent
-from tengri import Uniform
+## Finding the seam for any block
 
-class MyAGNTemplate(SEDModelComponent):
-    name = "my_agn_template"
-    parameter_prefix = "agn_"
+The reliable method, rather than guessing at a shape: open the validator that
+would reject your `type` string — `parameters/groups.py::_valid_*_types` — and
+read what set it builds its answer from. Every one derives from a live registry
+(ADR-0005 / ADR-0008), so that function *is* the specification of what your
+extension has to do to be accepted.
 
-    log_lbol = Uniform(42.0, 48.0, "bolometric luminosity (log)", units="erg/s")
-
-    inputs = {}
-    outputs = {"L_agn": "erg/s"}
-
-    def load(self, wave):
-        # Load SED template at build time (not at predict time)
-        # Return a dict or object with normalized template(s)
-        agn_template = jnp.array([...])  # wavelength-dependent template
-        return agn_template
-
-    def predict(self, p, sed_in, wave, **inputs):
-        """Scale and add AGN template to SED."""
-        # Interpolate template onto model wavelength grid
-        template = jnp.interp(wave, self.data_wave, self.data)
-
-        # Scale by luminosity: AGN_sed = template * 10^(log_lbol)
-        scale = 10.0 ** p["log_lbol"]
-        agn_sed = template * scale
-
-        sed_out = sed_in + agn_sed
-        return sed_out, {"L_agn": jnp.sum(agn_sed)}
-```
-
-Register and use: `SEDModel.build(..., agn={'type': 'my_agn_template'})`
+| What you want to add | Seam | Lives in |
+|---|---|---|
+| Dust IR emission model | subclass `EmissionComponent` | `components/dust/emission/` |
+| Dust attenuation curve | `@register_dust_law(name)` | `components/dust/attenuation.py` |
+| Nebular backend | `@register_nebular_model(name)` | `components/nebular/_models.py` |
+| AGN sub-block | `@register_agn_block(...)` | `components/agn/blocks/_protocol.py` |
+| SFH | `SFH_REGISTRY` entry | `components/stellar/sfh/registry.py` |
+| IGM / radio / X-ray | `register_igm_model` / `register_radio_model` / `register_xray_model` | `components/<block>/_models.py` |
 
 ## General guidelines
 
@@ -225,8 +245,16 @@ Register and use: `SEDModel.build(..., agn={'type': 'my_agn_template'})`
   - Time: years
   - SFR: M_sun/yr
   - Luminosity: erg/s/Hz (SED), erg/s (total)
-- **Parameter prefixes**: use a short, unique `parameter_prefix` to avoid collisions
-  (e.g., `"custom_bb_"` for CustomBlackbody).
+- **Parameter prefixes**: inherit the block's `parameter_prefix` (e.g. `"dust_"`
+  from `EmissionComponent`) rather than inventing a unique one. A unique prefix
+  does not avoid collisions so much as guarantee the parameter is absent from
+  the param map — see "Parameter names" above.
+- **Numerical guards**: `predict()` must be gradient-safe, not just finite.
+  Clip exponent arguments and prefer formulations whose denominators cannot
+  overflow; an unclipped `nu**3 / expm1(x)` evaluates to a harmless `0` at
+  optical wavelengths but differentiates to `nan`, and one `nan` poisons the
+  whole gradient. `components/dust/emission/analytic/_closures.py` documents
+  the standard treatment.
 - **Documentation**: include a docstring on your component class and the `predict()` method.
 - **Testing**: add tests in `tests/components/` or `tests/unit/`. Verify against other codes
   where possible. Run `pytest tests/ -q` before committing.

@@ -6,7 +6,7 @@ Canonical execution order (paper §2.1.6 / upstream GRAHSP module ordering)::
     [disc] → [nlr] → [blr] → [feii] → [torus] → [attenuation]
 
 Each stage is owned by a registered block from
-:mod:`tengri.components.agn.blocks._protocol`.
+``tengri.components.agn.blocks._protocol``.
 
 The runner is registered as ``AGN_MODELS["composable"]`` so users can opt in
 via the standard ``Parameters(agn_model="composable", ...)`` flow without
@@ -229,7 +229,7 @@ def validate_block_recipe(
        zero. A prior wider than the grid therefore contains parameter space
        a fit can never move through, silently. Warn with the live fraction
        and the grid extent. See
-       :mod:`tengri.components.agn.blocks._grid_support` for why this cannot
+       ``tengri.components.agn.blocks._grid_support`` for why this cannot
        be expressed on the parameter declaration itself (#1586).
 
     Parameters

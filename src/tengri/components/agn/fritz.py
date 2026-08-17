@@ -144,7 +144,9 @@ def _interpolate_and_normalize(
     -----
     **JIT-compatible**: yes — uses ``jnp.interp`` and ``jax.vmap``.
     """
-    template = interp_nd_triweight(grid_jax, axes, edges, point)
+    # Fritz tau and r_dust axes are non-uniform (I6 fix #1851).
+    # Use index-space interpolation for correct gradients throughout the range.
+    template = interp_nd_triweight(grid_jax, axes, edges, point, index_space_interp=True)
     sed = resample_template(wavelength, wave_grid, template, left=0.0, right=0.0)
     nu = _wavelength_to_nu(wavelength)
     integral_safe = _bolometric_integral_nu(sed, nu, floor=1e-100)

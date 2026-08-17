@@ -2,32 +2,12 @@
 Kennicutt+1998 SFR calibrations: baseline + stochastic variance
 ================================================================
 
-Three of the most-used star-formation-rate indicators agree only for
-specific assumed SFHs. This example demonstrates the Kennicutt+1998
-baseline calibrations under constant-SFR assumption, then explores how
-stochastic (bursty) star formation introduces variance in each indicator.
+Kennicutt+1998 baseline calibrations under constant-SFR assumption:
+L_FUV(1500 Å): SFR/L_FUV = 1.4 × 10⁻²⁸; L_Hα: SFR/L_Hα = 7.9 × 10⁻⁴²;
+L_IR(8–1000 μm): SFR/L_IR = 4.5 × 10⁻⁴⁴. Stochastic SFH introduces variance
+in each indicator; Hα most sensitive to recent star formation.
 
-**Top:** Baseline Kennicutt+1998 calibrations for constant-SFR galaxies.
-We mock SFR = 0.01 to 100 M☉/yr and read each indicator:
-
-- ``L_FUV(1500 Å)`` — K98: SFR/L_FUV = 1.4 × 10⁻²⁸
-- ``L_Hα`` — K98: SFR/L_Hα = 7.9 × 10⁻⁴²
-- ``L_IR(8-1000 μm)`` — K98: SFR/L_IR = 4.5 × 10⁻⁴⁴
-
-All three recover the input SFR within a factor of ~2 under the
-constant-SFR assumption. Departures from the 1:1 line measure bias
-from violating this assumption.
-
-**Bottom:** Scatter in SFR indicators under stochastic SFHs. As galaxies
-transition from smooth constant SFR to bursty histories (σ = 0.1 → 3.0),
-each indicator exhibits different scatter. Hα shows highest variance (most
-sensitive to recent star formation), while bolometric is most stable.
-
-References:
-
-- Kennicutt 1998, ARA&A, 36, 189 (baseline calibrations)
-- Conroy 2013, ARA&A, 51, 393 (SED fitting; SFR diagnostics)
-
+Reference: Kennicutt 1998, ARA&A, 36, 189; Conroy 2013, ARA&A, 51, 393.
 """
 
 import os

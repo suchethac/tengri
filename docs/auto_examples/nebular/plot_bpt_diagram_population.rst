@@ -21,27 +21,19 @@
 BPT diagram: star-forming galaxies, AGN, and shocks
 ====================================================
 
-The Baldwin-Phillips-Terlevich (BPT) diagram ([OIII]/Hβ vs [NII]/Hα)
-separates ionization mechanisms by tracing distinct loci.
+Emission lines are vacuum throughout: [OIII] = 5008.24 Å, [NII] = 6585.28 Å,
+Hα = 6564.61 Å, Hβ = 4862.68 Å. Overlays Kewley+2001 SF/AGN demarcation and
+Kauffmann+2003 SF/composite line.
 
-This example populates the diagram with:
-1. **Star-forming galaxies** (40 models sampled across logU and logZ_gas)
-2. **AGN-like models** (5 high-ionization configurations)
-3. **Shock ionization** (MAPPINGS V photoionization models at 100–1000 km/s)
+References
+----------
 
-Overlays Kewley+2001 (SF/AGN demarcation) and Kauffmann+2003
-(SF/composite line) to show how different ionization sources
-occupy the diagnostic plane. The shock sequence traces a path
-from HII regions (low ionization) through composites to Seyfert
-regions (high ionization) as velocity increases.
+Baldwin et al. 1981, PASP, 93, 5 (BPT diagnostic definitions).
+Kewley et al. 2001, ApJ, 556, 121 (SF/AGN demarcation).
+Kauffmann et al. 2003, MNRAS, 346, 1055 (SF/composite line).
+Allen et al. 2008, ApJS, 178, 20 (MAPPINGS V shocks).
 
-References:
-    Baldwin et al. 1981, PASP, 93, 5 (BPT diagnostic definitions)
-    Kewley et al. 2001, ApJ, 556, 121 (SF/AGN demarcation)
-    Kauffmann et al. 2003, MNRAS, 346, 1055 (SF/composite line)
-    Allen et al. 2008, ApJS, 178, 20 (MAPPINGS V shocks)
-
-.. GENERATED FROM PYTHON SOURCE LINES 25-274
+.. GENERATED FROM PYTHON SOURCE LINES 17-266
 
 
 
@@ -51,8 +43,21 @@ References:
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /tengri/examples/nebular/plot_bpt_diagram_population.py:264: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
+      fig.tight_layout()
+    /tengri/examples/nebular/plot_bpt_diagram_population.py:265: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
+      plt.savefig("plot_bpt_diagram_population.png", dpi=150, bbox_inches="tight")
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -309,7 +314,7 @@ References:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (1 minutes 34.879 seconds)
+   **Total running time of the script:** (0 minutes 55.215 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_bpt_diagram_population.py:

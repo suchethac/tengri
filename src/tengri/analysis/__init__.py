@@ -41,7 +41,7 @@ def __getattr__(name: str) -> ModuleType:
 
 
 # No ``__dir__`` here, deliberately. #1431 consolidated fourteen hand-rolled
-# copies onto :func:`tengri._completion.curated_dir` and guards the result, so a
+# copies onto ``tengri._completion.curated_dir`` and guards the result, so a
 # new one would have to curate through that helper and join the census in
 # ``tests/contract/test_curated_dir_mechanism.py``. Curating this namespace
 # would also be wrong: ``_CURATED_DIR`` has to equal ``dir()`` exactly, so a

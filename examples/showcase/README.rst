@@ -1,5 +1,4 @@
 Showcase
 ========
 
-Headline demonstrations that exercise the full stack: population-scale
-forward modeling, JAX gradient diagnostics, and end-to-end recipe tours.
+Full-stack demonstrations: population forward modeling, gradient diagnostics, end-to-end workflows.

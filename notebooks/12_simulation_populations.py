@@ -24,7 +24,7 @@
 #
 # ```text
 #     in :  t [Gyr]        (n_t,)      cosmic time, shared or per galaxy
-#           SFR(t)         (N, n_t)    Msun/yr
+#           SFR(t)         (N, n_t)    M☉/yr
 #           Z(t)           (N, n_t)    stellar metallicity
 #     out:  photometry     (N, n_β)    erg/s/cm2/Hz
 #           line fluxes    (N,)  each  erg/s/cm2
@@ -80,9 +80,7 @@ print(f"JAX backend: {jax.devices()[0].platform}   x64: {jax.config.jax_enable_x
 # %% [markdown]
 # ## 1. The model
 #
-# Four choices, and three of them are the speed. Each line below is annotated
-# with why it is there; section 5 measures what each one costs if you choose
-# otherwise.
+# Four choices set the speed. Section 5 measures the cost of each choice.
 
 # %%
 Z_OBS = 0.1  # snapshot redshift
@@ -126,7 +124,7 @@ print(f"{phot.n_filters} bands   free parameters: {fwd.spec.free_params}")
 #
 # Replace `simulation_snapshot` with your reader. Only three things matter:
 # the shapes, the units, and `met_unit=` — declare it, because `Z = 2e-4` is a
-# legal value both as a mass fraction and as log10(Z/Zsun), and reading one as
+# legal value both as a mass fraction and as log10(Z/Z☉), and reading one as
 # the other is a silent factor of ~70.
 
 # %%
@@ -167,17 +165,14 @@ print(f"SFR {snap['sfr'].shape}   Z {met.shape}   floored {(snap['met'] < Z_FLOO
 # %% [markdown]
 # ## 3. Predict photometry and lines
 #
-# `Catalog.from_histories` validates eagerly (before any compile), then
-# `simulate` runs the whole population as one vectorized program. Photometry,
-# emission lines and derived properties all come out of the same pass.
+# `Catalog.from_histories` validates eagerly, then `simulate` runs the population
+# as one vectorized program. Photometry, emission lines, and derived properties all
+# come from a single pass.
 #
-# One trap: with baked-in nebular, line fluxes come from `lines=(...)`.
-# Asking for them as `properties=("halpha",…)` returns **NaN** — that channel
-# needs a live photoionization backend (section 5a).
-#
-# (The wNE grid bakes its nebular emission at **solar gas-phase metallicity**
-# and a fixed ionization parameter. That is an assumption you are making; if
-# you need gas-phase Z per galaxy, you need a live backend and the cost in 5a.)
+# With baked-in nebular, line fluxes come from `lines=(...)`. Asking for them as
+# `properties=(...)` returns **NaN** — that channel needs a live photoionization
+# backend (section 5a). The wNE grid fixes gas-phase metallicity and ionization
+# parameter; varying either requires a live backend.
 
 # %%
 LINES = ("Halpha", "Hbeta", "OIII_5007", "NII_6584", "SII_6717")
@@ -212,6 +207,7 @@ print(
 # The mass round-trips to a few thousandths of a dex — two different quadratures
 # of the same table, not a disagreement about what the table says.
 #
+# <!-- docs-voice: criterion -->
 # The sanity check worth doing on any mock: emission lines must track the recent
 # star formation that powers them.
 
@@ -261,8 +257,8 @@ plt.show()
 # ## 4. Vectorizing it yourself
 #
 # `Catalog` is convenient, but if you are wiring this into your own pipeline you
-# want the `vmap` directly. The whole trick is that **the parameter dict is a
-# pytree, and `vmap` maps the leading axis of every leaf**:
+# want the `vmap` directly. **The parameter dict is a pytree, and `vmap` maps the
+# leading axis of every leaf** — scalars and histories batch through the same call:
 #
 # ```python
 # {"sfh_t_gyr": (N, n_t),      # a history
@@ -271,9 +267,7 @@ plt.show()
 #  "dust_tau_diff": (N,)}      # a per-galaxy scalar
 # ```
 #
-# Nothing has to agree beyond that leading galaxy axis — scalars and histories
-# batch through the same call. Here are the columns `Catalog` builds, which is
-# exactly what you would assemble by hand:
+# Here are the columns `Catalog` builds:
 
 # %%
 columns = {k: np.asarray(v) for k, v in cat._history_columns.items()}
@@ -364,18 +358,11 @@ print("      roll your own, pad the last chunk and discard the extra rows.")
 # %% [markdown]
 # ### How wide can the vmap go?
 #
-# Throughput stops improving long before memory does, so the ceiling is set by
-# **memory**, and it is worth measuring rather than guessing. Every galaxy in a
-# batch carries its own intermediates through the SSP machinery, so the working
-# set is linear in the batch width once the fixed overhead is amortized. Measure
-# the slope and the ceiling follows:
-#
 # $$ \text{max width} \;\approx\; \frac{\text{RAM you can spare}}{\text{MB per galaxy}} $$
 #
-# `ru_maxrss` is a **high-water mark**, so this sweep has to run before anything
-# heavier does, and increasing width order is what makes the deltas meaningful.
-# (It is also in bytes on macOS and kilobytes on Linux — a portability trap
-# worth knowing if you copy this helper.)
+# `ru_maxrss` is a high-water mark — a monotonic peak recorded since the process
+# started. To measure the slope, run this sweep before any heavier code, in increasing
+# width order. (It is in bytes on macOS and kilobytes on Linux — a portability trap.)
 
 # %%
 _RSS_SCALE = 1.0 if sys.platform == "darwin" else 1024.0  # bytes on macOS, kB on Linux

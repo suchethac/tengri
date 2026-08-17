@@ -1,12 +1,12 @@
 """
-Posterior width tracks 1/SNR for fixed-truth SDSS photometry
+Posterior width tracks 1/S/N for fixed-truth SDSS photometry
 =============================================================
 
 Same star-forming galaxy, same SDSS *ugriz* set, three signal-to-noise
 levels (5, 20, 100). For each S/N we mock the photometry, run a MAP
 fit, and overlay the recovered SED on the truth. The figure surfaces the
 expected scaling — posterior offset and band-by-band residuals shrink as
-1/SNR — and makes the inference cost concrete: even at S/N=5 the dust
+1/S/N — and makes the inference cost concrete: even at S/N=5 the dust
 amplitude is degenerate enough that a single MAP run misses it by ~0.3
 mag in the *u* band.
 

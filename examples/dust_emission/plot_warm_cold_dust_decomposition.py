@@ -33,7 +33,7 @@ References
    "Decomposing Dust Attenuation and Emission from Dust and Stellar
    Emission Models".
    *The Astrophysical Journal*, 787(1), 35.
-   https://doi.org/10.1088/0004-637X/787/1/35
+   https://doi.org/10.1088/0004–637X/787/1/35
 """
 
 import os

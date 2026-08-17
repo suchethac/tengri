@@ -209,7 +209,7 @@ ax.set_ylim(bottom=1e6)
 ax.legend(loc="upper right", fontsize=10)
 
 # Mark key wavelengths
-for label, lam_um in {r"Ly$\alpha$": 0.1216, "UV 1500 \AA": 0.15,
+for label, lam_um in {r"Ly$\alpha$": 0.1216, r"UV 1500 \AA": 0.15,
                        r"1 $\mu$m": 1.0, r"Si 9.7 $\mu$m": 9.7}.items():
     ax.axvline(lam_um, color="0.65", ls=":", lw=0.6, zorder=0)
     ax.text(lam_um * 1.05, ax.get_ylim()[1] * 0.3, label, fontsize=7,

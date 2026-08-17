@@ -47,10 +47,10 @@ References
 ----------
 .. [1] A. Slone & H. Netzer, "The effect of disc winds on the structure and
    spectrum of accretion discs," MNRAS 426, 656 (2012). arXiv:1207.5077.
-   https://doi.org/10.1111/j.1365-2966.2012.21699.x
+   https://doi.org/10.1111/j.1365–2966.2012.21699.x
 .. [2] L. N. Martínez-Ramírez et al., "AGNfitter-rx: Modeling the radio-to-X-ray
    spectral energy distributions of AGNs," A&A 688, A46 (2024).
-   arXiv:2405.12111. https://doi.org/10.1051/0004-6361/202449329
+   arXiv:2405.12111. https://doi.org/10.1051/0004–6361/202449329
 
 .. GENERATED FROM PYTHON SOURCE LINES 36-139
 
@@ -170,6 +170,11 @@ References
     )
     fig.tight_layout()
     plt.savefig("plot_slone_netzer_disc_sweep.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.320 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_slone_netzer_disc_sweep.py:

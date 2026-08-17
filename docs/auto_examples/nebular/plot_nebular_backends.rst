@@ -28,7 +28,7 @@ Compare four nebular emission backends on identical star-forming spectra:
 3. **SSP-embedded** — nebular lines baked into SSP templates (BakedIn / Byler)
 4. **BakedIn** — wNE SSP with emission in continuum (compare line shapes with Cue)
 
-Shows [OIII] 5007 + H-beta and H-alpha regions. BakedIn and Cue have
+Shows [OIII] 5007 + H-beta and Hα regions. BakedIn and Cue have
 different ionization flexibility — BakedIn pulls lines from SSP metallicity
 grid, Cue samples ionization parameter (log U) independently.
 
@@ -162,6 +162,11 @@ References:
 
     fig.tight_layout()
     plt.savefig("plot_nebular_backends.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 10.698 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_nebular_backends.py:

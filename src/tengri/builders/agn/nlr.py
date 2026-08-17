@@ -3,7 +3,7 @@
 
 """AGN narrow-line region (NLR) sub-block factories.
 
-Variants from :data:`tengri.parameters.groups._VALID_AGN_NLR_TYPES`:
+Variants from ``tengri.parameters.groups._VALID_AGN_NLR_TYPES``:
 ``none``, ``analytic``, ``synthesizer``, ``synthesizer_spectra``, ``grahsp``.
 Shared params under ``agn.nlr`` partition include ``nlr_cf``,
 ``alpha_ion``.

@@ -1488,7 +1488,7 @@ def _agn_active_param_set(structural_kwargs: dict) -> frozenset[str]:
     """Params a group-level AGN wildcard should free, scoped to active blocks.
 
     Thin wrapper over
-    :func:`tengri.components.agn.blocks._consumes.agn_active_param_set`,
+    ``tengri.components.agn.blocks._consumes.agn_active_param_set``,
     lazy-imported to avoid an import cycle (the agn package imports the priors
     layer that ultimately re-exports this module).
     """
@@ -2207,6 +2207,16 @@ def _translate_dust(dust_dict: dict, result: dict) -> None:
                     raise ValueError(f"Unknown dust emission type '{emission_type}'.{suggest_str}")
                 result["dust_emission"] = emission_type
 
+                # Astrodust+PAH (HD23) optional configuration: spinning dust (AME)
+                # and cold-neutral-medium filling fraction. These are structural
+                # configuration (not free parameters), stored with astrodust_ prefix
+                # to distinguish from parameter registry.
+                if emission_type == "astrodust":
+                    if "spinning_dust" in emission_dict:
+                        result["astrodust_spinning_dust"] = bool(emission_dict["spinning_dust"])
+                    if "f_cnm" in emission_dict:
+                        result["astrodust_f_cnm"] = float(emission_dict["f_cnm"])
+
 
 # Backend *implementations* are named after their physics (BakedInBackend,
 # CloudyGridBackend) and the internal NebularConfig.backend enum spells two of
@@ -2727,7 +2737,7 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
             "eb_include_lyc",
         }
     ),
-    "dust.emission": frozenset({"type", "*"}),
+    "dust.emission": frozenset({"type", "*", "spinning_dust", "f_cnm"}),
     "neb": frozenset({"type", "*", "full_catalog", "grid"}),
     "shock": frozenset({"type", "*", "norm", "abundance", "component"}),
     "igm": frozenset({"type", "*", "patchy", "dla"}),
@@ -2817,6 +2827,12 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
         _Structural("dust_curve", "dust_wg00_curve", "mw", only_types=("wg00",)),
         _Structural("geometry", "dust_wg00_geometry", "shell", only_types=("wg00",)),
         _Structural("structure", "dust_wg00_structure", "homogeneous", only_types=("wg00",)),
+    ),
+    "dust.emission": (
+        # Astrodust+PAH (HD23): spinning dust (AME) enable + cold-neutral-medium
+        # fraction. Structural config, forwarded to component_factory (#1093).
+        _Structural("spinning_dust", "astrodust_spinning_dust", False, only_types=("astrodust",)),
+        _Structural("f_cnm", "astrodust_f_cnm", 0.28, only_types=("astrodust",)),
     ),
     "neb": (
         _Structural("full_catalog", "cue_full_catalog", False, only_types=("cue",)),

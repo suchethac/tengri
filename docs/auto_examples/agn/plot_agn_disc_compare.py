@@ -53,10 +53,9 @@ SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
 DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
 # `powerlaw` is a bare phenomenological disc that tengri deprecates for science
-# fits (use multicolor or kubota_done for that). It is on this panel ON PURPOSE —
-# the point is to show what a power-law gives up against a physically derived
-# disc. Its DeprecationWarning is therefore expected here, and only here;
-# suppressing it narrowly keeps the gallery gate (#1146) meaningful everywhere else.
+# fits (use multicolor or kubota_done for that). It is on this panel to show
+# what a power-law gives up against a physically derived disc. The
+# DeprecationWarning is expected here only.
 warnings.filterwarnings("ignore", message=".*powerlaw_disc is deprecated.*")
 
 ssp = tengri.load_ssp()

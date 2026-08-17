@@ -5,11 +5,12 @@
 Multiwavelength
 ===============
 
-Panchromatic SED examples spanning X-ray to radio.
+Panchromatic SEDs from X-ray to radio.
 
-These short scripts complement the main tutorial notebooks — each produces a
-single figure. For full narrative walkthroughs, see the ``notebooks/`` spine.
 
+.. raw:: html
+
+  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
 
 
 .. raw:: html
@@ -37,7 +38,7 @@ single figure. For full narrative walkthroughs, see the ``notebooks/`` spine.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="A low-mass, low-metallicity dwarf irregular (M*~10^8 Msun, Z~0.1 Zsun) with high specific star formation rate. The SED highlights: strong UV continuum from young stars, dominant optical emission lines (Hα 6563 Å, [OIII] 5007 Å, Hβ) on a faint continuum, minimal dust attenuation, and negligible far-infrared. Equivalent width of Hα is extreme (~100s Å). Metal-poor stellar populations and active star formation drive the starburst signature visible from UV through optical.">
+    <div class="sphx-glr-thumbcontainer" tooltip="A low-mass, low-metallicity dwarf irregular (M*~10^8 M☉, Z~0.1 Z☉) with high specific star formation rate. The SED highlights: strong UV continuum from young stars, dominant optical emission lines (Hα 6563 Å, [OIII] 5007 Å, Hβ) on a faint continuum, minimal dust attenuation, and negligible far-infrared. Equivalent width of Hα is extreme (~100s Å). Metal-poor stellar populations and active star formation drive the starburst signature visible from UV through optical.">
 
 .. only:: html
 
@@ -88,7 +89,7 @@ single figure. For full narrative walkthroughs, see the ``notebooks/`` spine.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="M82 (NGC 3034) is a nearby starburst galaxy with intense nuclear star formation (SFR ~ 10 Msun/yr), stellar mass M* ~ 1×10^10 Msun, and moderate-to-high dust opacity (τ_V ~ 2 in the starburst core). The panchromatic SED spans from UV (young stars) through optical (attenuated by dust) to far-infrared (warm dust re-emission at ~50 μm) and radio (free-free continuum from ionized regions and synchrotron from supernovae).">
+    <div class="sphx-glr-thumbcontainer" tooltip="M82 (NGC 3034) is a nearby starburst galaxy with intense nuclear star formation (SFR ~ 10 M☉/yr), stellar mass M* ~ 1×10^10 M☉, and moderate-to-high dust opacity (τ_V ~ 2 in the starburst core). The panchromatic SED spans from UV (young stars) through optical (attenuated by dust) to far-infrared (warm dust re-emission at ~50 μm) and radio (free-free continuum from ionized regions and synchrotron from supernovae).">
 
 .. only:: html
 
@@ -207,7 +208,7 @@ single figure. For full narrative walkthroughs, see the ``notebooks/`` spine.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Full panchromatic SED combining stellar continuum, dust absorption, dust infrared emission, and radio synchrotron. Demonstrates how a unified model spans from ultraviolet through centimeter wavelengths with continuous physics from stellar populations through dust and synchrotron emission.">
+    <div class="sphx-glr-thumbcontainer" tooltip="UV-to-radio SED of a star-forming galaxy">
 
 .. only:: html
 
@@ -224,7 +225,7 @@ single figure. For full narrative walkthroughs, see the ``notebooks/`` spine.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="A nearby Milky Way-mass galaxy (M*~5×10^10 Msun, SFR~2 Msun/yr) across the full electromagnetic spectrum from X-ray (10 Å) to radio (10^9 Å).">
+    <div class="sphx-glr-thumbcontainer" tooltip="A nearby Milky Way-mass galaxy (M*~5×10^10 M☉, SFR~2 M☉/yr) across the full electromagnetic spectrum from X-ray (10 Å) to radio (10^9 Å).">
 
 .. only:: html
 
@@ -258,7 +259,7 @@ single figure. For full narrative walkthroughs, see the ``notebooks/`` spine.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Submillimeter galaxies (SMGs) are the most luminous starbursts in the universe, hidden behind massive dust columns. This example constructs a z=3 SMG SED with M* = 2×10^11 Msun, SFR = 500 Msun/yr, and τ_V ≈ 3.5 — typical of ALMA-detected sources and the SCUBA-2 850 μm parent population.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Dust-obscured starburst at z = 3 with a heavily attenuated diffuse ISM (`tau_diff = 3.0`). The negative K-correction is what makes submillimeter selection nearly distance-independent over z ≈ 1–6: as a source recedes, the observing band walks up the steep Rayleigh-Jeans side of the dust peak, and the two effects very nearly cancel (Blain+2002).">
 
 .. only:: html
 

@@ -225,7 +225,7 @@ def load_ssp(name: str | None = None, *, download: bool = False) -> "SSPData":
     name : str or None, optional
         Short alias from ``_LOAD_SSP_PRESETS``, a key from
         ``tengri.list_known_ssps()``, or a literal filename (with or
-        without ``.h5``). ``None`` (default) loads :data:`~tengri._data_setup.DEFAULT_SSP`
+        without ``.h5``). ``None`` (default) loads ``tengri._data_setup.DEFAULT_SSP``
         — the bare-stellar PRSC/MILES Chabrier grid, the same one
         ``tengri.download_ssp()`` fetches and the one the Cue/CloudyGrid nebular
         backends require. For the nebular-baked demo grid pass the alias
@@ -245,7 +245,7 @@ def load_ssp(name: str | None = None, *, download: bool = False) -> "SSPData":
     Raises
     ------
     FileNotFoundError
-        If the grid exists in none of :func:`~tengri._data_setup.data_dirs`
+        If the grid exists in none of ``tengri._data_setup.data_dirs``
         and either ``download`` is ``False`` or the grid is not one the
         catalog hosts. The message names the directories searched.
 

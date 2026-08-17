@@ -88,7 +88,7 @@ class ShockNebular(SEDModelComponent):
     r"""MAPPINGS V shock-driven nebular emission (composable, additive).
 
     Reads its free parameters from the ``shock_*`` bucket
-    (:data:`tengri.components.nebular._params.SHOCK_PARAMS`, registered by
+    (``tengri.components.nebular._params.SHOCK_PARAMS``, registered by
     ``Parameters(shock=True)`` / the ``shock`` grammar group) rather than
     auto-declaring them, so it composes with — and never double-declares
     against — the photoionized nebular backend.

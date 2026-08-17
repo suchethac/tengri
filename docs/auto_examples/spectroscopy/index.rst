@@ -5,12 +5,12 @@
 Spectroscopy
 ============
 
-What a spectrum adds over photometry — absorption-line indices and the
-D4000/Hdelta plane, stellar age and metallicity from spectral features,
-velocity dispersion and line broadening, instrumental resolution and
-prism-vs-grating trade-offs, and worked spectra from JWST/NIRSpec out to
-z≈6 Lyman-alpha emitters.
+Absorption-line indices (D4000, Hδ) from stellar age and metallicity. Velocity dispersion and line broadening. Instrumental resolution effects (prism vs grating). High-redshift examples: JWST/NIRSpec out to z ≈ 6 Lyα emitters.
 
+
+.. raw:: html
+
+  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
 
 
 .. raw:: html
@@ -72,7 +72,7 @@ z≈6 Lyman-alpha emitters.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="High-redshift Lyα emitter at z=6 with young age (~10 Myr), low metallicity (Z~0.1 Zsun), and minimal dust. The observed-frame spectrum (7000–13000 Å) reveals the redshifted Lyα emission line at 8512 Å, the Lyman break at 6384 Å, characteristic IGM blue-wing absorption, and the rest-UV continuum. Demonstrates Lyα radiative transfer and reionization-era observability.">
+    <div class="sphx-glr-thumbcontainer" tooltip="High-redshift Lyα emitter at z=6 with young age (~10 Myr), low metallicity (Z~0.1 Z☉), and minimal dust. The observed-frame spectrum (7000–13000 Å) reveals the redshifted Lyα emission line at 8512 Å, the Lyman break at 6384 Å, characteristic IGM blue-wing absorption, and the rest-UV continuum. Demonstrates Lyα radiative transfer and reionization-era observability.">
 
 .. only:: html
 
@@ -106,7 +106,7 @@ z≈6 Lyman-alpha emitters.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="A classic post-starburst (PSB) / K+A galaxy signature: strong Balmer absorption lines (high Hδ_A) with no emission, visible only in a narrow window after a recent burst of star formation has been abruptly quenched.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Hδ_A peaks ~100 Myr post-quench, then decays as A-type stars die out. This absorption index traces the lifetime of A-type stars responsible for Balmer absorption, a key driver of galaxy quenching (Worthey &amp; Ottaviani 1997).">
 
 .. only:: html
 
@@ -191,7 +191,7 @@ z≈6 Lyman-alpha emitters.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Compare the rest-frame spectrum of a young and old galaxy at fixed redshift. Shows how the optical continuum color, Balmer decrement, and absorption line strengths depend on mean stellar age, holding metallicity and dust fixed.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Rest-frame spectrum with stellar population ages">
 
 .. only:: html
 
@@ -225,7 +225,7 @@ z≈6 Lyman-alpha emitters.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Sweep emission-line velocity dispersion σ_v from 50 km/s (narrow-line region) to 5000 km/s (broad-line region) to show how Hα broadens while the [NII] doublet becomes buried in the Hα wing. Demonstrates the kinematic signature distinguishing AGN BLR from NLR.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Narrow-line regions sit at σ_v ≈ 50–300 km/s; a broad Hα component from the AGN accretion disk reaches thousands of km/s. The [NII] doublet is separated by 35.4 Å (6549.86 and 6585.28 Å vacuum), which corresponds to σ_v ≈ 1600 km/s — above that the two lines merge into the wing of Hα.">
 
 .. only:: html
 

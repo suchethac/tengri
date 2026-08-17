@@ -13,13 +13,13 @@ it responds strongly to its parameters.
 The panels sweep the two most consequential axes:
 
 - **Equatorial optical depth** ``tau`` (left): a thicker torus deepens the
-  9.7 micron silicate absorption and redistributes the reprocessed power.
+  9.7 μm silicate absorption and redistributes the reprocessed power.
 
 - **Inclination** (right): edge-on lines of sight (low ``cos i``) graze the
   optically-thick equatorial dust (Type-2-like, deep silicate absorption);
   face-on sight lines look down the polar funnel (Type-1-like).
 
-The full-grid SKIRTOR peaks near 40 micron, redward of the ~25 micron
+The full-grid SKIRTOR peaks near 40 μm, redward of the ~25 μm
 AGNfitter-averaged ``skirtor_agnfitter`` library (see
 ``plot_skirtor_agnfitter_sweep.py``). The torus contribution is isolated by
 subtracting the disc-only SED.

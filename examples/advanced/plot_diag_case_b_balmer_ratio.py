@@ -4,7 +4,7 @@ Case B Hα/Hβ ratio across ionization and metallicity
 
 In the dust-free limit with Case B recombination (T_e=10,000 K, n_e=100 cm^-3),
 the intrinsic Hα/Hβ ratio is 2.86, nearly independent of ionization parameter
-and metallicity below ~0.5 Zsun (Storey & Hummer 1995, MNRAS 272, 41). This
+and metallicity below ~0.5 Z☉ (Storey & Hummer 1995, MNRAS 272, 41). This
 diagnostic checks that tengri's Cue nebular emulator reproduces the canonical
 value across its (logU, logZ_gas) grid, identifying any library drift or
 implementation errors.

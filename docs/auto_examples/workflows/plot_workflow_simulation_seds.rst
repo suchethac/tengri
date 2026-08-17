@@ -21,24 +21,14 @@
 Predicting SEDs for a simulated population: what collapsing Z(t) costs
 ======================================================================
 
-A hydro simulation or semi-analytic model hands you two tables per galaxy —
-SFR(t) and the metallicity of the gas it formed from, Z(t). ``Catalog`` takes
-both as records and returns photometry for the whole population in one compile.
+Replacing metallicity history Z(t) with its mass-weighted mean introduces
+10–23% flux errors in *u* and 1–6% in *z*. The SED is a nonlinear
+mass-weighted sum of SSP templates; young metal-rich stars (dominant in UV)
+and old metal-poor stars do not average.
 
-The fourth panel is the reason to carry Z(t) at all. Replacing the history with
-its mass-weighted mean — one number, the usual approximation — keeps the same
-stellar mass and the same mean metallicity, and still overpredicts the flux by
-10-23% in *u* against 1-6% in *z* on this population. That the error falls
-monotonically to the red is what makes it a **color** error rather than a
-normalization one, so it does not divide out of a fit. Old metal-poor stars and
-young metal-rich ones do not average: the SED is a mass-weighted sum of SSP
-templates that are nonlinear in Z, so the sum over a track is not the template
-at the track's mean, and the UV — where the youngest, most metal-rich stars
-dominate — is where they disagree most.
+Reference: Conroy+2013.
 
-Reference: Conroy 2013, ARA&A, 51, 393 (SPS and the age-metallicity degeneracy).
-
-.. GENERATED FROM PYTHON SOURCE LINES 22-183
+.. GENERATED FROM PYTHON SOURCE LINES 12-173
 
 
 
@@ -218,7 +208,7 @@ Reference: Conroy 2013, ARA&A, 51, 393 (SPS and the age-metallicity degeneracy).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 8.842 seconds)
+   **Total running time of the script:** (0 minutes 5.025 seconds)
 
 
 .. _sphx_glr_download_auto_examples_workflows_plot_workflow_simulation_seds.py:

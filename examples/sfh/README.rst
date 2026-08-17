@@ -1,8 +1,4 @@
 Star Formation Histories
 ========================
 
-How the SFH is parameterized and what the data can recover — parametric
-forms (delayed-exponential, double power law, lognormal), non-parametric
-continuity and the PSD-governed stochastic/bursty priors, quenching
-pathways and double bursts, mass-formed vs mass-observed, and the
-"wrong-model trap" when the assumed form is too rigid.
+Default kernel: CIC (cloud-in-cell). `'dsps'` kernel available for cross-code parity but interpolates in log-space, annihilating the first SSP node (~3.8% mass loss) and shifting age gradients by 43%. Parametric forms (DPL, delayed-exponential, lognormal) and non-parametric (PSD-governed stochastic). Mismatch between true and assumed SFH form can produce unrecognizable posteriors.

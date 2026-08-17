@@ -11,10 +11,10 @@ features (enhanced α-element abundances + stronger metal absorption).
 This two-panel comparison shows:
 
 - **Left panel**: Mg b and Fe5270 equivalent widths (pseudo-EW in Ångströms)
-  versus single-burst age at solar metallicity (Z/Zsun = 0.0 dex).
+  versus single-burst age at solar metallicity (Z/Z☉ = 0.0 dex).
 
 - **Right panel**: same age range but across metallicities
-  (Z/Zsun = -1.0, -0.5, 0.0, +0.3 dex), illustrating the strength of the
+  (Z/Z☉ = -1.0, -0.5, 0.0, +0.3 dex), illustrating the strength of the
   age–metallicity degeneracy.
 
 Both indices are computed from high-resolution spectra (R=2000) in the

@@ -5,11 +5,12 @@
 Photometry
 ==========
 
-Working with broadband filters and observed-frame fluxes — filter curves
-and bandpass sets, color–redshift tracks, k-corrections and cosmological
-dimming, diagnostic color–color planes (UVJ, NUV–r, the WISE/IRAC AGN
-wedges), and photometric-redshift color degeneracies.
+Broadband filter selection, k-corrections, cosmological dimming. Diagnostic planes: UVJ, NUV–r, WISE/IRAC AGN wedges. Photometric-redshift color degeneracies.
 
+
+.. raw:: html
+
+  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
 
 
 .. raw:: html
@@ -71,7 +72,7 @@ wedges), and photometric-redshift color degeneracies.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="How does the observed photometric flux of a FIXED-luminosity galaxy decline with redshift? We track a star-forming galaxy (log M* = 10.5, SFR = 10 Msun/yr) across z = 0.1 to 6 in three optical/infrared bands (SDSS r, JWST J, JWST H), visualizing the three physical effects:">
+    <div class="sphx-glr-thumbcontainer" tooltip="How does the observed photometric flux of a FIXED-luminosity galaxy decline with redshift? We track a star-forming galaxy (log M* = 10.5, SFR = 10 M☉/yr) across z = 0.1 to 6 in three optical/infrared bands (SDSS r, JWST J, JWST H), visualizing the three physical effects:">
 
 .. only:: html
 
@@ -88,7 +89,7 @@ wedges), and photometric-redshift color degeneracies.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The same star-forming galaxy SED is intercepted by three different filter sets — SDSS ugriz (optical), 2MASS JHKs (near-infrared), and HST ACS F435W/F606W/F814W (UV-optical). Each panel overlays the survey&#x27;s throughputs on the shared SED so the reader sees, at a glance, which spectral features (the 4000-Å break, H-alpha + [N II], the 1.6-um stellar bump) fall inside each band.">
+    <div class="sphx-glr-thumbcontainer" tooltip="The same star-forming galaxy SED is intercepted by three different filter sets — SDSS ugriz (optical), 2MASS JHKs (near-infrared), and HST ACS F435W/F606W/F814W (UV-optical). Each panel overlays the survey&#x27;s throughputs on the shared SED so the reader sees, at a glance, which spectral features (the 4000-Å break, Hα + [N II], the 1.6-μm stellar bump) fall inside each band.">
 
 .. only:: html
 
@@ -258,7 +259,7 @@ wedges), and photometric-redshift color degeneracies.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Same star-forming galaxy, same SDSS ugriz set, three signal-to-noise levels (5, 20, 100). For each S/N we mock the photometry, run a MAP fit, and overlay the recovered SED on the truth. The figure surfaces the expected scaling — posterior offset and band-by-band residuals shrink as 1/SNR — and makes the inference cost concrete: even at S/N=5 the dust amplitude is degenerate enough that a single MAP run misses it by ~0.3 mag in the u band.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Same star-forming galaxy, same SDSS ugriz set, three signal-to-noise levels (5, 20, 100). For each S/N we mock the photometry, run a MAP fit, and overlay the recovered SED on the truth. The figure surfaces the expected scaling — posterior offset and band-by-band residuals shrink as 1/S/N — and makes the inference cost concrete: even at S/N=5 the dust amplitude is degenerate enough that a single MAP run misses it by ~0.3 mag in the u band.">
 
 .. only:: html
 
@@ -269,7 +270,7 @@ wedges), and photometric-redshift color degeneracies.
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Posterior width tracks 1/SNR for fixed-truth SDSS photometry</div>
+      <div class="sphx-glr-thumbnail-title">Posterior width tracks 1/S/N for fixed-truth SDSS photometry</div>
     </div>
 
 

@@ -118,7 +118,7 @@ Test paths are checked by `tools/check_verification_protocol_paths.py` — see
 | Attenuation vs `dust_attenuation` package | — | karllark/dust_attenuation | `tests/crossval/test_dust_attenuation_pkg.py` | PARTIAL (1/43) |
 | Two-component attenuation (birth cloud + diffuse) | Charlot & Fall 2000 | none | `tests/crossval/test_attenuation_physics.py` | PARTIAL (2/88) |
 | Dust attenuation + emission vs published | Draine & Li 2007 | none | `tests/crossval/test_dust_crossval.py` | PARTIAL (3/53) |
-| Dust IR emission vs bagpipes | Draine & Li 2007 | bagpipes | `tests/crossval/test_dust_emission_crossval.py` | CROSSVAL |
+| Dust IR emission vs BAGPIPES | Draine & Li 2007 | BAGPIPES | `tests/crossval/test_dust_emission_crossval.py` | CROSSVAL |
 | Dust IR emission physics (MBB, Casey12, CMB) | Casey 2012 | none | `tests/crossval/test_dust_emission_physics.py` | CROSSVAL |
 | `dh02_ce01` cold dust | Dale & Helou 2002; Chary & Elbaz 2001 | AGNfitter-rX grid | `tests/crossval/test_dh02_ce01_vs_agnfitter.py` | CROSSVAL |
 | Schreiber 2018 IR library | Schreiber et al. 2018 | AGNfitter-rX grid | `tests/crossval/test_schreiber2018_vs_agnfitter.py` | NOT RUN — `importorskip` |

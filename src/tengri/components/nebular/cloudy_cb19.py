@@ -538,7 +538,7 @@ class CB19Backend:
     **Note on nebular continuum**: CB_19 provides only line ratios, not a nebular
     continuum (``has_continuum = False``).  For applications that need nebular
     continuum, wrap this backend with
-    :class:`~tengri.components.nebular._shared.NebularContinuumFallback`:
+    ``tengri.components.nebular._shared.NebularContinuumFallback``:
 
     - For analytic free-free + two-photon continuum (fast, no extra data)::
 

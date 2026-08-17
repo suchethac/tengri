@@ -188,8 +188,8 @@ class AGNSEDComponent(TemplateThreading):
         """Free parameters this component owns.
 
         Returns the canonical :data:`PARAMS` tuple from
-        :mod:`tengri.components.agn._params`. The legacy ``_AGN_PARAMS``
-        bucket in :mod:`tengri.parameters._builders` is a derived view
+        ``tengri.components.agn._params``. The legacy ``_AGN_PARAMS``
+        bucket in ``tengri.parameters._builders`` is a derived view
         of the same tuple (plus the ``neb_xid`` orphan kept in the
         registry for the Feltre NLR backend).
 

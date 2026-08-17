@@ -29,7 +29,7 @@ breaks photometric degeneracies.
 Reference: Conroy 2013 (ARA&A, 51, 393); Leja et al. 2019 on spectroscopic
 constraints for star formation histories.
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-124
+.. GENERATED FROM PYTHON SOURCE LINES 13-115
 
 
 
@@ -39,33 +39,8 @@ constraints for star formation histories.
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /tengri/src/tengri/forward/sed_model.py:7566: WildcardPartialFreeWarning: 'all_params: FREE' freed 4 of 6 parameters in group 'sfh'. These have no declared prior, only Fixed defaults, so they stay pinned:
-      met_alpha_fe, met_logzsol_scatter
-    The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. sfh={'met_alpha_fe': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
-      spec = parse_groups(**groups)
-    /tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit__impl': FileNotFoundError: [Errno 2] No such file or directory: '~/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_val_and_grad': FileNotFoundError: [Errno 2] No such file or directory: '~/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_predict_photometry': FileNotFoundError: [Errno 2] No such file or directory: '~/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_predict_properties': FileNotFoundError: [Errno 2] No such file or directory: '~/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_single_step': FileNotFoundError: [Errno 2] No such file or directory: '~/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_scan_batch': FileNotFoundError: [Errno 2] No such file or directory: '~/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -75,7 +50,6 @@ constraints for star formation histories.
     os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
     import warnings
-    from pathlib import Path
 
     import jax
     import jax.numpy as jnp
@@ -87,27 +61,19 @@ constraints for star formation histories.
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+    # `all_params: FREE` leaves met_alpha_fe and met_logzsol_scatter pinned, since
+    # neither declares a prior. That is deliberate here -- this example is about
+    # combining photometry with spectroscopy, not about abundance ratios -- and the
+    # warning itself says to filter it when so. Unfiltered it lands in the rendered
+    # page carrying an absolute source path.
+    warnings.filterwarnings("ignore", message=".*all_params: FREE.*")
 
     ssp = tengri.load_ssp()
 
-    _FILTER_DIR = next(
-        (
-            str(d)
-            for d in [
-                Path("data/filters"),
-                Path("../data/filters"),
-                Path("../../data/filters"),
-                Path("../../../data/filters"),
-            ]
-            if d.exists()
-        ),
-        "data/filters",
-    )
-
-    phot = tengri.Photometry.from_names(
-        ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"],
-        cache_dir=_FILTER_DIR,
-    )
+    # No cache_dir: tengri resolves each curve across its own data directories, so
+    # an example works from any working directory. See plot_fisher_degeneracy.py
+    # for why the four-deep relative walk this replaces was a hazard.
+    phot = tengri.Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
     wave_rest = jnp.linspace(3800.0, 9200.0, 200)
     z = 0.1
     wave_obs = wave_rest * (1 + z)
@@ -184,7 +150,7 @@ constraints for star formation histories.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 12.250 seconds)
+   **Total running time of the script:** (0 minutes 52.438 seconds)
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_joint_fit.py:

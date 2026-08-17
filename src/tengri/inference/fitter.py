@@ -363,7 +363,7 @@ def fit_surface_ctor_names() -> frozenset[str]:
     -----
     Read off the live signature so it cannot drift from the constructor.
     :func:`split_fitter_kwargs` uses it to decide routing;
-    :func:`~tengri.inference._backend_registry.check_unknown_kwargs` uses it
+    ``tengri.inference._backend_registry.check_unknown_kwargs`` uses it
     to suggest a documented ``fit()`` option that is not a runner parameter.
     Both must mean the same thing by "constructor-routed", which is why this
     is one function rather than the same comprehension written twice.
@@ -575,7 +575,7 @@ def fast_nebular_can_engage(model) -> bool:
 
     Notes
     -----
-    Delegates to :func:`~tengri.forward.sed_model._nebular_continuum_consumers`, the
+    Delegates to ``tengri.forward.sed_model._nebular_continuum_consumers``, the
     same expression ``enable_fast_nebular`` uses to set ``must_materialize_sed``, so
     the advice and the behavior cannot drift apart.
     """

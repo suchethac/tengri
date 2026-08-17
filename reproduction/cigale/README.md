@@ -23,8 +23,24 @@ component.
 ## Prerequisites
 
 ```bash
-pip install pcigale jupytext jupyter
+# pcigale is not on PyPI under any name; it builds its template database at
+# install time, which is why the clone is ~2.8 GB and the build is not quick.
+git clone https://gitlab.lam.fr/cigale/cigale.git && cd cigale
+# CIGALE 2025.1 predates numpy 2, which removed np.trapz in favour of the
+# identically-signed np.trapezoid. 58 call sites, no other numpy-2 breakage:
+grep -rl 'np\.trapz' --include='*.py' . | xargs sed -i '' 's/np\.trapz\b/np.trapezoid/g'
+pip install --no-build-isolation .
+cd .. && pip install jupytext jupyter
+
+python -m reproduction.cigale._drivers.cigale_ssp_to_dsps   # writes the shared SSP grid
 ```
+
+The last line is not optional. `_drivers/data/bc03_from_cigale.h5` is 415 MB and
+excluded by `.gitignore`'s `*.h5`, so a fresh checkout does not have it and the
+notebook stops at its second cell with `SystemExit`. Under `nbclient` that reads
+as a *clean* stop, not an error: an automated run reports zero failures, writes
+a notebook with 5 of its 18 figures and none of its §-lines, and exits 0. Check
+that the run took minutes rather than seconds.
 
 Tengri itself should already be available on `PYTHONPATH`.
 

@@ -16,67 +16,22 @@
 # %% [markdown]
 # # Multi-model Bayesian model averaging on CANDELS galaxies
 #
-# > ⚠️ **Experimental.** This notebook is a research demonstration. It
-# > explores experimental features and may use APIs that change between
-# > releases; it sits outside the supported tutorial sequence.
+# > ⚠️ **Experimental.** Uses experimental APIs that may change between releases.
 #
-# Any SED fit is conditioned on a set of modeling choices — the SFH family, the
-# stellar library, the dust law — that the photometry alone does not pin down. A
-# single fit gives the posterior for one such choice but says nothing about how
-# much that choice contributes to the error budget. Here we fit each galaxy under
-# four different model configurations and combine them by Bayesian model
-# averaging (BMA), weighting each configuration by its marginal likelihood
-# (evidence).
+# SED fits are conditioned on modeling choices — SFH family, stellar library, dust law — that photometry alone cannot constrain. A single fit reports the posterior for one choice; BMA combines all four configurations by weighting each by its marginal likelihood (evidence). Evidence penalizes complexity (Occam factor) and requires nested sampling.
 #
-# We apply this to seven CANDELS GOODS-South galaxies at $z\sim1$ and report the
-# fit times alongside the results. The four configurations vary the star-formation
-# history family, the stellar isochrone, the dust law, and the nebular treatment.
+# Four configurations varying SFH family, stellar isochrone, dust law, and ionization:
 #
-# | Config | SFH | SSP | Dust law | Dust emis. | Nebular |
-# |--------|-----|-----|----------|------------|---------|
-# | A | Continuity (Leja+19) | MIST/C3K | Salim+2018 | — | SSP-baked, $\log U=-3$ |
-# | B | Dirichlet (Leja+17) | PARSEC/MILES | Calzetti | — | SSP-baked, $\log U=-3$ |
-# | C | Trunc. skew-normal | Padova/MILES | Kriek & Conroy | — | SSP-baked, $\log U=-2$ |
-# | D | Double power-law | BaSTI/MILES | power-law | — | SSP-baked, $\log U=-2$ |
+# | Config | SFH | SSP | Dust law | Nebular |
+# |--------|-----|-----|----------|---------|
+# | A | Continuity (Leja+19) | MIST/C3K | Salim+2018 | $\log U=-3$ |
+# | B | Dirichlet (Leja+17) | PARSEC/MILES | Calzetti | $\log U=-3$ |
+# | C | Trunc. skew-normal | Padova/MILES | Kriek & Conroy | $\log U=-2$ |
+# | D | Double power-law | BaSTI/MILES | power-law | $\log U=-2$ |
 #
-# Configs A and B use non-parametric SFHs (the continuity and Dirichlet priors of
-# Leja et al. 2019/2017); C and D use parametric forms. (An earlier version used
-# the Dense Basis prior for A and B, but its quantile parameters are strongly
-# degenerate, which left the nested-sampling weights unstable from seed to seed.)
+# All include nebular emission (wNE SSP grids). No dust IR emission — at $z\sim1$ the reddest band is below 5 µm rest-frame, and without far-IR photometry, dust emission does not constrain the fit.
 #
-# Every configuration includes nebular emission, so the comparison is not
-# confounded by an on/off nebular switch. All four use a different stellar
-# isochrone (MIST, PARSEC, Padova, BaSTI) with the line + continuum emission
-# baked into the wNE SSP grid — served from the precompute LUT at no runtime
-# cost. (BC03 and BPASS, used in an earlier draft, have no baked-nebular grids
-# — FSPS, which generates them, does not implement those isochrones — so we use
-# the closest FSPS libraries: Padova for BC03's Padova isochrone, and BaSTI as a
-# fourth distinct library.)
-#
-# We leave dust IR emission out of every configuration. At $z\sim1$ the reddest
-# band (IRAC 8 µm) samples $\sim4$ µm rest-frame, so there is no far-IR
-# photometry to constrain a dust-emission template and it cannot affect the fit.
-# For a FIR-detected target one would add `dust={'emission': {'type': 'dl07'}}`.
-#
-# ## Why the evidence, not $\chi^2$
-#
-# The BMA weights are posterior model probabilities. With flat model priors,
-#
-# $$
-# w_k \;=\; \frac{Z_k}{\sum_j Z_j}\;,\qquad
-# Z_k \;=\; \int \mathcal{L}(d\mid\theta, M_k)\,\pi(\theta\mid M_k)\,\mathrm{d}\theta ,
-# $$
-#
-# where $Z_k$ is the marginal likelihood of model $M_k$. The evidence penalizes
-# model complexity (the Occam factor): a more flexible model wins only if the
-# extra freedom is justified by the data. We therefore fit with nested sampling
-# (`"nss"`), which returns a calibrated $\log Z$; variational inference and MCMC
-# do not.
-#
-# All models are built through the public API: the nested-dict grammar of
-# `SEDModel.build(...)`, priors set with `Uniform`/`Fixed`, and the precompute
-# speed path enabled with `approx=WavePrecomp()`. Inference is
-# `model.fit(data, noise, method="nss")`.
+# $$w_k = \frac{Z_k}{\sum_j Z_j}, \qquad Z_k = \int \mathcal{L}(d\mid\theta, M_k)\,\pi(\theta\mid M_k)\,\mathrm{d}\theta$$
 
 # %% tags=["imports"]
 from __future__ import annotations
@@ -102,7 +57,6 @@ from scipy.stats import gaussian_kde
 jax.config.update("jax_enable_x64", True)
 warnings.filterwarnings("ignore")
 
-# --- Current tengri public API ---
 import tengri
 from _setup import FIG_DIR, REPO_ROOT
 from tengri import (
@@ -119,13 +73,7 @@ from tengri.units import ab_mag_to_fnu
 
 
 # %% [markdown]
-# ## 0. Locate the inputs
-#
-# `REPO_ROOT` and `FIG_DIR` come from `_setup`, anchored on that module's own
-# location, so this notebook runs from any working directory without
-# rediscovering the repository for itself. The SSP grids are *not* addressed
-# through `REPO_ROOT`: `tengri.load_ssp` finds them wherever they live,
-# including a `$TENGRI_DATA_DIR` scratch filesystem.
+# ## 0. Paths
 
 
 # %%
@@ -136,10 +84,9 @@ print(f"SSP grids : {DATA_DIR}")
 print(f"CANDELS   : {CANDELS_DIR}")
 
 # %% [markdown]
-# ## 1. Parse the CANDELS GOODS-South catalog
+# ## 1. Catalog: CANDELS GOODS-South
 #
-# AB magnitudes in 17 bands (HST/ACS + WFC3 + ground-based NIR + *Spitzer*
-# IRAC). We map a subset onto tengri filter names.
+# AB magnitudes in 17 bands (HST/ACS, WFC3, NIR, IRAC); map to tengri filter names.
 
 # %%
 # Column mapping: (mag_col_index, err_col_index, tengri_filter_name).
@@ -203,12 +150,9 @@ print(f"Catalog: {len(ids)} galaxies, {len(filter_names)} mapped filters")
 print(f"Flagged  : {len(flagged_ids)}")
 
 # %% [markdown]
-# ## 2. AB mag → $f_\nu$, and galaxy selection
+# ## 2. Magnitude to flux, galaxy selection
 #
-# We use the public `tengri.units.ab_mag_to_fnu` for the flux conversion and
-# work with star-forming galaxies at $z\sim1$ that have $\ge10$ detected bands
-# and clean flags; the seven `GAL_IDS` below were picked from these for clean
-# fits.
+# Select star-forming galaxies at $z\sim1$ with $\ge10$ detected bands and clean flags.
 
 # %%
 NON_DETECT = 90.0  # mag > 90 ⇒ non-detection in this catalog
@@ -264,10 +208,9 @@ def extract_photometry(gal_idx):
 
 
 # %% [markdown]
-# ## 3. Load the four SSP libraries
+# ## 3. SSP libraries
 #
-# Each configuration uses a different stellar library — part of the modeling
-# assumption space we want to average over.
+# Each config uses a different stellar library.
 
 # %%
 t0 = time.time()
@@ -284,13 +227,9 @@ SSP = {
 print(f"4 SSP libraries loaded in {time.time() - t0:.1f}s")
 
 # %% [markdown]
-# ## 4. The four model configurations (`SEDModel.build`)
+# ## 4. Model configurations
 #
-# Each config is built with the nested-dict grammar. We set `'all_params': FIXED` and
-# free **only** the parameters we want via explicit `Uniform` priors — this
-# reproduces the classic "free iff you give it a distribution" semantics and
-# keeps the four inference problems comparable. `approx=WavePrecomp()` turns on
-# the precompute speed path.
+# Each config: nested-dict grammar, `all_params=FIXED` except those with explicit `Uniform` priors; `approx=WavePrecomp()` for speed.
 
 # %%
 # Shared priors. Configs A and B use the two standard non-parametric SFHs —
@@ -390,23 +329,9 @@ def build_configs(z, obs):
 
 
 # %% [markdown]
-# ## 5. Fit every (galaxy × config) with nested sampling
+# ## 5. Fit with nested sampling
 #
-# We run nested slice sampling (`"nss"`) with `n_live=250`, using the catalog
-# flux uncertainties directly, and time the model build (which includes the
-# precompute publish and first compile) and the fit separately. With the small
-# catalog errors each configuration is tightly constrained, so the per-model
-# posteriors separate cleanly and the evidence decides how to weight them.
-#
-# Each fit is seeded deterministically (see `stable_seed`), so the figures
-# reproduce exactly from run to run. Nested sampling is stochastic, so the
-# evidences carry a Monte-Carlo uncertainty that shrinks with `n_live`; raising
-# it past 250 tightens the absolute weights at a higher cost, but the model
-# ordering is already stable here.
-#
-# The four configurations of a galaxy are independent fits, so we run them on a
-# thread pool. XLA releases the GIL during compute, giving a roughly 2-3x
-# speed-up on a multi-core machine with identical results.
+# Nested slice sampling (`nss`) with `n_live=250`. Each fit is seeded deterministically for reproducibility. The four configurations per galaxy run on a thread pool (XLA releases the GIL during compute).
 
 # %%
 N_LIVE = 250  # nested-sampling live points
@@ -509,11 +434,9 @@ print("(seconds; per-config times overlap — the 4 run concurrently. 'wall' = b
 print(" + threaded wall-clock for all 4. Build includes precompute + first compile.)")
 
 # %% [markdown]
-# ## 7. Posterior predictions + Bayesian model averaging
+# ## 7. Posterior predictions and BMA
 #
-# For each fit we draw posterior SEDs, SFHs, and derived $(M_\star,
-# \mathrm{SFR})$. BMA weights come from the evidences; the BMA predictive is an
-# evidence-weighted pool of the per-config draws.
+# Draw posterior SEDs, SFHs, and $(M_\star, \mathrm{SFR})$. BMA weights pool configurations by evidence.
 
 # %%
 N_DRAWS = 150  # posterior draws for SED bands
@@ -654,17 +577,7 @@ for gal_id, g in galaxies.items():
 # %% [markdown]
 # ## 8. Figures
 #
-# Each galaxy gets one three-panel figure (styled with `scienceplots`):
-#
-# - (a) Observed photometry (red points) over the posterior predictive spectrum
-#   of each configuration (median line and 68% credible band) and the BMA
-#   prediction (black).
-# - (b) The inferred star-formation histories.
-# - (c) The $M_\star$-SFR posterior, shown as filled 68/95% credible contours per
-#   configuration with the evidence-weighted BMA as a black contour.
-#
-# The BMA contour is broader than any single configuration because it includes
-# the between-model uncertainty that the individual fits do not see.
+# Three panels per galaxy: (a) photometry over posterior predictive spectra (color per config, black for BMA); (b) inferred SFHs; (c) $M_\star$-SFR posteriors (68/95% contours per config, BMA outline). The BMA contour is broader because it includes between-model uncertainty.
 
 # %%
 import scienceplots
@@ -967,25 +880,13 @@ plot_galaxy(13097)
 show_timings(13097)
 
 # %% [markdown]
-# ## 9. Model averaging with an error floor
+# ## 9. Error floor: systematic + template uncertainty
 #
-# Every galaxy above collapses onto a single configuration: with the raw
-# catalog errors (~1-2% at this S/N) the evidence is decisive, so the BMA is
-# the single best model. This is correct, but it does not show what BMA is for.
+# Above, the evidence is decisive and BMA collapses to one model. Catalog errors are statistical only; they omit systematics (zero-point, aperture, filter curves) and template imperfection (SPS models accurate to ~few percent). Adding a fractional error floor in quadrature makes evidences comparable and spreads BMA weight:
 #
-# Catalog errors are statistical only. They omit systematics (zero-points,
-# aperture matching, filter curves) and, more importantly for model comparison,
-# template imperfection: the SPS models are accurate to only a few percent. The
-# standard remedy (EAZY/FAST template errors plus a ~5% systematic, Prospector
-# noise inflation, CIGALE per-band floors) is to add a fractional error floor in
-# quadrature to the uncertainty that enters the likelihood,
+# $$\sigma_\mathrm{eff}^2 = \sigma_\mathrm{cat}^2 + (f_\mathrm{floor}\,f_\nu)^2$$
 #
-# $$\sigma_\mathrm{eff}^2 = \sigma_\mathrm{cat}^2 + (f_\mathrm{floor}\,f_\nu)^2 .$$
-#
-# With a 10% floor the per-band $\chi^2$ no longer explodes, the evidences become
-# comparable, and the BMA spreads its weight across configurations. The cost is
-# broader, more overlapping $M_\star$-SFR contours, which is the honest
-# uncertainty once template error is included.
+# With a 10% floor, the BMA averages configurations, reflecting honest model uncertainty.
 
 # %%
 ERROR_FLOOR = 0.10  # 10% systematic + template-error floor, added in quadrature
@@ -1029,19 +930,6 @@ plot_galaxy(17418, source=galaxies_floor, tag="_floor")
 # %% [markdown]
 # ## 10. Summary
 #
-# - The BMA weights are rarely uniform. One or two configurations usually
-#   dominate $\log Z$, and the average is pulled toward them while keeping some of
-#   the others' spread.
-# - The configurations disagree. Panel (c) shows four tight but separated
-#   $M_\star$-SFR clusters: changing the SSP library, SFH family, or dust law
-#   shifts the inferred stellar mass by a few tenths of a dex at fixed
-#   photometry. BMA makes that systematic spread explicit.
-# - Everything runs through the public API. Each model comes from
-#   `SEDModel.build(...)`, the speed path is `approx=WavePrecomp()`, and inference
-#   is `model.fit(data, noise, method="nss", ...)`, whose `log_evidence`
-#   supplies the averaging weights.
-# - The error budget decides whether averaging matters. With raw catalog errors
-#   the evidence collapses onto one model; a realistic ~10% floor (§9) makes the
-#   evidences comparable and the BMA averages. Whether to average or to trust the
-#   single best model depends on how well the photometry and templates are known,
-#   not on the fitter.
+# - BMA weights are rarely uniform; one or two configs dominate the evidence, pulling the average while preserving spread.
+# - Configurations disagree: changing SSP, SFH family, or dust law shifts $M_\star$ by ~0.1–0.3 dex at fixed photometry.
+# - Error floor determines whether averaging matters. Raw catalog errors collapse evidence to one model; ~10% systematic/template floor makes evidences comparable and activates BMA.

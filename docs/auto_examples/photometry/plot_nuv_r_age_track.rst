@@ -83,9 +83,9 @@ SED as young, hot stars fade and the older stellar population emerges.
     # Load filters: GALEX NUV and SDSS r
     obs = tengri.Observation(photometry=tengri.Photometry.from_names(["galex_nuv", "sdss_r"]))
 
-    # Age grid: avoid the problematic SSP age boundary at 6 Gyr (#299)
-    # Use two separate grids: young ages (0.05 to 1.5 Gyr) and old ages (1.5 to 5.5 Gyr)
-    # to capture the green valley crossing with fine resolution
+    # Age grid: use two separate ranges to capture the green valley crossing.
+    # Young ages (0.05 to 1.5 Gyr) with fine resolution, old ages (1.5 to 5.5 Gyr)
+    # avoid the SSP age boundary step around 6 Gyr.
     age_young = np.logspace(-1.3, 0.18, 35)  # 0.05 to 1.5 Gyr
     age_old = np.linspace(1.5, 5.5, 45)  # 1.5 to 5.5 Gyr with uniform spacing
     age_grid = np.concatenate([age_young[age_young < 1.5], age_old])
@@ -153,6 +153,11 @@ SED as young, hot stars fade and the older stellar population emerges.
 
     fig.tight_layout()
     plt.savefig("plot_nuv_r_age_track.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.124 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_nuv_r_age_track.py:

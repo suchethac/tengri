@@ -95,11 +95,10 @@ obs = Observation(photometry=Photometry.from_names(FILTERS))
 # %% [markdown]
 # ## Build the model
 #
-# A truncated skew-normal SFH and two-component Calzetti dust attenuation,
-# nebular off, redshift fixed at z = 0.05. Seven free parameters. Kept minimal
-# on purpose — dust IR re-emission, nebular, and AGN are shown in
-# `02_sed_anatomy.py`. `model.summary()` prints the assembled pipeline;
-# `citations.print_citations` pulls the bibliography straight from the registry.
+# Truncated-skew-normal SFH with two-component Calzetti dust attenuation,
+# nebular off, redshift fixed at z = 0.05: seven free parameters. Kept minimal
+# on purpose. Dust IR re-emission, nebular emission, and AGN are covered in
+# `02_sed_anatomy.py`.
 
 # %%
 sed_model = SEDModel.build(
@@ -128,7 +127,7 @@ citations.print_citations(sed_model)
 # ## Mock observation
 #
 # One draw from the prior is the truth. `generate_mock` returns the
-# noiseless model fluxes, Gaussian uncertainties at the requested SNR,
+# noiseless model fluxes, Gaussian uncertainties at the requested S/N,
 # and a noisy realization.
 
 # %%
@@ -146,11 +145,10 @@ wave_eff_um = effective_wavelengths_um(phot)
 # %% [markdown]
 # ## One-time JIT compile
 #
-# First touch of the photometric forward kernel and its gradient triggers
-# XLA compilation against the precomputed SSP × filter LUT (the
-# `WavePrecomp` knob set above). Cold cache is a few seconds; warm cache
-# (`~/.cache/tengri_jax_cache`) is milliseconds. Subsequent calls are
-# pure numeric throughput — no Python in the hot path.
+# First call to the forward kernel and its gradient triggers XLA compilation
+# against the precomputed SSP × filter LUT (the `WavePrecomp` knob above).
+# Cold compile is a few seconds; warm cache is milliseconds. The difference
+# between first and second call below shows the cost of compilation alone.
 
 # %%
 import time

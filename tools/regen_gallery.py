@@ -47,6 +47,14 @@ Usage
 Requires the optional data grids (SSP, SKIRTOR, astrodust, ...): the examples
 actually execute. CI cannot run this — it has neither the grids nor the RAM,
 which is why the rendered gallery is committed in the first place.
+
+Batch in single digits. Every requested example runs inside **one** sphinx
+process, and the per-example JAX/SSP allocations are not fully released between
+them, so the peak grows with the batch. Forty at once was OOM-killed on a 48 GB
+machine (``sphinx exit=-9``); eight at a time completes. The snapshot in step 3
+survives the kill, so a killed batch leaves the gallery intact rather than
+hollowed out — but it also does no work, so prefer several small batches over
+one large one. ``--stale`` on a large drift is exactly the case to split up.
 """
 
 from __future__ import annotations
@@ -220,6 +228,32 @@ def _scrub_machine_paths(targets: set[str]) -> tuple[int, list[str]]:
     return rewritten, leftovers
 
 
+def _nbconvert_data_dir() -> Path | None:
+    """Where the installed nbconvert keeps its export templates, if findable.
+
+    ``.venv-docs`` has no nbconvert of its own, so the import resolves to
+    whichever one is on the path -- here Anaconda's. nbsphinx then dies with
+    ``ValueError: No template sub-directory with name 'rst'``, because
+    ``JUPYTER_PATH`` never mentions that installation's data directory. The
+    build gets far enough to look like it is working and then aborts with a
+    message about templates that says nothing about the real cause, so this
+    derives the directory instead of leaving it to the caller to remember.
+
+    Returns None when nbconvert is absent or its data directory is not laid
+    out as ``<prefix>/share/jupyter`` -- in which case JUPYTER_PATH is left
+    alone and any existing value still applies.
+    """
+    try:
+        import nbconvert
+    except ImportError:
+        return None
+    for parent in Path(nbconvert.__file__).resolve().parents:
+        candidate = parent / "share" / "jupyter"
+        if (candidate / "nbconvert" / "templates").is_dir():
+            return candidate
+    return None
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("examples", nargs="*", help="example basenames, e.g. plot_agn_hierarchy")
@@ -253,6 +287,28 @@ def main() -> int:
     # conf.py switches to the committed renders when CI is set; we are the
     # machine that produces them, so make sure execution is on.
     env.pop("CI", None)
+    # sphinx-gallery executes each script from the gallery output directory, not
+    # the repo root, so a relative ``data/filters`` lookup misses and the filter
+    # loader falls through to an SVO download -- which fails without astroquery
+    # and network. The script runs fine by hand and only breaks under the build,
+    # which makes it a confusing failure. Pin the data directory absolutely.
+    env.setdefault("TENGRI_DATA_DIR", str(REPO / "data"))
+    # Give the build its own JAX compile cache. The default
+    # ``~/.cache/tengri_jax_cache`` is shared by every tengri process on the
+    # machine and is size-capped, so JAX evicts entries while another process
+    # is mid-write: the loser gets ``UserWarning: Error writing persistent
+    # compilation cache entry ... FileNotFoundError ... -atime``, which
+    # sphinx-gallery captures into the page along with two absolute paths.
+    # 136 such lines across 19 renders were committed that way. Step 4 cannot
+    # scrub them -- the cache lives outside the checkout, so it reports them
+    # instead -- which makes isolating the cache the only fix at the cause.
+    # A dedicated directory keeps the compile-cache speedup and removes the
+    # cross-process race.
+    gallery_cache = Path.home() / ".cache" / "tengri_gallery_jax_cache"
+    env.setdefault("TENGRI_JAX_CACHE_DIR", str(gallery_cache))
+    jupyter_data = _nbconvert_data_dir()
+    if jupyter_data is not None:
+        env.setdefault("JUPYTER_PATH", str(jupyter_data))
 
     # The snapshot deliberately outlives a crash. These builds execute real
     # science examples and can be OOM-killed mid-flight; an auto-deleting

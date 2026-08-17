@@ -21,14 +21,12 @@
 Emission-line velocity dispersion: narrow [NII] to broad Hα
 ===========================================================
 
-Sweep emission-line velocity dispersion σ_v from 50 km/s (narrow-line region)
-to 5000 km/s (broad-line region) to show how Hα broadens while the [NII]
-doublet becomes buried in the Hα wing. Demonstrates the kinematic signature
-distinguishing AGN BLR from NLR.
+Narrow-line regions sit at σ_v ≈ 50–300 km/s; a broad Hα component from the
+AGN accretion disk reaches thousands of km/s. The [NII] doublet is separated
+by 35.4 Å (6549.86 and 6585.28 Å vacuum), which corresponds to σ_v ≈ 1600
+km/s — above that the two lines merge into the wing of Hα.
 
-.. sphx-glr-precomputed-img:
-
-.. GENERATED FROM PYTHON SOURCE LINES 17-104
+.. GENERATED FROM PYTHON SOURCE LINES 10-97
 
 
 
@@ -38,8 +36,21 @@ distinguishing AGN BLR from NLR.
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /tengri/examples/spectroscopy/plot_velocity_offset_lines.py:95: UserWarning: Glyph 945 (\N{GREEK SMALL LETTER ALPHA}) missing from font(s) cmr10.
+      fig.tight_layout()
+    /tengri/examples/spectroscopy/plot_velocity_offset_lines.py:96: UserWarning: Glyph 945 (\N{GREEK SMALL LETTER ALPHA}) missing from font(s) cmr10.
+      plt.savefig("plot_velocity_offset_lines.png", dpi=150, bbox_inches="tight")
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -134,7 +145,7 @@ distinguishing AGN BLR from NLR.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.405 seconds)
+   **Total running time of the script:** (0 minutes 6.769 seconds)
 
 
 .. _sphx_glr_download_auto_examples_spectroscopy_plot_velocity_offset_lines.py:

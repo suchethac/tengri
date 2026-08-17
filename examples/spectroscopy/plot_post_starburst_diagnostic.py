@@ -2,30 +2,15 @@
 Post-Starburst K+A Diagnostic: Hδ_A vs Time Since Quench
 =========================================================
 
-A classic post-starburst (PSB) / K+A galaxy signature: strong Balmer
-absorption lines (high Hδ_A) with no emission, visible only in a narrow
-window after a recent burst of star formation has been abruptly quenched.
-
-This example builds 6 tengri models: extended star formation (tsnorm,
-~200 Myr width) at varying lookback times spanning 0.1–1.8 Gyr, simulating
-quench epochs with different elapsed times. We measure Hδ_A absorption at
-each epoch and show how it peaks ~100 Myr post-quench, then decays as
-A-type stars die out.
-
-The signature traces the lifetime of A-type stars (responsible for Balmer
-absorption) and reflects the mechanism by which star formation is rapidly
-shut off in galaxies — a key driver of the red sequence in the local universe.
+Hδ_A peaks ~100 Myr post-quench, then decays as A-type stars die out.
+This absorption index traces the lifetime of A-type stars responsible for
+Balmer absorption, a key driver of galaxy quenching (Worthey & Ottaviani 1997).
 
 References
 ----------
 
-.. [1] Dressler, A., & Gunn, J. E. 1992, ApJS, 78, 1
-       (K+A galaxies in the Coma cluster)
-.. [2] French, K. D., Yang, Y., Zabludoff, A., et al. 2018, ApJ, 862, 2
-       (The molecular gas content and CO line ratios in post-starburst
-       galaxies in the EAGLE simulations)
-.. [3] Worthey, G., & Ottaviani, D. L. 1997, ApJS, 111, 377
-       (Hδ_A window definitions and optical index calibrations)
+Worthey, G., & Ottaviani, D. L. 1997, ApJS, 111, 377
+(Hδ_A index definitions and optical index calibrations).
 """
 
 import os
@@ -139,7 +124,7 @@ for i, tsq in enumerate(time_since_quench_gyr):
     dust = {"type": "two_component", "all_params": tengri.FIXED, "tau_bc": 0.0, "tau_diff": 0.0}
     neb = {"type": "cue", "all_params": tengri.FIXED}
 
-    # Build model; z=0.05 avoids NaN singularity at z=0 (#290)
+    # Build model; z=0.05 avoids numerical singularities in cosmology at z=0
     model = tengri.SEDModel.build(
         ssp,
         sfh=sfh,

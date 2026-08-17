@@ -2,19 +2,13 @@
 BPT diagram: emission lines from the baked-in nebular SSP
 =========================================================
 
-Demonstrates BPT ([OIII]/Hβ vs [NII]/Hα) line ratios computed
-directly from the model's rest-frame SED via continuum-subtracted
-boxcar integration around each line center, swept across a stellar
-metallicity grid. The Kewley+2001 and Kauffmann+2003 demarcation
-lines are overlaid for context.
+BPT ([OIII]/Hβ vs [NII]/Hα) line ratios computed directly from the
+rest-frame SED via continuum-subtracted boxcar integration around each
+line center, swept across a stellar metallicity grid. The Kewley+2001
+and Kauffmann+2003 demarcation lines distinguish star-forming galaxies
+from AGN.
 
-The AGN-fraction axis of the previous version requires the discrete
-``Prediction.lines.*`` API on a backend that exposes per-line
-luminosities (cb19 / cloudy / cue); the BakedIn SSP backend used
-here does not. See issue #361 for the per-backend status.
-
-Reference: Kewley et al. 2001, ApJ, 556, 121 (theoretical classification);
-Kauffmann et al. 2003, MNRAS, 346, 1055 (empirical SF boundary).
+References: Kewley+2001; Kauffmann+2003.
 """
 
 import os

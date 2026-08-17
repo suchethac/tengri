@@ -1,11 +1,10 @@
-sphinx>=7.0
-furo>=2024.0
-myst-parser>=2.0
-nbsphinx>=0.9
-nbconvert>=7.0
-jupyter>=1.0
-jupytext>=1.16
-numpydoc>=1.5
-sphinx-copybutton>=0.5
-sphinx-design>=0.5
-sphinx-gallery>=0.15
+# Documentation build dependencies.
+#
+# One list, not two. This file used to restate the [docs] extra in
+# pyproject.toml, and the two had drifted by exactly one entry --
+# sphinx-gallery, which docs/conf.py names in `extensions`, so the build cannot
+# start without it. CI installs this file and was unaffected; anyone following
+# `pip install -e ".[docs]"` got a docs build that failed on import. Installing
+# the extra from here keeps that from recurring, because there is nothing left
+# to keep in step.
+-e .[docs]
