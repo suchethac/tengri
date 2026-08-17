@@ -24,10 +24,16 @@ This script makes a *scoped* regeneration safe:
 1. snapshot ``docs/auto_examples/``;
 2. build with ``TENGRI_GALLERY_ONLY`` set, so only the requested examples
    execute (that env var replaces the skip-list pattern in ``conf.py``);
-3. restore every file that does **not** belong to a requested example.
+3. restore every file that does **not** belong to a requested example;
+4. scrub this checkout's absolute path out of the pages it did rewrite.
 
 Step 3 is the fence. Without it the requested examples come back correct and
 the other ~270 come back hollowed out.
+
+Step 4 closes a leak that had no prevention, only detection. Captured console
+output carries the absolute path of whatever emitted it, so regenerating from
+a worktree stamps that worktree into the public docs; #1783 removed 792 such
+paths by hand and the next regeneration put them straight back.
 
 Usage
 -----
@@ -74,6 +80,19 @@ DOCS = REPO / "docs"
 # outside auto_examples/, so the page fence does not reach it; restore it
 # explicitly and leave the table to full builds.
 BUILD_ARTIFACTS = (DOCS / "sg_execution_times.rst",)
+
+#: What the repository root is called in captured console output. Already the
+#: committed spelling across the gallery, from the #1783 cleanup.
+PATH_PLACEHOLDER = "/tengri/"
+
+#: Generated artifacts that can carry a captured path. ``.py`` is a verbatim
+#: copy of the example source and ``.md5`` is a digest of it — rewriting
+#: either would desynchronize the freshness stamp. Images cannot hold one.
+SCRUBBED_SUFFIXES = frozenset({".rst", ".ipynb", ".json", ".txt"})
+
+#: Mirrors ``tools/check_no_local_paths.py`` — the guard this feeds.
+_HOME_PATH = re.compile(r"(?:/Users|/home)/[A-Za-z0-9][A-Za-z0-9_.-]*/")
+CI_HOMES = ("/home/runner/", "/home/ubuntu/")
 
 
 def _stale_basenames() -> list[str]:
@@ -169,6 +188,46 @@ def _restore_untargeted(snapshot: Path, targets: set[str]) -> tuple[int, int, in
     return restored, removed, kept
 
 
+def _scrub_machine_paths(targets: set[str]) -> tuple[int, list[str]]:
+    """Rewrite this checkout's absolute path out of the pages just built.
+
+    A Python warning prints the absolute ``__file__`` of whatever raised it,
+    and sphinx-gallery bakes stdout/stderr into the ``.rst`` — so every
+    regeneration stamps the generating machine into the committed docs. #1783
+    scrubbed 792 such paths across 112 files by hand; nothing prevented the
+    next one, and the leak returned on the following worktree regen. Closing
+    it here means the generator cannot emit it, rather than a reviewer
+    catching it (``tools/check_no_local_paths.py``) after the fact.
+
+    Only target-owned files are touched. Everything else was just restored
+    from the snapshot, so it already holds its committed bytes.
+
+    Returns ``(files_rewritten, leftovers)``. A leftover is an absolute home
+    path this cannot attribute to *this* checkout — a venv living elsewhere,
+    say. Those are reported, never guessed at: a blanket rewrite of every
+    ``/Users/<name>/`` would destroy the information needed to fix the cause.
+    """
+    root = f"{REPO}{os.sep}"
+    rewritten, leftovers = 0, []
+    for path in sorted(AUTO.rglob("*")):
+        if not path.is_file() or path.suffix not in SCRUBBED_SUFFIXES:
+            continue
+        if not _owned_by_targets(path, targets):
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue
+        scrubbed = text.replace(root, PATH_PLACEHOLDER)
+        if scrubbed != text:
+            path.write_text(scrubbed, encoding="utf-8")
+            rewritten += 1
+        for match in _HOME_PATH.finditer(scrubbed):
+            if not match.group(0).startswith(CI_HOMES):
+                leftovers.append(f"{path.relative_to(REPO)}: {match.group(0)}")
+    return rewritten, leftovers
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("examples", nargs="*", help="example basenames, e.g. plot_agn_hierarchy")
@@ -231,11 +290,22 @@ def main() -> int:
     finally:
         restored, removed, kept = _restore_untargeted(snapshot, set(targets))
         restored += _restore_build_artifacts(snapshot)
+        scrubbed, leftovers = _scrub_machine_paths(set(targets))
 
     print(
         f"\nsphinx exit={returncode}   "
-        f"kept {kept} target file(s), restored {restored}, removed {removed}"
+        f"kept {kept} target file(s), restored {restored}, removed {removed}, "
+        f"scrubbed {scrubbed}"
     )
+
+    if leftovers:
+        print(
+            f"\n{len(leftovers)} absolute home path(s) left, from outside this "
+            f"checkout. These ship to a public repo and describe your machine; "
+            f"tools/check_no_local_paths.py will reject them:"
+        )
+        for hit in leftovers[:20]:
+            print(f"  {hit}")
 
     if returncode == 0:
         shutil.rmtree(workdir, ignore_errors=True)
