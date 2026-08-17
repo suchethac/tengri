@@ -196,11 +196,11 @@ class Draine2021PAHIRSEDComponent(SEDModelComponent):
         if template_path is None:
             import os
 
+            from tengri._data_setup import find_data_str
             from tengri.components.dust.draine2021_pah import (
                 DRAINE2021_PAH_DEFAULT_PATH,
                 PAHSPEC_PATH_ENV,
             )
-            from tengri.components.dust.emission_templates import _find_data_file
 
             template_path = os.environ.get(PAHSPEC_PATH_ENV)
             if template_path is None:
@@ -211,7 +211,7 @@ class Draine2021PAHIRSEDComponent(SEDModelComponent):
                 # ``Path(...)`` fallback in ``draine2021_pah.py``) would
                 # otherwise produce a doubled ``data/data/…`` miss and the
                 # component would silently emit zeros (#852).
-                template_path = _find_data_file(os.path.basename(DRAINE2021_PAH_DEFAULT_PATH))
+                template_path = find_data_str(os.path.basename(DRAINE2021_PAH_DEFAULT_PATH))
 
         if template_path is None:
             warnings.warn(
@@ -317,15 +317,15 @@ class Draine2021PAHIRSEDComponent(SEDModelComponent):
             if template_path is None:
                 import os
 
+                from tengri._data_setup import find_data_str
                 from tengri.components.dust.draine2021_pah import (
                     DRAINE2021_PAH_DEFAULT_PATH,
                     PAHSPEC_PATH_ENV,
                 )
-                from tengri.components.dust.emission_templates import _find_data_file
 
                 template_path = os.environ.get(PAHSPEC_PATH_ENV)
                 if template_path is None:
-                    template_path = _find_data_file(os.path.basename(DRAINE2021_PAH_DEFAULT_PATH))
+                    template_path = find_data_str(os.path.basename(DRAINE2021_PAH_DEFAULT_PATH))
 
             if template_path is None:
                 warnings.warn(

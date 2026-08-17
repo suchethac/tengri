@@ -141,7 +141,7 @@ def run_nss(
     **Cross-galaxy cache reuse**
 
     The compiled XLA step function is cached on the ``SEDModel`` object via
-    the default :class:`~tengri.inference._model_cache.ModelCacheOwner`.  ``data_args`` is
+    the default ``tengri.inference._model_cache.ModelCacheOwner``.  ``data_args`` is
     passed as a *traced* JAX value (not a compile-time constant), so the same
     compiled program is reused for every galaxy that shares the same model
     dimensionality and photometric band layout.  The cache is keyed on

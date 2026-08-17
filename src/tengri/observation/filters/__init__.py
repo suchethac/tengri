@@ -52,7 +52,7 @@ def default_filter_cache_dir() -> Path:
     -------
     pathlib.Path
         The first ``<data-dir>/filters`` that already exists, searching
-        :func:`~tengri._data_setup.data_dirs`; otherwise
+        ``tengri._data_setup.data_dirs``; otherwise
         ``download_dir()/"filters"``, which is always a directory the loaders
         search, so a curve fetched now is found later.
 
@@ -91,7 +91,7 @@ def find_cached_filter(filename: str) -> Path | None:
     -------
     pathlib.Path or None
         The first ``<data-dir>/filters/<filename>`` that is a file, searching
-        :func:`~tengri._data_setup.data_dirs` in order; ``None`` when no cache
+        ``tengri._data_setup.data_dirs`` in order; ``None`` when no cache
         holds it and it genuinely has to be fetched.
 
     Notes

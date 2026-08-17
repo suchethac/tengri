@@ -197,7 +197,7 @@ def _pop_wildcard(variant: str, kwargs: dict[str, Any]) -> Any:
 def short_form(full_name: str, *, prefixes: tuple[str, ...]) -> str:
     """Strip a prefix and return the short-form name.
 
-    The grammar parser's :func:`tengri.parameters.groups._extract_short_name`
+    The grammar parser's ``tengri.parameters.groups._extract_short_name``
     strips the component prefix to derive the short form (e.g.
     ``radio_q_ir`` → ``q_ir``). Factories must use the same convention.
     """

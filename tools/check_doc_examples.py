@@ -376,6 +376,17 @@ def xref_targets(text: str) -> list[str]:
     return out
 
 
+def _has_private_segment(dotted: str) -> bool:
+    """Check if a dotted path contains a private (underscore-prefixed) segment.
+
+    Private internals (e.g., ``tengri.parameters._param_defs``,
+    ``tengri.parameters.groups._VALID_NEBULAR_TYPES``) should not be
+    cross-referenced from published docstrings.
+    """
+    parts = dotted.split(".")
+    return any(part.startswith("_") for part in parts)
+
+
 def xref_resolves(dotted: str) -> bool:
     """Resolve a dotted path by module-prefix split, longest module first.
 
@@ -542,6 +553,8 @@ def check(verbose: bool = False) -> list[str]:
     # 4. Every Sphinx cross-reference target must resolve. docs/api/*.rst are
     #    autodoc stubs, so the docstrings ARE the reference: a dead target is a
     #    dead link on the published page, and nitpicky is off so -W is silent.
+    #    Private targets (those with underscore-prefixed segments) should not be
+    #    cross-referenced from published docstrings, even if they resolve as paths.
     for path in sorted((REPO / "src" / "tengri").rglob("*.py")):
         if is_excluded(path):
             continue
@@ -550,7 +563,12 @@ def check(verbose: bool = False) -> list[str]:
             checked += 1
             if verbose:
                 print(f"  {rel}: xref {target}")
-            if not xref_resolves(target):
+            if _has_private_segment(target):
+                violations.append(
+                    f"{rel}: cross-reference `{target}` targets a private module/attribute; "
+                    "use literal backtick text instead"
+                )
+            elif not xref_resolves(target):
                 violations.append(f"{rel}: cross-reference `{target}` does not resolve")
     for pattern in ("*.md", "*.rst"):
         for path in sorted((REPO / "docs").rglob(pattern)):
@@ -559,7 +577,12 @@ def check(verbose: bool = False) -> list[str]:
             rel = path.relative_to(REPO)
             for target in xref_targets(path.read_text(encoding="utf-8", errors="replace")):
                 checked += 1
-                if not xref_resolves(target):
+                if _has_private_segment(target):
+                    violations.append(
+                        f"{rel}: cross-reference `{target}` targets a private module/attribute; "
+                        "use literal backtick text instead"
+                    )
+                elif not xref_resolves(target):
                     violations.append(f"{rel}: cross-reference `{target}` does not resolve")
 
     print(f"checked {checked} references across {len(targets)} files")

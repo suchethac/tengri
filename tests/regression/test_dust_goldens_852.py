@@ -47,6 +47,14 @@ _L_IR = 1.0e44
 
 _GOLDEN_DIR = Path(__file__).parent / "data" / "dust_emission_golden"
 
+# Cross-JAX-version XLA drift on JIT-compiled SED goldens is measured at ~1e-7
+# relative (#1763: 9.97e-08 on the PAH golden, jax 0.9.1 -> 0.11.0). Goldens
+# pinned tighter than that test the compiler version, not the physics; a real
+# regression and a JAX upgrade become indistinguishable, and the natural
+# response (re-freeze) would silently absorb a real regression.
+GOLDEN_SED_RTOL = 1e-6  # ~10x margin over measured drift; ~1e5 below physics changes
+GOLDEN_SED_ATOL = 1e-7
+
 
 def _schreiber2018_available() -> bool:
     """Gate on the grid FILE directly. ``preload_emission_model`` is lazy (does
@@ -54,9 +62,9 @@ def _schreiber2018_available() -> bool:
     leave the schreiber2018 lazy-loader entry in an inconsistent state that
     pollutes later tests (e.g. ``test_dust_energy_balance``). Checking the file
     up front skips cleanly without touching the loader."""
-    from tengri.components.dust.emission_templates import _find_data_file
+    from tengri._data_setup import find_data_str
 
-    return _find_data_file("schreiber2018_templates.h5") is not None
+    return find_data_str("schreiber2018_templates.h5") is not None
 
 
 def _draine2021_available() -> bool:
@@ -86,6 +94,7 @@ def test_schreiber2018_port_matches_loader_bit_exact():
 
     comp = _REGISTRY["schreiber2018"]()
     sed_out, _ = comp.predict({"T": 30.0, "f_pah": 0.05}, jnp.zeros_like(_WAVE), _WAVE, L_ir=_L_IR)
+    # Same-process loader comparison, not a frozen golden — exempt from GOLDEN_SED_RTOL (#1763).
     np.testing.assert_allclose(np.asarray(sed_out), golden, rtol=1e-14, atol=1e-15)
 
 
@@ -140,7 +149,7 @@ def test_draine2021_pah_matches_frozen_golden():
         pytest.skip(f"golden not found: {golden_npy}")
     golden = np.load(golden_npy)
     sed = _draine_port_sed()
-    np.testing.assert_allclose(sed, golden, rtol=1e-14, atol=1e-15)
+    np.testing.assert_allclose(sed, golden, rtol=GOLDEN_SED_RTOL, atol=GOLDEN_SED_ATOL)
 
 
 # ── astrodust — frozen golden + energy balance (#871) ─────────────────
@@ -205,4 +214,4 @@ def test_astrodust_matches_frozen_golden():
         pytest.skip(f"golden not found: {golden_npy}")
     golden = np.load(golden_npy)
     sed = _astrodust_port_sed()
-    np.testing.assert_allclose(sed, golden, rtol=1e-14, atol=1e-15)
+    np.testing.assert_allclose(sed, golden, rtol=GOLDEN_SED_RTOL, atol=GOLDEN_SED_ATOL)

@@ -111,9 +111,10 @@ class TestDispatchRefusesWhatABackendCannotDo:
 
 
 class _Spec:
-    """Minimal stand-in: the dispatcher reads only ``n_free``."""
+    """Minimal stand-in: the dispatcher reads only ``n_latent`` (#1408)."""
 
-    n_free = 10_000  # far above the auto threshold, so the high-D branch is taken
+    n_free = 10_000  # kept in sync with n_latent for stub coherence
+    n_latent = 10_000  # far above the auto threshold, so the high-D branch is taken
 
 
 class _Ctx:

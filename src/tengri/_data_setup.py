@@ -255,8 +255,8 @@ def find_data_str(*filenames: str) -> str | None:
     -----
     The template loaders want a string -- they interpolate it into messages and
     hand it to readers typed for ``str``. Three modules each carried their own
-    ``_find_data_file`` doing this one conversion (#1431); they now delegate
-    here, so the three cannot drift apart again.
+    ``_find_data_file`` doing this one conversion (#1431); they delegated
+    to this function, so the three cannot drift apart.
     """
     found = find_data(*filenames)
     return str(found) if found is not None else None

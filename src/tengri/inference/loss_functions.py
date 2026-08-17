@@ -369,6 +369,41 @@ def _build_data_neg_log_likelihood_fn(fitter):
         else None
     )
 
+    # Eager channel-scale pre-check (#1495): evaluate every likelihood channel
+    # once, at a reference parameter draw, against the SAME prediction dict the
+    # traced loss builds below — and refuse to hand back a loss whose channels
+    # cannot coexist on a representable scale. A units-mismatched channel
+    # produces a chi-squared that silently annihilates every other channel via
+    # floating-point absorption; this converts that into a loud construction
+    # error naming the channel. Runs once per loss build, outside JIT.
+    if user_likelihood is not None:
+        import jax as _jax
+
+        from tengri.inference.composite_likelihood import (
+            CompositeLikelihood,
+            _check_channel_scales,
+        )
+
+        _ref_params = dict(spec.sample(_jax.random.PRNGKey(0)))
+        _ref_prediction, _, _, _ = _build_prediction(
+            model,
+            _ref_params,
+            data_type,
+            has_line_fluxes=has_line_fluxes,
+            has_indices=has_indices,
+            index_defs=index_defs,
+            data_args=fitter._data_args,
+            use_components=use_components,
+            has_line_ratios=has_line_ratios,
+            measured_line_defs=measured_line_defs,
+        )
+        _channels = (
+            user_likelihood.likelihoods
+            if isinstance(user_likelihood, CompositeLikelihood)
+            else (user_likelihood,)
+        )
+        _check_channel_scales(_channels, _ref_prediction, _ref_params, fitter._data_args)
+
     def neg_log_lik(params, data_args):
         """-log p(d | params). Caller supplies physical params + data_args."""
         data = data_args["data"]

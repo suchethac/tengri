@@ -91,7 +91,7 @@ def _reset_caches_between_tests():
 class TestDL07NoFallback:
     def test_raises_when_templates_missing(self, monkeypatch):
         """draine_li2007 must raise FileNotFoundError, not silently return wrong SED."""
-        monkeypatch.setattr(_emission_mod, "_find_dl07_templates", lambda: None)
+        monkeypatch.setattr(_emission_mod, "find_data_str", lambda *a, **k: None)
         _emission_mod._resolved.discard("draine_li2007")
         _emission_mod.DUST_EMISSION_MODELS["draine_li2007"] = _emission_mod._dl07_lazy_wrapper
         import jax.numpy as jnp
@@ -102,7 +102,7 @@ class TestDL07NoFallback:
 
     def test_error_message_contains_script(self, monkeypatch):
         """Error message must tell the user how to fix it."""
-        monkeypatch.setattr(_emission_mod, "_find_dl07_templates", lambda: None)
+        monkeypatch.setattr(_emission_mod, "find_data_str", lambda *a, **k: None)
         _emission_mod._resolved.discard("draine_li2007")
         _emission_mod.DUST_EMISSION_MODELS["draine_li2007"] = _emission_mod._dl07_lazy_wrapper
         import jax.numpy as jnp
@@ -117,7 +117,7 @@ class TestDL07NoFallback:
 class TestDale2014NoFallback:
     def test_raises_when_templates_missing(self, monkeypatch):
         """dale2014 must raise FileNotFoundError, not silently return wrong SED."""
-        monkeypatch.setattr(_emission_mod, "_find_data_file", lambda *a, **k: None)
+        monkeypatch.setattr(_emission_mod, "find_data_str", lambda *a, **k: None)
         _emission_mod._resolved.discard("dale2014")
         _emission_mod.DUST_EMISSION_MODELS["dale2014"] = _emission_mod._make_lazy_loader(
             "dale2014",
@@ -135,7 +135,7 @@ class TestDale2014NoFallback:
 class TestDL14NoFallback:
     def test_raises_when_templates_missing(self, monkeypatch):
         """draine_li2014 must raise FileNotFoundError, not silently return wrong SED."""
-        monkeypatch.setattr(_emission_mod, "_find_data_file", lambda *a, **k: None)
+        monkeypatch.setattr(_emission_mod, "find_data_str", lambda *a, **k: None)
         _emission_mod._dl14_fn = None
         _emission_mod._resolved.discard("draine_li2014")
         _emission_mod.DUST_EMISSION_MODELS["draine_li2014"] = _emission_mod._dl14_lazy_wrapper
@@ -146,7 +146,7 @@ class TestDL14NoFallback:
             _emission_mod.draine_li2014(wave, L_absorbed=1e10)
 
     def test_error_message_contains_script(self, monkeypatch):
-        monkeypatch.setattr(_emission_mod, "_find_data_file", lambda *a, **k: None)
+        monkeypatch.setattr(_emission_mod, "find_data_str", lambda *a, **k: None)
         _emission_mod._dl14_fn = None
         _emission_mod._resolved.discard("draine_li2014")
         _emission_mod.DUST_EMISSION_MODELS["draine_li2014"] = _emission_mod._dl14_lazy_wrapper
@@ -162,7 +162,7 @@ class TestDL14NoFallback:
 class TestAstrodustNoFallback:
     def test_raises_when_templates_missing(self, monkeypatch):
         """astrodust must raise FileNotFoundError, not silently return wrong SED."""
-        monkeypatch.setattr(_emission_mod, "_find_data_file", lambda *a, **k: None)
+        monkeypatch.setattr(_emission_mod, "find_data_str", lambda *a, **k: None)
         _emission_mod._resolved.discard("astrodust")
         _emission_mod.DUST_EMISSION_MODELS["astrodust"] = _emission_mod._make_lazy_loader(
             "astrodust",

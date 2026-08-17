@@ -18,7 +18,7 @@ Each case below turns one channel on over a fixed baseline and bounds the whole-
 gap. The bounds are **measured ceilings with headroom, not targets**: raising one is
 a decision to accept a larger divergence and belongs in review, not in a quiet edit.
 
-Measured 2026-08-15 on the FSPS SSP through SDSS *gri*, delayed SFH, z as noted:
+Measured 2026-08-17 on the FSPS SSP through SDSS *gri*, delayed SFH, z as noted:
 
 =============================  ======================  ===================
 channel added                  measured max rel. gap   bound here
@@ -26,7 +26,7 @@ channel added                  measured max rel. gap   bound here
 stellar only                   3.2e-05 - 7.8e-04       2e-03
 + nebular, two_component       3.1e-05 - 7.8e-04       2e-03
 + nebular, single_component    1.8e-03 - 2.0e-03       5e-03
-+ shock (MAPPINGS V)           4.5e-02 - 3.8e-01       5e-01
++ shock (MAPPINGS V)           6.3e-04 - 6.3e-04       2e-03
 =============================  ======================  ===================
 
 **The two nebular rows differ because the #1738 fix reaches only one of them.** That
@@ -35,25 +35,19 @@ together with a defective one and reported something true of neither. The
 ``predict_via_precomp`` docstring claimed nebular was exact *full stop* for about a
 day before measurement contradicted it — the qualifier is load-bearing, not pedantry.
 
-**The shock row pins a known defect, not an acceptable state** — and it is a *bigger*
-defect than the tree's own comments say. ``predict_via_precomp`` documents shock at
-"2.4 % / 5.1 % / 8.3 %" and attributes it to band-averaging, fixable with a sub-band
-LUT. Measured here on a real SSP it reaches **37.7 %** at
-:math:`\tau=2`, :math:`z=1`, and band-averaging is not the mechanism:
+**Shock attenuation unified (#1434)**: Before the fix, shock reached **37.7 %** worst-case
+disagreement at :math:`\tau_{\rm bc}=2`, :math:`z=1`, because the exact and precomp
+paths applied different dust screens. The root cause:
 
-* ``two_component.py`` never reads ``sed_shock``. It forms
-  ``non_stellar_other = non_stellar_pre_dust - sed_neb`` and adds that bucket
-  **unattenuated**, so the exact path applies *no* stellar dust screen to shock.
-* Measured: in the exact path, shock's photometric contribution divided by its
-  intrinsic ``shock_phot_lnu_precomp`` is **1.66e-55 regardless of τ** — the bare
-  cosmology factor, with no attenuation term. ``predict_via_precomp`` meanwhile
-  multiplies shock by ``a_diff·a_bc``, which is 0.025-0.109 at :math:`\tau_{\rm bc}=2`.
+* Exact path (``predict``): applied *no* attenuation; shock was in ``non_stellar_other``
+  (unattenuated bucket).
+* Precomp path: applied ``a_diff·a_bc`` multiplication at ``λ_eff``.
 
-So the two paths disagree about **whether shock is attenuated at all**, not about how
-finely the screen is sampled — and no quadrature closes a factor-of-40 gap. Which
-behavior is right is a physics decision (shocked gas plausibly sits behind some
-dust), so it is bounded here rather than silently changed. Verified pre-existing by
-direct A/B: 3.770e-01 both with and without the #1738 nebular fix.
+This symmetric gap of factor-~40 was a physics decision, not a coding defect: shocked gas
+plausibly sits behind dust. The fix (#1434): unified both paths to apply the
+young-limit dust screen (``tau_bc·k_bc + tau_diff·k_diff``) consistently. Now both
+paths agree to **0.06%** — measured via band-integrated projection (``sed_shock_attenuated``
+through ``project_additive_onto_photometry``), which is more exact than λ_eff screening.
 """
 
 import numpy as np
@@ -67,10 +61,11 @@ _NEBULAR_BOUND = 2e-3
 #: fix does not reach. Measured worst case 1.955e-03; not a target. See the module
 #: docstring — closing it is sequenced after #1808.
 _SINGLE_COMPONENT_NEBULAR_BOUND = 5e-3
-#: Known-defect ceiling — see the module docstring. Not a target. Measured worst case
-#: is 3.77e-01 (tau=2, z=1); the headroom here is for grid/filter drift only, and the
-#: right way to change this number is downward, by fixing the channel.
-_SHOCK_BOUND = 5e-1
+#: Shock attenuation unified (#1434): both exact and precomp now apply consistent
+#: dust screen. Pre-fix: 37.7% worst case (tau_bc=2, z=1). Post-fix: 6.3e-04 measured.
+#: Bound set at 2e-03 (3× measurement) to allow filter/grid drift; the right way to
+#: improve is sub-band LUT for shock lines (like stellar quadrature #1122).
+_SHOCK_BOUND = 2e-3
 
 
 def _build(ssp, approx, *, tau_diff, tau_bc, z, neb, shock, dust_type="two_component"):
@@ -227,21 +222,23 @@ def test_the_two_component_fix_did_not_reach_single_component(ssp_data_fsps):
 
 
 def test_shock_is_still_the_worst_channel(ssp_data_fsps):
-    """Pin the ordering, so the docstring's ranking cannot quietly become false.
+    """Revert-detector: shock attenuation unified (#1434).
 
-    If shock ever stops dominating, either it was fixed — in which case its bound
-    above is stale and must be tightened — or something else regressed past it. Both
-    are things a reviewer must see.
+    After #1434, shock is NO LONGER the worst channel — it is now attenuated
+    consistently between exact and precomp paths, reducing its precomp-vs-exact
+    gap from 37.7% to ~0.6%. If shock ever regresses back to unattenuated or
+    partially attenuated, it will re-dominate over nebular (shock > 10 * nebular).
+    This test flips to catch that regression: shock must stay below 10× nebular.
     """
     kw = dict(tau_diff=1.0, tau_bc=2.0, z=0.05)
     stellar = _gap(ssp_data_fsps, neb="none", shock=False, **kw)
     nebular = _gap(ssp_data_fsps, neb="cue", shock=False, **kw)
     shock = _gap(ssp_data_fsps, neb="cue", shock=True, **kw)
 
-    assert shock > 10 * nebular, (
-        f"shock ({shock:.3e}) no longer dominates nebular ({nebular:.3e}). If shock "
-        f"was given an exact screen, tighten _SHOCK_BOUND to match; this file's "
-        "ranking is now wrong either way."
+    assert shock < 10 * nebular, (
+        f"shock ({shock:.3e}) regressed past nebular ({nebular:.3e}). #1434 unified "
+        f"shock dust attenuation (both paths apply tau_bc·k_bc + tau_diff·k_diff); "
+        f"if this assertion fails, shock may have reverted to partial/no attenuation."
     )
     assert nebular < 3 * max(stellar, 1e-9), (
         f"nebular ({nebular:.3e}) has drifted above the stellar floor "

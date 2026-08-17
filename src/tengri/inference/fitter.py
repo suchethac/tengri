@@ -363,7 +363,7 @@ def fit_surface_ctor_names() -> frozenset[str]:
     -----
     Read off the live signature so it cannot drift from the constructor.
     :func:`split_fitter_kwargs` uses it to decide routing;
-    :func:`~tengri.inference._backend_registry.check_unknown_kwargs` uses it
+    ``tengri.inference._backend_registry.check_unknown_kwargs`` uses it
     to suggest a documented ``fit()`` option that is not a runner parameter.
     Both must mean the same thing by "constructor-routed", which is why this
     is one function rather than the same comprehension written twice.
@@ -575,7 +575,7 @@ def fast_nebular_can_engage(model) -> bool:
 
     Notes
     -----
-    Delegates to :func:`~tengri.forward.sed_model._nebular_continuum_consumers`, the
+    Delegates to ``tengri.forward.sed_model._nebular_continuum_consumers``, the
     same expression ``enable_fast_nebular`` uses to set ``must_materialize_sed``, so
     the advice and the behavior cannot drift apart.
     """
@@ -3414,7 +3414,7 @@ class Fitter:
 
         # --- "auto" method: dimensionality-based selection ---
         if method == "auto":
-            d = self.spec.n_free
+            d = self.spec.n_latent
             try:
                 from tengri.parameters.defaults import get_inference_defaults
 
@@ -3436,7 +3436,7 @@ class Fitter:
         if method == "auto":
             # Pre-registry semantics: low-D → NUTS (exact), high-D → geoVI (scalable).
             # Dimensionality threshold is configurable via inference defaults.
-            d = self.spec.n_free
+            d = self.spec.n_latent
             try:
                 from tengri.parameters.defaults import get_inference_defaults
 
@@ -3453,7 +3453,7 @@ class Fitter:
             entry = get_backend(chosen)
         elif method == "mcmc":
             # Auto-select within the MCMC family: NUTS for low-D, ray tracing for high-D.
-            d = self.spec.n_free
+            d = self.spec.n_latent
             if d <= _MCMC_AUTO_D_THRESHOLD:
                 chosen = "mcmc_nuts"
             else:

@@ -24,18 +24,32 @@
 # dust IR atlas, a new AGN torus library, anything that follows the
 # *load → predict* shape.
 #
-# The contract is one class, one file. The base class
-# `SEDModelComponent` does the bookkeeping so the file reads as physics:
+# The contract is one class, one file. `SEDModelComponent` is the root
+# base class, but you rarely subclass it directly: **each physics block
+# has its own base class that already declares that block's
+# inputs/outputs contract**, and subclassing the right one is what makes
+# your model reachable from the build grammar. For dust IR emission that
+# base is `EmissionComponent`. The file then reads as physics:
 #
-# 1. Declare free parameters as class attributes (with units).
-# 2. Declare what the model reads from upstream and what it publishes.
+# 1. Subclass the base class for your physics block.
+# 2. Declare free parameters as class attributes (with units).
 # 3. (Optional) `load(wave)` to read a pre-computed library off disk into
 #    `self.data`.
 # 4. `predict(p, sed_in, wave, **inputs)` — the physics.
 #
-# That's it. The model auto-registers; `SEDModel.build(dust={'type':
-# 'my_model'})` finds it; class-level priors flow through to inference;
-# WavePrecomp picks it up automatically.
+# That's it. The model auto-registers; `SEDModel.build(dust={'emission':
+# {'type': 'my_model'}})` finds it; class-level priors flow through to
+# inference; WavePrecomp picks it up automatically.
+#
+# > **Why the base class matters.** `SEDModel.build()` does not accept a
+# > `type` string just because the class registered. The validator
+# > (`parameters/groups.py::_valid_dust_emission_types`) accepts a name
+# > only if that component *publishes `sed_dust_ir`* — a structural
+# > check, not a name lookup. `EmissionComponent` declares
+# > `outputs = {"sed_dust_ir": ...}` for you. Subclass bare
+# > `SEDModelComponent` and invent your own output names, and the class
+# > registers happily but `build()` rejects the type with
+# > `Unknown dust emission type '...'`.
 
 # %% [markdown]
 # ## Setup
@@ -64,87 +78,166 @@ from tengri import (
 from tengri.components.sed_model_component import SEDModelComponent
 from tengri.parameters.priors import Distribution
 
+# The base class for the dust IR emission block. It declares the
+# cross-component contract every emission model shares — consumes `L_ir`,
+# publishes `sed_dust_ir` — so your subclass only writes physics.
+from tengri.components.dust.emission._component_base import EmissionComponent
+
 # %% [markdown]
 # ## A worked example — your own modified blackbody
 #
 # Let's take the simplest dust IR emission model, a modified blackbody,
 # from physics straight to a working tengri model. The formula is
 #
-# $$ L_\nu(\lambda, T, \beta) = N(T, \beta, L_{\rm absorbed})\,\nu^\beta\,B_\nu(T) $$
+# $$ L_\nu(\lambda, T, \beta) = N(T, \beta, L_{\rm IR})\,\nu^\beta\,B_\nu(T) $$
 #
-# where $L_{\rm absorbed}$ comes from the upstream dust attenuation
-# component and $N$ is the normalization that makes the frequency
-# integral equal $L_{\rm absorbed}$.
+# where $L_{\rm IR}$ is the energy-balance luminosity handed to us by the
+# upstream dust attenuation component, and $N$ is the normalization that
+# makes the frequency integral equal $L_{\rm IR}$.
+#
+# The framework passes $L_{\rm IR}$ into `predict` as the keyword
+# `L_ir` — that name is the contract `EmissionComponent` declares, not a
+# name we choose.
 
 # %%
 # Tiny helper for the frequency integral
 _c = 2.99792458e18  # Å / s
 
 
-def _trapz_freq(L_lambda, wave_aa):
+def _trapz_freq(L_nu, wave_aa):
     nu = _c / wave_aa
-    return jnp.trapezoid(L_lambda[::-1], nu[::-1])
+    return jnp.trapezoid(L_nu[::-1], nu[::-1])
 
 
 def _planck_nu(wave_aa, T):
-    """B_nu in arbitrary units — normalization cancels later."""
+    """B_nu in arbitrary units — normalization cancels later.
+
+    Written the way the shipped closures write it
+    (``components/dust/emission/analytic/_closures.py``), because the
+    textbook spelling ``nu**3 / expm1(x)`` is not gradient-safe. Two
+    guards, both load-bearing:
+
+    * **Clip x.** At optical wavelengths ``x = h*nu/(kB*T)`` reaches
+      ~1e4 for cold dust, so ``expm1(x)`` overflows to ``inf``. The
+      forward value is a harmless 0, but its derivative is ``nan`` — and
+      one ``nan`` anywhere poisons the whole gradient.
+    * **Spell 1/expm1(x) as exp(-x) / -expm1(-x).** Same number, but the
+      denominator now lives in (0, 1] and cannot overflow at any x,
+      while ``exp(-x)`` underflows to exactly 0.0 — the true Wien limit.
+
+    The floor matters at the other end: the occupation number goes as
+    1/x, so x = 0 is a division by zero (the Rayleigh-Jeans limit would
+    come back ``inf`` rather than large-but-finite).
+    """
     h = 6.62607015e-27  # erg·s
     kB = 1.380649e-16  # erg/K
     nu = _c / wave_aa
-    x = h * nu / (kB * T)
-    return nu**3 / jnp.expm1(x)
+    x = jnp.clip(h * nu / (kB * T), 1e-10, 500.0)
+    return nu**3 * jnp.exp(-x) / -jnp.expm1(-x)
 
 
 # %% [markdown]
-# Now the model class. **One file, four declarations, two methods.**
+# Now the model class. **One base class, two declarations, one method.**
+#
+# Note what is *not* here: no `inputs`, no `outputs`, no
+# `parameter_prefix`. `EmissionComponent` already declares all three for
+# the whole dust-emission block (`optional_inputs = {"L_ir": ...}`,
+# `outputs = {"sed_dust_ir": ...}`, `parameter_prefix = "dust_"`).
+# Re-declaring them with names of your own is the single most common way
+# to write a component that registers but is never reachable.
 
 
 # %%
-class MyModifiedBlackbody(SEDModelComponent):
+class MyModifiedBlackbody(EmissionComponent):
     """Optically-thin modified blackbody dust IR emission."""
 
     name = "my_modified_blackbody"
-    parameter_prefix = "dust_"
 
     # ─── Free parameters (defaults — overridable per fit)
+    #
+    # These reuse the canonical dust-emission parameter names declared in
+    # `components/dust/_params.py`. That is a requirement, not a
+    # convention: the parameter map is built by a *static scan of the
+    # installed package* (ADR-0008), so a class defined here in a
+    # notebook cannot introduce a brand-new parameter name — see
+    # "Adding a genuinely new parameter" below.
     T = Uniform(20.0, 80.0, "dust temperature", units="K")
-    beta = Uniform(1.0, 3.0, "dust emissivity index", units="")
-
-    # ─── What this model reads from upstream
-    inputs = {"L_absorbed": "erg/s"}  # noqa: RUF012
-
-    # ─── What this model publishes for downstream
-    outputs = {"L_ir": "erg/s"}  # noqa: RUF012
+    beta_ir = Uniform(1.0, 3.0, "dust emissivity index", units="")
 
     # `load()` is optional — closed-form models like this one leave it
     # as the default (no atlas to load).
 
-    def predict(self, p, sed_in, wave, *, L_absorbed):
+    def predict(self, p, sed_in, wave, *, L_ir):
         # Modified-blackbody shape, un-normalized
-        shape = wave ** (-p["beta"]) * _planck_nu(wave, p["T"])
-        # Normalize so the frequency integral equals L_absorbed
-        norm = L_absorbed / _trapz_freq(shape, wave)
-        addition = norm * shape
-        L_ir = _trapz_freq(addition, wave)
-        return sed_in + addition, {"L_ir": L_ir}
+        shape = wave ** (-p["beta_ir"]) * _planck_nu(wave, p["T"])
+        # Normalize so the frequency integral equals L_ir
+        sed = L_ir * shape / _trapz_freq(shape, wave)
+        # Publish under the contract name the block expects
+        return sed_in + sed, {"sed_dust_ir": sed}
 
 
 # %% [markdown]
-# That's the whole model. Now check that it registered.
+# That's the whole model. Now check that it registered — and, separately,
+# that the builder will actually *accept* it.
+#
+# These are two different questions. Registration is automatic for any
+# `SEDModelComponent` subclass, so the first check passes even for a
+# component `build()` will reject. The second check is the one that
+# matters.
 
 # %%
 from tengri.components.sed_model_component import _REGISTRY
+from tengri.parameters.groups import _valid_dust_emission_types
 
-print("Registered:", "my_modified_blackbody" in _REGISTRY)
+print("Registered (dispatch):", "my_modified_blackbody" in _REGISTRY)
+print("Accepted  (validator):", "my_modified_blackbody" in _valid_dust_emission_types())
+print("Publishes            :", [o.name for o in MyModifiedBlackbody._outputs_tuple])
 print("Free parameters:")
 for d in MyModifiedBlackbody().declared_parameters():
     print(f"  {d.name:20s}  {type(d.prior).__name__:10s}  units={d.units!r}")
+
+
+# %% [markdown]
+# ### The trap, made explicit
+#
+# Here is the same model written against `SEDModelComponent` with
+# hand-rolled input/output names — the shape that looks right and isn't.
+# It registers. It is still unusable.
+
+# %%
+class _BrokenMBB(SEDModelComponent):
+    """Registers fine. `build()` will never accept it."""
+
+    name = "my_mbb_broken"
+    parameter_prefix = "dust_"
+
+    T = Uniform(20.0, 80.0, "dust temperature", units="K")
+
+    inputs = {"L_absorbed": "erg/s"}  # noqa: RUF012 — invented name
+    outputs = {"L_ir": "erg/s"}  # noqa: RUF012 — invented name
+
+    def predict(self, p, sed_in, wave, *, L_absorbed):
+        return sed_in, {"L_ir": jnp.asarray(0.0)}
+
+
+print("Registered (dispatch):", "my_mbb_broken" in _REGISTRY)
+print("Accepted  (validator):", "my_mbb_broken" in _valid_dust_emission_types())
+print("Publishes            :", [o.name for o in _BrokenMBB._outputs_tuple])
+print()
+print("The validator looks for 'sed_dust_ir' among a component's outputs.")
+print("This one publishes 'L_ir', so build() reports:")
+print("  ValueError: Unknown dust emission type 'my_mbb_broken'.")
+print("  Did you mean: modified_blackbody?")
+print()
+print("...which reads like a typo, but is a contract mismatch.")
 
 # %% [markdown]
 # ## Using your model in a fit
 #
 # `SEDModel.build()` consults the registry, so the `'type'` string we
-# declared above is reachable from the standard nested-dict grammar:
+# declared above is reachable from the standard nested-dict grammar.
+# Parameter overrides in the `emission` sub-block use the *unprefixed*
+# names (`T`, `beta_ir`) — the `dust_` prefix is added for you:
 
 # %%
 # `load_ssp` resolves the grid wherever it lives, so this demo does not depend
@@ -172,7 +265,7 @@ if ssp is not None:
             "type": "single_component",
             "law_bc": "calzetti",
             "tau_v": Fixed(0.4),
-            "emission": {"type": "my_modified_blackbody", "T": Fixed(35.0), "beta": Fixed(1.8)},
+            "emission": {"type": "my_modified_blackbody", "T": Fixed(35.0), "beta_ir": Fixed(1.8)},
         },
         redshift=Fixed(0.05),
     )
@@ -187,16 +280,18 @@ else:
 # Everything below happened automatically — no code added on top of the
 # 20 lines of `MyModifiedBlackbody`:
 #
-# - **Priors flowed to inference.** `model.spec.free_params` lists
-#   `dust_T` and `dust_beta` (if you set them `Uniform`). The chosen
-#   sampler — MAP, NUTS, VI, NSS — picks them up as standard free
-#   parameters. The posterior summary lists them with units intact.
+# - **Priors flowed to inference.** Pass `Uniform(...)` instead of
+#   `Fixed(...)` in the `emission` sub-block and `model.spec.free_params`
+#   lists `dust_T` and `dust_beta_ir`. The chosen sampler — MAP, NUTS,
+#   VI, NSS — picks them up as standard free parameters. The posterior
+#   summary lists them with units intact.
 #
-# - **Cross-component contract enforced.** Because `inputs = {"L_absorbed":
-#   "erg/s"}` is declared, `validate_pipeline` checks at construction
-#   time that an upstream component publishes `L_absorbed` with matching
-#   units. Wire it wrong and you fail at build time, not silently at
-#   runtime.
+# - **Cross-component contract enforced.** `EmissionComponent` declares
+#   `optional_inputs = {"L_ir": "erg/s"}` and
+#   `outputs = {"sed_dust_ir": "erg/s/Hz"}` on your behalf, so the
+#   pipeline check at construction time confirms an upstream component
+#   publishes `L_ir` with matching units, and that what you publish is
+#   what the downstream energy-balance and observable machinery reads.
 #
 # - **WavePrecomp compatibility.** Switch `approx=WavePrecomp()` on the
 #   `SEDModel.build()` call and the framework calls your `predict` at
@@ -214,82 +309,55 @@ else:
 #   registered `(name, cls)` automatically.
 
 # %% [markdown]
-# ## Three other shapes the same contract covers
+# ## Adding a genuinely new parameter
 #
-# ### Closed-form (no `load`)
+# `MyModifiedBlackbody` above reuses `dust_T` and `dust_beta_ir`, which
+# already exist. That was deliberate. A component defined in a notebook
+# **cannot introduce a new parameter name**, and it is worth knowing why
+# before you go looking for the bug.
 #
-# Calzetti dust attenuation:
+# There are two separate registries with two different lifetimes:
 #
-# ```python
-# class Calzetti(SEDModelComponent):
-#     name = "calzetti"
-#     parameter_prefix = "dust_"
+# | Registry | Populated by | Sees notebook classes? |
+# |---|---|---|
+# | `_REGISTRY` (dispatch) | `__init_subclass__`, at class-definition time | **yes** |
+# | parameter map | static scan of `components/*/_params.py` in the *installed package* (ADR-0008) | **no** |
 #
-#     tau_v = Uniform(0.0, 4.0, "V-band optical depth", units="")
-#     delta = Uniform(-0.5, 0.5, "UV slope deviation",  units="")
+# So a notebook class is dispatchable but cannot add parameters. Declare
+# a name the param map has never heard of and it is silently dropped —
+# `tengri.Parameters(dust_my_new_param=...)` then raises
+# `Unknown parameter`.
 #
-#     inputs  = {}
-#     outputs = {"L_absorbed": "erg/s"}
+# To add a real parameter, add its `ParamDeclaration` to the block's
+# `_params.py` in a checkout and reinstall. (`tengri.register_component`
+# looks like the seam for this, but it is vestigial — nothing consults
+# it any more; the static scan replaced it.)
+
+# %% [markdown]
+# ## Other blocks, other seams
 #
-#     def predict(self, p, sed_in, wave):
-#         atten   = calzetti_atten(wave, p["tau_v"], p["delta"])
-#         sed_out = sed_in * atten
-#         L_absorbed = _trapz_freq(sed_in - sed_out, wave)
-#         return sed_out, {"L_absorbed": L_absorbed}
-# ```
+# The `SEDModelComponent` shape shown here is the seam for whole physics
+# *blocks*. Several menus inside a block instead take a **decorator that
+# registers a function**, which is a smaller thing to write. Check the
+# seam your block actually uses before writing a class:
 #
-# ### Atlas library (load an HDF5 grid, interpolate)
+# | What you want to add | Seam | Lives in |
+# |---|---|---|
+# | Dust IR emission model | subclass `EmissionComponent` | `components/dust/emission/` |
+# | Dust attenuation curve | `@register_dust_law(name=...)` | `components/dust/laws/_registry.py` |
+# | Nebular backend | `@register_nebular_model(name=...)` | `components/nebular/_models.py` |
+# | SFH | `SFH_REGISTRY` entry | `components/stellar/sfh/registry.py` |
+# | IGM / radio / X-ray | `register_igm_model` / `register_radio_model` / `register_xray_model` | `components/<block>/_models.py` |
 #
-# SKIRTOR AGN torus:
+# The reliable way to find the seam for any block: open the validator
+# that would reject your `type` string —
+# `parameters/groups.py::_valid_*_types` — and read what set it builds
+# its answer from. Every one of them derives from a live registry
+# (ADR-0005 / ADR-0008), so that function *is* the specification of what
+# your component has to do to be accepted.
 #
-# ```python
-# class SKIRTORTorus(SEDModelComponent):
-#     name = "skirtor"
-#     parameter_prefix = "agn_"
-#
-#     log_lbol      = Uniform( 8.0, 14.0, "log L_bol",            units="dex (L_sun)")
-#     theta_view    = Uniform( 0.0, 90.0, "viewing angle",        units="deg")
-#     optical_depth = Uniform( 3.0, 11.0, "9.7 μm optical depth", units="")
-#
-#     inputs  = {}
-#     outputs = {"L_agn_torus": "erg/s"}
-#
-#     def load(self, wave):
-#         return load_skirtor_atlas(wave)        # → self.data
-#
-#     def predict(self, p, sed_in, wave):
-#         sed = skirtor_interp(self.data, p["log_lbol"],
-#                              p["theta_view"], p["optical_depth"])
-#         return sed_in + sed, {"L_agn_torus": _trapz_freq(sed, wave)}
-# ```
-#
-# ### NN emulator (load trained weights, forward pass)
-#
-# Cue nebular emulator (Li+2024):
-#
-# ```python
-# class CueNebular(SEDModelComponent):
-#     name = "cue_emulator"
-#     parameter_prefix = "neb_"
-#
-#     logU     = Uniform(-4.0, -2.0, "ionization parameter",       units="dex")
-#     logZ_gas = Uniform(-2.0,  0.5, "gas metallicity (Z/Z☉)",   units="dex")
-#     fesc     = Fixed(0.0,          "Lyman continuum escape frac", units="")
-#
-#     inputs  = {"ssp_ages_yr": "yr", "age_weights": ""}
-#     outputs = {"line_waves": "Å", "line_lums": "erg/s"}
-#
-#     def load(self, wave):
-#         return load_cue_nn_weights(wave)
-#
-#     def predict(self, p, sed_in, wave, *, ssp_ages_yr, age_weights):
-#         continuum     = cue_continuum(self.data, p, ssp_ages_yr, age_weights, wave)
-#         line_w, line_L = cue_lines(    self.data, p, ssp_ages_yr, age_weights)
-#         return sed_in + continuum, {"line_waves": line_w, "line_lums": line_L}
-# ```
-#
-# All three are the same shape, just different bodies of `predict`. See
-# the canonical components in `src/tengri/components/<domain>/<name>_model.py`.
+# For a worked example of each, read a shipped one next to it: the
+# canonical components live in `src/tengri/components/<block>/`.
 
 # %% [markdown]
 # ## Further reading

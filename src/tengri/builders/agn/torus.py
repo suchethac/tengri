@@ -3,7 +3,7 @@
 
 """AGN torus sub-block factories.
 
-Variants from :data:`tengri.parameters.groups._VALID_AGN_TORUS_TYPES`.
+Variants from ``tengri.parameters.groups._VALID_AGN_TORUS_TYPES``.
 All variants share the same param partition under ``agn.torus``
 (``T_torus``, ``tau_skirtor``, ``frac_hot``, etc.); the variant
 string selects the physics model.
