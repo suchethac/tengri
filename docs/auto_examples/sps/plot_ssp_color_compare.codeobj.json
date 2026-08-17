@@ -576,6 +576,15 @@
    "name": "Artist.tight_layout"
   }
  ],
+ "first_failure": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "KeyError"
+  }
+ ],
  "flux": [
   {
    "is_class": false,

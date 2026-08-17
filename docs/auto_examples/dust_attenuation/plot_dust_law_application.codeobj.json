@@ -417,6 +417,15 @@
    "name": "Artist.tight_layout"
   }
  ],
+ "first_failure": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "NoneType"
+  }
+ ],
  "jax.random.PRNGKey": [
   {
    "is_class": false,
@@ -593,6 +602,15 @@
    "module": "builtins",
    "module_short": "builtins",
    "name": "dict"
+  }
+ ],
+ "plotted": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "int"
   }
  ],
  "plt.cm.tab10": [

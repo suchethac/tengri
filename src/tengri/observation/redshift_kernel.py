@@ -36,7 +36,7 @@ import jax.numpy as jnp
 from dsps.cosmology.flat_wcdm import CosmoParams
 
 from tengri.cosmology import PLANCK18, luminosity_distance
-from tengri.utils.scale import LOG10_4PI, apply_log10_scale
+from tengri.utils.scale import apply_log10_scale, log10_flux_scale
 
 __all__ = ("shift_to_obs_frame",)
 
@@ -89,5 +89,4 @@ def shift_to_obs_frame(
     L_on_obs_grid = jnp.interp(wave_obs, wave_rest * (1.0 + z), L_nu_rest, left=0.0, right=0.0)
     # (1+z)/(4π d_L²) as a log10 offset — never form d_L² (overflow) or
     # flux_scale (underflow) as standalone float32 values.
-    log10_flux_scale = jnp.log10(1.0 + z) - LOG10_4PI - 2.0 * jnp.log10(dl_cm)
-    return apply_log10_scale(L_on_obs_grid, log10_flux_scale)
+    return apply_log10_scale(L_on_obs_grid, log10_flux_scale(z, dl_cm))

@@ -14,7 +14,7 @@ References
 ----------
 
 - Zacharegkas et al. 2025, arXiv:2506.19919 (photometric precomputation)
-- Hearin et al. 2023, Open J. Astrophysics, 6, 1 (triweight kernel / DSPS)
+- Hearin et al. 2023, MNRAS, 521, 1741 (triweight kernel / DSPS)
 
 """
 
@@ -29,6 +29,7 @@ import numpy as np
 from tengri.utils.filter_convention import FilterConvention, filter_weight_np as _filter_weight_np
 from tengri.utils.interpolation import compute_grid_weights, edges_for_grid
 from tengri.utils.physics_constants import C_AA
+from tengri.utils.scale import log10_flux_scale as _log10_flux_scale
 
 __all__ = [
     "PreintegratedGrid",
@@ -197,8 +198,12 @@ class PreintegratedGrid:
         (n_filters,) observed-frame effective wavelengths [Ångström].
     effective_wavelengths_rest : jnp.ndarray
         (n_filters,) rest-frame effective wavelengths [Ångström].
-    flux_scale : float
-        Geometric scaling factor (1+z) / (4π d_L²) [cm⁻²].
+    log10_flux_scale : float
+        ``log10`` of the geometric scaling factor (1+z) / (4π d_L²)
+        [dex re cm⁻²]. Stored as a log because the linear factor is ~1e-57 and
+        exactly ``0.0`` in float32 at every distance, so a stored linear scale is
+        zeroed by the cast alone (#1859). Apply it with
+        :func:`tengri.utils.scale.apply_log10_scale`.
     n_filters : int
         Number of filters.
     """
@@ -209,7 +214,7 @@ class PreintegratedGrid:
     edges: tuple[jnp.ndarray, ...]
     effective_wavelengths: jnp.ndarray
     effective_wavelengths_rest: jnp.ndarray
-    flux_scale: float
+    log10_flux_scale: float
     n_filters: int
     subband_phot: jnp.ndarray | None = None
     subband_waves: jnp.ndarray | None = None
@@ -487,15 +492,13 @@ def preintegrate_grid(
     else:
         sub_phot_j = sub_waves_j = sub_waves_rest_j = None
 
-    # Compute flux scale (geometric factor). Avoid calling the ``@jit``'d
-    # ``lnu_to_fnu`` and then ``float()``-casting its result — under a
-    # surrounding jit trace ``dl_cm`` and ``redshift`` arrive as tracers
-    # and ``float(traced)`` raises ``ConcretizationTypeError``. Inline the
-    # math so the expression returns a Python float when inputs are concrete
-    # and a JAX scalar when traced; both are valid downstream multipliers.
-    import math as _math
-
-    flux_scale = (1.0 + redshift) / (4.0 * _math.pi * dl_cm**2)
+    # Geometric factor, as a log10 offset. Not ``lnu_to_fnu`` + ``float()``:
+    # under a surrounding jit trace ``dl_cm`` and ``redshift`` arrive as tracers
+    # and ``float(traced)`` raises ``ConcretizationTypeError``. The shared helper
+    # returns a Python-float-compatible scalar when inputs are concrete and a JAX
+    # scalar when traced, and — unlike the linear form this replaced — survives
+    # float32, where (1+z)/(4 pi d_L^2) is exactly 0.0 at every distance (#1859).
+    log10_flux_scale = _log10_flux_scale(redshift, dl_cm)
 
     # Convert axes to JAX arrays and precompute edges
     axes_jax = tuple(jnp.asarray(ax) for ax in axes)
@@ -508,7 +511,7 @@ def preintegrate_grid(
         edges=edges_jax,
         effective_wavelengths=jnp.asarray(eff_waves_obs),
         effective_wavelengths_rest=jnp.asarray(eff_waves_rest),
-        flux_scale=flux_scale,
+        log10_flux_scale=log10_flux_scale,
         n_filters=n_filters,
         subband_phot=sub_phot_j,
         subband_waves=sub_waves_j,
@@ -1212,7 +1215,7 @@ def slice_fixed_axes(
             edges=tuple(edges),
             effective_wavelengths=preint.effective_wavelengths,
             effective_wavelengths_rest=preint.effective_wavelengths_rest,
-            flux_scale=preint.flux_scale,
+            log10_flux_scale=preint.log10_flux_scale,
             n_filters=preint.n_filters,
             subband_phot=sub_phot,
             subband_waves=sub_waves,

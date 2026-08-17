@@ -325,6 +325,18 @@ class DerivedState:
     #: float32-safe companion to ``line_lums`` (#1534); ~1e41 erg/s is ``inf``
     #: in pure float32. Same sentinel convention as ``log_L_age``.
     log_line_lums: jnp.ndarray | None = None
+    #: ``log_line_lums`` after the dust screen, published by whichever dust
+    #: component ran, with the same law/params/clip it applies to the nebular
+    #: continuum (#1867). ``None`` when no dust component ran, and
+    #: consumers then fall back to the intrinsic ``log_line_lums`` — the
+    #: correct answer in that case.
+    #:
+    #: A typed field rather than an ``_extras`` entry deliberately: both public
+    #: line surfaces (``pred.lines.*`` and ``predict_properties``) resolve
+    #: through it, and #1867 was exactly a reddened catalog going somewhere
+    #: nothing read. A typed field is greppable and checkable; an untyped extra
+    #: would reproduce the failure mode.
+    log_line_lums_attenuated: jnp.ndarray | None = None
     # Stellar Lyman-continuum survival fraction where(λ<912, neb_fesc, 1),
     # published by photoionized backends so two-component dust can honor the
     # fesc absorption on the per-age lnu_age path (#824).

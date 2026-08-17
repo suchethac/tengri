@@ -92,6 +92,7 @@ for _ in range(n_samples):
 # Predict and compare emission lines (Cue model)
 # ============================================================================
 diffs_lines = []
+_line_failure: Exception | None = None
 # The emission lines are catalog properties, and ``predict_properties`` is the
 # single JIT/vmap-safe surface for them (NAMING_CONTRACT §4b.5). Stack them into
 # one array so the eager-vs-jit comparison below is a plain elementwise diff.
@@ -131,8 +132,21 @@ if has_cue:
             rel_diff = jnp.abs(fluxes_jit - fluxes_eager) / jnp.abs(safe_eager)
             max_rel_diff = float(jnp.max(rel_diff))
             diffs_lines.append(max_rel_diff)
-        except Exception:
-            pass
+        except Exception as e:
+            if _line_failure is None:
+                _line_failure = e
+
+# `diffs_lines` empty is read below as "this build has no Cue lines" and the
+# figure quietly drops to one panel. That reading is only true when `has_cue` is
+# False. With Cue present and every sample failing, the same empty list hides a
+# broken JIT path -- and this example exists precisely to detect broken JIT
+# paths, so failing open here defeats its purpose.
+if has_cue and not diffs_lines:
+    raise RuntimeError(
+        f"Cue lines are available but all {n_samples} eager-vs-jit comparisons "
+        f"failed, so the line panel would be silently dropped. First failure: "
+        f"{type(_line_failure).__name__}: {_line_failure}"
+    ) from _line_failure
 
 # ============================================================================
 # Plot histograms
