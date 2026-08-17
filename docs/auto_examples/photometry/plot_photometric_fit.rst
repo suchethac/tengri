@@ -43,26 +43,12 @@ Reference: Conroy 2013, ARA&A, 51, 393.
 
  .. code-block:: none
 
-    /tengri/src/tengri/forward/sed_model.py:7566: WildcardPartialFreeWarning: 'all_params: FREE' freed 6 of 8 parameters in group 'sfh'. These have no declared prior, only Fixed defaults, so they stay pinned:
+    /tengri/src/tengri/forward/sed_model.py:8484: WildcardPartialFreeWarning: 'all_params: FREE' freed 6 of 8 parameters in group 'sfh'. These have no declared prior, only Fixed defaults, so they stay pinned:
       met_alpha_fe, met_logzsol_scatter
     The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. sfh={'met_alpha_fe': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
       spec = parse_groups(**groups)
-    /tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit__impl': FileNotFoundError: [Errno 2] No such file or directory: '~/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit__normal': FileNotFoundError: [Errno 2] No such file or directory: '~/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_lnu_filter_integral': FileNotFoundError: [Errno 2] No such file or directory: '~/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_val_and_grad': FileNotFoundError: [Errno 2] No such file or directory: '~/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_predict_photometry': FileNotFoundError: [Errno 2] No such file or directory: '~/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_predict_properties': FileNotFoundError: [Errno 2] No such file or directory: '~/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_single_step': FileNotFoundError: [Errno 2] No such file or directory: '~/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_scan_batch': FileNotFoundError: [Errno 2] No such file or directory: '~/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
+    /tengri/src/tengri/forward/orchestrator.py:951: SFHBeforeBigBangWarning: Star formation history forms 94% of its stellar mass before the Big Bang at z=3.00 (cosmic age 2.15 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
 
 
 
@@ -167,7 +153,7 @@ Reference: Conroy 2013, ARA&A, 51, 393.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 13.203 seconds)
+   **Total running time of the script:** (0 minutes 6.410 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_photometric_fit.py:

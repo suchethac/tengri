@@ -25,11 +25,7 @@ When ionizing photons escape (f_esc > 0), fewer LyC photons ionize the ISM
 within the galaxy, suppressing all nebular line emission proportionally:
 L(Hα) ∝ (1 − f_esc) × Q_H, where Q_H is the intrinsic ionizing photon rate.
 
-We build a young, dust-free, fixed-metallicity model and sweep f_esc from 0
-to 0.95 in 10 steps. If the Cue emulator respects energy conservation, the
-Hα luminosity should follow the theoretical (1 − f_esc) scaling exactly.
-
-.. GENERATED FROM PYTHON SOURCE LINES 13-89
+.. GENERATED FROM PYTHON SOURCE LINES 9-85
 
 
 
@@ -130,11 +126,6 @@ Hα luminosity should follow the theoretical (1 − f_esc) scaling exactly.
     fig.tight_layout()
     plt.savefig("plot_diag_fesc_lyc_conservation.png", dpi=150, bbox_inches="tight")
     print(f"Max deviation from y=x: {max_deviation:.2%}")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 33.780 seconds)
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_diag_fesc_lyc_conservation.py:

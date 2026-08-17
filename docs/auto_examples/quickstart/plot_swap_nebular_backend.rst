@@ -22,17 +22,11 @@ Swapping the nebular backend on, then off, on a young starburst
 ===============================================================
 
 Hα and [O III]+Hβ are produced by gas reprocessing the ionizing
-continuum from O/B stars. Whether they appear in the predicted SED
-depends entirely on the nebular backend the model is built with.
+continuum from O/B stars. The SFH is a young starburst (peak age ≈ 30 Myr).
 
-We hold the SFH (a young starburst with peak SFR ≈ 30 yr ago), dust,
-and metallicity fixed, and toggle the nebular block between Cue
-(Li+2025 neural emulator) and ``none`` (stellar continuum only).
-The lines that vanish in the right column are the gas's signature.
+Reference: Li+2025 (Cue emulator; arXiv:2405.04598).
 
-Reference: Li et al. 2025, ApJ, 986, 9 (Cue emulator; arXiv:2405.04598).
-
-.. GENERATED FROM PYTHON SOURCE LINES 16-100
+.. GENERATED FROM PYTHON SOURCE LINES 10-94
 
 
 
@@ -135,7 +129,7 @@ Reference: Li et al. 2025, ApJ, 986, 9 (Cue emulator; arXiv:2405.04598).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.602 seconds)
+   **Total running time of the script:** (0 minutes 22.460 seconds)
 
 
 .. _sphx_glr_download_auto_examples_quickstart_plot_swap_nebular_backend.py:

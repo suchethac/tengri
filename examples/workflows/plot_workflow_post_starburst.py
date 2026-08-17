@@ -3,12 +3,10 @@ Model misspecification: post-starburst galaxies reveal wrong SFH
 ================================================================
 
 A post-starburst galaxy shows a recent burst followed by quenching.
-When fit with smooth tau-model (incorrect), the fit biases the recovered
-SFH. This workflow compares two models on the same mock data to show how
-model flexibility directly impacts star formation history inference.
+When fit with a smooth exponential (incorrect), the fit biases the
+recovered SFH.
 
-Reference: Cid Fernandes et al. 2005, MNRAS, 358, 363 (post-starburst
-classification); Conroy 2013, ARA&A, 51, 393 (SED fitting).
+References: Cid Fernandes+2005; Conroy+2013.
 """
 
 import os

@@ -2,21 +2,10 @@
 Fisher Information Ellipses from the Hessian
 =============================================
 
-The Fisher Information Matrix quantifies which linear combinations of
-parameters are constrained by data — and which are degenerate. Tengri's
-fully differentiable forward model makes it trivial to compute the Fisher
-matrix at any point in parameter space.
-
-This plot demonstrates the classic age-dust degeneracy in galaxy SED
-fitting: at fixed stellar mass, older stars + more dust produce the
-same multiwavelength SED as younger stars + less dust. The principal axes
-of the Fisher ellipse (eigenvectors of the Hessian of the likelihood) reveal
-the most-constrained and least-constrained linear combinations.
-
-We compute the Fisher matrix via finite-difference approximation to the
-Hessian: F_ij ≈ (∂²χ² / ∂θ_i ∂θ_j) evaluated at the fiducial point. The
-resulting ellipse's eccentricity and orientation tell us exactly which
-parameter combinations observations can break.
+The Fisher Information Matrix quantifies which parameter combinations are
+constrained by data and which are degenerate. Age-dust degeneracy:
+at fixed stellar mass, older stars + more dust produce the same multiwavelength
+SED as younger stars + less dust.
 """
 
 import os

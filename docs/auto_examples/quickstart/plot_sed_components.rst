@@ -21,12 +21,7 @@
 Dust attenuation across the SED: intrinsic, attenuated, and absorbed
 ====================================================================
 
-Build a model with both stellar and dust components. Predict the full SED
-with attenuation, then predict without dust absorption to isolate the
-absorbed UV-optical flux. The filled region shows how much light dust
-removes from the intrinsic stellar continuum.
-
-.. GENERATED FROM PYTHON SOURCE LINES 10-88
+.. GENERATED FROM PYTHON SOURCE LINES 5-83
 
 
 

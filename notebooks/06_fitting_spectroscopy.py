@@ -113,7 +113,7 @@ print(f"Free parameters ({sed_model.spec.n_free}): {', '.join(sed_model.spec.fre
 # %% [markdown]
 # ## Mock observation
 #
-# Truth with an interior metallicity; one noisy realization at SNR = 30 per
+# Truth with an interior metallicity; one noisy realization at S/N = 30 per
 # pixel.
 
 # %%
@@ -137,12 +137,8 @@ print(f"Mock: {len(flux)}-pixel R=2000 spectrum, SNR = 30/pixel")
 # %% [markdown]
 # ## Fit
 #
-# `HMC_VALIDATED` is the convergence-validated fixed-length HMC recipe shared
-# by the fitting notebooks (dense mass, n_warmup=1000, n_leapfrog=20); it mixes
-# this six-parameter posterior cleanly. The data is a spectrum and the
-# observation says so, so there is no channel to declare. With
-# `SpectrumPrecomp` the forward pass is the lookup-table path, so the whole fit
-# runs in seconds rather than minutes.
+# `HMC_VALIDATED` uses validated settings. `SpectrumPrecomp` enables the
+# lookup-table forward pass.
 
 # %%
 t0 = time.perf_counter()

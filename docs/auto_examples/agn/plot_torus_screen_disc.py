@@ -7,8 +7,7 @@ but a real dusty torus also *obscures the central engine* along edge-on
 sightlines while its own infrared emission is not re-extinguished by that
 same screen. ``tengri`` applies this inclination-dependent **torus screen**
 automatically whenever the torus is one of the two CIGALE production grids
-(``skirtor`` or ``fritz``); it closes the "disc + torus composed additively,
-no torus screen on disc" gap (#294).
+(``skirtor`` or ``fritz``).
 
 Here a single Stalevski+2016 (``skirtor``) torus reprocesses a fixed
 Kubota & Done (2018) disc at ``log L_bol = 12.5`` (in log L_sun). Only the

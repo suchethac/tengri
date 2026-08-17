@@ -50,6 +50,19 @@ NAME_MAP = {
 }
 
 
+def cigale_version() -> str:
+    """Installed pcigale version, for the SSP-grid provenance line.
+
+    The repackaged grid is gitignored (``*.h5``) and rebuilt from whichever
+    pcigale is installed, and §6's dust-IR ratio moves with the CIGALE module
+    version. Printing it is what lets a reader tell a library-version
+    difference from a physics one.
+    """
+    from importlib.metadata import version
+
+    return version("pcigale")
+
+
 def _get_module_class(module_name):
     """Load a pcigale module class by name.
 

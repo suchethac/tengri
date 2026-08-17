@@ -21,15 +21,9 @@
 Dust attenuation: uncertainty in SED from dust parameter estimation
 ===================================================================
 
-Demonstrates dust attenuation effects and how fitting uncertainty propagates
-to the recovered SED. A galaxy with free dust parameters (tau_bc and tau_diff)
-is fit with MAP, showing the best-fit SED plus mock perturbation envelopes
-to illustrate the uncertainty range from photometric noise.
+References: Calzetti+2000; Conroy+2013.
 
-Reference: Calzetti et al. 2000, ApJ, 533, 682 (attenuation law);
-Conroy 2013, ARA&A, 51, 393 (SED fitting uncertainties).
-
-.. GENERATED FROM PYTHON SOURCE LINES 13-160
+.. GENERATED FROM PYTHON SOURCE LINES 7-154
 
 
 
@@ -195,7 +189,7 @@ Conroy 2013, ARA&A, 51, 393 (SED fitting uncertainties).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.352 seconds)
+   **Total running time of the script:** (0 minutes 10.879 seconds)
 
 
 .. _sphx_glr_download_auto_examples_workflows_plot_workflow_dust_mc_resampling.py:

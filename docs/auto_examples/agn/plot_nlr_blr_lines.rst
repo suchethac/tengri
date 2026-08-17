@@ -25,7 +25,7 @@ Identical AGN configuration (multicolor disc + SKIRTOR torus at log
 L_bol = 12.5), one with the narrow-line region (FWHM ~ a few hundred
 km/s, characteristic Type-2 spectrum) and the other with the broad-line
 region (FWHM ~ thousands of km/s, Type-1). Side-by-side zooms on the
-UV (Ly-alpha, C IV) and the optical (Hbeta, [O III], Halpha) make the
+UV (Ly-alpha, C IV) and the optical (Hbeta, [O III], Hα) make the
 velocity-width contrast unmistakable while controlling for continuum.
 
 Companion to ``plot_agn_lines_compare.py``, which sweeps line backbones
@@ -45,39 +45,8 @@ and Active Galactic Nuclei* (line classification by FWHM).
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_multiply': FileNotFoundError: [Errno 2] No such file or directory: '~/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_add': FileNotFoundError: [Errno 2] No such file or directory: '~/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_subtract': FileNotFoundError: [Errno 2] No such file or directory: '~/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_not_equal': FileNotFoundError: [Errno 2] No such file or directory: '~/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_abs': FileNotFoundError: [Errno 2] No such file or directory: '~/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_greater': FileNotFoundError: [Errno 2] No such file or directory: '~/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_bitwise_and': FileNotFoundError: [Errno 2] No such file or directory: '~/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_bitwise_not': FileNotFoundError: [Errno 2] No such file or directory: '~/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit__where': FileNotFoundError: [Errno 2] No such file or directory: '~/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_dynamic_slice': FileNotFoundError: [Errno 2] No such file or directory: '~/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
-    /tengri/.venv/lib/python3.12/site-packages/jax/_src/compiler.py:834: UserWarning: Error writing persistent compilation cache entry for 'jit_interp_nd_triweight': FileNotFoundError: [Errno 2] No such file or directory: '~/.cache/tengri_jax_cache/jit__eval_both-39d3e192caf66c4228282c7421a7efb784f6608f68ca4ca274a5939e868df9c1-atime'
-      warnings.warn(
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -164,7 +133,7 @@ and Active Galactic Nuclei* (line classification by FWHM).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 9.799 seconds)
+   **Total running time of the script:** (0 minutes 19.040 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_nlr_blr_lines.py:

@@ -5,7 +5,7 @@ Strong-lensing magnification: EoR galaxy SEDs at μ = 1, 5, 20, 100
 Demonstrates how strong gravitational lensing elevates intrinsically-faint
 high-redshift (z=7) galaxies above the JWST NIRCam 5σ detection threshold.
 
-A z=7 star-forming galaxy with log10(M*/Msun)=9 and young burst (peak_lbt_gyr=0.05 Gyr,
+A z=7 star-forming galaxy with log10(M*/M☉)=9 and young burst (peak_lbt_gyr=0.05 Gyr,
 typical of early reionization epoch Lyman-alpha emitters per Schaerer+2003) is
 intrinsically too faint to detect individually. Strong lensing magnifications μ ∈ {1, 5, 20, 100}
 (arc regime; Refsdal 1964) scale observed-frame fluxes by μ, progressively lifting

@@ -21,11 +21,12 @@
 Register and use a custom photometric filter
 ==============================================
 
-How do I combine a custom photometric filter with standard filters? This
-recipe generates a synthetic Gaussian filter at 2 μm and pairs it with
-SDSS optical bands, then predicts the full SED and photometry.
+Build a FilterCurve from a Gaussian transmission profile and combine it
+with standard filters. The Photometry object merges them, then SEDModel
+predicts photometry on all bands at once — custom filters compose naturally
+with the standard library.
 
-.. GENERATED FROM PYTHON SOURCE LINES 9-103
+.. GENERATED FROM PYTHON SOURCE LINES 10-104
 
 
 
@@ -134,6 +135,11 @@ SDSS optical bands, then predicts the full SED and photometry.
     ax_filters.set_xlim(2e3, 2.5e4)
 
     plt.savefig("plot_recipe_custom_filter.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.002 seconds)
 
 
 .. _sphx_glr_download_auto_examples_recipes_plot_recipe_custom_filter.py:

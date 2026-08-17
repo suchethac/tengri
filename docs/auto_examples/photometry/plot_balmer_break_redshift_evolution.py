@@ -18,9 +18,9 @@ where the break lands in each filter set.
 
 Key intuitions this figure makes obvious:
 
-- At z = 0.5, the break lands in HST/WFC3 F105W–F160W (1.0–1.6 µm)
-- At z = 1.0, the break has moved into JWST/NIRCam F150W–F200W (1.5–2.0 µm)
-- At z = 2.0, the break is now in JWST/NIRCam F277W–F356W (2.8–3.6 µm)
+- At z = 0.5, the break lands in HST/WFC3 F105W–F160W (1.0–1.6 μm)
+- At z = 1.0, the break has moved into JWST/NIRCam F150W–F200W (1.5–2.0 μm)
+- At z = 2.0, the break is now in JWST/NIRCam F277W–F356W (2.8–3.6 μm)
 - At higher z, the break escapes the NIR and enters mid-IR (MIRI)
 - A dusty low-z galaxy and a dust-free high-z galaxy can have nearly
   identical colors because the dust absorption and the age/dust

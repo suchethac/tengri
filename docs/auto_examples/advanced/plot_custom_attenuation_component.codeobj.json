@@ -54,6 +54,27 @@
    "module": "tengri",
    "module_short": "tengri",
    "name": "SEDModelComponent"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tengri.components.template_threading",
+   "module_short": "tengri.components.template_threading",
+   "name": "TemplateThreading"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tengri.components",
+   "module_short": "tengri.components",
+   "name": "TemplateThreading"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "TemplateThreading"
   }
  ],
  "CalzettiPlusBump.name": [
@@ -86,6 +107,27 @@
    "module": "tengri",
    "module_short": "tengri",
    "name": "SEDModelComponent"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tengri.components.template_threading",
+   "module_short": "tengri.components.template_threading",
+   "name": "TemplateThreading"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tengri.components",
+   "module_short": "tengri.components",
+   "name": "TemplateThreading"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "TemplateThreading"
   },
   {
    "is_class": false,
@@ -832,6 +874,27 @@
    "module": "tengri",
    "module_short": "tengri",
    "name": "SEDModelComponent.predict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.components.template_threading",
+   "module_short": "tengri.components.template_threading",
+   "name": "TemplateThreading.predict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri.components",
+   "module_short": "tengri.components",
+   "name": "TemplateThreading.predict"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "TemplateThreading.predict"
   }
  ],
  "np.asarray": [

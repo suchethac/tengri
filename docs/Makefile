@@ -16,6 +16,7 @@ export-notebooks-html: spine-ipynb
 	@jupyter nbconvert spine/*.ipynb --to html --output-dir="$(BUILDDIR)/html/nbconvert"
 
 html: spine-ipynb
+	@python ../tools/check_gallery_fresh.py --strict
 	@$(SPHINXBUILD) -M html "$(SOURCEDIR)" "$(BUILDDIR)" $(SPHINXOPTS)
 
 clean:

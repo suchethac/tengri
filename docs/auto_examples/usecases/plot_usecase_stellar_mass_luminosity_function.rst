@@ -34,7 +34,7 @@ luminosity through the mass-to-light ratio (M/L), which depends on the star
 formation history, dust attenuation, and stellar population age.
 
 This example constructs a mock survey of 200 galaxies from a Schechter SMF
-(Baldry+2012 z=0 fit: M*=10.78 M_sun, alpha=-1.45, phi*=3.96e-3 Mpc^-3).
+(Baldry+2012 z=0 fit: M*=10.78 M☉, alpha=-1.45, phi*=3.96e-3 Mpc^-3).
 For each galaxy, we build a tengri SEDModel and predict r-band absolute
 magnitudes. Binning in M_r yields a luminosity function, which we compare
 to the Blanton+2003 SDSS LF as a sanity check.
@@ -66,23 +66,23 @@ References:
     Sampled 200 galaxies from Schechter SMF
       M* range: 6.36e+07 – 8.28e+10 M_sun
       log10(M*) range: 7.80 – 10.92
-    /tengri/src/tengri/forward/sed_model.py:8398: WildcardPartialFreeWarning: 'all_params: FREE' freed 2 of 3 parameters in group 'dust'. These have no declared prior, only Fixed defaults, so they stay pinned:
+    /tengri/src/tengri/forward/sed_model.py:8484: WildcardPartialFreeWarning: 'all_params: FREE' freed 2 of 3 parameters in group 'dust'. These have no declared prior, only Fixed defaults, so they stay pinned:
       dust_f_obscuration
     The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. dust={'f_obscuration': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
       spec = parse_groups(**groups)
-    /tengri/src/tengri/forward/sed_model.py:8398: WildcardPartialFreeWarning: 'all_params: FREE' freed 6 of 8 parameters in group 'sfh'. These have no declared prior, only Fixed defaults, so they stay pinned:
+    /tengri/src/tengri/forward/sed_model.py:8484: WildcardPartialFreeWarning: 'all_params: FREE' freed 6 of 8 parameters in group 'sfh'. These have no declared prior, only Fixed defaults, so they stay pinned:
       met_alpha_fe, met_logzsol_scatter
     The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. sfh={'met_alpha_fe': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
       spec = parse_groups(**groups)
 
     Predicting r-band absolute magnitudes...
-      50/200: log10(M*)=8.04, m_r=-17.56, M_r=-17.56
-      100/200: log10(M*)=8.37, m_r=-18.13, M_r=-18.13
-      150/200: log10(M*)=8.91, m_r=-19.09, M_r=-19.09
-      200/200: log10(M*)=10.92, m_r=-22.59, M_r=-22.59
+      50/200: log10(M*)=8.04, m_r=-17.57, M_r=-17.57
+      100/200: log10(M*)=8.37, m_r=-18.14, M_r=-18.14
+      150/200: log10(M*)=8.91, m_r=-19.10, M_r=-19.10
+      200/200: log10(M*)=10.92, m_r=-22.61, M_r=-22.61
 
     Computed 200 absolute magnitudes
-      M_r range: -22.59 to -17.14
+      M_r range: -22.61 to -17.16
 
 
 
@@ -402,7 +402,7 @@ References:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 15.882 seconds)
+   **Total running time of the script:** (0 minutes 9.943 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_stellar_mass_luminosity_function.py:

@@ -7,8 +7,8 @@ galaxies once an AGN is excluded. High-mass XRBs trace the recent
 star-formation rate (Mineo+2012), while low-mass XRBs trace the
 integrated stellar mass (Lehmer+2019). The two scalings have different
 spectral shapes too: HMXBs are slightly harder, LMXBs slightly softer.
-Two side-by-side sweeps — SFR (left) at fixed M_star = 1e11 M_sun, and
-M_star (right) at fixed SFR = 10 M_sun/yr — separate the two channels
+Two side-by-side sweeps — SFR (left) at fixed M_star = 1e11 M☉, and
+M_star (right) at fixed SFR = 10 M☉/yr — separate the two channels
 on the same axes.
 
 References

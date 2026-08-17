@@ -2,14 +2,10 @@
 High-redshift Lyman-break galaxy: Lyman dropout signatures in JWST/HST
 ======================================================================
 
-Fits a z=4 young, dust-free star-forming galaxy using JWST (F150W/F200W/F277W)
-and HST (F814W) broadband photometry. The characteristic Lyman-break signature
-(sharp UV dropout at observed ~4 micron) constrains age and metallicity even
-with just 4 bands. Demonstrates recovery of the young starburst component
-from the dropout depth.
+The Lyman-break signature (sharp UV dropout at observed ≈ 4 μm) constrains
+age and metallicity even with just 4 bands.
 
-Reference: Steidel et al. 1996, ApJ, 462, L17 (Lyman-break galaxies);
-Conroy 2013, ARA&A, 51, 393 (SED fitting).
+References: Steidel+1996; Conroy+2013.
 """
 
 import os

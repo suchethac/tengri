@@ -16,10 +16,9 @@ effect** — the same accretion disc + dusty torus system appears as:
 This gallery shows both sightlines for the same AGN (L_bol = 10^12 L_sun) using
 the composable unified AGN model in tengri, plus a smooth 3-angle transition
 narrative (Type 1 → Intermediate → Type 2) demonstrating how the optical SED
-and feature visibility evolve continuously with inclination angle. The Type 2
-configuration demonstrates the library limitation noted in caveat #294: the
-torus does not properly screen the disc from the observer, resulting in
-over-bright Type-2 continuum.
+and feature visibility evolve continuously with inclination angle. In Type 2
+edge-on sightlines, the torus screening of the disc is incomplete, resulting
+in over-bright continuum in the UV/optical.
 
 References
 ----------

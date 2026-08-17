@@ -22,7 +22,7 @@ References
    arXiv:1702.08691.
 .. [2] L. N. Martínez-Ramírez et al., "AGNfitter-rx: Modeling the radio-to-X-ray
    spectral energy distributions of AGNs," A&A 688, A46 (2024).
-   arXiv:2405.12111. https://doi.org/10.1051/0004-6361/202449329
+   arXiv:2405.12111. https://doi.org/10.1051/0004–6361/202449329
 """
 
 import os

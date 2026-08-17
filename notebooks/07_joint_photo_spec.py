@@ -67,13 +67,10 @@ C_POST, C_TRUTH, C_DATA, C_SPEC = "#3a76d9", "0.15", "#c3372a", "#d98a3a"
 # %% [markdown]
 # ## Stellar library and observation
 #
-# Twelve UV–MIR bands (GALEX → WISE) plus an SDSS-like R≈2000 optical spectrum,
-# 3800–9200 Å observed — at z = 0.05 that covers the 4000 Å break, Hβ, the Mgb
-# triplet, the Fe5270 / Fe5335 blends, Hα, and the Ca II triplet, the features
-# that carry metallicity and light-weighted age. We sample the spectrum at 260
-# pixels: enough to resolve the indices that break the degeneracy, and the
-# joint fit time scales with the pixel count (each pixel is one more likelihood
-# term and gradient row).
+# Twelve UV–MIR bands (GALEX → WISE) plus an SDSS-like optical spectrum (R ≈ 2000,
+# 3800–9200 Å observed). At z = 0.05 this covers the 4000 Å break, Hβ, Mgb triplet,
+# Fe5270/Fe5335 blends, Hα, and Ca II triplet — the absorption features that carry
+# metallicity and light-weighted age. Sampling at 260 pixels resolves these indices.
 
 # %%
 SSP_NAME = "fsps_prsc_miles_chabrier"
@@ -106,8 +103,14 @@ obs_joint = Observation(photometry=phot_obs, spectroscopy=spec_obs)
 # ## Build the model
 #
 # One builder, called twice: the same physics and the same free parameters
-# against two different observations, so any difference in the posteriors
-# comes from the data and not from the model.
+# against two different observations. The spectrum pixel count drives fit cost —
+# each pixel adds a likelihood term and a gradient row.
+#
+# **Noise model assumption:** both channels assume Gaussian errors. That is true
+# for photometry but spectral pixels often have correlated noise (wavelength
+# calibration, flat-fielding). A proper analysis would decorrelate the spectrum
+# covariance; this fit uses diagonal errors, so the posterior width is honest
+# but does not account for that structure.
 
 
 # %%
@@ -179,15 +182,11 @@ print(f"Mock: {len(flux_phot)} bands (SNR 20) + {len(flux_spec)}-pixel spectrum 
 # %% [markdown]
 # ## Fit
 #
-# Both use `HMC_VALIDATED`, the recipe shared across the fitting notebooks
-# (dense mass, n_warmup=1000, n_leapfrog=20), and both run on lookup tables (WavePrecomp for photometry,
-# SpectrumPrecomp's dual LUT for the joint fit). Each fit is a couple of
-# minutes: the recipe does 32,000 gradient evaluations (1600 iterations × 20
-# leapfrog steps), plus a one-time JIT compile of the forward+likelihood
-# kernel. The joint fit is the slower of the two because every spectral pixel
-# adds a likelihood term and a gradient row — its per-evaluation cost scales
-# with the pixel count, not with the number of free parameters. The two fits
-# run sequentially in one process, per the OOM-orchestration rule.
+# Both use `HMC_VALIDATED` (dense mass, n_warmup=1000, n_leapfrog=20) on lookup
+# tables (WavePrecomp for photometry; SpectrumPrecomp's dual LUT for the joint fit).
+# The joint fit costs more because each spectral pixel adds a likelihood term and a
+# gradient row — its per-evaluation cost scales with pixel count. The two fits run
+# sequentially in one process, per OOM-orchestration.
 
 
 # %%
@@ -419,14 +418,12 @@ plt.show()
 # %% [markdown]
 # ## Summary
 #
-# Photometry fixes the overall SED shape and stellar mass; the optical spectrum
-# adds the absorption-line depths that pin metallicity and the dust split.
-# Fitted together through one `Observation`, the posterior is narrower than
-# either alone and recovers the truth the photometry-only fit
-# (the [quickstart](00_quickstart.py)) left degenerate. `SpectrumPrecomp`
-# runs both channels on lookup tables, so the joint fit lands in a couple of
-# minutes; what is left of the cost is the per-pixel spectral likelihood and
-# its gradient, not the forward integration.
+# Photometry constrains the SED shape and stellar mass; the optical spectrum
+# adds absorption-line depths that break the metallicity–dust–age degeneracy.
+# Compare the widths printed below against the photometry-only fit to see how
+# much that buys. `SpectrumPrecomp` runs
+# both channels on lookup tables; the per-pixel spectral likelihood is what remains
+# of the cost, not the forward integration.
 
 # %%
 from contextlib import suppress

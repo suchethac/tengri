@@ -11,7 +11,7 @@ via ``agn_grahsp_tor_temp`` and applies a short-wavelength Gaussian cutoff at
 
 This example overlays the two at fixed ``l5100`` and ``fcov``, then sweeps the
 MN12 temperature blend lo → avg → hi. (The two prescriptions carry different
-internal 12 µm normalizations — faithfully reproduced from upstream — so
+internal 12 μm normalizations — faithfully reproduced from upstream — so
 ``fcov`` has a different effective scale between them; here each curve is shown
 in its native normalization.)
 """

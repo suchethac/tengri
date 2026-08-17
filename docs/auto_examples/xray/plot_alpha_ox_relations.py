@@ -14,7 +14,7 @@ The three agree at Seyfert luminosities and diverge by tenths of a dex
 at quasar L_2500. The left panel shows the alpha_OX(L_2500) curves; the
 right panel propagates the divergence into the X-ray spectrum at the
 upper end (L_bol = 1e46 erg/s, a luminous quasar), where the three
-predictions for the 2-10 keV luminosity differ by a factor of ~2.
+predictions for the 2–10 keV luminosity differ by a factor of ~2.
 
 References
 ----------

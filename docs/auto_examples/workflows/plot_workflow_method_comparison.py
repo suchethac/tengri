@@ -2,12 +2,7 @@
 Recovering a truncated-skew-normal SFH from SDSS photometry via MAP
 ===================================================================
 
-Demonstrates the simplest inference workflow: building a flexible SFH model
-with free dust parameters, generating mock photometry at S/N = 20, then running
-MAP to recover the input star formation history and dust attenuation. The figure
-shows the recovered SFH (dashed) against the ground truth (solid).
-
-Reference: Conroy 2013, ARA&A, 51, 393 (SED fitting overview).
+Reference: Conroy+2013.
 """
 
 import os

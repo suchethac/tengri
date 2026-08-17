@@ -21,26 +21,14 @@
 How priors push the dust posterior — flat vs narrow prior on τ_diff
 ===================================================================
 
-If the data is informative the MAP estimate sits at the
-likelihood maximum and the choice of prior barely matters. If the
-data is uninformative the MAP slides toward the prior mode.
+If data is informative, the MAP estimate sits at the likelihood maximum
+and prior choice barely matters. If data is uninformative, the MAP slides
+toward the prior mode. At low S/N, the posterior shifts away from truth
+when the prior is strong; at high S/N both priors converge.
 
-We make this concrete by mock-photometering a star-forming galaxy
-in 5 SDSS bands at two noise levels (S/N = 5 and S/N = 50), then
-draw the **posterior surface** of the dust optical depth on a 1-D
-grid using two priors:
+Reference: Gelman+2013.
 
-* a flat ``Uniform(0, 2)`` prior
-* a narrow Gaussian prior peaked at 0.3 with σ = 0.1
-
-The posterior shifts away from truth at low S/N when the prior is
-strong; at high S/N both priors give the same MAP.
-
-References:
-
-- Gelman et al. 2013 *Bayesian Data Analysis* (3rd ed.), §3.4.
-
-.. GENERATED FROM PYTHON SOURCE LINES 25-110
+.. GENERATED FROM PYTHON SOURCE LINES 12-97
 
 
 
@@ -140,6 +128,11 @@ References:
 
     fig.tight_layout()
     plt.savefig("plot_prior_systematic_dust.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 3.403 seconds)
 
 
 .. _sphx_glr_download_auto_examples_workflows_plot_prior_systematic_dust.py:

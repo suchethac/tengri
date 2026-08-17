@@ -6,7 +6,7 @@ Identical AGN configuration (multicolor disc + SKIRTOR torus at log
 L_bol = 12.5), one with the narrow-line region (FWHM ~ a few hundred
 km/s, characteristic Type-2 spectrum) and the other with the broad-line
 region (FWHM ~ thousands of km/s, Type-1). Side-by-side zooms on the
-UV (Ly-alpha, C IV) and the optical (Hbeta, [O III], Halpha) make the
+UV (Ly-alpha, C IV) and the optical (Hbeta, [O III], Hα) make the
 velocity-width contrast unmistakable while controlling for continuum.
 
 Companion to ``plot_agn_lines_compare.py``, which sweeps line backbones
