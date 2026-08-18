@@ -18,7 +18,7 @@ Template-based models:
 
 Lazy loaders (auto-load templates on first call):
 
-- ``_make_lazy_loader`` — factory for lazy-loading wrappers
+- ``_make_lazy_loader``: factory for lazy-loading wrappers
 - ``_find_dl07_templates``, ``_dl07_lazy_wrapper``, ``_dl14_lazy_wrapper``
 
 Re-exported here from emission.py:

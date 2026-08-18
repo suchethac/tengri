@@ -29,9 +29,9 @@ want a flexible prior that doesn't impose a strong shape.
 
 Three forms overlaid at their default priors:
 
-- ``continuity``       — Leja+2019 fixed-bin continuity prior
-- ``dirichlet``        — Leja+2017 Dirichlet over normalized bin weights
-- ``dense_basis``      — Iyer+2019 GP-regularized cumulative SFH
+- ``continuity``: Leja+2019 fixed-bin continuity prior
+- ``dirichlet``: Leja+2017 Dirichlet over normalized bin weights
+- ``dense_basis``: Iyer+2019 GP-regularized cumulative SFH
 
 All three are drawn 24 times from their priors and shown as light
 trajectories; the parametric ``dpl`` is overlaid as a thick black
@@ -49,8 +49,44 @@ restrictive.
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /tengri/src/tengri/forward/sed_model.py:8560: WildcardPartialFreeWarning: sfh={'all_params': FREE} no longer frees metallicity parameters when there is no explicit met block. Before this change, met_logzsol (and other met_* params) were freed by the sfh wildcard.
+
+    To free metallicity parameters explicitly, pass either:
+      met={'all_params': FREE}
+    or:
+      met={'logzsol': Uniform(-2, 0.2)}
+
+    Issue #1796
+      spec = parse_groups(**groups)
+    /tengri/src/tengri/forward/sed_model.py:8560: WildcardPartialFreeWarning: sfh={'all_params': FREE} no longer frees metallicity parameters when there is no explicit met block. Before this change, met_logzsol (and other met_* params) were freed by the sfh wildcard.
+
+    To free metallicity parameters explicitly, pass either:
+      met={'all_params': FREE}
+    or:
+      met={'logzsol': Uniform(-2, 0.2)}
+
+    Issue #1796
+      spec = parse_groups(**groups)
+    /tengri/src/tengri/forward/sed_model.py:8560: WildcardPartialFreeWarning: sfh={'all_params': FREE} no longer frees metallicity parameters when there is no explicit met block. Before this change, met_logzsol (and other met_* params) were freed by the sfh wildcard.
+
+    To free metallicity parameters explicitly, pass either:
+      met={'all_params': FREE}
+    or:
+      met={'logzsol': Uniform(-2, 0.2)}
+
+    Issue #1796
+      spec = parse_groups(**groups)
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -129,6 +165,11 @@ restrictive.
     axes[0].legend(frameon=False, fontsize=8, loc="lower left")
 
     plt.savefig("plot_sfh_nonparametric_compare.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 4.786 seconds)
 
 
 .. _sphx_glr_download_auto_examples_sfh_plot_sfh_nonparametric_compare.py:

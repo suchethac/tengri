@@ -25,12 +25,12 @@ Usage
 Preset Gallery
 --------------
 
-- ``starforming()`` — Main sequence galaxies (z ~ 0–3): moderate dust, solar metallicity
-- ``quiescent()`` — Red/dead galaxies (z ~ 0–2): minimal dust, low metallicity spread
-- ``high_z()`` — Young galaxies (z > 4): strong nebular, younger ages, SMC-like dust
-- ``photoz()`` — Photometric-redshift surveys: wide z prior, uninformative SFH/dust
-- ``jwst_spec()`` — JWST NIRSpec spectroscopy: known/constrained z, moderate-high dust
-- ``agn_host()`` — AGN host galaxies: high dust for Type 2 AGN, no torus component
+- ``starforming()``: Main sequence galaxies (z ~ 0–3): moderate dust, solar metallicity
+- ``quiescent()``: Red/dead galaxies (z ~ 0–2): minimal dust, low metallicity spread
+- ``high_z()``: Young galaxies (z > 4): strong nebular, younger ages, SMC-like dust
+- ``photoz()``: Photometric-redshift surveys: wide z prior, uninformative SFH/dust
+- ``jwst_spec()``: JWST NIRSpec spectroscopy: known/constrained z, moderate-high dust
+- ``agn_host()``: AGN host galaxies: high dust for Type 2 AGN, no torus component
 
 References
 ----------

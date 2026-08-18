@@ -7,10 +7,10 @@ wavelength grid.
 
 Two entry points are provided:
 
-- :func:`evaluate_grahsp_agn` — low-level: takes :class:`GRAHSPParams`
+- :func:`evaluate_grahsp_agn`: low-level: takes :class:`GRAHSPParams`
   (CIGALE-style names, **nm** wavelengths) and returns the full
   per-component :class:`GRAHSPSED` bundle (:math:`L_\\lambda` in erg/s/nm).
-- :func:`compute_grahsp_sed` — registered AGN model entry point: takes Å
+- :func:`compute_grahsp_sed`: registered AGN model entry point: takes Å
   wavelengths and the standard ``agn_grahsp_*`` keyword arguments, and
   returns :math:`L_\\nu` in erg/s/Hz, normalized so the integrated
   intrinsic SED equals ``agn_log_lbol``.

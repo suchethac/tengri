@@ -5,9 +5,9 @@ Key class: ``SEDModel`` — the main forward model class.
 
 An alternative **component-orchestrator** path is also exposed:
 
-- :func:`build_components` — assemble an ordered list of
+- :func:`build_components`: assemble an ordered list of
   :class:`SEDComponent` adapters from a flat keyword-argument call.
-- :func:`run_components` — thread a
+- :func:`run_components`: thread a
   :class:`tengri.protocols.ForwardState` through the chain.
 
 Usage::

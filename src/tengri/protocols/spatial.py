@@ -49,9 +49,9 @@ class SpatialComponent(Protocol):
 
     Required attributes mirror :class:`SEDComponent` exactly:
 
-    - ``name: str`` — stable identifier
-    - ``parameter_prefix: str`` — always ``"spatial_"``
-    - ``config: SpatialComponentConfig`` — frozen structural knobs
+    - ``name: str``: stable identifier
+    - ``parameter_prefix: str``: always ``"spatial_"``
+    - ``config: SpatialComponentConfig``: frozen structural knobs
 
     Required methods are identical in shape to :class:`SEDComponent`:
 

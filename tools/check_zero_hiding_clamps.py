@@ -10,12 +10,12 @@ division into a clean zero.
 
 Not every site is a defect. Three genuinely different things wear this shape:
 
-* **count/scale floors** — ``jnp.maximum(n, 1.0)`` on a sample count. Zero is
+* **count/scale floors**: ``jnp.maximum(n, 1.0)`` on a sample count. Zero is
   impossible by construction and the floor is not a NaN guard at all.
-* **zero is physically possible** — a band with no flux, a starburst whose
+* **zero is physically possible**: a band with no flux, a starburst whose
   entire mass sits inside the recent window. A zero result is the right answer
   and NaN would be wrong.
-* **zero means something upstream broke** — a normalization whose denominator
+* **zero means something upstream broke**: a normalization whose denominator
   can only vanish if the model is degenerate. Here the finite zero is the bug,
   and the repo's own preferred form (``utils/sed_quantities.py``) is::
 

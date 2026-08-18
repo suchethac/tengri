@@ -930,10 +930,10 @@ class Observation:
 
         Components that publish a LUT entry:
 
-        - ``stellar_phot_lnu_precomp`` — :class:`StellarSEDComponent`.
+        - ``stellar_phot_lnu_precomp``: :class:`StellarSEDComponent`.
           For ``BakedIn`` nebular backends this already contains the nebular
           contribution, since the SSP grid carries baked-in nebular emission.
-        - ``nebular_phot_lnu_precomp`` — :class:`NebularSEDComponent`
+        - ``nebular_phot_lnu_precomp``: :class:`NebularSEDComponent`
           (when the backend supports filter-level precomputation;
           non-BakedIn backends only).
 
@@ -983,7 +983,7 @@ class Observation:
 
         **Accuracy ledger — where this path differs from** :meth:`predict`:
 
-        - **Stellar continuum** — K-point sub-band quadrature (#1122). The
+        - **Stellar continuum**: K-point sub-band quadrature (#1122). The
           screen is *evaluated* at each node rather than sampled once, and
           converges as :math:`1/K^2`. K=5 (default): ≲0.6 % worst case in GALEX
           FUV; 3.2e-05 to 7.8e-04 on an FSPS/SDSS *griz* reference model over
@@ -1018,7 +1018,7 @@ class Observation:
           the live curve while leaving nebular on the stale one. Two screens
           disagreeing inside one model is worse than the uniform staleness
           there now.
-        - **Shock** — the worst remaining channel by two orders of magnitude, and
+        - **Shock**: the worst remaining channel by two orders of magnitude, and
           **not** a band-averaging error despite what this docstring said for a
           long time. This path multiplies shock by ``a_diff·a_bc``; the exact
           path applies *no* stellar dust screen to it at all, because
@@ -1032,7 +1032,7 @@ class Observation:
           a screen applies. Which path is right is a physics question, so the
           gap is bounded (``tests/contract/test_precomp_channel_drift.py``)
           rather than silently resolved.
-        - **IGM** — ``igm_phot_factor`` band-averages :math:`T` alone,
+        - **IGM**: ``igm_phot_factor`` band-averages :math:`T` alone,
           forming :math:`\langle S\rangle\langle T\rangle` where the flux needs
           :math:`\langle S\,T\rangle`. Across GALEX FUV at :math:`z\approx0.8`
           the transmission runs ~1 to ~0 *inside* the band and that covariance

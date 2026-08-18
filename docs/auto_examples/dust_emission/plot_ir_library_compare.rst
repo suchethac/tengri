@@ -34,13 +34,13 @@ the SED *shape* — peak wavelength (T_dust proxy), PAH-feature amplitude in the
 (Bottom) Seven-library L_IR-normalized comparison via full SEDModel with
 constant SFH and dust parameters (τ_diff=1, τ_bc=1.5):
 
-- ``dale2014``  — Dale+2014 SFR-driven template family
-- ``dl07``      — Draine & Li 2007 grain mixture
-- ``dl14``      — Draine+2014 update (extended PAH/silicate)
-- ``mbb``       — single-T modified blackbody (Casey 2012)
-- ``themis``    — THEMIS amorphous-carbon grains (Jones+2017)
-- ``astrodust`` — Hensley & Draine 2023 unified grain model
-- ``bosa``      — BOSA template set (Boquien et al. CIGALE)
+- ``dale2014``: Dale+2014 SFR-driven template family
+- ``dl07``: Draine & Li 2007 grain mixture
+- ``dl14``: Draine+2014 update (extended PAH/silicate)
+- ``mbb``: single-T modified blackbody (Casey 2012)
+- ``themis``: THEMIS amorphous-carbon grains (Jones+2017)
+- ``astrodust``: Hensley & Draine 2023 unified grain model
+- ``bosa``: BOSA template set (Boquien et al. CIGALE)
 
 The L_IR normalization isolates the shape differences; combined with the fixed-L_abs
 view, both perspectives reveal the diversity of grain models and their physical
@@ -56,21 +56,8 @@ implications.
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /tengri/examples/dust_emission/plot_ir_library_compare.py:210: UserWarning: Glyph 956 (\N{GREEK SMALL LETTER MU}) missing from font(s) cmr10.
-      fig.tight_layout()
-    /tengri/examples/dust_emission/plot_ir_library_compare.py:211: UserWarning: Glyph 956 (\N{GREEK SMALL LETTER MU}) missing from font(s) cmr10.
-      plt.savefig("plot_ir_library_compare.png", dpi=150, bbox_inches="tight")
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -260,7 +247,7 @@ implications.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 16.455 seconds)
+   **Total running time of the script:** (0 minutes 19.336 seconds)
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_ir_library_compare.py:

@@ -8,15 +8,15 @@ registry.
 
 Available models (auto-registered):
 
-- ``dale2014`` — Dale et al. (2014) 1-parameter template
-- ``dale2014_cigale`` — CIGALE variant of Dale et al. (2014)
-- ``draine_li2007`` — Draine & Li (2007) 3-parameter template
-- ``draine_li2014`` — Draine & Li (2014) 4-parameter template
-- ``astrodust`` — Hensley & Draine (2023) Astrodust+PAH
-- ``bosa`` — Boquien & Salim (2021) (L_TIR, sSFR)-parameterized
-- ``themis`` — Jones et al. (2017) THEMIS/DustEM
-- ``schreiber2018`` — Schreiber et al. (2018) dust emission templates
-- ``dh02_ce01`` — Dale & Helou (2002) + Chary & Elbaz (2001) cold dust
+- ``dale2014``: Dale et al. (2014) 1-parameter template
+- ``dale2014_cigale``: CIGALE variant of Dale et al. (2014)
+- ``draine_li2007``: Draine & Li (2007) 3-parameter template
+- ``draine_li2014``: Draine & Li (2014) 4-parameter template
+- ``astrodust``: Hensley & Draine (2023) Astrodust+PAH
+- ``bosa``: Boquien & Salim (2021) (L_TIR, sSFR)-parameterized
+- ``themis``: Jones et al. (2017) THEMIS/DustEM
+- ``schreiber2018``: Schreiber et al. (2018) dust emission templates
+- ``dh02_ce01``: Dale & Helou (2002) + Chary & Elbaz (2001) cold dust
 
 Notes
 -----

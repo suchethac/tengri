@@ -265,7 +265,7 @@ class RadioQuantities(NamedTuple):
       :func:`tengri.utils.sed_quantities.compute_l_radio_thermal`.
     - ``l_nonthermal`` (erg/s/Hz) — synchrotron component
       (l_1p4ghz − l_thermal).
-    - ``q_ir`` — FIR-radio correlation parameter from L_TIR and l_1p4ghz.
+    - ``q_ir``: FIR-radio correlation parameter from L_TIR and l_1p4ghz.
 
     All fields are JAX scalars; the NamedTuple is a JAX pytree.
     """
@@ -1155,11 +1155,11 @@ def state_to_sed_components(state: Any) -> dict:
         plus per-component rest-frame :math:`L_\nu` [erg/s/Hz], each of
         shape ``(n_wave,)``:
 
-        - ``sed_total`` — accumulated post-chain total
+        - ``sed_total``: accumulated post-chain total
           (``state.sed_intrinsic`` after every adapter ran);
-        - ``sed_intrinsic`` — stellar pre-attenuation,
+        - ``sed_intrinsic``: stellar pre-attenuation,
           ``sum(lnu_age, axis=0)``;
-        - ``sed_attenuated`` — stellar post-attenuation
+        - ``sed_attenuated``: stellar post-attenuation
           (``sed_dust_attenuated``; falls back to intrinsic when no
           dust adapter ran);
         - ``sed_nebular``, ``sed_shock``, ``sed_dust_ir``, ``sed_agn``,

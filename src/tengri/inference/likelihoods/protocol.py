@@ -9,14 +9,14 @@ type — pin a different ``channel`` string instead.
 
 This module ships four base adapters:
 
-- :class:`GaussianLikelihood` — diagonal Gaussian (the workhorse;
+- :class:`GaussianLikelihood`: diagonal Gaussian (the workhorse;
   covers photometry, spectroscopy, line fluxes, spectral indices,
   equivalent widths, anything with diagonal Gaussian errors).
-- :class:`StudentTLikelihood` — heavy-tailed alternative for outlier
+- :class:`StudentTLikelihood`: heavy-tailed alternative for outlier
   tolerance.
-- :class:`CensoredLikelihood` — handles upper/lower limits via the
+- :class:`CensoredLikelihood`: handles upper/lower limits via the
   normal CDF.
-- :class:`MultivariateGaussianLikelihood` — correlated noise with a
+- :class:`MultivariateGaussianLikelihood`: correlated noise with a
   pre-inverted covariance matrix.
 
 To add a new observation channel (e.g. ``"line_fluxes"``,

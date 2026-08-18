@@ -14,7 +14,7 @@ The AGN radio component is selected via
 - ``"powerlaw"`` (default) — single power-law (:func:`radio_total`).
   Backwards-compatible default; behavior bit-identical to pre-aging
   releases.
-- ``"dpl"`` — AGNfitter-rx broken double power-law with phenomenological
+- ``"dpl"``: AGNfitter-rx broken double power-law with phenomenological
   ``exp(-nu/nu_cut)`` aging cutoff (:func:`radio_total_dpl`,
   Martinez-Ramirez+2024 Eq. 9-10). Uses ``radio_alpha_thin``,
   ``radio_alpha_thick``, ``radio_log_nu_t``, ``radio_log_nu_cut``.
@@ -38,7 +38,7 @@ Radio depends on quantities owned by other components:
   ``state.derived["L_agn_bol"]`` with a fallback to 0.0.
 - ``log_mstar`` (log10 M_⊙) — produced by the stellar component. Read
   from ``state.derived["log_mstar"]`` with a fallback to 10.0.
-- ``redshift`` — bare parameter from :data:`BARE_NAME_ALLOWLIST`.
+- ``redshift``: bare parameter from :data:`BARE_NAME_ALLOWLIST`.
 
 This is the canonical pattern documented in
 :class:`tengri.protocols.ForwardState`'s "Cross-component reads" section:
@@ -79,7 +79,7 @@ __all__ = ["RadioSEDComponent", "RadioSEDComponentConfig"]
 #
 # - ``"none"`` (new 2026-06) — AGN radio turned off; SF component only.
 # - ``"powerlaw"`` (default) — single power-law AGN radio
-# - ``"dpl"`` — double power-law AGN radio with aging cutoff
+# - ``"dpl"``: double power-law AGN radio with aging cutoff
 #
 # JP / KP / tribble (Jaffe & Perola 1973; Kardashev/Pacholczyk; Tribble
 # 1993) are NOT in this tuple — they require precomputed pitch-angle
@@ -95,10 +95,10 @@ AGN_RADIO_MODELS: tuple[str, ...] = ("none", "powerlaw", "dpl")
 # a hand-copied second list is how the dust menu and the radio error message
 # both drifted out of agreement with what the builder actually accepts.
 #
-# - ``"none"`` — SF synchrotron turned off; AGN radio only.
+# - ``"none"``: SF synchrotron turned off; AGN radio only.
 # - ``"bell2003"`` (default) — fixed-q FIR-radio correlation.
-# - ``"delvecchio2021"`` — mass- and z-dependent FIRRC at 1.4 GHz.
-# - ``"mccheyne2022"`` — mass- and z-dependent FIRRC at 150 MHz.
+# - ``"delvecchio2021"``: mass- and z-dependent FIRRC at 1.4 GHz.
+# - ``"mccheyne2022"``: mass- and z-dependent FIRRC at 150 MHz.
 SF_RADIO_MODELS: tuple[str, ...] = ("none", "bell2003", "delvecchio2021", "mccheyne2022")
 
 

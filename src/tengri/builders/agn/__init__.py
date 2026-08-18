@@ -35,20 +35,20 @@ The factory mirror:
 
 All 14 top-level AGN models are exposed as factories:
 
-- ``composable`` — orchestrator for the six sub-blocks
-- ``simple`` — power-law disc + single-temperature torus
-- ``standard`` — multi-color disc + two-temperature torus
-- ``multicolor_agn`` — Shakura-Sunyaev disc + 2-T torus (Kubota & Done 2018)
-- ``kubota_done`` — outer-zone K&D disc + clumpy torus (alias for ``multicolor_agn``)
-- ``kubota_done_full`` — full 3-zone K&D disc + torus + Comptonization
-- ``skirtor`` — power-law disc + SKIRTOR clumpy torus
-- ``silva04`` — power-law disc + Silva+04 smooth torus
-- ``cat3d_wind`` — power-law disc + CAT3D-Wind clumpy torus
-- ``adaf`` — ADAF + truncated disc + simple torus (low-luminosity)
-- ``relagn`` — RELAGN relativistic disc + 2-T torus
-- ``grahsp`` — multi-component semi-analytical AGN (Granada+Hönig+Ruiz)
-- ``qsogen`` — Temple, Hewett & Banerji (2021) empirical quasar SED
-- ``unified_nlr_blr`` — unified AGN + NLR/BLR decomposition + geometric masking
+- ``composable``: orchestrator for the six sub-blocks
+- ``simple``: power-law disc + single-temperature torus
+- ``standard``: multi-color disc + two-temperature torus
+- ``multicolor_agn``: Shakura-Sunyaev disc + 2-T torus (Kubota & Done 2018)
+- ``kubota_done``: outer-zone K&D disc + clumpy torus (alias for ``multicolor_agn``)
+- ``kubota_done_full``: full 3-zone K&D disc + torus + Comptonization
+- ``skirtor``: power-law disc + SKIRTOR clumpy torus
+- ``silva04``: power-law disc + Silva+04 smooth torus
+- ``cat3d_wind``: power-law disc + CAT3D-Wind clumpy torus
+- ``adaf``: ADAF + truncated disc + simple torus (low-luminosity)
+- ``relagn``: RELAGN relativistic disc + 2-T torus
+- ``grahsp``: multi-component semi-analytical AGN (Granada+Hönig+Ruiz)
+- ``qsogen``: Temple, Hewett & Banerji (2021) empirical quasar SED
+- ``unified_nlr_blr``: unified AGN + NLR/BLR decomposition + geometric masking
 
 Examples
 --------

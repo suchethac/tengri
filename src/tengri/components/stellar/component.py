@@ -5,9 +5,9 @@ Merges the SFH and SSP sub-modules into a single ``SEDComponent``.
 
 Model selection (see :class:`StellarSEDComponentConfig`):
 
-- ``sfh_model`` — any name in ``SFH_REGISTRY`` (``tsnorm``, ``dpl``,
+- ``sfh_model``: any name in ``SFH_REGISTRY`` (``tsnorm``, ``dpl``,
   ``dense_basis``, …); validated at construction.
-- ``metallicity_model`` — any name in ``MET_REGISTRY`` (``delta``,
+- ``metallicity_model``: any name in ``MET_REGISTRY`` (``delta``,
   ``bins``, ``table``, …); validated at construction.
 - ``field=True`` adds the stochastic GP-field parameters on top of the
   chosen mean SFH.

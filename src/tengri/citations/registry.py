@@ -107,10 +107,10 @@ def cite(thing) -> Citation | None:
 
     Polymorphic on the argument:
 
-    * ``cite(key: str)`` — look up a single bibliography entry and
+    * ``cite(key: str)``: look up a single bibliography entry and
       return the :class:`Citation` (existing behavior).  Raises
       ``KeyError`` if the key isn't registered.
-    * ``cite(parameters | sed_model | posterior)`` — print the table
+    * ``cite(parameters | sed_model | posterior)``: print the table
       of every component the object is configured to use plus the
       paste-ready BibTeX block beneath, then return ``None``.  This
       composes :func:`tengri.cite_components` and

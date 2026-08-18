@@ -5,12 +5,12 @@
 
 Variants come from ``tengri.components.nebular._models.NEBULAR_MODELS``:
 
-- ``none`` — no nebular contribution.
-- ``ssp`` — embedded in the SSP grid (no free params; selects the SSP
+- ``none``: no nebular contribution.
+- ``ssp``: embedded in the SSP grid (no free params; selects the SSP
   convention).
-- ``cue`` — neural emulator (Li+ 2025).
-- ``cloudy`` — direct CLOUDY interface (requires a Cloudy grid path).
-- ``cb19`` — Charlot & Bruzual 2019 templates.
+- ``cue``: neural emulator (Li+ 2025).
+- ``cloudy``: direct CLOUDY interface (requires a Cloudy grid path).
+- ``cb19``: Charlot & Bruzual 2019 templates.
 
 The free-parameter set is **shared** between ``cloudy`` / ``cue`` /
 ``cb19`` (per ``tengri.parameters._builders``), with ``cb19``

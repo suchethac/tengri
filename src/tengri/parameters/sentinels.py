@@ -3,8 +3,8 @@
 
 Provides two module-level singleton sentinels:
 
-- ``FREE`` — marks a parameter to use the registry's default prior
-- ``FIXED`` — marks a parameter to pin to the registry's default value
+- ``FREE``: marks a parameter to use the registry's default prior
+- ``FIXED``: marks a parameter to pin to the registry's default value
 
 Both sentinels preserve singleton identity across copy, pickle, and deepcopy operations.
 

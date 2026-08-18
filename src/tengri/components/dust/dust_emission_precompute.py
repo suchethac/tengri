@@ -8,12 +8,12 @@ precompute adapter and are evaluated at full wavelength resolution at runtime.
 
 The module exposes:
 
-- ``AXIS_PARAMS[model_name]`` — ordered parameter names corresponding to grid
+- ``AXIS_PARAMS[model_name]``: ordered parameter names corresponding to grid
   axes, per dust-emission model.
 - ``precompute(filter_waves, filter_trans, redshift, parameters, *, model_name)``
   — builds the preintegrated grid, auto-collapsing axes whose parameter is
   :class:`~tengri.parameters.priors.Fixed`.
-- ``build_lookup(preint, *, model_name)`` — JIT-compiled ``(scale, *free) →
+- ``build_lookup(preint, *, model_name)``: JIT-compiled ``(scale, *free) →
   phot`` runtime callable, with free-parameter count matching the collapsed axes.
 
 DL07 has a gamma-weighted mixing of single-U and power-law components; the

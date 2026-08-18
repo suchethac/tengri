@@ -3,13 +3,13 @@
 
 Sub-namespaces (additive, browseable groupings of the same objects):
 
-- :mod:`tengri.observation.containers` — user-facing data classes
+- :mod:`tengri.observation.containers`: user-facing data classes
   (Photometry, Spectroscopy, LineFluxData, LineList, NoiseModel,
   Observation, SpectralIndexData, SpectralIndexDef, Instrument).
-- :mod:`tengri.observation.physics` — transformation primitives
+- :mod:`tengri.observation.physics`: transformation primitives
   (apply_aperture_correction, apply_lsf, build_eline_design_matrix,
   apply_wavelength_mask, …).
-- :mod:`tengri.observation.constants` — catalogs and status flags
+- :mod:`tengri.observation.constants`: catalogs and status flags
   (DETECTED / UPPER_LIMIT / LOWER_LIMIT, DEFAULT_LINE_*, STANDARD_INDICES,
   SSP_LIBRARY_RESOLUTIONS).
 
