@@ -16,22 +16,16 @@
 # %% [markdown]
 # # SED anatomy — a kitchen-sink galaxy from X-rays to radio
 #
-# Galaxies emit across nine decades of frequency. A faithful SED is a
-# *composition*: stellar photospheres set the optical–NIR continuum;
-# nebular gas turns Lyman photons into lines and a Balmer continuum;
-# birth clouds and the diffuse ISM attenuate the UV and re-radiate in
-# the infrared; AGN add a disc + torus + narrow-line region; thermal
-# free-free and synchrotron close out the radio; corona Comptonization
-# produces the X-ray power-law; and the IGM eats the FUV at high z.
+# A faithful SED is a *composition*: stellar continuum, nebular emission,
+# dust attenuation and re-emission, AGN, radio, X-ray, and intergalactic
+# absorption. Tengri composes all of this from one nested-dict specification.
 #
-# Tengri composes all of this from one nested-dict specification. The
-# figure below is a **kitchen-sink** model at z = 2 — every component
+# The figure below is a **kitchen-sink** model at z = 2 — every component
 # turned on — followed by four mini-sweeps that isolate a single knob
-# at a time. The notebook closes with the *money shot*: a single
-# self-consistent SED from hard X-rays to the radio, with every block
-# overlaid on the total.
+# at a time. The notebook closes with a complete self-consistent SED from
+# hard X-rays to the radio, with every block overlaid on the total.
 #
-# Two things to watch for as the model is built:
+# As the model is built, notice:
 #
 # - `model.summary()` makes the assembly explicit.
 # - `citations.print_citations(model)` produces a working bibliography
@@ -125,12 +119,10 @@ obs = Observation(photometry=Photometry.from_names(filters))
 # %% [markdown]
 # ## The kitchen-sink model
 #
-# DPL star-formation history; two-component Calzetti attenuation; Dale
-# 2014 dust IR emission; Cue nebular continuum + lines; multicolor disc
-# + SKIRTOR torus + narrow-line region AGN; radio (free-free +
-# synchrotron, with the SFR–L_1.4GHz scaling); X-ray (Lusso & Risaliti
-# 2017 from L_2500); Inoue 2014 IGM at z = 2. Every parameter pinned at
-# a physically reasonable value so the figure is reproducible.
+# A complete model at z = 2 with all major components enabled: star formation,
+# dust attenuation and emission, nebular continuum and lines, AGN, radio, X-ray,
+# and intergalactic absorption. Every parameter pinned at a physically reasonable
+# value so the figure is reproducible.
 
 # %%
 # ``log_lbol`` is log10(L_bol / Lsun) — set the disc to a modest AGN.
@@ -181,10 +173,8 @@ citations.print_citations(model)
 # %% [markdown]
 # ## Hero figure — the panchromatic anatomy
 #
-# One sweep through the orchestrator at the truth point. The rest-frame
-# SED carries every contribution as a `state.derived` entry; the total
-# is `state.sed_intrinsic` after attenuation, with dust IR emission
-# added on top by the dust component.
+# All components of the SED from X-rays to the radio, shown together on a
+# single rest-frame wavelength grid.
 
 # %%
 params = model.spec.sample(jax.random.PRNGKey(0))
@@ -410,11 +400,9 @@ ax.legend(frameon=False, fontsize=9)
 fig.savefig(FIG_DIR / "02_anatomy_sweeps.png", dpi=300, bbox_inches="tight")
 
 # %% [markdown]
-# ## Round-trip — `spec.to_groups()`
+# ## Editing a built model — `spec.to_groups()`
 #
-# Every model carries its build-time grammar. Pull it back, edit one
-# leaf, rebuild — useful when a recipe is almost what you want and one
-# parameter needs adjusting.
+# Pull the model's configuration back, edit a parameter, and rebuild:
 
 # %%
 groups = model.spec.to_groups()
@@ -446,20 +434,13 @@ print(model_edited.summary())
 # %% [markdown]
 # ## The money shot — one model, X-rays to radio
 #
-# Everything above, on a single self-consistent grid. We build a local
-# (z = 0.1) galaxy + AGN so a double-power-law SFH forms its mass within
-# cosmic time, tuned to land on M_star ≈ 3 × 10¹⁰ M⊙, SFR ≈ 10 M⊙/yr and
-# log(L_bol^AGN / L⊙) = 10.5. Radio and X-ray are passed as **dicts**
-# (`{"type": ...}`), which is what wires their components into the
-# pipeline — so `state.wave` runs from the hard-X-ray cutoff (~0.04 Å)
-# out to ~30 m and `sed_radio` / `sed_xray` appear in `state.derived`.
-# The title reads M_star, SFR and L_bol back from the model, so the
-# numbers are whatever the build actually produced.
+# A complete self-consistent SED from hard X-rays to the radio at z = 0.1.
+# The model parameters (M_star, SFR, and AGN bolometric luminosity) are
+# displayed in the title, read from the assembled model.
 #
-# The X-ray is shown twice — unobscured and behind a heavily-absorbing
-# column (N_H = 10²³ cm⁻²) — to make line-of-sight photoelectric
-# absorption visible: it carves the soft band while the hard X-rays
-# punch straight through.
+# The X-ray component is shown twice: unobscured and behind a heavily-absorbing
+# column (N_H = 10²³ cm⁻²) to demonstrate how line-of-sight photoelectric
+# absorption carves the soft band while hard X-rays pass through.
 
 # %%
 C_UM = 2.998e14  # speed of light in [µm Hz], for the λ → ν twin axis

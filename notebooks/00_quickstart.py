@@ -145,8 +145,6 @@ wave_eff_um = effective_wavelengths_um(phot)
 # %% [markdown]
 # ## One-time JIT compile
 #
-# First call to the forward kernel and its gradient triggers XLA compilation
-# against the precomputed SSP × filter LUT (the `WavePrecomp` knob above).
 # Cold compile is a few seconds; warm cache is milliseconds. The difference
 # between first and second call below shows the cost of compilation alone.
 
@@ -181,26 +179,14 @@ print(f"  ∇log-likelihood  warm:       {time.perf_counter() - t:8.4f} s")
 # it to the fitter, and pick a method. The channel is explicit and unambiguous.
 #
 # Multi-start ADAM for the MAP point estimate, then NUTS with four parallel
-# chains via `jax.vmap` for the full posterior. Each stack JIT-compiles on first
-# use and persists to the on-disk cache (`~/.cache/tengri_jax_cache`); the data
-# and parameters are threaded through the compiled kernels as runtime arguments
-# (never baked in), so the compile is reused across calls.
+# chains via `jax.vmap` for the full posterior. The `n_restarts=8` parameter runs
+# eight random inits in parallel and keeps the lowest-loss one, then NUTS is seeded
+# from that MAP point (`init_from=map_result`).
 #
-# *Note*: the standardized prior maps an N(0,1) latent to a *genuinely uniform*
-# physical prior, so a single random init can land in a poor basin and stall a
-# lone ADAM run. `n_restarts=8` runs eight inits in parallel (`jax.vmap`, seeded
-# from the run key) and keeps the lowest-loss one; NUTS is then seeded from that
-# MAP point (`init_from=map_result`). Fully JAX-native, and it converges cleanly
-# (`r_hat ≈ 1.0`).
-#
-# The counts are sized to the problem, and the two knobs are not
-# interchangeable. **Draws** are cheap to cut: 1000 already resolve the
-# posterior far past what the 200-draw summaries and the corner plot below
-# consume, so 600 per chain bought nothing but wall-clock. **Warm-up** is not
-# — it is what buys the step size. Measured on this fit at 250 draws, dropping
-# warm-up to 500 gave 4 divergences and split-R̂ 1.017, and 1000 still left 1
-# divergence; 1500 is where it reaches 0 and the claims below hold. Cut the
-# draws, keep the warm-up.
+# With NUTS, more draws are cheap to cut but **warm-up is not**: 500 warm-up steps
+# gave 4 divergences and split-R̂ 1.017, 1000 still left 1 divergence, and 1500 is
+# where it reaches 0 — which is what the settings below use. Cut the draws, keep
+# the warm-up.
 
 # %%
 t = time.perf_counter()

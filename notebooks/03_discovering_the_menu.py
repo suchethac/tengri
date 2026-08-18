@@ -92,8 +92,7 @@ ssp = tengri.load_ssp("fsps_prsc_miles_chabrier", download=True)
 # ## Star-formation history variants
 #
 # Each entry of `builders.sfh.available()` is a real callable whose
-# signature lists its parameters with default priors. Notebook
-# autocompletion works on it.
+# signature lists its parameters with default priors.
 
 # %%
 builders.sfh.available()
@@ -281,7 +280,7 @@ tengri.list_dust_models()
 # %% [markdown]
 # ### Age integration kernels
 #
-# Cloud-in-cell (default, default, dense integrand) and DSPS histogram kernel for SFH→CSP composition.
+# Cloud-in-cell (default) and DSPS histogram kernel options for SFH→CSP composition.
 
 # %%
 tengri.list_age_kernels()
@@ -344,18 +343,10 @@ print(bibtex[:600], "…")
 # %% [markdown]
 # ## Cache and memory
 #
-# - **`tengri.lean`** — context manager / default mode. Drops the
-#   per-Fitter JIT engine after each `run` to release graph memory.
-# - **`tengri.persistent`** — opposite mode. Keep the engine for
-#   repeated same-shape fits (population sweep, MCMC restart).
-# - **`tengri.gc`** — one-shot collect: clears shared caches and asks
-#   XLA to release the device.
-# - **`tengri.clear_shared_caches()`** — full reset for clean
-#   benchmarking.
-#
-# The persistent JAX compile cache (`~/.cache/tengri_jax_cache`,
-# auto-enabled by `import tengri`) is independent of these — it survives
-# process restarts.
+# - **`tengri.lean`** — default mode. Drops JIT engine after each fit.
+# - **`tengri.persistent`** — keeps engine for repeated same-shape fits.
+# - **`tengri.gc`** — clears shared caches.
+# - **`tengri.clear_shared_caches()`** — full reset.
 
 # %% [markdown]
 # ## Cross-namespace search

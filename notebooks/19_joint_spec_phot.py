@@ -43,7 +43,6 @@
 #    and scales the spectrum by that fraction. The photometry is
 #    untouched (it's already total flux).
 #
-# The architecture is in `docs/dev/archive/forward-model-architecture.md` §3.3.
 # The aperture-fraction math is in `tengri.observation.fiber_aperture`.
 
 # %%
