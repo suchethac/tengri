@@ -431,3 +431,140 @@ class TestRegistryCensus:
                 report += f"    - {name:40s} ({reason})\n"
 
         print(report)
+
+
+# ── AGN composable blocks: selectable means it emits (#1488) ─────────────────
+#
+# Every production-status composable AGN block, activated as the only block in
+# its category against an all-'none' baseline, must change the SED surface.
+# The sweep measures on a fixed probe-wavelength array that includes vacuum
+# line centers — the NLR/BLR/feltre blocks emit LINES, and a continuum-only
+# probe reads them as dead (the mis-measurement that fed #1903's history).
+# Knob-gated blocks (enabling parameter defaults to 0) are swept WITH the knob
+# on, and the census asserts the knob is grammar-reachable — the #1488 §4
+# discoverability guard. All measurements were established by hand against
+# main 2026-08-18 before being pinned here; thresholds carry ≥10x margin.
+
+
+_AGN_PROBE_WAVES = jnp.asarray(
+    # Lya       MgII     Hbeta    [OIII]   V-cont   Halpha   K        10um
+    [1215.67, 2798.75, 4862.68, 5008.24, 5500.0, 6564.61, 2.2e4, 1.0e5]
+)
+
+# (category, block, grammar knob overrides, min max-relative SED delta)
+# Measured max-relative deltas on the fixture below (2026-08-18):
+# skirtor 1.66, simple 1.84, nlr-analytic 28.8, feltre 13.6, blr-analytic 6.3,
+# grahsp-feii 0.13, boroson_green(fe2_strength=2) 3.0, polar_dust(ebv=0.1) 0.87.
+_AGN_BLOCK_ROWS = [
+    ("torus", "skirtor", None, 0.1),
+    ("torus", "simple", None, 0.1),
+    ("nlr", "analytic", None, 1.0),
+    ("nlr", "feltre", None, 1.0),
+    ("blr", "analytic", None, 0.5),
+    ("feii", "grahsp", None, 0.01),
+    ("feii", "boroson_green", {"fe2_strength": 2.0}, 0.1),
+    ("atten", "polar_dust", {"polar_ebv": 0.1}, 0.05),
+]
+
+# Blocks whose enabling knob is NOT a registered parameter: the grammar
+# rejects the short form, so the block cannot be activated at all through
+# the recommended build surface — selectable-but-unreachable (#1488 §3/§4).
+# Each entry pins the exact rejection so the day the knob is registered,
+# this list goes stale loudly and the block joins _AGN_BLOCK_ROWS.
+_AGN_BLOCKS_WITH_UNREGISTERED_KNOBS = [
+    ("feii", "qsogen_balmer", "bcnorm"),
+    ("atten", "qsogen_smc", "ebv"),
+]
+
+
+@pytest.fixture(scope="module")
+def _agn_census_context():
+    """Dwarf host + dust-free + fracAGN-free composable AGN baseline.
+
+    fracAGN is deliberately absent: engaging it without dust is refused at
+    build since #944, and with it engaged the torus normalization would be
+    energy-balance-derived rather than block-intrinsic — the census must
+    measure each block on its own scale.
+    """
+    import numpy as np
+
+    import tengri
+    from tengri import FIXED, Fixed, Observation, Photometry
+    from tengri.observation.filters import load_filter_set
+
+    ssp = tengri.load_ssp()
+    obs = Observation(photometry=Photometry.from_filter_set(load_filter_set(["sdss_g"])))
+
+    def build(category=None, name=None, knobs=None):
+        agn = {
+            "type": "composable",
+            "*": FIXED,
+            "disc": {"type": "powerlaw", "*": FIXED},
+            "torus": {"type": "none"},
+            "nlr": {"type": "none"},
+            "blr": {"type": "none"},
+            "feii": {"type": "none"},
+            "atten": {"type": "none"},
+        }
+        if category is not None:
+            agn[category] = {"type": name, "*": FIXED}
+            if knobs:
+                agn[category].update(knobs)
+        return SEDModel.build(
+            ssp_data=ssp,
+            observation=obs,
+            redshift=Fixed(0.1),
+            approx=None,
+            sfh={"type": "tsnorm", "*": FIXED, "log_total_mass": 6.0},
+            dust={"type": "none"},
+            agn=agn,
+        )
+
+    def sed_on_probe(model):
+        params = dict(model.spec.sample(jax.random.PRNGKey(0)))
+        return np.asarray(model.predict(params).rest_sed(_AGN_PROBE_WAVES))
+
+    baseline_model = build()
+    baseline_sed = sed_on_probe(baseline_model)
+    return build, sed_on_probe, baseline_sed
+
+
+class TestAGNBlockEmit:
+    """Every selectable production AGN block changes the SED (#1488)."""
+
+    @pytest.mark.parametrize(
+        ("category", "name", "knobs", "min_delta"),
+        _AGN_BLOCK_ROWS,
+        ids=[f"{c}-{n}" for c, n, _, _ in _AGN_BLOCK_ROWS],
+    )
+    def test_block_changes_the_sed(self, _agn_census_context, category, name, knobs, min_delta):
+        import numpy as np
+
+        build, sed_on_probe, baseline_sed = _agn_census_context
+        sed = sed_on_probe(build(category, name, knobs))
+        rel = np.abs(sed - baseline_sed) / np.maximum(np.abs(baseline_sed), 1e-300)
+        assert float(np.max(rel)) > min_delta, (
+            f"AGN block {category}/{name} (knobs={knobs}) changed the SED by at most "
+            f"{float(np.max(rel)):.3e} relative — below the {min_delta} floor. A selectable "
+            f"production block that emits nothing is the #1488 silent-emitter class; either "
+            f"the block died, its enabling knob stopped reaching it, or the probe wavelengths "
+            f"no longer cover its emission."
+        )
+
+    @pytest.mark.parametrize(
+        ("category", "name", "knob"),
+        _AGN_BLOCKS_WITH_UNREGISTERED_KNOBS,
+        ids=[f"{c}-{n}" for c, n, _ in _AGN_BLOCKS_WITH_UNREGISTERED_KNOBS],
+    )
+    def test_knob_is_not_grammar_reachable_yet(self, _agn_census_context, category, name, knob):
+        """Pin the selectable-but-unreachable state of the qsogen blocks.
+
+        Their enabling knobs (agn_bcnorm, agn_ebv) are read by the block but
+        never registered as parameters, so the grammar rejects the short form
+        and the block can never emit through ``SEDModel.build`` (#1488 §3/§4).
+        The day the knob is registered this test XPASS-fails, forcing the row
+        into the live census above.
+        """
+        build, _, _ = _agn_census_context
+        with pytest.raises(ValueError, match="Unknown key"):
+            build(category, name, {knob: 0.3})
