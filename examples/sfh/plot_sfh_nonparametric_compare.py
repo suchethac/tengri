@@ -10,9 +10,9 @@ want a flexible prior that doesn't impose a strong shape.
 
 Three forms overlaid at their default priors:
 
-- ``continuity``       — Leja+2019 fixed-bin continuity prior
-- ``dirichlet``        — Leja+2017 Dirichlet over normalized bin weights
-- ``dense_basis``      — Iyer+2019 GP-regularized cumulative SFH
+- ``continuity``: Leja+2019 fixed-bin continuity prior
+- ``dirichlet``: Leja+2017 Dirichlet over normalized bin weights
+- ``dense_basis``: Iyer+2019 GP-regularized cumulative SFH
 
 All three are drawn 24 times from their priors and shown as light
 trajectories; the parametric ``dpl`` is overlaid as a thick black

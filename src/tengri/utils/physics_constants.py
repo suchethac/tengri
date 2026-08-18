@@ -26,22 +26,22 @@ each line shows::
 Naming conventions
 ------------------
 
-- ``H_PLANCK``   — Planck's constant h
-- ``K_BOLTZ``    — Boltzmann constant k_B
-- ``C_CGS``      — speed of light c in cm/s
-- ``C_AA``       — speed of light c in Å/s (used for ν = c/λ with λ in Å)
-- ``C_KM_S``     — speed of light c in km/s (for Doppler calculations)
-- ``SIGMA_SB``   — Stefan-Boltzmann constant σ
-- ``G_GRAV``     — gravitational constant G
-- ``SIGMA_T``    — Thomson cross section σ_T
-- ``M_PROTON``   — proton mass m_p
-- ``M_ELECTRON`` — electron mass m_e
-- ``M_SUN``      — solar mass M_⊙
-- ``L_SUN``      — solar luminosity L_⊙ (IAU 2015 nominal)
-- ``PC_CM``      — parsec in cm
-- ``AA_TO_CM``   — Ångström → cm conversion factor
-- ``KEV_TO_ERG`` — keV → erg energy conversion
-- ``KEV_TO_HZ``  — keV → Hz frequency conversion (E = hν)
+- ``H_PLANCK``: Planck's constant h
+- ``K_BOLTZ``: Boltzmann constant k_B
+- ``C_CGS``: speed of light c in cm/s
+- ``C_AA``: speed of light c in Å/s (used for ν = c/λ with λ in Å)
+- ``C_KM_S``: speed of light c in km/s (for Doppler calculations)
+- ``SIGMA_SB``: Stefan-Boltzmann constant σ
+- ``G_GRAV``: gravitational constant G
+- ``SIGMA_T``: Thomson cross section σ_T
+- ``M_PROTON``: proton mass m_p
+- ``M_ELECTRON``: electron mass m_e
+- ``M_SUN``: solar mass M_⊙
+- ``L_SUN``: solar luminosity L_⊙ (IAU 2015 nominal)
+- ``PC_CM``: parsec in cm
+- ``AA_TO_CM``: Ångström → cm conversion factor
+- ``KEV_TO_ERG``: keV → erg energy conversion
+- ``KEV_TO_HZ``: keV → Hz frequency conversion (E = hν)
 - ``K_BOLTZ_KEV``— k_B in keV/K (for temperature → seed photon energy)
 
 Special constants

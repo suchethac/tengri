@@ -481,8 +481,23 @@ def _load_filter_file(filepath: Path) -> tuple[np.ndarray, np.ndarray]:
     return _sanitize_filter_curve(data[:, 0], data[:, 1])
 
 
-def _fetch_from_svo(svo_id: str) -> tuple[np.ndarray, np.ndarray]:
-    """Fetch filter curve from SVO using astroquery.svo_fps."""
+def _fetch_from_svo(svo_id: str, short_name: str | None = None) -> tuple[np.ndarray, np.ndarray]:
+    """Fetch filter curve from SVO using astroquery.svo_fps.
+
+    Parameters
+    ----------
+    svo_id : str
+        SVO filter identifier (e.g. ``"JWST/NIRCam.F200W"``).
+    short_name : str, optional
+        User-facing short name (e.g. ``"jwst_f200w"``) for error messages.
+
+    Raises
+    ------
+    ImportError
+        If ``astroquery`` is not installed or network is unavailable.
+    ValueError
+        If SVO returns no data for the given filter ID.
+    """
     try:
         from astroquery.svo_fps import SvoFps
     except ImportError as exc:
@@ -495,7 +510,23 @@ def _fetch_from_svo(svo_id: str) -> tuple[np.ndarray, np.ndarray]:
             "to fetch a curve SVO has and tengri does not."
         ) from exc
 
-    table = SvoFps.get_transmission_data(svo_id)
+    try:
+        table = SvoFps.get_transmission_data(svo_id)
+    except (ConnectionError, TimeoutError, OSError) as exc:
+        # Network is unavailable or SVO is unreachable
+        name_str = f"'{short_name}' " if short_name else f"'{svo_id}' "
+        filename = Path(svo_id).name.replace("/", "_") + ".dat"
+        raise ImportError(
+            f"Could not fetch filter curve {name_str}from the SVO Filter Profile "
+            f"Service. The network may be unavailable or SVO may be unreachable.\n\n"
+            f"To use this filter offline:\n"
+            f"    python tools/download_filters.py {short_name or svo_id}\n"
+            f"to download it in advance, or set $TENGRI_DATA_DIR to a directory "
+            f"containing the curve in data/filters/.\n\n"
+            f"If you are in a CI/build environment, check that the filter is "
+            f"tracked in data/filters/ (e.g. data/filters/{filename})."
+        ) from exc
+
     wave = np.asarray(table["Wavelength"], dtype=float)
     trans = np.asarray(table["Transmission"], dtype=float)
     if len(wave) == 0:
@@ -550,6 +581,7 @@ def _warn_if_energy_detector(svo_id: str) -> None:
 def download_filter(
     svo_id: str,
     cache_dir: str | Path | None = None,
+    short_name: str | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Download a single filter from the SVO Filter Profile Service.
 
@@ -564,6 +596,8 @@ def download_filter(
         Directory for cached filter files. ``None`` (default) resolves through
         :func:`default_filter_cache_dir`, which is independent of the working
         directory.
+    short_name : str, optional
+        Short registry name (e.g. ``"jwst_f200w"``) for error messages.
 
     Returns
     -------
@@ -613,7 +647,7 @@ def download_filter(
     if cached is not None:
         return _load_filter_file(cached)
 
-    wave, trans = _sanitize_filter_curve(*_fetch_from_svo(svo_id))
+    wave, trans = _sanitize_filter_curve(*_fetch_from_svo(svo_id, short_name=short_name))
 
     order = np.argsort(wave)
     wave = wave[order]
@@ -717,14 +751,14 @@ def load_filter(
     # 3. Try exact FILTER_REGISTRY first
     if name in FILTER_REGISTRY:
         svo_id = FILTER_REGISTRY[name]
-        wave, trans = download_filter(svo_id, cache_dir=cache_dir)
+        wave, trans = download_filter(svo_id, cache_dir=cache_dir, short_name=name)
         return FilterCurve(wave=jnp.array(wave), trans=jnp.array(trans), name=name)
 
     # 4. Try SVO display-stem resolution (e.g., "SLOAN_SDSS_g" → "sdss_g")
     alias = _svo_name_to_key().get(name)
     if alias is not None:
         svo_id = FILTER_REGISTRY[alias]
-        wave, trans = download_filter(svo_id, cache_dir=cache_dir)
+        wave, trans = download_filter(svo_id, cache_dir=cache_dir, short_name=alias)
         return FilterCurve(wave=jnp.array(wave), trans=jnp.array(trans), name=alias)
 
     # 5. Try synthetic band registry
@@ -1129,7 +1163,9 @@ def describe(name: str) -> str:
     happened and an unknown filter was indistinguishable from a curve that
     failed to load. The lookup is now outside the ``try``, so an unknown name
     raises the loader's own ``KeyError``, and only the numeric summary is
-    guarded.
+    guarded. The lookup resolution for this function delegates to the same
+    path as :func:`tengri.describe` (issue #1611) through registry fallback
+    so that a name cannot resolve in one surface and not the other.
     """
     # Outside the try on purpose: an unknown name must raise, and
     # load_filter_set already says so with a message that lists the menus.

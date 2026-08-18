@@ -228,6 +228,7 @@ docstring-code-format = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["src"]
 # The default run is the PR-gating fast tier, in parallel. The heavy trees
 # (tests/inference, tests/integration) are auto-marked `slow` in conftest and
 # deselected here, matching the CI split where they run as a separate,
@@ -264,6 +265,7 @@ markers = [
     "unit: fast, isolated check of one function or class; no SSP data required",
     "integration: exercises several subsystems together (tests/integration tree)",
     "physics: cross-cut tag for a test whose subject is physical correctness",
+    "owner_blocked: marked xfail pending owner physics adjudication (#1728)",
 ]
 
 [tool.jupytext]

@@ -46,6 +46,7 @@ import pytest
 
 import tengri
 from tengri import FIXED, Observation, Photometry, SEDModel
+from tengri.config.exceptions import TengriIOError
 
 pytestmark = pytest.mark.contract
 
@@ -205,11 +206,12 @@ def test_menu_entry_builds_or_refuses_clearly(menu, entry, kwargs, bare_stellar_
                 f"Either wire it up, or make the refusal explicit and add its wording "
                 f"to ALLOWED_REFUSALS in this file."
             )
-    except FileNotFoundError as exc:
+    except (FileNotFoundError, TengriIOError) as exc:
         # Blocks backed by a third-party grid that is downloaded rather than
         # committed -- Synthesizer's AGN NLR/BLR tables, for one. Absent data is
         # not a broken selector, so skip rather than fail, and name the path so
-        # the reader can see exactly what to fetch.
+        # the reader can see exactly what to fetch. TengriIOError is the
+        # tengri-native absent-grid signal since #1952 (was FileNotFoundError).
         pytest.skip(f"{menu} '{entry}' needs an external grid that is not installed: {exc}")
     except Exception as exc:  # the point is that nothing else is acceptable
         pytest.fail(

@@ -9,12 +9,12 @@ registration of all built-in blocks (GRAHSP suite, simple alternates,
 Public API
 ----------
 
-- :data:`AGN_BLOCKS` — two-level registry (category → name → callable).
-- :func:`register_agn_block` — decorator for new block impls.
-- :func:`resolve_agn_block` — registry lookup.
-- :func:`composable_agn_l_nu` — the AGN_MODELS["composable"] entry point.
-- :func:`validate_block_recipe` — construction-time recipe validator.
-- :class:`RecipeWarning` — warning subclass for suspicious combos.
+- :data:`AGN_BLOCKS`: two-level registry (category → name → callable).
+- :func:`register_agn_block`: decorator for new block impls.
+- :func:`resolve_agn_block`: registry lookup.
+- :func:`composable_agn_l_nu`: the AGN_MODELS["composable"] entry point.
+- :func:`validate_block_recipe`: construction-time recipe validator.
+- :class:`RecipeWarning`: warning subclass for suspicious combos.
 
 """
 

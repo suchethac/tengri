@@ -4,10 +4,10 @@
 Mirrors the canonical adapter pattern of :mod:`tengri.components.radio.component`.
 The component publishes (all under ``state.derived``):
 
-- ``sed_grahsp`` — :math:`L_\\nu` [erg/s/Hz] of the full GRAHSP AGN-side SED.
-- ``L_agn_bol`` — bolometric BBB luminosity (paper §2.1.4 ``lumBolBBB``).
-- ``L_agn_torus`` — torus bolometric luminosity (``lumBolTOR``).
-- ``L_agn_absorbed`` — energy absorbed by the AGN bi-attenuation (the
+- ``sed_grahsp``: :math:`L_\\nu` [erg/s/Hz] of the full GRAHSP AGN-side SED.
+- ``L_agn_bol``: bolometric BBB luminosity (paper §2.1.4 ``lumBolBBB``).
+- ``L_agn_torus``: torus bolometric luminosity (``lumBolTOR``).
+- ``L_agn_absorbed``: energy absorbed by the AGN bi-attenuation (the
   intrinsic-minus-attenuated integral over the AGN-side spectrum). Useful
   for energy-budget diagnostics; see "Energy balance" below.
 
@@ -219,13 +219,13 @@ class GRAHSPSEDComponent:
         tuple of str
             Registry keys present in ``references.bib``:
 
-            - ``buchner2024`` — always (the GRAHSP model itself).
-            - ``grandi1982`` — if ``include_balmer``.
+            - ``buchner2024``: always (the GRAHSP model itself).
+            - ``grandi1982``: if ``include_balmer``.
             - ``bruhweiler_verner2008`` / ``veron_cetty2004`` — if
               ``include_feii``, selected by ``feii_template``.
-            - ``mor_netzer2012`` — if ``include_torus`` and
+            - ``mor_netzer2012``: if ``include_torus`` and
               ``torus_model == "mn12"`` (template torus).
-            - ``netzer_trakhtenbrot2014`` — if ``disc_model == "netzer"``.
+            - ``netzer_trakhtenbrot2014``: if ``disc_model == "netzer"``.
 
         Notes
         -----

@@ -489,7 +489,7 @@ def psb_continuity(
     **ratio_kwargs
         Log-SFR ratios. Convention:
 
-        - ``ratio_young`` — youngest bin vs flex bin (large positive = burst).
+        - ``ratio_young``: youngest bin vs flex bin (large positive = burst).
         - ``ratio_old_0``, ``ratio_old_1``, ... — ratios among old fixed bins.
 
     Returns

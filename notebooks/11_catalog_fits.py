@@ -445,7 +445,7 @@ plt.show()
 #   ~220 HMC iterations x 20 leapfrog steps ~ 4400 forward-model gradient
 #   evaluations; the 3 free parameters are cheap, the ~4400 SED evaluations are the
 #   cost. The speedup is machine-dependent — read it off the table above.
-# - **Free redshift rides `WavePrecomp`** — the LUT is tabulated over redshift, so
+# - **Free redshift rides `WavePrecomp`**: the LUT is tabulated over redshift, so
 #   a photo-z fit interpolates the table (nebular emission lines and all) instead
 #   of re-integrating the forward model per step. Baking the nebular emission into
 #   the SSP (the wNE grid) keeps the line-boosted colors while adding **zero**

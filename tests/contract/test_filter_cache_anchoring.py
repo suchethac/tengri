@@ -161,7 +161,7 @@ def test_a_shadowed_curve_loads_without_reaching_for_the_network(tmp_path, monke
     partial = _seed(tmp_path / "nested" / "filters", "SLOAN_SDSS_u.dat")
     monkeypatch.setattr(ds, "data_dirs", lambda: [partial.parent, complete.parent])
 
-    def _detonate(svo_id):
+    def _detonate(svo_id, short_name=None):
         raise AssertionError(f"reached SVO for {svo_id!r}, which is cached on disk")
 
     monkeypatch.setattr(f, "_fetch_from_svo", _detonate)
@@ -184,7 +184,7 @@ def test_a_failed_download_leaves_no_empty_cache_behind(tmp_path, monkeypatch):
     """
     import tengri.observation.filters as f
 
-    def _unavailable(svo_id):
+    def _unavailable(svo_id, short_name=None):
         raise ImportError("astroquery is not installed")
 
     monkeypatch.setattr(f, "_fetch_from_svo", _unavailable)

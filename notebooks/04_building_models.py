@@ -32,8 +32,22 @@ import os
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
+import sys
 
 os.environ.setdefault("TENGRI_NO_BACKGROUND_COMPILE", "1")
+
+try:
+    _nb_dir = os.path.dirname(os.path.abspath(__file__))
+    _repo_root = os.path.abspath(os.path.join(_nb_dir, ".."))
+except NameError:
+    _nb_dir = os.getcwd()
+    _repo_root = os.path.abspath(os.path.join(_nb_dir, ".."))
+
+_src = os.path.join(_repo_root, "src")
+if os.path.isdir(os.path.join(_src, "tengri")):
+    sys.path.insert(0, _src)
+sys.path.insert(0, _repo_root)
+sys.path.insert(0, _nb_dir)
 
 import warnings
 

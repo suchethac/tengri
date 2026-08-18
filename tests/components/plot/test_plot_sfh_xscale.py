@@ -11,18 +11,15 @@ import numpy as np
 import pytest
 
 from tengri.analysis.plotting import plot_sfh
+from tests._shared_mocks import MockSpec
 
 pytestmark = [pytest.mark.unit, pytest.mark.contract]
-
-
-class _MockSpec:
-    stochastic = True
 
 
 class _MockModel:
     """Minimal model stub exposing ``spec.stochastic`` and ``predict_sfh``."""
 
-    spec = _MockSpec()
+    spec = MockSpec(free_names=[], stochastic=True)
 
     def __init__(self):
         # Youngest SFH grid point ~1 Myr = 1e-3 Gyr, matching the real grid.

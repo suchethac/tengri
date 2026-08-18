@@ -8,12 +8,12 @@ row in that migration document.
 
 The three patterns provided:
 
-- :func:`deprecated_alias` — wraps a callable so calling it emits one
+- :func:`deprecated_alias`: wraps a callable so calling it emits one
   ``DeprecationWarning`` and then forwards to the new implementation.
-- :func:`deprecated_attribute` — for module-level attribute access via
+- :func:`deprecated_attribute`: for module-level attribute access via
   ``__getattr__`` (PEP 562). Use this when the old name is a class or
   constant rather than a function.
-- :func:`resolve_renamed_flag` — for a boolean *keyword argument* that was
+- :func:`resolve_renamed_flag`: for a boolean *keyword argument* that was
   renamed. The other two replace a whole symbol; this one lets a single
   parameter change spelling without breaking the call.
 

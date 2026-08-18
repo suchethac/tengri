@@ -43,6 +43,11 @@ def mock_model(mock_spec):
     """Create a minimal SEDModel-like object for testing."""
     model = MagicMock()
     model.spec = mock_spec
+    # This stub has no observation config. Say so: Fitter._build_data_args reads
+    # the optional channels with ``getattr(obs, "line_ratios", None)``, and on a
+    # MagicMock that default is unreachable, so the fitter would build line-flux,
+    # line-ratio and spectral-index channels the stub cannot serve (#1942).
+    model.observation = None
 
     # Simulate photometry prediction: 5 bands
     def _predict_photometry(params):

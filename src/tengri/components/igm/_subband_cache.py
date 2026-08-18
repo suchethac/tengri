@@ -21,9 +21,9 @@ reading of what the computation consumes rather than from what seemed likely.
 
 ``subband_node_transmission`` reads exactly three things on its cacheable path:
 
-* ``subband_waves_rest`` — the node wavelengths, by content;
-* ``z_grid`` — the redshift grid, by content;
-* ``config.igm_model`` — which transmission law.
+* ``subband_waves_rest``: the node wavelengths, by content;
+* ``z_grid``: the redshift grid, by content;
+* ``config.igm_model``: which transmission law.
 
 The other two config fields cannot reach it: ``igm_patchy`` and ``use_dla``
 both read *free parameters* at apply time, so the method returns ``None`` for

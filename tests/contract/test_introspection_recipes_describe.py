@@ -92,3 +92,47 @@ def test_describe_fn_symmetric_with_list_fn(list_fn, describe_fn, kind):
 def test_describe_fn_unknown_raises_keyerror_with_menu(describe_fn):
     with pytest.raises(KeyError, match="Known names"):
         describe_fn("not_a_real_name_xyz_123")
+
+
+# ── Universal describe() function tests (#1488 §6, #1611) ──
+
+
+def test_describe_universal_filter_name():
+    """tengri.describe() resolves filter names and aliases."""
+    # Get a known filter name from the registry
+    filters = tengri.list_filters()
+    if not filters:
+        pytest.skip("No filters available")
+
+    # Try to describe using the filter alias (e.g., "2mass_h")
+    # which is not in the menus and should hit the fallback lookup
+    filter_info = filters[0]
+    filter_alias = filter_info.get("alias") or filter_info["name"]
+
+    record = tengri.describe(filter_alias)
+
+    assert record["name"] == filter_alias
+    assert record["kind"] == "filter"
+    # The fallback filter lookup returns a description with wavelength info
+    desc = record.get("description", "")
+    assert "λ_eff" in desc or "wavelength" in desc.lower()
+
+
+def test_describe_universal_preset_name():
+    """tengri.describe() resolves preset names."""
+    # Get a known preset name from the registry
+    presets = tengri.list_recipes()
+    if not presets:
+        pytest.skip("No presets available")
+
+    preset_name = presets[0]["name"]
+    record = tengri.describe(preset_name)
+
+    assert record["name"] == preset_name
+    assert record["kind"] == "recipe"
+
+
+def test_describe_universal_unknown_raises_keyerror():
+    """tengri.describe() raises KeyError for unknown names."""
+    with pytest.raises(KeyError, match="Unknown name"):
+        tengri.describe("not_a_real_name_xyz_123_describe_test")

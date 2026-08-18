@@ -2,19 +2,19 @@
 
 ## Current Model
 
-Tengri is led by Suchetha Cooray as a single maintainer (BDFL-lite model). All major decisions rest with the maintainer. The project is pre-1.0, so scope and API may change.
+Tengri is led by Suchetha Cooray as a single maintainer. Scope and API may change before 1.0.
 
 ## Response Expectations
 
-Issue triage typically occurs within two weeks. Response time for pull requests depends on complexity and maintainer availability. For urgent security issues, please contact cooray@stanford.edu directly.
+Issue triage occurs within two weeks. Pull request response time varies by complexity. For urgent security issues, contact cooray@stanford.edu directly.
 
 ## Decision Process
 
-**Small, low-risk changes** (bug fixes, documentation, minor enhancements, utility functions) may be merged directly by the maintainer after code review.
+**Small, low-risk changes** (bug fixes, documentation, minor enhancements, utility functions) may be merged directly after code review.
 
-**Non-trivial public-API or file-format changes** must be proposed in a GitHub issue labelled `rfc` (request for comments) before work begins. This ensures community input and avoids wasted effort on rejected designs.
+**Non-trivial public-API or file-format changes** must be proposed in a GitHub issue labeled `rfc` before work begins.
 
-**Architectural decisions** are documented as ADRs (Architecture Decision Records) in `docs/adr/`. See the ADR template in that directory for the format.
+**Architectural decisions** are documented as ADRs in `docs/adr/`.
 
 ## Succession Plan
 

@@ -32,6 +32,7 @@ import pytest
 from tengri import FIXED, SEDModel
 from tengri.components.agn.blocks._protocol import AGN_BLOCKS
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
+from tengri.config.exceptions import TengriIOError
 from tengri.observation import Observation, Photometry
 from tengri.parameters.priors import Fixed
 
@@ -179,7 +180,7 @@ def test_block_template_threads_as_argument(ssp, obs, category, block):
     try:
         model = _build(ssp, obs, agn=group)
         baked = _traced_baked_mb(model)
-    except (FileNotFoundError, NotImplementedError) as exc:
+    except (FileNotFoundError, TengriIOError, NotImplementedError) as exc:
         pytest.skip(f"{category}/{block} unavailable: {exc}")
 
     assert baked < _BAKED_BUDGET_MB, (
@@ -214,7 +215,7 @@ def test_threaded_grid_matches_closure_path(name, module, sed_fn, loader_fn, kwa
         )
     try:
         grid = loader()
-    except FileNotFoundError:
+    except (FileNotFoundError, TengriIOError):
         pytest.skip(f"{name} grid not available on disk")
 
     wave = jnp.linspace(1.0e4, 5.0e5, 512)

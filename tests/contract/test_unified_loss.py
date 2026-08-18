@@ -27,40 +27,9 @@ from tengri.inference.loss_functions import (
     build_loglikelihood_unbounded_fn,
     build_loss_fn,
 )
+from tests._shared_mocks import MockSpec
 
-
-class _IdentityDist:
-    bounds = (-jnp.inf, jnp.inf)
-
-    def unstandardize(self, x):
-        return x
-
-
-class _MockSpec:
-    stochastic = False
-
-    def __init__(self, free_names):
-        self._free_names = free_names
-        self.all_params = []
-
-    @property
-    def free_params(self):
-        return self._free_names
-
-    def get_distribution(self, name):
-        return _IdentityDist()
-
-    def resolve_mirrors(self, params):
-        return params
-
-    def sample(self, key):
-        """Return a dict of default parameter values for all free parameters.
-
-        Matches the contract of Parameters.sample: takes a PRNG key and returns
-        a dict mapping parameter names to sampled values. For the mock, we return
-        a default value (1.0) for each free parameter.
-        """
-        return {name: jnp.asarray(1.0) for name in self._free_names}
+_MockSpec = MockSpec
 
 
 class _MockModel:

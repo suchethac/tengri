@@ -108,10 +108,10 @@ class _RegistryTable(list):
         Each keyword either does an exact match (``status="production"``)
         or uses a ``field__op`` operator suffix:
 
-        - ``field=value``           — case-insensitive equality
-        - ``field__contains=value`` — case-insensitive substring match
-        - ``field__in=(a, b, c)``   — membership in a sequence
-        - ``field__startswith=v``   — prefix match (case-insensitive)
+        - ``field=value``: case-insensitive equality
+        - ``field__contains=value``: case-insensitive substring match
+        - ``field__in=(a, b, c)``: membership in a sequence
+        - ``field__startswith=v``: prefix match (case-insensitive)
 
         All criteria must match (logical AND).
 
@@ -2314,10 +2314,28 @@ def describe(name: str) -> _DescribeRecord:
     if lookup_backend(name) is not None:
         return describe_inference_method(name)
 
+    # Check for filter names (#1611)
+    try:
+        from tengri.observation import filters as _filters_module
+
+        filter_desc = _filters_module.describe(name)
+        return _DescribeRecord({"name": name, "kind": "filter", "description": filter_desc})
+    except (KeyError, ValueError, AttributeError):
+        pass
+
+    # Check for preset names (#1611)
+    try:
+        from tengri.presets import param_presets as _presets_module
+
+        preset_desc = _presets_module.describe(name)
+        return _DescribeRecord({"name": name, "kind": "preset", "description": preset_desc})
+    except (ValueError, AttributeError):
+        pass
+
     raise KeyError(
         f"Unknown name '{name}'.  Try tengri.summary() for a menu of every "
         "core class, AGN model, dust law, SFH variant, nebular backend, "
-        "component, filter, or inference method that exists."
+        "component, filter, preset, or inference method that exists."
     )
 
 

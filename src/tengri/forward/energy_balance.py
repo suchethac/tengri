@@ -121,12 +121,12 @@ def _peak_factored_trapezoid(
     (something upstream produced Inf or NaN). ``corrupt`` separates them, and
     the two callers **deliberately answer it differently** (#1527):
 
-    * :func:`bolometric_absorbed_log10` — the live form, on every production
+    * :func:`bolometric_absorbed_log10`: the live form, on every production
       path — reports ``+inf``, matching :func:`tengri.utils.scale.log10_add`,
       whose comment argues that folding a non-finite term into the zero
       sentinel "would report an overflowed term as exactly zero — a fail-open
       on precisely the axis this module exists to close".
-    * :func:`bolometric_absorbed` — the linear form, with no caller in ``src/``
+    * :func:`bolometric_absorbed`: the linear form, with no caller in ``src/``
       — keeps clamping to ``0.0``. That clamp is inherited, not chosen: #922's
       table lists it as a property of the retired compositional kernel,
       preserved to avoid changing behavior for a real artifact class (Inf·0

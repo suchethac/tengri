@@ -41,11 +41,11 @@ marker lines to jump. In order:
 - ``SEDModel`` class:
 
   - ``SubModel Protocol surface``
-  - ``Construction`` — ``__init__``, the ``_init_*`` chain, ``build()``
+  - ``Construction``: ``__init__``, the ``_init_*`` chain, ``build()``
   - ``Deprecated filter/noise attributes → Observation delegation``
   - ``Core physics (SFH → SED pipeline)``
-  - ``Predictions (public API)`` — the ``predict_*`` surface
-  - ``Component orchestrator path`` — ``predict_state`` and the JIT
+  - ``Predictions (public API)``: the ``predict_*`` surface
+  - ``Component orchestrator path``: ``predict_state`` and the JIT
     kernel behind every prediction
   - ``Batch operations``
   - ``Private prediction dispatch``
@@ -917,6 +917,59 @@ def _warn_agn_dust_double_count(spec) -> None:
     )
 
 
+def _validate_fracagn_requires_dust(spec) -> None:
+    """Raise if AGN has fracAGN enabled without a dust component (#944).
+
+    The composable AGN's fracAGN parameter (agn_ir_frac) ties the torus
+    luminosity to the dust-absorbed stellar luminosity via the CIGALE
+    skirtor2016 energy-balance convention. Without a dust component, the
+    absorbed stellar luminosity is ~zero, so the torus (and under
+    agn_norm='cigale_joint' the whole AGN) collapses silently.
+
+    This is a build-time safety gate: fracAGN is only safe when paired
+    with a dust component (dust_model != 'off').
+
+    Raises
+    ------
+    ConfigError
+        If agn_ir_frac is nonzero (FREE or Fixed>0) and dust_model == 'off'.
+
+    See Also
+    --------
+    #944 : Silent torus luminosity drop when fracAGN used without dust.
+    """
+    from tengri.config.exceptions import ConfigError
+
+    # Check if agn_ir_frac (the fracAGN parameter) is active
+    free = set(spec.free_params)
+    fixed = spec.get_fixed_values()
+
+    def _is_positive_active(name: str) -> bool:
+        """Check if a param is FREE or Fixed with value > 0."""
+        if name in free:
+            return True
+        return float(fixed.get(name, 0.0)) > 0.0
+
+    # agn_ir_frac is the lowered name for fracAGN
+    if not _is_positive_active("agn_ir_frac"):
+        return  # fracAGN is not active, no validation needed
+
+    # Check dust configuration: dust_model='off' means no dust
+    dust_model = getattr(spec, "dust_model", "off")
+
+    # A model with dust_model='off' (dust={'type': 'none'} or no dust) is unsafe
+    if dust_model == "off":
+        raise ConfigError(
+            "fracAGN (agn_ir_frac) ties the AGN torus luminosity to the "
+            "dust-absorbed stellar luminosity (CIGALE skirtor2016 convention). "
+            "With dust={'type':'none'} or no dust component, the absorbed "
+            "stellar luminosity is ~zero and the torus would be silently zeroed. "
+            "Fix: either (1) add a dust component (e.g. dust={'type':'two_component'}), "
+            "or (2) drop fracAGN and use agn_torus_frac for independent torus scaling. "
+            "See issue #944."
+        )
+
+
 def _state_has_content(state) -> bool:
     """Report whether a component state carries anything beyond its name.
 
@@ -1449,7 +1502,7 @@ class SEDModel:
         # Resolve and validate approximation kwarg.
         # Contract (2026-05-20):
         #   * ``approx=None`` (default)        — exact wave-grid integration.
-        #   * ``approx=WavePrecomp(...)``      — opt into the precomputed
+        #   * ``approx=WavePrecomp(...)``: opt into the precomputed
         #     SSP × filter LUT path. ``WavePrecomp()`` gives the default
         #     ztable sampling; ``WavePrecomp(n_z=200, z_min=0.0, z_max=3.0)``
         #     for custom grids.
@@ -4872,6 +4925,16 @@ class SEDModel:
         -----
         **JIT-compatible**: no — delegates to nebular backend.
 
+        **Shock component limitation** (#927): When a model includes both
+        an active shock component and a photoionized backend (Cue/CloudyGrid),
+        the shock's discrete line luminosities are **not** published to the
+        returned catalog. MAPPINGS V bakes shock lines into the continuum SED
+        only (``sed_shock``), which is invisible to this catalog-reading surface.
+        The shock will constrain only through continuum (broadband/spectrum), with
+        zero gradient from line-flux channels. Use :meth:`measure_line_fluxes`
+        (pipeline-style flux extraction from the spectrum) to measure shock lines
+        self-consistently with the stellar continuum.
+
         Observed flux is calculated from luminosity via:
 
         .. math::
@@ -4886,6 +4949,29 @@ class SEDModel:
             raise ValueError(
                 "No nebular backend with line prediction configured. Cannot compute line fluxes."
             )
+
+        # Warn if shock component is active with photoionized backend (#927): shock
+        # lines are baked into the continuum SED, not published to the discrete
+        # catalog that predict_line_fluxes reads, so shock parameters get zero
+        # gradient from line-flux fitting.
+        if self._uses_shock:
+            backend_name = type(backend).__name__.lower()
+            is_photoionized = any(name in backend_name for name in ("cue", "cloudygrid"))
+            if is_photoionized:
+                from tengri.config.exceptions import ShockPhotoionizedMixedWarning
+
+                warnings.warn(
+                    "Shock component present with photoionized nebular backend "
+                    "(Cue/CloudyGrid). Shock's discrete line emission is **not** "
+                    "included in predict_line_fluxes output — shock lines are baked "
+                    "into the continuum SED (sed_shock) only. Shock parameters "
+                    "(shock_frac, shock_log_lhalpha, etc.) will have zero gradient "
+                    "from line-flux fitting. "
+                    "Remedy: use measure_line_fluxes() (pipeline-style extraction), "
+                    "fit shock through continuum only, or use BakedIn backend.",
+                    ShockPhotoionizedMixedWarning,
+                    stacklevel=2,
+                )
 
         # Read the discrete line catalog published by
         # NebularSEDComponent. The orchestrator's nebular adapter calls
@@ -8578,6 +8664,7 @@ class SEDModel:
                 groups["eline_mode"] = _obs_eline
 
         spec = parse_groups(**groups)
+        _validate_fracagn_requires_dust(spec)
         _warn_agn_dust_double_count(spec)
         _warn_dead_gradient_params(spec)
         return cls(
