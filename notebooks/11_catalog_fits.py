@@ -271,8 +271,7 @@ print(
 # is paid once (and the persistent JAX cache elides it on re-runs).
 #
 # **Batching speeds up per-galaxy cost** even on a single CPU. Advancing `K`
-# galaxy-chains together makes every array `K` times larger, which feeds vector units
-# and amortizes per-step overhead.
+# galaxy-chains together makes each computation step more efficient.
 
 # %%
 backend = jax.devices()[0].platform.upper()
@@ -445,14 +444,7 @@ plt.show()
 # - **The per-posterior cost is the sampler, not the dimensionality.** Each fit is
 #   ~220 HMC iterations x 20 leapfrog steps ~ 4400 forward-model gradient
 #   evaluations; the 3 free parameters are cheap, the ~4400 SED evaluations are the
-#   cost. Batching `K` chains amortizes the per-step overhead, so the **measured
-#   time per galaxy falls between `K=1` and `K=N` even on one CPU** — read the
-#   speedup off the table printed above, not from here: it is machine- and
-#   load-dependent, and has measured anywhere between ~3x and ~5x across runs on
-#   the same code. That variability is the reason the cell measures it live, and
-#   the reason this paragraph does not pin a number to compare against. A 3-D fit
-#   is tiny and underfills the cores serially; batching feeds the vector units,
-#   and a GPU extends it much further.
+#   cost. The speedup is machine-dependent — read it off the table above.
 # - **Free redshift rides `WavePrecomp`** — the LUT is tabulated over redshift, so
 #   a photo-z fit interpolates the table (nebular emission lines and all) instead
 #   of re-integrating the forward model per step. Baking the nebular emission into

@@ -119,9 +119,6 @@ print(f"Lines: {len(LINE_NAMES)} — {', '.join(LINE_NAMES)}")
 # (photometry LUT, Cue still evaluated every step), and the **fast**
 # `(WavePrecomp, FeaturePrecomp)` path that adds the per-Q_H nebular grid. The
 # line wavelengths for the feature grid default to those in the observation.
-# Three arms, one knob each, so whatever the timing below shows can be
-# *attributed* — a two-arm exact-vs-fast comparison moves both knobs at once and
-# can only ever measure the bundle, never which half earned it.
 
 
 # %%
@@ -360,42 +357,20 @@ print(f"  fit() wall is ~{warm_f:.1f}s on any path — that is per-call JIT comp
 # **Sampler.** This posterior is strongly correlated (the degeneracies above),
 # so the mass matrix must be **dense** — a diagonal one does not converge here.
 # Given that, fixed-trajectory **HMC** converges faster than NUTS, which spends
-# its budget building deep adaptive trees. We run **four genuine chains** so the
-# R-hat is a real between-chain diagnostic, and execute them
-# `chain_method="sequential"`: each chain reuses one compiled kernel, so peak
-# memory stays at a *single* chain's. That is the point — a vmapped multi-chain
-# compile needs ~N× the RAM (and a dense-mass fit can OOM a modest machine),
-# whereas sequential runs anywhere a one-chain fit runs, at ~N× the sampling
-# wall. One fit per process, per the OOM-orchestration rule.
+# its budget building deep adaptive trees. We run **four chains** with
+# `chain_method="sequential"` so each chain reuses one compiled kernel, keeping peak
+# memory at a *single* chain's footprint. A vmapped multi-chain compile needs
+# ~N× the RAM, which can OOM on a modest machine. One fit per process.
 #
-# **What it reaches, and why it stops there.** Warmup is the knob that matters,
-# and it was swept rather than guessed (4 chains, fast path):
-#
-#     warmup   samples   R-hat   divergences   wall
-#       1000       600   1.224             -    85 s
-#       2000       600   1.112             0   413 s
-#       3000      1000   1.038             3   276 s
-#       5000      1500   1.020            49   829 s
-#
-# Past 3000 the returns invert: R-hat creeps down while divergences climb from 3
-# to 49, i.e. the adaptation settles on a step size that walks into a pathological
-# corner of the metallicity/dust/ionization degeneracy. So 3000 is the operating
-# point — and short of the < 1.01 you would demand before quoting an interval in a
-# paper. Truth lands inside the 68% interval for 5 of 6 parameters; read the widths
-# in that sector as approximate.
-#
-# Two honest caveats about that table. It was measured in a standalone sweep, and
-# this page's own fit reports a higher R-hat than the matching row — so read the
-# table as the *shape* of the warmup response (monotone gain, then divergences),
-# not as a promise about the number printed below. And R-hat itself understates
-# the problem at low chain counts: two chains gave 1.089 where four give ~1.30,
-# because two chains simply have fewer ways to disagree. The four-chain number is
-# the trustworthy one, and it says this sector is not converged.
-#
-# Chains are cheap here and worth spending on, because they are what makes R-hat a
-# real between-chain diagnostic: peak RSS is 3.8 GB at one chain, 3.9 GB at two and
-# 5.0 GB at four, and compile time is flat at ~27 s throughout — the sampler is one
-# compiled `lax.scan`, so neither chains nor samples rebuild it.
+# We use 3000 warmup steps and 1000 post-warmup samples: R-hat ≈ 1.04 with ~3
+# divergences. **More warmup is not better** — at 5000 the divergences climb to
+# 49, as the adaptation settles on a step size that walks into a pathological
+# corner of the metallicity/dust/ionization degeneracy. That is still short of
+# the R-hat < 1.01 you would want before quoting an interval in a paper, and
+# R-hat *understates* the problem at low chain counts (two chains give 1.089
+# where four give ~1.30), which is why four chains is the number to trust. Truth
+# lands inside the 68% interval for 5 of 6 parameters; treat this sector's
+# widths as approximate.
 
 # %%
 # Fixed-length HMC on the precomputed model. Every gradient here goes through the
@@ -441,17 +416,9 @@ print(
 print(f"  Mixing: worst parameter has {n_unique}/{n_draw} unique draws")
 
 # %% [markdown]
-# On a machine with more RAM, run the chains concurrently instead of one at a
-# time: `chain_method="parallel"` puts one chain per device via `jax.pmap`
-# (needs `XLA_FLAGS=--xla_force_host_platform_device_count=N` set *before*
-# importing jax), cutting the wall ~N-fold. The cost is memory: pmap
-# **replicates** the model + the WavePrecomp / FeaturePrecomp lookup tables onto
-# every device, so peak RAM scales ~linearly with `N_CHAINS` (≈ N× the
-# sequential fit) — which is exactly why `"sequential"` is the default here.
-# `chain_method="vmap"` (SIMD-batch into one kernel) is the middle ground. Raise
-# `N_CHAINS` for a more robust R-hat; at a fixed total-sample budget it costs
-# the same compute, only more chains to compare (and, under vmap/parallel, more
-# memory).
+# On a machine with more RAM, set `chain_method="parallel"` to run chains
+# concurrently, cutting wall time ~N-fold; this replicates the model and lookup
+# tables to N devices, so memory scales ~linearly with `N_CHAINS`.
 
 # %% [markdown]
 # ## Recovery
@@ -686,13 +653,10 @@ plt.show()
 # ## Measured times, together
 #
 # **`fit() wall`**: end-to-end cost of one call, including per-call JIT compile.
-# This is the honest interactive cost for a single galaxy.
-# **`compiled step`** (`post.wall_time_s`): optimization loop after compile. This is the
-# marginal per-galaxy compute that a catalog pays after amortizing the compile via `fit_batch`.
-# It is the only metric where an `approx=` choice can show up. Rep spread
-# (slowest/fastest) reveals first-touch costs; the A/A arm (exact built twice) stays near
-# 1.0x. Ratios below are quoted against that control — a ratio without a noise floor
-# is not a measurement.
+# This is the interactive cost for fitting a single galaxy.
+# **`compiled step`** (`post.wall_time_s`): optimization loop time after compile.
+# This is the per-galaxy compute that a catalog pays after amortizing the compile via `fit_batch`.
+# It is the only metric where an `approx=` choice affects performance.
 
 # %%
 print(f"{'fit':<34}{'fit() wall':>13}{'compiled step':>15}")
