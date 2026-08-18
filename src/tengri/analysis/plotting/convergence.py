@@ -257,6 +257,27 @@ def convergence_check(result, method_name="", verbose=True):
         info["ess_median"] = None
         info["n_params_low_ess"] = None
 
+    # --- Frozen chain detection: all samples identical per parameter (#1437) ---
+    # A frozen chain has ~0 within-chain and ~0 between-chain variance, so split-R-hat
+    # scores it ~1.0 (perfect convergence) even though the sampler never moved.
+    # The guard: detect parameters where n_unique == 1 and surface as a failure.
+    frozen_params = []
+    if result.samples is not None:
+        for param_name, samples in result.samples.items():
+            if param_name.startswith("psd_xi"):
+                continue
+            arr = np.asarray(samples)
+            if arr.ndim >= 1 and float(np.ptp(arr)) == 0.0:
+                frozen_params.append(param_name)
+
+        if frozen_params:
+            info["frozen_params"] = frozen_params
+            warnings.append(
+                f"FROZEN: {len(frozen_params)} parameter(s) never moved "
+                f"({', '.join(frozen_params[:3])}{'...' if len(frozen_params) > 3 else ''}) "
+                f"— R-hat cannot detect this (both variances ~0, ratio ~1)"
+            )
+
     # --- Divergences (NUTS) ---
     n_div = result.diagnostics.get("n_divergent", None)
     if n_div is not None:
@@ -264,12 +285,24 @@ def convergence_check(result, method_name="", verbose=True):
         div_pct = 100 * n_div / max(n_samples, 1)
         info["n_divergent"] = n_div
         info["divergence_pct"] = div_pct
-        if n_div > th["divergence_warn"]:
+
+        # Explicit detection: all samples diverged (#1437)
+        if n_div == n_samples and n_samples > 0:
+            info["all_samples_divergent"] = True
+            warnings.append(
+                f"CRITICAL: {n_div}/{n_samples} divergent transitions (100%) "
+                f"— the sampler rejected every proposal. This is a dead fit, not a converged one."
+            )
+        elif n_div > th["divergence_warn"]:
             severity = "SERIOUS" if div_pct > th["divergence_fail_pct"] else "WARNING"
             warnings.append(
                 f"{severity}: {n_div}/{n_samples} divergent transitions "
                 f"({div_pct:.1f}%) — posterior may be unreliable"
             )
+        else:
+            info["all_samples_divergent"] = False
+    else:
+        info["all_samples_divergent"] = False
 
     # --- Acceptance rate (RT) ---
     accept = result.diagnostics.get("accept_rate_post_burnin", None)
