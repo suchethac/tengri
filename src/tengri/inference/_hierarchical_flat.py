@@ -925,7 +925,7 @@ def run_flat_sampler(
                 ghmc_delta,
             )
         else:
-            positions, divergent, step_size, _imm = _nuts_full_scan(
+            positions, divergent, _expansions, step_size, _imm = _nuts_full_scan(
                 prob.init_flat,
                 wkey,
                 chain_keys,

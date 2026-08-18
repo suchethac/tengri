@@ -136,6 +136,25 @@ def _bounded_pathfinder_elbo_draws(n_draws: int | None = None):
 #   target_accept_rate → warmup constructor kwarg (float, rarely changed)
 #   use_pathfinder_warmup → picks pathfinder_adaptation vs window_adaptation (bool)
 
+#: Default NUTS tree-depth cap, shared by every entry point (single-fit
+#: ``run_nuts``, the catalog engine, the batched-vmap path, and the prewarm
+#: compile) so the compiled program and the fit that follows cannot disagree.
+#: Before this constant existed the prewarm path hardcoded its own ``10`` —
+#: correct only by coincidence with the signature defaults it never saw.
+#:
+#: 10 (the BlackJAX/Stan convention) — and measured to stay there. Lowering
+#: the cap looks like a huge win on the heavy-tailed StudentT SFR-ratio
+#: geometry of the nonparametric SFHs and is a trap: on a 19-band continuity
+#: fit (D=9, 500 warmup + 500 samples, CPU, 2026-08-18) cap 6 cut the wall
+#: 118 s → 11 s but collapsed min-ESS 93 → 5 — per *effective* sample it is
+#: strictly worse (1.99 vs 1.27 s/ESS). The genuine fix on that geometry is
+#: ``dense_mass_matrix=True``: 28 s wall, min-ESS 45, 0.62 s/ESS — better
+#: than the diagonal default on both axes at once. Saturation of a deep cap
+#: is surfaced by ``NUTSTreeDepthWarning`` and the ``tree_depth_*``
+#: diagnostics every NUTS fit now reports; a deliberate low cap for a
+#: wall-bounded quick look is one kwarg, taken knowingly.
+DEFAULT_MAX_NUM_DOUBLINGS = 10
+
 
 @functools.partial(jax.jit, static_argnums=(3, 5, 6, 7, 8, 9))
 def _nuts_full_scan(
@@ -193,7 +212,9 @@ def _nuts_full_scan(
     -------
     positions : ndarray, shape (n_chain, D)
     divergent : ndarray, shape (n_chain,)
-        Both include the burnin prefix; caller slices ``[n_burnin:]``.
+    expansions : ndarray, shape (n_chain,)
+        Per-iteration NUTS trajectory-expansion count (tree depth). All
+        three include the burnin prefix; caller slices ``[n_burnin:]``.
     step_size : scalar
     inv_mass_matrix : ndarray, shape (D,) or (D, D)
     """
@@ -235,12 +256,12 @@ def _nuts_full_scan(
     kernel = _get_nuts_kernel()
 
     def _step(s, k):
-        """Advance NUTS sampler by one step, returning position and divergence flag."""
+        """Advance NUTS one step: position, divergence flag, tree depth."""
         s, info = kernel(k, s, ld_1arg, step_size, inv_mass_matrix, max_doublings)
-        return s, (s.position, info.is_divergent)
+        return s, (s.position, info.is_divergent, info.num_trajectory_expansions)
 
-    _, (positions, divergent) = jax.lax.scan(_step, state, chain_keys)
-    return positions, divergent, step_size, inv_mass_matrix
+    _, (positions, divergent, expansions) = jax.lax.scan(_step, state, chain_keys)
+    return positions, divergent, expansions, step_size, inv_mass_matrix
 
 
 @functools.partial(jax.jit, static_argnums=(2, 4, 5, 6, 7))
@@ -338,7 +359,9 @@ def _nuts_chain_scan(
     -------
     positions : ndarray, shape (n_chain, D)
     divergent : ndarray, shape (n_chain,)
-        Caller slices ``[n_burnin:]``.
+    expansions : ndarray, shape (n_chain,)
+        Per-iteration NUTS trajectory-expansion count (tree depth).
+        Caller slices ``[n_burnin:]`` on all three.
     """
 
     def ld(pos):
@@ -347,12 +370,12 @@ def _nuts_chain_scan(
     kernel = _get_nuts_kernel()
 
     def _step(s, k):
-        """Advance NUTS sampler by one step, returning position and divergence flag."""
+        """Advance NUTS one step: position, divergence flag, tree depth."""
         s, info = kernel(k, s, ld, step_size, inv_mass_matrix, max_doublings)
-        return s, (s.position, info.is_divergent)
+        return s, (s.position, info.is_divergent, info.num_trajectory_expansions)
 
-    _, (positions, divergent) = jax.lax.scan(_step, state, chain_keys)
-    return positions, divergent
+    _, (positions, divergent, expansions) = jax.lax.scan(_step, state, chain_keys)
+    return positions, divergent, expansions
 
 
 # ---------------------------------------------------------------------------
