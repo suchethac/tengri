@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.19.1
+#       jupytext_version: 1.19.5
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
@@ -459,7 +459,7 @@ key = jax.random.PRNGKey(123)
 true_params_stoch = spec_stoch.sample(key)
 # Override to a typical star-forming galaxy with dramatic burstiness
 true_params_stoch = {**true_params_stoch}
-true_params_stoch["sfh_tsnorm_log_total_mass"] = jnp.array(1.2)
+true_params_stoch["sfh_tsnorm_log_total_mass"] = jnp.array(10.5)
 true_params_stoch["sfh_tsnorm_peak_lbt_gyr"] = jnp.array(3.0)
 true_params_stoch["sfh_tsnorm_width_gyr"] = jnp.array(3.0)
 true_params_stoch["sfh_tsnorm_skew"] = jnp.array(0.3)
