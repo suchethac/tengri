@@ -187,6 +187,7 @@ _CANONICAL_METHODS = {
     "laplace",
     "pathfinder",
     "nss",  # Nested Slice Sampling, log Z (D≤30)
+    "hmc_is",  # HMC posterior + importance-sampled log Z
     "auto",  # auto: mcmc_nuts (D≤20) or vi (D>20)
 }
 
