@@ -1139,7 +1139,7 @@ This is why `geovi` defaults to `posterior_method="nonlinear"`.
 The marginal likelihood (evidence) Z quantifies how well a model explains the data
 averaged over its prior. Two models with identical fits to a dataset will have
 different evidence if one has a narrower prior (Occam factor). The Bayes factor
-B = Z₁/Z₂ tells you how much the data favour model 1 over model 2:
+B = Z₁/Z₂ tells you how much the data favor model 1 over model 2:
 
 - **B > 150** — decisive evidence for model 1
 - **B > 20** — strong evidence
