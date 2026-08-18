@@ -32,7 +32,7 @@ class TestMulticolorAgn:
         """multicolor_agn produces finite, non-negative SED."""
         from tengri.components.agn.unified import multicolor_agn
 
-        l_nu = multicolor_agn(wavelength, agn_log_lbol=44.0)
+        l_nu = multicolor_agn(wavelength, agn_log_lbol=10.42)
         chex.assert_tree_all_finite(l_nu)
         assert_non_negative(l_nu, name="l_nu")
         chex.assert_equal_shape([l_nu, wavelength])
@@ -69,8 +69,8 @@ class TestMulticolorAgn:
         assert callable(fn_kubota)
         assert callable(fn_multicolor)
 
-        sed_kubota = fn_kubota(wavelength, agn_log_lbol=44.0)
-        sed_multicolor = fn_multicolor(wavelength, agn_log_lbol=44.0)
+        sed_kubota = fn_kubota(wavelength, agn_log_lbol=10.42)
+        sed_multicolor = fn_multicolor(wavelength, agn_log_lbol=10.42)
 
         chex.assert_tree_all_finite(sed_kubota)
         chex.assert_tree_all_finite(sed_multicolor)
@@ -79,8 +79,8 @@ class TestMulticolorAgn:
         """agn_lum_ratio multiplies the whole SED linearly."""
         from tengri.components.agn.unified import multicolor_agn
 
-        l1 = multicolor_agn(wavelength, agn_log_lbol=44.0, agn_lum_ratio=0.1)
-        l2 = multicolor_agn(wavelength, agn_log_lbol=44.0, agn_lum_ratio=0.2)
+        l1 = multicolor_agn(wavelength, agn_log_lbol=10.42, agn_lum_ratio=0.1)
+        l2 = multicolor_agn(wavelength, agn_log_lbol=10.42, agn_lum_ratio=0.2)
         significant = l1 > 1e-50
         assert jnp.any(significant), "No significant SED values found"
         ratio = l2[significant] / l1[significant]
@@ -116,6 +116,6 @@ class TestMulticolorAgn:
 
         @jax.jit
         def _run(wave):
-            return multicolor_agn(wave, agn_log_lbol=44.0)
+            return multicolor_agn(wave, agn_log_lbol=10.42)
 
         chex.assert_tree_all_finite(_run(wavelength))

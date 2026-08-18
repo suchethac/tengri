@@ -50,7 +50,7 @@ class TestResolveAgn:
             warnings.simplefilter("ignore", DeprecationWarning)
             fn = resolve_agn_model("kubota_done")
 
-        l_nu = fn(wavelength, agn_log_lbol=44.0)
+        l_nu = fn(wavelength, agn_log_lbol=10.42)
         chex.assert_tree_all_finite(l_nu)
         chex.assert_equal_shape([l_nu, wavelength])
 

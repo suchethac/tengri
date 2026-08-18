@@ -94,6 +94,25 @@ Derivation: c = 2.99792458e8 m/s (exact)
 Used for Doppler-shift and line-width calculations.
 """
 
+# ── Radio continuum frequencies ───────────────────────────────────
+
+WAVE_1P4GHZ_AA: float = 21.41374e8
+"""1.400 GHz rest-frame wavelength [Å].
+
+Derivation: λ = c / ν
+            = 2.99792458e8 m/s / 1.400e9 Hz
+            = 0.214137... m
+            = 21.4137... × 1e8 Å
+            ≈ 21.41374e8 Å
+
+This is the standard continuum frequency for FIR-radio correlations (Bell 2003,
+Delvecchio+2021) and NVSS radio surveys. NOT the 21 cm HI line (1.4204 GHz /
+21.106 cm). See issue #1057 for the distinction.
+
+Used to extract monochromatic radio luminosity L_1.4GHz from rest-frame
+SED grids: ``L_1p4ghz = jnp.interp(WAVE_1P4GHZ_AA, wave, L_radio)``.
+"""
+
 # ── Planck's constant ─────────────────────────────────────────────
 
 H_PLANCK: float = 6.62607015e-27

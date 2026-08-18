@@ -352,8 +352,8 @@ class TestComputeQsogenSed:
         """Higher log_lbol → brighter overall SED."""
         from tengri.components.agn.qsogen import compute_qsogen_sed
 
-        sed_bright = compute_qsogen_sed(broad_wave, agn_log_lbol=46.0)
-        sed_faint = compute_qsogen_sed(broad_wave, agn_log_lbol=44.0)
+        sed_bright = compute_qsogen_sed(broad_wave, agn_log_lbol=12.42)
+        sed_faint = compute_qsogen_sed(broad_wave, agn_log_lbol=10.42)
         assert float(jnp.sum(sed_bright)) > float(jnp.sum(sed_faint))
 
     def test_hot_dust_bump_at_nir(self, broad_wave):
@@ -515,15 +515,15 @@ class TestQsogenWrapper:
         """qsogen() and compute_qsogen_sed() give bit-identical output."""
         from tengri.components.agn.qsogen import compute_qsogen_sed, qsogen
 
-        sed_wrapper = qsogen(broad_wave, agn_log_lbol=45.0)
-        sed_direct = compute_qsogen_sed(broad_wave, agn_log_lbol=45.0)
+        sed_wrapper = qsogen(broad_wave, agn_log_lbol=11.42)
+        sed_direct = compute_qsogen_sed(broad_wave, agn_log_lbol=11.42)
         np.testing.assert_array_equal(np.array(sed_wrapper), np.array(sed_direct))
 
     def test_accepts_kwargs(self, broad_wave):
         """qsogen passes all keyword arguments through without error."""
         from tengri.components.agn.qsogen import qsogen
 
-        sed = qsogen(broad_wave, agn_log_lbol=45.0, agn_ebv=0.1, agn_bbnorm=2.0)
+        sed = qsogen(broad_wave, agn_log_lbol=11.42, agn_ebv=0.1, agn_bbnorm=2.0)
         chex.assert_tree_all_finite(sed)
 
     def test_shape_and_finite_output(self, broad_wave):

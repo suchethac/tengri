@@ -14,7 +14,7 @@ renaming ``sfh_*_log_peak_sfr`` in the process. The parameter changed meaning --
 beside the old name were carried across unconverted, so 125 call sites in 57
 files declared priors like::
 
-    sfh_tsnorm_log_total_mass=Uniform(-1.0, 2.5)   # 0.1 - 316 Msun
+    sfh_tsnorm_log_total_mass = Uniform(-1.0, 2.5)  # 0.1 - 316 Msun
 
 That is a stellar mass between a tenth of the Sun and a small open cluster,
 declared as the prior for a galaxy. ``src/`` was clean; the damage was confined
@@ -67,14 +67,27 @@ checks put most of them in those categories. Flagging them would mean an
 allowlist of comparable size, and a guard whose allowlist rivals its findings
 teaches people to add entries rather than read them.
 
-What this guard cannot do
--------------------------
-It resolves **fully-qualified** parameter names only. The nested-dict grammar's
-short forms (``sfh={'type': 'dpl', 'log_total_mass': Uniform(...)}``) resolve
-through the SFH type declared in the same dict, which is a dataflow problem this
-does not attempt; those sites are skipped, not verified. Every site the #369
-rename touched uses the full name, so the recurrence it guards against is
-covered.
+What this guard can now do (updated for #1884, #1887)
+------------------------------------------------------
+As of #1887, the guard extends to short-form names in dicts using the **live
+registry** to resolve them, avoiding hand-curated type-name lists that drift.
+
+**Registry-based resolution**: For any dict literal, for each key whose value
+is a prior Call: skip structural keys (type, *, all_params, sub-block names),
+then try resolving the key as ``agn_<key>`` against the registry. If it
+resolves to a registered AGN parameter, check the prior for overlap against
+its declared support. This catches short-form AGN parameters regardless of
+dict context, and new AGN block types are automatically covered without
+updating the tool.
+
+**Why only zero-overlap is flagged**: A key that (a) resolves to a registered
+parameter and (b) carries a prior literal is overwhelmingly an AGN group site.
+The overlap rule (flag only ZERO-overlap) makes rare false positives harmless,
+and any genuinely-deliberate exception can be added to the ALLOWLIST.
+
+**Other groups**: Short forms in SFH, dust, radio, etc. are not yet resolved,
+as the dataflow through their structural logic remains unimplemented. These
+sites are skipped. Every fully-qualified name is checked.
 
 It reads literals. A prior built from variables (``Uniform(lo, hi)``) or from
 arithmetic is skipped -- there is no number to compare.
@@ -122,7 +135,50 @@ _RANGE_DISTS = {"Uniform", "LogUniform"}
 #: entry is ``(relative path, parameter)`` mapped to a reason. Prefer fixing the
 #: range: an entry here says the declaration is wrong for this one caller, which
 #: is a claim worth having to write down.
-ALLOWLIST: dict[tuple[str, str], str] = {}
+ALLOWLIST: dict[tuple[str, str], str] = {
+    # Registry-based resolution in tools/check_param_ranges.py catches sfh_dpl_alpha
+    # (short name "alpha" in sfh dicts) as agn_alpha false positives. These are
+    # legitimate sfh_dpl_alpha uses in correct range [0.5, 6]; they don't resolve
+    # to agn_alpha in context, but the registry contains both agn_alpha and
+    # sfh_*_alpha with different declarations. Acceptable false positives under
+    # the registry-based rule (see #1884 / #1887).
+    ("docs/auto_examples/sfh/plot_dpl_alpha_beta_grid.py", "agn_alpha"): (
+        "False positive: short name 'alpha' in sfh dict resolves to agn_alpha "
+        "in registry, but context is sfh_dpl_alpha. Legitimate sfh prior."
+    ),
+    ("examples/sfh/plot_dpl_alpha_beta_grid.py", "agn_alpha"): (
+        "False positive: short name 'alpha' in sfh dict resolves to agn_alpha "
+        "in registry, but context is sfh_dpl_alpha. Legitimate sfh prior."
+    ),
+    ("notebooks/multimodel_bma_candels.py", "agn_alpha"): (
+        "False positive: short name 'alpha' in sfh dict resolves to agn_alpha "
+        "in registry, but context is sfh_dpl_alpha. Legitimate sfh prior."
+    ),
+    ("src/tengri/recipes/__init__.py", "agn_alpha"): (
+        "False positive: short name 'alpha' in sfh dict resolves to agn_alpha "
+        "in registry, but context is sfh_dpl_alpha. Legitimate sfh prior."
+    ),
+    ("tests/contract/test_no_group_key_is_silently_dropped.py", "agn_alpha"): (
+        "False positive: short name 'alpha' in sfh dict resolves to agn_alpha "
+        "in registry, but context is sfh_dpl_alpha. Legitimate sfh prior."
+    ),
+    ("tests/contract/test_param_groups.py", "agn_alpha"): (
+        "False positive: short name 'alpha' in sfh dict resolves to agn_alpha "
+        "in registry, but context is sfh_dpl_alpha. Legitimate sfh prior."
+    ),
+    ("tests/contract/test_param_spec_invariants.py", "agn_alpha"): (
+        "False positive: short name 'alpha' in sfh dict resolves to agn_alpha "
+        "in registry, but context is sfh_dpl_alpha. Legitimate sfh prior."
+    ),
+    ("tests/contract/test_spectrum_lut.py", "agn_alpha"): (
+        "False positive: short name 'alpha' in sfh dict resolves to agn_alpha "
+        "in registry, but context is sfh_dpl_alpha. Legitimate sfh prior."
+    ),
+    ("tests/integration/test_sed_model_build.py", "agn_alpha"): (
+        "False positive: short name 'alpha' in sfh dict resolves to agn_alpha "
+        "in registry, but context is sfh_dpl_alpha. Legitimate sfh prior."
+    ),
+}
 
 
 def _tracked_python_files() -> list[Path]:
@@ -193,6 +249,72 @@ def _prior_sites(tree: ast.AST):
                     yield key.value, value
 
 
+def _agn_prior_sites(tree: ast.AST):
+    """Yield ``(agn_param_name, prior_call)`` for short-form names in dicts.
+
+    Resolves short-form names (e.g., 'log_lbol') to full AGN parameter names
+    (e.g., 'agn_log_lbol') by checking if they resolve in the live registry.
+
+    For any dict literal, for each key whose value is a prior Call:
+    - Skip structural keys (type, *, all_params, sub-block names, etc.)
+    - Try resolving as agn_<key> against the live registry
+    - If it resolves to a registered agn_* parameter, yield it for overlap check
+    - The overlap rule (flag only ZERO-overlap) makes rare false positives harmless
+
+    This approach avoids hand-curated type-name lists that drift silently when
+    new AGN block types are registered (the second-sources-of-truth problem).
+    """
+    # Structural keys that are never parameters, regardless of context
+    _STRUCTURAL_KEYS = {
+        "type",
+        "*",
+        "all_params",
+        "norm",  # Grammar structural keys
+        "disc",
+        "torus",
+        "nlr",
+        "blr",
+        "feii",
+        "atten",
+        "lines",
+        "sf",
+        "agn",  # Sub-block names
+    }
+
+    def _is_structural_key(key: str) -> bool:
+        """True if key is a structural, not a parameter key."""
+        return key in _STRUCTURAL_KEYS
+
+    def _try_resolve_agn_param(short_name: str) -> str | None:
+        """Try to resolve short name to agn_<short_name> if registered."""
+        candidate = f"agn_{short_name}"
+        if registry().get(candidate) is not None:
+            return candidate
+        return None
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Dict):
+            continue
+
+        # For each dict, check all keys whose values are prior Calls
+        for key, value in zip(node.keys, node.values, strict=False):
+            if not (
+                isinstance(key, ast.Constant)
+                and isinstance(key.value, str)
+                and isinstance(value, ast.Call)
+            ):
+                continue
+
+            short_name = key.value
+            if _is_structural_key(short_name):
+                continue
+
+            # Try to resolve as an AGN parameter in the live registry
+            full_name = _try_resolve_agn_param(short_name)
+            if full_name is not None:
+                yield full_name, value
+
+
 def _violates(declared: tuple[float, float], support: tuple[float, float]) -> bool:
     """True when the two intervals share no point."""
     lo, hi = declared
@@ -216,7 +338,22 @@ def main() -> int:
             continue
         scanned += 1
 
+        # Check fully-qualified names (e.g., agn_log_lbol=Uniform(...))
         for param, call in _prior_sites(tree):
+            support = _support(param)
+            if support is None:
+                continue
+            declared = _declared_range(call)
+            if declared is None:
+                continue
+            checked += 1
+            if (rel, param) in ALLOWLIST:
+                continue
+            if _violates(declared, support):
+                violations.append((rel, call.lineno, param, declared, support))
+
+        # Check short-form names in nested AGN dicts (e.g., log_lbol inside agn={...})
+        for param, call in _agn_prior_sites(tree):
             support = _support(param)
             if support is None:
                 continue
