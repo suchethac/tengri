@@ -26,21 +26,57 @@ The Cramér-Rao bound from the Fisher Information Matrix shows that SDSS
 metallicity. Adding NIR or MIR bands breaks the degeneracy by factors of
 2–5×, quantifying the information gain from multiwavelength coverage.
 
+Fisher Information Matrix is computed directly via JAX differentiation on the
+public prediction surface: F = J^T C^{-1} J, where J is the Jacobian of model
+predictions w.r.t. parameters and C^{-1} is the inverse noise covariance.
+
 Reference: Fisher Information Matrix in parameter estimation; see
 Conroy 2013 (ARA&A, 51, 393) for SED fitting context.
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-132
+.. GENERATED FROM PYTHON SOURCE LINES 17-171
+
+
+.. rst-class:: sphx-glr-script-out
+
+.. code-block:: pytb
+
+    Traceback (most recent call last):
+      File "/tengri/examples/advanced/plot_fisher_degeneracy.py", line 29, in <module>
+        import tengri
+      File "/tengri/src/tengri/__init__.py", line 200, in <module>
+        from tengri.inference.jit_engine import clear_shared_caches, lean, persistent
+      File "/tengri/src/tengri/inference/__init__.py", line 8, in <module>
+        from tengri.inference import _registration as _registration
+      File "/tengri/src/tengri/inference/_registration.py", line 32, in <module>
+        from tengri.inference.backends.map_dispatch import (
+      File "/tengri/src/tengri/inference/backends/__init__.py", line 6, in <module>
+        from tengri.inference.backends.map_dispatch import run_map
+      File "/tengri/src/tengri/inference/backends/map_dispatch.py", line 22, in <module>
+        from tengri.inference.likelihoods.gaussian import inv_noise_std
+      File "/tengri/src/tengri/inference/likelihoods/__init__.py", line 14, in <module>
+        from tengri.inference.likelihoods.gaussian import (
+      File "/tengri/src/tengri/inference/likelihoods/gaussian.py", line 37, in <module>
+        from tengri.utils.scale import whiten
+      File "/tengri/src/tengri/utils/__init__.py", line 4, in <module>
+        from tengri.utils.conversions import (
+      File "/tengri/src/tengri/utils/conversions.py", line 39, in <module>
+        from tengri.utils.scale import apply_log10_scale, log10_flux_scale, log10_four_pi_dl2
+      File "/tengri/src/tengri/utils/scale.py", line 20, in <module>
+        LOG10_4PI = float(jnp.log10(4.0 * jnp.pi))  # ~1.09921
+                          ^^^^^^^^^^^^^^^^^^^^^^^
+      File "/Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/literals.py", line 159, in __array__
+        return np.asarray(self.val, dtype=dtype, copy=copy)  # pytype: disable=wrong-keyword-args
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    TypeError: asarray() got an unexpected keyword argument 'copy'
+    --------------------
+    For simplicity, JAX has removed its internal frames from the traceback of the following exception. Set JAX_TRACEBACK_FILTERING=off to include these.
 
 
 
-.. image-sg:: /auto_examples/advanced/images/sphx_glr_plot_fisher_degeneracy_001.png
-   :alt: plot fisher degeneracy
-   :srcset: /auto_examples/advanced/images/sphx_glr_plot_fisher_degeneracy_001.png
-   :class: sphx-glr-single-img
 
 
 
-
+|
 
 .. code-block:: Python
 
@@ -57,9 +93,9 @@ Conroy 2013 (ARA&A, 51, 393) for SED fitting context.
     import numpy as np
 
     import tengri
-    from tengri.analysis.diagnostics.fisher import compute_fisher_matrix, fisher_parameter_errors
+    from tengri.plot import setup_style
 
-    tengri.analysis.plotting.setup_style()
+    setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
     ssp = tengri.load_ssp()
@@ -128,10 +164,45 @@ Conroy 2013 (ARA&A, 51, 393) for SED fitting context.
             )
             phot = jnp.abs(mdl.predict_photometry(true_params))
             noise = phot / 20.0
-            fim, _ = compute_fisher_matrix(
-                mdl, true_params, noise, data_type="photometry", param_names=fisher_params
-            )
-            errs = np.array(fisher_parameter_errors(fim))
+
+            # Compute Fisher Information Matrix using JAX jacobian.
+            # F = J^T C^{-1} J, where J is the Jacobian and C^{-1} is inverse noise covariance.
+            def predict_fn(params_dict):
+                """Return photometry for a parameter dictionary."""
+                return mdl.predict_photometry(params_dict)
+
+            # Build an array of the free parameters in the order they appear in fisher_params.
+            param_values = []
+            for pname in fisher_params:
+                param_values.append(true_params[pname])
+            param_array = jnp.array(param_values)
+
+            def forward_free_params(free_array):
+                """Forward model taking only free parameters; reconstruct full params dict."""
+                params_dict = true_params.copy()
+                for i, pname in enumerate(fisher_params):
+                    params_dict[pname] = free_array[i]
+                return predict_fn(params_dict)
+
+            # Compute Jacobian of predictions w.r.t. free parameters.
+            jac = jax.jacobian(forward_free_params)(param_array)  # shape: (n_bands, n_params)
+
+            # Inverse noise covariance (diagonal).
+            noise_var = noise ** 2
+            c_inv_diag = 1.0 / noise_var
+
+            # Fisher = J^T C^{-1} J
+            fim = jnp.dot(jac.T, jac * c_inv_diag[jnp.newaxis, :])  # (n_params, n_params)
+
+            # Cramér-Rao bound: sqrt(diag(F^{-1}))
+            try:
+                fim_inv = jnp.linalg.inv(fim)
+                errs = np.array(np.sqrt(np.maximum(np.diag(fim_inv), 0)))
+            except np.linalg.LinAlgError:
+                # Singular matrix; use pseudoinverse as fallback.
+                fim_inv = jnp.linalg.pinv(fim)
+                errs = np.array(np.sqrt(np.maximum(np.diag(fim_inv), 0)))
+
             errs = np.where(np.isfinite(errs) & (errs > 0), errs, 5.0)
             sigmas[fname] = np.minimum(errs, 5.0)
         except Exception as e:
@@ -163,11 +234,6 @@ Conroy 2013 (ARA&A, 51, 393) for SED fitting context.
     ax.legend(fontsize=10, frameon=False)
     fig.tight_layout()
     plt.savefig("plot_fisher_degeneracy.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 7.617 seconds)
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_fisher_degeneracy.py:

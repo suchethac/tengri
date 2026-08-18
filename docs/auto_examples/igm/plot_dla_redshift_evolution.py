@@ -25,7 +25,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri.analysis.plotting import setup_style
+from tengri.plot import setup_style
 from tengri.igm import dla_transmission_obs
 
 setup_style()

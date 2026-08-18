@@ -1,0 +1,172 @@
+"""
+Predicting SEDs for a simulated population: what collapsing Z(t) costs
+======================================================================
+
+Replacing metallicity history Z(t) with its mass-weighted mean introduces
+10–23% flux errors in *u* and 1–6% in *z*. The SED is a nonlinear
+mass-weighted sum of SSP templates; young metal-rich stars (dominant in UV)
+and old metal-poor stars do not average.
+
+Reference: Conroy+2013.
+"""
+
+import os
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
+
+import warnings
+
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+import numpy as np
+
+import tengri
+from tengri import LOG10_ZSUN
+from tengri.plot import setup_style
+
+setup_style()
+warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
+
+ssp = tengri.load_ssp()
+bands = ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
+obs = tengri.Observation(photometry=tengri.Photometry.from_names(bands))
+
+Z_OBS = 0.1
+N_GAL, N_T = 6, 60
+t_gyr = np.linspace(0.0, 12.5, N_T)
+
+# Stand-in for a snapshot's merger-tree histories: delayed-tau SFHs whose
+# formation timescale varies across the population, from a fast early-forming
+# galaxy to one still rising today.
+tau_gyr = np.linspace(0.7, 6.0, N_GAL)
+sfr = (t_gyr[None, :] / tau_gyr[:, None]) * np.exp(-t_gyr[None, :] / tau_gyr[:, None])
+sfr *= 40.0 / sfr.max(axis=1, keepdims=True)
+
+# Closed-box-flavored enrichment: metallicity tracks the cumulative mass formed,
+# so a fast-forming galaxy reaches solar early and a slow one is still metal-poor.
+cumulative = np.cumsum(sfr, axis=1)
+cumulative /= cumulative[:, -1:]
+logzsol = -2.6 + 2.7 * cumulative
+
+# The SSP's grid is a hard limit on what the templates can represent, and the
+# lookup clips onto it silently. Simulations reach primordial metallicity at
+# early times as a matter of course, so this clip is the ordinary case — done
+# here explicitly, because from_histories refuses an off-grid history by default
+# rather than let the clamp happen out of sight (#1677).
+grid_lo = float(np.min(ssp.ssp_lgmet)) - LOG10_ZSUN
+grid_hi = float(np.max(ssp.ssp_lgmet)) - LOG10_ZSUN
+logzsol_clipped = np.clip(logzsol, grid_lo, grid_hi)
+
+params = {"dust_tau_diff": np.full(N_GAL, 0.25)}
+
+model_zt = tengri.SEDModel.build(
+    ssp,
+    observation=obs,
+    sfh={"type": "table"},
+    met={"type": "table"},
+    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_bc": 0.4},
+    redshift=tengri.Fixed(Z_OBS),
+)
+fwd_zt = tengri.ForwardModel.build(sed=model_zt, observation=obs)
+flux_zt = np.asarray(
+    tengri.Catalog.from_histories(
+        fwd_zt, t_gyr=t_gyr, sfr=sfr, met=logzsol_clipped, params=params
+    ).predict()
+)
+
+# The approximation under test: one metallicity per galaxy, weighted by the mass
+# each node formed — the fairest single number the history can be reduced to.
+weights = sfr * np.gradient(t_gyr)[None, :]
+mean_logzsol = (weights * logzsol_clipped).sum(axis=1) / weights.sum(axis=1)
+
+model_mean = tengri.SEDModel.build(
+    ssp,
+    observation=obs,
+    sfh={"type": "table"},
+    met={"logzsol": tengri.Uniform(grid_lo, grid_hi)},
+    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_bc": 0.4},
+    redshift=tengri.Fixed(Z_OBS),
+)
+fwd_mean = tengri.ForwardModel.build(sed=model_mean, observation=obs)
+flux_mean = np.asarray(
+    tengri.Catalog.from_histories(
+        fwd_mean,
+        t_gyr=t_gyr,
+        sfr=sfr,
+        params={**params, "met_logzsol": mean_logzsol},
+    ).predict()
+)
+
+fig, axes = plt.subplots(2, 2, figsize=(11.5, 7.6))
+cmap = plt.get_cmap("viridis")
+norm = mpl.colors.Normalize(vmin=tau_gyr.min(), vmax=tau_gyr.max())
+colors = [cmap(norm(t)) for t in tau_gyr]
+
+ax = axes[0, 0]
+for i, c in enumerate(colors):
+    ax.plot(t_gyr, sfr[i], color=c, lw=1.4)
+ax.set(xlabel="Cosmic time [Gyr]", ylabel=r"SFR [M$_\odot$ yr$^{-1}$]")
+
+ax = axes[0, 1]
+ax.axhspan(grid_lo, grid_hi, color="0.85", zorder=0)
+for i, c in enumerate(colors):
+    ax.plot(t_gyr, logzsol[i], color=c, lw=1.4, ls=":", alpha=0.6)
+    ax.plot(t_gyr, logzsol_clipped[i], color=c, lw=1.4)
+ax.annotate(
+    "SSP grid",
+    xy=(0.03, grid_lo + 0.12),
+    xycoords=("axes fraction", "data"),
+    fontsize=8,
+    color="0.35",
+)
+# Dotted below the band is the unclipped track; the grid floor is where the
+# templates stop, not where the physics does.
+ax.set(xlabel="Cosmic time [Gyr]", ylabel=r"$\log_{10}(Z/Z_\odot)$")
+
+ax = axes[1, 0]
+XLIM_UM = (0.12, 3.0)  # the span the ugriz bands sample at z=0.1, plus context
+peak = 0.0
+for i, c in enumerate(colors):
+    pred = model_zt.predict(
+        {
+            "dust_tau_diff": 0.25,
+            "sfh_t_gyr": t_gyr,
+            "sfh_sfr": sfr[i],
+            "met_history": logzsol_clipped[i],
+        }
+    )
+    wave = np.asarray(pred.wave_rest)
+    nu_lnu = wave * np.asarray(pred.rest_sed())
+    ax.loglog(wave / 1e4, nu_lnu, color=c, lw=1.4)
+    inside = (wave / 1e4 >= XLIM_UM[0]) & (wave / 1e4 <= XLIM_UM[1])
+    peak = max(peak, float(nu_lnu[inside].max()))
+# Four decades below the brightest curve: the early-quenched galaxy's UV falls
+# ~20 dex, which would flatten every other curve into a line if left in frame.
+ax.set(
+    xlabel=r"$\lambda_{\rm rest}$ [$\mu$m]",
+    ylabel=r"$\nu L_\nu$ [erg s$^{-1}$]",
+    xlim=XLIM_UM,
+    ylim=(peak / 1e4, peak * 3.0),
+)
+
+ax = axes[1, 1]
+residual = 100.0 * (flux_mean / flux_zt - 1.0)
+x = np.arange(len(bands))
+for i, c in enumerate(colors):
+    ax.plot(x, residual[i], color=c, lw=1.4, marker="o", ms=4)
+ax.axhline(0.0, color="0.4", lw=0.8, zorder=0)
+ax.set(
+    xticks=x,
+    xlabel="Band",
+    ylabel=r"mean-$Z$ flux error [%]",
+)
+ax.set_xticklabels([b.split("_")[-1] for b in bands])
+
+cbar = fig.colorbar(
+    plt.cm.ScalarMappable(norm=norm, cmap=cmap),
+    ax=axes,
+    pad=0.015,
+    label=r"SFH timescale $\tau$ [Gyr]",
+)
+
+fig.savefig("plot_workflow_simulation_seds.png", dpi=150, bbox_inches="tight")

@@ -59,7 +59,7 @@ disc); Feltre et al. 2016 (NLR grid).
     import numpy as np
 
     import tengri
-    from tengri.analysis.plotting import setup_style
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -84,7 +84,40 @@ disc); Feltre et al. 2016 (NLR grid).
 
 
 
+.. rst-class:: sphx-glr-script-out
 
+.. code-block:: pytb
+
+    Traceback (most recent call last):
+      File "/tengri/examples/agn/plot_agn_free_param_sensitivity.py", line 38, in <module>
+        import tengri
+      File "/tengri/src/tengri/__init__.py", line 200, in <module>
+        from tengri.inference.jit_engine import clear_shared_caches, lean, persistent
+      File "/tengri/src/tengri/inference/__init__.py", line 8, in <module>
+        from tengri.inference import _registration as _registration
+      File "/tengri/src/tengri/inference/_registration.py", line 32, in <module>
+        from tengri.inference.backends.map_dispatch import (
+      File "/tengri/src/tengri/inference/backends/__init__.py", line 6, in <module>
+        from tengri.inference.backends.map_dispatch import run_map
+      File "/tengri/src/tengri/inference/backends/map_dispatch.py", line 22, in <module>
+        from tengri.inference.likelihoods.gaussian import inv_noise_std
+      File "/tengri/src/tengri/inference/likelihoods/__init__.py", line 14, in <module>
+        from tengri.inference.likelihoods.gaussian import (
+      File "/tengri/src/tengri/inference/likelihoods/gaussian.py", line 37, in <module>
+        from tengri.utils.scale import whiten
+      File "/tengri/src/tengri/utils/__init__.py", line 4, in <module>
+        from tengri.utils.conversions import (
+      File "/tengri/src/tengri/utils/conversions.py", line 39, in <module>
+        from tengri.utils.scale import apply_log10_scale, log10_flux_scale, log10_four_pi_dl2
+      File "/tengri/src/tengri/utils/scale.py", line 20, in <module>
+        LOG10_4PI = float(jnp.log10(4.0 * jnp.pi))  # ~1.09921
+                          ^^^^^^^^^^^^^^^^^^^^^^^
+      File "/Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/literals.py", line 159, in __array__
+        return np.asarray(self.val, dtype=dtype, copy=copy)  # pytype: disable=wrong-keyword-args
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    TypeError: asarray() got an unexpected keyword argument 'copy'
+    --------------------
+    For simplicity, JAX has removed its internal frames from the traceback of the following exception. Set JAX_TRACEBACK_FILTERING=off to include these.
 
 
 
@@ -104,18 +137,6 @@ blocks consume. Before the registry fix this set was empty.
     )
     free_agn = [p for p in model_free.spec.free_params if p.startswith("agn_")]
     print(f"AGN parameters freed by agn={{'all_params': FREE}} (block-scoped): {sorted(free_agn)}")
-
-
-
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    AGN parameters freed by agn={'all_params': FREE} (block-scoped): ['agn_a_spin', 'agn_cos_inc', 'agn_ir_frac', 'agn_log_mbh', 'agn_nlr_cf', 'agn_nlr_line_efficiency', 'agn_tau', 'agn_theta_torus', 'agn_torus_frac']
-
-
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 73-76
@@ -164,22 +185,6 @@ a time in the prediction dict — a clean, deterministic parameter sweep.
     fig.suptitle("Each freed AGN parameter visibly reshapes the SED (no silent no-ops)")
     fig.tight_layout()
     plt.savefig("plot_agn_free_param_sensitivity.png", dpi=150, bbox_inches="tight")
-
-
-
-.. image-sg:: /auto_examples/agn/images/sphx_glr_plot_agn_free_param_sensitivity_001.png
-   :alt: Each freed AGN parameter visibly reshapes the SED (no silent no-ops), $\log_{10}(M_{\rm BH}/M_\odot)$, $\log_{10}(L/L_{\rm Edd})$, Nenkova torus $\tau_{9.7}$
-   :srcset: /auto_examples/agn/images/sphx_glr_plot_agn_free_param_sensitivity_001.png
-   :class: sphx-glr-single-img
-
-
-
-
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 7.766 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_free_param_sensitivity.py:
