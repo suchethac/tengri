@@ -4960,7 +4960,27 @@ class SEDModel:
             else:
                 from tengri.utils.scale import pow10
 
+                # The published catalog is indexed on ``state.derived['line_waves']``
+                # — the backend's FULL line list — while the fast branch above set
+                # ``all_waves`` to ``grid.wavelengths``, which holds only the lines
+                # the observation asked for. Taking the luminosities without the
+                # wavelengths that index them pairs two different catalogs, and the
+                # target match below then reads the first ``n_target`` entries of the
+                # full list: for Cue those are the far-UV 923-937 A lines, returned
+                # under the labels Halpha / Hbeta / [OIII] and low by ~2.3e4 (#1943).
+                #
+                # ``tolerance_aa`` cannot catch that — the WAVELENGTHS match the
+                # targets exactly; only the luminosities come from the wrong array.
+                # Which is why it went unnoticed on the default ``approx='auto'``
+                # path for every dusty fit with a discrete-catalog backend.
+                #
+                # Only a dusty chain reaches here with a grid: dust sets
+                # ``must_materialize_sed``, which disarms ``use_grid`` and so leaves
+                # the nebular component publishing the attenuated catalog (#1281).
+                # A dust-free model publishes none, takes the fallback screen above,
+                # and was never affected.
                 all_lums = pow10(jnp.asarray(_log_atten))
+                all_waves = jnp.asarray(state.derived["line_waves"])
 
         if target_wavelengths is not None:
             target_wavelengths = jnp.asarray(target_wavelengths)
