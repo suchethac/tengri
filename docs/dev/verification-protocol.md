@@ -122,7 +122,7 @@ Test paths are checked by `tools/check_verification_protocol_paths.py` — see
 | Dust IR emission physics (MBB, Casey12, CMB) | Casey 2012 | none | `tests/crossval/test_dust_emission_physics.py` | CROSSVAL |
 | `dh02_ce01` cold dust | Dale & Helou 2002; Chary & Elbaz 2001 | AGNfitter-rX grid | `tests/crossval/test_dh02_ce01_vs_agnfitter.py` | CROSSVAL |
 | Schreiber 2018 IR library | Schreiber et al. 2018 | AGNfitter-rX grid | `tests/crossval/test_schreiber2018_vs_agnfitter.py` | NOT RUN — `importorskip` |
-| MAGPHYS-family IR templates | da Cunha et al. 2008 | none | `tests/crossval/test_magphys_crossval.py` | NOT RUN — module skip, `magphys_dc08` not implemented |
+| MAGPHYS-family IR templates | da Cunha et al. 2008 | none | test file removed in #1955 (was a stub: magphys_dc08 never implemented) | NOT RUN — model not implemented |
 
 ### Nebular and shocks
 
