@@ -19,7 +19,6 @@ directly via :class:`SimpleNamespace`.
 
 
 from types import SimpleNamespace
-from typing import ClassVar
 
 import jax.numpy as jnp
 import pytest
@@ -27,51 +26,9 @@ import pytest
 from tengri.inference.likelihoods.gaussian import diag_gaussian_log_prob
 from tengri.inference.loss_functions import build_loglikelihood_fn, build_loss_fn
 from tengri.inference.photometry_likelihood import PhotometryLikelihood
+from tests._shared_mocks import MockSpec
 
-
-class _IdentityDist:
-    """Mock distribution: unstandardize is identity, returns the same value."""
-
-    bounds = (-jnp.inf, jnp.inf)
-
-    def unstandardize(self, x):
-        return x
-
-
-class _MockSpec:
-    """Tiny stand-in for :class:`tengri.Parameters` used by Fitter."""
-
-    stochastic = False
-
-    def __init__(self, free_names):
-        self._free_names = free_names
-        # has_noise_model() reads spec.all_params — provide an empty
-        # iterable so the legacy path's noise-detection short-circuits.
-        self.all_params = []
-
-    @property
-    def free_params(self):
-        return self._free_names
-
-    def get_distribution(self, name):
-        return _IdentityDist()
-
-    def get_fixed_values(self):
-        return {}
-
-    def resolve_mirrors(self, params):
-        return params
-
-    def sample(self, key):
-        """Return a dict of default parameter values for all free parameters.
-
-        Matches the contract of Parameters.sample: takes a PRNG key and returns
-        a dict mapping parameter names to sampled values. The eager channel-scale
-        pre-check (#1495) calls this at loss-build time to obtain the reference
-        point it evaluates each channel at, so a spec that reaches the loss
-        builder must provide it.
-        """
-        return {name: jnp.asarray(1.0) for name in self._free_names}
+_MockSpec = MockSpec
 
 
 class _MockModel:
@@ -210,29 +167,10 @@ def test_prior_term_added_for_free_params_and_psd_xi():
     """The user-likelihood short-circuit must add ½ ξᵀξ over both
     free_names AND psd_xi (stochastic SFH case)."""
 
-    class _StochasticSpec:
-        stochastic = True
-        all_params: ClassVar[list[str]] = []
-
+    # Use MockSpec with stochastic=True for this test
+    class _StochasticSpec(MockSpec):
         def __init__(self, free_names):
-            self._free_names = free_names
-
-        @property
-        def free_params(self):
-            return self._free_names
-
-        def get_distribution(self, name):
-            return _IdentityDist()
-
-        def get_fixed_values(self):
-            return {}
-
-        def resolve_mirrors(self, params):
-            return params
-
-        def sample(self, key):
-            """Reference point for the eager channel-scale pre-check (#1495)."""
-            return {name: jnp.asarray(1.0) for name in self._free_names}
+            super().__init__(free_names, stochastic=True)
 
     fnu_pred = jnp.array([1.0e-29, 2.0e-29])
     fnu_obs = jnp.array([1.0e-29, 2.0e-29])

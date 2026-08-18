@@ -26,6 +26,8 @@ os.environ.setdefault("JAX_PLATFORMS", "cpu")
 # Disable background compilation to get accurate JIT timing
 os.environ.setdefault("TENGRI_NO_BACKGROUND_COMPILE", "1")
 
+from dsps import SSPData
+
 from tengri import Fitter, Observation, Parameters, Photometry, SEDModel
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
 from tengri.observation.filters import load_filter_set
@@ -34,11 +36,9 @@ from tengri.parameters.priors import Fixed, Uniform
 # ── Skip if SSP data not available ────────────────────────────────
 _DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 _MIST_SSP = _DATA_DIR / "ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
-_BC03_SSP = _DATA_DIR / "ssp_bc03_miles_chabrier.h5"
 _BPASS_SSP = _DATA_DIR / "ssp_bpass_imf170_300_100.h5"
 
 _MIST_EXISTS = _MIST_SSP.is_file()
-_BC03_EXISTS = _BC03_SSP.is_file()
 _BPASS_EXISTS = _BPASS_SSP.is_file()
 
 pytestmark = pytest.mark.skipif(
@@ -73,19 +73,22 @@ def mist_ssp():
 
 
 @pytest.fixture(scope="session")
-def bc03_ssp():
-    """BC03 SSP data (legacy, smaller grid)."""
-    if not _BC03_EXISTS:
-        pytest.skip("BC03 SSP not available")
-    return load_ssp_data(str(_BC03_SSP))
-
-
-@pytest.fixture(scope="session")
 def bpass_ssp():
-    """BPASS SSP data (no mass-remaining table → crashes posterior.derived)."""
-    if not _BPASS_EXISTS:
-        pytest.skip("BPASS SSP not available")
-    return load_ssp_data(str(_BPASS_SSP))
+    """BPASS SSP data (no mass-remaining table → crashes posterior.derived).
+
+    Synthesized fixture to reproduce BUG-NSS-01: ssp_mass_remaining missing
+    from BPASS causes posterior.derived to crash with TypeError.
+    """
+    if _BPASS_EXISTS:
+        return load_ssp_data(str(_BPASS_SSP))
+    # Synthesize minimal BPASS-shaped SSPData lacking ssp_mass_remaining
+    # to reproduce BUG-NSS-01 (posterior.derived crash with missing table).
+    return SSPData(
+        ssp_lgmet=np.array([-2.0, -1.5, -1.0, -0.5, 0.0]),
+        ssp_lg_age_gyr=np.array([6.0, 6.5, 7.0, 7.5, 8.0, 8.5, 9.0, 9.5, 10.0, 10.15]),
+        ssp_wave=np.logspace(3, 4, 300),  # 1000-10000 Å
+        ssp_flux=np.ones((5, 10, 300)),  # (n_met, n_age, n_wave)
+    )
 
 
 @pytest.fixture(scope="session")
@@ -499,7 +502,6 @@ class TestStandardGalaxyWorkflows:
 class TestKnownBugReproduction:
     """Category C: Known bug reproduction tests."""
 
-    @pytest.mark.skipif(not _BPASS_EXISTS, reason="BPASS SSP required for BUG-NSS-01 test")
     def test_c1_bpass_posterior_derived_crash(self, bpass_ssp, mock_obs_z1, mock_data_z1, rng_key):
         """C1. BPASS + posterior.derived crash (BUG-NSS-01).
 
