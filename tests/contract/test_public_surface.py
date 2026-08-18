@@ -179,6 +179,9 @@ EXPECTED_ALL = frozenset(
         "SEDResult",
         # Top-level convenience verbs
         "fit_batch",
+        # Bayesian model averaging over per-model evidences (nss/laplace/hmc_is)
+        "bma_weights",
+        "bma_resample",
         # Catalog fitting — the astronomer-facing noun (#1317, spec §6.2)
         "Catalog",
         # Data discovery helpers

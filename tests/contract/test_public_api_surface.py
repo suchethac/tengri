@@ -92,6 +92,9 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         # Only the single entry point is advertised; the rest live in
         # tengri.utils.jax_cache / tengri.inference.jit_engine.
         "clear_cache",
+        # ── Bayesian model averaging ────────────────────────────────
+        "bma_resample",
+        "bma_weights",
         # ── Top-level convenience verbs ─────────────────────────────
         "cite_components",
         "doctor",
