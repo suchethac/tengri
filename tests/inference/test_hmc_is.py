@@ -51,11 +51,11 @@ def smooth_fitter():
     # Deterministic interior truth: all values interior to Uniform bounds.
     # Avoid extremes to minimize posterior curvature, improving Laplace accuracy.
     truth = {
-        'sfh_dpl_alpha': 1.2,  # interior of (0.5, 3.0)
-        'sfh_dpl_tau_gyr': 4.0,  # interior of (0.5, 10.0)
-        'sfh_dpl_log_total_mass': 10.0,  # interior of (7.0, 12.5)
-        'met_logzsol': -0.8,  # interior of (-2.0, 0.2)
-        'dust_tau_bc': 1.2,  # interior of (0.0, 3.0)
+        "sfh_dpl_alpha": 1.2,  # interior of (0.5, 3.0)
+        "sfh_dpl_tau_gyr": 4.0,  # interior of (0.5, 10.0)
+        "sfh_dpl_log_total_mass": 10.0,  # interior of (7.0, 12.5)
+        "met_logzsol": -0.8,  # interior of (-2.0, 0.2)
+        "dust_tau_bc": 1.2,  # interior of (0.0, 3.0)
     }
     mock = model.mock(truth, snr=20.0, key=jax.random.PRNGKey(1))
     return Fitter(model, mock.flux_obs, mock.noise)

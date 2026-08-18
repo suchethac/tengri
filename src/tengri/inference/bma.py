@@ -182,15 +182,13 @@ def bma_resample(
     >>> import types
     >>> key = jax.random.PRNGKey(42)
     >>> p1 = types.SimpleNamespace(
-    ...     log_evidence=0.0,
-    ...     samples={'param_a': np.array([1.0, 2.0, 3.0])}
+    ...     log_evidence=0.0, samples={"param_a": np.array([1.0, 2.0, 3.0])}
     ... )
     >>> p2 = types.SimpleNamespace(
-    ...     log_evidence=0.0,
-    ...     samples={'param_a': np.array([10.0, 20.0, 30.0])}
+    ...     log_evidence=0.0, samples={"param_a": np.array([10.0, 20.0, 30.0])}
     ... )
     >>> resampled = bma_resample([p1, p2], n_draws=100, key=key)
-    >>> resampled['param_a'].shape
+    >>> resampled["param_a"].shape
     (100,)
     """
     # Convert to sequence if needed
