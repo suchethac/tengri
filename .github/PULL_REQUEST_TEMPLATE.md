@@ -47,6 +47,8 @@ have failed PRs that looked green locally.
 - [ ] Equations checked against the primary source, and cited
 - [ ] Regression test added if physics changed
 - [ ] CHANGELOG entry if user-facing
+- [ ] New physics module has a VERIFICATION entry
+- [ ] New public names exported from `__init__.py`
 
 ## AI-use disclosure
 

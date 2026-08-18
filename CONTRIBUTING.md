@@ -104,7 +104,7 @@ Tengri's physics blocks (AGN models, dust attenuation laws, SFH variants, nebula
    tengri.search("part_of_name")   # cross-menu search finds it
    ```
    Counts in `summary()` and `help()` are live from registries; no doc edit needed.
-6. **Open a PR.** GitHub Actions runs `tools/check_param_prefixes.py` (parameter naming guard) and a 30-second smoke test before the full suite.
+6. **Open a PR.** CI runs the `lint` and `smoke` gate jobs, about forty steps between them, before the full suite. The pull-request template shows how to run that list locally.
 
 Status conventions: `production` (validated), `experimental` (works but not yet validated against observations or another code), `demo` (toy model, not for science), `deprecated` (slated for removal).
 
@@ -260,13 +260,8 @@ Expect requested changes; that is the point of review.
 
 ## PR checklist
 
-- [ ] `ruff check src/ tests/` clean
-- [ ] `pytest tests/ -q` passes locally
-- [ ] new / modified functions have numpydoc docstrings
-- [ ] new physics modules have a VERIFICATION entry
-- [ ] new exports added to `__init__.py`
-- [ ] `CHANGELOG.md` updated for user-visible changes
-- [ ] AI-assistance checkbox filled in the PR template if applicable
+The pull-request template carries the list, including the commands that extract
+the gate steps CI actually runs. Fill it in rather than working from memory.
 
 ## AI-assisted contributions
 

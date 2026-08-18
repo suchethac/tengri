@@ -264,11 +264,8 @@ model, and code used in a fit.
 - [CHANGELOG.md](CHANGELOG.md) · [CONTRIBUTORS.md](CONTRIBUTORS.md)
 
 Contributors at every level are welcome. If a science case you care
-about isn't supported yet (a new emission mechanism, an unusual
-observation mode, a sampler from a paper you read last week), that's
-exactly the conversation we want to have. The longer-term goal is for
-tengri to be a shared platform for the kinds of inference that
-high-dimensional, differentiable forward models make possible.
+about isn't supported yet, that's exactly the conversation we want to
+have.
 
 For anything that doesn't fit in an issue (collaborations, the
 `tengri-project` org move, joining the project), write to
