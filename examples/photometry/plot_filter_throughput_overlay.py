@@ -32,8 +32,8 @@ import numpy as np
 
 import tengri
 from tengri import load_filter
-from tengri.plot import setup_style
 from tengri.igm import igm_transmission
+from tengri.plot import setup_style
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")

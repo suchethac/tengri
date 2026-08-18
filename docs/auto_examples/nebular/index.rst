@@ -14,12 +14,8 @@ SSP grid. The live backends instead compute it, and expect a bare stellar grid.
 Feed a bare grid to the baked-in path and both continuum and line fluxes come
 out low, with no error raised.
 
-Gas-phase metallicity is its own knob and does not follow the stellar one. Shock emission examples include line-ratio diagnostics; a composable shock-group sweep is in development (Task 4).
+Gas-phase metallicity is its own knob and does not follow the stellar one. Shock emission examples include line-ratio diagnostics and a composable shock-group sweep across shock parameters.
 
-
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
 
 
 .. raw:: html

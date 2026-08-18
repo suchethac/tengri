@@ -8,10 +8,6 @@ Recipes
 Recipe comparison, introspection tour, and custom filter design.
 
 
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
-
 
 .. raw:: html
 

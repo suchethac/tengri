@@ -6,10 +6,6 @@ Examples gallery
 Run a script locally with ``python examples/quickstart/plot_model_summary_walkthrough.py``. Physics examples (dust curves, SFH shapes, AGN spectra) require only core dependencies. Fetch an SSP grid via ``import tengri; tengri.download_ssp()``.
 
 
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
-
 
 .. raw:: html
 
@@ -28,10 +24,6 @@ Quick Start
 
 Model-summary walkthrough, SED dust anatomy, nebular-backend swap, and components-isolated anatomy tour. Fitting and inference examples live in the tutorial notebooks.
 
-
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
 
 
 .. raw:: html
@@ -120,10 +112,6 @@ Recipes
 Recipe comparison, introspection tour, and custom filter design.
 
 
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
-
 
 .. raw:: html
 
@@ -193,10 +181,6 @@ Stellar Population Synthesis
 
 SSP grid and age/metallicity sweeps, IMF choice, mass-to-light band comparison, and library shootout.
 
-
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
 
 
 .. raw:: html
@@ -318,10 +302,6 @@ Star Formation Histories
 
 Parametric forms (DPL, delayed-exponential, lognormal) and non-parametric (PSD-governed stochastic). Quenching pathways, burst observability, and SFH form comparison.
 
-
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
 
 
 .. raw:: html
@@ -495,10 +475,6 @@ Metallicity
 Per-SSP-library Z☉ differs: MIST 0.0142, BC03/Padova 0.0190, PARSEC 0.0152, BASTI 0.0200. Cross-code comparisons must reason in absolute log(Z). Stellar and gas-phase Z are separate knobs. Age–metallicity degeneracy in broadband data. α-element enhancement.
 
 
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
-
 
 .. raw:: html
 
@@ -592,12 +568,8 @@ SSP grid. The live backends instead compute it, and expect a bare stellar grid.
 Feed a bare grid to the baked-in path and both continuum and line fluxes come
 out low, with no error raised.
 
-Gas-phase metallicity is its own knob and does not follow the stellar one. Shock emission examples include line-ratio diagnostics; a composable shock-group sweep is in development (Task 4).
+Gas-phase metallicity is its own knob and does not follow the stellar one. Shock emission examples include line-ratio diagnostics and a composable shock-group sweep across shock parameters.
 
-
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
 
 
 .. raw:: html
@@ -796,10 +768,6 @@ missing template raises ``FileNotFoundError`` rather than quietly substituting
 a worse model.
 
 
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
-
 
 .. raw:: html
 
@@ -937,10 +905,6 @@ Dust Emission
 
 Dust emission templates auto-load from ``data/``; analytic fallbacks are not suitable for science. PAH features in Draine & Li templates (q_PAH and U_min sweeps). Mid-IR PAH diagnostics distinguish star-forming, AGN, and composite systems. Temperature sweeps. Template libraries: BOSA, THEMIS, PAHspec, Astrodust (HD23).
 
-
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
 
 
 .. raw:: html
@@ -1113,10 +1077,6 @@ AGN Models
 
 Torus models in `components/agn/torus.py` are toy models; SKIRTOR is the one for science. Disc continua (multicolor, KD18, relagn, qsogen), narrow-/broad-line and FeII emission, polar-dust and Type 1/2 attenuation. Cross-validated against CIGALE and AGNfitter.
 
-
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
 
 
 .. raw:: html
@@ -1392,10 +1352,6 @@ Radio
 Star formation (free-free and synchrotron) and AGN (radio-loud) components. Far-infrared–radio correlation and non-thermal spectral slopes. Model-family comparison included.
 
 
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
-
 
 .. raw:: html
 
@@ -1533,10 +1489,6 @@ X-ray Emission
 
 X-ray binaries (HMXB, LMXB) scaled with SFR and stellar mass. AGN coronae: luminosity, photon index γ, exponential cutoff E_cut, UV-to-X-ray slope α_ox. Model-family comparison included.
 
-
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
 
 
 .. raw:: html
@@ -1676,10 +1628,6 @@ IGM
 Intergalactic-medium absorption: Madau vs Inoue prescriptions, Lyα forest, damped Lyα systems. Lyman-break/dropout signature in high-z photometric selection. IGM `igm_transmission(wave_obs, z)` takes observed-frame wavelengths (not rest-frame).
 
 
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
-
 
 .. raw:: html
 
@@ -1800,10 +1748,6 @@ Photometry
 
 Broadband filter selection, cosmological dimming, color tracks and redshift evolution. Diagnostic planes: WISE/IRAC AGN wedges, red sequence/blue cloud. Photometric-redshift color degeneracies.
 
-
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
 
 
 .. raw:: html
@@ -1943,10 +1887,6 @@ Spectroscopy
 Absorption-line indices (D4000, Hδ) from stellar age and metallicity. Spectral indices vs age. Velocity dispersion, line broadening, and velocity offset. Instrumental resolution effects. High-redshift example: z ≈ 6 Lyα emitter.
 
 
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
-
 
 .. raw:: html
 
@@ -2084,10 +2024,6 @@ Use Cases
 
 Paper-style diagnostics: UVJ, JWST color-color, SFR indicators, age–dust degeneracy, main sequence evolution, dropout selection, spectral indices. Simulated-population Catalog examples.
 
-
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
 
 
 .. raw:: html
@@ -2312,10 +2248,6 @@ Advanced Topics
 Extension-point demonstration (SEDModelComponent), Fisher degeneracy, and validation techniques: gradient vs finite-difference, mass conservation, redshift-frame invariance, WavePrecomp accuracy.
 
 
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
-
 
 .. raw:: html
 
@@ -2436,10 +2368,6 @@ Showcase
 
 Full-stack demonstrations: population forward modeling, gradient diagnostics, end-to-end workflows.
 
-
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
 
 
 .. raw:: html

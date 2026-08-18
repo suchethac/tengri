@@ -56,8 +56,8 @@ Reference: Wolfe et al. 2005, ARA&A, 43, 861 (DLA review and cross-sections).
     import matplotlib.pyplot as plt
     import numpy as np
 
-    from tengri.plot import setup_style
     from tengri.igm import dla_transmission_obs
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")

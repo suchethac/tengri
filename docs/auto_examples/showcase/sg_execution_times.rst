@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:01.186** total execution time for 3 files **from auto_examples/showcase**:
+**00:01.186** total execution time for 2 files **from auto_examples/showcase**:
 
 .. container::
 
@@ -34,9 +34,6 @@ Computation times
      - Mem (MB)
    * - :ref:`sphx_glr_auto_examples_showcase_plot_jax_gradient_sensitivity.py` (``plot_jax_gradient_sensitivity.py``)
      - 00:01.186
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_showcase_plot_gradient_degeneracy_direction.py` (``plot_gradient_degeneracy_direction.py``)
-     - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_showcase_plot_recipes_gallery.py` (``plot_recipes_gallery.py``)
      - 00:00.000

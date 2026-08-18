@@ -26,8 +26,8 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri.plot import setup_style
 from tengri.dust import resolve_dust_law
+from tengri.plot import setup_style
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")

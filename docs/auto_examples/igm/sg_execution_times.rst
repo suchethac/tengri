@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:01.405** total execution time for 7 files **from auto_examples/igm**:
+**00:01.405** total execution time for 6 files **from auto_examples/igm**:
 
 .. container::
 
@@ -48,8 +48,5 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_igm_plot_igm_models_comparison.py` (``plot_igm_models_comparison.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_igm_plot_inoue_vs_madau_z5_z7.py` (``plot_inoue_vs_madau_z5_z7.py``)
      - 00:00.000
      - 0.0

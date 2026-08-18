@@ -101,9 +101,9 @@ for fname, filters in FILTER_SETS.items():
 
         # Compute Fisher Information Matrix using JAX jacobian.
         # F = J^T C^{-1} J, where J is the Jacobian and C^{-1} is inverse noise covariance.
-        def predict_fn(params_dict):
+        def predict_fn(params_dict, _mdl=mdl):
             """Return photometry for a parameter dictionary."""
-            return mdl.predict_photometry(params_dict)
+            return _mdl.predict_photometry(params_dict)
 
         # Build an array of the free parameters in the order they appear in fisher_params.
         param_values = []

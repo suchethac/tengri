@@ -16,10 +16,6 @@ missing template raises ``FileNotFoundError`` rather than quietly substituting
 a worse model.
 
 
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
-
 
 .. raw:: html
 

@@ -56,8 +56,8 @@ Reference: Draine & Li 2007, ApJ 657, 810 (Eq. 23, U distribution).
     import matplotlib.pyplot as plt
     import numpy as np
 
-    from tengri.plot import setup_style
     from tengri.dust import draine_li2007
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore")
@@ -113,11 +113,6 @@ Reference: Draine & Li 2007, ApJ 657, 810 (Eq. 23, U distribution).
 
     fig.tight_layout()
     plt.savefig("plot_tdust_vs_lir.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.187 seconds)
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_tdust_vs_lir.py:

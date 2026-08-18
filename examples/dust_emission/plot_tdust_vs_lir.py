@@ -22,8 +22,8 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri.plot import setup_style
 from tengri.dust import draine_li2007
+from tengri.plot import setup_style
 
 setup_style()
 warnings.filterwarnings("ignore")

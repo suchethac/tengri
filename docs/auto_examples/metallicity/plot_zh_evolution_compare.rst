@@ -56,8 +56,8 @@ neighborhood models); Dalcanton et al. 2007 (mass-metallicity relation physics).
     import matplotlib.pyplot as plt
     import numpy as np
 
-    from tengri.plot import setup_style
     from tengri.cosmology import age_at_z0
+    from tengri.plot import setup_style
     from tengri.sfh import closed_box_metallicity
 
     setup_style()
@@ -196,7 +196,7 @@ neighborhood models); Dalcanton et al. 2007 (mass-metallicity relation physics).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.074 seconds)
+   **Total running time of the script:** (0 minutes 2.985 seconds)
 
 
 .. _sphx_glr_download_auto_examples_metallicity_plot_zh_evolution_compare.py:

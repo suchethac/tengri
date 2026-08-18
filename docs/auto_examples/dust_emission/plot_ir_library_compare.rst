@@ -74,7 +74,6 @@ implications.
     import numpy as np
 
     import tengri
-    from tengri.plot import setup_style
     from tengri.dust import (
         casey2012,
         dale2014,
@@ -83,6 +82,7 @@ implications.
         energy_balance_split,
         modified_blackbody,
     )
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -247,7 +247,7 @@ implications.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 24.755 seconds)
+   **Total running time of the script:** (0 minutes 18.208 seconds)
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_ir_library_compare.py:

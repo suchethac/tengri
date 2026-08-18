@@ -56,8 +56,8 @@ Reference: Draine & Li 2007, ApJ, 657, 810.
     import matplotlib.pyplot as plt
     import numpy as np
 
-    from tengri.plot import setup_style
     from tengri.dust import draine_li2007
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -117,7 +117,7 @@ Reference: Draine & Li 2007, ApJ, 657, 810.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.204 seconds)
+   **Total running time of the script:** (0 minutes 3.902 seconds)
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_dust_qpah_umin_grid.py:

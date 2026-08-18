@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:32.194** total execution time for 121 files **from all galleries**:
+**00:39.773** total execution time for 121 files **from all galleries**:
 
 .. container::
 
@@ -32,8 +32,29 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_ir_library_compare.py` (``../examples/dust_emission/plot_ir_library_compare.py``)
+     - 00:18.208
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_dust_geometry_screen_vs_mixed.py` (``../examples/dust_attenuation/plot_dust_geometry_screen_vs_mixed.py``)
+     - 00:06.255
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_advanced_plot_fisher_degeneracy.py` (``../examples/advanced/plot_fisher_degeneracy.py``)
+     - 00:05.573
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_dust_qpah_umin_grid.py` (``../examples/dust_emission/plot_dust_qpah_umin_grid.py``)
+     - 00:03.902
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_bump_delta_joint_grid.py` (``../examples/dust_attenuation/plot_bump_delta_joint_grid.py``)
+     - 00:01.918
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_tdust_vs_lir.py` (``../examples/dust_emission/plot_tdust_vs_lir.py``)
+     - 00:01.746
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_wg00_tau_v_sweep.py` (``../examples/dust_attenuation/plot_wg00_tau_v_sweep.py``)
+     - 00:01.453
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_advanced_plot_custom_attenuation_component.py` (``../examples/advanced/plot_custom_attenuation_component.py``)
-     - 00:00.000
+     - 00:00.717
      - 0.0
    * - :ref:`sphx_glr_auto_examples_advanced_plot_diag_gradient_finite_difference.py` (``../examples/advanced/plot_diag_gradient_finite_difference.py``)
      - 00:00.000
@@ -45,9 +66,6 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_advanced_plot_diag_waveprecomp_accuracy.py` (``../examples/advanced/plot_diag_waveprecomp_accuracy.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_advanced_plot_fisher_degeneracy.py` (``../examples/advanced/plot_fisher_degeneracy.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_agn_disc_compare.py` (``../examples/agn/plot_agn_disc_compare.py``)
@@ -93,6 +111,36 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_ulirg_to_qso_transition.py` (``../examples/agn/plot_ulirg_to_qso_transition.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_birth_cloud_vs_diffuse.py` (``../examples/dust_attenuation/plot_birth_cloud_vs_diffuse.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_grahsp_paper_fig7_galaxy_attenuation.py` (``../examples/dust_attenuation/plot_grahsp_paper_fig7_galaxy_attenuation.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_rv_av_uv_slope_degeneracy.py` (``../examples/dust_attenuation/plot_rv_av_uv_slope_degeneracy.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_uv_ir_energy_balance.py` (``../examples/dust_attenuation/plot_uv_ir_energy_balance.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_bosa_grid.py` (``../examples/dust_emission/plot_bosa_grid.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_mbb_temperature_beta_grid.py` (``../examples/dust_emission/plot_mbb_temperature_beta_grid.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_mid_ir_pah_features.py` (``../examples/dust_emission/plot_mid_ir_pah_features.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_pahspec_starlight_sweep.py` (``../examples/dust_emission/plot_pahspec_starlight_sweep.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_themis_alpha_sweep.py` (``../examples/dust_emission/plot_themis_alpha_sweep.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_warm_cold_dust_decomposition.py` (``../examples/dust_emission/plot_warm_cold_dust_decomposition.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_igm_plot_dla_absorption.py` (``../examples/igm/plot_dla_absorption.py``)
@@ -149,6 +197,9 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_nebular_plot_shock_emission.py` (``../examples/nebular/plot_shock_emission.py``)
      - 00:00.000
      - 0.0
+   * - :ref:`sphx_glr_auto_examples_nebular_plot_shock_frac_sweep.py` (``../examples/nebular/plot_shock_frac_sweep.py``)
+     - 00:00.000
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_nebular_plot_strong_line_metallicity_diagnostics.py` (``../examples/nebular/plot_strong_line_metallicity_diagnostics.py``)
      - 00:00.000
      - 0.0
@@ -173,6 +224,9 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_photometry_plot_wise_agn_color_color.py` (``../examples/photometry/plot_wise_agn_color_color.py``)
      - 00:00.000
      - 0.0
+   * - :ref:`sphx_glr_auto_examples_quickstart_plot_components_isolated.py` (``../examples/quickstart/plot_components_isolated.py``)
+     - 00:00.000
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_quickstart_plot_model_summary_walkthrough.py` (``../examples/quickstart/plot_model_summary_walkthrough.py``)
      - 00:00.000
      - 0.0
@@ -195,6 +249,9 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_radio_plot_radio_loudness_sweep.py` (``../examples/radio/plot_radio_loudness_sweep.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_radio_plot_radio_model_family_compare.py` (``../examples/radio/plot_radio_model_family_compare.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_radio_plot_radio_vs_agn_lbol.py` (``../examples/radio/plot_radio_vs_agn_lbol.py``)
@@ -308,6 +365,9 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_sfr_uv_ir_consistency.py` (``../examples/usecases/plot_usecase_sfr_uv_ir_consistency.py``)
      - 00:00.000
      - 0.0
+   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_simulation_seds.py` (``../examples/usecases/plot_usecase_simulation_seds.py``)
+     - 00:00.000
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_uv_slope_beta.py` (``../examples/usecases/plot_usecase_uv_slope_beta.py``)
      - 00:00.000
      - 0.0
@@ -323,6 +383,9 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_xray_plot_xray_component_decomposition.py` (``../examples/xray/plot_xray_component_decomposition.py``)
      - 00:00.000
      - 0.0
+   * - :ref:`sphx_glr_auto_examples_xray_plot_xray_model_family_compare.py` (``../examples/xray/plot_xray_model_family_compare.py``)
+     - 00:00.000
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_xray_plot_xray_nh_sweep.py` (``../examples/xray/plot_xray_nh_sweep.py``)
      - 00:00.000
      - 0.0
@@ -332,67 +395,3 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_xray_plot_xray_sf.py` (``../examples/xray/plot_xray_sf.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_radio_plot_radio_model_family_compare.py` (``../examples/radio/plot_radio_model_family_compare.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_nebular_plot_shock_frac_sweep.py` (``../examples/nebular/plot_shock_frac_sweep.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_simulation_seds.py` (``../examples/usecases/plot_usecase_simulation_seds.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_xray_plot_xray_model_family_compare.py` (``../examples/xray/plot_xray_model_family_compare.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_birth_cloud_vs_diffuse.py` (``../examples/dust_attenuation/plot_birth_cloud_vs_diffuse.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_bosa_grid.py` (``../examples/dust_emission/plot_bosa_grid.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_bump_delta_joint_grid.py` (``../examples/dust_attenuation/plot_bump_delta_joint_grid.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_quickstart_plot_components_isolated.py` (``../examples/quickstart/plot_components_isolated.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_dust_geometry_screen_vs_mixed.py` (``../examples/dust_attenuation/plot_dust_geometry_screen_vs_mixed.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_dust_qpah_umin_grid.py` (``../examples/dust_emission/plot_dust_qpah_umin_grid.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_grahsp_paper_fig7_galaxy_attenuation.py` (``../examples/dust_attenuation/plot_grahsp_paper_fig7_galaxy_attenuation.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_ir_library_compare.py` (``../examples/dust_emission/plot_ir_library_compare.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_mbb_temperature_beta_grid.py` (``../examples/dust_emission/plot_mbb_temperature_beta_grid.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_mid_ir_pah_features.py` (``../examples/dust_emission/plot_mid_ir_pah_features.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_pahspec_starlight_sweep.py` (``../examples/dust_emission/plot_pahspec_starlight_sweep.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_rv_av_uv_slope_degeneracy.py` (``../examples/dust_attenuation/plot_rv_av_uv_slope_degeneracy.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_tdust_vs_lir.py` (``../examples/dust_emission/plot_tdust_vs_lir.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_themis_alpha_sweep.py` (``../examples/dust_emission/plot_themis_alpha_sweep.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_uv_ir_energy_balance.py` (``../examples/dust_attenuation/plot_uv_ir_energy_balance.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_warm_cold_dust_decomposition.py` (``../examples/dust_emission/plot_warm_cold_dust_decomposition.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_wg00_tau_v_sweep.py` (``../examples/dust_attenuation/plot_wg00_tau_v_sweep.py``)
-     - 00:00.000
-     - 0.0
-

@@ -69,8 +69,8 @@ setting :math:`E_b=0` recovers Calzetti exactly.
     import numpy as np
 
     from tengri import SEDModelComponent, Uniform
-    from tengri.plot import setup_style
     from tengri.dust import calzetti as _calzetti_law, cardelli as _cardelli_law
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")

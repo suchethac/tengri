@@ -135,9 +135,9 @@ Conroy 2013 (ARA&A, 51, 393) for SED fitting context.
 
             # Compute Fisher Information Matrix using JAX jacobian.
             # F = J^T C^{-1} J, where J is the Jacobian and C^{-1} is inverse noise covariance.
-            def predict_fn(params_dict):
+            def predict_fn(params_dict, _mdl=mdl):
                 """Return photometry for a parameter dictionary."""
-                return mdl.predict_photometry(params_dict)
+                return _mdl.predict_photometry(params_dict)
 
             # Build an array of the free parameters in the order they appear in fisher_params.
             param_values = []
@@ -206,7 +206,7 @@ Conroy 2013 (ARA&A, 51, 393) for SED fitting context.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 5.106 seconds)
+   **Total running time of the script:** (0 minutes 5.573 seconds)
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_fisher_degeneracy.py:

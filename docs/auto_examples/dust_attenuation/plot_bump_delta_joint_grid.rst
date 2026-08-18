@@ -60,8 +60,8 @@ Reference: Kriek & Conroy 2013, ApJL, 775, L16 (Eq. 5).
     import matplotlib.pyplot as plt
     import numpy as np
 
-    from tengri.plot import setup_style
     from tengri.dust import resolve_dust_law
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")

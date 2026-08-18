@@ -66,8 +66,8 @@ Tables as distributed by FSPS (Conroy & Gunn 2010, ``dust_type=3``).
     import matplotlib.pyplot as plt
     import numpy as np
 
-    from tengri.plot import setup_style
     from tengri.dust import wg00_attenuation
+    from tengri.plot import setup_style
 
     setup_style()
 
