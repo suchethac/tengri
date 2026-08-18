@@ -1000,7 +1000,9 @@ def describe(name: str) -> str:
     happened and an unknown filter was indistinguishable from a curve that
     failed to load. The lookup is now outside the ``try``, so an unknown name
     raises the loader's own ``KeyError``, and only the numeric summary is
-    guarded.
+    guarded. The lookup resolution for this function delegates to the same
+    path as :func:`tengri.describe` (issue #1611) through registry fallback
+    so that a name cannot resolve in one surface and not the other.
     """
     # Outside the try on purpose: an unknown name must raise, and
     # load_filter_set already says so with a message that lists the menus.

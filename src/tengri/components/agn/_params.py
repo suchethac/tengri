@@ -833,6 +833,29 @@ PARAMS: tuple[ParamDeclaration, ...] = (
         "it is the ADAF->thin-disc blend weight (clipped to [0, 1]).",
         units="dimensionless",
     ),
+    # QSOgen hot-dust and Balmer-continuum enabling knobs (Temple+ 2021).
+    # These parameters are read by the qsogen block adapters but were never
+    # registered, so the grammar could not accept them. Issue #1488.
+    ParamDeclaration(
+        "agn_bcnorm",
+        Uniform(0.0, 2.0, default=0.0),
+        "QSOgen Balmer continuum (Fe II pseudo-continuum) normalization. "
+        "When > 0, adds the Fe II pseudo-continuum contribution to the "
+        "emission (``qsogen_balmer`` block). Default 0.0 disables the "
+        "Balmer continuum. Range [0, 2.0] empirically sensible.",
+        lambda lo, hi: lo >= 0,
+        "must be >= 0",
+    ),
+    ParamDeclaration(
+        "agn_ebv",
+        Uniform(0.0, 1.0, default=0.0),
+        "QSOgen SMC reddening E(B-V) attenuation coefficient. "
+        "Applied by the ``qsogen_smc`` attenuation block. "
+        "Range [0, 1.0] matches SMC/Magellanic Cloud dust opacity. "
+        "Default 0.0 is no reddening.",
+        lambda lo, hi: lo >= 0,
+        "must be >= 0",
+    ),
 )
 
 #: Default ``agn_log_lbol`` for standalone model functions, read from the

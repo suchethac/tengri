@@ -522,6 +522,37 @@ class LaplaceNotAtModeWarning(UserWarning):
     """
 
 
+class ShockPhotoionizedMixedWarning(UserWarning):
+    """Shock component's discrete line emission is invisible to predict_line_fluxes (#927).
+
+    When a model combines:
+    - An active shock component (``shock={'type':'mappings',...}`` with non-zero fraction)
+    - A photoionized nebular backend (Cue or CloudyGrid, which publish discrete line catalogs)
+
+    The shock's line luminosities (Hα, Hβ, etc.) are **not** included in the catalog that
+    :meth:`SEDModel.predict_line_fluxes` reads. MAPPINGS V bakes shock lines into the
+    continuum SED only (``sed_shock``), so the discrete line flux output is invisible to
+    line-fitting constraints.
+
+    Consequence: fitting a model with this combination using a line-flux likelihood will
+    have zero gradient with respect to ``shock_frac`` / ``shock_log_lhalpha`` / shock
+    kinematic parameters from the line-flux channel alone. The shock is constrained only
+    through broadband or spectroscopic continuum, not through emission line ratios.
+
+    **Remedies:**
+
+    1. Measure line fluxes from the spectrum instead: use
+       :meth:`SEDModel.measure_line_fluxes` (the optical pipeline's flux-extraction
+       method), which reads discrete lines off the continuum and works with any backend.
+    2. Fit the shock through continuum only (disable line-flux likelihood).
+    3. Replace the photoionized backend with BakedIn (no discrete lines anywhere), which
+       silently includes shock and is equally transparent to predict_line_fluxes (neither
+       publishes a discrete catalog).
+
+    See issue #927 for the full boundary and architecture discussion.
+    """
+
+
 #: Attribute names a measurement may not use: they belong to ``BaseException``
 #: or to this mechanism itself, and shadowing them breaks ``str(w)``, pickling,
 #: or the uniform accessor.

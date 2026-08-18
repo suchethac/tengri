@@ -463,18 +463,14 @@ _AGN_BLOCK_ROWS = [
     ("blr", "analytic", None, 0.5),
     ("feii", "grahsp", None, 0.01),
     ("feii", "boroson_green", {"fe2_strength": 2.0}, 0.1),
+    ("feii", "qsogen_balmer", {"agn_bcnorm": 0.3}, 0.1),
     ("atten", "polar_dust", {"polar_ebv": 0.1}, 0.05),
+    ("atten", "qsogen_smc", {"agn_ebv": 0.1}, 0.1),
 ]
 
-# Blocks whose enabling knob is NOT a registered parameter: the grammar
-# rejects the short form, so the block cannot be activated at all through
-# the recommended build surface — selectable-but-unreachable (#1488 §3/§4).
-# Each entry pins the exact rejection so the day the knob is registered,
-# this list goes stale loudly and the block joins _AGN_BLOCK_ROWS.
-_AGN_BLOCKS_WITH_UNREGISTERED_KNOBS = [
-    ("feii", "qsogen_balmer", "bcnorm"),
-    ("atten", "qsogen_smc", "ebv"),
-]
+# Blocks whose enabling knob was NOT a registered parameter (FIXED by #1488).
+# Kept here for historical context: agn_bcnorm and agn_ebv are now registered.
+_AGN_BLOCKS_WITH_UNREGISTERED_KNOBS = []
 
 
 @pytest.fixture(scope="module")

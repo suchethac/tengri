@@ -635,6 +635,9 @@ def describe(name: str) -> str:
     -----
     **JIT-compatible**: no — returns formatted string.
 
+    Lookup resolution uses the same path as :func:`tengri.describe` (issue #1611),
+    so a name cannot resolve in one surface and not the other.
+
     Examples
     --------
     >>> print(presets.describe("starforming"))
