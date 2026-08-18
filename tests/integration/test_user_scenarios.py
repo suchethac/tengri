@@ -83,7 +83,13 @@ def bpass_ssp():
         return load_ssp_data(str(_BPASS_SSP))
     # Synthesize minimal BPASS-shaped SSPData lacking ssp_mass_remaining
     # to reproduce BUG-NSS-01 (posterior.derived crash with missing table).
-    return SSPData(
+    # Must be tengri's extended SSPData (ssp_mass_remaining/ssp_alpha_fe
+    # optional fields), NOT the bare dsps-package namedtuple this module
+    # imports for loading — the bare one lacks ssp_alpha_fe and dies in
+    # has_alpha_grid before the reproduction is reached.
+    from tengri.components.stellar.sps.dsps_wrapper import SSPData as TengriSSPData
+
+    return TengriSSPData(
         ssp_lgmet=np.array([-2.0, -1.5, -1.0, -0.5, 0.0]),
         ssp_lg_age_gyr=np.array([6.0, 6.5, 7.0, 7.5, 8.0, 8.5, 9.0, 9.5, 10.0, 10.15]),
         ssp_wave=np.logspace(3, 4, 300),  # 1000-10000 Å
