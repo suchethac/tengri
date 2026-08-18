@@ -9,9 +9,6 @@ from scipy import stats as scipy_stats
 
 from tengri.inference.backends.mcmc import hmc_is
 
-# Enable 64-bit arithmetic for numerical precision
-jax.config.update("jax_enable_x64", True)
-
 
 @pytest.fixture
 def gaussian_target():

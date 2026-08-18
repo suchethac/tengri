@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: BSD-3-Clause
 """Tests for recovered physics identities from deleted gallery diagnostics.
 
 This module ports four physics validations from removed gallery scripts (#1958):

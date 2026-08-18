@@ -159,8 +159,8 @@ def bma_resample(
     Raises
     ------
     ValueError
-        - If any posterior has `samples=None`
-        - If the intersection of sample keys is empty (no shared parameters)
+        If any posterior has ``samples=None``, or if the intersection of
+        sample keys is empty (no shared parameters).
 
     Notes
     -----
@@ -169,6 +169,7 @@ def bma_resample(
     the CANDELS notebook requires for model comparison.
 
     **Sampling procedure**:
+
     1. Compute BMA weights via :func:`bma_weights`
     2. Draw model indices via multinomial with probabilities = weights
     3. For each model, resample (with replacement) from its chain
