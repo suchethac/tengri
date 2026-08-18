@@ -14,22 +14,18 @@
 # ---
 
 # %% [markdown]
-# # Adding your own SED model
+# # # Adding your own SED model
 #
-# A galaxy SED is built up from physics components: stellar emission, dust
-# attenuation, nebular lines, dust IR emission, an AGN, IGM, radio,
-# X-ray. Many published recipes already ship with tengri (see
-# `04_building_models.py` for the menu). This notebook shows what it
-# looks like to add a **new** one — a new dust attenuation law, a new
-# dust IR atlas, a new AGN torus library, anything that follows the
-# *load → predict* shape.
+# Many published recipes already ship with tengri (see
+# `04_building_models.py` for the menu). This notebook adds a **new**
+# one — a dust attenuation law, a dust IR atlas, an AGN torus library,
+# anything that follows the *load → predict* shape.
 #
-# The contract is one class, one file. `SEDModelComponent` is the root
-# base class, but you rarely subclass it directly: **each physics block
-# has its own base class that already declares that block's
-# inputs/outputs contract**, and subclassing the right one is what makes
-# your model reachable from the build grammar. For dust IR emission that
-# base is `EmissionComponent`. The file then reads as physics:
+# The contract is one class, one file. **Each physics block has its own
+# base class that already declares that block's inputs/outputs
+# contract**, and subclassing the right one is what makes your model
+# reachable from the build grammar. For dust IR emission that base is
+# `EmissionComponent`. The file then reads as physics:
 #
 # 1. Subclass the base class for your physics block.
 # 2. Declare free parameters as class attributes (with units).
@@ -37,18 +33,15 @@
 #    `self.data`.
 # 4. `predict(p, sed_in, wave, **inputs)` — the physics.
 #
-# That's it. The model auto-registers; `SEDModel.build(dust={'emission':
+# The model auto-registers; `SEDModel.build(dust={'emission':
 # {'type': 'my_model'}})` finds it; class-level priors flow through to
 # inference; WavePrecomp picks it up automatically.
 #
-# > **Why the base class matters.** `SEDModel.build()` does not accept a
-# > `type` string just because the class registered. The validator
-# > (`parameters/groups.py::_valid_dust_emission_types`) accepts a name
-# > only if that component *publishes `sed_dust_ir`* — a structural
-# > check, not a name lookup. `EmissionComponent` declares
-# > `outputs = {"sed_dust_ir": ...}` for you. Subclass bare
-# > `SEDModelComponent` and invent your own output names, and the class
-# > registers happily but `build()` rejects the type with
+# > **Subclass the right base.** `build()` accepts a `type` only if that
+# > component *publishes* `sed_dust_ir` — a structural check, not a name
+# > lookup — and `EmissionComponent` declares it for you. Subclass bare
+# > `SEDModelComponent` with your own output names and the class
+# > registers happily while `build()` rejects the type with
 # > `Unknown dust emission type '...'`.
 
 # %% [markdown]
@@ -349,15 +342,9 @@ else:
 # | SFH | `SFH_REGISTRY` entry | `components/stellar/sfh/registry.py` |
 # | IGM / radio / X-ray | `register_igm_model` / `register_radio_model` / `register_xray_model` | `components/<block>/_models.py` |
 #
-# The reliable way to find the seam for any block: open the validator
-# that would reject your `type` string —
-# `parameters/groups.py::_valid_*_types` — and read what set it builds
-# its answer from. Every one of them derives from a live registry
-# (ADR-0005 / ADR-0008), so that function *is* the specification of what
-# your component has to do to be accepted.
-#
-# For a worked example of each, read a shipped one next to it: the
-# canonical components live in `src/tengri/components/<block>/`.
+# Every block's accepted `type` names come from a live registry
+# (ADR-0005 / ADR-0008). For a worked example, read a shipped component
+# next to yours — they live in `src/tengri/components/<block>/`.
 
 # %% [markdown]
 # ## Further reading

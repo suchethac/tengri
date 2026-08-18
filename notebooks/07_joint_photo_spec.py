@@ -103,14 +103,14 @@ obs_joint = Observation(photometry=phot_obs, spectroscopy=spec_obs)
 # ## Build the model
 #
 # One builder, called twice: the same physics and the same free parameters
-# against two different observations. The spectrum pixel count drives fit cost —
-# each pixel adds a likelihood term and a gradient row.
+# against two different observations. The spectrum's pixel count drives the fit
+# cost — each pixel adds a likelihood term and a gradient row.
 #
-# **Noise model assumption:** both channels assume Gaussian errors. That is true
-# for photometry but spectral pixels often have correlated noise (wavelength
-# calibration, flat-fielding). A proper analysis would decorrelate the spectrum
-# covariance; this fit uses diagonal errors, so the posterior width is honest
-# but does not account for that structure.
+# **Both channels assume Gaussian, uncorrelated errors.** That holds for the
+# photometry, but real spectral pixels share correlated noise (wavelength
+# calibration, flat-fielding). This fit uses diagonal errors, so the posterior
+# width is honest about the data it was given and does not account for that
+# structure.
 
 
 # %%
@@ -184,9 +184,6 @@ print(f"Mock: {len(flux_phot)} bands (SNR 20) + {len(flux_spec)}-pixel spectrum 
 #
 # Both use `HMC_VALIDATED` (dense mass, n_warmup=1000, n_leapfrog=20) on lookup
 # tables (WavePrecomp for photometry; SpectrumPrecomp's dual LUT for the joint fit).
-# The joint fit costs more because each spectral pixel adds a likelihood term and a
-# gradient row — its per-evaluation cost scales with pixel count. The two fits run
-# sequentially in one process, per OOM-orchestration.
 
 
 # %%
@@ -421,9 +418,7 @@ plt.show()
 # Photometry constrains the SED shape and stellar mass; the optical spectrum
 # adds absorption-line depths that break the metallicity–dust–age degeneracy.
 # Compare the widths printed below against the photometry-only fit to see how
-# much that buys. `SpectrumPrecomp` runs
-# both channels on lookup tables; the per-pixel spectral likelihood is what remains
-# of the cost, not the forward integration.
+# much the spectrum adds.
 
 # %%
 from contextlib import suppress

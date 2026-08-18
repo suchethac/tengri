@@ -34,15 +34,6 @@
 # There is no fitting here and **no free parameters** — the tables are the
 # model. Sections 1–3 are the working code; sections 4–5 are the speed, which
 # is the part worth reading twice.
-#
-# For scale: on the laptop CPU this was written on, the configuration in
-# section 1 runs **thousands of galaxies per second** — 4096 histories through
-# 11 bands in well under a second, with no GPU involved. Sections 4 and 5
-# measure each lever that gets you there, separately, because they do **not**
-# simply multiply: whichever term currently dominates is the only one worth
-# optimizing next. Every number below is printed by the cell above it, on
-# whatever machine you run this on; treat the ones in the prose as the shape of
-# the answer, not the answer.
 
 # %%
 from _setup import FIG_DIR, quiet
@@ -279,8 +270,7 @@ batch = {k: v[:256] for k, v in columns.items()}  # 256 of them
 K = 256
 
 # %% [markdown]
-# Four ways to run it. The timings use `block_until_ready` — JAX dispatch is
-# asynchronous, and without it you are timing the queue, not the work.
+# Four ways to run it.
 
 # %%
 
@@ -331,17 +321,6 @@ print(f"  (b) -> (c)  jit-ing the vmap costs {first_vmap / first_jitvmap:.1f}x l
 print("              first call, and never costs you throughput")
 
 # %% [markdown]
-# Two things to take from that table.
-#
-# **Vectorizing is the win; `jit` is what makes it cheap to start.** Going from
-# one galaxy at a time to a batch is worth a solid factor on throughput. Bare
-# `vmap` gets most of that too — it is genuinely vectorized — but it dispatches
-# op by op, compiling and launching each primitive separately, so its **first
-# call** is several times more expensive than one fused program. Warm throughput
-# for (b) and (c) can land within noise of each other on a busy machine; the
-# first-call column is the part that reproduces. Use `jit(vmap(f))`: it is never
-# slower and it starts much faster.
-#
 # **Every distinct batch width is its own compile.** JAX keys its cache on
 # shape, so a ragged trailing chunk — 128, 128, 47 — compiles the program
 # twice. Pad to a uniform width:
@@ -359,10 +338,6 @@ print("      roll your own, pad the last chunk and discard the extra rows.")
 # ### How wide can the vmap go?
 #
 # $$ \text{max width} \;\approx\; \frac{\text{RAM you can spare}}{\text{MB per galaxy}} $$
-#
-# `ru_maxrss` is a high-water mark — a monotonic peak recorded since the process
-# started. To measure the slope, run this sweep before any heavier code, in increasing
-# width order. (It is in bytes on macOS and kilobytes on Linux — a portability trap.)
 
 # %%
 _RSS_SCALE = 1.0 if sys.platform == "darwin" else 1024.0  # bytes on macOS, kB on Linux
@@ -437,9 +412,6 @@ for budget in (2, 8, 32):
 
 # %% [markdown]
 # ## 5. The optimization ladder
-#
-# Measured on this machine, on the backend printed at the top. Re-run rather
-# than quoting these numbers.
 #
 # ### 5a. The nebular backend is the biggest single lever
 
@@ -591,13 +563,7 @@ for n in (256, 1024, 4096):
 # budget rather than bisecting until something dies. If a run dies with no
 # Python traceback, memory is the first thing to suspect.
 #
-# **The ceiling does not tell you where throughput peaks**, and that optimum is
-# a property of your machine rather than of your model. Per-galaxy *work* is
-# flat to 0.2 % from *N* = 256 to 8192 (1.301 to 1.303 MFLOP/galaxy); the
-# wall-clock optimum moves with cache size and with whatever else the machine
-# is running. Size the batch from `memory_analysis`, confirm the work is flat
-# with `cost_analysis`, and tune wall clock last — with the A/A control from
-# section 5d.
+# Per-galaxy *work* is flat to 0.2 % from *N* = 256 to 8192 (1.301 to 1.303 MFLOP/galaxy).
 #
 # ### 5d. `float32`
 #
@@ -692,12 +658,7 @@ print(f"\n  agreement with float64: median {np.median(dmag):.0e} mag, worst {dma
 # **batch ceiling** from section 4, not the clock. Close to twice the width
 # fits in the same RAM.
 #
-# **Whether that becomes speed depends on your machine.** On the shared laptop
-# this was written on it did not separate from noise: repeat runs at the *same*
-# precision scattered by 8-16%, which is wider than the gap between precisions.
-# Before believing any A/B difference, run an A/A control — the same
-# configuration twice — and check the gap you are chasing is bigger than the
-# scatter you already have.
+# **Whether that becomes speed depends on your machine.**
 #
 # Two traps, both measured rather than imagined:
 #
@@ -743,7 +704,7 @@ print(f"\n  agreement with float64: median {np.median(dmag):.0e} mag, worst {dma
 # fwd = ForwardModel.build(sed=SEDModel.build(
 #     ssp_data=ssp, observation=obs, redshift=Fixed(0.1),
 #     sfh={"type": "table"}, met={"type": "table"},
-#     dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED},
+#     dust={"type": "two_component", "law_bc": "calzetti", "all_params": FIXED},
 #     neb={"type": "ssp"}, approx=WavePrecomp(),
 # ))
 #

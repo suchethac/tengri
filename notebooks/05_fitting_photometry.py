@@ -96,10 +96,8 @@ obs = Observation(photometry=Photometry.from_names(FILTERS))
 # ## Build the model
 #
 # The quickstart's model, plus two extra free parameters: stellar metallicity
-# (`met={"logzsol": ...}`) and the diffuse dust optical depth. Eight
-# free parameters in all. `approx=WavePrecomp()` precomputes the SSP × filter
-# integrals so the warm forward pass stays in the millisecond range — what
-# makes a prewarmed two-chain NUTS run finish in seconds.
+# and diffuse dust optical depth. Eight free parameters in all. `approx=WavePrecomp()`
+# precomputes the SSP × filter integrals for efficiency.
 
 # %%
 sed_model = SEDModel.build(
@@ -145,11 +143,7 @@ print(f"Mock: {len(flux_obs)} bands, SNR = 20")
 # %% [markdown]
 # ## Fit
 #
-# `forward.prewarm` compiles the sampler stack and runs NUTS window adaptation
-# once; the subsequent `forward.fit` reuses that compile cache. We use two
-# parallel chains (via `jax.vmap`) — enough for a genuine cross-chain split-R̂,
-# and the `vmap` memory scales with the chain count, so two keeps the peak well
-# clear of the jetsam threshold on a laptop.
+# We use two parallel chains to get a genuine cross-chain split-R̂.
 
 # %%
 t = time.perf_counter()

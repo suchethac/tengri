@@ -68,9 +68,7 @@ ssp = tengri.load_ssp("ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0", down
 #
 # Build a fixed star-forming galaxy and vary one knob. A sweep holds all other
 # parameters at their fixed values, so the fan understates the real degeneracy
-# — a full fit frees other parameters and expands the contours. `sweep_parameter`
-# loops in Python, but each forward call hits the persistent JIT cache, so after
-# the first iteration the per-call cost is just `model.predict`.
+# — a full fit frees other parameters and expands the contours.
 
 # %%
 spec_sf = Parameters(
@@ -441,9 +439,8 @@ plt.show()
 # %% [markdown]
 # ## Timing: Python loop vs `vmap` batch
 #
-# `sweep_parameter` loops in Python with cached JIT — fine for ≤ 30 values.
-# For finer grids or 2-D, `predict_photometry_batch` is a single compiled
-# `vmap`, an order of magnitude faster after warmup.
+# `sweep_parameter` works well for ≤ 30 values.
+# For finer grids or 2-D, use `predict_photometry_batch` with `vmap` for an order of magnitude speedup.
 
 # %%
 import time

@@ -1086,9 +1086,7 @@ print("sensitivity study, vmap() when you want the whole batch at once.")
 # %% [markdown]
 # ## Where to go next
 #
-# The nested-dict builder is the entry point for new models; the flat
-# `Parameters(...)` constructor is still there as an escape hatch. The handful
-# of calls worth remembering:
+# Key methods and entry points worth remembering:
 #
 # - `recipes.*()` — curated starting points
 # - `SEDModel.build(..., filters=...)` — build and evaluate in one line

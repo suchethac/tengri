@@ -98,12 +98,6 @@ flux_obs, noise = mock["flux_obs"], mock["noise"]
 # the log-posterior surface, with contours at 1σ / 2σ / 3σ. Right panel:
 # `jax.grad` of the same quantity, plotted as a vector field.
 #
-# **The JIT compilation boundary:** The code below first calls `jax.jit` to
-# compile the loss and its gradient into fused XLA kernels. The first call
-# triggers compilation (~100 ms); all subsequent calls reuse the kernel.
-# This is where the speedup comes from — not in the numerics, but in the
-# compiled representation.
-#
 # A gradient-free sampler explores by trial-and-error; a gradient-based
 # sampler reads the arrows. In one or two dozen dimensions that is the
 # difference between hours and seconds.
@@ -213,9 +207,7 @@ grad_at_truth = jax.grad(loss)(truth)
 # ## Figure 2 — forward-model throughput
 #
 # A single forward call versus a `vmap` over 100 parameter draws.
-# The batched call is far below 100× the single-call cost: the compile
-# is paid once (the "cold" first call, ~100–200 ms), then XLA broadcasts
-# the same kernel across the batch axis (subsequent "warm" calls reuse it).
+# The batched call is far below 100× the single-call cost.
 # This is the unit of speed-up that lets gradient samplers, population fits,
 # and posterior-predictive sweeps fit on a laptop.
 
