@@ -13,13 +13,13 @@ for plausible wavelength ranges before registration.
 from __future__ import annotations
 
 import os
-import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import jax.numpy as jnp
 import numpy as np
 
+from tengri.config.exceptions import warn_measured
 from tengri.observation.photometry import FilterCurve
 from tengri.registry import _RegistryTable
 
@@ -90,60 +90,51 @@ def _warn_implausible_wavelength_range(
 
     Notes
     -----
-    Rules (defensible, not exhaustive):
-    - If entire span is below ~50 Å: likely in nm or eV, too short for optical.
-    - If entire span is above ~1e7 Å (~1 cm): likely in wrong unit.
-    - If median wavelength suggests nm (e.g., 300–1000 instead of 3000–10000):
-      suggest conversion.
-    - If FWHM is very narrow relative to the span: suggests nm confusion.
+    The rule is deliberately a single narrow one: warn when the curve lies
+    **entirely inside 100-1000 Angstrom**, the extreme-UV.
+
+    That window is empty for a physical reason, not a statistical one. The
+    interstellar medium is opaque between the Lyman limit and the soft X-ray
+    band, so no photometric survey observes there and tengri ships no filter in
+    it -- the bluest is GALEX FUV at ~1340 Å and the reddest X-ray band tops out
+    near 100 Å. A curve sitting wholly in the gap is therefore almost always an
+    optical bandpass whose wavelengths are in nanometers (500-700 nm read as
+    500-700 Å).
+
+    Rules that were tried and rejected, because tengri spans X-ray to radio and
+    each produced false positives on ordinary curves:
+
+    * ``max < 50 Å`` -- flags hard X-ray bands, which legitimately live at
+      1-25 Å (``chandra_hard`` spans 1.8-6.2 Å).
+    * ``min > 1e7 Å`` -- flags every (sub)mm band; ``alma_band6`` is 1.2e7 Å and
+      ``planck_lfi_030`` is 1.1e8 Å.
+    * ``median < 5000 Å`` -- flags any ordinary blue filter. SDSS *u* sits at
+      ~3550 Å with a ~600 Å width, and so would have warned on every use.
+
+    Micron-scale confusion is **not** detectable and is not attempted: an
+    optical curve given in microns lands at 0.5-0.7 Å, which is 18-25 keV --
+    indistinguishable from a real NuSTAR band. Claiming to catch it would mean
+    warning on legitimate X-ray input.
     """
     wave_arr = np.asarray(wave)
     if wave_arr.size < 2:
         return
 
     wave_min, wave_max = float(np.min(wave_arr)), float(np.max(wave_arr))
-    wave_med = float(np.median(wave_arr))
-    span = wave_max - wave_min
 
-    # Check 1: Entire span too low (likely nanometers)
-    if wave_max < 50.0:
-        warnings.warn(
-            f"Filter '{name}' {source} has wavelengths spanning {wave_min:.1f}–{wave_max:.1f} Å, "
-            f"which is implausibly short for a photometric bandpass. "
-            f"This looks like **nanometers**. "
-            f"If so, multiply by 10: 300–1000 nm → 3000–10000 Å.",
+    if wave_min >= 100.0 and wave_max < 1000.0:
+        warn_measured(
+            f"Filter '{name}' {source} spans {wave_min:.0f}-{wave_max:.0f} Å, which lies "
+            f"entirely in the extreme-UV (100-1000 Å). The ISM is opaque there, so no "
+            f"photometric bandpass exists in that window -- these are most likely "
+            f"**nanometers**. If so, multiply by 10: {wave_min:.0f}-{wave_max:.0f} nm "
+            f"-> {wave_min * 10:.0f}-{wave_max * 10:.0f} Å. tengri wavelengths are "
+            f"Angstrom throughout.",
             UserWarning,
             stacklevel=4,
+            wave_min_aa=wave_min,
+            wave_max_aa=wave_max,
         )
-        return
-
-    # Check 2: Entire span too high (likely in wrong unit, e.g., cm)
-    if wave_min > 1e7:
-        warnings.warn(
-            f"Filter '{name}' {source} has wavelengths spanning {wave_min:.2e}–{wave_max:.2e} Å, "
-            f"which is implausibly long (>1 cm). "
-            f"Check that the wavelengths are in Angstrom.",
-            UserWarning,
-            stacklevel=4,
-        )
-        return
-
-    # Check 3: Median in nm range (e.g., 100–10000) but labeled Ångstrom
-    if wave_med < 5000.0 and span > 100.0 and span < 50000.0:
-        warnings.warn(
-            f"Filter '{name}' {source} has wavelengths spanning {wave_min:.0f}–{wave_max:.0f} Å "
-            f"(median {wave_med:.0f}). This is typical for **nanometers**, not Ångstrom. "
-            f"If so, multiply by 10 to convert nm → Å.",
-            UserWarning,
-            stacklevel=4,
-        )
-        return
-
-    # Check 4: Suspiciously narrow (FWHM / span suggests nm confusion)
-    # E.g., FWHM=100 Å, span=1000 Å is reasonable; FWHM=50 Å, span=400 Å looks like nm
-    if span < 5000.0 and span > 10.0:
-        # Rough heuristic: if FWHM/span is typical of infrared (narrow), warn
-        pass  # (conservative; avoid false positives in narrow bands like filters at 1 µm)
 
 
 def register_filter(

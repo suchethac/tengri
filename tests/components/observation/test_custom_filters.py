@@ -8,6 +8,7 @@ Markers: bounds, contract (CI-enforced per tests/TESTING.md)
 """
 
 import os
+import warnings
 
 import jax.numpy as jnp
 import numpy as np
@@ -178,11 +179,66 @@ class TestRegisterFilter:
         with pytest.warns(UserWarning, match="nanometers"):
             register_filter("nm_band", wave, trans)
 
-    def test_register_warns_on_um_scale(self, clean_registry, um_scale_curve):
-        """Warning when wavelengths look like micrometers."""
+    def test_no_warning_on_a_blue_filter(self, clean_registry):
+        """SDSS u is not a unit error.
+
+        The first version of this guard warned when the *median* wavelength was
+        below 5000 Å, which describes every ordinary blue and UV bandpass. A
+        guard that fires on ``sdss_u`` teaches users to ignore it.
+        """
+        wave = np.linspace(3200.0, 3900.0, 100)  # SDSS u, in Angstrom
+        trans = np.exp(-0.5 * ((wave - 3550.0) / 150.0) ** 2)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            register_filter("u_like", wave, trans)
+        assert not [w for w in caught if "nanometers" in str(w.message)]
+
+    def test_no_warning_on_an_xray_band(self, clean_registry):
+        """A hard X-ray band legitimately lives at a few Angstrom.
+
+        ``chandra_hard`` (2-7 keV) spans 1.8-6.2 Å. An earlier rule warned
+        below 50 Å, which would have flagged every X-ray band tengri ships.
+        """
+        wave = np.linspace(1.77, 6.20, 50)
+        trans = np.ones_like(wave)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            register_filter("xray_like", wave, trans)
+        assert not [w for w in caught if "nanometers" in str(w.message)]
+
+    def test_no_warning_on_a_millimeter_band(self, clean_registry):
+        """ALMA Band 6 sits near 1.2e7 Å; that is not a unit error either."""
+        wave = np.linspace(1.09e7, 1.42e7, 50)
+        trans = np.ones_like(wave)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            register_filter("mm_like", wave, trans)
+        assert not [w for w in caught if "nanometers" in str(w.message)]
+
+    def test_micron_confusion_is_documented_as_undetectable(self, clean_registry, um_scale_curve):
+        """An optical curve given in microns is indistinguishable from X-ray.
+
+        0.5-0.7 µm read as Angstrom lands at 0.5-0.7 Å -- 18-25 keV, a real
+        NuSTAR band. The guard deliberately stays silent rather than warn on
+        legitimate X-ray input; this test pins that choice so a later "fix"
+        has to argue with it.
+        """
         wave, trans = um_scale_curve
-        with pytest.warns(UserWarning, match="nanometers"):
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
             register_filter("um_band", wave, trans)
+        assert not [w for w in caught if "nanometers" in str(w.message)]
+
+    def test_warning_carries_the_exact_values(self, clean_registry, nm_scale_curve):
+        """#1645: a warning that renders a rounded number must carry the value."""
+        from tengri.config.exceptions import measurements_of
+
+        wave, trans = nm_scale_curve
+        with pytest.warns(UserWarning, match="nanometers") as record:
+            register_filter("nm_measured", wave, trans)
+        measured = measurements_of(record[0].message)
+        assert measured["wave_min_aa"] == pytest.approx(float(np.min(wave)))
+        assert measured["wave_max_aa"] == pytest.approx(float(np.max(wave)))
 
     def test_register_no_warn_normal_scale(self, clean_registry, sample_curve):
         """No warning for Angstrom-scale wavelengths."""
