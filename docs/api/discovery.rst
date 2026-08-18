@@ -90,6 +90,10 @@ and a one-line description.
 
 .. autofunction:: tengri.list_filters
 
+.. autofunction:: tengri.list_registered_filters
+
+.. autofunction:: tengri.list_synthetic_bands
+
 .. autofunction:: tengri.list_instruments
 
 .. autofunction:: tengri.list_components
@@ -128,6 +132,28 @@ the richer, category-specific record (and ``describe_agn_block`` takes a
 .. autofunction:: tengri.describe_recipe
 
 .. autofunction:: tengri.describe_property
+
+Custom filter loading
+---------------------
+
+In-memory registration, file-based directory loading, and DSPS integration
+for user-provided transmission curves.
+
+.. autofunction:: tengri.register_filter
+
+.. autofunction:: tengri.register_filter_from_file
+
+.. autofunction:: tengri.unregister_filter
+
+.. autofunction:: tengri.load_custom_filter
+
+.. autofunction:: tengri.load_tophat_filter
+
+.. autofunction:: tengri.load_filter_from_dsps_transmission_curve
+
+.. autofunction:: tengri.load_filter_from_dsps_file
+
+.. autofunction:: tengri.load_alma_band
 
 Citations
 ---------
