@@ -9,34 +9,34 @@ the suffix are the underlying physics (curves, template loaders).
 
 Components (selected via the model grammar):
 
-- ``component.py`` — ``DustAttenuationSEDComponent`` (attenuation only).
-- ``two_component.py`` — ``DustSEDComponent`` (attenuation + IR
+- ``component.py``: ``DustAttenuationSEDComponent`` (attenuation only).
+- ``two_component.py``: ``DustSEDComponent`` (attenuation + IR
   re-emission with energy balance).
-- ``wg00_model.py`` — WG00 radiative-transfer attenuation component
+- ``wg00_model.py``: WG00 radiative-transfer attenuation component
   (physics in ``wg00.py``).
 - ``schreiber2016_ir.py``, ``draine2021_pah_ir.py`` — standalone IR
   emission components (Draine+2021 physics in ``draine2021_pah.py``).
 
 Physics libraries:
 
-- ``attenuation.py`` — k(λ) attenuation laws and the ``DUST_LAWS``
+- ``attenuation.py``: k(λ) attenuation laws and the ``DUST_LAWS``
   registry; individual curve families live in ``laws/``.
-- ``emission/`` — IR re-emission package (analytic models + tabulated
+- ``emission/``: IR re-emission package (analytic models + tabulated
   template components + shared ``_physics.py`` integrals) with
   energy-balance normalization.
 - ``astrodust_hd23.py``, ``emission_templates.py`` — template grid
   loaders (not components).
-- ``drude_profiles.py`` — PAH Drude decomposition helpers.
-- ``priors.py`` — redshift-dependent attenuation priors from
+- ``drude_profiles.py``: PAH Drude decomposition helpers.
+- ``priors.py``: redshift-dependent attenuation priors from
   Narayanan+2018 cosmological RT simulations.
 
 Internal plumbing:
 
-- ``_apply.py`` — applies ``DUST_LAWS`` curves (two-component /
+- ``_apply.py``: applies ``DUST_LAWS`` curves (two-component /
   single-screen transmission, age weights, Lyman cutoff).
-- ``_params.py`` — free-parameter declarations owned by dust.
-- ``_protocol.py`` — structural Protocols for laws and templates.
-- ``*_precompute.py`` — build-time LUT construction for the
+- ``_params.py``: free-parameter declarations owned by dust.
+- ``_protocol.py``: structural Protocols for laws and templates.
+- ``*_precompute.py``: build-time LUT construction for the
   ``approx=WavePrecomp(...)`` path.
 
 """

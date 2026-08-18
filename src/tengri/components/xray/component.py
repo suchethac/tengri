@@ -23,7 +23,7 @@ X-ray depends on quantities owned by other components:
   stellar component. Its present-day bin drives the Lehmer+2016 HMXB
   metallicity term; falls back to :data:`~tengri.utils.physics_constants.Z_SUN`
   when no stellar component is present (#1755).
-- ``redshift`` — bare parameter from :data:`BARE_NAME_ALLOWLIST`,
+- ``redshift``: bare parameter from :data:`BARE_NAME_ALLOWLIST`,
   passed through but consumed by the observation model rather than
   by ``xray_total`` itself.
 

@@ -12,8 +12,8 @@ Forms shown:
 
 - ``const``, ``exp``, ``dexp``, ``tau``           — single-parameter classics
 - ``lnorm``, ``snorm``, ``tsnorm``                — peaked smooth families
-- ``dpl``                                          — Carnall+2018 double power-law
-- ``delayed_bq``                                   — Ciesla+ delayed + late burst/quench
+- ``dpl``: Carnall+2018 double power-law
+- ``delayed_bq``: Ciesla+ delayed + late burst/quench
 
 Pick a form by matching the data you have: ``tau`` for a single color,
 ``dpl`` for broadband UV-NIR, ``tsnorm`` for spectroscopy with the

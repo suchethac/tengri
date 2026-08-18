@@ -18,24 +18,24 @@ Navigation
 This file stays one module by design; use the ``# ── <section> ──``
 marker lines to jump. In order:
 
-- ``Method name validation`` — ``resolve_method`` (alias → canonical),
+- ``Method name validation``: ``resolve_method`` (alias → canonical),
   legacy-SEDModel nudge, batched-data auto-extraction
 - ``Fitter`` class (the bulk of the file):
 
-  - ``Construction`` — ``__init__`` (data validation, likelihood
+  - ``Construction``: ``__init__`` (data validation, likelihood
     auto-build, emission lines, compile-cache setup)
-  - ``Compilation`` — ``compile_signature``, the JIT-engine cache,
+  - ``Compilation``: ``compile_signature``, the JIT-engine cache,
     background compilation
   - ``Loss and likelihood builders``
   - ``Parameter transforms``
   - ``AOT pre-warm and adaptation persistence``
-  - ``Inference dispatch`` — ``run()`` routing into
+  - ``Inference dispatch``: ``run()`` routing into
     ``inference/backends/`` via the backend registry
   - ``Private method runners``
   - ``Posterior sampling``
   - ``Batch``
 
-- ``Backend Registry Initialization`` — imports that populate the
+- ``Backend Registry Initialization``: imports that populate the
   registry at module load
 
 """
@@ -524,13 +524,13 @@ def fast_nebular_can_engage(model) -> bool:
     Narrower than its original name suggests, and the difference cost a measured
     4.77x (#1770): this answers one of ``FeaturePrecomp``'s two jobs, not both.
 
-    * **Photometry** — served from a per-Q_H grid, which requires zeroing
+    * **Photometry**: served from a per-Q_H grid, which requires zeroing
       ``sed_nebular``. Since #1281 that is only permitted when nothing downstream
       reads the continuum, and ``DustSEDComponent`` declares it as an input, so
       **any model with dust disarms this shortcut entirely**. That is what this
       predicate reports, and why #1748 stopped attaching the config for a
       photometry-only fit.
-    * **A line channel** — served by supplying the line fluxes from the table, so
+    * **A line channel**: served by supplying the line fluxes from the table, so
       ``loss_functions`` need not set ``needs_state=True`` and rebuild the
       full-grid SED through ``predict_state`` on every likelihood evaluation.
       **Dust does not touch this**, and this predicate says nothing about it.
@@ -3034,41 +3034,41 @@ class Fitter:
 
             **Variational Inference (VI)**
 
-            - ``"vi"`` — geoVI via NIFTy (nonlinear, default for D>20)
-            - ``"vi_nonlinear"`` — geoVI via NIFTy (alias of ``vi``)
-            - ``"vi_linear"`` — MGVI via NIFTy (linearized Gaussian)
-            - ``"vi_nonlinear_fast"`` — geoVI fast path (~35% faster, no logging)
-            - ``"vi_linear_fast"`` — MGVI fast path (~35% faster, no logging)
-            - ``"native_vi_nonlinear"`` — Native JAX geoVI (**broken**: segfaults
+            - ``"vi"``: geoVI via NIFTy (nonlinear, default for D>20)
+            - ``"vi_nonlinear"``: geoVI via NIFTy (alias of ``vi``)
+            - ``"vi_linear"``: MGVI via NIFTy (linearized Gaussian)
+            - ``"vi_nonlinear_fast"``: geoVI fast path (~35% faster, no logging)
+            - ``"vi_linear_fast"``: MGVI fast path (~35% faster, no logging)
+            - ``"native_vi_nonlinear"``: Native JAX geoVI (**broken**: segfaults
               on DPL/dense_basis photometry mocks, issue #231)
-            - ``"native_vi_linear"`` — Native JAX MGVI (**broken**: same segfault)
+            - ``"native_vi_linear"``: Native JAX MGVI (**broken**: same segfault)
 
             **MCMC Sampling**
 
-            - ``"mcmc_nuts"`` — NUTS via BlackJAX (default for D≤20; exact posterior)
-            - ``"mcmc_raytrace"`` — Ray Tracing (Behroozi 2025; O(1) gradient cost)
-            - ``"mcmc"`` — Auto: NUTS (D≤20) or Ray Tracing (D>20)
-            - ``"mcmc_hmc"`` — Standard HMC (fixed trajectory length)
-            - ``"mcmc_dynamic_hmc"`` — Dynamic HMC (adaptive trajectory)
-            - ``"mcmc_ghmc"`` — Generalized HMC (**broken**: R-hat ~ 2.5-3.1,
+            - ``"mcmc_nuts"``: NUTS via BlackJAX (default for D≤20; exact posterior)
+            - ``"mcmc_raytrace"``: Ray Tracing (Behroozi 2025; O(1) gradient cost)
+            - ``"mcmc"``: Auto: NUTS (D≤20) or Ray Tracing (D>20)
+            - ``"mcmc_hmc"``: Standard HMC (fixed trajectory length)
+            - ``"mcmc_dynamic_hmc"``: Dynamic HMC (adaptive trajectory)
+            - ``"mcmc_ghmc"``: Generalized HMC (**broken**: R-hat ~ 2.5-3.1,
               ESS ~ 1 on D=6-7 mocks)
-            - ``"mcmc_mclmc"`` — MCLMC (**broken**: R-hat ~ 1.7, ESS ~ 1)
-            - ``"mcmc_adjusted_mclmc"`` — MCLMC + Metropolis correction
-            - ``"mcmc_ess"`` — Elliptical Slice Sampling (gradient-free)
+            - ``"mcmc_mclmc"``: MCLMC (**broken**: R-hat ~ 1.7, ESS ~ 1)
+            - ``"mcmc_adjusted_mclmc"``: MCLMC + Metropolis correction
+            - ``"mcmc_ess"``: Elliptical Slice Sampling (gradient-free)
 
             **Point Estimation & Approximations**
 
-            - ``"map"`` — MAP optimization (Adam by default)
-            - ``"laplace"`` — Laplace approximation (Gaussian posterior at MAP)
-            - ``"pathfinder"`` — L-BFGS trajectory + sequence of Gaussians (Zhang+2022)
+            - ``"map"``: MAP optimization (Adam by default)
+            - ``"laplace"``: Laplace approximation (Gaussian posterior at MAP)
+            - ``"pathfinder"``: L-BFGS trajectory + sequence of Gaussians (Zhang+2022)
 
             **Model Comparison (Bayesian Evidence)**
 
-            - ``"nss"`` — Nested Slice Sampling (exact Z, D≤30)
+            - ``"nss"``: Nested Slice Sampling (exact Z, D≤30)
 
             **Automatic Selection**
 
-            - ``"auto"`` — NUTS (D≤20) or geoVI (D>20) based on dimensionality
+            - ``"auto"``: NUTS (D≤20) or geoVI (D>20) based on dimensionality
 
         init_from : Posterior, optional
             Previous inference result to use as warm-start initialization.

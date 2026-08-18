@@ -44,6 +44,11 @@ def _make_mock_model(spec: Parameters, n_filters: int = 3) -> MagicMock:
     model.spec = spec
     model.predict_photometry.return_value = jnp.ones(n_filters) * 1e-18
     model.predict_spectrum.return_value = jnp.ones(50) * 1e-18
+    # This stub has no observation config. Say so: Fitter._build_data_args reads
+    # the optional channels with ``getattr(obs, "line_ratios", None)``, and on a
+    # MagicMock that default is unreachable, so the fitter would build line-flux,
+    # line-ratio and spectral-index channels the stub cannot serve (#1942).
+    model.observation = None
     return model
 
 

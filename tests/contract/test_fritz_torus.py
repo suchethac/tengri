@@ -114,7 +114,7 @@ def test_fritz_analytic_basic(fritz_grid_path: Path, wavelength_aa: jnp.ndarray)
     fritz_fn = create_fritz_from_grid(str(fritz_grid_path))
     L_nu = fritz_fn(
         wavelength_aa,
-        agn_log_lbol=44.0,
+        agn_log_lbol=10.42,
         agn_torus_frac=0.5,
         agn_fritz_r_ratio=60.0,
         agn_fritz_tau=1.0,

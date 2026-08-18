@@ -14,12 +14,12 @@ whole grid.
 
 This module provides:
 
-- :func:`arcsec_to_kpc` — convert angular size to physical size at
+- :func:`arcsec_to_kpc`: convert angular size to physical size at
   redshift z via the angular diameter distance.
-- :func:`circular_aperture_mask` — build a 0/1 mask on the spatial
+- :func:`circular_aperture_mask`: build a 0/1 mask on the spatial
   grid, optionally with a small sigmoidal edge softening for
   differentiability.
-- :func:`aperture_fraction` — the fraction of an unnormalized 2D
+- :func:`aperture_fraction`: the fraction of an unnormalized 2D
   profile that lies inside a given (kpc) radius from the origin.
 
 All functions are pure JAX. The aperture-fraction integral uses a

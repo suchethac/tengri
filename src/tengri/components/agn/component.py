@@ -19,7 +19,7 @@ Cross-component publications
   :class:`tengri.components.xray.component.XRaySEDComponent` and
   :class:`tengri.components.radio.component.RadioSEDComponent` via their
   documented fallback (``state.derived.get("L_agn_bol", 0.0)``).
-- ``state.derived["sed_agn"]`` — the AGN SED contribution
+- ``state.derived["sed_agn"]``: the AGN SED contribution
   (erg/s/Hz, shape n_wave) for diagnostics.
 
 Architectural notes

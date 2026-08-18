@@ -33,10 +33,10 @@ requires bare-stellar input — see Cue documentation).
 
 Diagnostics shown (read all from the rest-frame line list):
 
-- ``[O III] 5007 / H_β``  — ionization-state proxy (BPT y-axis)
-- ``[N II] 6583 / H_α``    — N-abundance + ionization (BPT x-axis)
-- ``[O III] 5007 / [O II] 3727``  — ``O32`` (ionization parameter)
-- ``[N II] 6583 / [O II] 3727``    — ``N2O2`` (gas metallicity)
+- ``[O III] 5007 / H_β``: ionization-state proxy (BPT y-axis)
+- ``[N II] 6583 / H_α``: N-abundance + ionization (BPT x-axis)
+- ``[O III] 5007 / [O II] 3727``: ``O32`` (ionization parameter)
+- ``[N II] 6583 / [O II] 3727``: ``N2O2`` (gas metallicity)
 
 The 2D grid subsumes 1D slices: varying logU alone at fixed metallicity
 (ionization-hardness diagnostic) and varying metallicity alone (abundance
@@ -175,7 +175,7 @@ References:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 51.042 seconds)
+   **Total running time of the script:** (1 minutes 30.094 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_cue_parameter_atlas.py:

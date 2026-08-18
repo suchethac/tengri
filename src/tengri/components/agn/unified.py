@@ -1591,7 +1591,7 @@ def unified_nlr_blr(
     >>> import jax.numpy as jnp
     >>> from tengri.components.agn.unified import unified_nlr_blr
     >>> wave = jnp.linspace(1000.0, 30000.0, 512)
-    >>> sed = unified_nlr_blr(wave, agn_log_lbol=45.0, agn_cos_inc=0.8)
+    >>> sed = unified_nlr_blr(wave, agn_log_lbol=11.42, agn_cos_inc=0.8)
     >>> sed.shape
     (512,)
     >>> bool(jnp.all(sed >= 0))

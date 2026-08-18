@@ -7,10 +7,10 @@ wavelength grid.
 
 Two entry points are provided:
 
-- :func:`evaluate_grahsp_agn` — low-level: takes :class:`GRAHSPParams`
+- :func:`evaluate_grahsp_agn`: low-level: takes :class:`GRAHSPParams`
   (CIGALE-style names, **nm** wavelengths) and returns the full
   per-component :class:`GRAHSPSED` bundle (:math:`L_\\lambda` in erg/s/nm).
-- :func:`compute_grahsp_sed` — registered AGN model entry point: takes Å
+- :func:`compute_grahsp_sed`: registered AGN model entry point: takes Å
   wavelengths and the standard ``agn_grahsp_*`` keyword arguments, and
   returns :math:`L_\\nu` in erg/s/Hz, normalized so the integrated
   intrinsic SED equals ``agn_log_lbol``.
@@ -481,7 +481,7 @@ agn_grahsp_hot_fcov
     --------
     >>> import jax.numpy as jnp
     >>> wave = jnp.logspace(2, 6, 200)  # Å
-    >>> L_nu = compute_grahsp_sed(wave, agn_log_lbol=45.0)
+    >>> L_nu = compute_grahsp_sed(wave, agn_log_lbol=11.42)
     """
     wave_angstrom = jnp.asarray(wavelength)
     wave_nm = wave_angstrom * 0.1

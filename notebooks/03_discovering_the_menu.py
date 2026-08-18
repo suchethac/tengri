@@ -158,12 +158,12 @@ tengri.list_dust_emission_models()
 # %% [markdown]
 # ## Nebular backends
 #
-# - **`cue`** — neural emulator on Cloudy 17.03 (Li+2024). Fast, smooth,
+# - **`cue`**: neural emulator on Cloudy 17.03 (Li+2024). Fast, smooth,
 #   requires bare-stellar SSP.
-# - **`ssp`** — baked-in nebular contribution from a wNE SSP grid.
+# - **`ssp`**: baked-in nebular contribution from a wNE SSP grid.
 #   Cheapest, locked to grid choices.
-# - **`cloudy`** — direct Cloudy evaluation. Accurate, slow.
-# - **`none`** — disable.
+# - **`cloudy`**: direct Cloudy evaluation. Accurate, slow.
+# - **`none`**: disable.
 
 # %%
 tengri.list_nebular_backends()
@@ -343,10 +343,10 @@ print(bibtex[:600], "…")
 # %% [markdown]
 # ## Cache and memory
 #
-# - **`tengri.lean`** — default mode. Drops JIT engine after each fit.
-# - **`tengri.persistent`** — keeps engine for repeated same-shape fits.
-# - **`tengri.gc`** — clears shared caches.
-# - **`tengri.clear_shared_caches()`** — full reset.
+# - **`tengri.lean`**: default mode. Drops JIT engine after each fit.
+# - **`tengri.persistent`**: keeps engine for repeated same-shape fits.
+# - **`tengri.gc`**: clears shared caches.
+# - **`tengri.clear_shared_caches()`**: full reset.
 
 # %% [markdown]
 # ## Cross-namespace search
@@ -359,29 +359,29 @@ tengri.search("Calzetti")
 # %% [markdown]
 # ## Sub-namespaces — where to look for what
 #
-# - **`tengri.cosmology`** — Planck 2018 distance and time integrals
+# - **`tengri.cosmology`**: Planck 2018 distance and time integrals
 #   (`luminosity_distance_mpc`, `age_at_z`, …).
-# - **`tengri.units`** — F_ν ↔ L_ν ↔ AB-mag conversions, vacuum-air, Jy.
-# - **`tengri.plot`** — `plot_sed_fit`, `plot_sfh`, `plot_corner_comparison`,
+# - **`tengri.units`**: F_ν ↔ L_ν ↔ AB-mag conversions, vacuum-air, Jy.
+# - **`tengri.plot`**: `plot_sed_fit`, `plot_sfh`, `plot_corner_comparison`,
 #   `setup_style`, `diagnostics_table`. Re-exports of
 #   `tengri.analysis.plotting`.
-# - **`tengri.observation`** — `Photometry`, `Spectroscopy`, `Observation`,
+# - **`tengri.observation`**: `Photometry`, `Spectroscopy`, `Observation`,
 #   `NoiseModel`, `LineList`, filter loaders.
-# - **`tengri.inference`** — `Catalog` (many galaxies, one call),
+# - **`tengri.inference`**: `Catalog` (many galaxies, one call),
 #   `VIConfig`, `InferenceContext`. Single-galaxy fits go through
 #   `ForwardModel.fit`; `Fitter` is an internal engine, not a surface to
 #   call directly.
-# - **`tengri.results`** — `Posterior`, `CatalogPosterior`,
+# - **`tengri.results`**: `Posterior`, `CatalogPosterior`,
 #   `PopulationPosterior`, `FitResult`, `MockData`, `Provenance`,
 #   `generate_mock`.
-# - **`tengri.config`** — `SEDModelConfig`, `SFHConfig`, `DustConfig`,
+# - **`tengri.config`**: `SEDModelConfig`, `SFHConfig`, `DustConfig`,
 #   `NebularConfig`, `AGNConfig`.
-# - **`tengri.protocols`** — Protocol shapes (`SEDComponent`, `Likelihood`,
+# - **`tengri.protocols`**: Protocol shapes (`SEDComponent`, `Likelihood`,
 #   `ObservationModel`, `DerivedKey`, `ForwardState`).
-# - **`tengri.builders`** — config-dict factories with introspectable
+# - **`tengri.builders`**: config-dict factories with introspectable
 #   signatures (`builders.sfh.*`, `builders.dust.*`, `builders.neb.*`,
 #   `builders.agn.*`, `builders.igm.*`).
-# - **`tengri.citations`** — `Bibliography`, `Citation`,
+# - **`tengri.citations`**: `Bibliography`, `Citation`,
 #   `collect_citations`, `citations_report`, `citations_bibtex`,
 #   `print_citations`, `print_bibtex`, `paper_citation`.
 #

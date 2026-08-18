@@ -91,9 +91,9 @@ def setup_style(style="tengri"):
         - ``"tengri"`` (default) — ``scienceplots.science`` + ``no-latex`` +
           tengri-specific tick and font-size overrides. Safe everywhere (no
           system LaTeX required).
-        - ``"tengri-nature"`` — Nature-journal variant (single-column width,
+        - ``"tengri-nature"``: Nature-journal variant (single-column width,
           sans-serif Arial). Use for slide decks.
-        - ``"tengri-minimal"`` — same tengri overrides but skip scienceplots
+        - ``"tengri-minimal"``: same tengri overrides but skip scienceplots
           so the style works when ``scienceplots`` is unavailable. Keeps the
           BAGPIPES-inspired look as a fallback.
 

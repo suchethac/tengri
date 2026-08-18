@@ -30,11 +30,11 @@ class ObservationModel(Protocol):
 
     Concrete implementations:
 
-    - ``PhotometryObservation`` — convolves observer-frame F_nu with a
+    - ``PhotometryObservation``: convolves observer-frame F_nu with a
       :class:`tengri.observation.LineList`-equivalent filter set.
-    - ``SpectroscopyObservation`` — applies the line-spread function,
+    - ``SpectroscopyObservation``: applies the line-spread function,
       wavelength mask, and calibration polynomial.
-    - ``JointObservation`` — combines both for objects with photometry
+    - ``JointObservation``: combines both for objects with photometry
       and spectroscopy.
 
     Required attributes
@@ -82,10 +82,10 @@ class ObservationModel(Protocol):
         mapping of str -> array
             Keys identify the observation channel. Standard keys:
 
-            - ``"phot_fnu"`` — F_nu in cgs at filter pivots
-            - ``"spec_fnu"`` — F_nu in cgs at the spec wavelength grid
-            - ``"lines_flux"`` — emission-line integrated fluxes
-            - ``"indices"`` — Lick indices and similar
+            - ``"phot_fnu"``: F_nu in cgs at filter pivots
+            - ``"spec_fnu"``: F_nu in cgs at the spec wavelength grid
+            - ``"lines_flux"``: emission-line integrated fluxes
+            - ``"indices"``: Lick indices and similar
 
             Implementations are free to add more keys; the
             :class:`Likelihood` decides which it consumes.

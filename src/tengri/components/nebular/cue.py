@@ -1067,8 +1067,9 @@ class CueBackend:
                 "emission.\n"
                 "\n"
                 "Fix (one of):\n"
-                "  1. Use a bare-stellar SSP (e.g. fsps_prsc_miles_chabrier.h5;\n"
-                "     see tengri.data.download_ssp / list_remote_ssps).\n"
+                "  1. Download a bare-stellar SSP and retry:\n"
+                "     tengri.download_ssp('fsps_prsc_miles_chabrier')\n"
+                "     Then rebuild the model with that grid.\n"
                 "  2. Keep this SSP and drop neb={'type': 'cue'} — the\n"
                 "     baked-in nebular backend already models the lines."
             )

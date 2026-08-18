@@ -26,22 +26,22 @@ each line shows::
 Naming conventions
 ------------------
 
-- ``H_PLANCK``   — Planck's constant h
-- ``K_BOLTZ``    — Boltzmann constant k_B
-- ``C_CGS``      — speed of light c in cm/s
-- ``C_AA``       — speed of light c in Å/s (used for ν = c/λ with λ in Å)
-- ``C_KM_S``     — speed of light c in km/s (for Doppler calculations)
-- ``SIGMA_SB``   — Stefan-Boltzmann constant σ
-- ``G_GRAV``     — gravitational constant G
-- ``SIGMA_T``    — Thomson cross section σ_T
-- ``M_PROTON``   — proton mass m_p
-- ``M_ELECTRON`` — electron mass m_e
-- ``M_SUN``      — solar mass M_⊙
-- ``L_SUN``      — solar luminosity L_⊙ (IAU 2015 nominal)
-- ``PC_CM``      — parsec in cm
-- ``AA_TO_CM``   — Ångström → cm conversion factor
-- ``KEV_TO_ERG`` — keV → erg energy conversion
-- ``KEV_TO_HZ``  — keV → Hz frequency conversion (E = hν)
+- ``H_PLANCK``: Planck's constant h
+- ``K_BOLTZ``: Boltzmann constant k_B
+- ``C_CGS``: speed of light c in cm/s
+- ``C_AA``: speed of light c in Å/s (used for ν = c/λ with λ in Å)
+- ``C_KM_S``: speed of light c in km/s (for Doppler calculations)
+- ``SIGMA_SB``: Stefan-Boltzmann constant σ
+- ``G_GRAV``: gravitational constant G
+- ``SIGMA_T``: Thomson cross section σ_T
+- ``M_PROTON``: proton mass m_p
+- ``M_ELECTRON``: electron mass m_e
+- ``M_SUN``: solar mass M_⊙
+- ``L_SUN``: solar luminosity L_⊙ (IAU 2015 nominal)
+- ``PC_CM``: parsec in cm
+- ``AA_TO_CM``: Ångström → cm conversion factor
+- ``KEV_TO_ERG``: keV → erg energy conversion
+- ``KEV_TO_HZ``: keV → Hz frequency conversion (E = hν)
 - ``K_BOLTZ_KEV``— k_B in keV/K (for temperature → seed photon energy)
 
 Special constants
@@ -92,6 +92,25 @@ Derivation: c = 2.99792458e8 m/s (exact)
             = 2.99792458e5 km/s
 
 Used for Doppler-shift and line-width calculations.
+"""
+
+# ── Radio continuum frequencies ───────────────────────────────────
+
+WAVE_1P4GHZ_AA: float = 21.41374e8
+"""1.400 GHz rest-frame wavelength [Å].
+
+Derivation: λ = c / ν
+            = 2.99792458e8 m/s / 1.400e9 Hz
+            = 0.214137... m
+            = 21.4137... × 1e8 Å
+            ≈ 21.41374e8 Å
+
+This is the standard continuum frequency for FIR-radio correlations (Bell 2003,
+Delvecchio+2021) and NVSS radio surveys. NOT the 21 cm HI line (1.4204 GHz /
+21.106 cm). See issue #1057 for the distinction.
+
+Used to extract monochromatic radio luminosity L_1.4GHz from rest-frame
+SED grids: ``L_1p4ghz = jnp.interp(WAVE_1P4GHZ_AA, wave, L_radio)``.
 """
 
 # ── Planck's constant ─────────────────────────────────────────────

@@ -419,10 +419,10 @@ def drw_partial_gp_from_zeta(zeta, psd_sigma_dex, psd_tau_yr, log_age_grid, cent
     :math:`s \sim \mathcal{N}(0, K)` with
     :math:`K_{ij} = \sigma_s^2 \exp(-|t_i-t_j|/\tau)`:
 
-    * ``a = 1`` — non-centered. The prior on :math:`\zeta` is :math:`\mathcal{N}(0, I)`,
+    * ``a = 1``: non-centered. The prior on :math:`\zeta` is :math:`\mathcal{N}(0, I)`,
       independent of :math:`\sigma`; the amplitude enters through the **likelihood**.
       This is the standardized parameterization and today's default.
-    * ``a = 0`` — centered. The transform is amplitude-free; :math:`\sigma` enters
+    * ``a = 0``: centered. The transform is amplitude-free; :math:`\sigma` enters
       through the **prior**.
 
     Why it matters: at ``a = 1`` the map is *multiplicative* in

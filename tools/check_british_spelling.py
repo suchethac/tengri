@@ -49,9 +49,34 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-# Files scanned: same scope that was converted in #819, plus the
-# repo-root prose files (README slipped through the original sweep).
-DEFAULT_ROOTS = ("src", "tests", "docs", "examples", "notebooks", "README.md", "CONTRIBUTING.md")
+# Files scanned: same scope that was converted in #819, plus the repo-root prose
+# files (README slipped through the original sweep) and the GitHub-visible
+# community files.
+#
+# The `.github` tree and the root prose files were outside this list until
+# 2026-08-18, which is why "Expected behaviour" sat in the bug-report template
+# and "labelled" in GOVERNANCE: the rule was repo-wide but the guard's *domain*
+# was not, so nothing ever looked. Adding a file to the repo root or to
+# `.github/` should mean it is covered by default.
+#
+# CHANGELOG.md is deliberately NOT scanned. It is a historical record, and many
+# of its entries document renames whose *old* name was British-spelled
+# (`rest_frame_colour()` -> `rest_frame_color()`). Normalising it rewrites both
+# sides of the arrow and turns the entry into `X -> X`, destroying the very
+# thing the line exists to record. Measured: --fix produced 23 such entries.
+DEFAULT_ROOTS = (
+    "src",
+    "tests",
+    "docs",
+    "examples",
+    "notebooks",
+    ".github",
+    "README.md",
+    "CONTRIBUTING.md",
+    "ROADMAP.md",
+    "GOVERNANCE.md",
+    "CONTRIBUTORS.md",
+)
 SUFFIXES = (".py", ".md", ".rst")
 # Excluded path fragments: generated output and archived notebook trees.
 # Matching is exact-on-path-part (see the `path.parts` test below), so each archived

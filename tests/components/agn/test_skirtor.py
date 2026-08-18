@@ -295,8 +295,8 @@ class TestSKIRTORAnalytic:
         """SED should scale with bolometric luminosity."""
         from tengri.components.agn.skirtor import skirtor_analytic
 
-        sed_low = skirtor_analytic(wave, agn_log_lbol=43.0)
-        sed_high = skirtor_analytic(wave, agn_log_lbol=44.0)
+        sed_low = skirtor_analytic(wave, agn_log_lbol=9.42)
+        sed_high = skirtor_analytic(wave, agn_log_lbol=10.42)
         ratio = float(jnp.max(sed_high) / jnp.max(sed_low))
         np.testing.assert_allclose(ratio, 10.0, rtol=0.1)
 
@@ -445,7 +445,7 @@ class TestSKIRTORGradients:
             return jnp.sum(
                 model_fn(
                     wave,
-                    agn_log_lbol=44.0,
+                    agn_log_lbol=10.42,
                     agn_tau_skirtor=tau,
                     agn_cos_inc=ci,
                 )
@@ -523,7 +523,7 @@ class TestSKIRTORJIT:
             def test_fn(tau, p, q, oa, ci):
                 return model_fn(
                     wave,
-                    agn_log_lbol=44.0,
+                    agn_log_lbol=10.42,
                     agn_tau_skirtor=tau,
                     agn_p_skirtor=p,
                     agn_q_skirtor=q,

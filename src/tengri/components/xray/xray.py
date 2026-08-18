@@ -863,12 +863,12 @@ ALPHA_OX_RELATIONS: tuple[str, ...] = (
 )
 """Available empirical α_OX(L_2500) correlations.
 
-* ``"just2007"`` — Just et al. 2007, ApJ 665, 1004 Eq. 3. CIGALE default
+* ``"just2007"``: Just et al. 2007, ApJ 665, 1004 Eq. 3. CIGALE default
   (yang20.py:227). Derived from optically-bright AGN at low–intermediate
   luminosity.
-* ``"lusso_risaliti_2016"`` — Lusso & Risaliti 2016, ApJ 819, 154 Eq. 3.
+* ``"lusso_risaliti_2016"``: Lusso & Risaliti 2016, ApJ 819, 154 Eq. 3.
   Refit on 2685 SDSS+XMM quasars, extends to higher L_2500.
-* ``"lusso_risaliti_2017"`` — Lusso & Risaliti 2017, A&A 602, A79 Eq. 2.
+* ``"lusso_risaliti_2017"``: Lusso & Risaliti 2017, A&A 602, A79 Eq. 2.
   High-z quasar sample, used by AGNfitter-rx.
 """
 

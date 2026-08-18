@@ -3,9 +3,9 @@
 
 Adds two BAGPIPES-parity helpers (closes #509):
 
-- :func:`plot_1d_posterior` — histogram of one free parameter with the
+- :func:`plot_1d_posterior`: histogram of one free parameter with the
   median + 16/84 percentile bars; optionally overlay the prior.
-- :func:`plot_calibration` — plot the Chebyshev calibration polynomial
+- :func:`plot_calibration`: plot the Chebyshev calibration polynomial
   :math:`C(\\lambda)` with its 16/84 band, useful for sanity-checking
   spectroscopy fits.
 

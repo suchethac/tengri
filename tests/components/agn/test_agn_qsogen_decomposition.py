@@ -72,7 +72,7 @@ def test_qsogen_components_helper_keys():
         agn_bbnorm=3.96,
         agn_emline_scale=1.0,
         agn_ebv=0.0,
-        agn_log_lbol=45.0,
+        agn_log_lbol=11.42,
         agn_bcnorm=0.0,
     )
     assert set(out.keys()) == {

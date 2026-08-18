@@ -635,6 +635,7 @@ def interp_nd_triweight(
     point: tuple,
     scatters: tuple | None = None,
     index_space_interp: bool | None = None,
+    on_out_of_grid: str = "clamp",
 ) -> jnp.ndarray:
     """N-dimensional smooth interpolation via triweight kernel.
 
@@ -663,6 +664,11 @@ def interp_nd_triweight(
         Whether to use index-space interpolation for non-uniform axes.
         Passed through to :func:`compute_grid_weights`. See its documentation
         for details. Default None (see compute_grid_weights).
+    on_out_of_grid : str
+        Behavior when any dimension's triweight kernel integrates to zero
+        (query entirely outside grid bounds on that axis). Default ``"clamp"``
+        (clip to edge value, zero gradient outside). See :func:`compute_grid_weights`
+        for alternatives. Issue #895.
 
     Returns
     -------
@@ -701,6 +707,7 @@ def interp_nd_triweight(
             scatter=scatters[i],
             edges=edges[i],
             index_space_interp=index_space_interp,
+            on_out_of_grid=on_out_of_grid,
         )
         weights_per_axis.append(w)
 
