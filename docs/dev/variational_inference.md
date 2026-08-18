@@ -49,7 +49,7 @@ If you keep the same scouts for too many rounds, they become **stale**: the pin 
 
 ## The Default Strategy
 
-When you call `fitter.run("native_geovi")` (the default), this is what happens internally:
+When you call `fitter.run("vi")` (the default), this is what happens internally:
 
 ```
 Iteration  1:  nonlinear_resample   ← fresh curved scouts (establish)
@@ -77,8 +77,8 @@ Fresh scouts every 5 iterations. Deterministic refinement in between. This gives
 
 ```python
 # Just works. Uses the optimal schedule internally.
-# native_geovi is the default going forward.
-result = fitter.run("native_geovi", n_iterations=15)
+# vi (NIFTy geoVI) is the default.
+result = fitter.run("vi", n_iterations=15)
 ```
 
 ### With control
@@ -106,47 +106,37 @@ There is no `schedule=` parameter. `OptimizationSchedule` was deleted in #1293
 as dead code — nothing ever consumed it, and the cadence it expressed is the
 one the backend already applies internally.
 
-### Method hierarchy
+### VI Method reference
 
-| Method | What it does | When to use |
-|--------|-------------|-------------|
-| `"native_geovi"` | JIT geoVI with resample+update, nonlinear draws (**DEFAULT**) | Almost always |
-| `"native_mgvi"` / `"native_evi"` | JIT MGVI/EVI | Quick look, very high D |
-| `"geovi"` / `"fast_geovi"` | NIFTy OptimizeVI.update tight loop | NIFTy-exact math needed |
-| `"mgvi"` / `"fast_mgvi"` | NIFTy MGVI tight loop | NIFTy-exact MGVI |
-| `"evi"` / `"fast_evi"` | NIFTy EVI tight loop | NIFTy-exact EVI |
-| `"nifty_geovi"` | Full jft.optimize_kl with logging | Debugging |
-| `"nifty_mgvi"` | Full NIFTy MGVI with logging | Debugging |
-| `"geovi_nuts"` | geoVI optimization + NUTS posterior draws | Best of both worlds |
-| `"mgvi_nuts"` | MGVI optimization + NUTS posterior draws | VI init + MCMC samples |
-| `"raytrace"` | Exact MCMC (Ray Tracing) | Gold-standard validation |
-| `"nuts"` | Exact MCMC (NUTS) | Low-D validation |
-| `"map"` | Point estimate only | Initialization |
+For the full list of available methods (VI and otherwise), call `tengri.list_inference_methods()`.
 
-### Backend hierarchy
+The variational inference methods are:
 
-| Prefix | Backend | Speed | Accuracy |
-|--------|---------|-------|----------|
-| `native_` | Pure JIT (XLA-compiled) | 0.03s/galaxy* | **Default** |
-| (none) / `fast_` | NIFTy `OptimizeVI.update` tight loop | ~12s/galaxy | Exact NIFTy math |
-| `nifty_` | Full `jft.optimize_kl` with logging | ~18s/galaxy | Same, with diagnostics |
+| Method | Tier | What it does | When to use |
+|--------|------|-------------|-------------|
+| `"vi"` | primary | NIFTy geoVI with resample+update, nonlinear draws (**DEFAULT**) | Almost always; best balance of speed and accuracy |
+| `"vi_nonlinear_fast"` | primary | NIFTy geoVI without Python logging | Same as `vi`, slightly faster (logging overhead removed) |
+| `"vi_linear"` | experimental | NIFTy MGVI with logging (linear approximation to posterior) | High-D exploration, lower memory than geoVI |
+| `"vi_linear_fast"` | experimental | NIFTy MGVI without Python logging | High-D quick look, lower memory |
+| `"native_vi_nonlinear"` | broken | JIT-compiled geoVI (internal use only) | [segfaults on some models; do not use] |
+| `"native_vi_linear"` | broken | JIT-compiled MGVI (internal use only) | [segfaults on some models; do not use] |
 
-*After one-time 56s compilation. Best for catalog fitting (100+ galaxies).
+### Backend speeds (empirical)
 
-### Internal dispatch
+The `_fast` variants skip Python logging, so they're measurably faster on catalog fits where the logging overhead dominates per-galaxy time. The difference is largest with `vmap` over many galaxies; on single-galaxy fits it's negligible.
 
-| Internal method | Canonical name | Old names (deprecated) |
-|----------------|---------------|----------------------|
-| `_run_vi` | `vi` (default) | `geovi`, `vi_nifty`, `nifty_geovi`, `fast_geovi` |
-| `_run_vi_linear` | `vi_linear` | `mgvi`, `evi`, `vi_nifty_linear`, `nifty_mgvi`, `fast_mgvi` |
-| `_run_nifty_fast_vi` | `vi_nifty_fast` | — |
-| `_run_nifty_fast_vi_linear` | `vi_nifty_fast_linear` | — |
-| `_run_vi_native` | `vi_native` | `native_geovi` |
-| `_run_vi_native_linear` | `vi_native_linear` | `native_mgvi`, `native_evi` |
-| `_run_map` | `map` | — |
-| `_run_nuts` | `mcmc_nuts` | `nuts` |
-| `_run_raytrace` | `mcmc_raytrace` | `raytrace` |
-| `_run_nss` | `nss` | `evidence` |
+For high-dimensional problems (D ≥ 50), `vi_linear` converges faster than `vi` (MGVI is cheaper per iteration than geoVI), at the cost of lower posterior fidelity. Try `vi_linear` first if your model is high-D; measure the posterior quality before committing.
+
+### Deprecated names
+
+The following method names are no longer in the registry. If you encounter them in old notebooks or older code, they have been renamed:
+
+| Old name | Current name | Status |
+|----------|-------------|--------|
+| `native_geovi`, `geovi`, `vi_nifty`, `nifty_geovi`, `fast_geovi` | `vi` | Consolidated to one entry point (both logging and fast variants available separately) |
+| `mgvi`, `evi`, `vi_nifty_linear`, `nifty_mgvi`, `fast_mgvi` | `vi_linear` | Consolidated; use `vi_linear_fast` for non-logging variant |
+| `native_vi_nonlinear` | (broken — do not use) | Segfaults on some models; broke during native JIT refactor |
+| `native_vi_linear` | (broken — do not use) | Segfaults on some models; broke during native JIT refactor |
 
 ### Batch fitting
 
@@ -195,7 +185,7 @@ When the pin (expansion point m) moves, the coordinate transform g changes (beca
 After fitting, check:
 
 ```python
-result = fitter.run("native_geovi", n_iterations=15)
+result = fitter.run("vi", n_iterations=15)
 
 # Chi-squared per data point (should be ~1)
 print(result.diagnostics["chi2_dof"])
@@ -207,20 +197,20 @@ for i in range(10):
     # pred should bracket the data within noise
 ```
 
-## Choosing an Inference Method
+## Choosing a VI Backend
 
-tengri has two VI paths with the same variational objective but different drivers.
+The two main variational inference backends are:
 
-| Method string | Driver | Notes |
+| Method string | Backend | Notes |
 |---|---|---|
-| `"vi"` | NIFTy `jft.optimize_kl` (Python loop) | Reference path; verbose logging. |
-| `"vi_linear"` | NIFTy MGVI | Linear-only, debugging high-D problems. |
-| `"vi_native"` | Pure-JAX `lax.while_loop` | ~18× faster warm-run; **not posterior-equivalent to `"vi"` in general** (see benchmark below). |
-| `"vi_native_linear"` | Pure-JAX MGVI | Same as above, MGVI variant. |
+| `"vi"` | NIFTy geoVI (`jft.optimize_kl`, Python loop) | **Default.** Best posterior quality; includes Python logging. |
+| `"vi_nonlinear_fast"` | NIFTy geoVI, no logging | Same algorithm as `vi`, slightly faster on catalog fits (logging overhead removed). |
+| `"vi_linear"` | NIFTy MGVI (`jft.optimize_kl`, Python loop) | Linear approximation to posterior; converges faster in very high D (≥ 50) at cost of fidelity. |
+| `"vi_linear_fast"` | NIFTy MGVI, no logging | Same as `vi_linear`, faster on catalog fits. |
 
-**Method names.** The registered VI backends are `"vi"` (NIFTy geoVI, primary), `"vi_nonlinear_fast"` (geoVI without Python logging, primary), and `"vi_linear"` / `"vi_linear_fast"` (NIFTy MGVI, experimental). Older names — `"geovi"`, `"mgvi"`, `"evi"`, `"native_geovi"`, `"vi_native"` and friends — are **not aliases and do not resolve**; they raise. `tengri.list_inference_methods()` is the live list.
+**Method names.** Older registrations like `"native_geovi"`, `"geovi"`, `"mgvi"`, `"vi_native"`, and similar do **not exist** and will raise a `ParameterError`. Call `tengri.list_inference_methods()` to see the live registry.
 
-**Important equivalence caveat:** A 2026-04-17 benchmark (`bench/reports/2026-04-17_native_vs_nifty.md`) compared `"vi"` vs `"vi_native"` on a 7-parameter parametric setup (15 KL iterations, 6 samples, matched `init_from="random"`). Native was 18.5× faster on warm run, but converged posterior means disagreed by up to 2.3σ on some parameters. **The two paths target the same objective with different solver details and land in different modes on multi-modal problems.** Treat `"vi_native"` as "fast but not identical" — validate per-problem with NUTS (for D ≤ 20) before trusting its posterior.
+Readers encountering references to `"vi_native"` in older code should substitute `"vi"`. The native backends (`"native_vi_nonlinear"`, `"native_vi_linear"`) still exist in the registry but at `tier=broken`: asking for one by its real name raises `BackendError` naming the tier and the working alternatives — a different failure from the never-registered names above, which raise `ParameterError`. They are not posterior-equivalent to the NIFTy reference on some problems (see `bench/reports/2026-04-17_native_vs_nifty.md` for measurements).
 
 ### `n_samples` gotcha
 
@@ -230,11 +220,11 @@ tengri has two VI paths with the same variational objective but different driver
 
 | Problem | D | Recommended method | Time |
 |---------|--:|-------------------|------|
-| Smooth SFH, 5 bands | ~7 | `native_geovi` (15 iter) | 56s compile + 0.3s |
-| Stochastic SFH, 5 bands | ~137 | `native_geovi` (15 iter) | 56s compile + 0.8s |
-| Stochastic SFH, spectrum | ~200 | `native_evi` (20 iter) | ~60s |
-| Hierarchical, 10 galaxies | ~1,400 | `native_evi` (25 iter) | ~10min |
-| Catalog, 100+ galaxies | ~7/galaxy | `native_geovi` via `fit_batch` | 56s compile + 3s |
+| Smooth SFH, 5 bands | ~7 | `vi` (15 iterations) | ~2-5s |
+| Stochastic SFH, 5 bands | ~137 | `vi` (15 iterations) | ~10-30s |
+| Stochastic SFH, spectrum | ~200 | `vi_linear` (20 iterations) | ~30-60s |
+| Hierarchical, 10 galaxies | ~1,400 | `vi_linear` (25 iterations) | ~10 min |
+| Catalog, 100+ galaxies | ~7/galaxy | `vi` via `fit_batch` | ~3-10s total (after compilation) |
 
 ## Mathematical Details
 
