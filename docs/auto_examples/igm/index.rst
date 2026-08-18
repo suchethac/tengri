@@ -55,7 +55,7 @@ Intergalactic-medium absorption: Madau vs Inoue prescriptions, Lyα forest, damp
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Four IGM transmission variants available in tengri are compared at z=7, applied to a young star-forming SED. This diagnostic isolates the differences between models around the Lyman-alpha forest:">
+    <div class="sphx-glr-thumbcontainer" tooltip="Five IGM transmission variants available in tengri are compared at z=7, applied to a young star-forming SED. This diagnostic isolates the differences between models around the Lyman-alpha forest:">
 
 .. only:: html
 
@@ -84,23 +84,6 @@ Intergalactic-medium absorption: Madau vs Inoue prescriptions, Lyα forest, damp
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">IGM transmission curves evolve sharply with redshift as Lyman forest deepens</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="The two standard IGM transmission prescriptions diverge most visibly across the Lyman-alpha forest and the Lyman limit. Madau (1995) is the original analytic Lyman-series effective optical depth; Inoue+2014 added Lyman-continuum and damped-Lyα systems in a more careful integral over the H I distribution.">
-
-.. only:: html
-
-  .. image:: /auto_examples/igm/images/thumb/sphx_glr_plot_inoue_vs_madau_z5_z7_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/igm/plot_inoue_vs_madau_z5_z7`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Inoue+2014 vs Madau 1995 across the Lyman break at z=5 and z=7</div>
     </div>
 
 
@@ -152,7 +135,6 @@ Intergalactic-medium absorption: Madau vs Inoue prescriptions, Lyα forest, damp
    /auto_examples/igm/plot_dla_redshift_evolution
    /auto_examples/igm/plot_igm_models_comparison
    /auto_examples/igm/plot_igm_redshift
-   /auto_examples/igm/plot_inoue_vs_madau_z5_z7
    /auto_examples/igm/plot_lyman_alpha_igm_attenuation
    /auto_examples/igm/plot_sed_with_igm
 

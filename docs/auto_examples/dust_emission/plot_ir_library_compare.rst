@@ -56,21 +56,8 @@ implications.
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /tengri/examples/dust_emission/plot_ir_library_compare.py:210: UserWarning: Glyph 956 (\N{GREEK SMALL LETTER MU}) missing from font(s) cmr10.
-      fig.tight_layout()
-    /tengri/examples/dust_emission/plot_ir_library_compare.py:211: UserWarning: Glyph 956 (\N{GREEK SMALL LETTER MU}) missing from font(s) cmr10.
-      plt.savefig("plot_ir_library_compare.png", dpi=150, bbox_inches="tight")
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -87,7 +74,7 @@ implications.
     import numpy as np
 
     import tengri
-    from tengri.analysis.plotting import setup_style
+    from tengri.plot import setup_style
     from tengri.dust import (
         casey2012,
         dale2014,
@@ -260,7 +247,7 @@ implications.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 16.455 seconds)
+   **Total running time of the script:** (0 minutes 24.755 seconds)
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_ir_library_compare.py:

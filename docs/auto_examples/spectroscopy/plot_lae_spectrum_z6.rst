@@ -41,12 +41,8 @@ Demonstrates Lyα radiative transfer and reionization-era observability.
 
  .. code-block:: none
 
-    /tengri/src/tengri/forward/orchestrator.py:794: SFHBeforeBigBangWarning: Star formation history forms 100% of its stellar mass before the Big Bang at z=6.00 (cosmic age 0.93 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+    /tengri/src/tengri/forward/orchestrator.py:951: SFHBeforeBigBangWarning: Star formation history forms 100% of its stellar mass before the Big Bang at z=6.00 (cosmic age 0.93 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
       state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
-    /tengri/examples/spectroscopy/plot_lae_spectrum_z6.py:159: UserWarning: Glyph 197 (\N{LATIN CAPITAL LETTER A WITH RING ABOVE}) missing from font(s) cmr10.
-      plt.savefig("plot_lae_spectrum_z6.png", dpi=150, bbox_inches="tight")
-    /tengri/examples/spectroscopy/plot_lae_spectrum_z6.py:159: UserWarning: Glyph 945 (\N{GREEK SMALL LETTER ALPHA}) missing from font(s) cmr10.
-      plt.savefig("plot_lae_spectrum_z6.png", dpi=150, bbox_inches="tight")
 
 
 
@@ -69,7 +65,7 @@ Demonstrates Lyα radiative transfer and reionization-era observability.
     import numpy as np
 
     import tengri
-    from tengri.analysis.plotting import setup_style
+    from tengri.plot import setup_style
     from tengri.igm import igm_transmission
 
     setup_style()
@@ -210,7 +206,7 @@ Demonstrates Lyα radiative transfer and reionization-era observability.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 7.177 seconds)
+   **Total running time of the script:** (0 minutes 8.764 seconds)
 
 
 .. _sphx_glr_download_auto_examples_spectroscopy_plot_lae_spectrum_z6.py:

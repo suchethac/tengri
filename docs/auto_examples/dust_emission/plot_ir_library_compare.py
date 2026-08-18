@@ -40,7 +40,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import tengri
-from tengri.analysis.plotting import setup_style
+from tengri.plot import setup_style
 from tengri.dust import (
     casey2012,
     dale2014,

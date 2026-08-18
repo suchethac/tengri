@@ -14,7 +14,7 @@ SSP grid. The live backends instead compute it, and expect a bare stellar grid.
 Feed a bare grid to the baked-in path and both continuum and line fluxes come
 out low, with no error raised.
 
-Gas-phase metallicity is its own knob and does not follow the stellar one.
+Gas-phase metallicity is its own knob and does not follow the stellar one. Shock emission examples include line-ratio diagnostics; a composable shock-group sweep is in development (Task 4).
 
 
 .. raw:: html
@@ -30,40 +30,6 @@ Gas-phase metallicity is its own knob and does not follow the stellar one.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The Cue neural emulator responds to 12+ parameters. We show how each knob (ionization, metallicity, density, abundances, ionizing slope) moves a galaxy on the BPT-N plane log [OIII]/Hβ vs log [NII]/Hα. Each panel sweeps one parameter while holding fiducial values fixed. Kewley+2001 and Kauffmann+2003 demarcations shown for reference.">
-
-.. only:: html
-
-  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_bpt_cue_flexibility_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/nebular/plot_bpt_cue_flexibility`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Cue nebular knobs affect BPT positions individually</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Show how the Cue neural emulator (Li+2025) maps the 2D parameter space (log U, log Z_gas) onto three classical BPT diagnostic diagrams. Lines of constant log U (varying metallicity) and constant log Z (varying ionization) show the full grid&#x27;s coverage and demarcation positions.">
-
-.. only:: html
-
-  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_bpt_cue_grid_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/nebular/plot_bpt_cue_grid`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Cue nebular grid on BPT diagram</div>
-    </div>
-
-
-.. raw:: html
-
     <div class="sphx-glr-thumbcontainer" tooltip="Emission lines are vacuum throughout: [OIII] = 5008.24 Å, [NII] = 6585.28 Å, Hα = 6564.61 Å, Hβ = 4862.68 Å. Overlays Kewley+2001 SF/AGN demarcation and Kauffmann+2003 SF/composite line.">
 
 .. only:: html
@@ -76,23 +42,6 @@ Gas-phase metallicity is its own knob and does not follow the stellar one.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">BPT diagram: star-forming galaxies, AGN, and shocks</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="The Cue knobs fesc (ionizing-photon escape fraction) and logU (HII region ionization parameter) jointly govern the line spectrum of a star-forming galaxy: escape fraction sets how many ionizing photons reach the gas, logU shifts the resulting ionization balance of the gas they ionize. We map the response of three diagnostic lines/ratios on a 2-D grid.">
-
-.. only:: html
-
-  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_cue_fesc_logu_atlas_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/nebular/plot_cue_fesc_logu_atlas`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Cue 2-D atlas: ionizing escape fraction × ionization parameter</div>
     </div>
 
 
@@ -115,23 +64,6 @@ Gas-phase metallicity is its own knob and does not follow the stellar one.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The Lyα-specific escape fraction f_esc_lya sets what fraction of Lyα photons can escape the ISM without scattering. Higher f_esc_lya suppresses the Lyα emission line while leaving other nebular lines unchanged.">
-
-.. only:: html
-
-  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_fesc_lya_sweep_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/nebular/plot_fesc_lya_sweep`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Lyα escape fraction controls Lyman-alpha strength</div>
-    </div>
-
-
-.. raw:: html
-
     <div class="sphx-glr-thumbcontainer" tooltip="We sweep the ionizing-photon escape fraction f_esc from 0 to 1.0 at fixed log U and metallicity, showing both the broadband SED response and a zoomed view of the critical Lyman-continuum (912 A) region. The Lyman edge deepens as ionizing photons escape the ISM unabsorbed, suppressing optical line ratios simultaneously.">
 
 .. only:: html
@@ -144,23 +76,6 @@ Gas-phase metallicity is its own knob and does not follow the stellar one.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Escape fraction reshapes the SED from the Lyman continuum to optical lines</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Nebular free-free, free-bound, and two-photon emission respond to gas-phase metallicity (``logZ_gas``) through changes in metal cooling efficiency and ionization balance. metallicity sensitivity of the nebular continuum at fixed ionization parameter.">
-
-.. only:: html
-
-  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_gas_z_continuum_effect_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/nebular/plot_gas_z_continuum_effect`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Gas-phase metallicity effect on nebular continuum</div>
     </div>
 
 
@@ -183,40 +98,6 @@ Gas-phase metallicity is its own knob and does not follow the stellar one.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="A galaxy&#x27;s velocity dispersion sigma_v_kms broadens every spectral feature — including the nebular emission lines — from a few tens of km/s (dynamically cold disks) to several hundred km/s (dispersion-dominated spheroids and AGN narrow-line regions). The broadening is a forward-model convolution applied to the predicted spectrum, so it is only visible when the instrument line-spread function is finer than the velocity width: we therefore predict a spectrum on a high-resolution grid (R ~ 10000) around the [O III] λλ4959,5007 + Hβ region and sweep sigma_v_kms.">
-
-.. only:: html
-
-  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_line_sigma_sweep_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/nebular/plot_line_sigma_sweep`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Emission line broadening traces gas kinematics</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="A 1-D log Z_gas sweep on the SED scale, complementing the 2-D atlas in plot_cue_parameter_atlas.py and the line-ratio projection in plot_strong_line_metallicity_diagnostics.py. Reader sees how every strong optical line moves together as Z_gas climbs, with [N II]/Hα and [O III]/Hbeta the textbook diagnostics.">
-
-.. only:: html
-
-  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_logz_gas_sweep_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/nebular/plot_logz_gas_sweep`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Gas metallicity reshapes the optical nebular continuum and line forest</div>
-    </div>
-
-
-.. raw:: html
-
     <div class="sphx-glr-thumbcontainer" tooltip="Lyα rest-frame wavelength is 1216 Å (vacuum). EW peaks at 3–5 Myr when O-type stars dominate ionization, then decays past 10 Myr. Higher metallicity suppresses ionizing photon production, reducing peak EW.">
 
 .. only:: html
@@ -234,57 +115,6 @@ Gas-phase metallicity is its own knob and does not follow the stellar one.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Ionizing photon production declines rapidly with stellar population age (~t^-1). We show how nebular line strength evolves from young (50 Myr) to old (5 Gyr) populations.">
-
-.. only:: html
-
-  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_neb_age_dependence_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/nebular/plot_neb_age_dependence`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Nebular emission fades with stellar population age</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Young massive stars produce harder ionizing continua and drive the nebular emission toward higher [O III]/Hbeta. We sweep the SFH timescale tau_gyr from 0.1 to 2 Gyr on a single dual power-law model and plot the resulting line ratios against the Kewley+2001 / Kauffmann+2003 demarcation curves. The locus migrates from the star-forming wing into the composite region as the population ages — SFH timescale is the upstream knob behind the BPT ionization sequence.">
-
-.. only:: html
-
-  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_neb_bpt_logu_grid_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/nebular/plot_neb_bpt_logu_grid`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Stellar-population age moves a galaxy on the BPT diagram</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Nebular gas density controls ionization balance and recombination rates, affecting emission line strengths. Higher density increases cooling efficiency, shifting line ratios through recombination rate changes.">
-
-.. only:: html
-
-  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_neb_density_sweep_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/nebular/plot_neb_density_sweep`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Nebular density affects recombination and cooling</div>
-    </div>
-
-
-.. raw:: html
-
     <div class="sphx-glr-thumbcontainer" tooltip="Compare four nebular emission backends on identical star-forming spectra:">
 
 .. only:: html
@@ -297,23 +127,6 @@ Gas-phase metallicity is its own knob and does not follow the stellar one.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Nebular backends: Cue, CloudyGrid, SSP-embedded, and BakedIn</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="The optical [O III] 5007 / Hβ ratio is set primarily by the ionization parameter log U: more energetic Lyman continuum photons per H atom ionize more O+ to O++, while Hβ recombination depends mostly on the ionizing photon rate (``Q_H``) and is roughly insensitive to log U. The ratio therefore rises monotonically with log U at fixed gas metallicity.">
-
-.. only:: html
-
-  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_oiii_hbeta_logu_at_fixed_z_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/nebular/plot_oiii_hbeta_logu_at_fixed_z`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">[O III]/Hβ vs ionization parameter at fixed gas metallicity</div>
     </div>
 
 
@@ -353,6 +166,23 @@ Gas-phase metallicity is its own knob and does not follow the stellar one.
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbcontainer" tooltip="The shock group adds MAPPINGS V shock emission as an additive component to any photoionized nebular backend (Cue, CloudyGrid, CB19, or baked-in). Here we show how increasing shock contamination (shock_frac) moves a star-forming galaxy from the SF locus toward the LI(N)ER/shock region of the BPT diagnostic plane.">
+
+.. only:: html
+
+  .. image:: /auto_examples/nebular/images/thumb/sphx_glr_plot_shock_frac_sweep_thumb.png
+    :alt:
+
+  :doc:`/auto_examples/nebular/plot_shock_frac_sweep`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Shock-group sweep: composable shock contamination on the BPT diagram</div>
+    </div>
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="Five widely-used optical strong-line metallicity diagnostics evaluated across the Cue logZ_gas prior. Each one carries a different systematic — Pettini &amp; Pagel 2004 O3N2 saturates at high Z, the R23 ratio is double-valued (Pagel+1979), N2 (Marino+2013) is monotonic but small dynamic range, the [O III]/[O II] diagnostic tracks ionization, and [S II]/[O II] is a low-ion proxy.">
 
 .. only:: html
@@ -378,24 +208,14 @@ Gas-phase metallicity is its own knob and does not follow the stellar one.
 .. toctree::
    :hidden:
 
-   /auto_examples/nebular/plot_bpt_cue_flexibility
-   /auto_examples/nebular/plot_bpt_cue_grid
    /auto_examples/nebular/plot_bpt_diagram_population
-   /auto_examples/nebular/plot_cue_fesc_logu_atlas
    /auto_examples/nebular/plot_cue_parameter_atlas
-   /auto_examples/nebular/plot_fesc_lya_sweep
    /auto_examples/nebular/plot_fesc_sweep
-   /auto_examples/nebular/plot_gas_z_continuum_effect
    /auto_examples/nebular/plot_halpha_sfr_calibration_age
-   /auto_examples/nebular/plot_line_sigma_sweep
-   /auto_examples/nebular/plot_logz_gas_sweep
    /auto_examples/nebular/plot_lyalpha_ew_vs_age
-   /auto_examples/nebular/plot_neb_age_dependence
-   /auto_examples/nebular/plot_neb_bpt_logu_grid
-   /auto_examples/nebular/plot_neb_density_sweep
    /auto_examples/nebular/plot_nebular_backends
-   /auto_examples/nebular/plot_oiii_hbeta_logu_at_fixed_z
    /auto_examples/nebular/plot_qh_vs_age_metallicity
    /auto_examples/nebular/plot_shock_emission
+   /auto_examples/nebular/plot_shock_frac_sweep
    /auto_examples/nebular/plot_strong_line_metallicity_diagnostics
 

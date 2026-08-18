@@ -30,78 +30,19 @@ Reference: Williams et al. 2009, ApJ, 691, 1879; Wuyts et al. 2007, ApJ, 655.
 .. GENERATED FROM PYTHON SOURCE LINES 11-158
 
 
+
+.. image-sg:: /auto_examples/usecases/images/sphx_glr_plot_usecase_uvj_diagram_001.png
+   :alt: plot usecase uvj diagram
+   :srcset: /auto_examples/usecases/images/sphx_glr_plot_usecase_uvj_diagram_001.png
+   :class: sphx-glr-single-img
+
+
 .. rst-class:: sphx-glr-script-out
 
-.. code-block:: pytb
+ .. code-block:: none
 
-    Traceback (most recent call last):
-      File "/tengri/examples/usecases/plot_usecase_uvj_diagram.py", line 22, in <module>
-        import tengri
-      File "/tengri/src/tengri/__init__.py", line 256, in <module>
-        from tengri import builders, components as _components, preprocessing, presets, recipes
-      File "/tengri/src/tengri/builders/__init__.py", line 58, in <module>
-        from tengri.builders import agn, dust, igm, neb, radio, sfh, xray
-      File "/tengri/src/tengri/builders/agn/__init__.py", line 67, in <module>
-        from tengri.builders._factory import UNSET, _pop_wildcard, make_factory, short_form
-      File "/tengri/src/tengri/builders/_factory.py", line 23, in <module>
-        from tengri.parameters.sentinels import FIXED, FREE, WILDCARD_ALIAS
-      File "/tengri/src/tengri/parameters/__init__.py", line 39, in <module>
-        from tengri.parameters.groups import parse_groups
-      File "/tengri/src/tengri/parameters/groups.py", line 106, in <module>
-        from tengri.parameters._builders import _resolve_lazy_bucket
-      File "/tengri/src/tengri/parameters/_builders.py", line 163, in <module>
-        from tengri.components.dust._params import ATTENUATION_TWO_COMPONENT_ONLY
-      File "/tengri/src/tengri/components/__init__.py", line 12, in <module>
-        from tengri.components import agn, dust, igm, nebular, radio, stellar, xray
-      File "/tengri/src/tengri/components/agn/__init__.py", line 44, in <module>
-        from tengri.components.agn import blocks
-      File "/tengri/src/tengri/components/agn/blocks/__init__.py", line 26, in <module>
-        from tengri.components.agn.blocks import (
-      File "/tengri/src/tengri/components/agn/blocks/alternates.py", line 33, in <module>
-        from tengri.components.agn.reddening import redden_disc
-      File "/tengri/src/tengri/components/agn/reddening.py", line 21, in <module>
-        from tengri.components.dust.attenuation import prevot_smc
-      File "/tengri/src/tengri/components/dust/__init__.py", line 49, in <module>
-        from tengri.components.dust.attenuation import (
-      File "/tengri/src/tengri/components/dust/attenuation.py", line 1752, in <module>
-        from dust_extinction.grain_models import D03, HD23, WD01
-      File "/Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/dust_extinction/grain_models.py", line 5, in <module>
-        from astropy.table import Table
-      File "/Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/astropy/table/__init__.py", line 6, in <module>
-        from .column import Column, ColumnInfo, MaskedColumn, StringTruncateWarning
-      File "/Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/astropy/table/column.py", line 12, in <module>
-        from astropy.units import Quantity, StructuredUnit, Unit
-      File "/Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/astropy/units/__init__.py", line 13, in <module>
-        from . import (
-      File "/Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/astropy/units/astrophys.py", line 10, in <module>
-        from astropy.constants import si as _si
-      File "/Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/astropy/constants/__init__.py", line 27, in <module>
-        from . import cgs, si
-      File "/Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/astropy/constants/cgs.py", line 7, in <module>
-        from .config import codata, iaudata
-      File "/Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/astropy/constants/config.py", line 15, in <module>
-        codata = importlib.import_module(".constants." + phys_version, "astropy")
-                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "/opt/anaconda3/lib/python3.12/importlib/__init__.py", line 90, in import_module
-        return _bootstrap._gcd_import(name[level:], package, level)
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "/Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/astropy/constants/codata2018.py", line 9, in <module>
-        from .constant import Constant, EMConstant
-      File "/Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/astropy/constants/constant.py", line 10, in <module>
-        from astropy.units.quantity import Quantity
-      File "/Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/astropy/units/quantity.py", line 38, in <module>
-        from .quantity_helper import can_have_arbitrary_unit, check_output, converters_and_unit
-      File "/Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/astropy/units/quantity_helper/__init__.py", line 16, in <module>
-        from . import erfa, function_helpers, helpers, scipy_special
-      File "/Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/astropy/units/quantity_helper/function_helpers.py", line 1065, in <module>
-        @function_helper  # np.in1d deprecated in not NUMPY_LT_2_0.
-         ^^^^^^^^^^^^^^^
-      File "/Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/astropy/units/quantity_helper/function_helpers.py", line 192, in __call__
-        helps = getattr(module, f.__name__)
-                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-      File "/Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/numpy/__init__.py", line 769, in __getattr__
-        raise AttributeError(f"module {__name__!r} has no attribute {attr!r}")
-    AttributeError: module 'numpy' has no attribute 'in1d'
+    /tengri/src/tengri/forward/sed_model.py:1594: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
 
 
 
@@ -259,6 +200,11 @@ Reference: Williams et al. 2009, ApJ, 691, 1879; Wuyts et al. 2007, ApJ, 655.
 
     fig.tight_layout()
     plt.savefig("plot_usecase_uvj_diagram.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.775 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_uvj_diagram.py:

@@ -39,40 +39,37 @@ Reference: Charlot & Fall 2000, ApJ, 539, 718.
 .. GENERATED FROM PYTHON SOURCE LINES 20-200
 
 
+
+.. rst-class:: sphx-glr-horizontal
+
+
+    *
+
+      .. image-sg:: /auto_examples/dust_attenuation/images/sphx_glr_plot_birth_cloud_vs_diffuse_001.png
+         :alt: plot birth cloud vs diffuse
+         :srcset: /auto_examples/dust_attenuation/images/sphx_glr_plot_birth_cloud_vs_diffuse_001.png
+         :class: sphx-glr-multi-img
+
+    *
+
+      .. image-sg:: /auto_examples/dust_attenuation/images/sphx_glr_plot_birth_cloud_vs_diffuse_002.png
+         :alt: plot birth cloud vs diffuse
+         :srcset: /auto_examples/dust_attenuation/images/sphx_glr_plot_birth_cloud_vs_diffuse_002.png
+         :class: sphx-glr-multi-img
+
+
 .. rst-class:: sphx-glr-script-out
 
-.. code-block:: pytb
+ .. code-block:: none
 
-    Traceback (most recent call last):
-      File "/tengri/examples/dust_attenuation/plot_birth_cloud_vs_diffuse.py", line 32, in <module>
-        import tengri
-      File "/tengri/src/tengri/__init__.py", line 200, in <module>
-        from tengri.inference.jit_engine import clear_shared_caches, lean, persistent
-      File "/tengri/src/tengri/inference/__init__.py", line 8, in <module>
-        from tengri.inference import _registration as _registration
-      File "/tengri/src/tengri/inference/_registration.py", line 32, in <module>
-        from tengri.inference.backends.map_dispatch import (
-      File "/tengri/src/tengri/inference/backends/__init__.py", line 6, in <module>
-        from tengri.inference.backends.map_dispatch import run_map
-      File "/tengri/src/tengri/inference/backends/map_dispatch.py", line 22, in <module>
-        from tengri.inference.likelihoods.gaussian import inv_noise_std
-      File "/tengri/src/tengri/inference/likelihoods/__init__.py", line 14, in <module>
-        from tengri.inference.likelihoods.gaussian import (
-      File "/tengri/src/tengri/inference/likelihoods/gaussian.py", line 37, in <module>
-        from tengri.utils.scale import whiten
-      File "/tengri/src/tengri/utils/__init__.py", line 4, in <module>
-        from tengri.utils.conversions import (
-      File "/tengri/src/tengri/utils/conversions.py", line 39, in <module>
-        from tengri.utils.scale import apply_log10_scale, log10_flux_scale, log10_four_pi_dl2
-      File "/tengri/src/tengri/utils/scale.py", line 20, in <module>
-        LOG10_4PI = float(jnp.log10(4.0 * jnp.pi))  # ~1.09921
-                          ^^^^^^^^^^^^^^^^^^^^^^^
-      File "/Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/literals.py", line 159, in __array__
-        return np.asarray(self.val, dtype=dtype, copy=copy)  # pytype: disable=wrong-keyword-args
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    TypeError: asarray() got an unexpected keyword argument 'copy'
-    --------------------
-    For simplicity, JAX has removed its internal frames from the traceback of the following exception. Set JAX_TRACEBACK_FILTERING=off to include these.
+    /tengri/src/tengri/forward/sed_model.py:1594: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.1 Gyr is narrower than the SSP grid spacing 0.77 Gyr at peak sfh_tsnorm_peak_lbt_gyr=6 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.77 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/src/tengri/forward/sed_model.py:1594: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.1 Gyr is narrower than the SSP grid spacing 0.864 Gyr at peak sfh_tsnorm_peak_lbt_gyr=7 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.864 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/src/tengri/forward/sed_model.py:1594: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.1 Gyr is narrower than the SSP grid spacing 1.09 Gyr at peak sfh_tsnorm_peak_lbt_gyr=8 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.09 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/src/tengri/forward/sed_model.py:1594: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
 
 
 
@@ -263,6 +260,11 @@ Reference: Charlot & Fall 2000, ApJ, 539, 718.
     fig_age.savefig("plot_birth_cloud_vs_diffuse_age_panel.png", dpi=150, bbox_inches="tight")
 
     plt.savefig("plot_birth_cloud_vs_diffuse.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.289 seconds)
 
 
 .. _sphx_glr_download_auto_examples_dust_attenuation_plot_birth_cloud_vs_diffuse.py:

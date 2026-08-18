@@ -126,7 +126,7 @@ for fname, filters in FILTER_SETS.items():
         c_inv_diag = 1.0 / noise_var
 
         # Fisher = J^T C^{-1} J
-        fim = jnp.dot(jac.T, jac * c_inv_diag[jnp.newaxis, :])  # (n_params, n_params)
+        fim = jnp.dot(jac.T, jac * c_inv_diag[:, jnp.newaxis])  # (n_params, n_params)
 
         # Cramér-Rao bound: sqrt(diag(F^{-1}))
         try:

@@ -57,7 +57,7 @@ Reference: Inoue et al. 2014, MNRAS, 442, 1805 (IGM transmission model).
     import matplotlib.pyplot as plt
     import numpy as np
 
-    from tengri.analysis.plotting import setup_style
+    from tengri.plot import setup_style
     from tengri.igm import igm_transmission
 
     setup_style()

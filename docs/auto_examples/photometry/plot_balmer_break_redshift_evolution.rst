@@ -52,40 +52,21 @@ et al. 2000 (PASP, 112, 1145) and the Bruzual & Charlot 2003 (MNRAS, 344,
 .. GENERATED FROM PYTHON SOURCE LINES 33-194
 
 
+
+.. image-sg:: /auto_examples/photometry/images/sphx_glr_plot_balmer_break_redshift_evolution_001.png
+   :alt: plot balmer break redshift evolution
+   :srcset: /auto_examples/photometry/images/sphx_glr_plot_balmer_break_redshift_evolution_001.png
+   :class: sphx-glr-single-img
+
+
 .. rst-class:: sphx-glr-script-out
 
-.. code-block:: pytb
+ .. code-block:: none
 
-    Traceback (most recent call last):
-      File "/tengri/examples/photometry/plot_balmer_break_redshift_evolution.py", line 44, in <module>
-        import tengri
-      File "/tengri/src/tengri/__init__.py", line 200, in <module>
-        from tengri.inference.jit_engine import clear_shared_caches, lean, persistent
-      File "/tengri/src/tengri/inference/__init__.py", line 8, in <module>
-        from tengri.inference import _registration as _registration
-      File "/tengri/src/tengri/inference/_registration.py", line 32, in <module>
-        from tengri.inference.backends.map_dispatch import (
-      File "/tengri/src/tengri/inference/backends/__init__.py", line 6, in <module>
-        from tengri.inference.backends.map_dispatch import run_map
-      File "/tengri/src/tengri/inference/backends/map_dispatch.py", line 22, in <module>
-        from tengri.inference.likelihoods.gaussian import inv_noise_std
-      File "/tengri/src/tengri/inference/likelihoods/__init__.py", line 14, in <module>
-        from tengri.inference.likelihoods.gaussian import (
-      File "/tengri/src/tengri/inference/likelihoods/gaussian.py", line 37, in <module>
-        from tengri.utils.scale import whiten
-      File "/tengri/src/tengri/utils/__init__.py", line 4, in <module>
-        from tengri.utils.conversions import (
-      File "/tengri/src/tengri/utils/conversions.py", line 39, in <module>
-        from tengri.utils.scale import apply_log10_scale, log10_flux_scale, log10_four_pi_dl2
-      File "/tengri/src/tengri/utils/scale.py", line 20, in <module>
-        LOG10_4PI = float(jnp.log10(4.0 * jnp.pi))  # ~1.09921
-                          ^^^^^^^^^^^^^^^^^^^^^^^
-      File "/Users/suchethacooray/Projects/tengri/.venv/lib/python3.12/site-packages/jax/_src/literals.py", line 159, in __array__
-        return np.asarray(self.val, dtype=dtype, copy=copy)  # pytype: disable=wrong-keyword-args
-               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    TypeError: asarray() got an unexpected keyword argument 'copy'
-    --------------------
-    For simplicity, JAX has removed its internal frames from the traceback of the following exception. Set JAX_TRACEBACK_FILTERING=off to include these.
+    /tengri/src/tengri/forward/orchestrator.py:951: SFHBeforeBigBangWarning: Star formation history forms 39% of its stellar mass before the Big Bang at z=3.00 (cosmic age 2.15 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
+    /tengri/src/tengri/forward/orchestrator.py:951: SFHBeforeBigBangWarning: Star formation history forms 83% of its stellar mass before the Big Bang at z=4.00 (cosmic age 1.54 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
 
 
 

@@ -63,23 +63,6 @@ a worse model.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The Cardelli+1989 Milky Way attenuation curve is a family parameterized by R_V = A_V / E(B-V). Smaller R_V (≲ 3) gives a steeper UV rise and stronger 2175 Å bump (denser lines of sight, small grains dominate); larger R_V (≳ 4.5) flattens the UV slope (processed grains, larger sizes).">
-
-.. only:: html
-
-  .. image:: /auto_examples/dust_attenuation/images/thumb/sphx_glr_plot_cardelli_rv_sweep_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/dust_attenuation/plot_cardelli_rv_sweep`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Cardelli MW attenuation: sweeping R_V</div>
-    </div>
-
-
-.. raw:: html
-
     <div class="sphx-glr-thumbcontainer" tooltip="Dust geometry determines how dust affects starlight. A screen (foreground dust) filters the light as it leaves the galaxy: transmission = exp(-τ_λ). A mixed geometry (dust uniformly distributed with stars) is more gentle: transmission = (1 - exp(-τ_λ)) / τ_λ.">
 
 .. only:: html
@@ -92,74 +75,6 @@ a worse model.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Screen vs. mixed dust geometry: identical optical depths, different SEDs</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Each of the bundled dust-attenuation laws applied to the same intrinsic SED at the same V-band optical depth — so the differences between the curves are entirely in the wavelength dependence of the attenuation. The intrinsic (unreddened) SED is shown in black for reference.">
-
-.. only:: html
-
-  .. image:: /auto_examples/dust_attenuation/images/thumb/sphx_glr_plot_dust_law_application_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/dust_attenuation/plot_dust_law_application`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">The same galaxy reddened by every attenuation law in the registry</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="For a fixed star-forming galaxy with τ_V = 1 (a moderate attenuation), six common attenuation laws produce six visibly different reddened UV slopes β. The intrinsic SED has β ≈ −2.3; SMC steepens β to ≈ +0.4; Calzetti / Salim leave a flatter β ≈ −0.5. The spread (~1 mag of UV slope at fixed τ_V) is the systematic an SED fitter inherits if its dust-law assumption is wrong.">
-
-.. only:: html
-
-  .. image:: /auto_examples/dust_attenuation/images/thumb/sphx_glr_plot_dust_law_uv_slope_response_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/dust_attenuation/plot_dust_law_uv_slope_response`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Attenuation law leaves a distinct UV-slope fingerprint</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="The power-law slope δ steepens (negative) or flattens (positive) UV attenuation relative to the optical, controlling whether dust absorbs more or less light at short wavelengths. We vary δ with elevated τ_bc and τ_diff to make slope effects visible (low dust opacities wash out the continuum slope).">
-
-.. only:: html
-
-  .. image:: /auto_examples/dust_attenuation/images/thumb/sphx_glr_plot_dust_slope_sweep_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/dust_attenuation/plot_dust_slope_sweep`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Dust attenuation curve slope controls UV vs optical hardness</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Public dust attenuation laws applied to the same intrinsic SED at the same V-band optical depth (τ_V = 1.0), illustrating how dust geometry and grain-size composition vary across the local universe.">
-
-.. only:: html
-
-  .. image:: /auto_examples/dust_attenuation/images/thumb/sphx_glr_plot_galactic_zoo_dust_laws_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/dust_attenuation/plot_galactic_zoo_dust_laws`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Dust attenuation laws across the galaxy zoo</div>
     </div>
 
 
@@ -182,23 +97,6 @@ a worse model.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="Reddy et al. (2015) derived a dust attenuation curve from Balmer decrements of z ~ 1.4–2.6 star-forming galaxies in the MOSDEF survey. It is shallower in the UV than the SMC curve but has a lower total-to-selective ratio (``R_V = 2.505``) than Calzetti&#x27;s local starburst law (``R_V = 4.05``) — a combination relevant when fitting rest-UV/optical SEDs of high-z galaxies. FSPS exposes this curve; tengri provides it as the reddy15 dust law.">
-
-.. only:: html
-
-  .. image:: /auto_examples/dust_attenuation/images/thumb/sphx_glr_plot_reddy15_highz_curve_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/dust_attenuation/plot_reddy15_highz_curve`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Reddy+2015 high-redshift attenuation curve</div>
-    </div>
-
-
-.. raw:: html
-
     <div class="sphx-glr-thumbcontainer" tooltip="At fixed UV slope β_UV (the observable astronomers measure), many (R_V, A_V) pairs produce identical colors — this is a classical dust modeling pitfall. Shows β_UV as contours on the (R_V, A_V) grid for Cardelli MW attenuation. Standard reference points (SMC, LMC, Milky Way diffuse, Calzetti starburst) sit on different iso-β_UV contours, illustrating why dust-law assumptions strongly bias inferred properties.">
 
 .. only:: html
@@ -216,57 +114,6 @@ a worse model.
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The Charlot &amp; Fall two-component dust model separates birth-cloud dust (young stars only, age &lt; ~10 Myr) from diffuse ISM dust (all stars). Two panels show: (left) V-band transmission versus age for three (τ_bc, τ_diff) combinations, revealing the sharp ~10 Myr transition; (right) full transmission spectra for 1 Myr and 1 Gyr stars under the same dust column.">
-
-.. only:: html
-
-  .. image:: /auto_examples/dust_attenuation/images/thumb/sphx_glr_plot_two_component_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/dust_attenuation/plot_two_component`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Two-component dust: birth cloud obscures only young stars</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="The IRX–β relation connects the UV continuum slope β (1250–2600 Å) with the infrared excess IRX = log₁₀(L_IR / L_UV). This diagram reveals dust reddening and star formation rate indicators in galaxies. Here we:">
-
-.. only:: html
-
-  .. image:: /auto_examples/dust_attenuation/images/thumb/sphx_glr_plot_usecase_irx_beta_meurer_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/dust_attenuation/plot_usecase_irx_beta_meurer`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">IRX–β diagram: infra-red excess vs UV slope (Meurer+1999)</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="The 2175 Å UV bump sits atop a power-law continuum. Varying the slope parameter δ (delta) in the Kriek &amp; Conroy attenuation law steepens or flattens the UV continuum, which changes the bump&#x27;s prominence relative to the surrounding curve. We zoom on rest-frame 1500–3500 Å to isolate the bump region and show how δ ∈ [−1, +0.5] reshapes the attenuation curve.">
-
-.. only:: html
-
-  .. image:: /auto_examples/dust_attenuation/images/thumb/sphx_glr_plot_uv_bump_strength_sweep_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/dust_attenuation/plot_uv_bump_strength_sweep`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">UV bump shape controlled by attenuation curve slope</div>
-    </div>
-
-
-.. raw:: html
-
     <div class="sphx-glr-thumbcontainer" tooltip="The Charlot &amp; Fall 2000 two-component dust model conserves energy: every UV photon attenuated by the dust must come back out as IR re-emission. We sweep τ_diff from 0 to 2 mag and on each step plot two quantities — the absorbed UV power L_abs(λ&lt;3000 Å) inferred from the difference of (no-dust) minus (with-dust) attenuated SEDs, and the integrated IR luminosity L_IR(8–1000 μm) from the IR re-emission template (Dale+2014 here).">
 
 .. only:: html
@@ -279,23 +126,6 @@ a worse model.
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">UV-IR energy balance: absorbed = re-emitted</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="The WG00 radiative-transfer grid (FSPS dust_type=3) spans three large-scale star-dust geometries — shell (a foreground screen), cloudy (a homogeneous star-dust mix), and dusty (a clumpy two-phase medium) — crossed with two grain populations (Milky-Way and SMC). At a fixed tau_V these choices set the shape of the transmission exp(-A(lambda)): the foreground screen is the reddest (steepest UV), while the mixed and clumpy geometries are progressively grayer because short-wavelength photons escape through low-opacity sightlines.">
-
-.. only:: html
-
-  .. image:: /auto_examples/dust_attenuation/images/thumb/sphx_glr_plot_wg00_geometry_compare_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/dust_attenuation/plot_wg00_geometry_compare`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Witt & Gordon 2000: geometry and grain type at fixed optical depth</div>
     </div>
 
 
@@ -328,19 +158,9 @@ a worse model.
 
    /auto_examples/dust_attenuation/plot_birth_cloud_vs_diffuse
    /auto_examples/dust_attenuation/plot_bump_delta_joint_grid
-   /auto_examples/dust_attenuation/plot_cardelli_rv_sweep
    /auto_examples/dust_attenuation/plot_dust_geometry_screen_vs_mixed
-   /auto_examples/dust_attenuation/plot_dust_law_application
-   /auto_examples/dust_attenuation/plot_dust_law_uv_slope_response
-   /auto_examples/dust_attenuation/plot_dust_slope_sweep
-   /auto_examples/dust_attenuation/plot_galactic_zoo_dust_laws
    /auto_examples/dust_attenuation/plot_grahsp_paper_fig7_galaxy_attenuation
-   /auto_examples/dust_attenuation/plot_reddy15_highz_curve
    /auto_examples/dust_attenuation/plot_rv_av_uv_slope_degeneracy
-   /auto_examples/dust_attenuation/plot_two_component
-   /auto_examples/dust_attenuation/plot_usecase_irx_beta_meurer
-   /auto_examples/dust_attenuation/plot_uv_bump_strength_sweep
    /auto_examples/dust_attenuation/plot_uv_ir_energy_balance
-   /auto_examples/dust_attenuation/plot_wg00_geometry_compare
    /auto_examples/dust_attenuation/plot_wg00_tau_v_sweep
 
