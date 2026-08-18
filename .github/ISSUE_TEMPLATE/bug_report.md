@@ -1,6 +1,6 @@
 ---
 name: Bug report
-about: Report unexpected behaviour or an error
+about: Report unexpected behavior or an error
 labels: bug
 ---
 
@@ -16,7 +16,7 @@ labels: bug
 # Your code here
 ```
 
-## Expected behaviour
+## Expected behavior
 
 <!-- What should have happened instead. -->
 

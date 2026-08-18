@@ -37,7 +37,7 @@ JIT compilation gets the core forward model down to tens of
 microseconds per galaxy in batched (`vmap`) evaluation on a single
 CPU core, fast enough for catalog-scale inference without putting a
 neural emulator in the loop. (A full panchromatic model with dust IR
-re-emission and nebular emission is heavier — of order a millisecond
+re-emission and nebular emission is heavier: of order a millisecond
 per galaxy.) Exact gradients make HMC, variational inference, and Laplace
 approximation work in the 100+ parameter spaces where bursty
 star formation histories and hierarchical population fits live. And
@@ -123,18 +123,16 @@ from tengri import (
 )
 
 # download_ssp() fetches the default bare-stellar grid on first run and
-# skips (returns the same path) on every run after — so this block is
-# copy-paste-safe. See "SSP grids" above for other grids / a shell setup.
+# skips on subsequent runs. See "SSP grids" above for other grids or shell setup.
 ssp = load_ssp_data(tengri.download_ssp())
 obs = Observation(photometry=Photometry.from_names(
     ["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"]
 ))
 
-# Pick a curated recipe and let it set sensible priors + defaults.
-# The mock is at a known redshift, so fix z — the model then builds a
-# single-redshift photometry table in seconds instead of tabulating the
-# full z in (0.01, 6) grid. Leave z free (the recipe default) for real
-# catalogs with unknown redshifts.
+# The mock is at a known redshift, so fix z. The model then builds a
+# single-redshift table in seconds instead of tabulating the
+# full z in (0.01, 6) grid.
+# Leave z free for real catalogs with unknown redshifts.
 config = recipes.star_forming_photometry()
 config["redshift"] = Fixed(0.05)
 sed = SEDModel.build(ssp_data=ssp, observation=obs, **config)
@@ -144,8 +142,8 @@ key = jax.random.PRNGKey(0)
 mock = sed.mock(sed.spec.sample(key), key=key)
 
 # This recipe has 8 free parameters. Past D ~ 6, NUTS spends most of its
-# time in warmup, so use fixed-length HMC — see docs/method_selection.md
-# for the full decision table.
+# time in warmup, so use fixed-length HMC. See
+# docs/method_selection.md for the decision table.
 fitter = Fitter(forward, mock.flux_obs, mock.noise)
 result = fitter.run("mcmc_hmc")
 print(result.summary_table())
@@ -198,9 +196,11 @@ The notebook spine in [`notebooks/`](https://github.com/suchethac/tengri/tree/ma
 | 06 | `06_fitting_spectroscopy.py`   | spectroscopy with calibration nuisance parameters           |
 | 07 | `07_joint_photo_spec.py`       | joint photo + spec to break degeneracies                    |
 | 08 | `08_emission_lines.py`         | BPT diagnostics, line ratios, Hα-based SFR                  |
+| 09 | `09_parameter_sweeps.py`       | one knob at a time: how each parameter moves the SED        |
 | 10 | `10_fastspecfit_joint_fit.py`  | joint DESI photometry + emission-line fluxes, timed        |
 | 11 | `11_catalog_fits.py`           | a catalog fit in parallel: LSST+Euclid photo-z, timed      |
 | 12 | `12_simulation_populations.py` | simulation SFH + Z(t) → photometry and lines, ~8k galaxies/s |
+| 19 | `19_joint_spec_phot.py`        | joint spec-phot with a Sersic fiber aperture                |
 
 For single-figure recipes, see the [examples gallery](https://suchethacooray.com/tengri/auto_examples/index.html).
 
@@ -299,7 +299,7 @@ While Paper I is in preparation, the shortest correct in-text citation is:
 See [CITATION.cff](CITATION.cff) for the machine-readable form and the
 [Citing tengri](https://suchethacooray.com/tengri/citation.html) page
 for the BibTeX + acknowledgement block. For automatic, fit-specific
-citations (every SSP grid, model, and sampler that actually ran) —
+citations (every SSP grid, model, and sampler that actually ran),
 pass the fit to `cite`, which prints the component table and BibTeX:
 
 ```python
