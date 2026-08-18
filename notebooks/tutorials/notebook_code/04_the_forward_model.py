@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.19.1
+#       jupytext_version: 1.19.5
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
@@ -142,7 +142,7 @@ model.precompute_spectroscopy(WAVE_OBS)
 params = spec.sample(jax.random.PRNGKey(42))
 # Override tsnorm to a typical star-forming galaxy (still forming stars now)
 params = {**params}
-params["sfh_tsnorm_log_total_mass"] = jnp.array(1.2)
+params["sfh_tsnorm_log_total_mass"] = jnp.array(10.5)
 params["sfh_tsnorm_peak_lbt_gyr"] = jnp.array(3.0)
 params["sfh_tsnorm_width_gyr"] = jnp.array(3.0)
 params["sfh_tsnorm_skew"] = jnp.array(0.3)
