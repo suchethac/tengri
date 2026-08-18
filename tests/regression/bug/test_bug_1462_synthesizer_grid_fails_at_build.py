@@ -5,7 +5,7 @@
 ``SynthesizerNLRBackend`` singleton before JIT (the #390 class of bug). But the
 whole block sat inside ``contextlib.suppress(Exception)``, so a grid that was
 simply not on disk was swallowed along with everything else: ``build`` returned
-a model object and the ``FileNotFoundError`` surfaced at the first
+a model object and the error (now ``TengriIOError``, #1952) surfaced at the first
 ``predict_photometry``, far from the ``nlr='synthesizer'`` that caused it.
 
 ``recipes.unified_agn()`` is the reachable case — it selects
@@ -27,6 +27,7 @@ import pytest
 
 import tengri
 from tengri import Observation, Photometry, SEDModel
+from tengri.config.exceptions import TengriIOError
 from tengri.observation.photometry import FilterCurve
 
 pytestmark = pytest.mark.regression_bug
@@ -68,7 +69,7 @@ def test_a_missing_grid_raises_at_build(ssp, obs, monkeypatch, tmp_path):
 
     # Escaped: the unescaped '.' would match any character, so the pattern would
     # pass on a filename this test does not mean to accept.
-    with pytest.raises(FileNotFoundError, match=re.escape("test_grid_agn-nlr.hdf5")):
+    with pytest.raises(TengriIOError, match=re.escape("test_grid_agn-nlr.hdf5")):
         SEDModel.build(ssp_data=ssp, observation=obs, **tengri.recipes.unified_agn())
 
 
@@ -81,7 +82,7 @@ def test_the_error_still_names_how_to_get_the_grid(ssp, obs, monkeypatch, tmp_pa
     monkeypatch.setenv("TENGRI_SYNTHESIZER_AGN_GRID_DIR", str(tmp_path))
     monkeypatch.chdir(tmp_path)
 
-    with pytest.raises(FileNotFoundError) as excinfo:
+    with pytest.raises(TengriIOError) as excinfo:
         SEDModel.build(ssp_data=ssp, observation=obs, **tengri.recipes.unified_agn())
 
     message = str(excinfo.value)
