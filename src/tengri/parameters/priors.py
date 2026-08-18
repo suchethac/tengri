@@ -264,6 +264,63 @@ class Distribution:
         """
         raise NotImplementedError(f"{type(self).__name__} must implement standardize()")
 
+    #: Attributes that never reach the compiled graph, so they must not key it.
+    #: Metadata for ``describe_parameter``/``spec.summary()`` plus the
+    #: FIXED-fallback default, none of which ``unstandardize`` reads.
+    _JIT_IRRELEVANT_ATTRS: frozenset[str] = frozenset({"description", "units", "_default"})
+
+    def jit_cache_key(self) -> tuple:
+        """Return a hashable identity for keying compiled artefacts.
+
+        ``unstandardize`` is traced, not threaded: it reads this instance's
+        Python attributes (``Uniform`` computes ``lo + (hi - lo) * Phi(xi)``
+        from ``self._lo``/``self._hi``) and they enter the graph as
+        **constants**. Any cache whose key omits them will hand one prior's
+        compiled transform to another prior, decoding the latent through the
+        wrong distribution — see
+        ``tests/regression/bug/test_prior_bounds_key_the_engine_cache.py``.
+
+        The key is *exclusion*-based on purpose: every attribute a subclass
+        stores is assumed to be baked unless it is named in
+        :attr:`_JIT_IRRELEVANT_ATTRS`. An inclusion list would silently miss a
+        field added to a subclass later, which is precisely the failure mode
+        this method exists to close. Consequently a new distribution family
+        needs no change here to be keyed correctly.
+
+        Bounds alone are **not** sufficient: two truncated Gaussians can share
+        ``(lo, hi)`` and differ in ``mu``/``sigma``, which ``unstandardize``
+        bakes just as firmly.
+
+        Returns
+        -------
+        tuple
+            ``(class_name, ((attr, value), ...))`` — immutable and hashable,
+            suitable for use as a dict key. Floats are kept at full precision:
+            rounding could collapse genuinely distinct constants (e.g.
+            ``LogUniform(1e-30, 1e-20)``) into one key.
+        """
+        entries = tuple(
+            (name, _hashable_attr(getattr(self, name)))
+            for name in sorted(vars(self))
+            if name not in self._JIT_IRRELEVANT_ATTRS
+        )
+        return (type(self).__name__, entries)
+
+
+def _hashable_attr(value):
+    """Return a hashable, equality-stable stand-in for a distribution attribute.
+
+    Arrays are reduced to ``(shape, dtype, bytes-hash)`` — ``StudentT`` caches
+    an interpolation grid derived from its scalars, and any future family that
+    tabulates its transform must key on it too.
+    """
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    if hasattr(value, "tobytes") or hasattr(value, "__array__"):
+        arr = np.asarray(value)
+        return ("ndarray", arr.shape, str(arr.dtype), hash(arr.tobytes()))
+    return repr(value)
+
 
 # ── Concrete distributions ────────────────────────────────────────
 

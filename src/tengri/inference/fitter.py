@@ -2216,6 +2216,52 @@ class Fitter:
                 if self._params_override
                 else None
             ),
+            # Free-parameter PRIOR identity. ``_build_signal_response`` threads
+            # only data/noise through ``data_args``; the priors stay baked,
+            # because ``_primals_to_params`` calls ``dist.unstandardize(xi)``
+            # and that reads the distribution's Python floats at trace time
+            # (``Uniform``: ``lo + (hi - lo) * Phi(xi)``). Baked is fine — but
+            # only if keyed. Without this entry two models differing solely in a
+            # prior's bounds share one engine, and fit #2's latent is decoded
+            # through fit #1's interval: a shift of order the prior width, which
+            # on ``log_total_mass`` reads as a mass deviation of order dex.
+            # Exactly the ``params_override`` hazard above, one layer over.
+            # Free NAMES (field 5) cannot stand in for this: editing
+            # ``Uniform(9.6, 11.1)`` to ``Uniform(7, 13)`` changes no name, no
+            # shape, no dtype and no control flow.
+            self._free_prior_key(),
+        )
+
+    def _free_prior_key(self) -> tuple:
+        """Return the prior identity of every free parameter, in sorted order.
+
+        Delegates per-distribution to
+        :meth:`~tengri.parameters.priors.Distribution.jit_cache_key`, which is
+        exclusion-based so a new distribution family is keyed correctly without
+        touching this method.
+
+        Fixed parameters are deliberately absent: their values already ride
+        field 5's companion ``spec_fixed_id`` in
+        :meth:`SEDModel.compile_signature` and the ``params_override`` entry
+        above, and a ``Fixed`` prior contributes no transform to bake.
+
+        A prior that does not inherit from ``Distribution`` (a caller's own
+        class) falls back to ``repr``. That fails in the safe direction: a
+        default ``repr`` carries the instance address, so two such priors never
+        share an engine. The cost is a missed cache hit, not a wrong decode.
+        """
+        return tuple(
+            (
+                name,
+                (
+                    dist.jit_cache_key()
+                    if hasattr(dist, "jit_cache_key")
+                    else repr(dist)  # unknown prior type: never share (see above)
+                ),
+            )
+            for name, dist in (
+                (n, self.spec.get_distribution(n)) for n in sorted(self._free_names)
+            )
         )
 
     def _get_or_build_engine(self, pos_dict: dict) -> dict:
