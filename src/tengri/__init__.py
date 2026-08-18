@@ -402,6 +402,7 @@ from tengri.forward.sed_model import (
 )
 from tengri.forward.spatial_model import SpatialModel, SpatialSEDModel
 from tengri.inference.backends.mcmc.raytrace import sample_raytrace
+from tengri.inference.bma import bma_resample, bma_weights
 from tengri.observation.filters import (
     list_registered_filters,
     list_synthetic_bands,
@@ -631,6 +632,9 @@ __all__ = [  # noqa: RUF022
     "builders",
     "recipes",
     "register_component",
+    # Bayesian model averaging
+    "bma_resample",
+    "bma_weights",
     # Utilities
     "measure",
     "vmap_chunked",
