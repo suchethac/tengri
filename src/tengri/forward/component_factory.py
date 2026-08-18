@@ -1049,11 +1049,13 @@ def state_to_radio_quantities(state: Any) -> RadioQuantities:
             l_nonthermal=nan_scalar,
             q_ir=nan_scalar,
         )
+    from tengri.utils.physics_constants import WAVE_1P4GHZ_AA
+
     L_radio = jnp.asarray(derived["sed_radio"])  # erg/s/Hz on rest-frame wave grid
     wave = state.wave
-    # 21 cm = 2.1e9 Å. The radio component computes at all wavelengths.
-    wave_21cm = 21.106e8  # Å — 1.4 GHz exactly
-    l_1p4ghz = jnp.interp(wave_21cm, wave, L_radio)
+    # 1.400 GHz continuum wavelength (FIR-radio correlation standard; Bell 2003,
+    # Delvecchio+2021; NVSS surveys). NOT the 21 cm HI line (1.4204 GHz).
+    l_1p4ghz = jnp.interp(WAVE_1P4GHZ_AA, wave, L_radio)
 
     log_nion = jnp.asarray(derived.get("log_nion", -jnp.inf))
     l_thermal = compute_l_radio_thermal_from_log_qh(log_nion)

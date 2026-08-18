@@ -481,7 +481,7 @@ agn_grahsp_hot_fcov
     --------
     >>> import jax.numpy as jnp
     >>> wave = jnp.logspace(2, 6, 200)  # Å
-    >>> L_nu = compute_grahsp_sed(wave, agn_log_lbol=45.0)
+    >>> L_nu = compute_grahsp_sed(wave, agn_log_lbol=11.42)
     """
     wave_angstrom = jnp.asarray(wavelength)
     wave_nm = wave_angstrom * 0.1

@@ -599,11 +599,7 @@ class RadioSEDComponent(TemplateThreading):
 _TINY = 1e-30  # Floor for safe division
 
 
-# 21 cm HI line in Angstrom (= 1.4204 GHz). Kept bit-identical to the literal
-# in state_to_radio_quantities (component_factory.py) so the property values
-# match the orchestrator NamedTuple exactly. NOTE: this is the 21 cm line
-# frequency (1.4204 GHz), not a literal 1.400 GHz — see #1045 follow-up.
-_WAVE_21CM_AA = 21.106e8
+from tengri.utils.physics_constants import WAVE_1P4GHZ_AA
 
 
 def _l_1p4ghz_fn(state, params):
@@ -614,7 +610,7 @@ def _l_1p4ghz_fn(state, params):
 
     L_radio = jnp.asarray(derived["sed_radio"])
     wave = state.wave
-    return jnp.interp(_WAVE_21CM_AA, wave, L_radio)
+    return jnp.interp(WAVE_1P4GHZ_AA, wave, L_radio)
 
 
 def _l_thermal_fn(state, params):
@@ -636,7 +632,7 @@ def _l_nonthermal_fn(state, params):
 
     L_radio = jnp.asarray(derived["sed_radio"])
     wave = state.wave
-    l_1p4ghz = jnp.interp(_WAVE_21CM_AA, wave, L_radio)
+    l_1p4ghz = jnp.interp(WAVE_1P4GHZ_AA, wave, L_radio)
 
     log_nion = jnp.asarray(derived.get("log_nion", -jnp.inf))
     l_thermal = compute_l_radio_thermal_from_log_qh(log_nion)
@@ -653,7 +649,7 @@ def _q_ir_fn(state, params):
 
     L_radio = jnp.asarray(derived["sed_radio"])
     wave = state.wave
-    l_1p4ghz = jnp.interp(_WAVE_21CM_AA, wave, L_radio)
+    l_1p4ghz = jnp.interp(WAVE_1P4GHZ_AA, wave, L_radio)
 
     # Same seam as ``l_dust_absorbed``: the linear ``L_ir`` is ~3.6e43 erg/s and
     # is ``inf`` in float32, while q_IR is a dex ratio of order 2 (#1837).

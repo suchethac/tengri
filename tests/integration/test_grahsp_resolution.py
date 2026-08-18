@@ -44,7 +44,7 @@ def test_agn_models_contains_grahsp():
 @_needs_grahsp
 def test_resolve_agn_model_returns_callable():
     fn = resolve_agn_model("grahsp")
-    out = fn(jnp.logspace(2, 6, 200), agn_log_lbol=45.0, agn_lum_ratio=1.0)
+    out = fn(jnp.logspace(2, 6, 200), agn_log_lbol=11.42, agn_lum_ratio=1.0)
     chex.assert_shape(out, (200,))
     chex.assert_tree_all_finite(out)
 
@@ -101,7 +101,7 @@ def test_grahsp_params_flow_through_dispatch():
     """
     fn = resolve_agn_model("grahsp")
     wave = jnp.logspace(2, 6, 200)
-    out_default = fn(wave, agn_log_lbol=45.0, agn_grahsp_plslope=-1.7)
-    out_steeper = fn(wave, agn_log_lbol=45.0, agn_grahsp_plslope=-2.5)
+    out_default = fn(wave, agn_log_lbol=11.42, agn_grahsp_plslope=-1.7)
+    out_steeper = fn(wave, agn_log_lbol=11.42, agn_grahsp_plslope=-2.5)
     # A steeper slope must change the SED.
     assert not jnp.allclose(out_default, out_steeper)

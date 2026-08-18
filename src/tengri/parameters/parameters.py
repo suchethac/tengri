@@ -316,7 +316,7 @@ class Parameters:
 
     ========================== ================= =======================================
     agn_lum_ratio              Fixed(1.0)        L_AGN / L_stellar_bol (1.0 = full AGN)
-    agn_log_lbol               Fixed(10.0)       AGN log L_bol [erg/s] (parametric)
+    agn_log_lbol               Fixed(10.0)       AGN log L_bol [log10(L_sun)] (parametric)
     agn_alpha                  Fixed(-1.0)       Disc power-law slope
     agn_T_torus                Fixed(1000)       Torus temperature (K)
     agn_tau_torus              Fixed(5.0)        Torus optical depth at 9.7 um
@@ -388,7 +388,7 @@ class Parameters:
             neb_fesc_lya=Uniform(0.0, 1.0),
             # AGN (qsogen empirical quasar)
             agn_model="qsogen",
-            agn_log_lbol=Uniform(40.0, 46.0),
+            agn_log_lbol=Uniform(6.42, 12.42),
             # IGM
             apply_igm=True,
             # Radio + X-ray
