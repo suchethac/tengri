@@ -21,10 +21,11 @@ This document consolidates and expands:
 7. [Compilation and Caching](#7-compilation-and-caching)
 8. [Performance Benchmarks](#8-performance-benchmarks)
 9. [Posterior Sampling](#9-posterior-sampling)
-10. [Block Gibbs for Hierarchical Models](#10-block-gibbs-for-hierarchical-models)
-11. [Convergence Diagnostics](#11-convergence-diagnostics)
-12. [Quick Reference](#12-quick-reference)
-13. [References](#13-references)
+10. [Bayesian Evidence and Model Comparison](#10-bayesian-evidence-and-model-comparison)
+11. [Block Gibbs for Hierarchical Models](#11-block-gibbs-for-hierarchical-models)
+12. [Convergence Diagnostics](#12-convergence-diagnostics)
+13. [Quick Reference](#13-quick-reference)
+14. [References](#14-references)
 
 ---
 
@@ -1131,9 +1132,187 @@ This is why `geovi` defaults to `posterior_method="nonlinear"`.
 
 ---
 
-## 10. Block Gibbs for Hierarchical Models
+## 10. Bayesian Evidence and Model Comparison
 
-### 10.1 The Problem
+### 10.1 Why Evidence? Occam's Razor for Model Selection
+
+The marginal likelihood (evidence) Z quantifies how well a model explains the data
+averaged over its prior. Two models with identical fits to a dataset will have
+different evidence if one has a narrower prior (Occam factor). The Bayes factor
+B = Z₁/Z₂ tells you how much the data favour model 1 over model 2:
+
+- **B > 150** — decisive evidence for model 1
+- **B > 20** — strong evidence
+- **B > 3** — moderate evidence
+- **1/3 < B < 3** — inconclusive
+
+Chi-squared cannot capture this: two models can have identical χ² but very different evidence
+if they make predictions of different breadth.
+
+### 10.2 Three Routes to Evidence in tengri
+
+#### 10.2.1 Nested Sampling (`method="nss"`)
+
+**Integral:** Z = ∫ L(θ) π(θ) dθ where the integral is accumulated via likelihood-threshold
+nested sampling, directly approximating the evidence.
+
+**In standardized ξ space:**
+```
+log Z = (1/N_live) Σᵢ log wᵢ  (weighted live-point approximation)
+```
+
+**Error bar:** σ_logZ ≈ √(H / n_live), where H is information content. Calibrated
+reference-grade estimate.
+
+**Parameters:** `preset="fast"` (n_live=100, num_delete=20, log_evidence_tol=-2.0, σ_logZ ~0.3–0.5 nat)
+or `preset="accurate"` (n_live=500, num_delete=50, log_evidence_tol=-3.0, σ_logZ ~0.1–0.2 nat).
+
+#### 10.2.2 Laplace Approximation (`method="laplace"`)
+
+**Gaussian approximation at the MAP:**
+```
+log Z_Laplace = -H(θ*) − ½ log det H(θ*)
+```
+
+where H(θ*) is the Hamiltonian (information) at the maximum, and H the Hessian.
+Computed entirely in standardized ξ-space. No explicit 2π term appears: tengri's
+loss carries the standardized prior *unnormalized* (½ Σξ², without −(D/2) log 2π),
+which exactly cancels the (2π)^{D/2} factor from the Gaussian integral. Keeping
+both terms would inflate log Z by 0.92 nats per free parameter and bias model
+comparison toward higher-dimensional models.
+
+**No error bar** — systematic uncertainty is unquantified. Validity requires:
+- `diagnostics['newton_decrement']` ≤ stationarity_tol (converged MAP)
+- `diagnostics['n_clipped_eigenvalues']` == 0 (well-defined Hessian)
+- Posterior visually approximately Gaussian (no banana/multimodality)
+
+**Wall time:** ~5–9 s cold, ~1–2 s warm. **Fastest route.**
+
+**Expected agreement with NSS:** Within ~1.5 nats on smooth, unimodal posteriors
+(measured ~1–1.5 nats on the D=8 DPL integration model — genuine Gaussian-approximation
+error, since SED posteriors are mildly curved in ξ-space). Laplace breaks on
+prior-boundary pileup (posterior mass clustering at uniform-prior edges).
+
+#### 10.2.3 Importance Sampling (`method="hmc_is"`)
+
+**Principle:** Sample posterior with HMC, then reweight by likelihood/prior ratio under a
+fitted proposal q(ξ):
+
+```
+log Ẑ = log ( (1/N) Σᵢ L(ξᵢ) π(ξᵢ) / q(ξᵢ) )       ξᵢ ~ q
+ESS = (Σᵢ wᵢ)² / Σᵢ wᵢ²                        (effective sample size)
+log σ_logZ ≈ std(wᵢ) / (mean(wᵢ) √N)           (delta method)
+```
+
+**Proposal:** Student-t distribution fitted in ξ-space with inflation factor for
+robustness. df=5.0 (heavy tails) by default.
+
+**Diagnostics:** ESS and max_weight_frac. The backend warns below ESS 500 or above
+max_weight_frac 0.1; on real SED posteriors (curved in ξ-space) ESS/N ~ 10⁻³ is
+typical, and ESS ~ 100–200 still gives σ_logZ ≈ 0.1 nats — ample for BMA weights.
+Distrust the estimate below ESS ~ 50; then raise n_is_draws or proposal_inflation,
+or fall back to `method="nss"`.
+
+Note the prior in tengri's `log_prior_fn` is the *unnormalized* ½ Σξ²; the backend
+restores the −(D/2) log 2π normalization internally so log Ẑ is taken against the
+true N(0, I) prior.
+
+**Wall time:** ~6 s cold, ~4 s warm at D=5 (5-band photometry; benchmarked 2026-08-18).
+**Delivers posterior samples + evidence in one run.**
+
+**Catalog scale:** warm steady-state per-fit times (same model, new galaxy data) measured
+at D=5: laplace ~0.3 s, nss preset="fast" ~2.6 s, hmc_is ~3.7 s. Rebuilding the model at a
+new redshift adds only a few seconds (persistent JIT cache; no full recompile). A
+372-galaxy × 4-config BMA pass is therefore ~7 min (laplace) to ~1.5 CPU-h (hmc_is);
+expect ~2–4× slower for D=8–10 / 17-band configurations. For batched catalog inference
+see `tengri.inference.catalog.Catalog` (natively batches `mcmc_hmc`/`mcmc_nuts` with
+runtime redshift).
+
+**Expected agreement with NSS:** Within error bar. parity tests show |hmc_is − nss|
+≤ max(1.0 nats, 3·σ_logZ_combined).
+
+### 10.3 Evidence is Parametrization-Invariant
+
+All three estimators operate in standardized ξ~N(0,I) space. When transforming back to
+physical parameters θ, the Jacobian of the reparametrization cancels exactly between the prior and likelihood:
+
+```
+Z_ξ = ∫ L(ξ) π(ξ) dξ
+
+θ = transform(ξ)  ⟹  dθ = J dξ
+
+Z_θ = ∫ L(transform(ξ)) π(transform(ξ)) |J| dξ/|J|
+    = ∫ L(ξ) π(ξ) dξ = Z_ξ
+```
+
+So evidence reported in ξ-space is the true marginal likelihood, no matter the original
+parametrization.
+
+### 10.4 Public API: `bma_weights` and `bma_resample`
+
+#### 10.4.1 Combining Multiple Models
+
+Given posteriors from fitting M different model configurations:
+
+```python
+from tengri import bma_weights, bma_resample
+
+posteriors = {
+    'model_a': fitter_a.run("hmc_is"),
+    'model_b': fitter_b.run("laplace"),
+    'model_c': fitter_c.run("nss", preset="fast"),
+}
+
+# Compute per-model weights (softmax of log evidences)
+weights = bma_weights(posteriors)  # → {'model_a': 0.65, 'model_b': 0.25, 'model_c': 0.10}
+
+# Pool posterior samples, weighted by evidence
+combined_samples = bma_resample(posteriors, n_draws=1000, key=jax.random.PRNGKey(0))
+```
+
+#### 10.4.2 Weights Across Models, Evidence from Any Route
+
+Weights are **always** computed as a softmax over the Posterior.log_evidence values:
+
+```
+wₘ = exp(logZ_m − max_k(logZ_k)) / Σₖ exp(logZ_k − max_k(logZ_k))
+```
+
+The per-model log_evidence can come from **any** of the three routes (`"nss"`, `"laplace"`,
+`"hmc_is"`). The softmax assumes a flat model prior P(m) ∝ 1.
+
+#### 10.4.3 Intersection Semantics for `bma_resample`
+
+When models have different free parameters (e.g., one has dust, another doesn't),
+`bma_resample` pools only the **intersection** of sample keys. Parameters present in all
+models are returned; model-specific parameters are dropped. This allows comparing
+structurally different models without inflating posterior intervals.
+
+Example:
+
+```python
+# Model A: SFH + dust (samples keys: sfr, dust_tau)
+# Model B: SFH only (sample keys: sfr)
+# Model C: SFH + dust + AGN (sample keys: sfr, dust_tau, agn_logL)
+
+combined = bma_resample([posteriors['A'], posteriors['B'], posteriors['C']], ...)
+# Result contains only 'sfr' (the common key)
+```
+
+### 10.5 Tolerance Expectations and Failure Modes
+
+| Method | Wall time | σ_logZ | Multimodal? | Boundary pileup? | Recommendation |
+|--------|-----------|--------|-------------|------------------|---|
+| NSS fast | ~60 s | ~0.3–0.5 nat | Handles | Handles | Calibrated reference |
+| NSS accurate | ~240 s | ~0.1–0.2 nat | Handles | Handles | Gold standard (slow) |
+| Laplace | ~5–9 s | Unquantified | **Breaks** | **Breaks** | Fast check, cross-validate |
+| HMC+IS | ~30 s | ~0.5–1.0 nat | Handles | Handles | Recommended for BMA (samples + Z) |
+
+---
+
+## 11. Block Gibbs for Hierarchical Models
+
+### 11.1 The Problem
 
 Hierarchical inference jointly fits shared population parameters (PSD amplitude, PSD
 timescale) and per-galaxy parameters (dust, metallicity, SFH). The total parameter
@@ -1150,7 +1329,7 @@ Fitting all parameters jointly is inefficient because:
 - Per-galaxy physical parameters have nonlinear degeneracies (need geoVI)
 - Per-galaxy SFH fields are nearly Gaussian conditioned on physical params (MGVI suffices)
 
-### 10.2 The Three-Block Structure
+### 11.2 The Three-Block Structure
 
 Block Gibbs cycling updates parameter blocks in rotation, holding others fixed:
 
@@ -1182,7 +1361,7 @@ Block Gibbs cycling updates parameter blocks in rotation, holding others fixed:
 - **Why last**: SFH fields are the "leaf" of the hierarchy. Nearly Gaussian conditioned
   on PSD + physical params.
 
-### 10.3 Parameter Layout
+### 11.3 Parameter Layout
 
 The hierarchical flat array has this layout:
 
@@ -1191,7 +1370,7 @@ The hierarchical flat array has this layout:
  <--- shared --->  <-------------- per-galaxy (N_gal repeats) ------------------>
 ```
 
-### 10.4 Constants vs Point Estimates
+### 11.4 Constants vs Point Estimates
 
 Both mechanisms freeze parameters during KL minimization (their gradient is zeroed),
 but they differ in sampling:
@@ -1210,7 +1389,7 @@ being updated, and speed matters. Example: when updating the 2D shared PSD param
 per-galaxy params (13,700D) are frozen as `point_estimates` because their individual
 uncertainties barely affect the population-level PSD constraint.
 
-### 10.5 Resample+Update Within Blocks
+### 11.5 Resample+Update Within Blocks
 
 Each block follows the same resample+update pattern as individual geoVI:
 
@@ -1220,7 +1399,7 @@ Outer cycles 1-4: nonlinear_update for blocks 1+2, linear_sample for block 3
 Outer cycle 5: resample again (prevent staleness)
 ```
 
-### 10.6 Usage
+### 11.6 Usage
 
 ```python
 from tengri import HierarchicalFitter
@@ -1237,7 +1416,7 @@ result = hfitter.run("native_geovi", n_iterations=25)
 result = hfitter.run("native_evi", n_iterations=30)
 ```
 
-### 10.7 Expected Performance (Hierarchical)
+### 11.7 Expected Performance (Hierarchical)
 
 For N=100 galaxies, D_total = 13,702:
 
@@ -1253,7 +1432,7 @@ Compile time: ~60s (one-time, cached to XLA disk cache).
 
 ---
 
-## 11. Convergence Diagnostics
+## 12. Convergence Diagnostics
 
 ### 12.1 Chi-squared per Degree of Freedom
 
@@ -1336,7 +1515,7 @@ Stan/ArviZ/BlackJAX thresholds).
 
 ---
 
-## 12. Quick Reference
+## 13. Quick Reference
 
 ### Method Selection Cheat Sheet
 
@@ -1390,7 +1569,7 @@ VIConfig(
 
 ---
 
-## 13. References
+## 14. References
 
 - Frank, P., Leike, R., Ensslin, T.A. (2021). "Geometric Variational Inference."
   Entropy 23(7):853. arXiv:2105.10470
