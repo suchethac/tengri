@@ -1395,6 +1395,12 @@ jobs:
       # themselves when absent, so a missing file is reported as a skip rather
       # than an error. Check the skip count, not just the exit status.
       - name: Run cross-validation tier
-        run: pytest tests/crossval -q --no-header -m crossval -n 0 -rf
+        run: pytest tests/crossval -q --no-header -m crossval -n 0 -rf --junit-xml=crossval-results.xml
         env:
           JAX_PLATFORMS: cpu
+      - name: Upload test results on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: crossval-test-results
+          path: crossval-results.xml
