@@ -28,7 +28,10 @@ star-forming (DPL+Cue nebular, free z to 6), quiescent at z=0.05 (dexp,
 lower dust ceiling), and AGN-panchromatic (full composite, z to 6).
 All require bare-stellar SSP (Cue backend).
 
-.. GENERATED FROM PYTHON SOURCE LINES 12-84
+Each SED is normalized to its rest-frame value at 5500 Å to overlay the
+spectral *shapes* and highlight morphological differences across recipe types.
+
+.. GENERATED FROM PYTHON SOURCE LINES 15-94
 
 
 
@@ -137,7 +140,15 @@ All require bare-stellar SSP (Cue backend).
         out = model.predict(p)
         wave = np.asarray(model.wavelengths)
         nu_l_nu = C_AA_PER_S / wave * np.asarray(out.rest_sed())
-        ax_seds.loglog(wave, nu_l_nu, color=color, lw=1.4, label=name)
+
+        # Normalize to the value at 5500 Å rest to show morphology shapes
+        i_norm = int(np.argmin(np.abs(wave - 5500.0)))
+        if nu_l_nu[i_norm] > 0:
+            nu_l_nu_norm = nu_l_nu / nu_l_nu[i_norm]
+        else:
+            nu_l_nu_norm = nu_l_nu
+
+        ax_seds.semilogx(wave, nu_l_nu_norm, color=color, lw=1.4, label=name)
         plotted += 1
 
     # Error check: ensure at least one recipe built
@@ -149,9 +160,8 @@ All require bare-stellar SSP (Cue backend).
 
     ax_seds.set(
         xlim=(700, 5e6),
-        ylim=(1e38, 5e45),
         xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
-        ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]",
+        ylabel=r"$\nu L_\nu$ / $\nu L_\nu(5500\,\mathrm{\AA})$ (normalized shape)",
     )
     ax_seds.legend(frameon=False, fontsize=10, loc="lower left")
     ax_seds.grid(True, alpha=0.2, which="both")
@@ -162,7 +172,7 @@ All require bare-stellar SSP (Cue backend).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 25.002 seconds)
+   **Total running time of the script:** (0 minutes 33.897 seconds)
 
 
 .. _sphx_glr_download_auto_examples_recipes_plot_recipe_introspection_tour.py:

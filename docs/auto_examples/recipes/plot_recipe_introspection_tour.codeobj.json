@@ -156,62 +156,62 @@
    "name": "Artist.legend"
   }
  ],
- "ax_seds.loglog": [
+ "ax_seds.semilogx": [
   {
    "is_class": false,
    "is_explicit": false,
    "module": "matplotlib.axes._axes",
    "module_short": "matplotlib.axes",
-   "name": "Axes.loglog"
+   "name": "Axes.semilogx"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "matplotlib.axes",
    "module_short": "matplotlib.axes",
-   "name": "Axes.loglog"
+   "name": "Axes.semilogx"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "matplotlib",
    "module_short": "matplotlib",
-   "name": "Axes.loglog"
+   "name": "Axes.semilogx"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "matplotlib.axes._base",
    "module_short": "matplotlib.axes._base",
-   "name": "_AxesBase.loglog"
+   "name": "_AxesBase.semilogx"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "matplotlib.axes",
    "module_short": "matplotlib.axes",
-   "name": "_AxesBase.loglog"
+   "name": "_AxesBase.semilogx"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "matplotlib",
    "module_short": "matplotlib",
-   "name": "_AxesBase.loglog"
+   "name": "_AxesBase.semilogx"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "matplotlib.artist",
    "module_short": "matplotlib.artist",
-   "name": "Artist.loglog"
+   "name": "Artist.semilogx"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "matplotlib",
    "module_short": "matplotlib",
-   "name": "Artist.loglog"
+   "name": "Artist.semilogx"
   }
  ],
  "ax_seds.set": [
@@ -350,6 +350,15 @@
    "name": "NoneType"
   }
  ],
+ "i_norm": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "int"
+  }
+ ],
  "jax.random.PRNGKey": [
   {
    "is_class": false,
@@ -467,6 +476,38 @@
    "name": "str"
   }
  ],
+ "np.abs": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "ufunc"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "abs"
+  }
+ ],
+ "np.argmin": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "_ArrayFunctionDispatcher"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "argmin"
+  }
+ ],
  "np.asarray": [
   {
    "is_class": false,
@@ -484,6 +525,15 @@
   }
  ],
  "nu_l_nu": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "ndarray"
+  }
+ ],
+ "nu_l_nu_norm": [
   {
    "is_class": false,
    "is_explicit": false,
