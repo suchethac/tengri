@@ -382,6 +382,17 @@ jobs:
       # healthy single-line cell (90) and the shortest damaged one (148).
       # Stdlib-only.
       - run: python tools/check_notebook_cells.py
+      # A paired notebook declares in its own metadata that its .ipynb and .py
+      # are one document. Nothing enforced that, and three drifted for months:
+      # 01_quickstart.ipynb kept teaching `Fitter(...)` after #1341 migrated the
+      # mirror to `ForwardModel`; 05_prior_predictive and hst_proposal still
+      # declared `sfh_tsnorm_log_peak_sfr`, a parameter #369 renamed; and
+      # 02_the_api imported `Model`/`ParamSpec`, which tengri no longer exports,
+      # so it died at its first cell with no mirror at all.
+      # check_notebook_renders.py cannot see these -- it pairs notebooks/*.py
+      # against docs/spine/** through an explicit SPINE_SLUGS list, so anything
+      # outside that list passes without being looked at. Stdlib-only.
+      - run: python tools/check_notebook_pairing.py
       # NOTE: `gen_property_table.py --check` cannot live here. This job installs
       # ruff and nothing else, and the generator imports tengri (hence jax) to read
       # the property registry. It runs in `smoke`, which does `pip install -e`.
