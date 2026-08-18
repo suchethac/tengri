@@ -278,7 +278,11 @@ from tengri.components.dust.draine2021_pah import (
     load_pahspec_draine2021,
     select_pahspec_axes,
 )
-from tengri.components.igm import igm_transmission, igm_transmission_madau
+from tengri.components.igm import (
+    igm_transmission,
+    igm_transmission_madau,
+    igm_transmission_meiksin06,
+)
 from tengri.components.igm.dla import dla_transmission, dla_transmission_obs
 from tengri.components.stellar.sfh import (
     AGEMAX_YR,
@@ -437,6 +441,8 @@ from tengri.parameters.sentinels import FIXED, FREE
 from tengri.protocols import ComponentIOError, DerivedKey, DerivedState, ForwardState
 from tengri.utils import jit_logging
 from tengri.utils.batching import vmap_chunked
+from tengri.utils.physics_constants import C_AA
+from tengri.parameters.translate import LOG10_ZSUN
 
 agn = _components.agn
 dust = _components.dust
@@ -654,6 +660,10 @@ __all__ = [  # noqa: RUF022
     "velocity_broaden",
     "igm_transmission",
     "igm_transmission_madau",
+    "igm_transmission_meiksin06",
+    # Physical constants
+    "C_AA",
+    "LOG10_ZSUN",
     # Spectral indices
     "measure_index_jax",
     "STANDARD_INDICES",

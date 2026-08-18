@@ -22,7 +22,7 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri.analysis.plotting import setup_style
+from tengri.plot import setup_style
 from tengri.dust import draine_li2007
 
 setup_style()

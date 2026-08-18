@@ -22,7 +22,7 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING l
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri.analysis.plotting import setup_style
+from tengri.plot import setup_style
 from tengri.cosmology import age_at_z0
 from tengri.sfh import closed_box_metallicity
 

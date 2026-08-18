@@ -24,7 +24,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from tengri import SEDModelComponent, Uniform
-from tengri.analysis.plotting import setup_style
+from tengri.plot import setup_style
 from tengri.dust import calzetti as _calzetti_law, cardelli as _cardelli_law
 
 setup_style()

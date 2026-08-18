@@ -34,7 +34,7 @@ import numpy as np
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
 import tengri
-from tengri.analysis.plotting import setup_style
+from tengri.plot import setup_style
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")

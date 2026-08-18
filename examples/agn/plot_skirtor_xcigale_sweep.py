@@ -46,8 +46,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import tengri
-from tengri.analysis.plotting import setup_style
-from tengri.utils.physics_constants import C_AA  # speed of light [Angstrom/s]
+from tengri import C_AA
+from tengri.plot import setup_style
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")

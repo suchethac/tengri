@@ -32,7 +32,7 @@ import numpy as np
 
 import tengri
 from tengri import load_filter
-from tengri.analysis.plotting import setup_style
+from tengri.plot import setup_style
 from tengri.igm import igm_transmission
 
 setup_style()

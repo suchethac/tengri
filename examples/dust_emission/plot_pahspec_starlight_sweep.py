@@ -17,18 +17,14 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri import data_path
-from tengri.analysis.plotting import setup_style
-from tengri.components.dust.draine2021_pah import (
-    load_pahspec_or_raise,
-    select_pahspec_axes,
-)
+from tengri import data_path, load_pahspec_draine2021, select_pahspec_axes
+from tengri.plot import setup_style
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 warnings.filterwarnings("ignore", message=".*deprecated.*")
 
-tpl = load_pahspec_or_raise(data_path("pahspec_draine2021.h5"))
+tpl = load_pahspec_draine2021(data_path("pahspec_draine2021.h5"))
 wave_um = np.asarray(tpl.wavelength_um)
 lgU_grid = np.asarray(tpl.lgU)
 i_lgU1 = int(np.argmin(np.abs(lgU_grid - 1.0)))
