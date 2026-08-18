@@ -14,15 +14,15 @@
 # ---
 
 # %% [markdown]
-# # Why JAX — differentiable inference, in the language of SED fitting
+# # Why JAX: differentiable inference, in the language of SED fitting
 #
 # Traditional SED fitting (`emcee` + Prospector / BAGPIPES / CIGALE) is
 # gradient-free: at every step the sampler queries the likelihood and
 # guesses the next move. In 10–30 dimensions, with 10⁴ likelihood calls
 # per chain step, a single galaxy takes hours.
 #
-# Tengri builds the same physics — stellar populations, dust, nebular
-# emission, AGN, IGM — entirely from JAX primitives. The model is
+# Tengri builds the same physics (stellar populations, dust, nebular
+# emission, AGN, IGM) entirely from JAX primitives. The model is
 # differentiable. The likelihood and its gradient come together, at no
 # extra cost. Gradient-based samplers (NUTS, HMC, VI) then *use* that
 # gradient to climb the posterior efficiently.
@@ -74,7 +74,7 @@ plot.setup_style()
 # %% [markdown]
 # ## A minimal star-forming galaxy
 #
-# `recipes.mock_recovery_minimal()` is the cheapest stable model — a
+# `recipes.mock_recovery_minimal()` is the cheapest stable model: a
 # truncated-skew-normal SFH, single dust optical depth, no nebular
 # physics. Seven free parameters; tractable in seconds.
 
@@ -91,7 +91,7 @@ mock = generate_mock(model, truth, key=jax.random.PRNGKey(1), snr=20.0)
 flux_obs, noise = mock["flux_obs"], mock["noise"]
 
 # %% [markdown]
-# ## Figure 1 — the posterior gradient
+# ## Figure 1: the posterior gradient
 #
 # Two of the free parameters, varied on a 20×20 grid with the rest fixed
 # at truth: the peak SFR and the birth-cloud optical depth. Left panel:
@@ -204,7 +204,7 @@ grad_at_truth = jax.grad(loss)(truth)
 {k: float(v) for k, v in grad_at_truth.items() if k in free_keys}
 
 # %% [markdown]
-# ## Figure 2 — forward-model throughput
+# ## Figure 2: forward-model throughput
 #
 # A single forward call versus a `vmap` over 100 parameter draws.
 # The batched call is far below 100× the single-call cost.
@@ -274,8 +274,8 @@ fig2.savefig(FIG_DIR / "01_wallclock.png", dpi=300, bbox_inches="tight")
 #
 # **`compile=`** controls how the forward model is JIT-wrapped at build
 # time. `per_component` (the default) compiles each `SEDComponent`
-# independently — fast cold start, friendly to notebook edits. `fused`
-# compiles the full pipeline as one graph — slower first call, fastest
+# independently: fast cold start, friendly to notebook edits. `fused`
+# compiles the full pipeline as one graph; slower first call, fastest
 # steady state, what you want inside a population fit.
 
 # %%

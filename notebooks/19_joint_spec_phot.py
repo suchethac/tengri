@@ -23,7 +23,7 @@
 # total light. How do you reconcile them in a joint SED fit?
 #
 # The classical answer is to scale the spectrum by a single number until
-# it matches the photometry — equivalent to assuming the galaxy is a
+# it matches the photometry: equivalent to assuming the galaxy is a
 # **flat slab** of uniform surface brightness across the aperture. Real
 # galaxies are not flat slabs: they have Sérsic-shaped surface-brightness
 # profiles, and the fiber captures only the bright nuclear region while
@@ -136,7 +136,7 @@ print(f"Ratio (flat-slab / Sérsic): {frac_flat / frac_sersic:.2f}")
 # implies the fiber captures `frac_flat` of the total. The physical
 # Sérsic profile says it actually captures `frac_sersic`. If you fit
 # both jointly with the wrong aperture model, you push the inferred
-# total-flux normalization up or down to compensate — biasing
+# total-flux normalization up or down to compensate, biasing
 # **stellar mass**, **star-formation rate**, and **dust attenuation**.
 #
 # Sérsic n=1 (this notebook): the bias is modest. Try `n=4`
@@ -179,8 +179,8 @@ print(
 #     observation=obs,
 # )
 # fit = forward.predict(params)
-# # fit["phot_fnu"] — total flux (untouched)
-# # fit["spec_fnu"] — scaled by aperture_fraction(Sérsic, fiber)
+# # fit["phot_fnu"]: total flux (untouched)
+# # fit["spec_fnu"]: scaled by aperture_fraction(Sérsic, fiber)
 # ```
 #
 # Compare against a flat-slab fit (`SpatialModel(components=[FlatSlab()])`):

@@ -16,13 +16,12 @@
 # %% [markdown]
 # # Joint photometry + spectroscopy
 #
-# Broadband photometry alone — the [`quickstart`](00_quickstart.py) — leaves
+# Broadband photometry alone (the [`quickstart`](00_quickstart.py)) leaves
 # the SFH shape and the metallicity–dust split prior-dominated. Here we add an
-# optical spectrum covering the metallicity-
-# sensitive absorption features (Hβ, Mgb, the Fe blends) and fit both datasets
-# together. The joint posterior is narrower than either single-dataset fit and
-# pins down parameters photometry alone cannot: the line depths break the
-# age–metallicity–dust ridge.
+# optical spectrum covering the metallicity-sensitive absorption features
+# (Hβ, Mgb, the Fe blends) and fit both datasets together. The joint posterior
+# is narrower than either single-dataset fit and pins down parameters photometry
+# alone cannot: the line depths break the age–metallicity–dust ridge.
 #
 # Same machinery as the quickstart and notebook 05 (`SEDModel.build`, validated
 # HMC), with one `Observation` carrying both channels.
@@ -67,10 +66,11 @@ C_POST, C_TRUTH, C_DATA, C_SPEC = "#3a76d9", "0.15", "#c3372a", "#d98a3a"
 # %% [markdown]
 # ## Stellar library and observation
 #
-# Twelve UV–MIR bands (GALEX → WISE) plus an SDSS-like optical spectrum (R ≈ 2000,
+# Twelve UV–MIR bands (GALEX to WISE) plus an SDSS-like optical spectrum (R ≈ 2000,
 # 3800–9200 Å observed). At z = 0.05 this covers the 4000 Å break, Hβ, Mgb triplet,
-# Fe5270/Fe5335 blends, Hα, and Ca II triplet — the absorption features that carry
-# metallicity and light-weighted age. Sampling at 260 pixels resolves these indices.
+# Fe5270/Fe5335 blends, Hα, and Ca II triplet. These are the absorption features that
+# carry metallicity and light-weighted age. Sampling at 260 pixels resolves these
+# indices.
 
 # %%
 SSP_NAME = "fsps_prsc_miles_chabrier"
@@ -104,9 +104,9 @@ obs_joint = Observation(photometry=phot_obs, spectroscopy=spec_obs)
 #
 # One builder, called twice: the same physics and the same free parameters
 # against two different observations. The spectrum's pixel count drives the fit
-# cost — each pixel adds a likelihood term and a gradient row.
+# cost: each pixel adds a likelihood term and a gradient row.
 #
-# **Both channels assume Gaussian, uncorrelated errors.** That holds for the
+# **Both channels assume Gaussian, uncorrelated errors.** This holds for the
 # photometry, but real spectral pixels share correlated noise (wavelength
 # calibration, flat-fielding). This fit uses diagonal errors, so the posterior
 # width is honest about the data it was given and does not account for that
@@ -140,8 +140,8 @@ def build(obs, approx=None):
 
 # Both fits use lookup tables. Photometry-only gets WavePrecomp (SSP × filter
 # LUT). The joint model gets SpectrumPrecomp, which builds both LUT families
-# side by side — the SSP × filter table for the photometry channel and the
-# SSP × pixel table for the spectrum — so neither channel falls back to the
+# side by side: the SSP × filter table for the photometry channel and the
+# SSP × pixel table for the spectrum, so neither channel falls back to the
 # slow exact wave-grid integration.
 model_phot = build(obs_phot, approx=WavePrecomp())
 model_joint = build(obs_joint, approx=SpectrumPrecomp())
@@ -230,8 +230,8 @@ print(f"Total fitting time: {t_phot + t_joint:.1f}s", flush=True)
 # ## Constraint widths: joint vs single-modality
 #
 # The 68% credible width of each free parameter, normalized so the photometry-
-# only width is 1. Bars below 1 mean the joint fit tightened that parameter.
-# The largest gains are in metallicity and the dust split.
+# only width is 1. Bars below 1 mean the joint fit tightened that parameter:
+# the largest gains are in metallicity and the dust split.
 
 # %%
 params = model_joint.spec.free_params
@@ -284,8 +284,8 @@ plt.show()
 # %% [markdown]
 # ## Recovery
 #
-# Truth vs joint-posterior 16/50/84. With converged chains (R̂ < 1.05) the
-# intervals are trustworthy; the spectrum pulls metallicity and the dust split
+# Truth vs joint-posterior 16/50/84: with converged chains (R̂ < 1.05) the
+# intervals are trustworthy. The spectrum pulls metallicity and the dust split
 # back onto the truth that photometry alone could not separate.
 
 # %%
@@ -397,10 +397,10 @@ fig_h.savefig(FIG_DIR / "07_joint_sed.png", dpi=300, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
-# ## Corner — joint posterior
+# ## Corner: joint posterior
 #
 # Free parameters with truth dashed. The metallicity and dust columns are now
-# tight and centered on the truth — neither dataset managed that on its own.
+# tight and centered on the truth; neither dataset managed that on its own.
 
 # %%
 fig_corner = post_joint.plot_corner(truths=truth_full, color=C_POST)

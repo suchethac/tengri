@@ -16,16 +16,15 @@
 # %% [markdown]
 # # Fitting optical spectroscopy
 #
-# Broadband photometry alone — the [`quickstart`](00_quickstart.py) — leaves
+# Broadband photometry alone (the [`quickstart`](00_quickstart.py)) leaves
 # stellar metallicity and the dust split prior-dominated. An optical spectrum
-# carries the absorption-line
-# depths — Hβ, the Mgb triplet, the Fe blends — that pin stellar age and
-# metallicity. This notebook fits a spectrum *alone* with the same machinery as
-# the quickstart (`SEDModel.build`, validated HMC) and shows what it does and
-# does not constrain: metallicity and age tighten sharply, but the **absolute
-# dust optical depth stays loose** — a spectrum sets the continuum *shape*, not
-# its normalization. Adding photometry closes that gap in
-# [`07_joint_photo_spec`](07_joint_photo_spec.py).
+# carries the absorption-line depths: Hβ, the Mgb triplet, the Fe blends. These
+# pin stellar age and metallicity. This notebook fits a spectrum *alone* with
+# the same machinery as the quickstart (`SEDModel.build`, validated HMC) and
+# shows what it does and does not constrain: metallicity and age tighten
+# sharply, but the **absolute dust optical depth stays loose**. A spectrum sets
+# the continuum *shape*, not its normalization. Adding photometry closes that
+# gap in [`07_joint_photo_spec`](07_joint_photo_spec.py).
 
 # %%
 from _setup import FIG_DIR, HMC_VALIDATED, quiet
@@ -63,10 +62,10 @@ C_POST, C_TRUTH, C_DATA = "#3a76d9", "0.15", "#c3372a"
 # %% [markdown]
 # ## Stellar library and observation
 #
-# An SDSS-like R≈2000 optical spectrum, 3800–9200 Å observed (rest-frame
-# 3620–8760 Å at z = 0.05: the 4000 Å break, Hβ, Mgb, the Fe blends, Hα, and
-# the Ca II triplet), sampled at 260 pixels to keep the demo fast, on the same
-# FSPS bare-stellar grid as notebooks 05 and 07.
+# An SDSS-like R≈2000 optical spectrum; 3800–9200 Å observed (rest-frame
+# 3620–8760 Å at z = 0.05, featuring the 4000 Å break, Hβ, Mgb, the Fe blends,
+# Hα, and the Ca II triplet). Sampled at 260 pixels to keep the demo fast, on
+# the same FSPS bare-stellar grid as notebooks 05 and 07.
 
 # %%
 SSP_NAME = "fsps_prsc_miles_chabrier"
@@ -80,12 +79,12 @@ obs = Observation(spectroscopy=Spectroscopy(wave_obs=WAVE_OBS, resolution=2000))
 # ## Build the model
 #
 # Truncated-skew-normal SFH (normalization + two timescales free; skew and
-# truncation fixed), free stellar metallicity, and two dust optical depths —
-# the same physics as notebooks 05 and 07, so the three are comparable.
+# truncation fixed), free stellar metallicity, and two dust optical depths.
+# This is the same physics as notebooks 05 and 07, so the three are comparable.
 
 # %%
 # approx=SpectrumPrecomp() pre-rebins the SSP to the spectrum pixel centers and
-# projects every forward pass through that lookup table — within ~0.03% of the
+# projects every forward pass through that lookup table, within ~0.03% of the
 # exact wave-grid spectrum but ~30x faster per evaluation, so a converged HMC
 # fit takes seconds rather than minutes. It is the spectroscopic analog of
 # WavePrecomp; valid for low-to-medium resolution (R ≲ a few thousand), where
@@ -113,7 +112,7 @@ print(f"Free parameters ({sed_model.spec.n_free}): {', '.join(sed_model.spec.fre
 # %% [markdown]
 # ## Mock observation
 #
-# Truth with an interior metallicity; one noisy realization at S/N = 30 per
+# Truth with an interior metallicity: one noisy realization at S/N = 30 per
 # pixel.
 
 # %%
@@ -188,11 +187,11 @@ print(
 )
 
 # %% [markdown]
-# ## Recovery — what a spectrum alone pins
+# ## Recovery: what a spectrum alone pins
 #
 # Metallicity, stellar mass, and the SFH timescales recover tightly. The
-# diffuse dust optical depth is constrained (it shapes the continuum slope) but
-# the birth-cloud component `tau_bc` stays broad — a spectrum fixes the
+# diffuse dust optical depth is constrained (it shapes the continuum slope), but
+# the birth-cloud component `tau_bc` stays broad. A spectrum fixes the
 # continuum shape, not the overall dust normalization.
 
 # %%
@@ -270,4 +269,4 @@ plt.show()
 # A converged spectroscopy-only fit (R̂ < 1.05) pins stellar age, metallicity,
 # and mass from the absorption features, but leaves the dust normalization
 # loose. [`07_joint_photo_spec`](07_joint_photo_spec.py) adds broadband
-# photometry, which fixes the dust normalization and tightens the rest.
+# photometry, which fixes dust normalization and tightens the rest.

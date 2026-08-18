@@ -17,17 +17,17 @@
 # # Fitting photometry: more parameters, and how to trust the fit
 #
 # [`00_quickstart`](00_quickstart.py) ran a fit and showed the posterior SED,
-# SFH, and corner. This notebook keeps that exact machinery — `SEDModel.build`
-# with the `WavePrecomp` lookup table, a prewarmed two-chain NUTS run — and
+# SFH, and corner. This notebook keeps that exact machinery: `SEDModel.build`
+# with the `WavePrecomp` lookup table, a prewarmed two-chain NUTS run. It
 # extends it in the two ways that matter for real work:
 #
 # 1. **More free parameters.** On top of the quickstart's SFH + birth-cloud
 #    dust, we free the stellar **metallicity** and the **diffuse** dust optical
 #    depth. That opens the classic age–metallicity–dust degeneracy, which is
 #    the thing broadband photometry struggles with.
-# 2. **Verifying the posterior.** The second half is the part the quickstart
-#    skips: per-parameter split-R̂ and effective sample size, divergence count,
-#    chain traces, and a posterior-predictive χ². These are what let you say a
+# 2. **Verifying the posterior:** the second half is the part the quickstart
+#    skips. Per-parameter split-R̂ and effective sample size, divergence count,
+#    chain traces, and a posterior-predictive χ² are what let you say a
 #    credible interval means something.
 
 # %%
@@ -68,7 +68,7 @@ C_POST, C_TRUTH, C_DATA = "#3a76d9", "0.15", "#c3372a"
 # %% [markdown]
 # ## Stellar library and observation
 #
-# The same UV–MIR bandset as the quickstart (GALEX → WISE), bare-stellar SSP.
+# The same UV–MIR bandset as the quickstart (GALEX to WISE): bare-stellar SSP.
 
 # %%
 SSP_NAME = "fsps_prsc_miles_chabrier"
@@ -124,7 +124,7 @@ print(f"\nFree parameters ({sed_model.spec.n_free}): {', '.join(sed_model.spec.f
 # ## Mock observation
 #
 # One draw from the prior is the truth (so the truth is always inside the
-# prior — no chance of the broken "truth outside the prior" setup). S/N = 20 is
+# prior: no chance of the broken "truth outside the prior" setup). S/N = 20 is
 # realistic for a survey source.
 
 # %%
@@ -191,7 +191,7 @@ print(f"\nmax R̂ = {rhat_max:.4f}   divergences = {n_div}   (2 chains × 600 dr
 # %% [markdown]
 # <!-- docs-voice: criterion -->
 # Chain traces for the three parameters driving the age–metallicity–dust
-# degeneracy. Well-mixed chains overlap and look like white noise; chains
+# degeneracy: well-mixed chains overlap and look like white noise. Chains
 # that separate or wander indicate poor mixing.
 
 # %%
@@ -223,8 +223,8 @@ plt.show()
 # %% [markdown]
 # ## Recovery
 #
-# Stellar mass, SFR, sSFR rolled up from the SFH integral, with the input truth
-# alongside the posterior 16/50/84 percentiles.
+# Stellar mass, SFR, and sSFR rolled up from the SFH integral, with the input
+# truth alongside the posterior 16/50/84 percentiles.
 
 # %%
 N_DRAWS = 200
@@ -260,8 +260,8 @@ for k in DERIVED_KEYS:
 # %% [markdown]
 # ## Posterior SED
 #
-# Posterior spectrum (median + 68% band), truth dashed, observed photometry
-# with error bars, residuals below. The residual panel is the
+# Posterior spectrum (median + 68% band), truth dashed, and observed photometry
+# with error bars; residuals shown below. The residual panel is the
 # posterior-predictive check: a good fit scatters $(d-m)/\sigma$ within ±2 with
 # a reduced χ² near 1.
 
@@ -351,13 +351,13 @@ fig.savefig(FIG_DIR / "05_posterior_sed.png", dpi=300, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
-# ## Corner — the age–metallicity–dust degeneracy
+# ## Corner: the age–metallicity–dust degeneracy
 #
 # Free parameters plus derived quantities, truth dashed. Read the
 # `met_logzsol`–`dust_tau_diff`–`sfh_tsnorm_*` block: broadband photometry
 # constrains the stellar mass and the broad SED shape tightly, but the SFH
 # *shape* parameters and the metallicity–dust split stay correlated and
-# prior-dominated. That residual degeneracy — not a fitting failure — is
+# prior-dominated. This residual degeneracy (not a fitting failure) is
 # exactly what an optical spectrum
 # ([`06_fitting_spectroscopy`](06_fitting_spectroscopy.py)) breaks.
 
@@ -372,6 +372,6 @@ plt.show()
 # Same workflow as the quickstart, two more free parameters, and the part that
 # turns "a fit ran" into "a fit you can publish": split-R̂ and ESS per
 # parameter, a divergence count, chain traces, and a posterior-predictive χ².
-# Where the posterior stays broad — the SFH shape, the metallicity–dust split —
-# that is the physics of broadband photometry, and the diagnostics are what let
+# Where the posterior stays broad (the SFH shape, the metallicity–dust split),
+# that is the physics of broadband photometry. The diagnostics are what let
 # you tell that apart from a sampler that simply failed.

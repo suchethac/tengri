@@ -14,14 +14,14 @@
 # ---
 
 # %% [markdown]
-# # SED anatomy — a kitchen-sink galaxy from X-rays to radio
+# # SED anatomy: a kitchen-sink galaxy from X-rays to radio
 #
 # A faithful SED is a *composition*: stellar continuum, nebular emission,
 # dust attenuation and re-emission, AGN, radio, X-ray, and intergalactic
 # absorption. Tengri composes all of this from one nested-dict specification.
 #
-# The figure below is a **kitchen-sink** model at z = 2 — every component
-# turned on — followed by four mini-sweeps that isolate a single knob
+# The figure below is a **kitchen-sink** model at z = 2: every component
+# turned on, followed by four mini-sweeps that isolate a single knob
 # at a time. The notebook closes with a complete self-consistent SED from
 # hard X-rays to the radio, with every block overlaid on the total.
 #
@@ -79,7 +79,7 @@ from tengri.units import erg_per_s_to_lsun, lnu_to_llambda
 plot.setup_style()
 
 # %% [markdown]
-# ## Setup — bare-stellar SSP and panchromatic filters
+# ## Setup: bare-stellar SSP and panchromatic filters
 #
 # Cue needs a bare-stellar SSP. The filter set spans GALEX through ALMA
 # so every component has somewhere to be visible.
@@ -171,7 +171,7 @@ print(model.summary())
 citations.print_citations(model)
 
 # %% [markdown]
-# ## Hero figure — the panchromatic anatomy
+# ## Hero figure: the panchromatic anatomy
 #
 # All components of the SED from X-rays to the radio, shown together on a
 # single rest-frame wavelength grid.
@@ -400,7 +400,7 @@ ax.legend(frameon=False, fontsize=9)
 fig.savefig(FIG_DIR / "02_anatomy_sweeps.png", dpi=300, bbox_inches="tight")
 
 # %% [markdown]
-# ## Editing a built model — `spec.to_groups()`
+# ## Editing a built model: `spec.to_groups()`
 #
 # Pull the model's configuration back, edit a parameter, and rebuild:
 
@@ -432,7 +432,7 @@ print(model_edited.summary())
 # - **IGM.** Inoue 2014 Lyman-alpha forest opacity at z > 0.
 
 # %% [markdown]
-# ## The money shot — one model, X-rays to radio
+# ## The money shot: one model, X-rays to radio
 #
 # A complete self-consistent SED from hard X-rays to the radio at z = 0.1.
 # The model parameters (M_star, SFR, and AGN bolometric luminosity) are

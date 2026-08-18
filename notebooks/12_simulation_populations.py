@@ -17,7 +17,7 @@
 # # Forward-modeling simulation histories: photometry and lines, fast
 #
 # You have a simulation. For each galaxy it gives you a star formation history
-# and a metallicity history — arrays, not parameters. You want broadband
+# and a metallicity history: arrays, not parameters. You want broadband
 # photometry and emission-line fluxes for all of them, as fast as possible.
 #
 # That is all this notebook does.
@@ -31,7 +31,7 @@
 #           properties     (N,)  each  stellar mass, SFR, ...
 # ```
 #
-# There is no fitting here and **no free parameters** — the tables are the
+# There is no fitting here and **no free parameters**; the tables are the
 # model. Sections 1–3 are the working code; sections 4–5 are the speed, which
 # is the part worth reading twice.
 
@@ -114,7 +114,7 @@ print(f"{phot.n_filters} bands   free parameters: {fwd.spec.free_params}")
 # ## 2. The histories
 #
 # Replace `simulation_snapshot` with your reader. Only three things matter:
-# the shapes, the units, and `met_unit=` — declare it, because `Z = 2e-4` is a
+# the shapes, the units, and `met_unit=`: declare it, because `Z = 2e-4` is a
 # legal value both as a mass fraction and as log10(Z/Z☉), and reading one as
 # the other is a silent factor of ~70.
 
@@ -161,7 +161,7 @@ print(f"SFR {snap['sfr'].shape}   Z {met.shape}   floored {(snap['met'] < Z_FLOO
 # come from a single pass.
 #
 # With baked-in nebular, line fluxes come from `lines=(...)`. Asking for them as
-# `properties=(...)` returns **NaN** — that channel needs a live photoionization
+# `properties=(...)` returns **NaN**; that channel needs a live photoionization
 # backend (section 5a). The wNE grid fixes gas-phase metallicity and ionization
 # parameter; varying either requires a live backend.
 
@@ -195,7 +195,7 @@ print(
 )
 
 # %% [markdown]
-# The mass round-trips to a few thousandths of a dex — two different quadratures
+# The mass round-trips to a few thousandths of a dex: two different quadratures
 # of the same table, not a disagreement about what the table says.
 #
 # <!-- docs-voice: criterion -->
@@ -249,7 +249,7 @@ plt.show()
 #
 # `Catalog` is convenient, but if you are wiring this into your own pipeline you
 # want the `vmap` directly. **The parameter dict is a pytree, and `vmap` maps the
-# leading axis of every leaf** — scalars and histories batch through the same call:
+# leading axis of every leaf**; scalars and histories batch through the same call:
 #
 # ```python
 # {"sfh_t_gyr": (N, n_t),      # a history
@@ -322,7 +322,7 @@ print("              first call, and never costs you throughput")
 
 # %% [markdown]
 # **Every distinct batch width is its own compile.** JAX keys its cache on
-# shape, so a ragged trailing chunk — 128, 128, 47 — compiles the program
+# shape, so a ragged trailing chunk (128, 128, 47) compiles the program
 # twice. Pad to a uniform width:
 
 # %%
@@ -400,13 +400,13 @@ for budget in (2, 8, 32):
 
 # %% [markdown]
 # On this configuration a galaxy costs well under a megabyte, so a few GB holds
-# **tens of thousands** of them in a single `vmap` — for most catalogs you never
+# **tens of thousands** of them in a single `vmap`; for most catalogs you never
 # need to chunk at all. That is not a property of `vmap`; it is a property of
 # the *fast configuration*. Section 5 shows the same measurement on the heavy
 # one, where a galaxy costs about ten times more and the ceiling drops with it.
 #
 # **What running out looks like.** Nothing useful. The OS `SIGKILL`s the process,
-# so you get no Python traceback, no `MemoryError`, no stack — just a dead
+# so you get no Python traceback, no `MemoryError`, no stack: just a dead
 # kernel, or a shell reporting exit code `-9` (or 137). If a run dies silently,
 # that is almost always this, and the fix is a smaller batch, not a bug hunt.
 
@@ -499,7 +499,7 @@ print(
 # magnitude in *footprint*, which moves the batch ceiling by the same factor:
 # a batch width that is comfortable on the baked-in path is an OOM kill on the
 # live one. Measured here at width 2048, the live path wanted about 19 GB and
-# was `SIGKILL`ed on a machine with 17 GB free — no traceback, exit -9.
+# was `SIGKILL`ed on a machine with 17 GB free: no traceback, exit -9.
 #
 # ### 5b. `WavePrecomp`
 #
@@ -523,7 +523,7 @@ print(f"\n  WavePrecomp is {t_exact / t_baked:.1f}x faster.")
 # Note how the two levers interact. On the baked-in configuration `WavePrecomp`
 # is worth a large factor, because the SSP x filter integral is then most of the
 # remaining work. Put a live nebular emulator back in and the same `WavePrecomp`
-# is worth only about 2x — not because it got worse, but because the emulator
+# is worth only about 2x; not because it got worse, but because the emulator
 # now dominates. **Optimize the biggest term first**, and re-measure after each
 # change rather than assuming the factors multiply.
 #
@@ -557,7 +557,7 @@ for n in (256, 1024, 4096):
 
 # %% [markdown]
 # Per-galaxy cost is flat in *N*, so a bigger catalog is just proportionally
-# more wall clock. `chunk_size` trades memory for throughput **linearly** —
+# more wall clock. `chunk_size` trades memory for throughput **linearly**:
 # each vmapped galaxy carries its own SFH and Z(t) through the SSP machinery.
 # Section 4 measured that trade exactly, so size the chunk from your memory
 # budget rather than bisecting until something dies. If a run dies with no
@@ -569,24 +569,24 @@ for n in (256, 1024, 4096):
 #
 # The last lever is precision, and it is the one whose payoff is most often
 # misdescribed. `tengri` turns float64 on at import because the projection to
-# flux needs the dynamic range — `d_L^2` at any interesting redshift overflows
+# flux needs the dynamic range: `d_L^2` at any interesting redshift overflows
 # float32 outright. What makes float32 usable anyway is that the forward model
 # never *forms* `d_L^2`: `observation/redshift_kernel.py` applies
 # $(1+z)/(4\pi d_L^2)$ as a log10 offset, precisely so that intermediate cannot
 # overflow. The dynamic range never exists as a number, so it never has to fit.
 #
-# The switch is global, and it only affects arrays created after it — so it has
+# The switch is global, and it only affects arrays created after it; so it has
 # to come **before** the build. A model built under float64 keeps its float64
 # tables no matter what you set afterwards.
 #
 # Two routes set it: `JAX_ENABLE_X64=0` in the environment *before* importing
 # tengri, or `jax.config.update` afterwards. In a notebook the import has
-# already happened, so it is the second one — the cell below. Either way,
+# already happened, so it is the second one: the cell below. Either way,
 # **check the dtype you got rather than the dtype you asked for**; the cell
 # prints it, because a precision measurement that cannot fail is not a
 # measurement.
 #
-# Rebuilding then emits a `UserWarning` per table — *"Explicitly requested dtype
+# Rebuilding then emits a `UserWarning` per table: *"Explicitly requested dtype
 # float64 ... will be truncated to float32"*. That is JAX reporting the thing you
 # just asked for, not a problem; the cell silences it so the output stays
 # readable, and checks the resulting dtype instead of trusting it.
@@ -649,12 +649,12 @@ print(f"\n  agreement with float64: median {np.median(dmag):.0e} mag, worst {dma
 # "float32 is faster".
 #
 # **The FLOP count does not move.** Same arithmetic, same number of `while`
-# loops, same number of fusion regions — the compiled program has the same
+# loops, same number of fusion regions: the compiled program has the same
 # shape, it is just narrower. float32 is not buying you arithmetic here.
 #
 # **The bytes halve.** About 1.8x fewer bytes moved, and roughly 1.9x less
 # scratch memory. This workload is bandwidth-bound rather than FLOP-bound, so
-# bytes are the currency that matters — which means the dependable win is the
+# bytes are the currency that matters; which means the dependable win is the
 # **batch ceiling** from section 4, not the clock. Close to twice the width
 # fits in the same RAM.
 #
@@ -663,14 +663,14 @@ print(f"\n  agreement with float64: median {np.median(dmag):.0e} mag, worst {dma
 # Two traps, both measured rather than imagined:
 #
 # **Underflow at high redshift.** Agreement holds at ~1e-5 mag from z = 0.01 to
-# z = 3. At z = 6 the Lyman-break dropout bands are genuinely tiny — float64
-# returns 1e-49 to 1e-41 there — and float32 has no such numbers, so they come
+# z = 3. At z = 6 the Lyman-break dropout bands are genuinely tiny: float64
+# returns 1e-49 to 1e-41 there; and float32 has no such numbers, so they come
 # back as exactly `0.0` (measured: 128 of 352 fluxes). Those bands are dark
 # either way, but `0.0` turns a color or a log into `-inf`. Above z ~ 4, stay in
 # float64 or mask the dropouts deliberately.
 #
 # float32's smallest subnormal is 1.4e-45, so any constant below that *is* zero
-# there — and a zero that multiplies is not a rounding error, it is a wrong
+# there; and a zero that multiplies is not a rounding error, it is a wrong
 # answer. If you write your own float32 path, reach for
 # `tengri.utils.scale.representable_floor` rather than a bare literal: it lifts
 # a floor to the working dtype's smallest normal and leaves float64 alone.
@@ -678,7 +678,7 @@ print(f"\n  agreement with float64: median {np.median(dmag):.0e} mag, worst {dma
 # **Grid edges stop being exact.** `Z_FLOOR` above is read off the SSP
 # metallicity grid and clipped *to* it. In float32 that edge is only good to
 # ~1e-7 relative, so a value clipped exactly onto it can land a hair outside,
-# and `Catalog.from_histories` then refuses the whole catalog — correctly, since
+# and `Catalog.from_histories` then refuses the whole catalog: correctly, since
 # off-grid nodes are clipped silently inside JIT. Clip with a margin
 # (`Z_FLOOR * (1 + 1e-4)`) instead of to the edge itself.
 #
@@ -687,8 +687,8 @@ print(f"\n  agreement with float64: median {np.median(dmag):.0e} mag, worst {dma
 # a different component brings its own small constants, and the CB19 line list
 # once returned *every* line as exactly zero in pure float32 for precisely the
 # reason above. Re-run this comparison after changing the component stack rather
-# than assuming the result carries over. Inference is a separate question again
-# — gradients, mass matrices and log-likelihood *differences* have their own
+# than assuming the result carries over. Inference is a separate question again;
+# gradients, mass matrices and log-likelihood *differences* have their own
 # conditioning, and nothing here measures any of it.
 #
 # ## The whole thing

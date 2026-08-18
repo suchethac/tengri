@@ -16,7 +16,7 @@
 # %% [markdown]
 # # Parameter sweeps
 #
-# Vary one knob, plot a fan of SEDs — the cheapest way to build physical intuition.
+# Vary one knob, plot a fan of SEDs: the cheapest way to build physical intuition.
 # Because tengri's model is pure JAX, sweeps can be batched through `vmap` and run
 # in a single compiled call. This notebook covers:
 #
@@ -67,8 +67,8 @@ ssp = tengri.load_ssp("ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0", down
 # ## 1-D sweep with `sweep_parameter`
 #
 # Build a fixed star-forming galaxy and vary one knob. A sweep holds all other
-# parameters at their fixed values, so the fan understates the real degeneracy
-# — a full fit frees other parameters and expands the contours.
+# parameters at their fixed values, so the fan understates the real degeneracy.
+# A full fit frees other parameters and expands the contours.
 
 # %%
 spec_sf = Parameters(
@@ -103,7 +103,7 @@ plt.show()
 # ## A prior fan via `sample_sfh_prior`
 #
 # What range of behavior does the prior actually allow? `sample_sfh_prior` draws
-# from a registered SFH family's default prior and returns the SFR curves directly.
+# from a registered SFH family's default prior and returns SFR curves directly.
 
 # %%
 age_grid_yr, curves = sample_sfh_prior(
@@ -159,7 +159,7 @@ for inst_factory in (Instrument.SDSS, Instrument.JWST_NIRCam, Instrument.WISE):
 # %% [markdown]
 # ## A 2-D photometric grid via `predict_photometry_batch`
 #
-# For multi-axis sweeps, use `model.predict_photometry_batch`, a `jax.vmap` of
+# For multi-axis sweeps, use `model.predict_photometry_batch`: a `jax.vmap` of
 # the per-galaxy predictor. We sweep `met_logzsol` against `dust_tau_diff` for
 # an SDSS model and track how the *color* `g - r` moves.
 
@@ -275,7 +275,7 @@ fig.tight_layout()
 plt.show()
 
 # %% [markdown]
-# UV slopes spread by ~1 mag/dex even at the same optical depth — the
+# UV slopes spread by ~1 mag/dex even at the same optical depth: the
 # 2175 Å bump shows up clearly in `noll09`, the SMC curve has the
 # steepest UV rise, and Calzetti sits where most fits assume it does.
 
@@ -283,7 +283,7 @@ plt.show()
 # ## Photometric tracks across redshift
 #
 # One galaxy traced across redshifts traces a locus in color-color space
-# that high-z selection cuts (Lyman-break, BzK, dropouts) live on. Here we
+# where high-z selection cuts (Lyman-break, BzK, dropouts) live. Here we
 # vmap a single SFH/dust truth across z ∈ [0.5, 8] through JWST NIRCam.
 
 # %%
@@ -373,7 +373,7 @@ plt.show()
 # %% [markdown]
 # Below `log L_bol ≈ 10` the SED is host-dominated; above ~12 the AGN disc
 # dominates UV–optical and the torus dominates mid-IR. The crossover is where
-# AGN/SF decompositions are most identifiable — and most degenerate.
+# AGN/SF decompositions are most identifiable, and most degenerate.
 
 # %% [markdown]
 # ## Stochastic SFH: PSD-driven burstiness
@@ -433,7 +433,7 @@ plt.show()
 # %% [markdown]
 # Each panel shows six independent realizations from the same prior. Short `τ`
 # produces ~10-Myr ringing; long `τ` produces smooth drift. This is the prior
-# that VI and NUTS fits explore — the fan above is what "uninformative on
+# that VI and NUTS fits explore. The fan above is what "uninformative on
 # burstiness shape" actually means.
 
 # %% [markdown]

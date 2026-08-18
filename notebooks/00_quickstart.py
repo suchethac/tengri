@@ -20,7 +20,7 @@
 # and WISE (UV through near-IR), fitted with NUTS on a differentiable JAX
 # forward model.
 #
-# Deliberately minimal — the point is to show how *fast* the JIT-compiled
+# Deliberately minimal: the point is to show how *fast* the JIT-compiled
 # forward model and gradients are. Truncated-skew-normal SFH, two-component
 # Calzetti dust attenuation, nebular off, redshift fixed at 0.05. Seven free
 # parameters. See `04_building_models.py` for the recipe grammar and
@@ -185,7 +185,7 @@ print(f"  ∇log-likelihood  warm:       {time.perf_counter() - t:8.4f} s")
 #
 # With NUTS, more draws are cheap to cut but **warm-up is not**: 500 warm-up steps
 # gave 4 divergences and split-R̂ 1.017, 1000 still left 1 divergence, and 1500 is
-# where it reaches 0 — which is what the settings below use. Cut the draws, keep
+# where it reaches 0, which is what the settings below use. Cut the draws, keep
 # the warm-up.
 
 # %%
@@ -243,12 +243,12 @@ print(
 # %% [markdown]
 # The fit recovers the mock truth: well-constrained parameters (stellar mass,
 # dust, metallicity) land on the input values, and even the SFH *shape*
-# parameters are sensibly constrained for this star-forming galaxy — the
+# parameters are sensibly constrained for this star-forming galaxy; the
 # posteriors are unimodal and well-mixed (`r_hat ≈ 1.0`), without piling up
 # against the prior bounds.
 
 # %% [markdown]
-# Derived physical scalars — stellar mass, SFR, sSFR — rolled up from the
+# Derived physical scalars (stellar mass, SFR, sSFR) rolled up from the
 # SFH integral, with the input truth in the first column.
 
 # %%

@@ -17,7 +17,7 @@
 # # Joint fit: photometry + emission lines
 #
 # Broadband photometry + emission-line-flux catalog fit (e.g., FastSpecFit for DESI).
-# Uses `predict_line_fluxes` for pure, deblended, absorption-corrected emission —
+# Uses `predict_line_fluxes` for pure, deblended, absorption-corrected emission;
 # the same quantity FastSpecFit's `LINE_FLUX` reports. Window integrals carry stellar
 # absorption and mis-deblend [N II], so do not compare them to this model.
 
@@ -73,7 +73,7 @@ C_POST, C_TRUTH, C_DATA, C_LINE = "#3a76d9", "0.15", "#c3372a", "#2e8b57"
 # DESI Legacy Imaging (DECam *grz* + WISE W1–W4) plus ten strong optical lines:
 # [O II], Balmer lines, [O III], [N II], [S II]. FastSpecFit fits a stellar-continuum
 # model (SPS templates with Balmer absorption), subtracts it, and fits each line as
-# a Gaussian on the residual — with [N II]/Hα doublet kinematics tied so the blends
+# a Gaussian on the residual; [N II]/Hα doublet kinematics are tied so the blends
 # deblend properly. Its output `LINE_FLUX` is pure, deblended, absorption-corrected
 # emission. That is exactly what `predict_line_fluxes` returns: the backend's emitted
 # line luminosity projected to a flux.
@@ -111,7 +111,7 @@ print(f"Lines: {len(LINE_NAMES)} — {', '.join(LINE_NAMES)}")
 # We use the **Cue** photoionization backend, because it publishes discrete line
 # luminosities that `predict_line_fluxes` turns into the pure-emission flux a
 # catalog reports, and because its gas conditions (`neb_logU`, `neb_logZ_gas`)
-# are free — a real catalog spans the metallicity–ionization plane, so a
+# are free; a real catalog spans the metallicity–ionization plane, so a
 # fixed-condition baked-in grid cannot follow it.
 #
 # We build the model three times with the *same* physics and free parameters,
@@ -224,7 +224,7 @@ print(
 # ## Measure the fit time: exact vs WavePrecomp vs fast
 #
 # MAP fit (200 Adam steps) on photometry + line likelihood, timed on all three paths.
-# `WavePrecomp` is the photometry lookup — SSP × filter table replacing full integration
+# `WavePrecomp` is the photometry lookup; SSP × filter table replaces full integration
 # with table look-up. `FeaturePrecomp` adds a per-Q_H nebular grid. The line channel
 # already keeps nebular work off the per-gradient path, so on a line-flux fit the
 # fast path has little left to remove. Read **compiled step** (`post.wall_time_s`):
@@ -351,11 +351,11 @@ print(f"  fit() wall is ~{warm_f:.1f}s on any path — that is per-call JIT comp
 # %% [markdown]
 # ## Posterior on the fast path
 #
-# A point estimate is not enough for a catalog — the metallicity / dust /
+# A point estimate is not enough for a catalog; the metallicity / dust /
 # ionization sector is degenerate, and the honest object is the posterior.
 #
 # **Sampler.** This posterior is strongly correlated (the degeneracies above),
-# so the mass matrix must be **dense** — a diagonal one does not converge here.
+# so the mass matrix must be **dense**; a diagonal one does not converge here.
 # Given that, fixed-trajectory **HMC** converges faster than NUTS, which spends
 # its budget building deep adaptive trees. We run **four chains** with
 # `chain_method="sequential"` so each chain reuses one compiled kernel, keeping peak
@@ -363,7 +363,7 @@ print(f"  fit() wall is ~{warm_f:.1f}s on any path — that is per-call JIT comp
 # ~N× the RAM, which can OOM on a modest machine. One fit per process.
 #
 # We use 3000 warmup steps and 1000 post-warmup samples: R-hat ≈ 1.04 with ~3
-# divergences. **More warmup is not better** — at 5000 the divergences climb to
+# divergences. **More warmup is not better**; at 5000 the divergences climb to
 # 49, as the adaptation settles on a step size that walks into a pathological
 # corner of the metallicity/dust/ionization degeneracy. That is still short of
 # the R-hat < 1.01 you would want before quoting an interval in a paper, and
@@ -451,7 +451,7 @@ for p in REPORT:
 print(f"\n68% coverage: {n_cov}/{len(REPORT)}")
 
 # %% [markdown]
-# ## Corner — the joint posterior
+# ## Corner: the joint posterior
 #
 # 1-D marginals show each parameter's distribution with truth (lines). 2-D contours
 # show the covariance structure where degeneracies live. Stellar mass is tight;
@@ -470,7 +470,7 @@ plt.show()
 #
 # Evaluated once and reused by both figures below: the model photometry
 # (`predict_photometry`), the full model SED (`predict(...).rest_sed()` → observed
-# `F_ν`), and the model line fluxes (`predict_line_fluxes`) — each drawn over the
+# `F_ν`), and the model line fluxes (`predict_line_fluxes`); each is drawn over the
 # posterior so the bands carry the parameter uncertainty.
 
 # %%
@@ -512,7 +512,7 @@ sed_lo, sed_med, sed_hi = np.percentile(
 sed_truth = _sed_fnu(truth_full)
 
 # %% [markdown]
-# ## Do the points match the best fit? — photometry
+# ## Do the points match the best fit?: photometry
 #
 # Observed photometry on the posterior-median SED. Lower panel is the pull `(O−M)/σ`:
 # inside ±1 (gray band) means the model reproduces that band within error. Reduced χ²
@@ -584,10 +584,10 @@ fig.savefig(FIG_DIR / "10_sed_photometry.png", dpi=300, bbox_inches="tight")
 plt.show()
 
 # %% [markdown]
-# ## Do the points match the best fit? — emission lines
+# ## Do the points match the best fit?: emission lines
 #
 # Observed line fluxes against posterior-predictive predictions. Lines are categorical,
-# so no curve joins them — each is an independent measurement. Lower panel: pull over
+# so no curve joins them; each is an independent measurement. Lower panel: pull over
 # the ten lines. Reduced χ² quantifies the line match.
 
 # %%
@@ -691,7 +691,7 @@ print(
 #   (Gaussian on continuum-subtracted spectrum) matching `FastSpecFit.LINE_FLUX`.
 #   Window integrals are different: they carry stellar absorption and mis-deblend [N II].
 # - Build-time `WavePrecomp` and `FeaturePrecomp` are lookup tables; their win at catalog
-#   scale (batched `fit_batch`) is real and separate — the build is shared across galaxies.
+#   scale (batched `fit_batch`) is real and separate; the build is shared across galaxies.
 #   A line-channel observation already keeps nebular work off the per-gradient path, so
 #   on this fit the fast path buys little.
 # - Stellar mass and SFR are well constrained. Metallicity / dust / gas conditions

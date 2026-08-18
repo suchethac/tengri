@@ -18,7 +18,7 @@
 #
 # Many published recipes already ship with tengri (see
 # `04_building_models.py` for the menu). This notebook adds a **new**
-# one — a dust attenuation law, a dust IR atlas, an AGN torus library,
+# one: a dust attenuation law, a dust IR atlas, an AGN torus library,
 # anything that follows the *load → predict* shape.
 #
 # The contract is one class, one file. **Each physics block has its own
@@ -31,15 +31,15 @@
 # 2. Declare free parameters as class attributes (with units).
 # 3. (Optional) `load(wave)` to read a pre-computed library off disk into
 #    `self.data`.
-# 4. `predict(p, sed_in, wave, **inputs)` — the physics.
+# 4. `predict(p, sed_in, wave, **inputs)`: the physics.
 #
 # The model auto-registers; `SEDModel.build(dust={'emission':
 # {'type': 'my_model'}})` finds it; class-level priors flow through to
 # inference; WavePrecomp picks it up automatically.
 #
 # > **Subclass the right base.** `build()` accepts a `type` only if that
-# > component *publishes* `sed_dust_ir` — a structural check, not a name
-# > lookup — and `EmissionComponent` declares it for you. Subclass bare
+# > component *publishes* `sed_dust_ir`: a structural check, not a name
+# > lookup; and `EmissionComponent` declares it for you. Subclass bare
 # > `SEDModelComponent` with your own output names and the class
 # > registers happily while `build()` rejects the type with
 # > `Unknown dust emission type '...'`.
@@ -77,7 +77,7 @@ from tengri.parameters.priors import Distribution
 from tengri.components.dust.emission._component_base import EmissionComponent
 
 # %% [markdown]
-# ## A worked example — your own modified blackbody
+# ## A worked example: your own modified blackbody
 #
 # Let's take the simplest dust IR emission model, a modified blackbody,
 # from physics straight to a working tengri model. The formula is
@@ -89,7 +89,7 @@ from tengri.components.dust.emission._component_base import EmissionComponent
 # makes the frequency integral equal $L_{\rm IR}$.
 #
 # The framework passes $L_{\rm IR}$ into `predict` as the keyword
-# `L_ir` — that name is the contract `EmissionComponent` declares, not a
+# `L_ir`: that name is the contract `EmissionComponent` declares, not a
 # name we choose.
 
 # %%
@@ -170,7 +170,7 @@ class MyModifiedBlackbody(EmissionComponent):
 
 
 # %% [markdown]
-# That's the whole model. Now check that it registered — and, separately,
+# That's the whole model. Now check that it registered and, separately,
 # that the builder will actually *accept* it.
 #
 # These are two different questions. Registration is automatic for any
@@ -194,7 +194,7 @@ for d in MyModifiedBlackbody().declared_parameters():
 # ### The trap, made explicit
 #
 # Here is the same model written against `SEDModelComponent` with
-# hand-rolled input/output names — the shape that looks right and isn't.
+# hand-rolled input/output names, the shape that looks right and isn't.
 # It registers. It is still unusable.
 
 # %%
@@ -230,7 +230,7 @@ print("...which reads like a typo, but is a contract mismatch.")
 # `SEDModel.build()` consults the registry, so the `'type'` string we
 # declared above is reachable from the standard nested-dict grammar.
 # Parameter overrides in the `emission` sub-block use the *unprefixed*
-# names (`T`, `beta_ir`) — the `dust_` prefix is added for you:
+# names (`T`, `beta_ir`); the `dust_` prefix is added for you:
 
 # %%
 # `load_ssp` resolves the grid wherever it lives, so this demo does not depend
@@ -270,13 +270,13 @@ else:
 # %% [markdown]
 # ## What the framework gives you for free
 #
-# Everything below happened automatically — no code added on top of the
+# Everything below happened automatically; no code added on top of the
 # 20 lines of `MyModifiedBlackbody`:
 #
 # - **Priors flowed to inference.** Pass `Uniform(...)` instead of
 #   `Fixed(...)` in the `emission` sub-block and `model.spec.free_params`
-#   lists `dust_T` and `dust_beta_ir`. The chosen sampler — MAP, NUTS,
-#   VI, NSS — picks them up as standard free parameters. The posterior
+#   lists `dust_T` and `dust_beta_ir`. The chosen sampler (MAP, NUTS,
+#   VI, NSS) picks them up as standard free parameters. The posterior
 #   summary lists them with units intact.
 #
 # - **Cross-component contract enforced.** `EmissionComponent` declares
@@ -295,10 +295,10 @@ else:
 # - **Optional Taylor refinement.** Setting `taylor_order = 1` on the
 #   class would have JAX auto-differentiate `predict` w.r.t. `wave` and
 #   use the moment $\Psi$ that stellar publishes to get a first-order
-#   accuracy bump — still no extra code from you.
+#   accuracy bump; still no extra code from you.
 #
 # - **Reachable by name.** `SEDModel.build(dust={'emission': {'type':
-#   'my_modified_blackbody'}})` finds the class — `__init_subclass__`
+#   'my_modified_blackbody'}})` finds the class; `__init_subclass__`
 #   registered `(name, cls)` automatically.
 
 # %% [markdown]
@@ -317,13 +317,13 @@ else:
 # | parameter map | static scan of `components/*/_params.py` in the *installed package* (ADR-0008) | **no** |
 #
 # So a notebook class is dispatchable but cannot add parameters. Declare
-# a name the param map has never heard of and it is silently dropped —
+# a name the param map has never heard of and it is silently dropped;
 # `tengri.Parameters(dust_my_new_param=...)` then raises
 # `Unknown parameter`.
 #
 # To add a real parameter, add its `ParamDeclaration` to the block's
 # `_params.py` in a checkout and reinstall. (`tengri.register_component`
-# looks like the seam for this, but it is vestigial — nothing consults
+# looks like the seam for this, but it is vestigial; nothing consults
 # it any more; the static scan replaced it.)
 
 # %% [markdown]
@@ -344,17 +344,17 @@ else:
 #
 # Every block's accepted `type` names come from a live registry
 # (ADR-0005 / ADR-0008). For a worked example, read a shipped component
-# next to yours — they live in `src/tengri/components/<block>/`.
+# next to yours; they live in `src/tengri/components/<block>/`.
 
 # %% [markdown]
 # ## Further reading
 #
-# - **The how-to**: `docs/dev/sed-model-components.md` — full contract,
+# - **The how-to**: `docs/dev/sed-model-components.md`: full contract,
 #   conventions, what's optional.
-# - **The architecture**: `docs/dev/archive/forward-model-architecture.md` — how
+# - **The architecture**: `docs/dev/archive/forward-model-architecture.md`: how
 #   your component fits into the wider pipeline, the cross-component
 #   contract, WavePrecomp, the build resolver.
-# - **The decision**: `docs/adr/0011-sed-model-component-base.md` — why
+# - **The decision**: `docs/adr/0011-sed-model-component-base.md`: why
 #   the base class exists and what alternatives were considered.
 # - **The base class**: `src/tengri/components/sed_model_component.py`.
 # - **Canonical components**: `src/tengri/components/dust/wg00_model.py`
