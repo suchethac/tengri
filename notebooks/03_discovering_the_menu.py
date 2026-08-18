@@ -294,7 +294,11 @@ tengri.list_components()
 # %% [markdown]
 # ### All instruments and filters
 #
-# Instruments group filters by survey or facility; 249 filter curves span UV to radio.
+# Instruments group filters by survey or facility; 424 filter curves span X-ray to radio,
+# including medium-band sets (ALHAMBRA, SHARDS, ZFOURGE/FourStar, NMBS/NEWFIRM, HST) and
+# narrow-band sets (J-PAS, J-PLUS, HST emission-line, Subaru/HSC, VISTA NB118).
+# Bands with no published response curve — ALMA, Chandra, NuSTAR, SPT-3G, ACT, TolTEC —
+# are served as synthetic top-hats; see `tengri.list_synthetic_bands()`.
 # Display sample surveys:
 
 # %%

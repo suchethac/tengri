@@ -9,18 +9,54 @@ Uses astroquery.svo_fps for downloads. Filters are cached as two-column
 text files (wavelength in Angstrom, transmission) under a configurable
 cache directory.
 
-Note on ALMA / interferometers
-------------------------------
-ALMA and similar interferometric arrays do not use photometric bandpass
-filters — observations are defined by spectral windows in GHz. SVO has
-no ALMA entries. For SED fitting at (sub)mm continuum frequencies, use
-``load_tophat_filter()`` to create a synthetic rectangular bandpass
-centered on the observed frequency.
+Alias conventions
+-----------------
+Aliases are ``<facility>_<band>``, lowercase. One wrinkle is worth stating
+because it looks like an inconsistency and is not: HST wide and medium bands
+are spelled bare (``hst_f105w``, ``hst_f127m``), while HST *narrow* bands carry
+their instrument (``hst_uvis_f656n``, ``hst_wfc3ir_f132n``, ``hst_acs_f502n``).
 
-Available submm photometric instruments (real bandpasses on SVO):
-  JCMT SCUBA-2 : 450 μm, 850 μm  → scuba2_450, scuba2_850
-  APEX LABOCA  : 870 μm           → laboca_870
-  APEX SABOCA  : 350 μm           → saboca_350
+F502N and F658N exist on both WFC3/UVIS and ACS/WFC with genuinely different
+curves, so a bare ``hst_f502n`` would have to pick one instrument silently —
+an arbitrary choice that returns a wrong answer without raising. Qualifying the
+whole narrow set keeps one rule rather than a per-band exception list. The bare
+spelling is kept for wide and medium bands, where no such collision exists, so
+the aliases predating this convention keep working.
+
+Synthetic bands versus measured curves
+--------------------------------------
+Facilities whose "bandpass" is really a receiver spectral window (ALMA, in GHz)
+or a detector energy range (Chandra, NuSTAR, in keV) have nothing to fetch from
+SVO. Those are served as rectangular top-hats from
+:mod:`tengri.observation.filters.synthetic`, and :func:`load_filter` resolves
+them by name like any other filter — so they work in
+``Photometry.from_names([...])`` and therefore in a fit.
+
+Where a measured curve exists, it wins and no synthetic twin is defined. SPT-SZ
+is the worked example: SVO serves measured 150 and 220 GHz bandpasses, so those
+are ordinary registry entries and only the 95 GHz band is synthetic. A name must
+never resolve to an approximation while real data for it exists.
+
+Real (sub)mm bandpasses already on SVO:
+  Planck HFI   : 100-857 GHz        → planck_hfi_100 … planck_hfi_857
+  Planck LFI   : 30-70 GHz          → planck_lfi_030 … planck_lfi_070
+  SPT-SZ       : 150, 220 GHz       → spt_150ghz, spt_220ghz
+  JCMT SCUBA-2 : 450 μm, 850 μm     → scuba2_450, scuba2_850
+  APEX LABOCA  : 870 μm             → laboca_870
+  APEX SABOCA  : 350 μm             → saboca_350
+
+User-supplied curves
+--------------------
+Three routes, all resolving through :func:`load_filter` so a custom band is
+usable anywhere a built-in one is — see
+:mod:`tengri.observation.filters.custom`:
+
+* :func:`register_filter` / :func:`register_filter_from_file` — in-memory,
+  by name, for the current process.
+* ``$TENGRI_FILTER_DIR`` — a ``:``-separated directory list; any curve file
+  dropped in loads by its file stem, with no code call, and resolves the same
+  way on another machine that has the directory.
+* :func:`load_filter_from_dsps_transmission_curve` / DSPS curve files.
 """
 
 import json
@@ -36,8 +72,19 @@ except ImportError:  # numpy < 1.26
     from numpy import trapz as _np_trapezoid  # type: ignore[no-redef]
 
 from tengri._deprecated import deprecated_alias
+from tengri.observation.filters.synthetic import (
+    _ALMA_BANDS_GHZ,
+    SYNTHETIC_BAND_REGISTRY,
+    list_synthetic_bands,
+    load_alma_band as _load_alma_band_impl,
+    load_synthetic_band,
+)
 from tengri.observation.photometry import FilterCurve
 from tengri.registry import _RegistryTable
+from tengri.utils.physics_constants import C_AA
+
+# Speed of light (legacy alias for backward compatibility)
+_C_AA_S = C_AA
 
 # ── Registry: short name -> SVO Filter Profile Service ID ─────────
 
@@ -125,28 +172,6 @@ def find_cached_filter(filename: str) -> Path | None:
     return None
 
 
-# Speed of light in Å/s — used for GHz ↔ Å conversion.
-from tengri.utils.physics_constants import C_AA as _C_AA_S
-
-# ALMA receiver band definitions (ALMA Cycle 11 specifications).
-# Each entry maps band number → (lo_ghz, hi_ghz) at the edges of the
-# receiver bandwidth.  The full band width is used as the top-hat width
-# so that continuum photometry integrates over the realistic frequency
-# coverage rather than an arbitrarily narrow window.
-_ALMA_BANDS_GHZ: dict[int, tuple[float, float]] = {
-    1: (35.0, 50.0),
-    2: (67.0, 90.0),
-    3: (84.0, 116.0),
-    4: (125.0, 163.0),
-    5: (163.0, 211.0),
-    6: (211.0, 275.0),
-    7: (275.0, 373.0),
-    8: (385.0, 500.0),
-    9: (602.0, 720.0),
-    10: (787.0, 950.0),
-}
-
-
 # ── Filter metadata: facility and description for rich listing ────
 
 _FACILITY_FROM_PREFIX: dict[str, str] = {
@@ -181,6 +206,20 @@ _FACILITY_FROM_PREFIX: dict[str, str] = {
     "saboca": "APEX/SABOCA",
     "johnson": "Generic/Johnson",
     "cousins": "Generic/Cousins",
+    "gaia": "Gaia",
+    # Medium-band surveys.
+    "alhambra": "CAHA/ALHAMBRA",
+    "shards": "GTC/OSIRIS",
+    "fourstar": "Magellan/FourStar",
+    "newfirm": "NOAO/NEWFIRM",
+    "wircam": "CFHT/WIRCam",
+    # Narrow-band surveys.
+    "jplus": "OAJ/J-PLUS",
+    "jpas": "OAJ/J-PAS",
+    "hawki": "VLT/HAWK-I",
+    # Millimeter.
+    "planck": "Planck",
+    "spt": "SPT",
 }
 
 
@@ -188,19 +227,38 @@ def _unknown_filter_msg(name: str) -> str:
     """Did-you-mean error message for an unrecognized filter name."""
     import difflib
 
-    pool = sorted(set(FILTER_REGISTRY) | set(_svo_name_to_key()))
+    from tengri.observation.filters.custom import _USER_FILTER_REGISTRY
+
+    # Pool includes SVO filters, synthetic bands, and user-registered filters
+    pool = sorted(
+        set(FILTER_REGISTRY)
+        | set(_svo_name_to_key())
+        | set(SYNTHETIC_BAND_REGISTRY.keys())
+        | set(_USER_FILTER_REGISTRY.keys())
+    )
     close = difflib.get_close_matches(name, pool, n=3, cutoff=0.6)
     hint = f" Did you mean {close}?" if close else ""
     return (
         f"Unknown filter '{name}'.{hint} tengri.list_filters() lists every "
-        "available name — both the SVO-style names it displays (e.g. "
-        "'SLOAN_SDSS_g') and their short aliases (e.g. 'sdss_g') load; "
-        "load_custom_filter() loads arbitrary curve files."
+        "SVO filter — both the SVO-style names (e.g. 'SLOAN_SDSS_g') and "
+        "their short aliases (e.g. 'sdss_g'). Synthetic bands (ALMA, X-ray, "
+        "submillimeter) are in SYNTHETIC_BAND_REGISTRY. "
+        "User-registered filters via register_filter() or TENGRI_FILTER_DIR "
+        "also load here. load_custom_filter() reads arbitrary curve files."
     )
 
 
 def _infer_facility(name: str) -> str:
-    """Infer facility from filter short name prefix."""
+    """Infer facility from filter short name.
+
+    Consults synthetic band registry first by exact name (so xmm_epic_soft
+    maps to XMM-Newton/EPIC, not XMM-Newton/OM), then falls back to
+    prefix-based inference from the SVO registry.
+    """
+    # Check synthetic bands first (exact name match)
+    if name in SYNTHETIC_BAND_REGISTRY:
+        return SYNTHETIC_BAND_REGISTRY[name].facility
+    # Fall back to prefix-based inference for SVO filters
     for prefix, facility in _FACILITY_FROM_PREFIX.items():
         if name.startswith(prefix):
             return facility
@@ -291,25 +349,28 @@ def filter_info(name: str, *, cache_dir: str | None = None) -> dict:
     """Return metadata for a single filter.
 
     Loads the transmission curve from the local cache (downloading from
-    SVO if needed) and computes derived properties.
+    SVO if needed) or constructs it for synthetic bands, and computes
+    derived properties.
 
     Parameters
     ----------
     name : str
-        Short filter name from ``FILTER_REGISTRY``.
+        Short filter name from ``FILTER_REGISTRY`` or
+        ``SYNTHETIC_BAND_REGISTRY``.
     cache_dir : str, optional
-        Override cache directory.
+        Override cache directory for SVO filters.
 
     Returns
     -------
     dict
-        Keys: ``name``, ``svo_id``, ``facility``, ``lambda_eff_aa``,
-        ``fwhm_aa``, ``lambda_eff_str``, ``fwhm_str``.
+        Keys: ``name``, ``svo_id`` (or ``"synthetic"`` for synthetic bands),
+        ``facility``, ``lambda_eff_aa``, ``fwhm_aa``,
+        ``lambda_eff_str``, ``fwhm_str``.
 
     Raises
     ------
     KeyError
-        If *name* is not in the registry.
+        If *name* is not in either registry.
 
     Notes
     -----
@@ -318,7 +379,7 @@ def filter_info(name: str, *, cache_dir: str | None = None) -> dict:
     not for forward model evaluation.
 
     """
-    if name not in FILTER_REGISTRY:
+    if name not in FILTER_REGISTRY and name not in SYNTHETIC_BAND_REGISTRY:
         raise KeyError(_unknown_filter_msg(name))
     kwargs = {"cache_dir": cache_dir} if cache_dir is not None else {}
     fc = load_filter(name, **kwargs)
@@ -326,9 +387,11 @@ def filter_info(name: str, *, cache_dir: str | None = None) -> dict:
     trans_np = np.asarray(fc.trans)
     lam_eff = compute_effective_wavelength(wave_np, trans_np)
     fwhm = compute_fwhm(wave_np, trans_np)
+    # Synthetic bands have no SVO ID; mark them as "synthetic"
+    svo_id = FILTER_REGISTRY.get(name, "synthetic")
     return {
         "name": name,
-        "svo_id": FILTER_REGISTRY[name],
+        "svo_id": svo_id,
         "facility": _infer_facility(name),
         "lambda_eff_aa": lam_eff,
         "fwhm_aa": fwhm,
@@ -567,51 +630,109 @@ def load_filter(
 ) -> FilterCurve:
     """Load a filter by its short registry name.
 
-    Downloads from SVO if not already cached.
+    Downloads from SVO if not already cached. Also supports synthetic
+    top-hat bandpasses for ALMA, X-ray, and (sub)millimeter facilities,
+    user-registered filters, and curves from the user filter directory.
 
     Parameters
     ----------
     name : str
-        Either a short ``FILTER_REGISTRY`` alias (e.g. ``"jwst_f200w"``) or
-        the SVO-style display name shown by :func:`tengri.list_filters`
-        (e.g. ``"JWST_NIRCam_F200W"``); both resolve to the same curve.
+        Short alias (e.g. ``"jwst_f200w"``, ``"alma_band6"``, ``"chandra_soft"``),
+        SVO-style display name (e.g. ``"JWST_NIRCam_F200W"``), user-registered
+        name, or synthetic band name. Both SVO spellings round-trip; synthetic
+        bands and user filters are accessed by their exact alias.
     cache_dir : str or pathlib.Path or None, optional
         Directory for cached filter files. ``None`` (default) resolves through
-        :func:`default_filter_cache_dir`.
+        :func:`default_filter_cache_dir`. Ignored for synthetic bands and
+        user-registered filters.
 
     Returns
     -------
     FilterCurve
-        Filter with wavelength (Angstrom), raw transmission as returned
-        by SVO, and name.  Transmission values are not normalized — the
-        absolute scale cancels in the photometry integral
-        ``∫fλTλdλ / ∫Tλdλ``.
+        Filter with wavelength (Angstrom), transmission, and name.
+        For SVO filters, transmission values are as returned by SVO
+        (not normalized). For synthetic bands and user filters, transmission
+        values are as provided.
 
     Raises
     ------
     KeyError
-        If *name* matches neither a ``FILTER_REGISTRY`` alias nor an SVO
-        display name.
+        If *name* matches none of: user-registered, user filter directory,
+        ``FILTER_REGISTRY`` alias, SVO display name, or
+        :data:`SYNTHETIC_BAND_REGISTRY` entry.
 
     Notes
     -----
-    Not JAX-compatible (uses file I/O and astroquery for downloads).
+    Not JAX-compatible (uses file I/O and astroquery for SVO downloads).
     Preferred interface over :func:`download_filter` for user code;
     provides a JAX array return type (FilterCurve) rather than raw NumPy.
 
-    """
-    if name not in FILTER_REGISTRY:
-        # Accept the SVO-style display names that tengri.list_filters() shows
-        # (e.g. "SLOAN_SDSS_g") by resolving them to their short alias, so the
-        # discovery menu round-trips through the loader.
-        alias = _svo_name_to_key().get(name)
-        if alias is None:
-            raise KeyError(_unknown_filter_msg(name))
-        name = alias
+    **Resolution order** (first match wins):
 
-    svo_id = FILTER_REGISTRY[name]
-    wave, trans = download_filter(svo_id, cache_dir=cache_dir)
-    return FilterCurve(wave=jnp.array(wave), trans=jnp.array(trans), name=name)
+    1. User-registered filters via :func:`register_filter`
+    2. User filter directory (``TENGRI_FILTER_DIR`` environment variable)
+    3. Built-in ``FILTER_REGISTRY`` alias (exact name match)
+    4. SVO display stem (e.g., ``"SLOAN_SDSS_g"`` → ``"sdss_g"``)
+    5. Synthetic band registry (ALMA, X-ray, etc.)
+    6. Raise :exc:`KeyError`
+
+    This precedence ensures user customization always wins over built-ins,
+    and that a typo in a built-in name still gets found by its display stem.
+
+    Examples
+    --------
+    Load a built-in filter::
+
+        >>> from tengri.observation.filters import load_filter
+        >>> fc = load_filter("sdss_r")
+
+    Register a custom filter and load it::
+
+        >>> import numpy as np
+        >>> from tengri.observation.filters import register_filter, load_filter
+        >>> wave = np.linspace(5000, 7000, 100)
+        >>> trans = np.exp(-0.5 * ((wave - 6000) / 300) ** 2)
+        >>> register_filter("my_band", wave, trans)
+        >>> fc = load_filter("my_band")
+
+    Load a filter from a file::
+
+        >>> fc = load_filter("band_from_file")  # if in TENGRI_FILTER_DIR
+
+    """
+    from tengri.observation.filters.custom import (
+        _USER_FILTER_REGISTRY,
+        _load_filter_from_directory,
+    )
+
+    # 1. Check user-registered filters
+    if name in _USER_FILTER_REGISTRY:
+        return _USER_FILTER_REGISTRY[name]
+
+    # 2. Check user filter directory (TENGRI_FILTER_DIR)
+    fc_from_dir = _load_filter_from_directory(name)
+    if fc_from_dir is not None:
+        return fc_from_dir
+
+    # 3. Try exact FILTER_REGISTRY first
+    if name in FILTER_REGISTRY:
+        svo_id = FILTER_REGISTRY[name]
+        wave, trans = download_filter(svo_id, cache_dir=cache_dir)
+        return FilterCurve(wave=jnp.array(wave), trans=jnp.array(trans), name=name)
+
+    # 4. Try SVO display-stem resolution (e.g., "SLOAN_SDSS_g" → "sdss_g")
+    alias = _svo_name_to_key().get(name)
+    if alias is not None:
+        svo_id = FILTER_REGISTRY[alias]
+        wave, trans = download_filter(svo_id, cache_dir=cache_dir)
+        return FilterCurve(wave=jnp.array(wave), trans=jnp.array(trans), name=alias)
+
+    # 5. Try synthetic band registry
+    if name in SYNTHETIC_BAND_REGISTRY:
+        return load_synthetic_band(name)
+
+    # 6. Not found anywhere
+    raise KeyError(_unknown_filter_msg(name))
 
 
 def load_filter_set(
@@ -754,7 +875,7 @@ def load_alma_band(band: int, name: str | None = None) -> FilterCurve:
     """Create a synthetic top-hat filter for an ALMA continuum band.
 
     ALMA is an interferometric array with no entries on the SVO Filter
-    Profile Service.  This function constructs a rectangular bandpass
+    Profile Service. This function constructs a rectangular bandpass
     spanning the full receiver bandwidth of the requested band, which is
     appropriate for fitting SED continuum photometry.
 
@@ -770,6 +891,11 @@ def load_alma_band(band: int, name: str | None = None) -> FilterCurve:
     FilterCurve
         Top-hat bandpass in observed-frame wavelengths (Angstrom).
 
+    Raises
+    ------
+    ValueError
+        If band is not in 1–10.
+
     Examples
     --------
     >>> fc = load_alma_band(6)  # 1.23 mm continuum (211–275 GHz)
@@ -779,23 +905,16 @@ def load_alma_band(band: int, name: str | None = None) -> FilterCurve:
     -----
     Band definitions follow the ALMA Cycle 11 receiver specifications.
     Wavelengths are in the *observed* frame — the filter should be applied
-    at the observed frequency.  For a source at redshift *z*, Band N probes
+    at the observed frequency. For a source at redshift *z*, Band N probes
     rest-frame wavelength λ_rest = λ_obs / (1 + z).
 
+    **Backward compatibility**: This function delegates to the synthetic
+    band registry and is kept here for API stability. New code can use
+    :func:`load_filter` with ``"alma_band{N}"`` directly.
+
     """
-    if band not in _ALMA_BANDS_GHZ:
-        valid = sorted(_ALMA_BANDS_GHZ)
-        raise ValueError(f"ALMA band must be one of {valid}, got {band}.")
-
-    lo_ghz, hi_ghz = _ALMA_BANDS_GHZ[band]
-    # High frequency = short wavelength and vice versa.
-    lo_aa = _C_AA_S / (hi_ghz * 1e9)
-    hi_aa = _C_AA_S / (lo_ghz * 1e9)
-    center_aa = (lo_aa + hi_aa) / 2.0
-    width_aa = hi_aa - lo_aa
-
-    label = name if name is not None else f"alma_band{band}"
-    return load_tophat_filter(center_aa, width_aa, name=label)
+    # Delegate to the implementation in synthetic.py
+    return _load_alma_band_impl(band, name=name)
 
 
 def list_available_filters(
@@ -804,7 +923,7 @@ def list_available_filters(
     compute_properties: bool = False,
     cache_dir: str | None = None,
 ) -> _RegistryTable:
-    """List every filter alias in the registry, as a table.
+    """List every filter and synthetic band, as a table.
 
     Parameters
     ----------
@@ -823,32 +942,41 @@ def list_available_filters(
     -------
     _RegistryTable
         One row per alias, with columns ``name`` (the short alias
-        :func:`load_filter` accepts), ``facility`` and ``svo_id``.
+        :func:`load_filter` accepts), ``kind`` (``"filter_alias"`` for SVO,
+        ``"synthetic_band"`` for ALMA/X-ray/submillimeter), ``facility``
+        and ``svo_id`` (``"synthetic"`` for synthetic bands).
 
     Notes
     -----
-    Returned a plain ``dict`` and printed the registry to stdout before
-    #1574. Every discovery verb returns a table (#1285), and the table
-    prints itself, so the stdout side effect is gone.
-    ``.to_dict("svo_id")`` reproduces the old ``{alias: svo_id}`` mapping.
+    Includes both SVO filters and synthetic bandpasses. Returned a plain
+    ``dict`` before #1574; now every discovery verb returns a table (#1285).
+    ``.to_dict("svo_id")`` returns ``{alias: svo_id}`` for SVO filters only
+    (synthetic bands have ``svo_id="synthetic"``).
 
     Examples
     --------
     >>> list_available_filters()
-    >>> list_available_filters().filter(facility__contains="JWST")
-    >>> list_available_filters().to_dict("svo_id")  # the pre-#1574 shape
+    >>> list_available_filters().filter(facility__contains="ALMA")
+    >>> list_available_filters(compute_properties=True)
     """
-    names = sorted(FILTER_REGISTRY)
+    # Collect both SVO and synthetic names
+    svo_names = sorted(FILTER_REGISTRY)
+    synthetic_names = sorted(SYNTHETIC_BAND_REGISTRY)
+    all_names = svo_names + synthetic_names
+
     if group_by != "none":
-        names.sort(key=lambda n: (_infer_facility(n), n))
+        all_names.sort(key=lambda n: (_infer_facility(n), n))
+
     kwargs = {"cache_dir": cache_dir} if cache_dir is not None else {}
     rows: list[dict] = []
-    for name in names:
+
+    for name in all_names:
+        is_synthetic = name in SYNTHETIC_BAND_REGISTRY
         row = {
             "name": name,
-            "kind": "filter_alias",
+            "kind": "synthetic_band" if is_synthetic else "filter_alias",
             "facility": _infer_facility(name),
-            "svo_id": FILTER_REGISTRY[name],
+            "svo_id": "synthetic" if is_synthetic else FILTER_REGISTRY[name],
             "use": f'tengri.load_filter("{name}")',
         }
         if compute_properties:
@@ -856,6 +984,7 @@ def list_available_filters(
             row["lambda_eff"] = info["lambda_eff_str"]
             row["fwhm"] = info["fwhm_str"]
         rows.append(row)
+
     return _RegistryTable(rows)
 
 
@@ -1131,3 +1260,15 @@ def suggest(
     matches.sort(key=lambda name: wavelengths_by_name[name])
 
     return matches
+
+
+# ── Re-export custom filter functions ──────────────────────────────
+
+from tengri.observation.filters.custom import (
+    list_registered_filters,
+    load_filter_from_dsps_file,
+    load_filter_from_dsps_transmission_curve,
+    register_filter,
+    register_filter_from_file,
+    unregister_filter,
+)
