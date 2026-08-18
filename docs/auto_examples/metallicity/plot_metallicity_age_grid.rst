@@ -31,7 +31,7 @@ Physics: older stars redden due to turnoff mass loss; higher metallicity
 increases line blanketing, also reddening. At UV wavelengths the degeneracy
 breaks (young stars are bluer).
 
-.. GENERATED FROM PYTHON SOURCE LINES 15-111
+.. GENERATED FROM PYTHON SOURCE LINES 15-118
 
 
 
@@ -56,6 +56,7 @@ breaks (young stars are bluer).
     import jax
     import jax.numpy as jnp
     import matplotlib.pyplot as plt
+    import matplotlib.ticker as ticker
     import numpy as np
 
     import tengri
@@ -107,6 +108,12 @@ breaks (young stars are bluer).
             mask = (wave_um > 0.3) & (wave_um < 2.0) & (sed_norm > 0)
             ax.loglog(wave_um[mask], sed_norm[mask], color=age_colors[i], lw=2.0)
             ax.set(xlim=(0.3, 2.0), ylim=(0.1, 10.0))
+
+            # Fix x-axis ticks to avoid label collision in loglog plot
+            ax.set_xticks([0.3, 0.5, 1.0, 2.0])
+            ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
+            ax.xaxis.set_minor_formatter(ticker.NullFormatter())
+
             ax.tick_params(labelsize=7)
 
             if j == 0:
@@ -142,11 +149,6 @@ breaks (young stars are bluer).
 
     fig.tight_layout()
     plt.savefig("plot_metallicity_age_grid.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.782 seconds)
 
 
 .. _sphx_glr_download_auto_examples_metallicity_plot_metallicity_age_grid.py:

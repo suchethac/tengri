@@ -41,10 +41,13 @@ baseline = dict(
     log_total_mass=10.0,
 )
 
+# Pre-compute y-axis limits across all panels for consistent scaling
+y_min = float("inf")
+y_max = float("-inf")
+sed_cache = {}
+
 for i, beta in enumerate(betas):
     for j, alpha in enumerate(alphas):
-        ax = axes[i, j]
-
         model = tengri.SEDModel.build(
             ssp,
             sfh={
@@ -73,13 +76,38 @@ for i, beta in enumerate(betas):
 
         # Optical region
         mask = (wave > 4000) & (wave < 8000)
+        sed_cache[(i, j)] = (wave[mask], sed[mask])
+
+        # Track limits for shared y-axis
+        y_min = min(y_min, sed[mask].min())
+        y_max = max(y_max, sed[mask].max())
+
+# Now plot with shared y-limits and labels
+for i, beta in enumerate(betas):
+    for j, alpha in enumerate(alphas):
+        ax = axes[i, j]
+        wave_opt, sed_opt = sed_cache[(i, j)]
 
         ax.plot(
-            wave[mask],
-            sed[mask],
+            wave_opt,
+            sed_opt,
             "C0-",
             lw=2.0,
         )
+
+        # Add panel label
+        ax.text(
+            0.98,
+            0.98,
+            rf"$\alpha={alpha:.1f}$, $\beta={beta:.1f}$",
+            transform=ax.transAxes,
+            fontsize=9,
+            verticalalignment="top",
+            horizontalalignment="right",
+            bbox=dict(boxstyle="round", facecolor="white", alpha=0.85),
+        )
+
+        ax.set_ylim(y_min * 0.9, y_max * 1.1)
         ax.set_xlabel(r"Wavelength [$\AA$]", fontsize=9)
         ax.set_ylabel(r"$L_\nu$ [erg/s/Hz]", fontsize=9)
         ax.grid(True, alpha=0.2)

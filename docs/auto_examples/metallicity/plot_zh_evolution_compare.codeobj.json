@@ -749,6 +749,22 @@
    "name": "ArrayImpl"
   }
  ],
+ "log_z_full": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "jaxlib._jax",
+   "module_short": "jaxlib._jax",
+   "name": "ArrayImpl"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "jaxlib",
+   "module_short": "jaxlib",
+   "name": "ArrayImpl"
+  }
+ ],
  "models": [
   {
    "is_class": false,
@@ -1045,7 +1061,25 @@
    "name": "float"
   }
  ],
- "z_assembly": [
+ "z_ratio": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "ndarray"
+  }
+ ],
+ "z_ratio_full": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "ndarray"
+  }
+ ],
+ "z_values": [
   {
    "is_class": false,
    "is_explicit": false,
@@ -1054,22 +1088,13 @@
    "name": "list"
   }
  ],
- "z_assembly.append": [
+ "z_values.append": [
   {
    "is_class": false,
    "is_explicit": false,
    "module": "builtins",
    "module_short": "builtins",
    "name": "builtin_function_or_method"
-  }
- ],
- "z_ratio": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "numpy",
-   "module_short": "numpy",
-   "name": "ndarray"
   }
  ]
 }

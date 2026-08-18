@@ -28,7 +28,7 @@ star-forming (DPL+Cue nebular, free z to 6), quiescent at z=0.05 (dexp,
 lower dust ceiling), and AGN-panchromatic (full composite, z to 6).
 All require bare-stellar SSP (Cue backend).
 
-.. GENERATED FROM PYTHON SOURCE LINES 12-101
+.. GENERATED FROM PYTHON SOURCE LINES 12-84
 
 
 
@@ -42,17 +42,35 @@ All require bare-stellar SSP (Cue backend).
 
  .. code-block:: none
 
-    /tengri/src/tengri/forward/sed_model.py:8580: WildcardPartialFreeWarning: 'all_params: FREE' freed 2 of 3 parameters in group 'dust'. These have no declared prior, only Fixed defaults, so they stay pinned:
+
+    === Available Recipes ===
+    name                     short_doc                                                                ssp_requirement                                                                   data                                                                  
+    ───────────────────────  ───────────────────────────────────────────────────────────────────────  ────────────────────────────────────────────────────────────────────────────────  ──────────────────────────────────────────────────────────────────────
+    agn_panchromatic         Recipe for AGN-dominated galaxies with multi-wavelength data.            bare-stellar (Cue nebular backend; see star_forming_photometry for details).      ready                                                                 
+    composable_agn           Fully composable AGN — all slots switchable on committed data.           bare-stellar (Cue nebular backend; see star_forming_photometry for details).      ready                                                                 
+    dust_demo                Recipe for forward-only dust attenuation gallery sweeps.                 wNE (with-nebular-emission), i.e. load_ssp("prsc_miles_chabrier_wNE"). Uses t...  ready                                                                 
+    high_z                   Recipe for high-redshift galaxies (z > 3.5, young starburst).            with-nebular-emission (wNE) SSP grids — the ssp nebular backend reads line an...  ready                                                                 
+    mock_recovery_minimal    Recipe for mock data recovery and benchmarking (minimal model).          any. Nebular emission is disabled, so this recipe works with both bare-stella...  ready                                                                 
+    photoz                   Recipe for photometric-redshift fits (redshift-unconstrained surveys).   any (nebular emission is off).                                                    ready                                                                 
+    quiescent_z0             Recipe for quiescent galaxies at low redshift (z ~ 0.05).                bare-stellar (Cue nebular backend; see star_forming_photometry for details).      ready                                                                 
+    star_forming_photometry  Recipe for star-forming galaxies with broadband photometry (0 < z < 6).  bare-stellar (e.g., fsps_prsc_miles_chabrier.h5, fsps_mist_c3k_a_chabrier.h5)...  ready                                                                 
+    stochastic_sfh_jwst      Recipe for JWST high-redshift galaxies with stochastic SFH.              bare-stellar (Cue nebular backend; see star_forming_photometry for details).      ready                                                                 
+    unified_agn              Synthesizer UnifiedAGN reproduction (disc + NLR/BLR grids).              bare-stellar (Cue nebular backend; see star_forming_photometry for details). ...  needs Synthesizer AGN NLR grid (synthesizer-download --agn-test-grids)
+    [10 results — recipe]
+      Use:  tengri.describe('agn_panchromatic')  →  recipes.agn_panchromatic() → SEDModel.build(ssp_data=ssp, **recipe)
+
+
+    /tengri/src/tengri/forward/sed_model.py:8666: WildcardPartialFreeWarning: 'all_params: FREE' freed 2 of 3 parameters in group 'dust'. These have no declared prior, only Fixed defaults, so they stay pinned:
       dust_f_obscuration
     The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. dust={'f_obscuration': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
       spec = parse_groups(**groups)
     /tengri/src/tengri/forward/orchestrator.py:951: SFHBeforeBigBangWarning: Star formation history forms 5% of its stellar mass before the Big Bang at z=5.18 (cosmic age 1.12 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
       state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
-    /tengri/src/tengri/forward/sed_model.py:8580: WildcardPartialFreeWarning: 'all_params: FREE' freed 2 of 3 parameters in group 'sfh'. These have no declared prior, only Fixed defaults, so they stay pinned:
+    /tengri/src/tengri/forward/sed_model.py:8666: WildcardPartialFreeWarning: 'all_params: FREE' freed 2 of 3 parameters in group 'sfh'. These have no declared prior, only Fixed defaults, so they stay pinned:
       sfh_dexp_start_gyr
     The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. sfh={'dexp_start_gyr': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
       spec = parse_groups(**groups)
-    /tengri/src/tengri/forward/sed_model.py:8580: WildcardPartialFreeWarning: 'all_params: FREE' freed 2 of 3 parameters in group 'dust'. These have no declared prior, only Fixed defaults, so they stay pinned:
+    /tengri/src/tengri/forward/sed_model.py:8666: WildcardPartialFreeWarning: 'all_params: FREE' freed 2 of 3 parameters in group 'dust'. These have no declared prior, only Fixed defaults, so they stay pinned:
       dust_f_obscuration
     The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. dust={'f_obscuration': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
       spec = parse_groups(**groups)
@@ -69,7 +87,6 @@ All require bare-stellar SSP (Cue backend).
 .. code-block:: Python
 
 
-    import io
     import warnings
 
     import jax
@@ -89,6 +106,12 @@ All require bare-stellar SSP (Cue backend).
     # Load bare-stellar SSP (required for Cue nebular backend in all recipes)
     ssp = tengri.load_ssp("fsps_prsc_miles_chabrier")
 
+    # Print the recipe menu to stdout for documentation
+    print("\n=== Available Recipes ===")
+    recipe_table = tengri.list_recipes()
+    print(recipe_table)
+    print("\n")
+
     # Define the three recipes to showcase
     RECIPE_CONFIGS = [
         ("star_forming_photometry", recipes.star_forming_photometry, "#3377cc"),
@@ -96,30 +119,9 @@ All require bare-stellar SSP (Cue backend).
         ("agn_panchromatic", recipes.agn_panchromatic, "#9933aa"),
     ]
 
-    # Compute SEDs
-    fig, (ax_menu, ax_seds) = plt.subplots(
-        2, 1, figsize=(9.5, 7.0), gridspec_kw={"height_ratios": [1, 1.6]}
-    )
+    # Compute and plot rest-frame SEDs
+    fig, ax_seds = plt.subplots(figsize=(8, 5.5))
 
-    # Left panel: render the recipe menu
-    recipe_table = tengri.list_recipes()
-    table_str = io.StringIO()
-    table_str.write(str(recipe_table))
-    menu_text = table_str.getvalue()
-
-    ax_menu.axis("off")
-    ax_menu.text(
-        0.05,
-        0.95,
-        menu_text,
-        transform=ax_menu.transAxes,
-        fontfamily="monospace",
-        fontsize=7,
-        verticalalignment="top",
-        bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.3),
-    )
-
-    # Right panel: overlay rest-frame SEDs
     plotted = 0
     first_failure: Exception | None = None
 
@@ -138,8 +140,7 @@ All require bare-stellar SSP (Cue backend).
         ax_seds.loglog(wave, nu_l_nu, color=color, lw=1.4, label=name)
         plotted += 1
 
-    # The left panel prints spec introspection and would still render, so an empty
-    # right panel is not visible in the exit status without this.
+    # Error check: ensure at least one recipe built
     if plotted == 0:
         raise RuntimeError(
             f"none of the {len(RECIPE_CONFIGS)} recipes built, so the SED panel is "
@@ -152,7 +153,7 @@ All require bare-stellar SSP (Cue backend).
         xlabel=r"Rest-frame wavelength $\lambda$ [$\mathrm{\AA}$]",
         ylabel=r"$\nu L_\nu$  [erg s$^{-1}$]",
     )
-    ax_seds.legend(frameon=False, fontsize=9, loc="lower right")
+    ax_seds.legend(frameon=False, fontsize=10, loc="lower left")
     ax_seds.grid(True, alpha=0.2, which="both")
 
     fig.tight_layout()
@@ -161,7 +162,7 @@ All require bare-stellar SSP (Cue backend).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.596 seconds)
+   **Total running time of the script:** (0 minutes 25.002 seconds)
 
 
 .. _sphx_glr_download_auto_examples_recipes_plot_recipe_introspection_tour.py:

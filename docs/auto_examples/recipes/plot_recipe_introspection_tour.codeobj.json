@@ -17,161 +17,6 @@
    "name": "list"
   }
  ],
- "ax_menu": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.axes._axes",
-   "module_short": "matplotlib.axes",
-   "name": "Axes"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.axes",
-   "module_short": "matplotlib.axes",
-   "name": "Axes"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib",
-   "module_short": "matplotlib",
-   "name": "Axes"
-  }
- ],
- "ax_menu.axis": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.axes._axes",
-   "module_short": "matplotlib.axes",
-   "name": "Axes.axis"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.axes",
-   "module_short": "matplotlib.axes",
-   "name": "Axes.axis"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib",
-   "module_short": "matplotlib",
-   "name": "Axes.axis"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.axes._base",
-   "module_short": "matplotlib.axes._base",
-   "name": "_AxesBase.axis"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.axes",
-   "module_short": "matplotlib.axes",
-   "name": "_AxesBase.axis"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib",
-   "module_short": "matplotlib",
-   "name": "_AxesBase.axis"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.artist",
-   "module_short": "matplotlib.artist",
-   "name": "Artist.axis"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib",
-   "module_short": "matplotlib",
-   "name": "Artist.axis"
-  }
- ],
- "ax_menu.text": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.axes._axes",
-   "module_short": "matplotlib.axes",
-   "name": "Axes.text"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.axes",
-   "module_short": "matplotlib.axes",
-   "name": "Axes.text"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib",
-   "module_short": "matplotlib",
-   "name": "Axes.text"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.axes._base",
-   "module_short": "matplotlib.axes._base",
-   "name": "_AxesBase.text"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.axes",
-   "module_short": "matplotlib.axes",
-   "name": "_AxesBase.text"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib",
-   "module_short": "matplotlib",
-   "name": "_AxesBase.text"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.artist",
-   "module_short": "matplotlib.artist",
-   "name": "Artist.text"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib",
-   "module_short": "matplotlib",
-   "name": "Artist.text"
-  }
- ],
- "ax_menu.transAxes": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.transforms",
-   "module_short": "matplotlib.transforms",
-   "name": "BboxTransformTo"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib",
-   "module_short": "matplotlib",
-   "name": "BboxTransformTo"
-  }
- ],
  "ax_seds": [
   {
    "is_class": false,
@@ -505,36 +350,6 @@
    "name": "NoneType"
   }
  ],
- "io.StringIO": [
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "_io",
-   "module_short": "_io",
-   "name": "StringIO"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "_io",
-   "module_short": "_io",
-   "name": "_TextIOBase"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "_io",
-   "module_short": "_io",
-   "name": "_IOBase"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "io",
-   "module_short": "io",
-   "name": "StringIO"
-  }
- ],
  "jax.random.PRNGKey": [
   {
    "is_class": false,
@@ -549,15 +364,6 @@
    "module": "jax.random",
    "module_short": "jax.random",
    "name": "PRNGKey"
-  }
- ],
- "menu_text": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "str"
   }
  ],
  "model": [
@@ -906,33 +712,6 @@
    "module": "tengri",
    "module_short": "tengri",
    "name": "SSPData"
-  }
- ],
- "table_str": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "_io",
-   "module_short": "_io",
-   "name": "StringIO"
-  }
- ],
- "table_str.getvalue": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "builtin_function_or_method"
-  }
- ],
- "table_str.write": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "builtin_function_or_method"
   }
  ],
  "tengri.SEDModel.build": [
