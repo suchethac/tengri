@@ -84,9 +84,7 @@ def test_both_radio_code_paths_import_shared_constant():
 
     # Verify the constant is defined and correct
     assert WAVE_1P4GHZ_AA > 0
-    assert 21.4e8 < WAVE_1P4GHZ_AA < 21.5e8, (
-        "WAVE_1P4GHZ_AA should be ~21.41e8 Å for 1.400 GHz"
-    )
+    assert 21.4e8 < WAVE_1P4GHZ_AA < 21.5e8, "WAVE_1P4GHZ_AA should be ~21.41e8 Å for 1.400 GHz"
 
     # Both modules should import from the same location
     import tengri.components.radio.component
