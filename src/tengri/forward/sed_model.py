@@ -4925,6 +4925,16 @@ class SEDModel:
         -----
         **JIT-compatible**: no — delegates to nebular backend.
 
+        **Shock component limitation** (#927): When a model includes both
+        an active shock component and a photoionized backend (Cue/CloudyGrid),
+        the shock's discrete line luminosities are **not** published to the
+        returned catalog. MAPPINGS V bakes shock lines into the continuum SED
+        only (``sed_shock``), which is invisible to this catalog-reading surface.
+        The shock will constrain only through continuum (broadband/spectrum), with
+        zero gradient from line-flux channels. Use :meth:`measure_line_fluxes`
+        (pipeline-style flux extraction from the spectrum) to measure shock lines
+        self-consistently with the stellar continuum.
+
         Observed flux is calculated from luminosity via:
 
         .. math::
@@ -4939,6 +4949,29 @@ class SEDModel:
             raise ValueError(
                 "No nebular backend with line prediction configured. Cannot compute line fluxes."
             )
+
+        # Warn if shock component is active with photoionized backend (#927): shock
+        # lines are baked into the continuum SED, not published to the discrete
+        # catalog that predict_line_fluxes reads, so shock parameters get zero
+        # gradient from line-flux fitting.
+        if self._uses_shock:
+            backend_name = type(backend).__name__.lower()
+            is_photoionized = any(name in backend_name for name in ("cue", "cloudygrid"))
+            if is_photoionized:
+                from tengri.config.exceptions import ShockPhotoionizedMixedWarning
+
+                warnings.warn(
+                    "Shock component present with photoionized nebular backend "
+                    "(Cue/CloudyGrid). Shock's discrete line emission is **not** "
+                    "included in predict_line_fluxes output — shock lines are baked "
+                    "into the continuum SED (sed_shock) only. Shock parameters "
+                    "(shock_frac, shock_log_lhalpha, etc.) will have zero gradient "
+                    "from line-flux fitting. "
+                    "Remedy: use measure_line_fluxes() (pipeline-style extraction), "
+                    "fit shock through continuum only, or use BakedIn backend.",
+                    ShockPhotoionizedMixedWarning,
+                    stacklevel=2,
+                )
 
         # Read the discrete line catalog published by
         # NebularSEDComponent. The orchestrator's nebular adapter calls

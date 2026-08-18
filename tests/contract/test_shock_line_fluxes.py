@@ -116,3 +116,122 @@ class TestShockLineFluxes:
             f"half_shock={line_flux_half_shock:.3e}, "
             f"with_shock={line_flux_with_shock:.3e}"
         )
+
+    @pytest.mark.regression_bug
+    def test_shock_photoionized_mixed_warning_cue(self):
+        """Warning fires when shock is active with Cue backend (#927)."""
+        import warnings
+
+        from tengri import FIXED, Fixed, Observation, Photometry, SEDModel
+        from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
+        from tengri.config.exceptions import ShockPhotoionizedMixedWarning
+        from tengri.data import download_ssp
+
+        ssp_path = download_ssp("fsps_prsc_miles_chabrier")
+        ssp = load_ssp_data(str(ssp_path))
+
+        model = SEDModel.build(
+            ssp_data=ssp,
+            observation=Observation(photometry=Photometry.from_names(["sdss_g", "sdss_r"])),
+            sfh={"type": "delayed", "all_params": FIXED, "tau_gyr": 1.0, "log_total_mass": 10.0},
+            dust={"type": "two_component", "all_params": FIXED},
+            neb={"type": "cue", "all_params": FIXED},
+            shock={"frac": 0.5, "all_params": FIXED},
+            redshift=Fixed(0.1),
+        )
+
+        params = {}
+        halpha_wave = 6564.61
+
+        # Verify warning is emitted
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            model.predict_line_fluxes(params, target_wavelengths=[halpha_wave])
+            # Filter to our specific warning
+            shock_warnings = [
+                warn for warn in w if issubclass(warn.category, ShockPhotoionizedMixedWarning)
+            ]
+            assert len(shock_warnings) > 0, "Expected ShockPhotoionizedMixedWarning not raised"
+            assert "shock" in str(shock_warnings[0].message).lower()
+            assert "predict_line_fluxes" in str(shock_warnings[0].message)
+
+    @pytest.mark.regression_bug
+    def test_shock_catalog_invariant_to_shock_frac(self):
+        """Shock fraction does NOT change Hα flux in predict_line_fluxes (#927).
+
+        This is the measured symptom: shock_frac varies sed_shock (continuum)
+        but does not change the discrete line catalog, proving shock lines are
+        excluded from the catalog predict_line_fluxes reads.
+        """
+        from tengri import FIXED, Fixed, Observation, Photometry, SEDModel
+        from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
+        from tengri.data import download_ssp
+
+        ssp_path = download_ssp("fsps_prsc_miles_chabrier")
+        ssp = load_ssp_data(str(ssp_path))
+
+        model = SEDModel.build(
+            ssp_data=ssp,
+            observation=Observation(photometry=Photometry.from_names(["sdss_g", "sdss_r"])),
+            sfh={"type": "delayed", "all_params": FIXED, "tau_gyr": 1.0, "log_total_mass": 10.0},
+            dust={"type": "two_component", "all_params": FIXED},
+            neb={"type": "cue", "all_params": FIXED},
+            shock={"frac": 1.0, "all_params": FIXED},  # Shock is active (but frac can be varied)
+            redshift=Fixed(0.1),
+        )
+
+        halpha_wave = 6564.61
+
+        # Measure Hα flux with high shock
+        flux_high_shock = model.predict_line_fluxes({}, target_wavelengths=[halpha_wave])[0]
+
+        # Measure Hα flux with low shock
+        flux_low_shock = model.predict_line_fluxes(
+            {"shock_frac": 0.1}, target_wavelengths=[halpha_wave]
+        )[0]
+
+        # The catalog values should be **identical** — proof shock is not in the catalog
+        # (this is the regression: they currently are identical, as reported in #927)
+        np.testing.assert_allclose(
+            flux_high_shock,
+            flux_low_shock,
+            rtol=1e-14,
+            err_msg="Shock fraction should NOT affect predict_line_fluxes output (#927)",
+        )
+
+    @pytest.mark.regression_bug
+    def test_shock_none_no_warning(self):
+        """No warning when shock is disabled (#927)."""
+        import warnings
+
+        from tengri import FIXED, Fixed, Observation, Photometry, SEDModel
+        from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
+        from tengri.config.exceptions import ShockPhotoionizedMixedWarning
+        from tengri.data import download_ssp
+
+        ssp_path = download_ssp("fsps_prsc_miles_chabrier")
+        ssp = load_ssp_data(str(ssp_path))
+
+        # Build model with shock disabled
+        model = SEDModel.build(
+            ssp_data=ssp,
+            observation=Observation(photometry=Photometry.from_names(["sdss_g", "sdss_r"])),
+            sfh={"type": "delayed", "all_params": FIXED, "tau_gyr": 1.0, "log_total_mass": 10.0},
+            dust={"type": "two_component", "all_params": FIXED},
+            neb={"type": "cue", "all_params": FIXED},
+            shock={"type": "none"},  # Shock explicitly disabled
+            redshift=Fixed(0.1),
+        )
+
+        params = {}
+        halpha_wave = 6564.61
+
+        # Verify warning is NOT emitted
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            model.predict_line_fluxes(params, target_wavelengths=[halpha_wave])
+            shock_warnings = [
+                warn for warn in w if issubclass(warn.category, ShockPhotoionizedMixedWarning)
+            ]
+            msg = "Unexpected ShockPhotoionizedMixedWarning (shock should be disabled)"
+            assert len(shock_warnings) == 0, msg
