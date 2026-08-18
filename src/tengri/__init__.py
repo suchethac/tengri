@@ -438,11 +438,11 @@ from tengri.parameters.registry import (
     recipe_parameters,
 )
 from tengri.parameters.sentinels import FIXED, FREE
+from tengri.parameters.translate import LOG10_ZSUN
 from tengri.protocols import ComponentIOError, DerivedKey, DerivedState, ForwardState
 from tengri.utils import jit_logging
 from tengri.utils.batching import vmap_chunked
 from tengri.utils.physics_constants import C_AA
-from tengri.parameters.translate import LOG10_ZSUN
 
 agn = _components.agn
 dust = _components.dust
