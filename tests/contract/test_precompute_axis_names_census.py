@@ -60,7 +60,8 @@ pytestmark = pytest.mark.contract
 #: photometry array with six grid dimensions, so repairing the names alone would
 #: make the collapse contract the filter axis. Fix both together.
 DEAD_AXIS_NAMES: dict[str, frozenset[str]] = {
-    "tengri.components.agn.qsogen_precompute": frozenset({"agn_plslp1", "agn_ebv"}),
+    # agn_ebv was repaired (registered census-live) in #1966; agn_plslp1 remains.
+    "tengri.components.agn.qsogen_precompute": frozenset({"agn_plslp1"}),
 }
 
 #: Modules whose dead names still collapse, because they pass ``defaults=`` to
