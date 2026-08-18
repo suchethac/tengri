@@ -229,9 +229,12 @@ def _interpolate_and_normalize(
     silicate features, golden-sample photometry, and parity tests against
     CIGALE — see #1911.
     """
-    # Use default index_space_interp=None (physical-space path) for backward
-    # compatibility. The cos_inc axis carries the #1851 degeneracy — see note above.
-    template = interp_nd_triweight(grid_jax, axes, edges, _match_point_to_axes(point, axes))
+    # Apply index-space interpolation to the cos_inc axis (last axis).
+    # This fixes the #1851 nearest-neighbor degeneracy on the non-uniform
+    # cos_inclination axis. See #1911 for validation details.
+    template = interp_nd_triweight(
+        grid_jax, axes, edges, _match_point_to_axes(point, axes), index_space_interp=True
+    )
     # Bolometric integral on the *template* wavelength grid (full UV–FIR
     # coverage). Using the user wave grid would clip the FIR tail and
     # over-normalize on truncated grids; trapezoid in λ matches the
@@ -281,17 +284,37 @@ def _load_skirtor_grid_data(grid_path: str) -> SKIRTORGrid:
 
     Prefers the v3 dust-only template when present (avoids disc/dust
     double-counting); falls back to the v2 ``total`` cube.
+
+    Any descending axes are reversed so the triweight interpolator sees
+    strictly ascending coordinates (required by edges_for_grid).
     """
+    import numpy as np
+
     raw = _load_grid_arrays(grid_path)
+
+    # Reverse any descending axes — the triweight kernel requires strictly
+    # ascending coordinates (edges_for_grid assumes this). The cos_inclination
+    # axis is typically descending (1.0 → 0.0), so we flip it and the grid
+    # along that dimension.
+    if "dust" in raw:
+        grid = np.asarray(raw["dust"])
+    else:
+        grid = np.asarray(raw["total"])
+    axes_list = [np.asarray(ax) for ax in raw["axes"]]
+
+    for i, ax in enumerate(axes_list):
+        if ax.size > 1 and ax[0] > ax[-1]:  # descending → reverse axis i
+            axes_list[i] = ax[::-1]
+            grid = np.flip(grid, axis=i)
+
     # ``ensure_compile_time_eval`` so the concrete arrays are captured even if
     # the first call happens inside a jit trace (mirrors the legacy closure).
     with jax.ensure_compile_time_eval():
-        _grid_key = "dust" if "dust" in raw else "total"
-        grid = jnp.array(raw[_grid_key])
+        grid_jax = jnp.array(grid)
         wave_grid = jnp.array(raw["wave"])
-        axes = tuple(jnp.array(ax) for ax in raw["axes"])
+        axes = tuple(jnp.array(ax) for ax in axes_list)
         edges = tuple(edges_for_grid(ax) for ax in axes)
-    return SKIRTORGrid(grid=grid, wave_grid=wave_grid, axes=axes, edges=edges)
+    return SKIRTORGrid(grid=grid_jax, wave_grid=wave_grid, axes=axes, edges=edges)
 
 
 def _skirtor_grid_sed(
@@ -784,6 +807,29 @@ class SKIRTORBundle(NamedTuple):
 
     torus: SKIRTORGrid
     disc_dust: tuple | None
+
+
+def load_skirtor_grid(grid_path: str | None = None) -> SKIRTORGrid:
+    """Load a SKIRTOR grid file into a threadable SKIRTORGrid pytree.
+
+    Parameters
+    ----------
+    grid_path : str, optional
+        Path to a SKIRTOR grid file. If None, auto-discovers the best available.
+
+    Returns
+    -------
+    SKIRTORGrid
+        Threadable template arrays (grid, wave_grid, axes, edges).
+
+    Notes
+    -----
+    Public API for tests and research code. For production model loading,
+    use ``load_skirtor_bundle()`` which loads both torus and disc_dust grids.
+    """
+    if grid_path is None:
+        grid_path = _find_skirtor_grid()
+    return _load_skirtor_grid_data(grid_path)
 
 
 def load_skirtor_bundle() -> SKIRTORBundle:

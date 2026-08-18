@@ -29,20 +29,13 @@ pytestmark = [pytest.mark.unit, pytest.mark.gradient]
 
 # Locate the SKIRTOR grid, or skip if missing
 _SKIRTOR_GRID_DIR = Path(__file__).resolve().parents[3] / "data"
-_SKIRTOR_GRID_FILES = list(_SKIRTOR_GRID_DIR.glob("skirtor*_*.h5"))
+_SKIRTOR_GRID_FILES = [
+    f for f in _SKIRTOR_GRID_DIR.glob("skirtor_templates*.h5")
+]  # Use templates grids, skip mean3p
 _has_skirtor = len(_SKIRTOR_GRID_FILES) > 0
 
 
 @pytest.mark.skipif(not _has_skirtor, reason="SKIRTOR grid not found")
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "SKIRTOR cos_inclination exhibits #1851 degeneracy (nearest-neighbor-like "
-        "behavior over ~67.5% of range, 0% distinct outputs in sweep). "
-        "Re-baselining requires validation of silicate features, goldens, "
-        "and CIGALE parity (see #1911)."
-    ),
-)
 def test_skirtor_cos_inc_ratchet_40_point_sweep():
     """SKIRTOR cos_inc: 40-point sweep should yield 40 distinct outputs.
 
@@ -65,11 +58,14 @@ def test_skirtor_cos_inc_ratchet_40_point_sweep():
 
     # Create a single query point: sweep only cos_inc, fix other dimensions at midpoints
     fixed_indices = [len(ax) // 2 for ax in axes[:-1]]  # Midpoint for all but cos_inc
-    tau_idx, p_idx, q_idx, oa_idx, radius_idx = fixed_indices
 
-    # Slice out a 1-D trace: grid[tau_idx, p_idx, q_idx, oa_idx, radius_idx, :, :]
-    # (the last dimension is wavelength, which we interpolate over)
-    trace_grid = grid_data[tau_idx, p_idx, q_idx, oa_idx, radius_idx, :, :]  # (n_inc, n_wave)
+    # Handle both 5D (tau, p, q, oa, cos_inc) and 6D (tau, p, q, oa, radius, cos_inc) grids
+    if len(fixed_indices) == 4:  # 5D grid (v2)
+        tau_idx, p_idx, q_idx, oa_idx = fixed_indices
+        trace_grid = grid_data[tau_idx, p_idx, q_idx, oa_idx, :, :]  # (n_inc, n_wave)
+    else:  # 6D grid (v3 with radius_ratio)
+        tau_idx, p_idx, q_idx, oa_idx, radius_idx = fixed_indices
+        trace_grid = grid_data[tau_idx, p_idx, q_idx, oa_idx, radius_idx, :, :]  # (n_inc, n_wave)
 
     # 40-point sweep over cos_inc
     cos_inc_sweep = jnp.linspace(float(cos_inc_axis[0]), float(cos_inc_axis[-1]), 40)
@@ -85,7 +81,7 @@ def test_skirtor_cos_inc_ratchet_40_point_sweep():
             cos_inc_axis,
             scatter=scatter,
             edges=edges[-1],  # cos_inc axis edges
-            index_space_interp=None,  # Use default (physical-space) to match current behavior
+            index_space_interp=True,  # Use index-space interpolation (fix for #1851)
         )
         interp_val = jnp.dot(w, trace_grid)  # Shape (n_wave,)
         results.append(interp_val)
@@ -102,14 +98,6 @@ def test_skirtor_cos_inc_ratchet_40_point_sweep():
 
 
 @pytest.mark.skipif(not _has_skirtor, reason="SKIRTOR grid not found")
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "SKIRTOR cos_inclination exhibits #1851 degeneracy (0% exactly-zero gradients "
-        "over the full range would be corrected by index-space interpolation). "
-        "See #1911 for the validation plan."
-    ),
-)
 def test_skirtor_cos_inc_ratchet_zero_gradient_fraction():
     """SKIRTOR cos_inc: gradient should be nonzero throughout.
 
@@ -128,8 +116,12 @@ def test_skirtor_cos_inc_ratchet_zero_gradient_fraction():
 
     # Single-parameter trace (fix all but cos_inc)
     fixed_indices = [len(ax) // 2 for ax in axes[:-1]]
-    tau_idx, p_idx, q_idx, oa_idx, radius_idx = fixed_indices
-    trace_grid = grid_data[tau_idx, p_idx, q_idx, oa_idx, radius_idx, :, :]
+    if len(fixed_indices) == 4:  # 5D grid (v2)
+        tau_idx, p_idx, q_idx, oa_idx = fixed_indices
+        trace_grid = grid_data[tau_idx, p_idx, q_idx, oa_idx, :, :]
+    else:  # 6D grid (v3)
+        tau_idx, p_idx, q_idx, oa_idx, radius_idx = fixed_indices
+        trace_grid = grid_data[tau_idx, p_idx, q_idx, oa_idx, radius_idx, :, :]
 
     cos_inc_sweep = jnp.linspace(float(cos_inc_axis[0]), float(cos_inc_axis[-1]), 40)
 
@@ -139,7 +131,7 @@ def test_skirtor_cos_inc_ratchet_zero_gradient_fraction():
     def interp_sum(cos_inc_val):
         scatter = 0.5 * (cos_inc_axis[1] - cos_inc_axis[0])
         w = compute_grid_weights(
-            cos_inc_val, cos_inc_axis, scatter=scatter, edges=edges[-1], index_space_interp=None
+            cos_inc_val, cos_inc_axis, scatter=scatter, edges=edges[-1], index_space_interp=True
         )
         interp_val = jnp.dot(w, trace_grid)
         return jnp.sum(interp_val)
