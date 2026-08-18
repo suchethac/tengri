@@ -1,4 +1,4 @@
 Advanced Topics
 ===============
 
-Hierarchical population inference, gradient diagnostics, batch fitting, panchromatic multi-component SEDs, joint photometry + spectroscopy.
+Extension-point demonstration (SEDModelComponent), Fisher degeneracy, and validation techniques: gradient vs finite-difference, mass conservation, redshift-frame invariance, WavePrecomp accuracy.
