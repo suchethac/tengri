@@ -62,6 +62,17 @@ class _MockSpec:
     def resolve_mirrors(self, params):
         return params
 
+    def sample(self, key):
+        """Return a dict of default parameter values for all free parameters.
+
+        Matches the contract of Parameters.sample: takes a PRNG key and returns
+        a dict mapping parameter names to sampled values. The eager channel-scale
+        pre-check (#1495) calls this at loss-build time to obtain the reference
+        point it evaluates each channel at, so a spec that reaches the loss
+        builder must provide it.
+        """
+        return {name: jnp.asarray(1.0) for name in self._free_names}
+
 
 class _MockModel:
     """Minimal model exposing predict_photometry."""
@@ -218,6 +229,10 @@ def test_prior_term_added_for_free_params_and_psd_xi():
 
         def resolve_mirrors(self, params):
             return params
+
+        def sample(self, key):
+            """Reference point for the eager channel-scale pre-check (#1495)."""
+            return {name: jnp.asarray(1.0) for name in self._free_names}
 
     fnu_pred = jnp.array([1.0e-29, 2.0e-29])
     fnu_obs = jnp.array([1.0e-29, 2.0e-29])
