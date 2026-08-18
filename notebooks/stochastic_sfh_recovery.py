@@ -360,7 +360,7 @@ for key in "ABC":
 # Two scores per fit:
 #
 # - **RMS error in dex** (per age window) — recovery accuracy of the SFH shape.
-# - **Old mass fraction** — the fraction of stellar mass formed > 1 Gyr ago. Use mass, not per-node SFR, because below 1 Gyr the rising history has near-zero rate where per-node error ratios diverge.
+# - **Old mass fraction**: the fraction of stellar mass formed > 1 Gyr ago. Use mass, not per-node SFR, because below 1 Gyr the rising history has near-zero rate where per-node error ratios diverge.
 
 
 # %%

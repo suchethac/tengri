@@ -104,7 +104,7 @@ class Parameters:
 
     - **Scalar** (int/float) → ``Fixed(value)`` — parameter is constant
     - **Tuple** (lo, hi) → ``Uniform(lo, hi)`` — shorthand for uniform prior
-    - **Distribution object** — ``Uniform``, ``Gaussian``, ``LogUniform``,
+    - **Distribution object**: ``Uniform``, ``Gaussian``, ``LogUniform``,
       ``LogNormal``, ``StudentT``, or ``Fixed``
 
     A Parameters object also stores model configuration settings

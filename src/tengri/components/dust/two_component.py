@@ -13,9 +13,9 @@ Sibling to :class:`tengri.components.dust.component.DustAttenuationSEDComponent`
 Cross-component reads
 ---------------------
 
-- ``state.derived["lnu_age"]``  — (n_age, n_wave) per-age L_ν cube
+- ``state.derived["lnu_age"]``: (n_age, n_wave) per-age L_ν cube
   (erg/s/Hz) from :class:`StellarSEDComponent`.
-- ``state.derived["ssp_ages_yr"]`` — (n_age,) age axis (yr) from
+- ``state.derived["ssp_ages_yr"]``: (n_age,) age axis (yr) from
   :class:`StellarSEDComponent`.
 
 Cross-component publications
@@ -592,7 +592,7 @@ class DustSEDComponent(TemplateThreading):
         #     the old/diffuse stellar LyC passes through. Matches bagpipes.
         #     Per-age factor ``1 - y(a)·(1 - lyc_t(λ))`` -> young→neb_fesc,
         #     old→1 below 912; both →1 above 912.
-        #   * ``lyc_absorb_all=True`` — all stellar LyC absorbed (FSPS/CIGALE).
+        #   * ``lyc_absorb_all=True``: all stellar LyC absorbed (FSPS/CIGALE).
         _lyc_t = state.derived.get("lyc_transmission")
         if _lyc_t is not None:
             _lyc_t = jnp.asarray(_lyc_t)

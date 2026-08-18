@@ -10,7 +10,7 @@ downstream dust block to read.
 The objects defined here are the small, stable surface that physics
 components target:
 
-- :class:`SEDComponent` — the protocol every physics block satisfies.
+- :class:`SEDComponent`: the protocol every physics block satisfies.
 - :class:`ForwardState`, :class:`DerivedState` — the typed bags that
   flow between components.
 - :class:`DerivedKey`, :class:`ParamDeclaration` — the labels a

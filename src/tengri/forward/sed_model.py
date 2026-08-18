@@ -41,11 +41,11 @@ marker lines to jump. In order:
 - ``SEDModel`` class:
 
   - ``SubModel Protocol surface``
-  - ``Construction`` — ``__init__``, the ``_init_*`` chain, ``build()``
+  - ``Construction``: ``__init__``, the ``_init_*`` chain, ``build()``
   - ``Deprecated filter/noise attributes → Observation delegation``
   - ``Core physics (SFH → SED pipeline)``
-  - ``Predictions (public API)`` — the ``predict_*`` surface
-  - ``Component orchestrator path`` — ``predict_state`` and the JIT
+  - ``Predictions (public API)``: the ``predict_*`` surface
+  - ``Component orchestrator path``: ``predict_state`` and the JIT
     kernel behind every prediction
   - ``Batch operations``
   - ``Private prediction dispatch``
@@ -1502,7 +1502,7 @@ class SEDModel:
         # Resolve and validate approximation kwarg.
         # Contract (2026-05-20):
         #   * ``approx=None`` (default)        — exact wave-grid integration.
-        #   * ``approx=WavePrecomp(...)``      — opt into the precomputed
+        #   * ``approx=WavePrecomp(...)``: opt into the precomputed
         #     SSP × filter LUT path. ``WavePrecomp()`` gives the default
         #     ztable sampling; ``WavePrecomp(n_z=200, z_min=0.0, z_max=3.0)``
         #     for custom grids.

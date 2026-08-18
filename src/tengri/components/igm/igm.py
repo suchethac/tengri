@@ -1007,11 +1007,11 @@ def igm_absorption(
     uses (the exact ``predict_obs_sed`` path and the :class:`IGMSEDComponent`
     photometry/spectroscopy projection), so all paths stay consistent (#932):
 
-    * **mean IGM** — resolved once from the registry
+    * **mean IGM**: resolved once from the registry
       (:func:`resolve_igm_model`: ``inoue``/``inoue14``, ``madau``,
       ``meiksin06``, ``asada25`` = Inoue + Asada+2025 CGM damping wing), or
       replaced by the patchy-reionization model when ``igm_patchy`` is set.
-    * **DLA** — an optional multiplicative damped-Lyman-α absorber layered on
+    * **DLA**: an optional multiplicative damped-Lyman-α absorber layered on
       top of the mean IGM (``use_dla``), so photometry and spectroscopy both
       see it rather than only ``predict_obs_sed``.
 

@@ -21,7 +21,7 @@ Normalization (two knobs, selected by the static ``norm`` config)
   (``L(Hα) ~ 1e-3 L_bol`` of the SED accumulated so far). Intuitive "how
   much of the line budget is shock-driven"; reproduces the legacy
   :func:`tengri.forward.emission_helpers.shock_emission` bit-for-bit.
-* ``norm="lhalpha"`` — *absolute*: the shock Hα luminosity is set directly by
+* ``norm="lhalpha"``: *absolute*: the shock Hα luminosity is set directly by
   ``shock_log_lhalpha`` (``log10(L_Hα / [erg/s])``), decoupled from the star
   formation rate. Preferred for AGN narrow-line-region / outflow / SN-remnant
   shocks that are unrelated to the young-stellar Hα budget.

@@ -7,9 +7,9 @@ applied to a young star-forming SED. This diagnostic isolates the differences
 between models around the Lyman-alpha forest:
 
 - **No IGM** (intrinsic SED, reference)
-- **Madau (1995)** — foundational model with 17 Lyman lines + continuum
-- **Inoue+2014** — modern prescription with 39 Lyman lines, LAF, and DLA
-- **Inoue+2014 + CGM damping wing (Asada+2025)** — Inoue extended with
+- **Madau (1995)**: foundational model with 17 Lyman lines + continuum
+- **Inoue+2014**: modern prescription with 39 Lyman lines, LAF, and DLA
+- **Inoue+2014 + CGM damping wing (Asada+2025)**: Inoue extended with
   neutral-hydrogen damping wing in the circumgalactic medium at z > 5
 
 The key diagnostic at z=7 is the **Lyman-alpha forest** (blue-wing

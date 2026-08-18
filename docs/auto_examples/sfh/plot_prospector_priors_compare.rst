@@ -24,18 +24,18 @@ Prospector prior families: continuity vs bursty vs Dirichlet vs PSB
 Tengri ships the non-parametric SFH priors that appear most often in
 Prospector papers, all with the *published* prior on the SFR ratios:
 
-- ``continuity``        — Leja+2019 — StudentT(μ=0, σ=0.3, df=2) on log-SFR
+- ``continuity``: Leja+2019 — StudentT(μ=0, σ=0.3, df=2) on log-SFR
   ratios between adjacent bins.
 
-- ``bursty_continuity`` — Tacchella+2022 — same shape, but the per-ratio σ
+- ``bursty_continuity``: Tacchella+2022 — same shape, but the per-ratio σ
   switches between 1.0 dex (younger edge < 1 Gyr) and 0.3 dex (older). The
   prior is intentionally wider on recent ratios so the data can drive
   burstiness.
 
-- ``dirichlet``         — Leja+2017 — symmetric Dirichlet(1,…,1) on mass
+- ``dirichlet``: Leja+2017 — symmetric Dirichlet(1,…,1) on mass
   fractions via Beta(1, 1) stick-breaking auxiliaries.
 
-- ``psb_suess2022``     — Suess+2022 — post-starburst SFH that splits the
+- ``psb_suess2022``: Suess+2022 — post-starburst SFH that splits the
   recent past into a youngest [0, t_last] bin and a [t_last, t_flex] flex
   zone. ``t_last`` and ``t_flex`` are free, with uniform priors.
 
@@ -147,6 +147,11 @@ follow-up.
     axes[0].legend(frameon=False, fontsize=8, loc="lower left")
 
     plt.savefig("plot_prospector_priors_compare.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 6.354 seconds)
 
 
 .. _sphx_glr_download_auto_examples_sfh_plot_prospector_priors_compare.py:

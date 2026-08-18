@@ -1,40 +1,58 @@
 ## Summary
 
-<!-- One paragraph describing the changes and their purpose. -->
+<!-- One paragraph: what changed and why. -->
 
 ## Related issues
 
-<!-- Link to related GitHub issues: #123, #456 -->
+<!-- #123, #456 -->
 
 ## Type of change
 
-- [ ] Bug fix (non-breaking change which fixes an issue)
-- [ ] New feature (non-breaking change which adds functionality)
-- [ ] Documentation (docstrings, README, guides)
-- [ ] Refactoring (code restructure with no functional change)
-- [ ] Tests (new tests or test improvements)
-- [ ] Chore (build config, dependencies, CI/CD)
+- [ ] Bug fix
+- [ ] New feature
+- [ ] Documentation
+- [ ] Refactor (no behavior change)
+- [ ] Tests
+- [ ] Chore (build, dependencies, CI)
 
-## Testing
+## Labels
 
-- [ ] Unit tests added
-- [ ] Integration tests added
-- [ ] Regression test added (if physics changed)
-- [ ] Manual verification completed
+- [ ] At least one `area:*` label applied (see the label table in `CLAUDE.md`)
 
-## Checklist
+## Before you push
 
-- [ ] `ruff check src/ tests/` and `ruff format src/ tests/` pass
+CI runs two gate jobs, `lint` and `smoke`, and between them about forty steps.
+`ruff` and `pytest` are only the first two, so passing those locally does not
+mean CI is green. To run the real list rather than guessing at it:
+
+```bash
+# every step CI runs, extracted from the workflow itself
+sed -n '/^  lint:/,/^  [a-z-]*:$/p'  .github/workflows/tests.yml | grep -oE '^      - run: .*' | sed 's/^      - run: //'
+sed -n '/^  smoke:/,/^  [a-z-]*:$/p' .github/workflows/tests.yml | grep -oE '^      - run: .*' | sed 's/^      - run: //'
+```
+
+A `tools/check_*.py` glob is **not** the same list: it misses
+`add_spdx_headers.py --check` and `gen_property_table.py --check`, both of which
+have failed PRs that looked green locally.
+
+- [ ] `ruff check src/ tests/` and `ruff format --check src/ tests/` pass
 - [ ] `pytest tests/ -q` passes
-- [ ] New functions/classes have numpydoc docstrings with Parameters, Returns, Raises sections
-- [ ] Citations registered in docstrings if a new physics component was added
-- [ ] CHANGELOG entry added (if user-facing change)
-- [ ] Array shapes annotated in docstrings (e.g., `shape (n_wave,)`)
-- [ ] Physical units included in docstring brackets (e.g., `[erg/s/Hz]`, `[yr]`)
-- [ ] Equations cited against primary sources in docstrings (if physics formula added)
+- [ ] The `lint` and `smoke` steps above pass
+
+## Physics and documentation
+
+- [ ] New functions have numpydoc docstrings: Parameters, Returns, Raises
+- [ ] Array shapes annotated, e.g. `shape (n_wave,)`
+- [ ] Units in brackets, e.g. `[erg/s/Hz]`, `[yr]`
+- [ ] Equations checked against the primary source, and cited
+- [ ] Regression test added if physics changed
+- [ ] CHANGELOG entry if user-facing
+- [ ] New physics module has a VERIFICATION entry
+- [ ] New public names exported from `__init__.py`
 
 ## AI-use disclosure
 
 - [ ] This PR was drafted with AI assistance
 
-If yes, I have reviewed every line, verified all equations and citations against the primary sources, and run the regression tests.
+If so: every line reviewed, every equation and citation checked against the
+primary source, regression tests run.

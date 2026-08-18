@@ -30,7 +30,7 @@ NLR module map (#897) — these are **distinct**, not duplicates
   kernel (``compute_nlr_sed``, Richardson+2014 line ratios). Consumed by the
   composable block ``blocks/nlr_analytic.py`` (the canonical, grammar-reachable
   path via ``agn={'nlr': {'type': 'analytic'}}``).
-* ``nlr_cloudy.py`` — grid-backed (Feltre / Synthesizer CLOUDY) NLR **adapters**.
+* ``nlr_cloudy.py``: grid-backed (Feltre / Synthesizer CLOUDY) NLR **adapters**.
   A *different* physics source (photoionization grids, not analytic line
   ratios), consumed by ``blocks/nlr_synthesizer*.py``. Not a duplicate.
 * (removed) ``nlr_model.py`` — a one-file ``SEDModelComponent`` that

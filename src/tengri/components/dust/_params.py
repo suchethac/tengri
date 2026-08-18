@@ -4,10 +4,10 @@
 Three tuples, each the canonical source for one legacy bucket in
 ``tengri.parameters._builders``:
 
-- :data:`PARAMS` — dust **emission** priors (Draine-Li / Dale / Casey /
+- :data:`PARAMS`: dust **emission** priors (Draine-Li / Dale / Casey /
   BOSA / THEMIS / PAHspec). Backs the legacy ``_DUST_EMISSION_PARAMS``
   bucket. Registered when ``dust_emission`` is set.
-- :data:`ATTENUATION_PARAMS` — dust **attenuation** priors
+- :data:`ATTENUATION_PARAMS`: dust **attenuation** priors
   (Charlot-Fall ``dust_tau_bc`` / ``dust_tau_diff`` / ``dust_slope``
   plus the always-on shape modifiers ``dust_f_obscuration``,
   ``dust_bump_strength``, ``dust_delta``, ``dust_Rv``). Backs the
@@ -15,7 +15,7 @@ Three tuples, each the canonical source for one legacy bucket in
   ``_DUST_EXTRA_PARAMS``. Always registered, except the two
   Charlot-Fall optical depths are skipped under
   ``dust_model="single_component"``.
-- :data:`SINGLE_COMPONENT_PARAMS` — ``dust_tau_v`` only. Backs
+- :data:`SINGLE_COMPONENT_PARAMS`: ``dust_tau_v`` only. Backs
   ``_SINGLE_COMPONENT_DUST_PARAMS``. Registered when
   ``dust_model="single_component"``.
 

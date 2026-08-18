@@ -108,10 +108,10 @@ class _RegistryTable(list):
         Each keyword either does an exact match (``status="production"``)
         or uses a ``field__op`` operator suffix:
 
-        - ``field=value``           — case-insensitive equality
-        - ``field__contains=value`` — case-insensitive substring match
-        - ``field__in=(a, b, c)``   — membership in a sequence
-        - ``field__startswith=v``   — prefix match (case-insensitive)
+        - ``field=value``: case-insensitive equality
+        - ``field__contains=value``: case-insensitive substring match
+        - ``field__in=(a, b, c)``: membership in a sequence
+        - ``field__startswith=v``: prefix match (case-insensitive)
 
         All criteria must match (logical AND).
 

@@ -472,12 +472,12 @@ class LaplaceVarianceCeilingWarning(UserWarning):
 
     A clipped direction is usually one of three things, and the remedy differs:
 
-    - **an exact degeneracy** — two parameters that enter the model only in
+    - **an exact degeneracy**: two parameters that enter the model only in
       one combination, so the likelihood is flat along a ridge (``met_alpha_fe``
       and ``met_logzsol`` are exactly this, see
       :class:`DegenerateParameterPairWarning` and issue #1095). Fix the model,
       not the floor: hold one of the pair fixed.
-    - **a genuinely unconstrained parameter** — the data carry no information
+    - **a genuinely unconstrained parameter**: the data carry no information
       about it. The prior, not ``1 / min_eigenvalue``, is the honest answer;
       consider fixing it or reporting it as prior-dominated.
     - **numerical noise** in a finite-difference Hessian near a flat direction,

@@ -48,16 +48,16 @@ def build_observables_class(observation) -> type:
     -----
     Field set (conditional on observation contents):
 
-    - ``phot_fnu``      — observed-frame F_nu [erg/s/cm²/Hz], shape ``(n_filt,)``
-    - ``phot_rest_fnu`` — rest-frame F_nu at d_L=10 pc, same filters, shape ``(n_filt,)``
-    - ``spec_fnu``      — observed-frame F_nu [erg/s/cm²/Hz], shape ``(n_pix,)``
-    - ``lines_flux``    — integrated line fluxes [erg/s/cm²], shape ``(n_lines,)``
-    - ``indices``       — spectral indices, shape ``(n_indices,)``
+    - ``phot_fnu``: observed-frame F_nu [erg/s/cm²/Hz], shape ``(n_filt,)``
+    - ``phot_rest_fnu``: rest-frame F_nu at d_L=10 pc, same filters, shape ``(n_filt,)``
+    - ``spec_fnu``: observed-frame F_nu [erg/s/cm²/Hz], shape ``(n_pix,)``
+    - ``lines_flux``: integrated line fluxes [erg/s/cm²], shape ``(n_lines,)``
+    - ``indices``: spectral indices, shape ``(n_indices,)``
 
     Properties (attached when photometry is configured):
 
-    - ``mag_apparent``  — AB mag from ``phot_fnu``
-    - ``mag_absolute``  — AB mag from ``phot_rest_fnu``
+    - ``mag_apparent``: AB mag from ``phot_fnu``
+    - ``mag_absolute``: AB mag from ``phot_rest_fnu``
 
     Examples
     --------

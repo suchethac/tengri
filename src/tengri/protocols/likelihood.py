@@ -27,15 +27,15 @@ class Likelihood(Protocol):
 
     Concrete implementations:
 
-    - ``GaussianLikelihood`` — independent Gaussian errors
+    - ``GaussianLikelihood``: independent Gaussian errors
       (chi-squared + log-normalization).
-    - ``StudentTLikelihood`` — heavy-tailed alternative for outlier
+    - ``StudentTLikelihood``: heavy-tailed alternative for outlier
       tolerance.
-    - ``GPLikelihood`` — Gaussian-process correlated noise on
+    - ``GPLikelihood``: Gaussian-process correlated noise on
       spectroscopy.
-    - ``UpperLimitLikelihood`` — half-Gaussian / step-function for
+    - ``UpperLimitLikelihood``: half-Gaussian / step-function for
       non-detections.
-    - ``CompositeLikelihood`` — sum of channel-specific likelihoods
+    - ``CompositeLikelihood``: sum of channel-specific likelihoods
       (phot + spec + lines).
 
     Required attributes

@@ -618,23 +618,23 @@ class PopulationFitter:
         method : str
             **NIFTy-backed (CorrelatedFieldMaker, native PSD learning)**
 
-            - ``"vi"`` — the canonical name, shared with every other fit
+            - ``"vi"``: the canonical name, shared with every other fit
               surface (``tengri.inference._backend_registry.DEFAULT_METHOD``,
               #1289). Same geoVI runner as ``"vi_nonlinear_fast"``.
-            - ``"vi_nonlinear_fast"`` — geoVI via NIFTy ``optimize_kl``
+            - ``"vi_nonlinear_fast"``: geoVI via NIFTy ``optimize_kl``
               (default).
-            - ``"vi_nonlinear"`` — geoVI; same runner as fast, kept for API symmetry.
-            - ``"vi_linear_fast"`` — MGVI via NIFTy ``optimize_kl``.
-            - ``"vi_linear"`` — MGVI; same runner as fast, kept for API symmetry.
-            - ``"evi_nifty"`` — expansion-point VI via ``_run_geovi_cfm``
+            - ``"vi_nonlinear"``: geoVI; same runner as fast, kept for API symmetry.
+            - ``"vi_linear_fast"``: MGVI via NIFTy ``optimize_kl``.
+            - ``"vi_linear"``: MGVI; same runner as fast, kept for API symmetry.
+            - ``"evi_nifty"``: expansion-point VI via ``_run_geovi_cfm``
               (``sample_mode="evi"``). Dispatched by name, with no registry
               entry of its own.
 
             **Pure-JAX (lax.while_loop, no NIFTy) — tier="broken"**
 
-            - ``"native_vi_linear"`` — MGVI inside ``lax.while_loop``.
+            - ``"native_vi_linear"``: MGVI inside ``lax.while_loop``.
               3–4× faster than NIFTy MGVI on CPU; O(1) memory in N.
-            - ``"native_vi_nonlinear"`` — geoVI inside ``lax.while_loop``.
+            - ``"native_vi_nonlinear"``: geoVI inside ``lax.while_loop``.
               Comparable speed to NIFTy geoVI; prefers lower N (≤20).
 
             Both native backends are registered ``tier="broken"`` — they
@@ -657,38 +657,38 @@ class PopulationFitter:
 
             **MCMC and MAP (through the flat seam)**
 
-            - ``"mcmc_raytrace"`` — Ray Tracing on the flat vector. At
+            - ``"mcmc_raytrace"``: Ray Tracing on the flat vector. At
               hierarchical D the chain is typically degenerate, and the run
               raises :class:`DegenerateChainError` rather than returning
               MAP-echo draws (#1530).
-            - ``"mcmc"`` — pinned to NUTS, deliberately diverging from the
+            - ``"mcmc"``: pinned to NUTS, deliberately diverging from the
               single-galaxy auto-pick (raytrace above D~20): hierarchical D
               grows with the catalog, so that auto-pick would select the
               guaranteed-degenerate sampler.
             - ``"mcmc_nuts"``, ``"mcmc_hmc"``, ``"mcmc_dynamic_hmc"`` — NUTS /
               static-leapfrog HMC / dynamic trajectory-length HMC on the flat
               vector.
-            - ``"mcmc_ess"`` — elliptical slice sampling, gradient-free. The
+            - ``"mcmc_ess"``: elliptical slice sampling, gradient-free. The
               flat parameterization's prior is exactly the iid N(0,1) the ESS
               ellipse assumes, so its one structural requirement holds by
               construction; no step size or warmup exists to tune.
-            - ``"mcmc_adjusted_mclmc"`` — Metropolis-adjusted microcanonical
+            - ``"mcmc_adjusted_mclmc"``: Metropolis-adjusted microcanonical
               Langevin MC, tuned by blackjax's own (L, step size) adaptation.
-            - ``"mcmc_mclmc"`` — unadjusted MCLMC; tier="broken" ([POOR
+            - ``"mcmc_mclmc"``: unadjusted MCLMC; tier="broken" ([POOR
               MIXING] on the single-galaxy benchmarks, and biased at finite
               step size by construction), requires ``allow_unvalidated=True``.
-            - ``"mcmc_ghmc"`` — generalized (persistent-momentum) HMC;
+            - ``"mcmc_ghmc"``: generalized (persistent-momentum) HMC;
               tier="broken" ([POOR MIXING] on the single-galaxy benchmarks),
               requires ``allow_unvalidated=True``. Always uses a diagonal mass
               matrix.
-            - ``"map"`` — Adam MAP on the flat vector.
-            - ``"laplace"`` — the same MAP ascent plus a Gaussian covariance
+            - ``"map"``: Adam MAP on the flat vector.
+            - ``"laplace"``: the same MAP ascent plus a Gaussian covariance
               from the negative Hessian at a GRADIENT-VERIFIED mode: an
               unconverged ascent or non-negative-definite curvature raises
               rather than returning error bars measured off a mode (#1537).
-            - ``"pathfinder"`` — tier="broken" (OOM-killed the process on a
+            - ``"pathfinder"``: tier="broken" (OOM-killed the process on a
               measured 2-galaxy problem); requires ``allow_unvalidated=True``.
-            - ``"nss"`` — the in-tree Nested Slice Sampler (Yallup+2026) on
+            - ``"nss"``: the in-tree Nested Slice Sampler (Yallup+2026) on
               the flat vector, with live points drawn from the exact iid
               N(0,1) prior; the only driver that also returns
               ``log_evidence`` (hierarchical model comparison). Requires

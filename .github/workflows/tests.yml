@@ -635,6 +635,10 @@ jobs:
       - run: python tools/check_test_markers.py
       - run: python tools/check_single_dispatch.py
       - run: python tools/check_registry_completeness.py
+      # ROADMAP.md names physics that does not exist yet; it has twice
+      # listed modules that had already shipped. Needs the registries, so
+      # it lives here rather than in `lint` (which installs only ruff).
+      - run: python tools/check_roadmap_honest.py
       # The docs build cannot execute code (nbsphinx_execute = "never", no
       # `.. exec::`), so the API guide's property table is a COMMITTED generator
       # plus a checked-in output. This gate is what keeps it from going stale.

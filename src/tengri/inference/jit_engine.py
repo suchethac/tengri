@@ -1497,11 +1497,11 @@ def build_jit_engine(fitter, pos_dict):
         ``sample_mode`` is a **static** string — JAX compiles a
         separate XLA program per mode.  All 5 NIFTy modes supported:
 
-        - ``"linear_resample"`` — fresh MGVI samples each iteration
-        - ``"linear_sample"`` — reuse PRNG keys (deterministic MGVI)
-        - ``"nonlinear_resample"`` — fresh geoVI samples
-        - ``"nonlinear_sample"`` — reuse keys + curve (deterministic geoVI)
-        - ``"nonlinear_update"`` — re-curve existing residuals at new m
+        - ``"linear_resample"``: fresh MGVI samples each iteration
+        - ``"linear_sample"``: reuse PRNG keys (deterministic MGVI)
+        - ``"nonlinear_resample"``: fresh geoVI samples
+        - ``"nonlinear_sample"``: reuse keys + curve (deterministic geoVI)
+        - ``"nonlinear_update"``: re-curve existing residuals at new m
 
         """
         # Generate per-iteration keys on-the-fly via fold_in (no

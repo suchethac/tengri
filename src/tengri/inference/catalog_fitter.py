@@ -930,8 +930,8 @@ class _CatalogFitterOriginal:
 
             - ``None`` (default) — pad only to the next multiple of K
               (existing behavior).
-            - ``"auto"`` — pad to the next power of 2.
-            - ``int`` — pad to exactly this many galaxies (must be
+            - ``"auto"``: pad to the next power of 2.
+            - ``int``: pad to exactly this many galaxies (must be
               ``>= n_galaxies``).
 
             Only applies to native methods. Ignored with a warning for
