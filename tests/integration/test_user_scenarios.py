@@ -26,7 +26,6 @@ os.environ.setdefault("JAX_PLATFORMS", "cpu")
 # Disable background compilation to get accurate JIT timing
 os.environ.setdefault("TENGRI_NO_BACKGROUND_COMPILE", "1")
 
-from dsps import SSPData
 
 from tengri import Fitter, Observation, Parameters, Photometry, SEDModel
 from tengri.components.stellar.sps.dsps_wrapper import load_ssp_data
