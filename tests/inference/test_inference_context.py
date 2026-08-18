@@ -16,6 +16,7 @@ No SSP data required — uses MagicMock model and Parameters spec.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import jax
@@ -49,6 +50,17 @@ def _build_fitter():
     model = MagicMock()
     model.spec = spec
     model.predict_photometry.return_value = jnp.ones(3) * 1e-18
+    # Declare the optional observation channels ABSENT. Fitter._build_data_args
+    # reads them with ``getattr(obs, "line_ratios", None)``, and on a bare
+    # MagicMock that default is unreachable — every attribute auto-vivifies, so
+    # each ``is not None`` guard passes and the fitter builds line-flux,
+    # line-ratio and spectral-index channels this photometry-only stub cannot
+    # serve. The eager channel-scale pre-check (#1495) then evaluates them and
+    # dies on the Mock predictions. A stub must declare its capabilities, not
+    # inherit them from Mock's auto-vivification.
+    model.observation = SimpleNamespace(
+        spectroscopy=None, line_fluxes=None, line_ratios=None, spectral_indices=None
+    )
     data = jnp.ones(3) * 1e-18
     noise = jnp.ones(3) * 1e-19
     return Fitter(model, data, noise, data_type="photometry")
