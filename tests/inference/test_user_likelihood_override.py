@@ -19,7 +19,6 @@ directly via :class:`SimpleNamespace`.
 
 
 from types import SimpleNamespace
-from typing import ClassVar
 
 import jax.numpy as jnp
 import pytest
@@ -27,40 +26,7 @@ import pytest
 from tengri.inference.likelihoods.gaussian import diag_gaussian_log_prob
 from tengri.inference.loss_functions import build_loglikelihood_fn, build_loss_fn
 from tengri.inference.photometry_likelihood import PhotometryLikelihood
-
-
-class _IdentityDist:
-    """Mock distribution: unstandardize is identity, returns the same value."""
-
-    bounds = (-jnp.inf, jnp.inf)
-
-    def unstandardize(self, x):
-        return x
-
-
-class _MockSpec:
-    """Tiny stand-in for :class:`tengri.Parameters` used by Fitter."""
-
-    stochastic = False
-
-    def __init__(self, free_names):
-        self._free_names = free_names
-        # has_noise_model() reads spec.all_params — provide an empty
-        # iterable so the legacy path's noise-detection short-circuits.
-        self.all_params = []
-
-    @property
-    def free_params(self):
-        return self._free_names
-
-    def get_distribution(self, name):
-        return _IdentityDist()
-
-    def get_fixed_values(self):
-        return {}
-
-    def resolve_mirrors(self, params):
-        return params
+from tests._doubles import FakeSpec
 
 
 class _MockModel:
@@ -83,7 +49,7 @@ def _make_fitter(user_likelihood=None):
     fnu_obs = jnp.array([1.1e-29, 1.9e-29, 3.05e-29])
     fnu_err = jnp.array([0.1e-29, 0.1e-29, 0.1e-29])
 
-    spec = _MockSpec(free_names=["flux_scale"])
+    spec = FakeSpec(free_names=["flux_scale"])
     model = _MockModel(fnu_pred)
     model.spec = spec
 
@@ -199,31 +165,11 @@ def test_prior_term_added_for_free_params_and_psd_xi():
     """The user-likelihood short-circuit must add ½ ξᵀξ over both
     free_names AND psd_xi (stochastic SFH case)."""
 
-    class _StochasticSpec:
-        stochastic = True
-        all_params: ClassVar[list[str]] = []
-
-        def __init__(self, free_names):
-            self._free_names = free_names
-
-        @property
-        def free_params(self):
-            return self._free_names
-
-        def get_distribution(self, name):
-            return _IdentityDist()
-
-        def get_fixed_values(self):
-            return {}
-
-        def resolve_mirrors(self, params):
-            return params
-
     fnu_pred = jnp.array([1.0e-29, 2.0e-29])
     fnu_obs = jnp.array([1.0e-29, 2.0e-29])
     fnu_err = jnp.array([0.1e-29, 0.1e-29])
 
-    spec = _StochasticSpec(free_names=["a", "b", "c"])
+    spec = FakeSpec(free_names=["a", "b", "c"], stochastic=True)
     model = _MockModel(fnu_pred)
     model.spec = spec
 
@@ -275,7 +221,7 @@ def test_prior_includes_only_free_params_when_not_stochastic():
     fnu_obs = jnp.array([1.0e-29])
     fnu_err = jnp.array([0.1e-29])
 
-    spec = _MockSpec(free_names=["a"])  # non-stochastic by default
+    spec = FakeSpec(free_names=["a"])  # non-stochastic by default
     model = _MockModel(fnu_pred)
     model.spec = spec
 

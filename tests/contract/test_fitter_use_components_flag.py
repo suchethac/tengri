@@ -18,50 +18,13 @@ non-photometry guard rejects the unsupported configuration loudly.
 
 
 from types import SimpleNamespace
-from typing import ClassVar
 
 import jax.numpy as jnp
 import pytest
 
 from tengri.inference.loss_functions import build_loglikelihood_fn
 from tengri.inference.photometry_likelihood import PhotometryLikelihood
-
-
-class _IdentityDist:
-    bounds = (-jnp.inf, jnp.inf)
-
-    def unstandardize(self, x):
-        return x
-
-
-class _MockSpec:
-    stochastic = False
-    all_params: ClassVar[list] = []
-
-    def __init__(self, free_names):
-        self._free_names = free_names
-
-    @property
-    def free_params(self):
-        return self._free_names
-
-    def get_distribution(self, name):
-        return _IdentityDist()
-
-    def get_fixed_values(self):
-        return {}
-
-    def resolve_mirrors(self, params):
-        return params
-
-    def sample(self, key):
-        """Return a dict of default parameter values for all free parameters.
-
-        Matches the contract of Parameters.sample: takes a PRNG key and returns
-        a dict mapping parameter names to sampled values. For the mock, we return
-        a default value (1.0) for each free parameter.
-        """
-        return {name: jnp.asarray(1.0) for name in self._free_names}
+from tests._doubles import FakeSpec
 
 
 class _DualPathModel:
@@ -95,7 +58,7 @@ class _DualPathModel:
 
 
 def _make_fitter(*, use_components: bool):
-    spec = _MockSpec(free_names=["flux_scale"])
+    spec = FakeSpec(free_names=["flux_scale"])
     model = _DualPathModel()
     model.spec = spec
 
@@ -142,7 +105,7 @@ def test_use_components_routes_through_component_path():
 
 
 def _make_spectroscopy_fitter(*, use_components: bool):
-    spec = _MockSpec(free_names=["flux_scale"])
+    spec = FakeSpec(free_names=["flux_scale"])
     model = _DualPathModel()
     model.spec = spec
 
@@ -193,7 +156,7 @@ def test_use_components_rejects_unknown_data_type_at_construction():
     from tengri.inference.fitter import Fitter
 
     class _StubModel:
-        spec = _MockSpec(free_names=["flux_scale"])
+        spec = FakeSpec(free_names=["flux_scale"])
 
         def __init__(self):
             self.observation = SimpleNamespace(

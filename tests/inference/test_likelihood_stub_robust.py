@@ -13,39 +13,9 @@ from types import SimpleNamespace
 import jax.numpy as jnp
 import pytest
 
+from tests._doubles import FakeSpec
+
 pytestmark = pytest.mark.contract
-
-
-class _IdentityDist:
-    """Mock distribution: unstandardize is identity."""
-
-    bounds = (-jnp.inf, jnp.inf)
-
-    def unstandardize(self, x):
-        return x
-
-
-class _MockSpec:
-    """Tiny stand-in for Parameters."""
-
-    stochastic = False
-
-    def __init__(self, free_names):
-        self._free_names = free_names
-        self.all_params = []
-
-    @property
-    def free_params(self):
-        return self._free_names
-
-    def get_distribution(self, name):
-        return _IdentityDist()
-
-    def get_fixed_values(self):
-        return {}
-
-    def resolve_mirrors(self, params):
-        return params
 
 
 class _MockModel:
@@ -61,7 +31,7 @@ class _MockModel:
 
 def _make_mock_fitter(fnu_pred, fnu_obs, fnu_err):
     """Build a mock Fitter for likelihood testing."""
-    spec = _MockSpec(free_names=[])
+    spec = FakeSpec(free_names=[])
     model = _MockModel(fnu_pred)
     model.spec = spec
 

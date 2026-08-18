@@ -27,40 +27,7 @@ from tengri.inference.loss_functions import (
     build_loglikelihood_unbounded_fn,
     build_loss_fn,
 )
-
-
-class _IdentityDist:
-    bounds = (-jnp.inf, jnp.inf)
-
-    def unstandardize(self, x):
-        return x
-
-
-class _MockSpec:
-    stochastic = False
-
-    def __init__(self, free_names):
-        self._free_names = free_names
-        self.all_params = []
-
-    @property
-    def free_params(self):
-        return self._free_names
-
-    def get_distribution(self, name):
-        return _IdentityDist()
-
-    def resolve_mirrors(self, params):
-        return params
-
-    def sample(self, key):
-        """Return a dict of default parameter values for all free parameters.
-
-        Matches the contract of Parameters.sample: takes a PRNG key and returns
-        a dict mapping parameter names to sampled values. For the mock, we return
-        a default value (1.0) for each free parameter.
-        """
-        return {name: jnp.asarray(1.0) for name in self._free_names}
+from tests._doubles import FakeSpec
 
 
 class _MockModel:
@@ -76,7 +43,7 @@ def _make_fitter(user_likelihood=None, data_mask=None):
     fnu_pred = jnp.array([1e-29, 2e-29, 3e-29])
     fnu_obs = jnp.array([1.1e-29, 1.9e-29, 3.05e-29])
     fnu_err = jnp.array([0.1e-29, 0.1e-29, 0.1e-29])
-    spec = _MockSpec(free_names=["flux_scale"])
+    spec = FakeSpec(free_names=["flux_scale"])
     model = _MockModel(fnu_pred)
     data_args = {"data": fnu_obs, "noise": fnu_err}
     if data_mask is not None:

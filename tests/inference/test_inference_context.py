@@ -46,9 +46,20 @@ def _build_fitter():
         dust_tau_diff=Fixed(0.3),
         redshift=Fixed(0.1),
     )
-    model = MagicMock()
+    # spec= confines the mock to the two attributes this fitter genuinely
+    # uses. A bare MagicMock() answers hasattr() affirmatively for every
+    # name, so the forward path's optional-capability probes all fired and
+    # Fitter populated _data_args with an emission-line channel this
+    # photometry-only fixture never asked for -- which the eager
+    # channel-scale pre-check (#1495) then tried to evaluate, reaching
+    # predict_line_fluxes() and handing JAX a MagicMock to convert.
+    model = MagicMock(spec=["spec", "predict_photometry", "compile_signature"])
     model.spec = spec
     model.predict_photometry.return_value = jnp.ones(3) * 1e-18
+    # Feeds Fitter.compile_signature()'s JIT cache key, so it must be a real
+    # hashable tuple rather than a Mock. Constant is correct here: every
+    # fitter this helper builds describes the same model.
+    model.compile_signature.return_value = ("mock-photometry-model",)
     data = jnp.ones(3) * 1e-18
     noise = jnp.ones(3) * 1e-19
     return Fitter(model, data, noise, data_type="photometry")
