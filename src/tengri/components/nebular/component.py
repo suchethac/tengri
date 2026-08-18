@@ -494,9 +494,9 @@ class NebularSEDComponent(TemplateThreading):
 
         Cross-component reads (Cue/CloudyGrid):
 
-        - ``state.derived["log_metallicity_history"]`` — falls back to
+        - ``state.derived["log_metallicity_history"]``: falls back to
           ``params["met_logzsol"]`` if not published.
-        - ``state.derived["lnu_age"]`` — for the SSP-weighted Q_H
+        - ``state.derived["lnu_age"]``: for the SSP-weighted Q_H
           computation in CloudyGrid.
 
         Returns

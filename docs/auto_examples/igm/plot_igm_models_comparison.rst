@@ -26,10 +26,10 @@ applied to a young star-forming SED. This diagnostic isolates the differences
 between models around the Lyman-alpha forest:
 
 - **No IGM** (intrinsic SED, reference)
-- **Madau (1995)** — foundational model with 17 Lyman lines + continuum
-- **Meiksin (2006)** — smooth Lyman-alpha forest continuum with LLS damping
-- **Inoue+2014** — modern prescription with 39 Lyman lines, LAF, and DLA
-- **Inoue+2014 + CGM damping wing (Asada+2025)** — Inoue extended with
+- **Madau (1995)**: foundational model with 17 Lyman lines + continuum
+- **Meiksin (2006)**: smooth Lyman-alpha forest continuum with LLS damping
+- **Inoue+2014**: modern prescription with 39 Lyman lines, LAF, and DLA
+- **Inoue+2014 + CGM damping wing (Asada+2025)**: Inoue extended with
   neutral-hydrogen damping wing in the circumgalactic medium at z > 5
 
 The key diagnostic at z=7 is the **Lyman-alpha forest** (blue-wing
@@ -50,7 +50,7 @@ References:
   .. [4] Asada, R., Ouchi, M., & collaborators 2025 — CGM damping wing
          absorption at z > 5 (experimental extension to Inoue+2014)
 
-.. GENERATED FROM PYTHON SOURCE LINES 34-221
+.. GENERATED FROM PYTHON SOURCE LINES 34-217
 
 
 
@@ -64,7 +64,7 @@ References:
 
  .. code-block:: none
 
-    /tengri/src/tengri/forward/orchestrator.py:951: SFHBeforeBigBangWarning: Star formation history forms 100% of its stellar mass before the Big Bang at z=7.00 (cosmic age 0.76 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+    /Users/suchethacooray/Projects/tengri/.claude/worktrees/gallery-overhaul/src/tengri/forward/orchestrator.py:951: SFHBeforeBigBangWarning: Star formation history forms 100% of its stellar mass before the Big Bang at z=7.00 (cosmic age 0.76 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
       state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
 
 
@@ -88,12 +88,8 @@ References:
     import numpy as np
 
     import tengri
-    from tengri import (
-        igm_transmission,
-        igm_transmission_madau,
-        igm_transmission_meiksin06,
-    )
-    from tengri.plot import setup_style
+    from tengri import igm_transmission, igm_transmission_madau, igm_transmission_meiksin06
+    from tengri.analysis.plotting import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -263,6 +259,11 @@ References:
 
     fig.tight_layout()
     plt.savefig("plot_igm_models_comparison.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 7.599 seconds)
 
 
 .. _sphx_glr_download_auto_examples_igm_plot_igm_models_comparison.py:

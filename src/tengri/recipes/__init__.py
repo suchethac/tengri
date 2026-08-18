@@ -57,6 +57,14 @@ def star_forming_photometry() -> dict:
     with wNE (with-nebular-emission) SSP files; doing so raises
     ``CueWNESSPError``.
 
+    **To download the bare-stellar SSP:**
+
+    .. code-block:: python
+
+        import tengri
+
+        tengri.download_ssp("fsps_prsc_miles_chabrier")
+
     **Configuration:**
 
     - **SFH**: Dual power-law (DPL) with all parameters free
@@ -107,6 +115,14 @@ def quiescent_z0() -> dict:
 
     **SSP requirement:** bare-stellar (Cue nebular backend; see
     :func:`star_forming_photometry` for details).
+
+    **To download the bare-stellar SSP:**
+
+    .. code-block:: python
+
+        import tengri
+
+        tengri.download_ssp("fsps_prsc_miles_chabrier")
 
     **Configuration:**
 
@@ -291,6 +307,14 @@ def agn_panchromatic() -> dict:
     **SSP requirement:** bare-stellar (Cue nebular backend; see
     :func:`star_forming_photometry` for details).
 
+    **To download the bare-stellar SSP:**
+
+    .. code-block:: python
+
+        import tengri
+
+        tengri.download_ssp("fsps_prsc_miles_chabrier")
+
     **Configuration:**
 
     - **SFH**: DPL (free)
@@ -356,6 +380,14 @@ def composable_agn() -> dict:
 
     **SSP requirement:** bare-stellar (Cue nebular backend; see
     :func:`star_forming_photometry` for details).
+
+    **To download the bare-stellar SSP:**
+
+    .. code-block:: python
+
+        import tengri
+
+        tengri.download_ssp("fsps_prsc_miles_chabrier")
 
     **Data requirement:** All components use committed templates bundled with
     tengri. No external Synthesizer Cloudy grids or other downloads needed.
@@ -435,6 +467,14 @@ def stochastic_sfh_jwst() -> dict:
 
     **SSP requirement:** bare-stellar (Cue nebular backend; see
     :func:`star_forming_photometry` for details).
+
+    **To download the bare-stellar SSP:**
+
+    .. code-block:: python
+
+        import tengri
+
+        tengri.download_ssp("fsps_prsc_miles_chabrier")
 
     **Configuration:**
 

@@ -48,15 +48,18 @@ import pytest
 
 pytestmark = pytest.mark.contract
 
+# Module-level redshift constant: ensures filter fixture and test models cannot drift apart
+Z = 0.1
+
 
 def assert_nonvacuous_equivalence_delta(
-    model_exact,
-    model_precomp,
-    model_control,
+    model_exact_high,
+    model_precomp_high,
+    model_control_high,
+    model_exact_low,
+    model_control_low,
     params_dict,
     rtol,
-    lbol_high,
-    lbol_low,
     context_msg,
 ):
     """Assert difference-based equivalence with non-vacuity preconditions.
@@ -66,92 +69,129 @@ def assert_nonvacuous_equivalence_delta(
 
     Parameters
     ----------
-    model_exact : SEDModel
-        With-component model, `approx=None`.
-    model_precomp : SEDModel
-        With-component model, `approx=WavePrecomp()`.
-    model_control : SEDModel
-        Without-component (component disabled) model for delta baseline.
+    model_exact_high : SEDModel
+        With-component model at lbol_high, `approx=None`.
+    model_precomp_high : SEDModel
+        With-component model at lbol_high, `approx=WavePrecomp()`.
+    model_control_high : SEDModel
+        Without-component (component disabled) model, lbol=lbol_high, for delta baseline.
+    model_exact_low : SEDModel
+        With-component model at lbol_low, `approx=None`, for SCALING SANITY check.
+    model_control_low : SEDModel
+        Without-component (component disabled) model, lbol=lbol_low, for SCALING SANITY.
     params_dict : dict
-        Single parameter draw, used identically for all three models.
+        Single parameter draw with non-AGN parameters. AGN parameters (especially
+        agn_log_lbol if FIXED) are populated from each model's spec to avoid
+        cross-model parameter bleed. Non-AGN params are shared across all models.
     rtol : float
         Relative tolerance on delta agreement: |delta_exact - delta_precomp| /
         |delta_exact| < rtol. Derived from measured stellar LUT error ×3.
-    lbol_high : SEDModel
-        High-luminosity version of exact model for SCALING SANITY check.
-        If None, skip scaling check.
-    lbol_low : SEDModel
-        Low-luminosity version of exact model for SCALING SANITY check.
-        If None, skip scaling check.
     context_msg : str
-        Human-readable context (e.g., "BLR-analytic, lbol=13 vs 11").
+        Human-readable context (e.g., "BLR-analytic delta, lbol=13 vs 11").
 
     Raises
     ------
     AssertionError
         If non-vacuity precondition fails (delta too small, doesn't scale with
         lbol, or equivalence exceeds rtol).
+
+    Notes
+    -----
+    SCALING SANITY fix (#1903): The old harness was confounded because the lbol
+    parameter appeared in both the "with-component" and "control" models. This
+    meant the disc pedestal scaled differently, masking whether the component
+    actually responded to luminosity. The fix passes separate control models for
+    each luminosity so delta(lbol) = phot(with_block, lbol) - phot(without_block,
+    SAME lbol), isolating the component's response and preventing confounding by
+    the disc normalization.
+
+    **Parameter handling**: When agn_log_lbol is FIXED in a model's spec, the params
+    dict value (if present) would override the FIXED spec value. To prevent
+    cross-model contamination, we remove agn_log_lbol from the params before
+    passing to each model, letting each model use its own FIXED value.
     """
-    # ──────────────────────────────────────────────────────────────────────────
-    # Compute deltas (pedestal cancels identically for exact and precomp)
-    # ──────────────────────────────────────────────────────────────────────────
-    phot_exact_with = np.asarray(model_exact.predict_photometry(params_dict))
-    phot_exact_without = np.asarray(model_control.predict_photometry(params_dict))
-    delta_exact = phot_exact_with - phot_exact_without
-
-    phot_precomp_with = np.asarray(model_precomp.predict_photometry(params_dict))
-    delta_precomp = phot_precomp_with - phot_exact_without
+    # Remove agn_log_lbol from params if present, so each model uses its own FIXED value
+    params_for_high = dict(params_dict)
+    params_for_low = dict(params_dict)
+    params_for_high.pop("agn_log_lbol", None)
+    params_for_low.pop("agn_log_lbol", None)
 
     # ──────────────────────────────────────────────────────────────────────────
-    # NON-VACUITY PRECONDITION (a): magnitude of delta >> differencing noise
+    # Compute deltas at high luminosity (pedestal cancels identically)
     # ──────────────────────────────────────────────────────────────────────────
-    # Estimate noise floor: recompute control twice (independent parameter sampling)
-    phot_control_recompute = np.asarray(model_control.predict_photometry(params_dict))
-    noise = np.abs(phot_exact_without - phot_control_recompute)
-    max_noise_per_band = np.max(noise)
-    max_delta_magnitude = np.max(np.abs(delta_exact))
+    phot_exact_high = np.asarray(model_exact_high.predict_photometry(params_for_high))
+    phot_control_high = np.asarray(model_control_high.predict_photometry(params_for_high))
+    delta_exact_high = phot_exact_high - phot_control_high
 
-    noise_ratio = max_delta_magnitude / np.maximum(max_noise_per_band, 1e-40)
-    if noise_ratio < 1000:  # ≥3 orders above noise
+    phot_precomp_high = np.asarray(model_precomp_high.predict_photometry(params_for_high))
+    delta_precomp_high = phot_precomp_high - phot_control_high
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # NON-VACUITY PRECONDITION (a): IN-BAND SIGNIFICANCE (#1660 pattern)
+    # ──────────────────────────────────────────────────────────────────────────
+    # Assert the component's in-band significance: delta must be a substantial
+    # fraction of the total photometry. This guards against vacuous tests where
+    # the emitter is swamped by a pedestal that cancels anyway.
+    #
+    # Orchestrator measurement on properly-aligned filters:
+    #   - In-band (filter centered on redshifted line): ~49% of photometry
+    #   - Out-of-band (filter off-center): ≤0.1% of photometry
+    # Mutant (filter at rest-frame, not redshifted): ~0.52% in-band.
+    # Threshold with ~10x safety margins: 0.01 (1.0%)
+    #   - ~50× below in-band correct (49% vs 1%)
+    #   - ~10× above out-of-band worst-case (0.1% vs 1%)
+    #   - Clearly rejects the misaligned-filter mutant (0.52% vs 1.0%)
+    in_band_fractional_contrib = np.max(
+        np.abs(delta_exact_high) / np.maximum(np.abs(phot_exact_high), 1e-40)
+    )
+    in_band_threshold = 0.01  # 1.0% minimum in-band contribution
+
+    if in_band_fractional_contrib < in_band_threshold:
         raise AssertionError(
-            f"[{context_msg}] Non-vacuity FAILED (a): delta magnitude "
-            f"{max_delta_magnitude:.3e} is only {noise_ratio:.1f}× above noise floor "
-            f"{max_noise_per_band:.3e}. Need ≥1000× to be signal-dominated."
+            f"[{context_msg}] Non-vacuity FAILED (a) IN-BAND SIGNIFICANCE: "
+            f"max(|delta|/|phot_with|) = {in_band_fractional_contrib:.3%} is below "
+            f"threshold {in_band_threshold:.3%}. The line-emitter block has negligible "
+            f"in-band contribution and the test would be vacuous. "
+            f"Measured in-band on correct filters: ~49%, on misaligned: ~0.52%. "
+            f"Max delta: {np.max(np.abs(delta_exact_high)):.3e}, "
+            f"max photometry: {np.max(np.abs(phot_exact_high)):.3e}."
         )
 
     # ──────────────────────────────────────────────────────────────────────────
-    # NON-VACUITY PRECONDITION (b): SCALING SANITY (if lbol models provided)
+    # NON-VACUITY PRECONDITION (b): SCALING SANITY
     # ──────────────────────────────────────────────────────────────────────────
-    if lbol_high is not None and lbol_low is not None:
-        phot_high = np.asarray(lbol_high.predict_photometry(params_dict))
-        phot_low = np.asarray(lbol_low.predict_photometry(params_dict))
-        # Control is same for both (pedestal cancels)
-        delta_high = phot_high - phot_exact_without
-        delta_low = phot_low - phot_exact_without
+    # Compare deltas at two luminosities. Each delta uses a lbol-matched control,
+    # so delta(lbol) = phot(with_block, lbol) - phot(without_block, SAME lbol).
+    # This isolates the component's luminosity response from disc pedestal scaling.
+    phot_exact_low = np.asarray(model_exact_low.predict_photometry(params_for_low))
+    phot_control_low = np.asarray(model_control_low.predict_photometry(params_for_low))
+    delta_exact_low = phot_exact_low - phot_control_low
 
-        max_delta_high = np.max(np.abs(delta_high))
-        max_delta_low = np.max(np.abs(delta_low))
-        scaling = max_delta_high / np.maximum(max_delta_low, 1e-40)
+    max_delta_high = np.max(np.abs(delta_exact_high))
+    max_delta_low = np.max(np.abs(delta_exact_low))
+    scaling = max_delta_high / np.maximum(max_delta_low, 1e-40)
 
-        if scaling < 10:
-            raise AssertionError(
-                f"[{context_msg}] Non-vacuity FAILED (b) SCALING SANITY: "
-                f"delta scales {scaling:.1f}× from lbol=11 to lbol=13 (expect >10×). "
-                f"The line-emitter block is not responding to luminosity—possible "
-                f"dead block (#1488-class bug). Measured delta_11={max_delta_low:.3e}, "
-                f"delta_13={max_delta_high:.3e}."
-            )
+    if scaling < 10:
+        raise AssertionError(
+            f"[{context_msg}] Non-vacuity FAILED (b) SCALING SANITY: "
+            f"delta scales {scaling:.1f}× (expect >10×). "
+            f"The line-emitter block is not responding to luminosity—possible "
+            f"dead block (#1488-class bug). Measured delta_low={max_delta_low:.3e}, "
+            f"delta_high={max_delta_high:.3e}."
+        )
 
     # ──────────────────────────────────────────────────────────────────────────
-    # EQUIVALENCE ASSERTION: exact vs precomp delta agreement
+    # EQUIVALENCE ASSERTION: exact vs precomp delta agreement at high luminosity
     # ──────────────────────────────────────────────────────────────────────────
-    rel_error_delta = np.abs(delta_precomp - delta_exact) / np.maximum(np.abs(delta_exact), 1e-40)
+    rel_error_delta = np.abs(delta_precomp_high - delta_exact_high) / np.maximum(
+        np.abs(delta_exact_high), 1e-40
+    )
     max_rel_error = np.max(rel_error_delta)
 
     assert max_rel_error < rtol, (
         f"[{context_msg}] Equivalence FAILED: precompute↔exact delta disagreement "
         f"{max_rel_error:.3%} exceeds tolerance {rtol:.3%}. "
-        f"Per-filter delta_exact: {delta_exact}, delta_precomp: {delta_precomp}, "
+        f"Per-filter delta_exact: {delta_exact_high}, delta_precomp: {delta_precomp_high}, "
         f"rel error: {rel_error_delta}."
     )
 
@@ -178,13 +218,29 @@ def _gaussian_filter(center_aa, fwhm_aa, name):
 
 @pytest.fixture(scope="module")
 def narrow_ha_hb_filters():
-    """Two moderately-narrow Gaussian filters at vacuum H-alpha and H-beta.
+    """Two moderately-narrow Gaussian filters at OBSERVED-frame wavelengths.
+
+    CRITICAL FIX for #1903: Filters are placed at observed-frame centers
+    (rest × (1 + Z)) so they sample the actual redshifted line positions
+    in the model. At Z=0.1 (module constant), rest Hα 6564.61 Å moves to
+    7221.07 Å, rest Hβ 4862.68 Å to 5348.95 Å.
 
     FWHM=30 Å ensures the filter captures line emission while isolating it
     from broad continuum features.
+
+    Previous bug: filters were defined at rest wavelengths but the model
+    was at z=0.1, so the filters sampled continuum adjacent to the lines
+    rather than the lines themselves. This made BLR/NLR appear dead (delta≈0)
+    even when emitting. Consequence: equivalence test was vacuous (xfail).
     """
-    ha_filter = _gaussian_filter(6564.61, 30.0, "ha_narrow")
-    hb_filter = _gaussian_filter(4862.68, 30.0, "hb_narrow")
+    # Redshift filters to observed frame
+    ha_center_rest = 6564.61
+    hb_center_rest = 4862.68
+    ha_center_obs = ha_center_rest * (1.0 + Z)
+    hb_center_obs = hb_center_rest * (1.0 + Z)
+
+    ha_filter = _gaussian_filter(ha_center_obs, 30.0, "ha_narrow")
+    hb_filter = _gaussian_filter(hb_center_obs, 30.0, "hb_narrow")
     return [hb_filter, ha_filter]
 
 
@@ -194,13 +250,6 @@ def narrow_ha_hb_filters():
 class TestAGNNebularPrecomputeEquivalence:
     """BLR/NLR-analytic precompute ↔ runtime equivalence (difference-based)."""
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="BLR-analytic block is inert (delta=0 at all luminosities); "
-        "surface-integration gap (see #1903). agn_log_lbol does not feed the BLR "
-        "emission computation. TODO: fix BLR luminosity wiring + SED-surface integration "
-        "(#1903, likely same root cause as #1867).",
-    )
     def test_blr_analytic_delta_equivalence(self, real_ssp_data, narrow_ha_hb_filters):
         """BLR-analytic precompute must match runtime via DELTA.
 
@@ -215,7 +264,6 @@ class TestAGNNebularPrecomputeEquivalence:
         """
         from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, WavePrecomp
 
-        z = 0.1
         obs = Observation(photometry=Photometry(filters=tuple(narrow_ha_hb_filters)))
         key = jax.random.PRNGKey(42)
 
@@ -223,7 +271,7 @@ class TestAGNNebularPrecomputeEquivalence:
         model_exact_13 = SEDModel.build(
             ssp_data=real_ssp_data,
             observation=obs,
-            redshift=Fixed(z),
+            redshift=Fixed(Z),
             approx=None,
             sfh={"type": "tsnorm", "*": FIXED, "log_total_mass": 6.0},
             dust={"type": "none"},
@@ -241,7 +289,7 @@ class TestAGNNebularPrecomputeEquivalence:
         model_precomp_13 = SEDModel.build(
             ssp_data=real_ssp_data,
             observation=obs,
-            redshift=Fixed(z),
+            redshift=Fixed(Z),
             approx=WavePrecomp(),
             sfh={"type": "tsnorm", "*": FIXED, "log_total_mass": 6.0},
             dust={"type": "none"},
@@ -260,7 +308,7 @@ class TestAGNNebularPrecomputeEquivalence:
         model_exact_11 = SEDModel.build(
             ssp_data=real_ssp_data,
             observation=obs,
-            redshift=Fixed(z),
+            redshift=Fixed(Z),
             approx=None,
             sfh={"type": "tsnorm", "*": FIXED, "log_total_mass": 6.0},
             dust={"type": "none"},
@@ -275,17 +323,35 @@ class TestAGNNebularPrecomputeEquivalence:
             },
         )
 
-        # ──── Control (BLR disabled) ────
-        model_control = SEDModel.build(
+        # ──── Control models (BLR disabled, lbol-matched) ────
+        model_control_13 = SEDModel.build(
             ssp_data=real_ssp_data,
             observation=obs,
-            redshift=Fixed(z),
+            redshift=Fixed(Z),
             approx=None,
             sfh={"type": "tsnorm", "*": FIXED, "log_total_mass": 6.0},
             dust={"type": "none"},
             agn={
                 "type": "composable",
-                "disc": {"type": "powerlaw", "*": FIXED},
+                "disc": {"type": "powerlaw", "*": FIXED, "agn_log_lbol": 13.0},
+                "torus": {"type": "simple", "*": FIXED},
+                "blr": {"type": "none"},
+                "nlr": {"type": "none"},
+                "feii": {"type": "none"},
+                "atten": {"type": "none"},
+            },
+        )
+
+        model_control_11 = SEDModel.build(
+            ssp_data=real_ssp_data,
+            observation=obs,
+            redshift=Fixed(Z),
+            approx=None,
+            sfh={"type": "tsnorm", "*": FIXED, "log_total_mass": 6.0},
+            dust={"type": "none"},
+            agn={
+                "type": "composable",
+                "disc": {"type": "powerlaw", "*": FIXED, "agn_log_lbol": 11.0},
                 "torus": {"type": "simple", "*": FIXED},
                 "blr": {"type": "none"},
                 "nlr": {"type": "none"},
@@ -302,21 +368,14 @@ class TestAGNNebularPrecomputeEquivalence:
             assert_nonvacuous_equivalence_delta(
                 model_exact_13,
                 model_precomp_13,
-                model_control,
+                model_control_13,
+                model_exact_11,
+                model_control_11,
                 params_dict,
                 rtol=measured_rtol,
-                lbol_high=model_exact_13,
-                lbol_low=model_exact_11,
                 context_msg="BLR-analytic delta, lbol=13 vs 11",
             )
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="NLR-analytic block is inert (delta=0 at all luminosities); "
-        "surface-integration gap (see #1903). agn_log_lbol does not feed the NLR "
-        "emission computation. TODO: fix NLR luminosity wiring + SED-surface integration "
-        "(#1903, likely same root cause as #1867).",
-    )
     def test_nlr_analytic_delta_equivalence(self, real_ssp_data, narrow_ha_hb_filters):
         """NLR-analytic precompute must match runtime via DELTA.
 
@@ -324,7 +383,6 @@ class TestAGNNebularPrecomputeEquivalence:
         """
         from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, WavePrecomp
 
-        z = 0.1
         obs = Observation(photometry=Photometry(filters=tuple(narrow_ha_hb_filters)))
         key = jax.random.PRNGKey(43)
 
@@ -332,7 +390,7 @@ class TestAGNNebularPrecomputeEquivalence:
         model_exact_125 = SEDModel.build(
             ssp_data=real_ssp_data,
             observation=obs,
-            redshift=Fixed(z),
+            redshift=Fixed(Z),
             approx=None,
             sfh={"type": "tsnorm", "*": FIXED, "log_total_mass": 6.0},
             dust={"type": "none"},
@@ -350,7 +408,7 @@ class TestAGNNebularPrecomputeEquivalence:
         model_precomp_125 = SEDModel.build(
             ssp_data=real_ssp_data,
             observation=obs,
-            redshift=Fixed(z),
+            redshift=Fixed(Z),
             approx=WavePrecomp(),
             sfh={"type": "tsnorm", "*": FIXED, "log_total_mass": 6.0},
             dust={"type": "none"},
@@ -369,7 +427,7 @@ class TestAGNNebularPrecomputeEquivalence:
         model_exact_11 = SEDModel.build(
             ssp_data=real_ssp_data,
             observation=obs,
-            redshift=Fixed(z),
+            redshift=Fixed(Z),
             approx=None,
             sfh={"type": "tsnorm", "*": FIXED, "log_total_mass": 6.0},
             dust={"type": "none"},
@@ -384,17 +442,35 @@ class TestAGNNebularPrecomputeEquivalence:
             },
         )
 
-        # ──── Control (NLR disabled) ────
-        model_control = SEDModel.build(
+        # ──── Control models (NLR disabled, lbol-matched) ────
+        model_control_125 = SEDModel.build(
             ssp_data=real_ssp_data,
             observation=obs,
-            redshift=Fixed(z),
+            redshift=Fixed(Z),
             approx=None,
             sfh={"type": "tsnorm", "*": FIXED, "log_total_mass": 6.0},
             dust={"type": "none"},
             agn={
                 "type": "composable",
-                "disc": {"type": "powerlaw", "*": FIXED},
+                "disc": {"type": "powerlaw", "*": FIXED, "agn_log_lbol": 12.5},
+                "torus": {"type": "simple", "*": FIXED},
+                "blr": {"type": "none"},
+                "nlr": {"type": "none"},
+                "feii": {"type": "none"},
+                "atten": {"type": "none"},
+            },
+        )
+
+        model_control_11 = SEDModel.build(
+            ssp_data=real_ssp_data,
+            observation=obs,
+            redshift=Fixed(Z),
+            approx=None,
+            sfh={"type": "tsnorm", "*": FIXED, "log_total_mass": 6.0},
+            dust={"type": "none"},
+            agn={
+                "type": "composable",
+                "disc": {"type": "powerlaw", "*": FIXED, "agn_log_lbol": 11.0},
                 "torus": {"type": "simple", "*": FIXED},
                 "blr": {"type": "none"},
                 "nlr": {"type": "none"},
@@ -411,11 +487,11 @@ class TestAGNNebularPrecomputeEquivalence:
             assert_nonvacuous_equivalence_delta(
                 model_exact_125,
                 model_precomp_125,
-                model_control,
+                model_control_125,
+                model_exact_11,
+                model_control_11,
                 params_dict,
                 rtol=measured_rtol,
-                lbol_high=model_exact_125,
-                lbol_low=model_exact_11,
                 context_msg="NLR-analytic delta, lbol=12.5 vs 11",
             )
 
@@ -428,7 +504,6 @@ class TestAGNNebularPrecomputeEquivalence:
         """
         from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, WavePrecomp
 
-        z = 0.1
         obs = Observation(photometry=Photometry(filters=tuple(narrow_ha_hb_filters)))
         key = jax.random.PRNGKey(42)
 
@@ -436,7 +511,7 @@ class TestAGNNebularPrecomputeEquivalence:
         model_exact = SEDModel.build(
             ssp_data=real_ssp_data,
             observation=obs,
-            redshift=Fixed(z),
+            redshift=Fixed(Z),
             approx=None,
             sfh={"type": "tsnorm", "*": FIXED, "log_total_mass": 6.0},
             dust={"type": "none"},
@@ -454,7 +529,7 @@ class TestAGNNebularPrecomputeEquivalence:
         model_precomp = SEDModel.build(
             ssp_data=real_ssp_data,
             observation=obs,
-            redshift=Fixed(z),
+            redshift=Fixed(Z),
             approx=WavePrecomp(),
             sfh={"type": "tsnorm", "*": FIXED, "log_total_mass": 6.0},
             dust={"type": "none"},
@@ -479,9 +554,9 @@ class TestAGNNebularPrecomputeEquivalence:
                 model_exact,
                 model_precomp,
                 model_control,
+                model_exact,
+                model_control,
                 params_dict,
                 rtol=measured_rtol,
-                lbol_high=None,
-                lbol_low=None,
                 context_msg="BLR-analytic MUTANT (BLR disabled)",
             )

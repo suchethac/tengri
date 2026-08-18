@@ -14,7 +14,7 @@ The AGN radio component is selected via
 - ``"powerlaw"`` (default) — single power-law (:func:`radio_total`).
   Backwards-compatible default; behavior bit-identical to pre-aging
   releases.
-- ``"dpl"`` — AGNfitter-rx broken double power-law with phenomenological
+- ``"dpl"``: AGNfitter-rx broken double power-law with phenomenological
   ``exp(-nu/nu_cut)`` aging cutoff (:func:`radio_total_dpl`,
   Martinez-Ramirez+2024 Eq. 9-10). Uses ``radio_alpha_thin``,
   ``radio_alpha_thick``, ``radio_log_nu_t``, ``radio_log_nu_cut``.
@@ -38,7 +38,7 @@ Radio depends on quantities owned by other components:
   ``state.derived["L_agn_bol"]`` with a fallback to 0.0.
 - ``log_mstar`` (log10 M_⊙) — produced by the stellar component. Read
   from ``state.derived["log_mstar"]`` with a fallback to 10.0.
-- ``redshift`` — bare parameter from :data:`BARE_NAME_ALLOWLIST`.
+- ``redshift``: bare parameter from :data:`BARE_NAME_ALLOWLIST`.
 
 This is the canonical pattern documented in
 :class:`tengri.protocols.ForwardState`'s "Cross-component reads" section:
@@ -79,7 +79,7 @@ __all__ = ["RadioSEDComponent", "RadioSEDComponentConfig"]
 #
 # - ``"none"`` (new 2026-06) — AGN radio turned off; SF component only.
 # - ``"powerlaw"`` (default) — single power-law AGN radio
-# - ``"dpl"`` — double power-law AGN radio with aging cutoff
+# - ``"dpl"``: double power-law AGN radio with aging cutoff
 #
 # JP / KP / tribble (Jaffe & Perola 1973; Kardashev/Pacholczyk; Tribble
 # 1993) are NOT in this tuple — they require precomputed pitch-angle
@@ -95,10 +95,10 @@ AGN_RADIO_MODELS: tuple[str, ...] = ("none", "powerlaw", "dpl")
 # a hand-copied second list is how the dust menu and the radio error message
 # both drifted out of agreement with what the builder actually accepts.
 #
-# - ``"none"`` — SF synchrotron turned off; AGN radio only.
+# - ``"none"``: SF synchrotron turned off; AGN radio only.
 # - ``"bell2003"`` (default) — fixed-q FIR-radio correlation.
-# - ``"delvecchio2021"`` — mass- and z-dependent FIRRC at 1.4 GHz.
-# - ``"mccheyne2022"`` — mass- and z-dependent FIRRC at 150 MHz.
+# - ``"delvecchio2021"``: mass- and z-dependent FIRRC at 1.4 GHz.
+# - ``"mccheyne2022"``: mass- and z-dependent FIRRC at 150 MHz.
 SF_RADIO_MODELS: tuple[str, ...] = ("none", "bell2003", "delvecchio2021", "mccheyne2022")
 
 
@@ -599,11 +599,7 @@ class RadioSEDComponent(TemplateThreading):
 _TINY = 1e-30  # Floor for safe division
 
 
-# 21 cm HI line in Angstrom (= 1.4204 GHz). Kept bit-identical to the literal
-# in state_to_radio_quantities (component_factory.py) so the property values
-# match the orchestrator NamedTuple exactly. NOTE: this is the 21 cm line
-# frequency (1.4204 GHz), not a literal 1.400 GHz — see #1045 follow-up.
-_WAVE_21CM_AA = 21.106e8
+from tengri.utils.physics_constants import WAVE_1P4GHZ_AA
 
 
 def _l_1p4ghz_fn(state, params):
@@ -614,7 +610,7 @@ def _l_1p4ghz_fn(state, params):
 
     L_radio = jnp.asarray(derived["sed_radio"])
     wave = state.wave
-    return jnp.interp(_WAVE_21CM_AA, wave, L_radio)
+    return jnp.interp(WAVE_1P4GHZ_AA, wave, L_radio)
 
 
 def _l_thermal_fn(state, params):
@@ -636,7 +632,7 @@ def _l_nonthermal_fn(state, params):
 
     L_radio = jnp.asarray(derived["sed_radio"])
     wave = state.wave
-    l_1p4ghz = jnp.interp(_WAVE_21CM_AA, wave, L_radio)
+    l_1p4ghz = jnp.interp(WAVE_1P4GHZ_AA, wave, L_radio)
 
     log_nion = jnp.asarray(derived.get("log_nion", -jnp.inf))
     l_thermal = compute_l_radio_thermal_from_log_qh(log_nion)
@@ -653,7 +649,7 @@ def _q_ir_fn(state, params):
 
     L_radio = jnp.asarray(derived["sed_radio"])
     wave = state.wave
-    l_1p4ghz = jnp.interp(_WAVE_21CM_AA, wave, L_radio)
+    l_1p4ghz = jnp.interp(WAVE_1P4GHZ_AA, wave, L_radio)
 
     # Same seam as ``l_dust_absorbed``: the linear ``L_ir`` is ~3.6e43 erg/s and
     # is ``inf`` in float32, while q_IR is a dex ratio of order 2 (#1837).

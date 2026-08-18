@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:39.773** total execution time for 121 files **from all galleries**:
+**00:07.599** total execution time for 121 files **from all galleries**:
 
 .. container::
 
@@ -32,29 +32,11 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_ir_library_compare.py` (``../examples/dust_emission/plot_ir_library_compare.py``)
-     - 00:18.208
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_dust_geometry_screen_vs_mixed.py` (``../examples/dust_attenuation/plot_dust_geometry_screen_vs_mixed.py``)
-     - 00:06.255
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_advanced_plot_fisher_degeneracy.py` (``../examples/advanced/plot_fisher_degeneracy.py``)
-     - 00:05.573
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_dust_qpah_umin_grid.py` (``../examples/dust_emission/plot_dust_qpah_umin_grid.py``)
-     - 00:03.902
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_bump_delta_joint_grid.py` (``../examples/dust_attenuation/plot_bump_delta_joint_grid.py``)
-     - 00:01.918
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_tdust_vs_lir.py` (``../examples/dust_emission/plot_tdust_vs_lir.py``)
-     - 00:01.746
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_wg00_tau_v_sweep.py` (``../examples/dust_attenuation/plot_wg00_tau_v_sweep.py``)
-     - 00:01.453
+   * - :ref:`sphx_glr_auto_examples_igm_plot_igm_models_comparison.py` (``../examples/igm/plot_igm_models_comparison.py``)
+     - 00:07.599
      - 0.0
    * - :ref:`sphx_glr_auto_examples_advanced_plot_custom_attenuation_component.py` (``../examples/advanced/plot_custom_attenuation_component.py``)
-     - 00:00.717
+     - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_advanced_plot_diag_gradient_finite_difference.py` (``../examples/advanced/plot_diag_gradient_finite_difference.py``)
      - 00:00.000
@@ -66,6 +48,9 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_advanced_plot_diag_waveprecomp_accuracy.py` (``../examples/advanced/plot_diag_waveprecomp_accuracy.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_advanced_plot_fisher_degeneracy.py` (``../examples/advanced/plot_fisher_degeneracy.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_agn_plot_agn_disc_compare.py` (``../examples/agn/plot_agn_disc_compare.py``)
@@ -116,6 +101,12 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_birth_cloud_vs_diffuse.py` (``../examples/dust_attenuation/plot_birth_cloud_vs_diffuse.py``)
      - 00:00.000
      - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_bump_delta_joint_grid.py` (``../examples/dust_attenuation/plot_bump_delta_joint_grid.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_dust_geometry_screen_vs_mixed.py` (``../examples/dust_attenuation/plot_dust_geometry_screen_vs_mixed.py``)
+     - 00:00.000
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_grahsp_paper_fig7_galaxy_attenuation.py` (``../examples/dust_attenuation/plot_grahsp_paper_fig7_galaxy_attenuation.py``)
      - 00:00.000
      - 0.0
@@ -125,7 +116,16 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_uv_ir_energy_balance.py` (``../examples/dust_attenuation/plot_uv_ir_energy_balance.py``)
      - 00:00.000
      - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_wg00_tau_v_sweep.py` (``../examples/dust_attenuation/plot_wg00_tau_v_sweep.py``)
+     - 00:00.000
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_emission_plot_bosa_grid.py` (``../examples/dust_emission/plot_bosa_grid.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_dust_qpah_umin_grid.py` (``../examples/dust_emission/plot_dust_qpah_umin_grid.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_ir_library_compare.py` (``../examples/dust_emission/plot_ir_library_compare.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_emission_plot_mbb_temperature_beta_grid.py` (``../examples/dust_emission/plot_mbb_temperature_beta_grid.py``)
@@ -135,6 +135,9 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_emission_plot_pahspec_starlight_sweep.py` (``../examples/dust_emission/plot_pahspec_starlight_sweep.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_dust_emission_plot_tdust_vs_lir.py` (``../examples/dust_emission/plot_tdust_vs_lir.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_emission_plot_themis_alpha_sweep.py` (``../examples/dust_emission/plot_themis_alpha_sweep.py``)
@@ -147,9 +150,6 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_igm_plot_dla_redshift_evolution.py` (``../examples/igm/plot_dla_redshift_evolution.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_igm_plot_igm_models_comparison.py` (``../examples/igm/plot_igm_models_comparison.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_igm_plot_igm_redshift.py` (``../examples/igm/plot_igm_redshift.py``)

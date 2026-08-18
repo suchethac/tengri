@@ -964,8 +964,8 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "tengri.plot",
-   "module_short": "tengri",
+   "module": "tengri.analysis.plotting",
+   "module_short": "tengri.analysis.plotting",
    "name": "setup_style"
   }
  ],

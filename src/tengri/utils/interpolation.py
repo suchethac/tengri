@@ -93,6 +93,7 @@ def compute_grid_weights(
     scatter: float = 0.2,
     edges: jnp.ndarray | None = None,
     index_space_interp: bool | None = None,
+    on_out_of_grid: str = "clamp",
 ) -> jnp.ndarray:
     """Smooth triweight-kernel weights over a 1-D grid axis.
 
@@ -130,6 +131,15 @@ def compute_grid_weights(
           (see Notes below). Use this for Fritz, Nenkova, and other intentionally
           non-uniform grids.
         - ``False``: always use physical-space interpolation (legacy behavior).
+    on_out_of_grid : str
+        Behavior when the triweight kernel integrates to zero (query entirely
+        outside grid bounds). Default ``"clamp"`` (clip to edge value, zero
+        gradient outside). Alternative ``"nan"`` returns NaN out-of-grid for
+        explicit signal. Issue #895: choosing "clamp" is the CIGALE convention
+        (keeps gradient defined) but silently flattens the objective surface
+        outside the grid. A prior wider than the grid will sit on a gradient-free
+        plateau. Warnings at model construction flag this case so it can be
+        addressed by narrowing the prior to the grid extent.
 
     Returns
     -------
@@ -270,20 +280,29 @@ def compute_grid_weights(
     # Index-space bandwidth is always 0.5 (half a cell in index space)
     index_scatter = jnp.asarray(0.5, dtype=dt)
 
+    # Validate on_out_of_grid mode at trace time (static check)
+    if on_out_of_grid not in ("clamp", "nan"):
+        raise ValueError(f"on_out_of_grid must be 'clamp' or 'nan', got {on_out_of_grid!r}")
+
     # Compute weights: use index space for non-uniform, physical space for uniform.
     # Both branches are traced but only one result is kept.
+    # Handle on_out_of_grid choice: 'clamp' uses nearest-bin fallback, 'nan' returns NaN.
+    # The choice is static (known at trace time) so we use plain Python if, not jnp.where.
+    nan_fallback = jnp.full(n, jnp.nan) if on_out_of_grid == "nan" else None
+    use_nan_fallback = on_out_of_grid == "nan"
+
     cuml_phys = tw_cuml_kern(x, phys_edges, scatter)
     raw_phys = cuml_phys[:-1] - cuml_phys[1:]
     total_phys = jnp.sum(raw_phys)
     nearest_phys = jnp.argmin(jnp.abs(grid - x))
-    fallback_phys = jnp.zeros(n).at[nearest_phys].set(1.0)
+    fallback_phys = nan_fallback if use_nan_fallback else jnp.zeros(n).at[nearest_phys].set(1.0)
     weights_phys = jnp.where(total_phys > 0.0, raw_phys / total_phys, fallback_phys)
 
     cuml_idx = tw_cuml_kern(x_index, index_edges, index_scatter)
     raw_idx = cuml_idx[:-1] - cuml_idx[1:]
     total_idx = jnp.sum(raw_idx)
     nearest_idx = jnp.argmin(jnp.abs(index_grid - x_index))
-    fallback_idx = jnp.zeros(n).at[nearest_idx].set(1.0)
+    fallback_idx = nan_fallback if use_nan_fallback else jnp.zeros(n).at[nearest_idx].set(1.0)
     weights_idx = jnp.where(total_idx > 0.0, raw_idx / total_idx, fallback_idx)
 
     # Select the appropriate result based on uniformity
@@ -378,6 +397,7 @@ def compute_grid_window(
     grid: jnp.ndarray,
     bandwidth_cells: float = 0.5,
     edges: jnp.ndarray | None = None,
+    on_out_of_grid: str = "clamp",
 ) -> tuple[jnp.ndarray, jnp.ndarray]:
     """Kernel-supported slice of :func:`compute_grid_weights` on a uniform grid.
 
@@ -418,6 +438,11 @@ def compute_grid_window(
     edges : array, shape (n + 1,) or None
         Precomputed bin edges from :func:`edges_for_grid`.  Passing them keeps
         the whole-axis edge construction out of the traced graph.
+    on_out_of_grid : str
+        Behavior when the triweight kernel integrates to zero (query entirely
+        outside grid bounds). Default ``"clamp"`` (clip to edge value, zero
+        gradient outside). Alternative ``"nan"`` returns NaN out-of-grid.
+        See :func:`compute_grid_weights` for details. Issue #895.
 
     Returns
     -------
@@ -473,6 +498,10 @@ def compute_grid_window(
     >>> bool(jnp.allclose(apply_grid_window(table, start, w), 1.0))
     True
     """
+    # Validate on_out_of_grid mode at trace time (static check)
+    if on_out_of_grid not in ("clamp", "nan"):
+        raise ValueError(f"on_out_of_grid must be 'clamp' or 'nan', got {on_out_of_grid!r}")
+
     b = float(bandwidth_cells)
     if not b > 0.0:
         raise ValueError(f"bandwidth_cells must be positive; got {bandwidth_cells!r}")
@@ -505,7 +534,10 @@ def compute_grid_window(
     # Same fallback as compute_grid_weights: if the kernel misses the grid
     # entirely, put all weight on the nearest node. Clipping above guarantees
     # that node is inside the window.
-    fallback = jnp.zeros(width).at[nearest - start].set(1.0)
+    # Use plain Python if (not jnp.where) since on_out_of_grid is static.
+    use_nan_fallback = on_out_of_grid == "nan"
+    nan_fallback = jnp.full(width, jnp.nan) if use_nan_fallback else None
+    fallback = nan_fallback if use_nan_fallback else jnp.zeros(width).at[nearest - start].set(1.0)
     return start, jnp.where(total > 0.0, raw / total, fallback)
 
 

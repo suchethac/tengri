@@ -4,7 +4,7 @@
 
 We are building a scientific software project that welcomes contributors of all backgrounds and experience levels. We aim to create an environment where people can collaborate respectfully, learn from each other, and do good science together.
 
-## Expected Behaviour
+## Expected Behavior
 
 - Be welcoming and inclusive. Treat everyone with respect, regardless of their experience, identity, or background.
 - Engage constructively. Disagree on ideas, not people. When you critique code or methods, focus on the technical substance.
@@ -12,7 +12,7 @@ We are building a scientific software project that welcomes contributors of all 
 - Give credit fairly. Acknowledge others' contributions, ideas, and inspiration. Cite upstream code and publications accurately.
 - Listen actively. Value perspectives different from your own and be willing to update your views based on evidence.
 
-## Unacceptable Behaviour
+## Unacceptable Behavior
 
 The following conduct is not tolerated in this project:
 
@@ -32,7 +32,7 @@ The project maintainer will review reports in confidence, investigate as needed,
 - Private conversation with the person in question to clarify expectations.
 - Public apology if a breach affects the community.
 - Suspension from communication channels or contributions.
-- Permanent ban from the project if behaviour is severe or repeated.
+- Permanent ban from the project if behavior is severe or repeated.
 
 The maintainer will not disclose the identity of the person who reported the concern unless they consent.
 

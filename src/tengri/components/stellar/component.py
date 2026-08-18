@@ -5,9 +5,9 @@ Merges the SFH and SSP sub-modules into a single ``SEDComponent``.
 
 Model selection (see :class:`StellarSEDComponentConfig`):
 
-- ``sfh_model`` — any name in ``SFH_REGISTRY`` (``tsnorm``, ``dpl``,
+- ``sfh_model``: any name in ``SFH_REGISTRY`` (``tsnorm``, ``dpl``,
   ``dense_basis``, …); validated at construction.
-- ``metallicity_model`` — any name in ``MET_REGISTRY`` (``delta``,
+- ``metallicity_model``: any name in ``MET_REGISTRY`` (``delta``,
   ``bins``, ``table``, …); validated at construction.
 - ``field=True`` adds the stochastic GP-field parameters on top of the
   chosen mean SFH.
@@ -1514,7 +1514,12 @@ class StellarSEDComponentConfig(SEDComponentConfig):
         parametric/bursty variants.
     field : bool
         If ``True``, applies stochastic log-normal GP modulation to the mean SFH.
-        Default ``False`` (no field).
+        Default ``False`` (no field). **CIC/DSPS coupling** (issue #1470): when
+        ``field=True``, the integration kernel is always ``"dsps"`` regardless of
+        ``age_kernel``. The GP field draw is defined on the coarse SSP lookback
+        grid, so a dense cloud-in-cell integrand is not available. A dense reference
+        path is not possible; asking for ``age_kernel="cic"`` together with
+        ``field=True`` raises an error.
     n_grid : int
         Lookback-time grid resolution for SFH evaluation and the published
         ``state.derived["sfh_grid_lbt_yr"]`` array.
@@ -1524,8 +1529,9 @@ class StellarSEDComponentConfig(SEDComponentConfig):
         (piecewise-constant per age bin), ``"table"`` (user-provided), and
         ``"chem_evol"`` (closed-box chemical evolution).
     sps_backend : str
-        Stellar population synthesis backend. Currently supports ``"dsps"``
-        (DSPS native triweight-MDF CSP integration).
+        **Deprecated** (issue #1470). This field is inert and has no effect on
+        the code path. Use ``age_kernel`` to select between ``"cic"`` and ``"dsps"``
+        integration kernels (see below). Will be removed in tengri v1.0.
     age_kernel : str or None
         How the SFH is integrated onto the SSP age grid — ``"cic"``, ``"dsps"``,
         or ``None`` (default) to auto-select: :data:`DEFAULT_AGE_KERNEL` on the
@@ -1610,6 +1616,20 @@ class StellarSEDComponentConfig(SEDComponentConfig):
     # SFH's ``sfh_t_gyr`` nodes (requires ``sfh_model="table"``; #996).
     met_table_log_age_yr: Any = None
     met_table_log_z_abs: Any = None
+
+    def __post_init__(self):
+        """Emit deprecation warning for sps_backend (issue #1470)."""
+        import warnings
+
+        if self.sps_backend != "dsps":
+            warnings.warn(
+                f"StellarSEDComponentConfig.sps_backend={self.sps_backend!r} is "
+                "deprecated and will be removed in tengri v1.0. This field has no "
+                "effect on the code path; use age_kernel to select between 'cic' and "
+                "'dsps' integration kernels instead.",
+                DeprecationWarning,
+                stacklevel=3,
+            )
 
 
 @dataclass(frozen=True)

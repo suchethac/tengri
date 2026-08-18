@@ -88,7 +88,7 @@ def test_template_hoist_returns_same_output_as_lru_load():
 
     wave = jnp.logspace(3, 5, 200)
     params = dict(
-        agn_log_lbol=44.5,
+        agn_log_lbol=10.92,
         agn_disc_block="grahsp_sbpl",
         agn_nlr_block="grahsp",
         agn_blr_block="grahsp",
@@ -242,7 +242,7 @@ def test_parity_at_grid_center():
         agn_feii_block="none",
         agn_torus_block="grahsp",
         agn_attenuation_block="none",
-        agn_log_lbol=45.0,
+        agn_log_lbol=11.42,
         agn_grahsp_l5100=l5100_value,
     )
     # Trapezoidal filter integration: <F_nu> = int(F_nu * trans / nu dnu) /

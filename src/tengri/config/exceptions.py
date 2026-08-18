@@ -472,12 +472,12 @@ class LaplaceVarianceCeilingWarning(UserWarning):
 
     A clipped direction is usually one of three things, and the remedy differs:
 
-    - **an exact degeneracy** — two parameters that enter the model only in
+    - **an exact degeneracy**: two parameters that enter the model only in
       one combination, so the likelihood is flat along a ridge (``met_alpha_fe``
       and ``met_logzsol`` are exactly this, see
       :class:`DegenerateParameterPairWarning` and issue #1095). Fix the model,
       not the floor: hold one of the pair fixed.
-    - **a genuinely unconstrained parameter** — the data carry no information
+    - **a genuinely unconstrained parameter**: the data carry no information
       about it. The prior, not ``1 / min_eigenvalue``, is the honest answer;
       consider fixing it or reporting it as prior-dominated.
     - **numerical noise** in a finite-difference Hessian near a flat direction,
@@ -519,6 +519,37 @@ class LaplaceNotAtModeWarning(UserWarning):
     --------
     tengri.inference.backends.laplace.run_laplace
         Emits this warning; reports ``newton_decrement`` in ``diagnostics``.
+    """
+
+
+class ShockPhotoionizedMixedWarning(UserWarning):
+    """Shock component's discrete line emission is invisible to predict_line_fluxes (#927).
+
+    When a model combines:
+    - An active shock component (``shock={'type':'mappings',...}`` with non-zero fraction)
+    - A photoionized nebular backend (Cue or CloudyGrid, which publish discrete line catalogs)
+
+    The shock's line luminosities (Hα, Hβ, etc.) are **not** included in the catalog that
+    :meth:`SEDModel.predict_line_fluxes` reads. MAPPINGS V bakes shock lines into the
+    continuum SED only (``sed_shock``), so the discrete line flux output is invisible to
+    line-fitting constraints.
+
+    Consequence: fitting a model with this combination using a line-flux likelihood will
+    have zero gradient with respect to ``shock_frac`` / ``shock_log_lhalpha`` / shock
+    kinematic parameters from the line-flux channel alone. The shock is constrained only
+    through broadband or spectroscopic continuum, not through emission line ratios.
+
+    **Remedies:**
+
+    1. Measure line fluxes from the spectrum instead: use
+       :meth:`SEDModel.measure_line_fluxes` (the optical pipeline's flux-extraction
+       method), which reads discrete lines off the continuum and works with any backend.
+    2. Fit the shock through continuum only (disable line-flux likelihood).
+    3. Replace the photoionized backend with BakedIn (no discrete lines anywhere), which
+       silently includes shock and is equally transparent to predict_line_fluxes (neither
+       publishes a discrete catalog).
+
+    See issue #927 for the full boundary and architecture discussion.
     """
 
 

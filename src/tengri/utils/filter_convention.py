@@ -38,11 +38,11 @@ class FilterConvention(StrEnum):
 
     and the member selects the weight :math:`w(\lambda)`:
 
-    - ``BESSELL`` — photon-counting, :math:`w = 1/\lambda`. The physically
+    - ``BESSELL``: photon-counting, :math:`w = 1/\lambda`. The physically
       correct mean for photon-counting detectors (all optical/NIR CCDs) and
       how the AB system is realized by surveys. Matches DSPS, FSPS, sedpy,
       and prospector. **This is the default.**
-    - ``ENERGY`` — energy-counting, :math:`w = 1/\lambda^2` (i.e. flat in
+    - ``ENERGY``: energy-counting, :math:`w = 1/\lambda^2` (i.e. flat in
       frequency, :math:`\int F_\nu T\,d\nu / \int T\,d\nu`). Matches CIGALE
       and bagpipes; use it when reproducing those codes.
 

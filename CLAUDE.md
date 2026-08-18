@@ -22,8 +22,8 @@ Differentiable SED fitting code in JAX. Models galaxy star formation histories a
 
 # The heavy trees (tests/inference, tests/integration) are auto-marked `slow`
 # in tests/conftest.py and deselected by default: 15% of the tests, but the
-# overwhelming majority of the wall clock (two test_user_scenarios tests alone
-# run 24 min and 18 min). They run in CI as a schedule/label-gated job.
+# overwhelming majority of the wall clock (test_user_scenarios alone runs ~11-12 min).
+# They run in CI as a schedule/label-gated job.
 .venv/bin/pytest tests/ -q -m slow            # the heavy trees only
 .venv/bin/pytest tests/ -q -m 'not crossval'  # everything (fast + slow)
 

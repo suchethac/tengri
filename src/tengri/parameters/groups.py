@@ -53,11 +53,11 @@ marker lines to jump. In order:
 
 - registry loading helpers and ``_valid_*_types()`` menus
 - ``Constants``
-- ``Main API`` — ``parse_groups()``
-- ``Internal helpers`` — one ``_translate_<group>()`` per group (sfh,
+- ``Main API``: ``parse_groups()``
+- ``Internal helpers``: one ``_translate_<group>()`` per group (sfh,
   stellar, dust, neb, shock, igm, radio, foreground, xray, agn), then
   key validation and per-parameter resolution
-- ``Inverse: Parameters to nested-dict form`` — ``parameters_to_groups()``
+- ``Inverse: Parameters to nested-dict form``: ``parameters_to_groups()``
 
 Notes
 -----
@@ -1240,10 +1240,10 @@ def _declared_param_names(component_type: str) -> frozenset[str] | None:
     An empty ``_priors`` is **three** questions wearing one shape, and inferring
     from it is wrong for two of them. The component is asked instead:
 
-    * ``declares_no_parameters = True`` — genuinely parameter-free
+    * ``declares_no_parameters = True``: genuinely parameter-free
       (``pah_drude``, a pure template shape). Narrowing to the empty set is
       correct: it is what every engine that *does* declare priors gets.
-    * ``reads_parameters = {...}`` — reads real knobs declared elsewhere.
+    * ``reads_parameters = {...}``: reads real knobs declared elsewhere.
       ``energy_balance_split``'s warm/cold knobs live in
       ``components/dust/_params.py`` because re-declaring them beside the
       attenuator's would raise a duplicate declaration.
@@ -2285,10 +2285,10 @@ def _translate_shock(shock_dict: dict, result: dict) -> None:
 
     Recognized structural keys:
 
-    - ``norm`` — ``"frac"`` (relative to the galaxy Halpha, default) or
+    - ``norm``: ``"frac"`` (relative to the galaxy Halpha, default) or
       ``"lhalpha"`` (absolute ``shock_log_lhalpha``).
-    - ``abundance`` — MAPPINGS abundance set (``"solar"``, ``"2xsolar"``, …).
-    - ``component`` — ``"shock"`` | ``"precursor"`` | ``"combined"``.
+    - ``abundance``: MAPPINGS abundance set (``"solar"``, ``"2xsolar"``, …).
+    - ``component``: ``"shock"`` | ``"precursor"`` | ``"combined"``.
 
     Per-parameter overrides (``frac``, ``log_lhalpha``, ``velocity``,
     ``log_density``, ``b_over_sqrt_n``) resolve to the ``shock_*`` bucket

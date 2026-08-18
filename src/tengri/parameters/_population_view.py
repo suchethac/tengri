@@ -32,15 +32,15 @@ class PopulationSpecView:
     Implements the implicit :class:`Parameters` Protocol that
     :class:`Fitter` consumes:
 
-    - ``free_params``        — list of free-parameter names
-    - ``all_params``         — list of all parameter names
-    - ``fixed_params``       — list of fixed-parameter names
-    - ``n_free``             — number of free parameters
-    - ``stochastic``         — boolean flag
-    - ``_distributions``     — dict of name → Distribution
+    - ``free_params``: list of free-parameter names
+    - ``all_params``: list of all parameter names
+    - ``fixed_params``: list of fixed-parameter names
+    - ``n_free``: number of free parameters
+    - ``stochastic``: boolean flag
+    - ``_distributions``: dict of name → Distribution
     - ``get_distribution(name)``
     - ``get_fixed_values()``
-    - ``sample(key)``        — **vmapped over N for per-galaxy params**
+    - ``sample(key)``: **vmapped over N for per-galaxy params**
 
     Parameters
     ----------

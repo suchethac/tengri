@@ -11,11 +11,11 @@ That is not hypothetical. The AGN NLR line template is Richardson et al. 2014,
 MNRAS, 437, 2376, *"Interpreting the ionization sequence in AGN emission-line
 spectra"*. The repo cited it three times, three different ways:
 
-* ``components/agn/nlr.py`` — "Optical Spectroscopy of Post-Starburst
+* ``components/agn/nlr.py``: "Optical Spectroscopy of Post-Starburst
   Galaxies," ApJ **786, 87**
-* ``components/agn/nlr_gaussian_precompute.py`` — same title, ApJ **782, 33**,
+* ``components/agn/nlr_gaussian_precompute.py``: same title, ApJ **782, 33**,
   carrying an inline ``CITATION-AUDIT NOTE: not found`` that was left in place
-* ``docs/adr/0015-cigale-alignment.md`` — "Predicting the Emission Line
+* ``docs/adr/0015-cigale-alignment.md``: "Predicting the Emission Line
   Spectrum of Quasars," ApJ 786, 87
 
 ``2014ApJ...786...87`` is Brooks & Zolotov, *"Why Baryons Matter: The Kinematics

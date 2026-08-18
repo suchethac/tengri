@@ -70,10 +70,17 @@ def _resolve_synthesizer_grid(kind: str) -> str:
     for c in candidates:
         if c.exists():
             return str(c)
-    raise FileNotFoundError(
-        f"Synthesizer AGN {kind.upper()} grid '{fname}' not found. Set "
-        "$TENGRI_SYNTHESIZER_AGN_GRID_DIR or place it in data/synthesizer_grids/ "
-        "(fetch via `synthesizer-download --agn-test-grids`)."
+    from tengri.config.exceptions import TengriIOError
+
+    raise TengriIOError(
+        f"Synthesizer AGN {kind.upper()} grid '{fname}' not found.\n"
+        "\n"
+        "Fix (one of):\n"
+        "  1. Download the Synthesizer test grids:\n"
+        "     synthesizer-download --agn-test-grids\n"
+        "     They will be placed in data/synthesizer_grids/\n"
+        "  2. Set the grid directory via environment variable:\n"
+        "     export TENGRI_SYNTHESIZER_AGN_GRID_DIR=/path/to/synthesizer_grids"
     )
 
 

@@ -31,17 +31,17 @@ Examples
 Scope
 -----
 
-- :mod:`tengri.builders.sfh` — one factory per canonical SFH variant
+- :mod:`tengri.builders.sfh`: one factory per canonical SFH variant
   in :data:`SFH_REGISTRY` (PR #79).
 - :mod:`tengri.builders.igm` / :mod:`~tengri.builders.radio` /
   :mod:`~tengri.builders.xray` — simple components with
   variant-string selectors and component-wide parameter sets.
-- :mod:`tengri.builders.neb` — nebular emission backends
+- :mod:`tengri.builders.neb`: nebular emission backends
   (none/ssp/cue/cloudy/cb19).
 - :mod:`tengri.builders.dust` (+ nested
   :mod:`~tengri.builders.dust.emission`) — attenuation
   top-level + IR emission sub-block.
-- :mod:`tengri.builders.agn` — top-level ``composable``
+- :mod:`tengri.builders.agn`: top-level ``composable``
   orchestrator + five sub-block submodules (``disc``, ``torus``,
   ``lines``, ``feii``, ``atten``).
 

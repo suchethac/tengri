@@ -72,7 +72,7 @@ def test_grid_metadata_sensible() -> None:
 
 @pytest.mark.bounds
 def test_output_shape_and_finiteness(torus_fn, wavelength) -> None:
-    sed = torus_fn(wavelength, agn_log_lbol=44.0, agn_tau=30.0, agn_torus_frac=0.5)
+    sed = torus_fn(wavelength, agn_log_lbol=10.42, agn_tau=30.0, agn_torus_frac=0.5)
     chex.assert_equal_shape([sed, wavelength])
     chex.assert_tree_all_finite(sed)
     assert jnp.all(sed >= 0.0)
@@ -85,15 +85,15 @@ def test_mir_peak_in_torus_range(torus_fn, wavelength) -> None:
 
     This is the headline sanity check vs Prospector's torus SED shape.
     """
-    sed = torus_fn(wavelength, agn_log_lbol=44.0, agn_tau=30.0)
+    sed = torus_fn(wavelength, agn_log_lbol=10.42, agn_tau=30.0)
     peak_um = float(wavelength[int(jnp.argmax(sed))]) / 1e4
     assert 8.0 < peak_um < 50.0, f"torus peak at {peak_um:.1f} um is unphysical"
 
 
 @pytest.mark.bounds
 def test_luminosity_scales_linearly_with_lbol(torus_fn, wavelength) -> None:
-    sed_lo = torus_fn(wavelength, agn_log_lbol=44.0, agn_tau=30.0)
-    sed_hi = torus_fn(wavelength, agn_log_lbol=45.0, agn_tau=30.0)
+    sed_lo = torus_fn(wavelength, agn_log_lbol=10.42, agn_tau=30.0)
+    sed_hi = torus_fn(wavelength, agn_log_lbol=11.42, agn_tau=30.0)
     mask = sed_lo > 0.0
     ratio = jnp.where(mask, sed_hi / jnp.where(mask, sed_lo, 1.0), 10.0)
     assert jnp.allclose(ratio[mask], 10.0, rtol=1e-5)
@@ -101,8 +101,8 @@ def test_luminosity_scales_linearly_with_lbol(torus_fn, wavelength) -> None:
 
 @pytest.mark.bounds
 def test_torus_frac_scales_linearly(torus_fn, wavelength) -> None:
-    sed_half = torus_fn(wavelength, agn_log_lbol=44.0, agn_torus_frac=0.5)
-    sed_full = torus_fn(wavelength, agn_log_lbol=44.0, agn_torus_frac=1.0)
+    sed_half = torus_fn(wavelength, agn_log_lbol=10.42, agn_torus_frac=0.5)
+    sed_full = torus_fn(wavelength, agn_log_lbol=10.42, agn_torus_frac=1.0)
     mask = sed_half > 0.0
     ratio = jnp.where(mask, sed_full / jnp.where(mask, sed_half, 1.0), 2.0)
     assert jnp.allclose(ratio[mask], 2.0, rtol=1e-5)
@@ -118,7 +118,7 @@ def test_on_grid_reproduces_clumpy_template(torus_fn) -> None:
     i30 = int(np.argmin(np.abs(raw["tau_axis"] - 30.0)))
     ref = np.asarray(raw["template"][i30])
     wave = jnp.asarray(raw["wavelength"])
-    sed = np.asarray(torus_fn(wave, agn_log_lbol=44.0, agn_tau=30.0))
+    sed = np.asarray(torus_fn(wave, agn_log_lbol=10.42, agn_tau=30.0))
     # Triweight is a smoothing kernel (not exact at nodes), so compare the
     # normalized spectral shape rather than asserting bit-exact node recovery.
     corr = float(np.corrcoef(sed, ref)[0, 1])
@@ -164,7 +164,7 @@ def test_grad_flows_through_tau(torus_fn, wavelength) -> None:
     """
 
     def scalar_loss(tau: float) -> float:
-        sed = torus_fn(wavelength, agn_log_lbol=44.0, agn_tau=tau)
+        sed = torus_fn(wavelength, agn_log_lbol=10.42, agn_tau=tau)
         return jnp.log1p(jnp.sum(sed))
 
     g = assert_grad_matches_fd(scalar_loss, 25.0)
@@ -189,7 +189,7 @@ def test_gradient_is_one_sided_at_nodes_where_spacing_changes(torus_fn, waveleng
     edges = edges_for_grid(tau_axis)
 
     def scalar_loss(tau: float) -> float:
-        sed = torus_fn(wavelength, agn_log_lbol=44.0, agn_tau=tau)
+        sed = torus_fn(wavelength, agn_log_lbol=10.42, agn_tau=tau)
         return jnp.log1p(jnp.sum(sed))
 
     # At tau=40 (node 4, spacings 10|20), compute left and right one-sided FD
@@ -227,7 +227,7 @@ def test_gradient_is_one_sided_at_nodes_where_spacing_changes(torus_fn, waveleng
 def test_vmap_over_tau(torus_fn, wavelength) -> None:
     """``jax.vmap`` over ``agn_tau`` (e.g. posterior-sample batches) works."""
     taus = jnp.array([10.0, 30.0, 80.0, 140.0])
-    batch = jax.vmap(lambda t: torus_fn(wavelength, agn_log_lbol=44.0, agn_tau=t))(taus)
+    batch = jax.vmap(lambda t: torus_fn(wavelength, agn_log_lbol=10.42, agn_tau=t))(taus)
     chex.assert_shape(batch, (taus.size, wavelength.size))
     chex.assert_tree_all_finite(batch)
 
@@ -238,11 +238,11 @@ def test_public_nenkova_torus_is_jit_safe(wavelength) -> None:
     from tengri.components.agn.torus import nenkova_torus
 
     sed = assert_jit_matches_eager(
-        lambda tau: nenkova_torus(wavelength, agn_log_lbol=44.0, agn_tau=tau), jnp.array(30.0)
+        lambda tau: nenkova_torus(wavelength, agn_log_lbol=10.42, agn_tau=tau), jnp.array(30.0)
     )
     chex.assert_tree_all_finite(sed)
     g = assert_grad_matches_fd(
-        lambda tau: jnp.sum(nenkova_torus(wavelength, agn_log_lbol=44.0, agn_tau=tau)), 50.0
+        lambda tau: jnp.sum(nenkova_torus(wavelength, agn_log_lbol=10.42, agn_tau=tau)), 50.0
     )
     assert jnp.isfinite(g)
 
