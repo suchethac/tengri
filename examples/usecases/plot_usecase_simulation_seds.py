@@ -21,8 +21,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import tengri
-from tengri import LOG10_ZSUN
 from tengri.plot import setup_style
+from tengri.units import LOG10_ZSUN
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")

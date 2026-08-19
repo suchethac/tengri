@@ -19,8 +19,8 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "tengri",
-   "module_short": "tengri",
+   "module": "tengri.units",
+   "module_short": "tengri.units",
    "name": "C_AA"
   }
  ],

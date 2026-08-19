@@ -39,8 +39,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import tengri
-from tengri import C_AA
 from tengri.plot import setup_style
+from tengri.units import C_AA
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")

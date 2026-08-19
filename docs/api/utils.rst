@@ -86,8 +86,8 @@ Physical Constants
 
 Fundamental physical constants in CGS units.
 
-.. autodata:: tengri.C_AA
+.. autodata:: tengri.units.C_AA
    :no-value:
 
-.. autodata:: tengri.LOG10_ZSUN
+.. autodata:: tengri.units.LOG10_ZSUN
    :no-value:
