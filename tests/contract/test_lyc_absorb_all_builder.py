@@ -21,7 +21,13 @@ def _build(ssp, obs, **dust_extra):
         ssp,
         observation=obs,
         sfh={"type": "delayed", "*": tengri.FIXED},
-        dust={"law": "power_law", "type": "two_component", "*": tengri.FIXED, "emission": None, **dust_extra},
+        dust={
+            "law": "power_law",
+            "type": "two_component",
+            "*": tengri.FIXED,
+            "emission": None,
+            **dust_extra,
+        },
         neb={"type": "none"},
         redshift=tengri.Fixed(0.05),
     )

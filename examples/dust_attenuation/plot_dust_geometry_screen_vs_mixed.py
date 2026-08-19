@@ -63,7 +63,13 @@ ssp = tengri.load_ssp()
 intrinsic_model = tengri.SEDModel.build(
     ssp,
     sfh=SFH,
-    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_bc": 0.0, "tau_diff": 0.0},
+    dust={
+        "law": "power_law",
+        "type": "two_component",
+        "all_params": tengri.FIXED,
+        "tau_bc": 0.0,
+        "tau_diff": 0.0,
+    },
     redshift=tengri.Fixed(0.05),
 )
 p_intrinsic = dict(intrinsic_model.spec.sample(jax.random.PRNGKey(0)))

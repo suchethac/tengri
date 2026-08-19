@@ -68,7 +68,13 @@ def _build_state():
             "log_total_mass": Fixed(0.0),
             "*": FIXED,
         },
-        dust={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+        dust={
+            "law": "power_law",
+            "type": "two_component",
+            "tau_bc": Fixed(0.0),
+            "tau_diff": Fixed(0.0),
+            "*": FIXED,
+        },
         redshift=Fixed(0.0),
     )
     return model.predict_state({})

@@ -27,7 +27,8 @@ def _model(ssp, obs, approx=None):
         ssp,
         observation=obs,
         sfh={"type": "delayed", "*": FIXED},
-        dust={"law": "power_law", 
+        dust={
+            "law": "power_law",
             "type": "two_component",
             "*": FIXED,
             "tau_diff": Uniform(0.0, 1.5),

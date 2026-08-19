@@ -98,6 +98,7 @@ for i in range(n_sf):
     }
 
     dust_config = {
+        "law_diff": "calzetti",
         "type": "two_component",
         "all_params": tengri.FIXED,
         "law_bc": "calzetti",
@@ -180,6 +181,7 @@ for i in range(n_agn):
     }
 
     dust_config = {
+        "law_diff": "calzetti",
         "type": "two_component",
         "all_params": tengri.FIXED,
         "law_bc": "calzetti",

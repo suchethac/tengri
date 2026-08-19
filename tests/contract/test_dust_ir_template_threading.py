@@ -119,7 +119,8 @@ def test_dust_emission_template_threads_as_argument(ssp, obs, emission):
                 ssp_data=ssp,
                 observation=obs,
                 sfh={"type": "dpl", "all_params": FIXED},
-                dust={"law": "power_law", 
+                dust={
+                    "law": "power_law",
                     "type": "two_component",
                     "all_params": FIXED,
                     "emission": {"type": emission},

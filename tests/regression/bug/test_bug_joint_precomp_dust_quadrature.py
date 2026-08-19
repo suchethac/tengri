@@ -96,7 +96,8 @@ def _build(ssp, obs, approx, *, tau_diff=1.5, z=0.05):
             sfh={"type": "dpl", "*": FIXED},
             # Diffuse-only: isolates the screen quadrature from the birth-cloud
             # LUT residual (#617).
-            dust={"law_diff": 'calzetti', 
+            dust={
+                "law_diff": "calzetti",
                 "type": "two_component",
                 "law_bc": "calzetti",
                 "*": FIXED,

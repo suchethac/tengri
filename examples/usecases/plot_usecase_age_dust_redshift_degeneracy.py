@@ -60,6 +60,7 @@ model_a = SEDModel.build(
         "log_total_mass": 10.0,  # Will be tuned for magnitude match
     },
     dust={
+        "law_diff": "calzetti",
         "type": "two_component",
         "law_bc": "calzetti",
         "all_params": tengri.FIXED,
@@ -89,6 +90,7 @@ model_b = SEDModel.build(
         "log_total_mass": 10.0,  # Will be tuned
     },
     dust={
+        "law_diff": "calzetti",
         "type": "two_component",
         "law_bc": "calzetti",
         "all_params": tengri.FIXED,
@@ -119,6 +121,7 @@ model_c = SEDModel.build(
         "log_total_mass": 10.0,  # Will be tuned
     },
     dust={
+        "law_diff": "calzetti",
         "type": "two_component",
         "law_bc": "calzetti",
         "all_params": tengri.FIXED,

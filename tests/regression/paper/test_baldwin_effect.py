@@ -47,7 +47,13 @@ def _build(ssp, log_lbol):
     return SEDModel.build(
         ssp_data=ssp,
         sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0), "*": FIXED},
-        dust={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+        dust={
+            "law": "power_law",
+            "type": "two_component",
+            "tau_bc": Fixed(0.0),
+            "tau_diff": Fixed(0.0),
+            "*": FIXED,
+        },
         agn={
             "type": "composable",
             "disc": {"type": "qsogen", "*": FIXED},

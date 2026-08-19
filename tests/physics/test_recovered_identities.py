@@ -137,7 +137,8 @@ def test_kennicutt_1998_halpha_sfr_chabrier(ssp_fsps_chabrier):
             "end_gyr": 0.0,
             "log_total_mass": tengri.FREE,
         },
-        dust={"law": "power_law", 
+        dust={
+            "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
             "tau_diff": 0.0,

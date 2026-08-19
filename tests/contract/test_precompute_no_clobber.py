@@ -91,7 +91,13 @@ def _build_with_wave_precomp(ssp_data, filters):
         approx=WavePrecomp(),
         sfh={"type": "dpl", "*": FIXED},
         neb={"type": "none"},
-        dust={"law_diff": 'calzetti', "type": "two_component", "law_bc": "calzetti", "*": FIXED, "tau_diff": 0.5},
+        dust={
+            "law_diff": "calzetti",
+            "type": "two_component",
+            "law_bc": "calzetti",
+            "*": FIXED,
+            "tau_diff": 0.5,
+        },
     )
 
 
@@ -138,7 +144,13 @@ def test_unconditional_pass_still_resolves_without_approx(synthetic_ssp, tophat_
         approx=None,
         sfh={"type": "dpl", "*": FIXED},
         neb={"type": "none"},
-        dust={"law_diff": 'calzetti', "type": "two_component", "law_bc": "calzetti", "*": FIXED, "tau_diff": 0.5},
+        dust={
+            "law_diff": "calzetti",
+            "type": "two_component",
+            "law_bc": "calzetti",
+            "*": FIXED,
+            "tau_diff": 0.5,
+        },
     )
 
     chain = model._build_component_chain()

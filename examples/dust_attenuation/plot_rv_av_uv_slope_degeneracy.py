@@ -71,6 +71,9 @@ def _model(av, rv):
             "all_params": tengri.FIXED,
             "tau_bc": 0.0,
             "tau_diff": av / 1.086,
+            # Per-screen pair: this example varies R_V on the diffuse screen,
+            # so the two screens deliberately differ and both must be named.
+            "law_bc": "power_law",
             "law_diff": "cardelli",
             "Rv": rv,
         },

@@ -89,7 +89,12 @@ def population():
                 "psd_sigma": Fixed(float(psd_sigma)),
                 "psd_tau_myr": Fixed(float(psd_tau_myr)),
             },
-            dust={"law_diff": 'calzetti', "type": "two_component", "law_bc": "calzetti", "all_params": FIXED},
+            dust={
+                "law_diff": "calzetti",
+                "type": "two_component",
+                "law_bc": "calzetti",
+                "all_params": FIXED,
+            },
             neb={"type": "none"},
             redshift=Fixed(0.05),
         )
@@ -129,7 +134,12 @@ def spectroscopic_population():
                 "psd_sigma": Fixed(float(psd_sigma)),
                 "psd_tau_myr": Fixed(float(psd_tau_myr)),
             },
-            dust={"law_diff": 'calzetti', "type": "two_component", "law_bc": "calzetti", "all_params": FIXED},
+            dust={
+                "law_diff": "calzetti",
+                "type": "two_component",
+                "law_bc": "calzetti",
+                "all_params": FIXED,
+            },
             neb={"type": "none"},
             redshift=Fixed(0.05),
             n_grid=8,

@@ -22,7 +22,8 @@ pytestmark = [pytest.mark.contract, pytest.mark.regression_bug]
 
 
 def _build(ssp, obs, **dust_extra):
-    dust = {"law": "power_law", 
+    dust = {
+        "law": "power_law",
         "type": "two_component",
         "*": tengri.FIXED,
         "tau_bc": 1.0,

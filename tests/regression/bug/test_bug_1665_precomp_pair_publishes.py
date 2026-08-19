@@ -106,7 +106,12 @@ def _build(approx, index_data):
             ssp_data=ssp,
             observation=obs,
             sfh={"type": "dpl", "all_params": FIXED},
-            dust={"law_diff": 'calzetti', "type": "two_component", "law_bc": "calzetti", "all_params": FIXED},
+            dust={
+                "law_diff": "calzetti",
+                "type": "two_component",
+                "law_bc": "calzetti",
+                "all_params": FIXED,
+            },
             neb={"type": "cue", "all_params": FIXED},
             redshift=Fixed(0.05),
             approx=approx,

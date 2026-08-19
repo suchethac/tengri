@@ -68,7 +68,11 @@ def test_dust_validator_still_rejects_unknown_emission_with_suggestion() -> None
 
     with pytest.raises(ValueError, match="Unknown dust emission type 'modified_blakbody'"):
         _translate_dust(
-            {"type": "two_component", "law": "power_law", "emission": {"type": "modified_blakbody"}},  # typo
+            {
+                "type": "two_component",
+                "law": "power_law",
+                "emission": {"type": "modified_blakbody"},
+            },  # typo
             {},
         )
 

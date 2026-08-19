@@ -230,7 +230,12 @@ def _shock_cases():
             "shock",
             "shock_",
             {
-                "dust": {"law_diff": 'calzetti', "type": "two_component", "law_bc": "calzetti", "*": FIXED},
+                "dust": {
+                    "law_diff": "calzetti",
+                    "type": "two_component",
+                    "law_bc": "calzetti",
+                    "*": FIXED,
+                },
                 "neb": {"type": "none"},
                 "shock": {"norm": norm, "*": FREE},
             },
@@ -284,7 +289,12 @@ def _xray_cases():
             "xray",
             "xray_",
             {
-                "dust": {"law_diff": 'calzetti', "type": "two_component", "law_bc": "calzetti", "*": FIXED},
+                "dust": {
+                    "law_diff": "calzetti",
+                    "type": "two_component",
+                    "law_bc": "calzetti",
+                    "*": FIXED,
+                },
                 "neb": {"type": "none"},
                 "xray": {"type": model, "*": FREE},
                 # The AGN needs a DISC, not just a luminosity. The corona
@@ -607,7 +617,12 @@ def test_the_threaded_values_actually_reach_the_backend(synthetic_ssp_wide, panc
             ssp_data=synthetic_ssp_wide,
             observation=panchromatic_obs,
             sfh={"type": "dpl", "*": FIXED},
-            dust={"law_diff": 'calzetti', "type": "two_component", "law_bc": "calzetti", "*": FIXED},
+            dust={
+                "law_diff": "calzetti",
+                "type": "two_component",
+                "law_bc": "calzetti",
+                "*": FIXED,
+            },
             neb={"type": "cb19", "*": FREE},
             redshift=Fixed(0.5),
         )

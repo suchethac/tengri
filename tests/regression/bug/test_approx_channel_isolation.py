@@ -61,7 +61,8 @@ _BASE = dict(
 #: Dust emission is load-bearing: it is the energy-balance consumer of
 #: ``sed_nebular``, and without an IR component nothing reads the absorbed
 #: budget and the defect is invisible.
-_DUST = {"law_diff": 'calzetti', 
+_DUST = {
+    "law_diff": "calzetti",
     "type": "two_component",
     "law_bc": "calzetti",
     "all_params": FIXED,

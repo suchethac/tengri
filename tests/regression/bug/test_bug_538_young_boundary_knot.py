@@ -107,7 +107,8 @@ def test_young_knot_preserves_mass_conservation():
                 "*": FIXED,
             },
             met={"logzsol": Fixed(0.0), "*": FIXED},
-            dust={"law": "power_law", 
+            dust={
+                "law": "power_law",
                 "type": "two_component",
                 "tau_bc": Fixed(0.0),
                 "tau_diff": Fixed(0.0),

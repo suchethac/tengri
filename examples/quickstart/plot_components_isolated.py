@@ -41,13 +41,20 @@ HOST = dict(
     redshift=tengri.Fixed(0.05),
 )
 DUST_ON = {
+    "law": "power_law",
     "type": "two_component",
     "all_params": tengri.FIXED,
     "tau_diff": 0.4,
     "tau_bc": 0.6,
     "emission": {"type": "dale2014", "all_params": tengri.FIXED},
 }
-DUST_OFF = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+DUST_OFF = {
+    "law": "power_law",
+    "type": "two_component",
+    "all_params": tengri.FIXED,
+    "tau_diff": 0.0,
+    "tau_bc": 0.0,
+}
 
 
 def _nuLnu(**blocks):

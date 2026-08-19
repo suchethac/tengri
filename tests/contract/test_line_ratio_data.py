@@ -82,7 +82,12 @@ class TestLineRatioPrediction:
                 ssp_data=ssp,
                 observation=obs,
                 sfh={"type": "dpl", "*": FIXED},
-                dust={"law_diff": 'calzetti', "type": "two_component", "law_bc": "calzetti", "*": FIXED},
+                dust={
+                    "law_diff": "calzetti",
+                    "type": "two_component",
+                    "law_bc": "calzetti",
+                    "*": FIXED,
+                },
                 neb={"type": "cue", "*": FIXED},
                 redshift=Fixed(0.05),
                 approx=approx,
@@ -122,7 +127,12 @@ class TestLineRatioLikelihood:
                 ssp_data=ssp,
                 observation=obs,
                 sfh={"type": "dpl", "*": FIXED},
-                dust={"law_diff": 'calzetti', "type": "two_component", "law_bc": "calzetti", "*": FIXED},
+                dust={
+                    "law_diff": "calzetti",
+                    "type": "two_component",
+                    "law_bc": "calzetti",
+                    "*": FIXED,
+                },
                 neb={"type": "cue", "*": FIXED},
                 redshift=Fixed(0.05),
             )

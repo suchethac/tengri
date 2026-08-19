@@ -125,7 +125,8 @@ class TestRecipeParametersManualRecipes:
         """Recipe with explicit Uniform priors for free params."""
         recipe = {
             "sfh": {"type": "dpl", "*": FREE},
-            "dust": {"law_diff": 'calzetti', 
+            "dust": {
+                "law_diff": "calzetti",
                 "type": "two_component",
                 "law_bc": "calzetti",
                 "*": FREE,

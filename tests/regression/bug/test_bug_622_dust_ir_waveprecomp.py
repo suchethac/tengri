@@ -62,7 +62,8 @@ def test_dust_ir_in_waveprecomp_photometry(emission):
     obs = _ir_obs()
     groups = dict(
         sfh={"type": "dpl", "*": FIXED},
-        dust={"law_diff": 'calzetti', 
+        dust={
+            "law_diff": "calzetti",
             "type": "two_component",
             "law_bc": "calzetti",
             "*": FIXED,
@@ -131,7 +132,8 @@ def test_dust_ir_optical_reddest_band_not_inflated(filters):
     obs = Observation(photometry=Photometry.from_names(filters))
     groups = dict(
         sfh={"type": "dpl", "*": FIXED},
-        dust={"law_diff": 'calzetti', 
+        dust={
+            "law_diff": "calzetti",
             "type": "two_component",
             "law_bc": "calzetti",
             "*": FIXED,

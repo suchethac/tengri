@@ -93,7 +93,8 @@ def test_phot_plus_dn4000_objective_is_jit_and_nonsilent(ssp_data_wne):
             ssp_data=ssp_data_wne,
             observation=obs,
             sfh={"type": "dpl", "*": FREE},
-            dust={"law_diff": 'calzetti', 
+            dust={
+                "law_diff": "calzetti",
                 "type": "two_component",
                 "law_bc": "calzetti",
                 "*": FIXED,
@@ -117,7 +118,8 @@ def test_phot_plus_dn4000_objective_is_jit_and_nonsilent(ssp_data_wne):
             ssp_data=ssp_data_wne,
             observation=obs,
             sfh={"type": "dpl", "*": FREE},
-            dust={"law_diff": 'calzetti', 
+            dust={
+                "law_diff": "calzetti",
                 "type": "two_component",
                 "law_bc": "calzetti",
                 "*": FIXED,
@@ -152,7 +154,8 @@ def test_phot_plus_dn4000_objective_is_jit_and_nonsilent(ssp_data_wne):
             ssp_data=ssp_data_wne,
             observation=obs_bad,
             sfh={"type": "dpl", "*": FREE},
-            dust={"law_diff": 'calzetti', 
+            dust={
+                "law_diff": "calzetti",
                 "type": "two_component",
                 "law_bc": "calzetti",
                 "*": FIXED,
@@ -181,7 +184,8 @@ def test_desi_joint_phot_lines_dn4000_objective(ssp_data_fsps):
                 ssp_data=ssp_data_fsps,
                 observation=obs,
                 sfh={"type": "dpl", "*": FREE},
-                dust={"law_diff": 'calzetti', 
+                dust={
+                    "law_diff": "calzetti",
                     "type": "two_component",
                     "law_bc": "calzetti",
                     "*": FIXED,

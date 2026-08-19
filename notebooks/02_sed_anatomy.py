@@ -140,6 +140,7 @@ kitchen_sink = dict(
         "tau_gyr": 4.0,
     },
     dust={
+        "law_diff": "calzetti",
         "type": "two_component",
         "law_bc": "calzetti",
         "all_params": FIXED,
@@ -457,6 +458,7 @@ money_shot = dict(
         "tau_gyr": 13.2,
     },
     dust={
+        "law_diff": "calzetti",
         "type": "two_component",
         "law_bc": "calzetti",
         "all_params": FIXED,

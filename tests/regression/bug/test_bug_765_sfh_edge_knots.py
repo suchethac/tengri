@@ -116,7 +116,13 @@ def test_edge_knot_sfh_conserves_mass_and_finite(synthetic_ssp_wide):
     model = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
         sfh=sfh,
-        dust={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+        dust={
+            "law": "power_law",
+            "type": "two_component",
+            "tau_bc": Fixed(0.0),
+            "tau_diff": Fixed(0.0),
+            "*": FIXED,
+        },
         redshift=Fixed(0.0),
     )
     state = model.predict_state({})
@@ -139,7 +145,13 @@ def test_edge_knot_sfh_is_jit_safe(synthetic_ssp_wide):
             "flex_1": Fixed(-0.3),
             "*": FIXED,
         },
-        dust={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+        dust={
+            "law": "power_law",
+            "type": "two_component",
+            "tau_bc": Fixed(0.0),
+            "tau_diff": Fixed(0.0),
+            "*": FIXED,
+        },
         redshift=Fixed(0.0),
     )
     sed = jax.jit(lambda p: model.predict_state(p).sed_intrinsic)({})
