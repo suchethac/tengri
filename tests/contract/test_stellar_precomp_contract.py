@@ -130,7 +130,7 @@ def test_dust_attenuation_precomps_published(ssp, synthetic_tophat_obs):
         redshift=Fixed(0.05),
         dust_tau_v=Fixed(0.3),
         dust_model="single_component",
-        dust_law="calzetti",
+        dust_law_bc="calzetti",
         apply_igm=False,
     )
     obs = synthetic_tophat_obs
@@ -236,7 +236,7 @@ def test_dust_luts_absent_without_wave_precomp(ssp, synthetic_tophat_obs):
         redshift=Fixed(0.05),
         dust_tau_v=Fixed(0.3),
         dust_model="single_component",
-        dust_law="power_law",
+        dust_law_bc="power_law",
         apply_igm=False,
     )
     obs = synthetic_tophat_obs

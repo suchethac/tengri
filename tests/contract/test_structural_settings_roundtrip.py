@@ -242,10 +242,12 @@ def test_every_structural_key_has_a_roundtrip_rule():
     # Handled by _extract_group_type and the wildcard analyzer, not the table.
     meta_keys = {"type", "*"}
     # Dust attenuation laws stay hand-written in _add_structural_settings:
-    # law_diff inherits from law_bc, the per-component overrides live in a
-    # flattened dict, and two booleans are stored as a float cutoff. None is a
-    # plain "attribute differs from default" comparison.
+    # law/law_bc/law_diff are an explicit XOR (never a default comparison:
+    # the emit collapses to shared 'law' when both screens agree, else the
+    # law_bc/law_diff pair), the per-component overrides live in a flattened
+    # dict, and two booleans are stored as a float cutoff.
     hand_written = {
+        "law",
         "law_bc",
         "law_diff",
         "law_neb",

@@ -148,7 +148,7 @@ class TestGrammar:
 
         result: dict = {}
         _translate_dust(
-            {"law": "power_law", "type": "two_component", "law_diff": "calzetti", "lyman_cutoff": True}, result
+            {"type": "two_component", "law_bc": "calzetti", "law_diff": "calzetti", "lyman_cutoff": True}, result
         )
         assert result["dust_lyman_cutoff_aa"] == LYMAN_LIMIT_AA
 

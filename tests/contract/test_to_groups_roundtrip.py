@@ -345,15 +345,28 @@ class TestToGroupsStructuralSettings:
     """Test that structural settings are preserved in to_groups output."""
 
     def test_to_groups_preserves_dust_law(self):
-        """dust_law_bc setting is preserved."""
+        """Differing per-screen laws are preserved as the law_bc/law_diff pair."""
         original = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
-            dust={"law_diff": 'kriek_conroy', "type": "two_component", "law_bc": "kriek_conroy", "*": FIXED},
+            dust={"type": "two_component", "law_bc": "kriek_conroy", "law_diff": "smc", "*": FIXED},
             redshift=Fixed(0.1),
         )
         result = original.to_groups()
 
         assert result["dust"]["law_bc"] == "kriek_conroy"
+        assert result["dust"]["law_diff"] == "smc"
+
+    def test_to_groups_collapses_shared_dust_law(self):
+        """Equal per-screen laws round-trip as the shared 'law' key."""
+        original = parse_groups(
+            sfh={"type": "dpl", "*": FIXED},
+            dust={"type": "two_component", "law": "kriek_conroy", "*": FIXED},
+            redshift=Fixed(0.1),
+        )
+        result = original.to_groups()
+
+        assert result["dust"]["law"] == "kriek_conroy"
+        assert "law_bc" not in result["dust"]
 
     def test_to_groups_preserves_dust_emission_type(self):
         """dust_emission type is preserved."""
