@@ -187,7 +187,7 @@ override per-fit:
 model = SEDModel.build(
     ssp_data=ssp, observation=obs,
     dust={
-        'type': 'two_component', 'law_bc': 'calzetti', 'all_params': FIXED,
+        'type': 'two_component', 'law': 'calzetti', 'all_params': FIXED,
         'emission': {
             'type':    'modified_blackbody',
             'T':       Fixed(35.0),          # pin one

@@ -44,7 +44,7 @@ References
 .. [2] Conroy, C. 2013, ARA&A, 51, 393
    "Modeling the Panchromatic Spectral Energy Distributions of Galaxies"
 
-.. GENERATED FROM PYTHON SOURCE LINES 28-121
+.. GENERATED FROM PYTHON SOURCE LINES 28-127
 
 
 
@@ -58,7 +58,7 @@ References
 
  .. code-block:: none
 
-    /tengri/src/tengri/forward/sed_model.py:1594: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.864 Gyr at peak sfh_tsnorm_peak_lbt_gyr=6.53 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.864 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.864 Gyr at peak sfh_tsnorm_peak_lbt_gyr=6.53 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.864 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
 
 
@@ -119,7 +119,13 @@ References
             "skew": 0.0,
             "trunc": 13.0,
         },
-        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+        dust={
+            "law": "power_law",
+            "type": "two_component",
+            "all_params": tengri.FIXED,
+            "tau_diff": 0.0,
+            "tau_bc": 0.0,
+        },
         redshift=tengri.Fixed(0.01),
     )
     baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))

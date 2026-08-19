@@ -42,7 +42,7 @@ _DUST = {
     "tau_diff": 0.5,
     "tau_bc": 0.3,
 }
-_DUST_IR = {**_DUST, "emission": {"type": "dale2014", "all_params": FIXED}}
+_DUST_IR = {"law": "power_law", **_DUST, "emission": {"type": "dale2014", "all_params": FIXED}}
 
 
 def _rest_sed(ssp, dtype, **groups):

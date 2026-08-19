@@ -40,7 +40,7 @@ References:
 - Marino et al. 2013, ApJ, 768, 171 (N2 metallicity diagnostic)
 - Pettini & Pagel 2004, MNRAS, 348, L59 (O3N2 diagnostic)
 
-.. GENERATED FROM PYTHON SOURCE LINES 25-122
+.. GENERATED FROM PYTHON SOURCE LINES 25-128
 
 
 
@@ -84,7 +84,13 @@ References:
             "alpha": 4.0,
             "beta": 2.0,
         },
-        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+        dust={
+            "law": "power_law",
+            "type": "two_component",
+            "all_params": tengri.FIXED,
+            "tau_diff": 0.0,
+            "tau_bc": 0.0,
+        },
         neb={"type": "cue", "all_params": tengri.FIXED, "logZ_gas": tengri.Uniform(-2.0, 0.5)},
         redshift=tengri.Fixed(0.0),
     )
@@ -156,7 +162,7 @@ References:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.647 seconds)
+   **Total running time of the script:** (0 minutes 2.361 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_strong_line_metallicity_diagnostics.py:

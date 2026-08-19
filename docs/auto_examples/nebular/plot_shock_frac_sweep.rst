@@ -44,7 +44,7 @@ References
 .. [4] Kewley et al. 2001, ApJ, 556, 121 (SF/AGN demarcation).
 .. [5] Kauffmann et al. 2003, MNRAS, 346, 1055 (SF/composite line).
 
-.. GENERATED FROM PYTHON SOURCE LINES 28-261
+.. GENERATED FROM PYTHON SOURCE LINES 28-262
 
 
 
@@ -104,6 +104,7 @@ References
             "log_total_mass": 10.0,
         },
         dust={
+            "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
             "tau_diff": 0.05,
@@ -296,7 +297,7 @@ References
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 10.501 seconds)
+   **Total running time of the script:** (0 minutes 2.920 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_shock_frac_sweep.py:

@@ -29,7 +29,11 @@ lines added at the source), then dust (UV attenuated, reprocessed
 into the FIR), then AGN (disc + torus + NLR), then radio, then X-ray.
 The color at each wavelength tells you which block matters most.
 
+<<<<<<< HEAD
 .. GENERATED FROM PYTHON SOURCE LINES 13-116
+=======
+.. GENERATED FROM PYTHON SOURCE LINES 13-118
+>>>>>>> e64c5dd7a (PR1: regenerate the 87 drifted gallery renders)
 
 
 
@@ -75,6 +79,7 @@ The color at each wavelength tells you which block matters most.
         redshift=tengri.Fixed(0.05),
     )
     DUST_ON = {
+        "law": "power_law",
         "type": "two_component",
         "all_params": tengri.FIXED,
         "tau_diff": 0.4,
@@ -86,7 +91,13 @@ The color at each wavelength tells you which block matters most.
         # alone contributes nothing there.
         "emission": {"type": "dale2014_cigale", "all_params": tengri.FIXED},
     }
-    DUST_OFF = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+    DUST_OFF = {
+        "law": "power_law",
+        "type": "two_component",
+        "all_params": tengri.FIXED,
+        "tau_diff": 0.0,
+        "tau_bc": 0.0,
+    }
 
 
     def _nuLnu(**blocks):
@@ -151,7 +162,11 @@ The color at each wavelength tells you which block matters most.
 
 .. rst-class:: sphx-glr-timing
 
+<<<<<<< HEAD
    **Total running time of the script:** (0 minutes 17.405 seconds)
+=======
+   **Total running time of the script:** (0 minutes 21.631 seconds)
+>>>>>>> e64c5dd7a (PR1: regenerate the 87 drifted gallery renders)
 
 
 .. _sphx_glr_download_auto_examples_quickstart_plot_components_isolated.py:

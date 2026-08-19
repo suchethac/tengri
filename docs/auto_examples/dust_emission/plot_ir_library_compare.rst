@@ -46,7 +46,7 @@ The L_IR normalization isolates the shape differences; combined with the fixed-L
 view, both perspectives reveal the diversity of grain models and their physical
 implications.
 
-.. GENERATED FROM PYTHON SOURCE LINES 30-212
+.. GENERATED FROM PYTHON SOURCE LINES 30-213
 
 
 
@@ -189,6 +189,7 @@ implications.
                 ssp,
                 sfh=SFH,
                 dust={
+                    "law": "power_law",
                     "type": "two_component",
                     "all_params": tengri.FIXED,
                     "tau_diff": 1.0,
@@ -247,7 +248,7 @@ implications.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 16.706 seconds)
+   **Total running time of the script:** (0 minutes 9.382 seconds)
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_ir_library_compare.py:

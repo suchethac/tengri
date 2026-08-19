@@ -133,7 +133,7 @@ def _rel(a: np.ndarray, b: np.ndarray) -> float:
 
 
 def _single(law: str, **extra) -> dict:
-    return {"type": "single_component", "law_bc": law, "tau_v": Fixed(_TAU), **extra}
+    return {"type": "single_component", "law": law, "tau_v": Fixed(_TAU), **extra}
 
 
 def _two(law: str, **extra) -> dict:

@@ -140,7 +140,7 @@ Each phase ships independently green with a CI invariant that flips green and st
    # the dust *emission* type, and its parameters go in that sub-block:
    model = SEDModel.build(
        ssp_data=ssp,
-       dust={'type': 'two_component', 'law_bc': 'calzetti',
+       dust={'type': 'two_component', 'law': 'calzetti',
              'emission': {'type': 'my_model', 'T': Fixed(35.0),
                           'beta_ir': Uniform(1.0, 2.0)}},
    )

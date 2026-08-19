@@ -359,7 +359,7 @@ _m_sfh = SEDModel.build(
         "log_total_mass": Fixed(0.0),
         "all_params": FIXED,
     },
-    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+    dust={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
 _state_sfh = _m_sfh.predict_state({})
@@ -447,7 +447,7 @@ _m_2exp = SEDModel.build(
         "log_total_mass": Fixed(0.0),
         "all_params": FIXED,
     },
-    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+    dust={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
 _st_2exp = _m_2exp.predict_state({})
@@ -517,7 +517,7 @@ m_stellar = SEDModel.build(
         "log_total_mass": Fixed(0.0),
         "all_params": FIXED,
     },
-    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+    dust={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
 s_stellar = m_stellar.predict_state({})
@@ -680,7 +680,7 @@ m_nd = SEDModel.build(
         "log_total_mass": Fixed(0.0),
         "all_params": FIXED,
     },
-    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+    dust={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
 s_nd = m_nd.predict_state({})
@@ -1130,7 +1130,7 @@ m_no_neb = SEDModel.build(
     ssp_data=ssp,
     met=MET_FIDUCIAL,
     sfh=_neb_sfh_kw,
-    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+    dust={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
 s_no_neb = m_no_neb.predict_state({})
@@ -1146,7 +1146,7 @@ m_neb = SEDModel.build(
         "neb_fesc": Fixed(0.0),
         "all_params": FIXED,
     },  # ionspec_* slopes stay at their SSP-derived Fixed values
-    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+    dust={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
 s_neb = m_neb.predict_state({})
@@ -1215,7 +1215,7 @@ _m_neb_dense = SEDModel.build(
         "neb_fesc": Fixed(0.0),
         "all_params": FIXED,
     },
-    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+    dust={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
 _s_neb_dense = _m_neb_dense.predict_state({})
@@ -1685,7 +1685,7 @@ def _tengri_xray(log_lbol, cos_inc):
             "log_total_mass": Fixed(0.0),
             "all_params": FIXED,
         },
-        dust={
+        dust={"law": "power_law", 
             "type": "two_component",
             "tau_bc": Fixed(TAU_BC_FIDUCIAL),
             "tau_diff": Fixed(TAU_DIFF_FIDUCIAL),

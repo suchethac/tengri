@@ -87,6 +87,7 @@ def build_model(peak_lbt, width, tau_diff, tau_bc):
             "trunc": 13.0,
         },
         dust={
+            "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
             "tau_diff": tau_diff,

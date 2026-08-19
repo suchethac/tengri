@@ -257,7 +257,7 @@ _m_sfh = SEDModel.build(
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
         "all_params": FIXED,
     },
-    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+    dust={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
 _state_sfh = _m_sfh.predict_state({})
@@ -355,7 +355,7 @@ m_dpl = SEDModel.build(
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
         "all_params": FIXED,
     },
-    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+    dust={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
 s_dpl = m_dpl.predict_state({})
@@ -441,7 +441,7 @@ m_ln = SEDModel.build(
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
         "all_params": FIXED,
     },
-    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+    dust={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
 s_ln = m_ln.predict_state({})
@@ -539,7 +539,7 @@ for row, (label, ratios) in enumerate(_cases):
             **{f"ratio_{i}": Fixed(ratios[i]) for i in range(6)},
             "all_params": FIXED,
         },
-        dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+        dust={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
         redshift=Fixed(0.0),
     )
     s_c = m_c.predict_state({})
@@ -593,7 +593,7 @@ m_stellar = SEDModel.build(
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
         "all_params": FIXED,
     },
-    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+    dust={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
 s_stellar = m_stellar.predict_state({})
@@ -699,7 +699,7 @@ for color, z, logz in zip(_colors, _Z_VALUES, _logzsol_values):
             "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
             "all_params": FIXED,
         },
-        dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+        dust={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
         redshift=Fixed(0.0),
     )
     s_z = m_z.predict_state({})
@@ -811,7 +811,7 @@ m_nd = SEDModel.build(
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
         "all_params": FIXED,
     },
-    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+    dust={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
 s_nd = m_nd.predict_state({})
@@ -1039,7 +1039,7 @@ m_neb_on = SEDModel.build(
         "log_total_mass": Fixed(9.0),
         "all_params": FIXED,
     },
-    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+    dust={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
     neb={"type": "cue", "neb_logU": Fixed(-2.0), "neb_logZ_gas": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
@@ -1055,7 +1055,7 @@ m_neb_off = SEDModel.build(
         "log_total_mass": Fixed(9.0),
         "all_params": FIXED,
     },
-    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+    dust={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
 s_neb_off = m_neb_off.predict_state({})

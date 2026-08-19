@@ -97,7 +97,7 @@ class TestIssue1317UnionPresence:
                 ssp_data=ssp,
                 observation=obs_2band,
                 sfh={"type": "dpl", "*": FIXED, "tau_gyr": Fixed(10.0)},
-                dust={"type": "single_component", "law_bc": "calzetti", "tau_v": Fixed(0.3)},
+                dust={"type": "single_component", "law": "calzetti", "tau_v": Fixed(0.3)},
                 redshift=Fixed(0.1),
                 approx=WavePrecomp(catalog_z_range=(0.0, 1.0)),  # For catalog fits
             )
@@ -139,7 +139,7 @@ class TestIssue1317UnionPresence:
                 ssp_data=ssp,
                 observation=obs_3band,
                 sfh={"type": "dpl", "*": FIXED, "tau_gyr": Fixed(10.0)},
-                dust={"type": "single_component", "law_bc": "calzetti", "tau_v": Fixed(0.3)},
+                dust={"type": "single_component", "law": "calzetti", "tau_v": Fixed(0.3)},
                 redshift=Fixed(0.1),
                 approx=WavePrecomp(catalog_z_range=(0.0, 1.0)),  # For catalog fits
             )

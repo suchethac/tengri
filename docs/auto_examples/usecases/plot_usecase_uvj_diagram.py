@@ -69,6 +69,7 @@ sf_model = tengri.SEDModel.build(
         "logzsol": tengri.Uniform(-0.5, 0.2),
     },
     dust={
+        "law": "power_law",
         "type": "two_component",
         "all_params": tengri.FIXED,
         "tau_bc": tengri.Uniform(0.1, 1.5),
@@ -93,6 +94,7 @@ passive_model = tengri.SEDModel.build(
         "logzsol": tengri.Uniform(-0.2, 0.3),
     },
     dust={
+        "law": "power_law",
         "type": "two_component",
         "all_params": tengri.FIXED,
         "tau_bc": tengri.Uniform(0.0, 0.15),

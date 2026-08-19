@@ -26,7 +26,7 @@ with standard filters. The Photometry object merges them, then SEDModel
 predicts photometry on all bands at once — custom filters compose naturally
 with the standard library.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-104
+.. GENERATED FROM PYTHON SOURCE LINES 10-105
 
 
 
@@ -93,6 +93,7 @@ with the standard library.
             "trunc": 5.0,
         },
         dust={
+            "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
             "tau_bc": 0.1,

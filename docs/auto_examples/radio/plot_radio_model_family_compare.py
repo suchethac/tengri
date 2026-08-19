@@ -44,6 +44,7 @@ warnings.filterwarnings("ignore", message=".*experimental.*")
 
 SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": 10.5}
 DUST = {
+    "law": "power_law",
     "type": "two_component",
     "all_params": tengri.FIXED,
     "tau_diff": 1.0,

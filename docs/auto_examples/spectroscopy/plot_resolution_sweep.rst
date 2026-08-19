@@ -27,7 +27,7 @@ distinct lines (high R). Varying R from 100 to 10000 reveals the transition
 from kinematically degenerate at R~100 (SDSS/DESI-like) to fully resolved
 at R~5000 (JWST-like).
 
-.. GENERATED FROM PYTHON SOURCE LINES 11-108
+.. GENERATED FROM PYTHON SOURCE LINES 11-115
 
 
 
@@ -81,7 +81,13 @@ at R~5000 (JWST-like).
             "alpha": 2.5,
             "beta": 1.8,
         },
-        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_bc": 0.1, "tau_diff": 0.05},
+        dust={
+            "law": "power_law",
+            "type": "two_component",
+            "all_params": tengri.FIXED,
+            "tau_bc": 0.1,
+            "tau_diff": 0.05,
+        },
         neb={"type": "cue", "all_params": tengri.FIXED, "logU": -2.0},
         redshift=tengri.Fixed(REDSHIFT),
     )
@@ -111,6 +117,7 @@ at R~5000 (JWST-like).
                 "beta": 1.8,
             },
             dust={
+                "law": "power_law",
                 "type": "two_component",
                 "all_params": tengri.FIXED,
                 "tau_bc": 0.1,
@@ -143,7 +150,7 @@ at R~5000 (JWST-like).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 7.099 seconds)
+   **Total running time of the script:** (0 minutes 6.135 seconds)
 
 
 .. _sphx_glr_download_auto_examples_spectroscopy_plot_resolution_sweep.py:

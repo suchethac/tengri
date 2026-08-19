@@ -334,7 +334,7 @@ groups = {
     "sfh": {"type": "dpl", "all_params": FREE},
     "dust": {
         "type": "two_component",
-        "law_bc": "calzetti",
+        "law": "calzetti",
         "all_params": FREE,
         "emission": {"type": "dale2014", "all_params": FIXED},
     },

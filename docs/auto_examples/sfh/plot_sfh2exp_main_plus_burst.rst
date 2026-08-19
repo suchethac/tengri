@@ -31,7 +31,7 @@ burst lifts the recent SFR (top panel) and blues the rest-frame UV continuum
 (bottom panel). The total stellar mass is held fixed, so a larger burst
 necessarily draws mass away from the old population.
 
-.. GENERATED FROM PYTHON SOURCE LINES 15-82
+.. GENERATED FROM PYTHON SOURCE LINES 15-88
 
 
 
@@ -80,7 +80,13 @@ necessarily draws mass away from the old population.
                 "age_gyr": 10.0,
                 "burst_age_gyr": 0.3,
             },
-            dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.2},
+            dust={
+                "law": "power_law",
+                "type": "two_component",
+                "all_params": tengri.FIXED,
+                "tau_diff": 0.2,
+                "tau_bc": 0.2,
+            },
             redshift=tengri.Fixed(0.05),
         )
 
@@ -113,11 +119,6 @@ necessarily draws mass away from the old population.
 
     fig.tight_layout()
     plt.savefig("plot_sfh2exp_main_plus_burst.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 5.507 seconds)
 
 
 .. _sphx_glr_download_auto_examples_sfh_plot_sfh2exp_main_plus_burst.py:
