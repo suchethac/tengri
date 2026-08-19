@@ -266,6 +266,7 @@ markers = [
     "integration: exercises several subsystems together (tests/integration tree)",
     "physics: cross-cut tag for a test whose subject is physical correctness",
     "owner_blocked: marked xfail pending owner physics adjudication (#1728)",
+    "oom: test allocates more memory than CI runners have; excluded from CI, run manually",
 ]
 
 [tool.jupytext]

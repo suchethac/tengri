@@ -570,7 +570,13 @@ class TestVelocityBroadening:
         flux_in = 1.0 + 5.0 * jnp.exp(-0.5 * ((wave - 5000.0) / 2.0) ** 2)
         total_in = float(jnp.sum(flux_in))
 
-        flux_out = velocity_broaden(flux_in, wave, 200.0)
+        # velocity_broaden requires a log-uniform wavelength grid (see issue #1742).
+        # Resample to log grid, broaden, and interpolate back.
+        wave_log = jnp.logspace(jnp.log10(wave[0]), jnp.log10(wave[-1]), wave.size)
+        flux_log = jnp.interp(wave_log, wave, flux_in)
+
+        flux_out_log = velocity_broaden(flux_log, wave_log, 200.0)
+        flux_out = jnp.interp(wave, wave_log, flux_out_log)
         total_out = float(jnp.sum(flux_out))
 
         np.testing.assert_allclose(
