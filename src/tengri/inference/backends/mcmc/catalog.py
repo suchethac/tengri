@@ -70,8 +70,8 @@ def build_catalog_mcmc_engine(
         Posterior samples kept per galaxy.
     max_num_doublings : int, default DEFAULT_MAX_NUM_DOUBLINGS (10)
         NUTS tree depth cap (ignored for HMC). Shares the single-fit
-        default and its rationale — see
-        :data:`~tengri.inference.backends.mcmc._shared.DEFAULT_MAX_NUM_DOUBLINGS`.
+        default and its rationale — see ``DEFAULT_MAX_NUM_DOUBLINGS`` in
+        ``tengri.inference.backends.mcmc._shared``.
     n_leapfrog : int, default 10
         HMC leapfrog steps per proposal (ignored for NUTS).
     target_accept_rate : float, default 0.85
