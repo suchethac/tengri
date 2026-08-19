@@ -261,7 +261,7 @@ class TestRegistryComponentsEmit:
                         sfh={"type": "const"},
                         dust={
                             "type": "single_component",
-                            "law_bc": name,
+                            "law": name,
                         },
                     )
 

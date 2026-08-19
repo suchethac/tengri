@@ -53,8 +53,13 @@ class DustAttenuationSEDComponentConfig(SEDComponentConfig):
         Attenuation law name resolved by
         :func:`tengri.components.dust.attenuation.resolve_dust_law`.
         Examples: ``"calzetti"``, ``"cardelli"``, ``"smc"``, ``"lmc"``,
-        ``"prevot_smc"``, ``"li08"``, etc. Grammar builds require explicit
-        specification; no default is applied. Required.
+        ``"prevot_smc"``, ``"li08"``, etc. Default ``"calzetti"`` — this
+        default is a low-level construction convenience only (component
+        tests that build ``DustAttenuationSEDComponent()`` directly to
+        exercise pipeline mechanics, not curve choice); the public grammar
+        (``SEDModel.build`` / ``Parameters``) always resolves and passes
+        ``law`` explicitly before reaching this dataclass, so it never
+        observes this default.
     name : str
         Diagnostic identifier. Default ``"dust_attenuation"``.
 
@@ -65,7 +70,7 @@ class DustAttenuationSEDComponentConfig(SEDComponentConfig):
     JIT scope.
     """
 
-    law: str = field()
+    law: str = "calzetti"
     name: str = "dust_attenuation"
     live_shape_params: frozenset[str] = frozenset()
     r"""Shape parameters somebody actually asked for, resolved at build time.
