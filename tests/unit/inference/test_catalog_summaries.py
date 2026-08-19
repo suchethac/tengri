@@ -39,7 +39,7 @@ def _fwd_free_z():
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "dpl", "all_params": FREE},
-        dust={"type": "two_component", "all_params": FIXED, "tau_bc": 0.5},
+        dust={"law": "power_law", "type": "two_component", "all_params": FIXED, "tau_bc": 0.5},
         neb={"type": "none"},
         redshift=Uniform(0.1, 1.0),
     )

@@ -53,7 +53,7 @@ class TestShockAttenuationEquivalence:
                 photometry=Photometry.from_names(["sdss_g", "sdss_r", "sdss_i"])
             ),
             sfh={"type": "delayed", "all_params": FIXED, "tau_gyr": 1.0, "log_total_mass": 10.0},
-            dust={
+            dust={"law_diff": 'calzetti', 
                 "type": "two_component",
                 "law_bc": "calzetti",
                 "all_params": FIXED,
@@ -74,7 +74,7 @@ class TestShockAttenuationEquivalence:
                 photometry=Photometry.from_names(["sdss_g", "sdss_r", "sdss_i"])
             ),
             sfh={"type": "delayed", "all_params": FIXED, "tau_gyr": 1.0, "log_total_mass": 10.0},
-            dust={
+            dust={"law_diff": 'calzetti', 
                 "type": "two_component",
                 "law_bc": "calzetti",
                 "all_params": FIXED,

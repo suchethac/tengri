@@ -449,7 +449,7 @@ def test_dust_law_surface_applies_law_not_silent_noop(ssp, obs):
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "dpl", "*": FIXED},
-        dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED},
+        dust={"law_diff": 'calzetti', "type": "two_component", "law_bc": "calzetti", "*": FIXED},
         redshift=Fixed(0.05),
     )
     assert model._dust_law_bc == "calzetti", (
@@ -462,7 +462,7 @@ def test_dust_law_surface_applies_law_not_silent_noop(ssp, obs):
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "dpl", "*": FIXED},
-        dust={
+        dust={"law_diff": 'smc', 
             "type": "two_component",
             "law_bc": "smc",
             "*": FIXED,
@@ -475,7 +475,7 @@ def test_dust_law_surface_applies_law_not_silent_noop(ssp, obs):
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "dpl", "*": FIXED},
-        dust={
+        dust={"law_diff": 'calzetti', 
             "type": "two_component",
             "law_bc": "calzetti",
             "*": FIXED,

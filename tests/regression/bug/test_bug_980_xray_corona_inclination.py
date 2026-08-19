@@ -63,7 +63,7 @@ class TestCoronaSeesInclination:
             model = SEDModel.build(
                 ssp_data=synthetic_ssp_wide,
                 sfh={"type": "delayed", "*": FIXED},
-                dust={"type": "two_component", "*": FIXED},
+                dust={"law": "power_law", "type": "two_component", "*": FIXED},
                 agn={
                     "type": "composable",
                     "disc": {"type": "schartmann2005", "*": FIXED},

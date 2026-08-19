@@ -60,7 +60,7 @@ _BASE = dict(
 
 _CUE = {"type": "cue", "all_params": FIXED}
 
-_DUST_EMIT = {
+_DUST_EMIT = {"law_diff": 'calzetti', 
     "type": "two_component",
     "law_bc": "calzetti",
     "all_params": FIXED,

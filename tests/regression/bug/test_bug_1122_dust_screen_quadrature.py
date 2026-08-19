@@ -34,7 +34,7 @@ def _build(ssp, approx, tau_diff=0.5, tau_bc=1.0, z=0.2):
         ssp_data=ssp,
         observation=Observation(photometry=Photometry.from_names(BANDS)),
         sfh={"type": "dpl", "*": FREE},
-        dust={"type": "two_component", "*": FIXED, "tau_diff": tau_diff, "tau_bc": tau_bc},
+        dust={"law": "power_law", "type": "two_component", "*": FIXED, "tau_diff": tau_diff, "tau_bc": tau_bc},
         redshift=Fixed(z),
         approx=approx,
     )
@@ -202,7 +202,7 @@ def test_free_z_path_publishes_the_subband_tensors(ssp):
         ssp_data=ssp,
         observation=Observation(photometry=Photometry.from_names(BANDS)),
         sfh={"type": "dpl", "*": FREE},
-        dust={"type": "two_component", "*": FIXED, "tau_diff": 0.5, "tau_bc": 1.0},
+        dust={"law": "power_law", "type": "two_component", "*": FIXED, "tau_diff": 0.5, "tau_bc": 1.0},
         redshift=Uniform(0.01, 1.5),
         approx=WavePrecomp(n_z=40),
     )

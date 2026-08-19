@@ -115,7 +115,7 @@ def _build(ir_ssp, ir_obs, engine: str):
             ssp_data=ir_ssp,
             observation=ir_obs,
             sfh={"type": "dpl", "all_params": FIXED},
-            dust={
+            dust={"law_diff": 'calzetti', 
                 "type": "two_component",
                 "law_bc": "calzetti",
                 "tau_bc": Fixed(2.0),

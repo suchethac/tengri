@@ -45,7 +45,7 @@ def _model(ssp, log_mass=10.0):
             "log_total_mass": Fixed(log_mass),
             "*": FIXED,
         },
-        dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+        dust={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
         redshift=Fixed(0.0),
     )
 

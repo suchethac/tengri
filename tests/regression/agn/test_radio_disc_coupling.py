@@ -94,7 +94,7 @@ class TestEndToEndPublish:
         model = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
             sfh={"type": "delayed", "*": FIXED},
-            dust={
+            dust={"law": "power_law", 
                 "type": "two_component",
                 "tau_bc": Fixed(0.0),
                 "tau_diff": Fixed(0.0),
@@ -112,7 +112,7 @@ class TestEndToEndPublish:
         model = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
             sfh={"type": "delayed", "*": FIXED},
-            dust={
+            dust={"law": "power_law", 
                 "type": "two_component",
                 "tau_bc": Fixed(0.0),
                 "tau_diff": Fixed(0.0),
@@ -130,7 +130,7 @@ class TestEndToEndPublish:
         model = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
             sfh={"type": "delayed", "*": FIXED},
-            dust={
+            dust={"law": "power_law", 
                 "type": "two_component",
                 "tau_bc": Fixed(0.0),
                 "tau_diff": Fixed(0.0),
@@ -207,7 +207,7 @@ class TestEndToEndRadioDiscCoupling:
         model_mc = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
             sfh={"type": "delayed", "*": FIXED},
-            dust={
+            dust={"law": "power_law", 
                 "type": "two_component",
                 "tau_bc": Fixed(0.0),
                 "tau_diff": Fixed(0.0),
@@ -221,7 +221,7 @@ class TestEndToEndRadioDiscCoupling:
         model_r6 = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
             sfh={"type": "delayed", "*": FIXED},
-            dust={
+            dust={"law": "power_law", 
                 "type": "two_component",
                 "tau_bc": Fixed(0.0),
                 "tau_diff": Fixed(0.0),
@@ -263,7 +263,7 @@ class TestEndToEndRadioDiscCoupling:
             model = SEDModel.build(
                 ssp_data=synthetic_ssp_wide,
                 sfh={"type": "delayed", "*": FIXED},
-                dust={
+                dust={"law": "power_law", 
                     "type": "two_component",
                     "tau_bc": Fixed(0.0),
                     "tau_diff": Fixed(0.0),

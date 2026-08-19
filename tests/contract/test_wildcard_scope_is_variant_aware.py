@@ -230,7 +230,7 @@ def _shock_cases():
             "shock",
             "shock_",
             {
-                "dust": {"type": "two_component", "law_bc": "calzetti", "*": FIXED},
+                "dust": {"law_diff": 'calzetti', "type": "two_component", "law_bc": "calzetti", "*": FIXED},
                 "neb": {"type": "none"},
                 "shock": {"norm": norm, "*": FREE},
             },
@@ -284,7 +284,7 @@ def _xray_cases():
             "xray",
             "xray_",
             {
-                "dust": {"type": "two_component", "law_bc": "calzetti", "*": FIXED},
+                "dust": {"law_diff": 'calzetti', "type": "two_component", "law_bc": "calzetti", "*": FIXED},
                 "neb": {"type": "none"},
                 "xray": {"type": model, "*": FREE},
                 # The AGN needs a DISC, not just a luminosity. The corona
@@ -319,7 +319,7 @@ def _simple_group_cases():
         {
             "sfh": {"type": "dpl", "*": FREE},
             "neb": {"type": "none"},
-            "dust": {"type": "two_component", "*": FIXED},
+            "dust": {"law": "power_law", "type": "two_component", "*": FIXED},
         },
     )
     yield Case(
@@ -328,7 +328,7 @@ def _simple_group_cases():
         "met_",
         {
             "neb": {"type": "none"},
-            "dust": {"type": "two_component", "*": FIXED},
+            "dust": {"law": "power_law", "type": "two_component", "*": FIXED},
             "met": {"*": FREE},
         },
     )
@@ -338,7 +338,7 @@ def _simple_group_cases():
         "radio_",
         {
             "neb": {"type": "none"},
-            "dust": {"type": "two_component", "*": FIXED},
+            "dust": {"law": "power_law", "type": "two_component", "*": FIXED},
             "radio": {"type": "condon92", "*": FREE},
         },
     )
@@ -540,7 +540,7 @@ def test_an_omitted_law_scopes_as_its_resolved_default():
             )
         return {p for p in spec.free_params if p.startswith("dust_")}
 
-    omitted = freed({"type": "two_component", "*": FREE})
+    omitted = freed({"law": "power_law", "type": "two_component", "*": FREE})
     explicit = freed(
         {"type": "two_component", "law_bc": "power_law", "law_diff": "power_law", "*": FREE}
     )
@@ -607,7 +607,7 @@ def test_the_threaded_values_actually_reach_the_backend(synthetic_ssp_wide, panc
             ssp_data=synthetic_ssp_wide,
             observation=panchromatic_obs,
             sfh={"type": "dpl", "*": FIXED},
-            dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED},
+            dust={"law_diff": 'calzetti', "type": "two_component", "law_bc": "calzetti", "*": FIXED},
             neb={"type": "cb19", "*": FREE},
             redshift=Fixed(0.5),
         )

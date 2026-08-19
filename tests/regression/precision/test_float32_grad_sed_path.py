@@ -33,7 +33,7 @@ _SFH = {
     "tau_gyr": 1.0,
     "age_gyr": 5.0,
 }
-_DUST = {
+_DUST = {"law_diff": 'calzetti', 
     "type": "two_component",
     "law_bc": "calzetti",
     "all_params": FIXED,

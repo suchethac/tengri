@@ -52,7 +52,7 @@ def model_and_external_mock():
         ssp_data=ssp,
         observation=Observation(photometry=Photometry(filters=tuple(filters))),
         sfh=builders.sfh.dpl(defaults=FREE),
-        dust={
+        dust={"law_diff": 'calzetti', 
             "type": "two_component",
             "*": FIXED,
             "law_bc": "calzetti",
@@ -88,7 +88,7 @@ def _fresh_model() -> SEDModel:
         ssp_data=ssp,
         observation=Observation(photometry=Photometry(filters=tuple(filters))),
         sfh=builders.sfh.dpl(defaults=FREE),
-        dust={
+        dust={"law_diff": 'calzetti', 
             "type": "two_component",
             "*": FIXED,
             "law_bc": "calzetti",

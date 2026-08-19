@@ -38,14 +38,14 @@ pytestmark = pytest.mark.conservation
 
 _WG00_GRID = Path(__file__).resolve().parents[3] / "data" / "wg00_attenuation_grid.h5"
 
-TWO_COMPONENT = {
+TWO_COMPONENT = {"law_diff": 'calzetti', 
     "type": "two_component",
     "law_bc": "calzetti",
     "*": FIXED,
     "tau_bc": 0.5,
     "tau_diff": 0.3,
 }
-SINGLE_SCREEN = {"type": "single_component", "*": FIXED, "tau_v": 0.5}
+SINGLE_SCREEN = {"law": "power_law", "type": "single_component", "*": FIXED, "tau_v": 0.5}
 WG00 = {"type": "wg00", "*": FIXED, "tau_v": 0.5}
 
 _DUST_CASES = [
@@ -128,7 +128,7 @@ class TestLycMaskedLAbsorbed:
         # work — build() auto-fills a default dust group with *free* taus that
         # ``_params`` then samples; and WG00 has no tau=0 grid node, so zeroing
         # the dusty model's own taus is wrong for the wg00 case.
-        transparent = {
+        transparent = {"law_diff": 'calzetti', 
             "type": "two_component",
             "law_bc": "calzetti",
             "*": FIXED,
