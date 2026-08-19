@@ -51,7 +51,7 @@ def test_grammar_accepts_spinning_dust(fixture_path, ssp_data):
     model = SEDModel.build(
         ssp_data=ssp,
         observation=obs,
-        dust={
+        dust={"law_diff": 'calzetti', 
             "type": "two_component",
             "law_bc": "calzetti",
             "emission": {"type": "astrodust", "spinning_dust": True},
@@ -75,7 +75,7 @@ def test_grammar_accepts_f_cnm(fixture_path, ssp_data):
     model = SEDModel.build(
         ssp_data=ssp,
         observation=obs,
-        dust={
+        dust={"law_diff": 'calzetti', 
             "type": "two_component",
             "law_bc": "calzetti",
             "emission": {"type": "astrodust", "f_cnm": 0.5},
@@ -103,7 +103,7 @@ def test_spinning_dust_changes_microwave_sed(ssp_data):
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "dpl", "all_params": FIXED},
-        dust={
+        dust={"law_diff": 'calzetti', 
             "type": "two_component",
             "law_bc": "calzetti",
             "tau_bc": 0.5,
@@ -119,7 +119,7 @@ def test_spinning_dust_changes_microwave_sed(ssp_data):
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "dpl", "all_params": FIXED},
-        dust={
+        dust={"law_diff": 'calzetti', 
             "type": "two_component",
             "law_bc": "calzetti",
             "tau_bc": 0.5,
@@ -199,7 +199,7 @@ def test_f_cnm_changes_spinning_dust_spectrum(ssp_data):
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "dpl", "all_params": FIXED},
-        dust={
+        dust={"law_diff": 'calzetti', 
             "type": "two_component",
             "law_bc": "calzetti",
             "tau_bc": 0.5,
@@ -215,7 +215,7 @@ def test_f_cnm_changes_spinning_dust_spectrum(ssp_data):
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "dpl", "all_params": FIXED},
-        dust={
+        dust={"law_diff": 'calzetti', 
             "type": "two_component",
             "law_bc": "calzetti",
             "tau_bc": 0.5,

@@ -157,7 +157,7 @@ def _model(name, *, approx, free_shape=False, bands=None):
         observation=Observation(photometry=_photometry(bands or name)),
         redshift=Fixed(0.1),
         sfh={"type": "dpl", "*": FIXED},
-        dust={
+        dust={"law_diff": 'calzetti', 
             "type": "two_component",
             "law_bc": "calzetti",
             "*": FIXED,

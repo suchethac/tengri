@@ -229,7 +229,7 @@ def test_unified_agn_nlr_blr_additive(synthetic_ssp_wide):
         m = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
             sfh={"type": "delayed", "*": FIXED},
-            dust={"type": "two_component", "*": FIXED},
+            dust={"law": "power_law", "type": "two_component", "*": FIXED},
             agn={
                 "type": "composable",
                 "disc": {"type": "kubota_done"},
@@ -265,7 +265,7 @@ def test_unified_agn_type1_type2_masking(synthetic_ssp_wide):
         m = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
             sfh={"type": "delayed", "*": FIXED},
-            dust={
+            dust={"law": "power_law", 
                 "type": "two_component",
                 "tau_bc": Fixed(0.0),
                 "tau_diff": Fixed(0.0),
@@ -331,7 +331,7 @@ def test_composable_wildcard_frees_only_active_params(synthetic_ssp_wide):
     model = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
         sfh={"type": "delayed", "*": FIXED},
-        dust={"type": "two_component", "*": FIXED},
+        dust={"law": "power_law", "type": "two_component", "*": FIXED},
         agn={
             "type": "composable",
             "disc": {"type": "multicolor"},
@@ -351,7 +351,7 @@ def test_all_fixed_wildcard_frees_nothing_and_keeps_old_defaults(synthetic_ssp_w
     model = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
         sfh={"type": "delayed", "*": FIXED},
-        dust={"type": "two_component", "*": FIXED},
+        dust={"law": "power_law", "type": "two_component", "*": FIXED},
         agn={
             "type": "composable",
             "disc": {"type": "multicolor"},
@@ -429,7 +429,7 @@ def test_agn_panchromatic_free_params_all_move_predict(real_ssp_only):
             ssp_data=ssp,
             observation=obs,
             sfh={"type": "delayed", "*": FIXED},
-            dust={
+            dust={"law": "power_law", 
                 "type": "two_component",
                 "tau_diff": Fixed(0.3),
                 "emission": {"type": "dale2014_cigale"},

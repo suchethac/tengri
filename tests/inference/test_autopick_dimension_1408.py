@@ -88,7 +88,7 @@ def test_n_latent_exceeds_n_free_for_field_sfh(ssp_data_fsps):
             "psd_sigma": Fixed(1.0),
             "psd_tau_myr": Uniform(100, 500),
         },
-        dust={"type": "two_component", "law_bc": "calzetti", "all_params": FIXED},
+        dust={"law_diff": 'calzetti', "type": "two_component", "law_bc": "calzetti", "all_params": FIXED},
         neb={"type": "none"},
         redshift=Fixed(0.05),
     )

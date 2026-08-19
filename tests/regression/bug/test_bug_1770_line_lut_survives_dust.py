@@ -82,7 +82,7 @@ def phot_obs():
 
 def _model(ssp, obs, approx, *, dust: bool):
     dust_block = (
-        {
+        {"law_diff": 'calzetti', 
             "type": "two_component",
             "law_bc": "calzetti",
             "all_params": FIXED,

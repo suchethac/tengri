@@ -115,7 +115,7 @@ def _build(ssp: SSPData, obs: Observation) -> SEDModel:
             ssp_data=ssp,
             observation=obs,
             sfh={"type": "dpl", "*": FIXED},
-            dust={
+            dust={"law_diff": 'calzetti', 
                 "type": "two_component",
                 "law_bc": "calzetti",
                 "*": FIXED,
@@ -238,7 +238,7 @@ def test_narrowing_does_not_orphan_eta_balance(panchromatic_ssp, panchromatic_ob
             ssp_data=panchromatic_ssp,
             observation=panchromatic_obs,
             sfh={"type": "dpl", "*": FIXED},
-            dust={
+            dust={"law_diff": 'calzetti', 
                 "type": "two_component",
                 "law_bc": "calzetti",
                 "*": FREE,

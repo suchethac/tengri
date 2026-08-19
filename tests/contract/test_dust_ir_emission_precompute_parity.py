@@ -92,7 +92,7 @@ def assert_precompute_matches_exact(
     from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, WavePrecomp
 
     if dust_config is None:
-        dust_config = {
+        dust_config = {"law_diff": 'calzetti', 
             "type": "two_component",
             "law_bc": "calzetti",
             "*": FIXED,
@@ -236,7 +236,7 @@ def test_dale2014_precompute_matches_exact(synthetic_ssp, dust_ir_filters):
             synthetic_ssp,
             dust_ir_filters,
             "dale2014",
-            dust_config={
+            dust_config={"law_diff": 'calzetti', 
                 "type": "two_component",
                 "law_bc": "calzetti",
                 "*": FIXED,

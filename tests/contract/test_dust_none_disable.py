@@ -69,7 +69,7 @@ def test_dust_emission_none_builds(synthetic_ssp_wide, synthetic_tophat_obs):
     _, phot = _phot(
         synthetic_ssp_wide,
         synthetic_tophat_obs,
-        dust={"type": "two_component", "*": FIXED, "emission": {"type": "none"}},
+        dust={"law": "power_law", "type": "two_component", "*": FIXED, "emission": {"type": "none"}},
     )
     assert np.all(np.isfinite(phot))
 

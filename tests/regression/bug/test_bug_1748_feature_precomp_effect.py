@@ -37,7 +37,7 @@ def _build(ssp, approx, *, dust: bool):
     from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, Uniform
 
     dust_group = (
-        {
+        {"law_diff": 'calzetti', 
             "type": "two_component",
             "law_bc": "calzetti",
             "all_params": FIXED,

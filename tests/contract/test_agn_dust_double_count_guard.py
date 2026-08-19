@@ -28,7 +28,7 @@ def _spec(dust_frac_agn, agn_fracagn, *, emission="dale2014", with_agn=True):
     """Build a spec with a chosen dust emission + (optional) composable AGN."""
     groups = dict(
         sfh={"type": "dpl", "*": FIXED},
-        dust={
+        dust={"law": "power_law", 
             "type": "two_component",
             "emission": {"type": emission, "frac_agn": dust_frac_agn}
             if emission == "dale2014"
@@ -101,7 +101,7 @@ class TestGuardEndToEndAndFilterable:
             SEDModel.build(
                 ssp_data=synthetic_ssp_wide,
                 sfh={"type": "delayed", "*": FIXED},
-                dust={
+                dust={"law": "power_law", 
                     "type": "two_component",
                     "tau_bc": Fixed(0.0),
                     "tau_diff": Fixed(0.0),
@@ -124,7 +124,7 @@ class TestGuardEndToEndAndFilterable:
             model = SEDModel.build(
                 ssp_data=synthetic_ssp_wide,
                 sfh={"type": "delayed", "*": FIXED},
-                dust={
+                dust={"law": "power_law", 
                     "type": "two_component",
                     "tau_bc": Fixed(0.0),
                     "tau_diff": Fixed(0.0),

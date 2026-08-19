@@ -53,7 +53,7 @@ def fitter(synthetic_ssp_wide):
         ssp_data=synthetic_ssp_wide,
         observation=obs,
         sfh={"type": "dpl", "all_params": FIXED, "log_total_mass": Uniform(8.0, 12.0)},
-        dust={
+        dust={"law_diff": 'calzetti', 
             "type": "two_component",
             "law_bc": "calzetti",
             "all_params": FIXED,
