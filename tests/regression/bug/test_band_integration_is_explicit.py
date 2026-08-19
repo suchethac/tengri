@@ -66,9 +66,9 @@ def obs():
 
 
 def _model(ssp, obs, *, dust_type, approx):
-    dust = {"type": dust_type, "all_params": FIXED}
+    dust = {"type": dust_type, "all_params": FIXED, "law": "power_law"}
     if dust_type == "two_component":
-        dust["law_bc"] = "calzetti"
+        dust["law"] = "calzetti"
     return SEDModel.build(
         ssp_data=ssp,
         observation=obs,
