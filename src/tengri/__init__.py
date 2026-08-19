@@ -278,7 +278,11 @@ from tengri.components.dust.draine2021_pah import (
     load_pahspec_draine2021,
     select_pahspec_axes,
 )
-from tengri.components.igm import igm_transmission, igm_transmission_madau
+from tengri.components.igm import (
+    igm_transmission,
+    igm_transmission_madau,
+    igm_transmission_meiksin06,
+)
 from tengri.components.igm.dla import dla_transmission, dla_transmission_obs
 from tengri.components.stellar.sfh import (
     AGEMAX_YR,
@@ -402,7 +406,21 @@ from tengri.forward.sed_model import (
 )
 from tengri.forward.spatial_model import SpatialModel, SpatialSEDModel
 from tengri.inference.backends.mcmc.raytrace import sample_raytrace
-from tengri.observation.filters import load_filter, load_filter_set
+from tengri.inference.bma import bma_resample, bma_weights
+from tengri.observation.filters import (
+    list_registered_filters,
+    list_synthetic_bands,
+    load_alma_band,
+    load_custom_filter,
+    load_filter,
+    load_filter_from_dsps_file,
+    load_filter_from_dsps_transmission_curve,
+    load_filter_set,
+    load_tophat_filter,
+    register_filter,
+    register_filter_from_file,
+    unregister_filter,
+)
 from tengri.observation.noise import (
     PoissonNoiseLikelihood,
     StudentTLikelihood,
@@ -618,6 +636,9 @@ __all__ = [  # noqa: RUF022
     "builders",
     "recipes",
     "register_component",
+    # Bayesian model averaging
+    "bma_resample",
+    "bma_weights",
     # Utilities
     "measure",
     "vmap_chunked",
@@ -654,6 +675,7 @@ __all__ = [  # noqa: RUF022
     "velocity_broaden",
     "igm_transmission",
     "igm_transmission_madau",
+    "igm_transmission_meiksin06",
     # Spectral indices
     "measure_index_jax",
     "STANDARD_INDICES",
@@ -686,6 +708,16 @@ __all__ = [  # noqa: RUF022
     "list_dust_models",
     "list_filter_conventions",
     "list_filters",
+    "list_registered_filters",
+    "list_synthetic_bands",
+    "load_alma_band",
+    "load_custom_filter",
+    "load_filter_from_dsps_file",
+    "load_filter_from_dsps_transmission_curve",
+    "load_tophat_filter",
+    "register_filter",
+    "register_filter_from_file",
+    "unregister_filter",
     "list_igm_models",
     "list_inference_methods",
     "list_metallicity_modes",

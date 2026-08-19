@@ -56,8 +56,8 @@ Reference: Draine & Li 2007, ApJ 657, 810 (Eq. 23, U distribution).
     import matplotlib.pyplot as plt
     import numpy as np
 
-    from tengri.analysis.plotting import setup_style
     from tengri.dust import draine_li2007
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore")

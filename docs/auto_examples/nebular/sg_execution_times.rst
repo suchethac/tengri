@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:56.377** total execution time for 20 files **from auto_examples/nebular**:
+**00:56.377** total execution time for 9 files **from auto_examples/nebular**:
 
 .. container::
 
@@ -41,52 +41,19 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_nebular_plot_fesc_sweep.py` (``plot_fesc_sweep.py``)
      - 00:01.148
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_nebular_plot_gas_z_continuum_effect.py` (``plot_gas_z_continuum_effect.py``)
-     - 00:00.802
-     - 0.0
    * - :ref:`sphx_glr_auto_examples_nebular_plot_nebular_backends.py` (``plot_nebular_backends.py``)
      - 00:00.646
      - 0.0
    * - :ref:`sphx_glr_auto_examples_nebular_plot_qh_vs_age_metallicity.py` (``plot_qh_vs_age_metallicity.py``)
      - 00:00.379
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_nebular_plot_bpt_cue_flexibility.py` (``plot_bpt_cue_flexibility.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_nebular_plot_bpt_cue_grid.py` (``plot_bpt_cue_grid.py``)
-     - 00:00.000
-     - 0.0
    * - :ref:`sphx_glr_auto_examples_nebular_plot_bpt_diagram_population.py` (``plot_bpt_diagram_population.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_nebular_plot_cue_fesc_logu_atlas.py` (``plot_cue_fesc_logu_atlas.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_nebular_plot_fesc_lya_sweep.py` (``plot_fesc_lya_sweep.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_nebular_plot_halpha_sfr_calibration_age.py` (``plot_halpha_sfr_calibration_age.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_nebular_plot_line_sigma_sweep.py` (``plot_line_sigma_sweep.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_nebular_plot_logz_gas_sweep.py` (``plot_logz_gas_sweep.py``)
-     - 00:00.000
-     - 0.0
    * - :ref:`sphx_glr_auto_examples_nebular_plot_lyalpha_ew_vs_age.py` (``plot_lyalpha_ew_vs_age.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_nebular_plot_neb_age_dependence.py` (``plot_neb_age_dependence.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_nebular_plot_neb_bpt_logu_grid.py` (``plot_neb_bpt_logu_grid.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_nebular_plot_neb_density_sweep.py` (``plot_neb_density_sweep.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_nebular_plot_oiii_hbeta_logu_at_fixed_z.py` (``plot_oiii_hbeta_logu_at_fixed_z.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_nebular_plot_shock_emission.py` (``plot_shock_emission.py``)

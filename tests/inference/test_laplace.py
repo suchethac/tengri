@@ -117,3 +117,22 @@ class TestLaplace:
         result = fitter.run("laplace", n_samples=50, n_map_steps=50, verbose=False)
         assert isinstance(result, Posterior)
         assert result.samples is not None
+
+    def test_posterior_log_evidence_populated(self, fitter_and_map):
+        """Posterior.log_evidence should be populated and finite."""
+        fitter, map_result, _ = fitter_and_map
+        result = fitter.run("laplace", init_from=map_result, n_samples=50, verbose=False)
+        assert result.log_evidence is not None
+        assert np.isfinite(result.log_evidence)
+
+    def test_posterior_log_evidence_equals_diagnostics(self, fitter_and_map):
+        """Posterior.log_evidence should match diagnostics['log_evidence']."""
+        fitter, map_result, _ = fitter_and_map
+        result = fitter.run("laplace", init_from=map_result, n_samples=50, verbose=False)
+        assert result.log_evidence is not None
+        assert "log_evidence" in result.diagnostics
+        np.testing.assert_allclose(
+            float(result.log_evidence),
+            float(result.diagnostics["log_evidence"]),
+            rtol=1e-10,
+        )

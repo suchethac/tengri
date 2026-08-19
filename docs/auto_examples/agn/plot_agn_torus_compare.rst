@@ -45,21 +45,8 @@ near 9.7 and 18 μm.
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /tengri/examples/agn/plot_agn_torus_compare.py:95: UserWarning: Glyph 246 (\N{LATIN SMALL LETTER O WITH DIAERESIS}) missing from font(s) cmr10.
-      fig.tight_layout()
-    /tengri/examples/agn/plot_agn_torus_compare.py:96: UserWarning: Glyph 246 (\N{LATIN SMALL LETTER O WITH DIAERESIS}) missing from font(s) cmr10.
-      plt.savefig("plot_agn_torus_compare.png", dpi=150, bbox_inches="tight")
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -75,7 +62,7 @@ near 9.7 and 18 μm.
     import numpy as np
 
     import tengri
-    from tengri.analysis.plotting import setup_style
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -145,7 +132,7 @@ near 9.7 and 18 μm.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 24.633 seconds)
+   **Total running time of the script:** (0 minutes 6.534 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_torus_compare.py:

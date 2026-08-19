@@ -69,8 +69,8 @@ Reference: Bell+2003; Delvecchio+2021; McCheyne+2022 (q_IR calibrations).
     import numpy as np
 
     import tengri
-    from tengri.analysis.plotting import setup_style
-    from tengri.utils.physics_constants import C_AA
+    from tengri.plot import setup_style
+    from tengri.units import C_AA
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -156,7 +156,7 @@ Reference: Bell+2003; Delvecchio+2021; McCheyne+2022 (q_IR calibrations).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 23.244 seconds)
+   **Total running time of the script:** (0 minutes 5.418 seconds)
 
 
 .. _sphx_glr_download_auto_examples_radio_plot_radio_model_family_compare.py:

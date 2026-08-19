@@ -24,7 +24,9 @@ The table below is a decision aid; when it disagrees with
 | Exact posterior, low-D (D ≤ 6) photometry | `mcmc_nuts` | No-U-Turn Sampler. Gold standard for small parametric models. Cold ~90 s at D=6 DPL. |
 | D ≈ 7–8, or NUTS warmup too slow | `mcmc_hmc` | Fixed-length HMC keeps the compile graph bounded. Cold ~21 s at D=6–7, ~40 s at D=8 photometry. **Validated only with `dense_mass_matrix=True`, `n_warmup ≥ 1000`, `n_leapfrog_steps ≥ 20`** — do not lower the warmup for science. |
 | High-D (D ≳ 20), e.g. stochastic-field SFH | `mcmc_raytrace` or `vi` | Ray tracing is O(1)-gradient ensemble sampling; `vi` (NIFTy geoVI) captures non-Gaussian geometry but is memory-heavy (~20 GB at D=6–7). |
-| Bayesian evidence / model comparison (experimental) | `nss` | Nested sampling. **Experimental tier.** Slow (cold ~240 s at D=6); use for evidence only, not point estimates. |
+| Model comparison / BMA (calibrated reference) | `nss` with `preset="fast"` | Nested sampling. Calibrated, reference-grade evidence (σ_logZ ≈ √(H/n_live)). Cold ~60 s at D=6 with fast preset; use for cross-validation per model family. |
+| Model comparison / BMA (fast approximation) | `laplace` | Gaussian approximation around the MAP. Cold ~5–9 s. Valid when diagnostics show `newton_decrement` ≤ stationarity_tol and n_clipped_eigenvalues = 0; cross-check per model family. |
+| Model comparison / BMA (recommended workhorse) | `hmc_is` | HMC posterior chain + importance-sampled evidence. Cold ~30 s at D=6; delivers posterior samples + log Z in one run. Check `diagnostics["ess"]` (~100+ gives σ_logZ ≲ 0.1 nats; distrust below ~50). |
 
 ## Tiers
 

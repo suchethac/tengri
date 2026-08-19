@@ -52,21 +52,8 @@ References
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /tengri/examples/xray/plot_alpha_ox_relations.py:106: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
-      fig.tight_layout()
-    /tengri/examples/xray/plot_alpha_ox_relations.py:107: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
-      plt.savefig("plot_alpha_ox_relations.png", dpi=150, bbox_inches="tight")
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -81,7 +68,7 @@ References
     import matplotlib.pyplot as plt
     import numpy as np
 
-    from tengri.analysis.plotting import setup_style
+    from tengri.plot import setup_style
     from tengri.xray import alpha_ox_from_l2500, xray_agn_corona
 
     setup_style()

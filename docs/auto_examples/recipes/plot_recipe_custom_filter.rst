@@ -54,7 +54,7 @@ with the standard library.
 
     import tengri
     from tengri import FilterCurve
-    from tengri.analysis.plotting import setup_style
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -135,11 +135,6 @@ with the standard library.
     ax_filters.set_xlim(2e3, 2.5e4)
 
     plt.savefig("plot_recipe_custom_filter.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.002 seconds)
 
 
 .. _sphx_glr_download_auto_examples_recipes_plot_recipe_custom_filter.py:

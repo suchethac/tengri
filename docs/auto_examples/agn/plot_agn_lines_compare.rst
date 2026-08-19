@@ -63,7 +63,7 @@ line normalization is under review, see the tracked issue).
     import numpy as np
 
     import tengri
-    from tengri.analysis.plotting import setup_style
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -135,7 +135,7 @@ line normalization is under review, see the tracked issue).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.638 seconds)
+   **Total running time of the script:** (0 minutes 3.320 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_lines_compare.py:

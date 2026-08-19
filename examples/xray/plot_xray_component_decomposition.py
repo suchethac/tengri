@@ -23,7 +23,7 @@ import jax.numpy as jnp
 import numpy as np
 from matplotlib import pyplot as plt
 
-from tengri.analysis.plotting import setup_style
+from tengri.plot import setup_style
 from tengri.xray import xray_agn_corona, xray_hotgas, xray_xrb
 
 setup_style()

@@ -5,12 +5,8 @@
 Use Cases
 =========
 
-Paper-style diagnostics: UVJ, JWST color-color, SFR indicators, mass completeness, age–dust degeneracy, emission-line correlations.
+Paper-style diagnostics: UVJ, JWST color-color, SFR indicators, age–dust degeneracy, main sequence evolution, dropout selection, spectral indices. Simulated-population Catalog examples.
 
-
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
 
 
 .. raw:: html
@@ -18,23 +14,6 @@ Paper-style diagnostics: UVJ, JWST color-color, SFR indicators, mass completenes
     <div class="sphx-glr-thumbnails">
 
 .. thumbnail-parent-div-open
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Left panel: The age–dust degeneracy as seen in optical g−r color. A 5 Gyr stellar population with no dust is nearly indistinguishable from a 1 Gyr population reddened by τ_diff = 0.4 when observed in optical broadband colors alone. A 2-D grid in (age, τ_diff) with iso-color contours reveals the orientation of the degeneracy—lines of constant color show why optical colors alone cannot break this ambiguity.">
-
-.. only:: html
-
-  .. image:: /auto_examples/usecases/images/thumb/sphx_glr_plot_usecase_age_dust_2d_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/usecases/plot_usecase_age_dust_2d`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Age-dust degeneracy: optical colors vs. UV constraining power</div>
-    </div>
-
 
 .. raw:: html
 
@@ -67,40 +46,6 @@ Paper-style diagnostics: UVJ, JWST color-color, SFR indicators, mass completenes
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Balmer Decrement Tests Dust Attenuation on Emission Lines</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Planck 2018: H₀ = 67.4 km/s/Mpc, Ω_M = 0.315. Riess et al. 2022: H₀ = 73.04 ± 1.04 km/s/Mpc, Ω_M = 0.30. Apparent magnitude shift is ~0.15 mag across z = 0.05–3.">
-
-.. only:: html
-
-  .. image:: /auto_examples/usecases/images/thumb/sphx_glr_plot_usecase_cosmology_distance_modulus_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/usecases/plot_usecase_cosmology_distance_modulus`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Hubble Tension: Cosmology-dependent distance modulus</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="tengri.cosmology exposes the standard FRW distances — comoving, luminosity, angular-diameter — and lookback time as pure-JAX functions over a Planck-18 default. They are differentiable, JIT-able, and interchangeable with astropy&#x27;s API for tengri&#x27;s own forward model.">
-
-.. only:: html
-
-  .. image:: /auto_examples/usecases/images/thumb/sphx_glr_plot_usecase_cosmology_ladder_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/usecases/plot_usecase_cosmology_ladder`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Cosmological distance ladder and the K-correction for a flat SED</div>
     </div>
 
 
@@ -140,23 +85,6 @@ Paper-style diagnostics: UVJ, JWST color-color, SFR indicators, mass completenes
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The Mannucci+2010 fundamental metallicity relation (FMR) describes how a galaxy&#x27;s gas-phase metallicity (Z) depends not only on its stellar mass (M) but also on its star formation rate (SFR). This three-parameter relation is a schematic* demonstration of the physical interplay between assembly, star formation, and chemical enrichment.">
-
-.. only:: html
-
-  .. image:: /auto_examples/usecases/images/thumb/sphx_glr_plot_usecase_fundamental_metallicity_relation_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/usecases/plot_usecase_fundamental_metallicity_relation`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">The Fundamental Metallicity Relation: M*-Z-SFR three-body interaction</div>
-    </div>
-
-
-.. raw:: html
-
     <div class="sphx-glr-thumbcontainer" tooltip="The Coleman, Wu &amp; Weedman 1980 spectral templates remain the textbook illustration of how the integrated SED morphs along the Hubble sequence — from quiescent ellipticals with deep 4000 Å breaks to gas-rich irregulars dominated by ongoing star formation and nebular emission.">
 
 .. only:: html
@@ -186,40 +114,6 @@ Paper-style diagnostics: UVJ, JWST color-color, SFR indicators, mass completenes
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">JWST NIRCam color-color diagnostics for high-z galaxy classification</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Kennicutt+1998 baseline calibrations under constant-SFR assumption: L_FUV(1500 Å): SFR/L_FUV = 1.4 × 10⁻²⁸; L_Hα: SFR/L_Hα = 7.9 × 10⁻⁴²; L_IR(8–1000 μm): SFR/L_IR = 4.5 × 10⁻⁴⁴. Stochastic SFH introduces variance in each indicator; Hα most sensitive to recent star formation.">
-
-.. only:: html
-
-  .. image:: /auto_examples/usecases/images/thumb/sphx_glr_plot_usecase_kennicutt_sfr_calibrations_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/usecases/plot_usecase_kennicutt_sfr_calibrations`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Kennicutt+1998 SFR calibrations: baseline + stochastic variance</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Demonstrates how strong gravitational lensing elevates intrinsically-faint high-redshift (z=7) galaxies above the JWST NIRCam 5σ detection threshold.">
-
-.. only:: html
-
-  .. image:: /auto_examples/usecases/images/thumb/sphx_glr_plot_usecase_lensed_galaxy_magnification_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/usecases/plot_usecase_lensed_galaxy_magnification`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Strong-lensing magnification: EoR galaxy SEDs at μ = 1, 5, 20, 100</div>
     </div>
 
 
@@ -259,23 +153,6 @@ Paper-style diagnostics: UVJ, JWST color-color, SFR indicators, mass completenes
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The cosmic star formation rate density (SFRD) — the total stellar mass created per unit time per unit comoving volume — rises from z~0 to peak at z~2, then declines toward higher redshift. Madau &amp; Dickinson 2014 assembled multi-wavelength observational data and fit a smooth analytic form:">
-
-.. only:: html
-
-  .. image:: /auto_examples/usecases/images/thumb/sphx_glr_plot_usecase_sfh_to_madau_dickinson_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/usecases/plot_usecase_sfh_to_madau_dickinson`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Madau-Dickinson 2014 cosmic SFRD(z) from a population of mock galaxies</div>
-    </div>
-
-
-.. raw:: html
-
     <div class="sphx-glr-thumbcontainer" tooltip="Star formation rate calibrations depend on which wavelengths we observe. At high dust optical depth, UV-only SFR estimators severely underestimate the true SFR because dusty starbursts radiate most energy in the infrared. The hybrid SFR(UV+IR) recipe recovers the true SFR by combining both tracers.">
 
 .. only:: html
@@ -293,35 +170,18 @@ Paper-style diagnostics: UVJ, JWST color-color, SFR indicators, mass completenes
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="The stellar mass function (SMF) describes the number density of galaxies as a function of stellar mass, a fundamental probe of galaxy assembly. The Schechter function provides an excellent fit to observed SMF across cosmic time:">
+    <div class="sphx-glr-thumbcontainer" tooltip="Replacing metallicity history Z(t) with its mass-weighted mean introduces 10–23% flux errors in u and 1–6% in z. The SED is a nonlinear mass-weighted sum of SSP templates; young metal-rich stars (dominant in UV) and old metal-poor stars do not average.">
 
 .. only:: html
 
-  .. image:: /auto_examples/usecases/images/thumb/sphx_glr_plot_usecase_stellar_mass_luminosity_function_thumb.png
+  .. image:: /auto_examples/usecases/images/thumb/sphx_glr_plot_usecase_simulation_seds_thumb.png
     :alt:
 
-  :doc:`/auto_examples/usecases/plot_usecase_stellar_mass_luminosity_function`
+  :doc:`/auto_examples/usecases/plot_usecase_simulation_seds`
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Stellar Mass and Luminosity Functions from Mock Survey</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="The Tully-Fisher relation is a tight empirical correlation between the baryonic mass of disc galaxies and their observed rotation velocity, parametrized as M_baryon ∝ V_rot^4 (slope 4.0 on the log-log plane).">
-
-.. only:: html
-
-  .. image:: /auto_examples/usecases/images/thumb/sphx_glr_plot_usecase_tully_fisher_relation_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/usecases/plot_usecase_tully_fisher_relation`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Tully-Fisher Relation: Baryonic Mass — Rotation Velocity Scaling</div>
+      <div class="sphx-glr-thumbnail-title">Predicting SEDs for a simulated population: what collapsing Z(t) costs</div>
     </div>
 
 
@@ -339,23 +199,6 @@ Paper-style diagnostics: UVJ, JWST color-color, SFR indicators, mass completenes
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">UV slope β degeneracy: dust optical depth and stellar age</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="For any self-consistent dust model: L_IR ≈ L_UV_absorbed. Using tabulated Dale14 templates, agreement reaches ~5% across τ_V ∈ {0, 0.1, …, 4}. Non-conservation flags calibration issues in the dust emission routing.">
-
-.. only:: html
-
-  .. image:: /auto_examples/usecases/images/thumb/sphx_glr_plot_usecase_uv_to_ir_bolometric_balance_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/usecases/plot_usecase_uv_to_ir_bolometric_balance`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Dust energy balance: L_IR = L_UV_absorbed across opacity variations</div>
     </div>
 
 
@@ -386,25 +229,16 @@ Paper-style diagnostics: UVJ, JWST color-color, SFR indicators, mass completenes
 .. toctree::
    :hidden:
 
-   /auto_examples/usecases/plot_usecase_age_dust_2d
    /auto_examples/usecases/plot_usecase_age_dust_redshift_degeneracy
    /auto_examples/usecases/plot_usecase_balmer_decrement_av
-   /auto_examples/usecases/plot_usecase_cosmology_distance_modulus
-   /auto_examples/usecases/plot_usecase_cosmology_ladder
    /auto_examples/usecases/plot_usecase_d4000_vs_ssfr
    /auto_examples/usecases/plot_usecase_dropout_selection_z3
-   /auto_examples/usecases/plot_usecase_fundamental_metallicity_relation
    /auto_examples/usecases/plot_usecase_hubble_sequence
    /auto_examples/usecases/plot_usecase_jwst_color_color
-   /auto_examples/usecases/plot_usecase_kennicutt_sfr_calibrations
-   /auto_examples/usecases/plot_usecase_lensed_galaxy_magnification
    /auto_examples/usecases/plot_usecase_main_sequence_cosmic_evolution
    /auto_examples/usecases/plot_usecase_sdss_lrg_stack_template
-   /auto_examples/usecases/plot_usecase_sfh_to_madau_dickinson
    /auto_examples/usecases/plot_usecase_sfr_uv_ir_consistency
-   /auto_examples/usecases/plot_usecase_stellar_mass_luminosity_function
-   /auto_examples/usecases/plot_usecase_tully_fisher_relation
+   /auto_examples/usecases/plot_usecase_simulation_seds
    /auto_examples/usecases/plot_usecase_uv_slope_beta
-   /auto_examples/usecases/plot_usecase_uv_to_ir_bolometric_balance
    /auto_examples/usecases/plot_usecase_uvj_diagram
 

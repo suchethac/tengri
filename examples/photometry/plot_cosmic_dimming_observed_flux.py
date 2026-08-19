@@ -49,7 +49,7 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 
 import tengri
-from tengri.analysis.plotting import setup_style
+from tengri.plot import setup_style
 
 setup_style()
 
