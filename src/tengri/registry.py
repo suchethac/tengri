@@ -2130,7 +2130,13 @@ def _menu_listers() -> tuple:
 #: Menus that are not a physics group but are still menus a user can look a
 #: name up in. ``describe`` and ``search`` used to append these by hand at each
 #: call site — a second and third hand-written enumeration of "every menu".
-_EXTRA_MENU_LISTER_NAMES = ("list_components", "list_filters", "list_plots", "list_recipes")
+_EXTRA_MENU_LISTER_NAMES = (
+    "list_components",
+    "list_filters",
+    "list_synthetic_bands",
+    "list_plots",
+    "list_recipes",
+)
 
 
 @functools.cache

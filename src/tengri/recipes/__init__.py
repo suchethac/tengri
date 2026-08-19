@@ -216,6 +216,7 @@ def high_z() -> dict:
     return dict(
         sfh={
             "type": "tsnorm",
+            "all_params": FIXED,
             "log_total_mass": Uniform(8.0, 12.0),
             "peak_lbt_gyr": Uniform(0.1, 1.5),
             "width_gyr": Uniform(0.05, 1.0),
@@ -225,6 +226,7 @@ def high_z() -> dict:
         },
         dust={
             "type": "two_component",
+            "all_params": FIXED,
             "law_bc": "calzetti",
             "law_diff": "power_law",
             "tau_bc": Uniform(0.1, 1.5),
@@ -278,6 +280,7 @@ def photoz() -> dict:
     return dict(
         sfh={
             "type": "dpl",
+            "all_params": FIXED,
             "alpha": Uniform(0.5, 3.0),
             "beta": Uniform(0.3, 2.0),
             "tau_gyr": Uniform(0.5, 13.0),
@@ -286,6 +289,7 @@ def photoz() -> dict:
         },
         dust={
             "type": "two_component",
+            "all_params": FIXED,
             "law_bc": "calzetti",
             "law_diff": "power_law",
             "tau_bc": Uniform(0.0, 3.0),
@@ -353,7 +357,10 @@ def agn_panchromatic() -> dict:
             defaults=FREE,
             # ``defaults=FIXED``: the Dale+2014 knobs are a template-family
             # choice, not something a wildcard should open by default.
-            emission=builders.dust.emission.dale2014(defaults=FIXED),
+            # ``dale2014_cigale``: this recipe enables the radio component, and
+            # plain dale2014 embeds its own SF radio continuum — the pair
+            # double-counts the synchrotron and is refused at build (#1970).
+            emission=builders.dust.emission.dale2014_cigale(defaults=FIXED),
         ),
         met={"logzsol": FREE},
         neb=builders.neb.cue(defaults=FIXED),
@@ -435,7 +442,10 @@ def composable_agn() -> dict:
             defaults=FREE,
             # ``defaults=FIXED``: the Dale+2014 knobs are a template-family
             # choice, not something a wildcard should open by default.
-            emission=builders.dust.emission.dale2014(defaults=FIXED),
+            # ``dale2014_cigale``: this recipe enables the radio component, and
+            # plain dale2014 embeds its own SF radio continuum — the pair
+            # double-counts the synchrotron and is refused at build (#1970).
+            emission=builders.dust.emission.dale2014_cigale(defaults=FIXED),
         ),
         met={"logzsol": FREE},
         neb=builders.neb.cue(defaults=FIXED),
@@ -565,7 +575,7 @@ def mock_recovery_minimal() -> dict:
             law_bc="calzetti",
             tau_bc=Uniform(0, 1),
         ),
-        met={"logzsol": FREE},
+        met={"all_params": FIXED, "logzsol": FREE},
         neb=builders.neb.none(),
         redshift=Fixed(0.05),
         approx=WavePrecomp(),

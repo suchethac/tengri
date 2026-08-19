@@ -187,6 +187,7 @@ _CANONICAL_METHODS = {
     "laplace",
     "pathfinder",
     "nss",  # Nested Slice Sampling, log Z (D≤30)
+    "hmc_is",  # HMC posterior + importance-sampled log Z
     "auto",  # auto: mcmc_nuts (D≤20) or vi (D>20)
 }
 
@@ -2467,6 +2468,7 @@ class Fitter:
 
         if mcmc_methods:
             from tengri.inference.backends.mcmc._shared import (
+                DEFAULT_MAX_NUM_DOUBLINGS,
                 _dynamic_hmc_full_scan,
                 _get_flat_logdensity,
                 _ghmc_full_scan,
@@ -2495,7 +2497,7 @@ class Fitter:
                         log_posterior_flat_2arg,
                         data_args,
                         n_warmup,
-                        10,
+                        DEFAULT_MAX_NUM_DOUBLINGS,
                         use_dense,
                         0.85,
                     )
@@ -4140,6 +4142,7 @@ class Fitter:
         from jax.flatten_util import ravel_pytree
 
         from tengri.inference.backends.mcmc._shared import (
+            DEFAULT_MAX_NUM_DOUBLINGS,
             _get_dynamic_hmc_kernel,
             _get_flat_logdensity,
             _get_ghmc_kernel,
@@ -4152,7 +4155,7 @@ class Fitter:
         n_burnin = kwargs.get("n_burnin", 100)
         n_samples = kwargs.get("n_samples", 1000)
         target_accept_rate = kwargs.get("target_accept_rate", 0.85)
-        max_num_doublings = kwargs.get("max_num_doublings", 10)
+        max_num_doublings = kwargs.get("max_num_doublings", DEFAULT_MAX_NUM_DOUBLINGS)
         dense_mass_matrix = kwargs.get("dense_mass_matrix", True)
         n_leapfrog_steps = kwargs.get("n_leapfrog_steps", 10)
         alpha = kwargs.get("alpha", 0.8)

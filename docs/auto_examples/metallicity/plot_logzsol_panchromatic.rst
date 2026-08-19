@@ -44,9 +44,7 @@ Reference: Conroy 2013 (stellar), Silva et al. 1998 (dust emission).
 
  .. code-block:: none
 
-    /tengri/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
-      return load_ssp_data(str(candidate))
-    /tengri/src/tengri/forward/orchestrator.py:693: SFHBeforeBigBangWarning: Star formation history forms 43% of its stellar mass before the Big Bang at z=0.20 (cosmic age 11.30 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
+    /tengri/src/tengri/forward/orchestrator.py:951: SFHBeforeBigBangWarning: Star formation history forms 43% of its stellar mass before the Big Bang at z=0.20 (cosmic age 11.30 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
       state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
 
 
@@ -72,7 +70,7 @@ Reference: Conroy 2013 (stellar), Silva et al. 1998 (dust emission).
     import numpy as np
 
     import tengri
-    from tengri.analysis.plotting import setup_style
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -130,6 +128,11 @@ Reference: Conroy 2013 (stellar), Silva et al. 1998 (dust emission).
 
     fig.tight_layout()
     plt.savefig("plot_logzsol_panchromatic.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.073 seconds)
 
 
 .. _sphx_glr_download_auto_examples_metallicity_plot_logzsol_panchromatic.py:

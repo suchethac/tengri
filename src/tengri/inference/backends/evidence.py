@@ -14,6 +14,51 @@ import jax.numpy as jnp
 from tengri.inference._model_cache import _default_owner as _model_cache_owner
 
 
+def _resolve_nss_settings(preset, n_live, num_delete, log_evidence_tol, max_shrinkage):
+    """Expand preset name to tuple of settings, with explicit kwargs overriding.
+
+    Parameters
+    ----------
+    preset : str or None
+        Preset name: "fast", "accurate", or None (defaults to "accurate").
+    n_live : int or None
+        Number of live points (overrides preset if not None).
+    num_delete : int or None
+        Points to replace per iteration (overrides preset if not None).
+    log_evidence_tol : float or None
+        Termination tolerance on log(Z_remaining) (overrides preset if not None).
+    max_shrinkage : int or None
+        Maximum shrinkage steps (overrides preset if not None).
+
+    Returns
+    -------
+    tuple of (int, int, float, int)
+        Resolved (n_live, num_delete, log_evidence_tol, max_shrinkage).
+
+    Raises
+    ------
+    ValueError
+        If preset is not in ("fast", "accurate", None).
+    """
+    presets = {
+        "fast": (100, 20, -2.0, 10),
+        "accurate": (500, 50, -3.0, 20),
+        None: (500, 50, -3.0, 20),
+    }
+
+    if preset not in presets:
+        raise ValueError(f"Unknown preset {preset!r}. Valid options: 'fast', 'accurate', or None.")
+
+    default_n_live, default_num_delete, default_log_tol, default_shrink = presets[preset]
+
+    return (
+        n_live if n_live is not None else default_n_live,
+        num_delete if num_delete is not None else default_num_delete,
+        log_evidence_tol if log_evidence_tol is not None else default_log_tol,
+        max_shrinkage if max_shrinkage is not None else default_shrink,
+    )
+
+
 def _get_nss_fns(
     fitter,
     *,
@@ -95,14 +140,15 @@ def run_nss(
     *,
     key,
     init_from=None,
-    n_live=500,
-    num_delete=50,
+    preset=None,
+    n_live=None,
+    num_delete=None,
     num_inner_steps=None,
-    log_evidence_tol=-3.0,
+    log_evidence_tol=None,
     max_iterations=10000,
     n_posterior_samples=1000,
     max_steps=10,
-    max_shrinkage=20,
+    max_shrinkage=None,
     verbose=True,
 ):
     """Nested Slice Sampling for Bayesian evidence computation.
@@ -114,30 +160,51 @@ def run_nss(
 
     Parameters
     ----------
-    n_live : int
-        Number of live points.
-    num_delete : int
-        Points to replace per iteration.
+    preset : str or None
+        Preset configuration for evidence accuracy vs. speed. Options:
+
+        - ``"fast"``: n_live=100, num_delete=20, log_evidence_tol=-2.0,
+          max_shrinkage=10. Evidence scatter σ_logZ ≈ 0.3–0.45 nats; suitable
+          when Δlog Z between models ≳ 1. Wall time ~2–3× faster than "accurate".
+        - ``"accurate"``: n_live=500, num_delete=50, log_evidence_tol=-3.0,
+          max_shrinkage=20 (default). Evidence scatter σ_logZ ≈ 0.15–0.2 nats;
+          calibrated reference.
+        - ``None``: equivalent to ``"accurate"``.
+
+        Explicit non-None arguments (n_live, num_delete, etc.) always override
+        preset values.
+    n_live : int or None
+        Number of live points. Overrides preset if not None.
+    num_delete : int or None
+        Points to replace per iteration. Overrides preset if not None.
     num_inner_steps : int or None
         HRSS walk length per replacement. Defaults to D.
-    log_evidence_tol : float
+    log_evidence_tol : float or None
         Terminate when log(Z_remaining) - log(Z_accumulated) < this.
+        Overrides preset if not None.
     max_iterations : int
         Safety limit on iterations.
     n_posterior_samples : int
         Number of posterior samples to draw after convergence.
     max_steps : int
         Maximum stepping-out steps in slice sampling.
-    max_shrinkage : int
-        Maximum shrinking steps in slice sampling. Default 20 (reduced from 100)
-        to limit the XLA graph size — each shrinkage step is compiled into the
-        ``vmap(lax.while_loop)`` body, and ``max_shrinkage=100`` caused 20 GB+
-        JIT compilation memory.
+    max_shrinkage : int or None
+        Maximum shrinking steps in slice sampling. Overrides preset if not None.
+        Default behavior (when None + no preset override) is 20 to limit XLA
+        graph size — each shrinkage step is compiled into ``vmap(lax.while_loop)``
+        body, and ``max_shrinkage=100`` caused 20 GB+ JIT compilation memory.
     verbose : bool
         Print progress.
 
     Notes
     -----
+    **Preset rationale**: Evidence scatter scales as σ_logZ ≈ √(H/n_live) where
+    H is the entropy. "fast" trades ~2–3× wall time for σ_logZ ≈ 0.3–0.45 nats,
+    fine for BMA when model differences Δlog Z ≳ 1. "accurate" provides σ_logZ
+    ≈ 0.15–0.2 nats, suitable for tight model selection. The required live set
+    must satisfy n_live > D (number of free parameters); a guard checks this
+    after preset resolution.
+
     **Cross-galaxy cache reuse**
 
     The compiled XLA step function is cached on the ``SEDModel`` object via
@@ -149,8 +216,7 @@ def run_nss(
 
     **XLA compilation size**: each ``lax.while_loop`` shrinkage step adds nodes
     to the compiled XLA graph when ``jax.vmap`` batches it over ``num_delete``
-    particles.  ``max_shrinkage=100`` caused 20 GB+ JIT compilation RAM;
-    the default is now 20.  Increase only if acceptance rates fall below ~0.5.
+    particles.  Increase max_shrinkage only if acceptance rates fall below ~0.5.
 
     Cold compile (~10–15 s) happens once per model configuration; subsequent
     galaxies pay only the per-step XLA execution time.
@@ -173,6 +239,16 @@ def run_nss(
         )
 
     D = len(context.free_names)
+    n_live, num_delete, log_evidence_tol, max_shrinkage = _resolve_nss_settings(
+        preset, n_live, num_delete, log_evidence_tol, max_shrinkage
+    )
+
+    if n_live <= D:
+        raise ValueError(
+            f"n_live ({n_live}) must be > D ({D}, number of free parameters). "
+            f"Nested sampling needs strictly more live points than dimensions."
+        )
+
     if num_inner_steps is None:
         num_inner_steps = D
 

@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:02.701** total execution time for 17 files **from auto_examples/dust_attenuation**:
+**00:09.626** total execution time for 7 files **from auto_examples/dust_attenuation**:
 
 .. container::
 
@@ -32,54 +32,24 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_usecase_irx_beta_meurer.py` (``plot_usecase_irx_beta_meurer.py``)
-     - 00:01.289
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_birth_cloud_vs_diffuse.py` (``plot_birth_cloud_vs_diffuse.py``)
-     - 00:00.947
-     - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_dust_geometry_screen_vs_mixed.py` (``plot_dust_geometry_screen_vs_mixed.py``)
-     - 00:00.464
+     - 00:06.255
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_bump_delta_joint_grid.py` (``plot_bump_delta_joint_grid.py``)
-     - 00:00.000
+     - 00:01.918
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_cardelli_rv_sweep.py` (``plot_cardelli_rv_sweep.py``)
-     - 00:00.000
+   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_wg00_tau_v_sweep.py` (``plot_wg00_tau_v_sweep.py``)
+     - 00:01.453
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_dust_law_application.py` (``plot_dust_law_application.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_dust_law_uv_slope_response.py` (``plot_dust_law_uv_slope_response.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_dust_slope_sweep.py` (``plot_dust_slope_sweep.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_galactic_zoo_dust_laws.py` (``plot_galactic_zoo_dust_laws.py``)
+   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_birth_cloud_vs_diffuse.py` (``plot_birth_cloud_vs_diffuse.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_grahsp_paper_fig7_galaxy_attenuation.py` (``plot_grahsp_paper_fig7_galaxy_attenuation.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_reddy15_highz_curve.py` (``plot_reddy15_highz_curve.py``)
-     - 00:00.000
-     - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_rv_av_uv_slope_degeneracy.py` (``plot_rv_av_uv_slope_degeneracy.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_two_component.py` (``plot_two_component.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_uv_bump_strength_sweep.py` (``plot_uv_bump_strength_sweep.py``)
-     - 00:00.000
-     - 0.0
    * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_uv_ir_energy_balance.py` (``plot_uv_ir_energy_balance.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_wg00_geometry_compare.py` (``plot_wg00_geometry_compare.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_dust_attenuation_plot_wg00_tau_v_sweep.py` (``plot_wg00_tau_v_sweep.py``)
      - 00:00.000
      - 0.0

@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:33.433** total execution time for 21 files **from auto_examples/usecases**:
+**00:33.433** total execution time for 11 files **from auto_examples/usecases**:
 
 .. container::
 
@@ -32,12 +32,6 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_stellar_mass_luminosity_function.py` (``plot_usecase_stellar_mass_luminosity_function.py``)
-     - 00:07.389
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_age_dust_2d.py` (``plot_usecase_age_dust_2d.py``)
-     - 00:05.681
-     - 0.0
    * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_sdss_lrg_stack_template.py` (``plot_usecase_sdss_lrg_stack_template.py``)
      - 00:03.887
      - 0.0
@@ -53,31 +47,13 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_sfr_uv_ir_consistency.py` (``plot_usecase_sfr_uv_ir_consistency.py``)
      - 00:02.071
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_tully_fisher_relation.py` (``plot_usecase_tully_fisher_relation.py``)
-     - 00:01.287
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_cosmology_distance_modulus.py` (``plot_usecase_cosmology_distance_modulus.py``)
-     - 00:00.905
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_kennicutt_sfr_calibrations.py` (``plot_usecase_kennicutt_sfr_calibrations.py``)
-     - 00:00.856
-     - 0.0
    * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_main_sequence_cosmic_evolution.py` (``plot_usecase_main_sequence_cosmic_evolution.py``)
      - 00:00.654
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_lensed_galaxy_magnification.py` (``plot_usecase_lensed_galaxy_magnification.py``)
-     - 00:00.626
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_fundamental_metallicity_relation.py` (``plot_usecase_fundamental_metallicity_relation.py``)
-     - 00:00.500
      - 0.0
    * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_hubble_sequence.py` (``plot_usecase_hubble_sequence.py``)
      - 00:00.346
      - 0.0
    * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_balmer_decrement_av.py` (``plot_usecase_balmer_decrement_av.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_cosmology_ladder.py` (``plot_usecase_cosmology_ladder.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_d4000_vs_ssfr.py` (``plot_usecase_d4000_vs_ssfr.py``)
@@ -87,11 +63,5 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_jwst_color_color.py` (``plot_usecase_jwst_color_color.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_sfh_to_madau_dickinson.py` (``plot_usecase_sfh_to_madau_dickinson.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_usecases_plot_usecase_uv_to_ir_bolometric_balance.py` (``plot_usecase_uv_to_ir_bolometric_balance.py``)
      - 00:00.000
      - 0.0

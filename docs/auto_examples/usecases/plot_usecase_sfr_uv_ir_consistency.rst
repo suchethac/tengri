@@ -55,33 +55,8 @@ References
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /tengri/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:228: UserWarning: Glyph 197 (\N{LATIN CAPITAL LETTER A WITH RING ABOVE}) missing from font(s) cmr10.
-      fig.tight_layout()
-    /tengri/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:228: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
-      fig.tight_layout()
-    /tengri/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:228: UserWarning: Glyph 956 (\N{GREEK SMALL LETTER MU}) missing from font(s) cmr10.
-      fig.tight_layout()
-    /tengri/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:228: UserWarning: Glyph 8857 (\N{CIRCLED DOT OPERATOR}) missing from font(s) cmr10.
-      fig.tight_layout()
-    /tengri/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:229: UserWarning: Glyph 197 (\N{LATIN CAPITAL LETTER A WITH RING ABOVE}) missing from font(s) cmr10.
-      plt.savefig("plot_usecase_sfr_uv_ir_consistency.png", dpi=150, bbox_inches="tight")
-    /tengri/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:229: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
-      plt.savefig("plot_usecase_sfr_uv_ir_consistency.png", dpi=150, bbox_inches="tight")
-    /tengri/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:229: UserWarning: Glyph 956 (\N{GREEK SMALL LETTER MU}) missing from font(s) cmr10.
-      plt.savefig("plot_usecase_sfr_uv_ir_consistency.png", dpi=150, bbox_inches="tight")
-    /tengri/examples/usecases/plot_usecase_sfr_uv_ir_consistency.py:229: UserWarning: Glyph 8857 (\N{CIRCLED DOT OPERATOR}) missing from font(s) cmr10.
-      plt.savefig("plot_usecase_sfr_uv_ir_consistency.png", dpi=150, bbox_inches="tight")
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -97,7 +72,7 @@ References
     import numpy as np
 
     from tengri import FIXED, Fixed, SEDModel, load_ssp
-    from tengri.analysis.plotting import setup_style
+    from tengri.plot import setup_style
 
     # Suppress JAX and matplotlib warnings
     jax.config.update("jax_enable_x64", True)
@@ -289,7 +264,7 @@ References
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 11.365 seconds)
+   **Total running time of the script:** (0 minutes 4.616 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_sfr_uv_ir_consistency.py:

@@ -583,6 +583,22 @@
    "name": "igm_transmission_madau"
   }
  ],
+ "igm_transmission_meiksin06": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "igm_transmission_meiksin06"
+  }
+ ],
  "jax.random.PRNGKey": [
   {
    "is_class": false,
@@ -928,6 +944,15 @@
    "name": "ndarray"
   }
  ],
+ "sed_meiksin": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "ndarray"
+  }
+ ],
  "setup_style": [
   {
    "is_class": false,
@@ -939,8 +964,8 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "tengri.analysis.plotting",
-   "module_short": "tengri.analysis.plotting",
+   "module": "tengri.plot",
+   "module_short": "tengri",
    "name": "setup_style"
   }
  ],
@@ -1136,6 +1161,15 @@
   }
  ],
  "transmission_madau": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "ndarray"
+  }
+ ],
+ "transmission_meiksin": [
   {
    "is_class": false,
    "is_explicit": false,

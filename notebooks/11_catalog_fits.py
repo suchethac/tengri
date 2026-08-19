@@ -209,7 +209,11 @@ print(
 # a deep tree on a banana-shaped photo-z posterior, and paid once per galaxy that
 # adds up. We set `K = N` (fit them all at once), a diagonal mass matrix (each
 # galaxy is low-D and the parallelism is *width over galaxies*), and one chain per
-# galaxy. We time a single forward evaluation first, then the catalog.
+# galaxy. `K = N` is right for a model this light; on heavier models
+# (nonparametric SFHs, many bands, line channels) an explicit `K = N` can exceed
+# available RAM, so leave `forward_chunk_size` at its `"auto"` default there and
+# let it size `K` from a memory budget. We time a single forward evaluation
+# first, then the catalog.
 
 # %%
 FIT_KW = dict(

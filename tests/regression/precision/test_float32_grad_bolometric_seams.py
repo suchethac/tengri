@@ -109,7 +109,7 @@ _SEAM_MODELS = {
             "all_params": FIXED,
             "tau_diff": Uniform(0.0, 1.5),
             "tau_bc": 0.0,
-            "emission": {"type": "dale2014", "all_params": FIXED},
+            "emission": {"type": "dale2014_cigale", "all_params": FIXED},
         },
         neb={"type": "cue", "all_params": FIXED},
         agn={

@@ -73,8 +73,8 @@ Reference: Yang+2020 (alpha_ox corona); Lopez+2024, Asmus+2015 (alpha_IRX).
     import numpy as np
 
     import tengri
-    from tengri.analysis.plotting import setup_style
-    from tengri.utils.physics_constants import C_AA
+    from tengri.plot import setup_style
+    from tengri.units import C_AA
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -147,7 +147,7 @@ Reference: Yang+2020 (alpha_ox corona); Lopez+2024, Asmus+2015 (alpha_IRX).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 41.380 seconds)
+   **Total running time of the script:** (0 minutes 3.984 seconds)
 
 
 .. _sphx_glr_download_auto_examples_xray_plot_xray_model_family_compare.py:

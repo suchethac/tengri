@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:06.391** total execution time for 18 files **from auto_examples/sfh**:
+**00:06.391** total execution time for 9 files **from auto_examples/sfh**:
 
 .. container::
 
@@ -38,34 +38,13 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_sfh_plot_dpl_alpha_beta_grid.py` (``plot_dpl_alpha_beta_grid.py``)
      - 00:01.645
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_sfh_plot_prospector_priors_compare.py` (``plot_prospector_priors_compare.py``)
-     - 00:01.265
-     - 0.0
    * - :ref:`sphx_glr_auto_examples_sfh_plot_sfh_nonparametric_compare.py` (``plot_sfh_nonparametric_compare.py``)
      - 00:00.917
      - 0.0
    * - :ref:`sphx_glr_auto_examples_sfh_plot_sfh_form_compare.py` (``plot_sfh_form_compare.py``)
      - 00:00.319
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_sfh_plot_bursty_continuity_sigma_schedule.py` (``plot_bursty_continuity_sigma_schedule.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_sfh_plot_bursty_recovery.py` (``plot_bursty_recovery.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_sfh_plot_chemical_evolution.py` (``plot_chemical_evolution.py``)
-     - 00:00.000
-     - 0.0
    * - :ref:`sphx_glr_auto_examples_sfh_plot_continuity_vs_bursty_psd.py` (``plot_continuity_vs_bursty_psd.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_sfh_plot_dexp_tau_sweep.py` (``plot_dexp_tau_sweep.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_sfh_plot_grahsp_paper_sfh_tau_sweep.py` (``plot_grahsp_paper_sfh_tau_sweep.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_sfh_plot_lnorm_peak_sweep.py` (``plot_lnorm_peak_sweep.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_sfh_plot_psd_burstiness.py` (``plot_psd_burstiness.py``)
@@ -77,12 +56,6 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_sfh_plot_sfh2exp_main_plus_burst.py` (``plot_sfh2exp_main_plus_burst.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_sfh_plot_sfh_quenching_compare.py` (``plot_sfh_quenching_compare.py``)
-     - 00:00.000
-     - 0.0
    * - :ref:`sphx_glr_auto_examples_sfh_plot_stochastic_sfh.py` (``plot_stochastic_sfh.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_sfh_plot_wrong_model_trap.py` (``plot_wrong_model_trap.py``)
      - 00:00.000
      - 0.0

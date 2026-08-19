@@ -432,7 +432,7 @@ def test_agn_panchromatic_free_params_all_move_predict(real_ssp_only):
             dust={
                 "type": "two_component",
                 "tau_diff": Fixed(0.3),
-                "emission": {"type": "dale2014"},
+                "emission": {"type": "dale2014_cigale"},
                 "*": FIXED,
             },
             agn=agn,

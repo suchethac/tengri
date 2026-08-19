@@ -102,6 +102,16 @@ EXPECTED_ALL = frozenset(
         "list_dust_models",
         "list_filter_conventions",
         "list_filters",
+        "list_registered_filters",
+        "list_synthetic_bands",
+        "load_alma_band",
+        "load_custom_filter",
+        "load_filter_from_dsps_file",
+        "load_filter_from_dsps_transmission_curve",
+        "load_tophat_filter",
+        "register_filter",
+        "register_filter_from_file",
+        "unregister_filter",
         "list_igm_models",
         "list_inference_methods",
         "list_metallicity_modes",
@@ -140,6 +150,7 @@ EXPECTED_ALL = frozenset(
         # Component helpers (closes #497 / #498)
         "igm_transmission",
         "igm_transmission_madau",
+        "igm_transmission_meiksin06",
         "velocity_broaden",
         "apply_lsf",
         # GP-noise kernels + spectral-index helpers (closes #511)
@@ -179,6 +190,9 @@ EXPECTED_ALL = frozenset(
         "SEDResult",
         # Top-level convenience verbs
         "fit_batch",
+        # Bayesian model averaging over per-model evidences (nss/laplace/hmc_is)
+        "bma_weights",
+        "bma_resample",
         # Catalog fitting — the astronomer-facing noun (#1317, spec §6.2)
         "Catalog",
         # Data discovery helpers

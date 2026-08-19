@@ -51,16 +51,22 @@ pytestmark = pytest.mark.contract
 #:
 #: What remains is the third cause, which a rename cannot fix: an internal
 #: grid-axis label that was never a user parameter at all. ``cb19``'s seven,
-#: ``log_age`` in the two CLOUDY-family adapters, and qsogen's pair have no
-#: live counterpart to point at — the parameter genuinely does not exist, so
-#: closing these means either declaring the parameter or declaring the axis
-#: internal and not user-collapsible. Tracked as #1827.
+#: ``log_age`` in the two CLOUDY-family adapters, and qsogen's ``agn_plslp1``
+#: have no live counterpart to point at — the parameter genuinely does not
+#: exist, so closing these means either declaring the parameter or declaring the
+#: axis internal and not user-collapsible. Tracked as #1827.
 #:
 #: ``cb19`` needs more than that again: it also carries seven axes over a
 #: photometry array with six grid dimensions, so repairing the names alone would
 #: make the collapse contract the filter axis. Fix both together.
+#:
+#: qsogen was a *pair* until #1488 registered ``agn_ebv`` as a real knob, which
+#: is the repair this ledger asks for — so the name left here, exactly as the
+#: assertion instructs. The ledger is an equality, not a floor: it fails just as
+#: loudly on a name that got fixed as on one that broke, which is what caught
+#: this. Only ``agn_plslp1`` remains dead.
 DEAD_AXIS_NAMES: dict[str, frozenset[str]] = {
-    "tengri.components.agn.qsogen_precompute": frozenset({"agn_plslp1", "agn_ebv"}),
+    "tengri.components.agn.qsogen_precompute": frozenset({"agn_plslp1"}),
 }
 
 #: Modules whose dead names still collapse, because they pass ``defaults=`` to

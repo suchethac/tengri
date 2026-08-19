@@ -39,7 +39,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from tengri import FIXED, Fixed, SEDModel, load_ssp
-from tengri.analysis.plotting import setup_style
+from tengri.plot import setup_style
 
 # Suppress JAX and matplotlib warnings
 jax.config.update("jax_enable_x64", True)

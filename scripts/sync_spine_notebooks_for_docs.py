@@ -82,6 +82,7 @@ SPINE_TITLES: dict[str, str] = {
 EXPERIMENTAL_SLUGS = [
     "stochastic_sfh_recovery",
     "multimodel_bma_candels",
+    "jwst_nonparametric_fits",
     # Apple-GPU guide. Its render is produced on Apple Silicon in a separate
     # environment (jax-mps + jax 0.10), because the notebook selects
     # JAX_PLATFORMS=mps and cannot execute anywhere else. check_notebook_renders
