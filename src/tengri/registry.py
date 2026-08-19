@@ -398,11 +398,20 @@ def _usage_hint(name: str, kind: str) -> str:
     if kind == "agn_model":
         return f"SEDModel.build(..., agn={{'type': '{name}'}})"
     if kind == "dust_model":
+        if name in ("two_component", "single_component"):
+            # Attenuation law is required (no silent default); show the
+            # smallest valid spelling for this structural type.
+            return f"SEDModel.build(..., dust={{'type': '{name}', 'law': 'calzetti'}})"
         return f"SEDModel.build(..., dust={{'type': '{name}'}})"
     if kind == "dust_attenuation":
         return f"SEDModel.build(..., dust={{'type': 'single_component', 'law': '{name}'}})"
     if kind == "dust_emission":
-        return f"SEDModel.build(..., dust={{'emission': {{'type': '{name}'}}}})"
+        # The dust dict's own 'type' defaults to two_component, which needs
+        # an explicit law; show it alongside the emission sub-block.
+        return (
+            f"SEDModel.build(..., dust={{'law': 'calzetti', "
+            f"'emission': {{'type': '{name}'}}}})"
+        )
     if kind == "sfh_model":
         return f"SEDModel.build(..., sfh={{'type': '{name}'}})"
     if kind == "nebular_backend":
