@@ -1483,7 +1483,13 @@ jobs:
             exit 1
           fi
           for f in crossval-results/*.xml; do
-            n=$(grep -o 'tests="[0-9]*"' "$f" | head -1 | grep -o '[0-9]*')
+            # Count real testcases (non-empty classname). A module whose
+            # reference package is absent skips at COLLECTION and pytest
+            # records one placeholder <testcase classname=""> for it, which
+            # collect-only does not list — counting the testsuite's tests=
+            # attribute overcounted by one per such module (7 on hosted
+            # runners, first dispatch run 32293846721).
+            n=$(grep -o '<testcase classname="[^"]' "$f" | wc -l)
             ran=$((ran + ${n:-0}))
           done
           echo "expected=$expected ran=$ran"
