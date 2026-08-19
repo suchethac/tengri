@@ -29,11 +29,7 @@ lines added at the source), then dust (UV attenuated, reprocessed
 into the FIR), then AGN (disc + torus + NLR), then radio, then X-ray.
 The color at each wavelength tells you which block matters most.
 
-<<<<<<< HEAD
-.. GENERATED FROM PYTHON SOURCE LINES 13-116
-=======
-.. GENERATED FROM PYTHON SOURCE LINES 13-118
->>>>>>> e64c5dd7a (PR1: regenerate the 87 drifted gallery renders)
+.. GENERATED FROM PYTHON SOURCE LINES 13-123
 
 
 
@@ -162,11 +158,7 @@ The color at each wavelength tells you which block matters most.
 
 .. rst-class:: sphx-glr-timing
 
-<<<<<<< HEAD
-   **Total running time of the script:** (0 minutes 17.405 seconds)
-=======
-   **Total running time of the script:** (0 minutes 21.631 seconds)
->>>>>>> e64c5dd7a (PR1: regenerate the 87 drifted gallery renders)
+   **Total running time of the script:** (0 minutes 20.246 seconds)
 
 
 .. _sphx_glr_download_auto_examples_quickstart_plot_components_isolated.py:

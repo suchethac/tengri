@@ -146,7 +146,13 @@ kitchen_sink = dict(
         "tau_bc": 0.8,
         "tau_diff": 0.3,
         "slope": -0.4,
-        "emission": {"type": "dale2014", "all_params": FIXED, "alpha_dale": 2.2},
+        # dale2014_cigale, not dale2014: this notebook also switches on a radio
+        # block, and the plain Dale+2014 template embeds its own star-forming
+        # radio synchrotron continuum out to 1.335 GHz. Running both double-counts
+        # the radio continuum (~2x between ~1.34 and ~10 GHz), which #1983 made a
+        # ConfigError. The _cigale variant has that tail stripped, per CIGALE
+        # convention — the remedy that error itself prescribes.
+        "emission": {"type": "dale2014_cigale", "all_params": FIXED, "alpha_dale": 2.2},
     },
     neb={"type": "cue", "all_params": FIXED},
     agn={
@@ -463,7 +469,13 @@ money_shot = dict(
         "tau_bc": 0.8,
         "tau_diff": 0.3,
         "slope": -0.4,
-        "emission": {"type": "dale2014", "all_params": FIXED, "alpha_dale": 2.2},
+        # dale2014_cigale, not dale2014: this notebook also switches on a radio
+        # block, and the plain Dale+2014 template embeds its own star-forming
+        # radio synchrotron continuum out to 1.335 GHz. Running both double-counts
+        # the radio continuum (~2x between ~1.34 and ~10 GHz), which #1983 made a
+        # ConfigError. The _cigale variant has that tail stripped, per CIGALE
+        # convention — the remedy that error itself prescribes.
+        "emission": {"type": "dale2014_cigale", "all_params": FIXED, "alpha_dale": 2.2},
     },
     neb={"type": "cue", "all_params": FIXED},
     agn={

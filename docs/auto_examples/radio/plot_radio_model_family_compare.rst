@@ -157,11 +157,7 @@ Reference: Bell+2003; Delvecchio+2021; McCheyne+2022 (q_IR calibrations).
 
 .. rst-class:: sphx-glr-timing
 
-<<<<<<< HEAD
-   **Total running time of the script:** (0 minutes 13.276 seconds)
-=======
-   **Total running time of the script:** (0 minutes 8.773 seconds)
->>>>>>> e64c5dd7a (PR1: regenerate the 87 drifted gallery renders)
+   **Total running time of the script:** (0 minutes 3.821 seconds)
 
 
 .. _sphx_glr_download_auto_examples_radio_plot_radio_model_family_compare.py:

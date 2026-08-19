@@ -599,7 +599,7 @@ for dust_law in dust_laws:
     # Swap dust law: one-line edit
     groups_dust_var = base_groups_dust.copy()
     groups_dust_var["dust"] = base_groups_dust["dust"].copy()
-    groups_dust_var["dust"]["law_bc"] = dust_law
+    groups_dust_var["dust"]["law"] = dust_law
 
     spec = parse_groups(**groups_dust_var)
     free_dust = [p for p in spec.free_params if p.startswith("dust_")]
