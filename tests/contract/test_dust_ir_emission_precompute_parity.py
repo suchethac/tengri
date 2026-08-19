@@ -102,7 +102,11 @@ def assert_precompute_matches_exact(
     else:
         # Ensure emission is set in the provided config
         if "emission" not in dust_config:
-            dust_config = {**dust_config, "emission": {"type": emission_type, "*": FIXED}}
+            dust_config = {
+                "law": "power_law",
+                **dust_config,
+                "emission": {"type": emission_type, "*": FIXED},
+            }
 
     if redshift_dist is None:
         redshift_dist = Fixed(0.05)
@@ -142,7 +146,7 @@ def assert_precompute_matches_exact(
     # Band dominance check: emission must contribute >5% to at least one band.
     # ──────────────────────────────────────────────────────────────────────────
     # Build a reference (no emission) to measure dominance against
-    dust_config_no_emission = {**dust_config}
+    dust_config_no_emission = {"law": "power_law", **dust_config}
     dust_config_no_emission.pop("emission", None)
 
     ref_model = SEDModel.build(

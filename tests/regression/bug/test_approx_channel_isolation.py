@@ -242,7 +242,7 @@ def test_every_dust_law_is_seen_as_a_nebular_consumer(ssp_data_fsps, obs, dust_t
         ssp_data_fsps,
         obs,
         dict(
-            dust={"type": dust_type, "all_params": FIXED},
+            dust={"law": "power_law", "type": dust_type, "all_params": FIXED},
             neb={"type": "cue", "all_params": FIXED},
         ),
         None,

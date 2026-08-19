@@ -63,7 +63,7 @@ class TestBuildResolverDustEmission:
         try:
             model = SEDModel.build(
                 ssp_data=ssp_data_bc03,
-                dust={"emission": {"type": emission}},
+                dust={"law": "power_law", "emission": {"type": emission}},
                 redshift=Fixed(0.1),
             )
         except (FileNotFoundError, OSError) as exc:
