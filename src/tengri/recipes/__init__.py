@@ -353,7 +353,10 @@ def agn_panchromatic() -> dict:
             defaults=FREE,
             # ``defaults=FIXED``: the Dale+2014 knobs are a template-family
             # choice, not something a wildcard should open by default.
-            emission=builders.dust.emission.dale2014(defaults=FIXED),
+            # ``dale2014_cigale``: this recipe enables the radio component, and
+            # plain dale2014 embeds its own SF radio continuum — the pair
+            # double-counts the synchrotron and is refused at build (#1970).
+            emission=builders.dust.emission.dale2014_cigale(defaults=FIXED),
         ),
         met={"logzsol": FREE},
         neb=builders.neb.cue(defaults=FIXED),
@@ -435,7 +438,10 @@ def composable_agn() -> dict:
             defaults=FREE,
             # ``defaults=FIXED``: the Dale+2014 knobs are a template-family
             # choice, not something a wildcard should open by default.
-            emission=builders.dust.emission.dale2014(defaults=FIXED),
+            # ``dale2014_cigale``: this recipe enables the radio component, and
+            # plain dale2014 embeds its own SF radio continuum — the pair
+            # double-counts the synchrotron and is refused at build (#1970).
+            emission=builders.dust.emission.dale2014_cigale(defaults=FIXED),
         ),
         met={"logzsol": FREE},
         neb=builders.neb.cue(defaults=FIXED),

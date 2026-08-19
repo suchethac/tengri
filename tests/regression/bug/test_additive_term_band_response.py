@@ -161,7 +161,7 @@ def _model(name, *, approx, free_shape=False, bands=None):
             "type": "two_component",
             "law_bc": "calzetti",
             "*": FIXED,
-            "emission": {"type": "dale2014", "*": FIXED},
+            "emission": {"type": "dale2014_cigale", "*": FIXED},
         },
         agn=AGN,
         approx=approx,

@@ -82,7 +82,7 @@ Reference: Bell+2003; Delvecchio+2021; McCheyne+2022 (q_IR calibrations).
         "all_params": tengri.FIXED,
         "tau_diff": 1.0,
         "tau_bc": 1.5,
-        "emission": {"type": "dale2014", "all_params": tengri.FIXED},
+        "emission": {"type": "dale2014_cigale", "all_params": tengri.FIXED},
     }
     AGN = {
         "type": "composable",
@@ -156,7 +156,7 @@ Reference: Bell+2003; Delvecchio+2021; McCheyne+2022 (q_IR calibrations).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 23.244 seconds)
+   **Total running time of the script:** (0 minutes 10.980 seconds)
 
 
 .. _sphx_glr_download_auto_examples_radio_plot_radio_model_family_compare.py:

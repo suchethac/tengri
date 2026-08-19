@@ -48,7 +48,7 @@ DUST = {
     "all_params": tengri.FIXED,
     "tau_diff": 1.0,
     "tau_bc": 1.5,
-    "emission": {"type": "dale2014", "all_params": tengri.FIXED},
+    "emission": {"type": "dale2014_cigale", "all_params": tengri.FIXED},
 }
 AGN = {
     "type": "composable",
