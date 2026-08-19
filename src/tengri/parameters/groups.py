@@ -1864,6 +1864,17 @@ def _normalize_sfh_field(kwargs: dict) -> dict:
     return {**kwargs, "sfh": sfh}
 
 
+def _validate_sfh_bin_edges(sfh_type, edges) -> None:
+    """Validate ``sfh['bin_edges_gyr']` at build time.
+
+    Delegates to the registry so the grammar and the stellar component apply one
+    rule; a second copy is what let #1975 ship with a green suite.
+    """
+    from tengri.components.stellar.sfh.registry import validate_bin_edges_gyr
+
+    validate_bin_edges_gyr(sfh_type, edges)
+
+
 def _translate_sfh(sfh_dict: dict, result: dict) -> None:
     """Resolve `sfh.type` (or a list composition) into `mean_sfh_type`.
 
@@ -1881,6 +1892,7 @@ def _translate_sfh(sfh_dict: dict, result: dict) -> None:
     # ``_build_legacy``. The wildcard ``'*': FREE / FIXED`` does NOT
     # apply to this — it's a config, not a free parameter.
     if "bin_edges_gyr" in sfh_dict:
+        _validate_sfh_bin_edges(sfh_type, sfh_dict["bin_edges_gyr"])
         result["bin_edges_gyr"] = sfh_dict["bin_edges_gyr"]
 
     # ``age_kernel`` is likewise a structural setting, not a free parameter:

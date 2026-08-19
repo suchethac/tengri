@@ -4074,6 +4074,17 @@ class SEDModel:
         # differing only in ``age_kernel`` share a compiled kernel and the
         # second silently returns the first's photometry.
         age_kernel = str(getattr(self.spec, "age_kernel", None) or "auto")
+        # Non-parametric SFH bin edges (#1975). Exactly the ``age_kernel``
+        # hazard: custom edges change the age weights on the SAME graph shape,
+        # so without this entry two models differing only in their bin layout
+        # share a compiled kernel and the second silently returns the first's
+        # photometry. Hashed by value; "default" is the model's own ladder.
+        _bin_edges = getattr(self.spec, "bin_edges_gyr", None)
+        sfh_bin_edges = (
+            "default"
+            if _bin_edges is None
+            else hash(tuple(map(float, np.asarray(_bin_edges).ravel())))
+        )
         # GP-field parameterization (#1355). Same hazard as ``age_kernel``: a
         # different ``centering`` changes the xi -> SFH map without changing the
         # graph shape, so without this entry two models differing only in
@@ -4352,6 +4363,7 @@ class SEDModel:
             stochastic,
             n_grid,
             age_kernel,
+            sfh_bin_edges,
             field_centering,
             alpha_fe_evolving,
             z_fixed,
@@ -8068,6 +8080,7 @@ class SEDModel:
             n_grid=int(getattr(self.spec, "n_grid", 256)),
             lgmet_scatter=float(getattr(self, "_lgmet_scatter", 0.2)),
             age_kernel=getattr(self.spec, "age_kernel", None),
+            sfh_bin_edges_gyr=getattr(self.spec, "bin_edges_gyr", None),
             field_centering=float(getattr(self.spec, "field_centering", 1.0)),
             nebular_backend=neb_backend_name,
             nebular_backend_instance=neb_backend_instance,
