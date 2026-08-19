@@ -98,7 +98,12 @@ def _build(ssp, observation):
         ssp_data=ssp,
         observation=observation,
         sfh={"type": "dpl", "all_params": FIXED, "log_total_mass": Uniform(8, 12)},
-        dust={"law_diff": 'calzetti', "type": "two_component", "law_bc": "calzetti", "all_params": FIXED},
+        dust={
+            "law_diff": "calzetti",
+            "type": "two_component",
+            "law_bc": "calzetti",
+            "all_params": FIXED,
+        },
         neb={"type": "none"},
         redshift=Fixed(0.5),
     )

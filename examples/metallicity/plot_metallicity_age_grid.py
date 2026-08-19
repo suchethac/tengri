@@ -52,6 +52,7 @@ for i, age_gyr in enumerate(age_gyr_grid):
                 "log_total_mass": 10.0,
             },
             dust={
+                "law": "power_law",
                 "type": "two_component",
                 "all_params": tengri.FIXED,
                 "tau_bc": 0.0,

@@ -50,7 +50,13 @@ SFH = {
     "alpha": 3.0,
     "beta": 2.0,
 }
-DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.1}
+DUST = {
+    "law": "power_law",
+    "type": "two_component",
+    "all_params": tengri.FIXED,
+    "tau_diff": 0.1,
+    "tau_bc": 0.1,
+}
 
 fig, ax = plt.subplots(figsize=(7.4, 4.8))
 

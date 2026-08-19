@@ -294,7 +294,8 @@ def _build_chain(ssp, with_cue):
             "tau_gyr": 1.5,
             "age_gyr": 5.0,
         },
-        dust={"law_diff": 'calzetti', 
+        dust={
+            "law_diff": "calzetti",
             "type": "two_component",
             "law_bc": "calzetti",
             "all_params": FIXED,

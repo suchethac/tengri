@@ -140,7 +140,8 @@ def fwd_table(synthetic_ssp_wide, synthetic_tophat_obs):
             ssp_data=synthetic_ssp_wide,
             observation=synthetic_tophat_obs,
             sfh={"type": "table"},
-            dust={"law": "power_law", 
+            dust={
+                "law": "power_law",
                 "type": "two_component",
                 "all_params": FIXED,
                 "tau_bc": 0.5,
@@ -175,7 +176,8 @@ def fwd_table_other(synthetic_ssp_wide, synthetic_tophat_obs):
             ssp_data=synthetic_ssp_wide,
             observation=synthetic_tophat_obs,
             sfh={"type": "table"},
-            dust={"law": "power_law", 
+            dust={
+                "law": "power_law",
                 "type": "two_component",
                 "all_params": FIXED,
                 "tau_bc": 2.5,  # vs 0.5

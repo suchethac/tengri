@@ -146,7 +146,7 @@ def test_legacy_warn_fires_on_bare_sedmodel(synthetic_ssp, simple_observation) -
         ssp_data=synthetic_ssp,
         observation=simple_observation,
         sfh={"type": "dpl", "*": FIXED},
-        dust={"law_diff": 'calzetti', "type": "two_component", "law_bc": "calzetti", "*": FIXED},
+        dust={"law_diff": "calzetti", "type": "two_component", "law_bc": "calzetti", "*": FIXED},
         neb={"type": "none"},
     )
     with warnings.catch_warnings(record=True) as caught:

@@ -69,7 +69,8 @@ def _build(ssp, obs):
         # Pinned explicitly: a model with no ``dust`` group still declares
         # ``dust_tau_diff`` / ``dust_tau_bc`` free, which would leave the free set
         # out of step with the truth dict below.
-        dust={"law_diff": 'calzetti', 
+        dust={
+            "law_diff": "calzetti",
             "type": "two_component",
             "law_bc": "calzetti",
             "all_params": FIXED,

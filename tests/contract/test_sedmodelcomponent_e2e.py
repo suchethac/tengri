@@ -188,7 +188,13 @@ def _fixed_dust() -> dict:
     A fresh dict is returned each call because ``SEDModel.build`` consumes the
     group dicts it is handed.
     """
-    return {"type": "two_component", "law": "power_law", "*": FIXED, "tau_bc": Fixed(0.3), "tau_diff": Fixed(0.2)}
+    return {
+        "type": "two_component",
+        "law": "power_law",
+        "*": FIXED,
+        "tau_bc": Fixed(0.3),
+        "tau_diff": Fixed(0.2),
+    }
 
 
 # AGN is built through the composable block grammar (the canonical AGN surface,
@@ -449,7 +455,7 @@ def test_dust_law_surface_applies_law_not_silent_noop(ssp, obs):
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "dpl", "*": FIXED},
-        dust={"law_diff": 'calzetti', "type": "two_component", "law_bc": "calzetti", "*": FIXED},
+        dust={"law_diff": "calzetti", "type": "two_component", "law_bc": "calzetti", "*": FIXED},
         redshift=Fixed(0.05),
     )
     assert model._dust_law_bc == "calzetti", (
@@ -462,7 +468,8 @@ def test_dust_law_surface_applies_law_not_silent_noop(ssp, obs):
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "dpl", "*": FIXED},
-        dust={"law_diff": 'smc', 
+        dust={
+            "law_diff": "smc",
             "type": "two_component",
             "law_bc": "smc",
             "*": FIXED,
@@ -475,7 +482,8 @@ def test_dust_law_surface_applies_law_not_silent_noop(ssp, obs):
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "dpl", "*": FIXED},
-        dust={"law_diff": 'calzetti', 
+        dust={
+            "law_diff": "calzetti",
             "type": "two_component",
             "law_bc": "calzetti",
             "*": FIXED,

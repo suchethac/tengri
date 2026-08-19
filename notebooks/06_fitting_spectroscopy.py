@@ -98,6 +98,7 @@ sed_model = SEDModel.build(
         defaults=FIXED, log_total_mass=FREE, peak_lbt_gyr=FREE, width_gyr=FREE
     ),
     dust=builders.dust.two_component(
+        law_diff="calzetti",
         defaults=FIXED,
         law_bc="calzetti",
         tau_bc=Uniform(0.0, 1.0),
@@ -158,18 +159,16 @@ t0 = time.perf_counter()
 # Switching to the working arm: precondition=False with the shared HMC_VALIDATED
 # recipe (n_warmup=1000, n_samples=600, 20 leapfrog, dense mass, 0.9 target).
 posterior = forward.fit(
-    Data(spectrum=(flux, noise)), key=jax.random.PRNGKey(1),
-    precondition=False, **HMC_VALIDATED
+    Data(spectrum=(flux, noise)), key=jax.random.PRNGKey(1), precondition=False, **HMC_VALIDATED
 )
 rhat = posterior.rhat()
 
 # Regression detector: if chain froze again (as in #1734), raise loudly.
 # Counts unique values across all free parameters; any showing near-zero
 # variance signals a return of the frozen-chain bug.
-n_div = posterior.diagnostics.get('n_divergent', 0)
+n_div = posterior.diagnostics.get("n_divergent", 0)
 unique_per_param = [
-    len(np.unique(np.asarray(posterior.samples[p])))
-    for p in sed_model.spec.free_params
+    len(np.unique(np.asarray(posterior.samples[p]))) for p in sed_model.spec.free_params
 ]
 min_unique = min(unique_per_param)
 n_samples = len(np.asarray(posterior.samples[sed_model.spec.free_params[0]]))

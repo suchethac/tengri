@@ -176,7 +176,12 @@ def test_model_level_f32_gradient_with_delayed_sfh_cue_dust():
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "delayed", "all_params": FREE},
-        dust={"law_diff": 'calzetti', "type": "two_component", "law_bc": "calzetti", "all_params": FREE},
+        dust={
+            "law_diff": "calzetti",
+            "type": "two_component",
+            "law_bc": "calzetti",
+            "all_params": FREE,
+        },
         neb={"type": "cue", "all_params": FREE},
         redshift=Fixed(0.05),
     )

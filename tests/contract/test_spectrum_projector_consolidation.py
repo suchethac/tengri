@@ -208,7 +208,13 @@ class TestPublicSurfaceAgreement:
             ssp_data=synthetic_ssp_wide,
             observation=obs,
             sfh={"type": "dpl"},
-            dust={"law_diff": 'calzetti', "type": "two_component", "law_bc": "calzetti", "tau_bc": 0.3, "tau_diff": 0.1},
+            dust={
+                "law_diff": "calzetti",
+                "type": "two_component",
+                "law_bc": "calzetti",
+                "tau_bc": 0.3,
+                "tau_diff": 0.1,
+            },
             neb={"type": "none"},
             redshift=Fixed(0.1),
         )
@@ -260,7 +266,13 @@ class TestIntegrationViaForwardModel:
             ssp_data=synthetic_ssp_wide,
             observation=obs,
             sfh={"type": "dpl"},
-            dust={"law_diff": 'calzetti', "type": "two_component", "law_bc": "calzetti", "tau_bc": 0.3, "tau_diff": 0.1},
+            dust={
+                "law_diff": "calzetti",
+                "type": "two_component",
+                "law_bc": "calzetti",
+                "tau_bc": 0.3,
+                "tau_diff": 0.1,
+            },
             neb={"type": "none"},
             redshift=Fixed(0.1),
         )

@@ -39,7 +39,7 @@ def phot_model(synthetic_ssp_wide):
         ssp_data=synthetic_ssp_wide,
         observation=obs,
         sfh={"type": "dpl", "*": FIXED, "log_total_mass": Uniform(8, 12)},
-        dust={"law_diff": 'calzetti', "type": "two_component", "law_bc": "calzetti", "*": FIXED},
+        dust={"law_diff": "calzetti", "type": "two_component", "law_bc": "calzetti", "*": FIXED},
         neb={"type": "none"},
         redshift=Fixed(0.5),
     )

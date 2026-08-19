@@ -32,7 +32,13 @@ import tengri
 pytestmark = pytest.mark.regression_bug
 
 _SFH = {"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0}
-_DUST = {"law": "power_law", "type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+_DUST = {
+    "law": "power_law",
+    "type": "two_component",
+    "*": tengri.FIXED,
+    "tau_diff": 0.0,
+    "tau_bc": 0.0,
+}
 _DISC = {
     "disc": {"type": "multicolor", "*": tengri.FIXED},
     "*": tengri.FIXED,

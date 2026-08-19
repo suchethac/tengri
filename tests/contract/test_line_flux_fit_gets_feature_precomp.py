@@ -64,7 +64,8 @@ def _model(ssp, obs, approx):
             ssp_data=ssp,
             observation=obs,
             sfh={"type": "dpl", "all_params": FREE},
-            dust={"law_diff": 'calzetti', 
+            dust={
+                "law_diff": "calzetti",
                 "type": "two_component",
                 "law_bc": "calzetti",
                 "all_params": FIXED,

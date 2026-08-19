@@ -56,7 +56,8 @@ def fwd_table_sfh(synthetic_ssp_wide, synthetic_tophat_obs):
             ssp_data=synthetic_ssp_wide,
             observation=synthetic_tophat_obs,
             sfh={"type": "table"},
-            dust={"law": "power_law", 
+            dust={
+                "law": "power_law",
                 "type": "two_component",
                 "all_params": FIXED,
                 "tau_bc": 0.5,
@@ -605,7 +606,8 @@ def roundtrip_arms(age_reddening_ssp, synthetic_tophat_obs):
                 ssp_data=age_reddening_ssp,
                 observation=synthetic_tophat_obs,
                 sfh=sfh,
-                dust={"law": "power_law", 
+                dust={
+                    "law": "power_law",
                     "type": "two_component",
                     "all_params": FIXED,
                     "tau_bc": 0.0,

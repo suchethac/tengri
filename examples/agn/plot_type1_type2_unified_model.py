@@ -57,7 +57,13 @@ ssp = tengri.load_ssp()
 # Shared model components (minimal star formation, no dust).
 COMMON = dict(
     sfh={"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0},
-    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+    dust={
+        "law": "power_law",
+        "type": "two_component",
+        "all_params": tengri.FIXED,
+        "tau_diff": 0.0,
+        "tau_bc": 0.0,
+    },
     redshift=tengri.Fixed(0.05),
 )
 
@@ -152,7 +158,13 @@ INCLINATIONS = (
     ("Type 2 (edge-on)", 0.10, "#d62728"),
 )
 SFH_TRANS = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
-DUST_TRANS = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+DUST_TRANS = {
+    "law": "power_law",
+    "type": "two_component",
+    "all_params": tengri.FIXED,
+    "tau_diff": 0.0,
+    "tau_bc": 0.0,
+}
 
 # Create a second figure for the transition narrative
 fig2, ax_trans = plt.subplots(figsize=(7.5, 4.8))

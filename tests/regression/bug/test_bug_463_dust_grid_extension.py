@@ -50,7 +50,8 @@ def ssp():
 
 def _build_model(ssp, *, with_dust_emission: bool):
     """Tiny dusty-SFG model with or without dust IR emission."""
-    dust_kwargs: dict = {"law": "power_law", 
+    dust_kwargs: dict = {
+        "law": "power_law",
         "type": "two_component",
         "tau_bc": Fixed(0.6),
         "tau_diff": Fixed(0.5),

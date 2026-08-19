@@ -107,6 +107,7 @@ sed_model = SEDModel.build(
     approx=WavePrecomp(),
     sfh=builders.sfh.tsnorm(defaults=FREE),
     dust=builders.dust.two_component(
+        law_diff="calzetti",
         defaults=FIXED,
         law_bc="calzetti",
         tau_bc=Uniform(0.0, 1.0),
@@ -382,6 +383,7 @@ fig.savefig(FIG_DIR / "00_posterior_sed.pdf", bbox_inches="tight")
 
 # %% [markdown]
 # ## Star-formation history
+
 
 # %%
 def sfh(p):

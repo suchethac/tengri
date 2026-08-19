@@ -36,6 +36,7 @@ model = tengri.SEDModel.build(
         "logzsol": tengri.Fixed(-0.1),  # [user] override on a FREE wildcard
     },
     dust={
+        "law_diff": "calzetti",
         "type": "two_component",
         "law_bc": "calzetti",
         "all_params": tengri.FIXED,

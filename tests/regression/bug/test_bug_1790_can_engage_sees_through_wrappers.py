@@ -53,7 +53,8 @@ pytestmark = pytest.mark.regression_bug
 
 def _sed(ssp, obs, *, dust: bool):
     dust_group = (
-        {"law_diff": 'calzetti', 
+        {
+            "law_diff": "calzetti",
             "type": "two_component",
             "law_bc": "calzetti",
             "all_params": FIXED,

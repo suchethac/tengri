@@ -35,7 +35,13 @@ from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, Uniform
 
 pytestmark = pytest.mark.regression_bug
 
-_DUST = {"law": "power_law", "type": "two_component", "all_params": FIXED, "tau_diff": 0.5, "tau_bc": 0.3}
+_DUST = {
+    "law": "power_law",
+    "type": "two_component",
+    "all_params": FIXED,
+    "tau_diff": 0.5,
+    "tau_bc": 0.3,
+}
 _DUST_IR = {**_DUST, "emission": {"type": "dale2014", "all_params": FIXED}}
 
 

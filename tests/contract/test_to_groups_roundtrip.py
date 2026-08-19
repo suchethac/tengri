@@ -80,7 +80,8 @@ class TestToGroupsBasic:
         """to_groups() preserves nested dust.emission subgroup structure."""
         spec = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
-            dust={"law_diff": 'calzetti', 
+            dust={
+                "law_diff": "calzetti",
                 "type": "two_component",
                 "law_bc": "calzetti",
                 "*": FIXED,
@@ -140,7 +141,8 @@ class TestToGroupsRoundtrip:
         """Nested dust.emission sub-block roundtrips."""
         original = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
-            dust={"law_diff": 'calzetti', 
+            dust={
+                "law_diff": "calzetti",
                 "type": "two_component",
                 "law_bc": "calzetti",
                 "*": FIXED,
@@ -199,7 +201,8 @@ class TestToGroupsRoundtrip:
         """Mixed free and fixed params roundtrip."""
         original = parse_groups(
             sfh={"type": "dpl", "alpha": FREE, "beta": Uniform(0.5, 2.0), "tau_gyr": Fixed(1.0)},
-            dust={"law_diff": 'calzetti', 
+            dust={
+                "law_diff": "calzetti",
                 "type": "two_component",
                 "law_bc": "calzetti",
                 "*": FIXED,
@@ -348,7 +351,12 @@ class TestToGroupsStructuralSettings:
         """Differing per-screen laws are preserved as the law_bc/law_diff pair."""
         original = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
-            dust={"type": "two_component", "law_bc": "kriek_conroy", "law_diff": "smc", "*": FIXED},
+            dust={
+                "type": "two_component",
+                "law_bc": "kriek_conroy",
+                "law_diff": "smc",
+                "*": FIXED,
+            },
             redshift=Fixed(0.1),
         )
         result = original.to_groups()
@@ -372,7 +380,8 @@ class TestToGroupsStructuralSettings:
         """dust_emission type is preserved."""
         original = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
-            dust={"law": "power_law", 
+            dust={
+                "law": "power_law",
                 "type": "two_component",
                 "*": FIXED,
                 "emission": {"type": "dale2014", "*": FIXED},

@@ -144,7 +144,8 @@ class TestFracAGNDustCoupling944:
             ssp_data=synthetic_ssp_wide,
             observation=synthetic_tophat_obs,
             sfh={"type": "const"},
-            dust={"law_diff": 'calzetti', 
+            dust={
+                "law_diff": "calzetti",
                 "type": "two_component",
                 "law_bc": "calzetti",
                 "emission": {"type": "dale2014"},
@@ -175,7 +176,8 @@ class TestFracAGNDustCoupling944:
             ssp_data=synthetic_ssp_wide,
             observation=synthetic_tophat_obs,
             sfh={"type": "const", "*": FIXED},
-            dust={"law_diff": 'calzetti', 
+            dust={
+                "law_diff": "calzetti",
                 "type": "two_component",
                 "law_bc": "calzetti",
                 "emission": {"type": "dale2014"},
@@ -198,7 +200,8 @@ class TestFracAGNDustCoupling944:
             ssp_data=synthetic_ssp_wide,
             observation=synthetic_tophat_obs,
             sfh={"type": "const", "*": FIXED},
-            dust={"law_diff": 'calzetti', 
+            dust={
+                "law_diff": "calzetti",
                 "type": "two_component",
                 "law_bc": "calzetti",
                 "emission": {"type": "dale2014"},
@@ -246,7 +249,8 @@ class TestFracAGNDustCoupling944:
                 ssp_data=synthetic_ssp_wide,
                 observation=synthetic_tophat_obs,
                 sfh={"type": "const"},
-                dust={"law_diff": 'calzetti', 
+                dust={
+                    "law_diff": "calzetti",
                     "type": "two_component",
                     "law_bc": "calzetti",
                     "emission": {"type": "dale2014"},

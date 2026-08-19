@@ -69,7 +69,7 @@ def test_radio_xray_in_waveprecomp(group, band_wave, fam):
     obs = Observation(photometry=Photometry(filters=filt))
     base = dict(
         sfh={"type": "dpl", "*": FIXED},
-        dust={"law_diff": 'calzetti', "type": "two_component", "law_bc": "calzetti", "*": FIXED},
+        dust={"law_diff": "calzetti", "type": "two_component", "law_bc": "calzetti", "*": FIXED},
         neb={"type": "none"},
     )
     groups = dict(base, **{group: {"type": gtype, "*": FIXED}})

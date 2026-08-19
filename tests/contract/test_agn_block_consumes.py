@@ -265,7 +265,8 @@ def test_unified_agn_type1_type2_masking(synthetic_ssp_wide):
         m = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
             sfh={"type": "delayed", "*": FIXED},
-            dust={"law": "power_law", 
+            dust={
+                "law": "power_law",
                 "type": "two_component",
                 "tau_bc": Fixed(0.0),
                 "tau_diff": Fixed(0.0),
@@ -429,7 +430,8 @@ def test_agn_panchromatic_free_params_all_move_predict(real_ssp_only):
             ssp_data=ssp,
             observation=obs,
             sfh={"type": "delayed", "*": FIXED},
-            dust={"law": "power_law", 
+            dust={
+                "law": "power_law",
                 "type": "two_component",
                 "tau_diff": Fixed(0.3),
                 "emission": {"type": "dale2014_cigale"},

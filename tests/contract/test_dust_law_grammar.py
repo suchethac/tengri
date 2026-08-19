@@ -13,10 +13,9 @@ explicit and requires them to be specified. Tests cover:
 
 import pytest
 
-from tengri.parameters import FIXED, FREE, Fixed, Uniform
+from tengri.parameters import FIXED, Fixed
 from tengri.parameters.groups import parse_groups
 from tengri.parameters.parameters import Parameters
-
 
 pytestmark = pytest.mark.contract
 

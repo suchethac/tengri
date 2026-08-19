@@ -189,7 +189,8 @@ class TestBug361B_silent_nan_warning:
                     "trunc": 3.0,
                     "logzsol": -0.1,
                 },
-                dust={"law": "power_law", 
+                dust={
+                    "law": "power_law",
                     "type": "two_component",
                     "*": tengri.FIXED,
                     "tau_bc": 0.2,

@@ -147,6 +147,7 @@ print("PATH 2: Nested-dict direct")
 groups_dict = {
     "sfh": {"type": "dpl", "all_params": FREE},
     "dust": {
+        "law_diff": "calzetti",
         "type": "two_component",
         "law_bc": "calzetti",
         "all_params": FREE,
@@ -174,6 +175,7 @@ print("PATH 3: Builder factories")
 factory_groups = {
     "sfh": builders.sfh.dpl(defaults=FREE, log_total_mass=Uniform(9.0, 11.0)),
     "dust": {
+        "law_diff": "calzetti",
         "type": "two_component",
         "law_bc": "calzetti",
         "all_params": FREE,
@@ -219,6 +221,7 @@ print()
 groups_sfh_tour = {
     "sfh": builders.sfh.tsnorm(defaults=FREE, skew=Uniform(-1.0, 1.0)),
     "dust": {
+        "law_diff": "calzetti",
         "type": "two_component",
         "law_bc": "calzetti",
         "all_params": FIXED,
@@ -244,6 +247,7 @@ print("─" * 70)
 groups_dust_tour = {
     "sfh": {"type": "tsnorm", "all_params": FIXED},
     "dust": builders.dust.two_component(
+        law_diff="calzetti",
         law_bc="calzetti",
         defaults=FREE,
         tau_bc=Uniform(0.0, 2.0),
@@ -272,7 +276,7 @@ print()
 try:
     groups_neb_tour = {
         "sfh": {"type": "tsnorm", "all_params": FIXED},
-        "dust": {"type": "two_component", "all_params": FIXED},
+        "dust": {"law": "power_law", "type": "two_component", "all_params": FIXED},
         "neb": builders.neb.cb19(defaults=FREE, log_nH=Uniform(1.0, 4.0)),
         "redshift": Fixed(0.05),
     }
@@ -284,7 +288,7 @@ except Exception as e:
     print(f"cb19 skipped (bare-stellar SSP limitation): {str(e)[:50]}...")
     groups_neb_tour = {
         "sfh": {"type": "tsnorm", "all_params": FIXED},
-        "dust": {"type": "two_component", "all_params": FIXED},
+        "dust": {"law": "power_law", "type": "two_component", "all_params": FIXED},
         "neb": builders.neb.cue(defaults=FIXED),
         "redshift": Fixed(0.05),
     }
@@ -350,6 +354,7 @@ base_groups = {
         "skew": Uniform(-1.0, 1.0),
     },  # skew is [user], others are [all_params FREE]
     "dust": {
+        "law_diff": "calzetti",
         "type": "two_component",
         "law_bc": "calzetti",
         "all_params": FIXED,  # All dust params are [all_params FIXED]
@@ -429,6 +434,7 @@ print("─" * 70)
 # Base groups dict: reused for all SFH families, only type changes
 base_groups_sfh = {
     "dust": {
+        "law_diff": "calzetti",
         "type": "two_component",
         "law_bc": "calzetti",
         "tau_bc": Fixed(0.5),
@@ -474,6 +480,7 @@ for sfh_name, truth_sfh in sfh_families:
     groups_sfh_fig = {
         "sfh": {"type": sfh_name, "all_params": FIXED, "met_logzsol": Fixed(-0.1)},
         "dust": {
+            "law_diff": "calzetti",
             "type": "two_component",
             "law_bc": "calzetti",
             "tau_bc": Fixed(0.5),
@@ -584,6 +591,7 @@ base_groups_dust = {
         "trunc": Fixed(4.0),
     },
     "dust": {
+        "law": "power_law",
         "type": "two_component",
         "tau_bc": Fixed(0.5),
         "tau_diff": Fixed(0.3),
@@ -640,6 +648,7 @@ groups_nodust = {
         "trunc": Fixed(4.0),
     },
     "dust": {
+        "law_diff": "calzetti",
         "type": "two_component",
         "law_bc": "calzetti",
         "tau_bc": Fixed(0.0),
@@ -709,7 +718,9 @@ for idx, dust_law in enumerate(dust_laws):
         },
         "dust": {
             "type": "two_component",
-            "law_bc": dust_law,
+            # One shared law for both screens — the explicit spelling that
+            # replaces the old law_bc-alone inheritance.
+            "law": dust_law,
             "tau_bc": Fixed(0.5),
             "tau_diff": Fixed(0.3),
             "slope": Fixed(-0.7),
@@ -791,6 +802,7 @@ base_groups_emission = {
         "trunc": Fixed(4.0),
     },
     "dust": {
+        "law_diff": "calzetti",
         "type": "two_component",
         "law_bc": "calzetti",
         "tau_bc": Fixed(0.5),
@@ -854,6 +866,7 @@ for idx, emission in enumerate(dust_emissions):
             "trunc": Fixed(4.0),
         },
         "dust": {
+            "law_diff": "calzetti",
             "type": "two_component",
             "law_bc": "calzetti",
             "tau_bc": Fixed(0.5),
@@ -910,6 +923,7 @@ for emission in dust_emissions:
             "trunc": Fixed(4.0),
         },
         "dust": {
+            "law_diff": "calzetti",
             "type": "two_component",
             "law_bc": "calzetti",
             "tau_bc": Fixed(0.5),
@@ -975,6 +989,7 @@ print("─" * 70)
 groups_ref = {
     "sfh": {"type": "tsnorm", "all_params": FREE, "met_logzsol": Fixed(-0.1)},
     "dust": {
+        "law_diff": "calzetti",
         "type": "two_component",
         "law_bc": "calzetti",
         "all_params": FREE,
@@ -992,6 +1007,7 @@ print(spec_ref.summary_str())
 groups_free_z = {
     "sfh": {"type": "tsnorm", "all_params": FREE, "met_logzsol": Fixed(-0.1)},
     "dust": {
+        "law_diff": "calzetti",
         "type": "two_component",
         "law_bc": "calzetti",
         "all_params": FREE,
@@ -1007,6 +1023,7 @@ spec_free_z = parse_groups(**groups_free_z)
 groups_fixed_z = {
     "sfh": {"type": "tsnorm", "all_params": FREE, "met_logzsol": Fixed(-0.1)},
     "dust": {
+        "law_diff": "calzetti",
         "type": "two_component",
         "law_bc": "calzetti",
         "all_params": FREE,
@@ -1047,6 +1064,7 @@ groups_perf = {
         "trunc": Fixed(4.0),
     },
     "dust": {
+        "law_diff": "calzetti",
         "type": "two_component",
         "law_bc": "calzetti",
         "tau_bc": Fixed(0.5),

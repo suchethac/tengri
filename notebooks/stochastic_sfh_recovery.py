@@ -115,8 +115,16 @@ BANDS = ["galex_fuv", "galex_nuv", "sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss
 # Strong star-forming optical lines. Hgamma and [NII] are left out on purpose:
 # they sit on top of stellar Balmer absorption and measure near zero for these
 # histories, so their signal-to-noise-scaled errors would feed the fit pure noise.
-LINE_NAMES = ["Halpha", "Hbeta", "OIII_5007", "OIII_4959",
-              "SII_6717", "SII_6731", "OII_3726", "OII_3729"]
+LINE_NAMES = [
+    "Halpha",
+    "Hbeta",
+    "OIII_5007",
+    "OIII_4959",
+    "SII_6717",
+    "SII_6731",
+    "OII_3726",
+    "OII_3729",
+]
 
 WAVE_OBS = jnp.linspace(3800.0, 9200.0, 260)  # rest 3455-8364 A at z = 0.1
 
@@ -164,7 +172,7 @@ def build(observation, n_grid=N_GRID, approx=FAST_PATH):
         observation=observation,
         sfh={"type": ["dpl", "field"], "all_params": FREE},
         met={"logzsol": Fixed(-0.3)},
-        dust=builders.dust.two_component(defaults=FREE, law_bc="calzetti"),
+        dust=builders.dust.two_component(law_diff="calzetti", defaults=FREE, law_bc="calzetti"),
         neb=builders.neb.ssp(),
         redshift=Fixed(Z_GAL),
         apply_igm=False,
@@ -188,8 +196,10 @@ def build(observation, n_grid=N_GRID, approx=FAST_PATH):
 model = {k: build(v) for k, v in OBSERVATION.items()}
 spec = model["B"].spec
 fixed_values = spec.get_fixed_values()
-print(f"SFH dimension: {spec.n_grid} field latents + {spec.n_free} physical "
-      f"= D {spec.n_grid + spec.n_free}")
+print(
+    f"SFH dimension: {spec.n_grid} field latents + {spec.n_free} physical "
+    f"= D {spec.n_grid + spec.n_free}"
+)
 
 # %% [markdown]
 # ## 2. One known history, injected
@@ -202,8 +212,7 @@ print(f"SFH dimension: {spec.n_grid} field latents + {spec.n_free} physical "
 
 # %%
 SEED = 1
-DPL = {"sfh_dpl_alpha": 2.0, "sfh_dpl_beta": 1.5,
-       "sfh_dpl_age_gyr": 12.0, "sfh_dpl_tau_gyr": 13.0}
+DPL = {"sfh_dpl_alpha": 2.0, "sfh_dpl_beta": 1.5, "sfh_dpl_age_gyr": 12.0, "sfh_dpl_tau_gyr": 13.0}
 
 truth = {
     **spec.sample(jax.random.PRNGKey(SEED)),  # a field realization, xi ~ N(0, I)
@@ -236,8 +245,10 @@ WINDOW = {
     "intermediate (15 Myr - 1 Gyr)": (t_node >= YOUNG_GYR) & (t_node < MID_GYR),
     "old (> 1 Gyr)": t_node >= MID_GYR,
 }
-print(f"Injected SFH on {t_node.size} log-age nodes, "
-      f"{t_node.min() * 1e3:.1f} Myr to {t_node.max():.1f} Gyr")
+print(
+    f"Injected SFH on {t_node.size} log-age nodes, "
+    f"{t_node.min() * 1e3:.1f} Myr to {t_node.max():.1f} Gyr"
+)
 
 # %% [markdown]
 # ### Synthesizing the three data sets
@@ -245,8 +256,11 @@ print(f"Injected SFH on {t_node.size} log-age nodes, "
 # All three observables are drawn from the same truth at S/N 20 (photometry), 10 (lines), 30 (spectrum).
 
 # %%
-mock = model["A"].mock({**model["A"].spec.get_fixed_values(), **truth},
-                       snr=PHOT_SNR, key=jax.random.PRNGKey(SEED + 10_000))
+mock = model["A"].mock(
+    {**model["A"].spec.get_fixed_values(), **truth},
+    snr=PHOT_SNR,
+    key=jax.random.PRNGKey(SEED + 10_000),
+)
 flux_phot, err_phot = np.asarray(mock.flux_obs), np.asarray(mock.noise)
 
 # measure_line_fluxes needs its line_defs passed explicitly. Left out, it falls
@@ -255,16 +269,25 @@ flux_phot, err_phot = np.asarray(mock.flux_obs), np.asarray(mock.noise)
 lf_true = np.asarray(model["B"].measure_line_fluxes(truth_full, line_defs))
 assert lf_true[LINE_NAMES.index("Halpha")] > 0, "Halpha not in emission for this truth"
 err_line = np.abs(lf_true) / LINE_SNR
-flux_line = lf_true + err_line * np.random.default_rng(SEED + 20_000).standard_normal(lf_true.shape)
+flux_line = lf_true + err_line * np.random.default_rng(SEED + 20_000).standard_normal(
+    lf_true.shape
+)
 
-spec_true = np.asarray(model["C"].predict_spectrum(
-    {**model["C"].spec.get_fixed_values(), **truth}, wave_obs=WAVE_OBS))
+spec_true = np.asarray(
+    model["C"].predict_spectrum({**model["C"].spec.get_fixed_values(), **truth}, wave_obs=WAVE_OBS)
+)
 err_spec = np.abs(spec_true) / SPEC_SNR
-flux_spec = spec_true + err_spec * np.random.default_rng(SEED + 30_000).normal(size=spec_true.shape)
+flux_spec = spec_true + err_spec * np.random.default_rng(SEED + 30_000).normal(
+    size=spec_true.shape
+)
 
 # Fold the measured values into the observations the fits will actually see.
-line_data = LineFluxData(names=tuple(LINE_NAMES), fluxes=jnp.asarray(flux_line),
-                         errors=jnp.asarray(err_line), wavelengths=line_template.wavelengths)
+line_data = LineFluxData(
+    names=tuple(LINE_NAMES),
+    fluxes=jnp.asarray(flux_line),
+    errors=jnp.asarray(err_line),
+    wavelengths=line_template.wavelengths,
+)
 OBSERVATION["B"] = Observation(photometry=phot, line_fluxes=line_data, noise=noise_model)
 
 DATA = {
@@ -274,9 +297,11 @@ DATA = {
     # already declares both, so the split is unambiguous.
     "C": (np.concatenate([flux_phot, flux_spec]), np.concatenate([err_phot, err_spec])),
 }
-print(f"A: {flux_phot.size} fluxes   "
-      f"B: {flux_phot.size} + {flux_line.size} lines   "
-      f"C: {flux_phot.size} + {flux_spec.size} spectral pixels")
+print(
+    f"A: {flux_phot.size} fluxes   "
+    f"B: {flux_phot.size} + {flux_line.size} lines   "
+    f"C: {flux_phot.size} + {flux_spec.size} spectral pixels"
+)
 
 # %% [markdown]
 # ### What each observable sees
@@ -286,8 +311,11 @@ print(f"A: {flux_phot.size} fluxes   "
 
 # %%
 wave_wide = jnp.linspace(1300.0, 11000.0, 3000)
-sed_wide = np.asarray(model["C"].predict_spectrum(
-    {**model["C"].spec.get_fixed_values(), **truth}, wave_obs=wave_wide))
+sed_wide = np.asarray(
+    model["C"].predict_spectrum(
+        {**model["C"].spec.get_fixed_values(), **truth}, wave_obs=wave_wide
+    )
+)
 TO_UJY = 1e29  # erg/s/cm2/Hz -> microjansky
 wave_eff = np.asarray(effective_wavelengths_um(phot)) * 1e4
 
@@ -306,20 +334,59 @@ NAMED = {"OII_3726": "[O II]", "Hbeta": r"H$\beta$", "Halpha": r"H$\alpha$"}
 
 fig, axes = plt.subplots(3, 1, figsize=(9.2, 7.4), sharex=True, sharey=True)
 for key, ax in zip("ABC", axes):
-    ax.plot(np.asarray(wave_wide), sed_wide * TO_UJY, color="0.72", lw=0.9, zorder=1,
-            label="true spectrum" if key == "A" else None)
+    ax.plot(
+        np.asarray(wave_wide),
+        sed_wide * TO_UJY,
+        color="0.72",
+        lw=0.9,
+        zorder=1,
+        label="true spectrum" if key == "A" else None,
+    )
     if key == "C":
-        ax.plot(np.asarray(WAVE_OBS), flux_spec * TO_UJY, color=C["C"], lw=0.8,
-                alpha=0.9, zorder=2, label="spectrum, R = 2000")
+        ax.plot(
+            np.asarray(WAVE_OBS),
+            flux_spec * TO_UJY,
+            color=C["C"],
+            lw=0.8,
+            alpha=0.9,
+            zorder=2,
+            label="spectrum, R = 2000",
+        )
     if key == "B":
         obs_wl = np.asarray(line_template.wavelengths) * (1 + Z_GAL)
-        ax.vlines(obs_wl, Y_HI / 3.2, Y_HI / 1.15, color=C["B"], lw=1.3, alpha=0.85,
-                  zorder=3, label="measured emission lines")
+        ax.vlines(
+            obs_wl,
+            Y_HI / 3.2,
+            Y_HI / 1.15,
+            color=C["B"],
+            lw=1.3,
+            alpha=0.85,
+            zorder=3,
+            label="measured emission lines",
+        )
         for nm, tex in NAMED.items():
-            ax.text(obs_wl[LINE_NAMES.index(nm)], Y_HI / 1.08, tex, color=C["B"],
-                    fontsize=7.5, ha="center", va="bottom")
-    ax.errorbar(wave_eff, flux_phot * TO_UJY, yerr=err_phot * TO_UJY, fmt="o", ms=6,
-                color="#c3372a", mec="w", mew=0.8, lw=1.2, zorder=4, label="photometry")
+            ax.text(
+                obs_wl[LINE_NAMES.index(nm)],
+                Y_HI / 1.08,
+                tex,
+                color=C["B"],
+                fontsize=7.5,
+                ha="center",
+                va="bottom",
+            )
+    ax.errorbar(
+        wave_eff,
+        flux_phot * TO_UJY,
+        yerr=err_phot * TO_UJY,
+        fmt="o",
+        ms=6,
+        color="#c3372a",
+        mec="w",
+        mew=0.8,
+        lw=1.2,
+        zorder=4,
+        label="photometry",
+    )
     ax.set_xscale("log")
     ax.set_yscale("log")
     ax.set_ylabel(r"$F_\nu$  [$\mu$Jy]")
@@ -347,8 +414,13 @@ for key in "ABC":
     data, err = DATA[key]
     t0 = time.perf_counter()
     fits[key] = ForwardModel.build(sed=m, observation=obs).fit(
-        data, err, method="map", n_steps=10_000, n_restarts=3,
-        key=jax.random.PRNGKey(SEED), verbose=False,
+        data,
+        err,
+        method="map",
+        n_steps=10_000,
+        n_restarts=3,
+        key=jax.random.PRNGKey(SEED),
+        verbose=False,
     )
     timings[key] = time.perf_counter() - t0
     model[key] = m
@@ -372,9 +444,17 @@ def sfr_at_nodes(key):
 
 def rms_dex(pred, mask):
     lo = 1e-8
-    return float(np.sqrt(np.mean(
-        (np.log10(np.clip(pred[mask], lo, None)) - np.log10(np.clip(sfr_true[mask], lo, None))) ** 2
-    )))
+    return float(
+        np.sqrt(
+            np.mean(
+                (
+                    np.log10(np.clip(pred[mask], lo, None))
+                    - np.log10(np.clip(sfr_true[mask], lo, None))
+                )
+                ** 2
+            )
+        )
+    )
 
 
 def old_mass_fraction(sfr):
@@ -398,10 +478,12 @@ print(f"{'':38s}{'recent':>9s}{'interm.':>9s}{'f_old':>9s}")
 print("-" * 65)
 for k in "ABC":
     s = score[k]
-    print(f"{k} {LABEL[k]:36s}"
-          f"{s['recent (< 15 Myr)']:>9.3f}"
-          f"{s['intermediate (15 Myr - 1 Gyr)']:>9.3f}"
-          f"{s['f_old']:>9.3f}")
+    print(
+        f"{k} {LABEL[k]:36s}"
+        f"{s['recent (< 15 Myr)']:>9.3f}"
+        f"{s['intermediate (15 Myr - 1 Gyr)']:>9.3f}"
+        f"{s['f_old']:>9.3f}"
+    )
 print(f"{'':38s}{'':>9s}{'':>9s}{f_old_true:>9.3f}  <- truth")
 
 # %% [markdown]
@@ -423,18 +505,33 @@ for key, ax in zip("ABC", axes):
     ax.set_xlim(t_plot.min(), t_plot.max() * 1.4)
     ax.set_ylim(0, top * 1.08)
     ax.set_xlabel("lookback time [Gyr]")
-    ax.set_title(f"{key} — {LABEL[key]}\nrecent {score[key]['recent (< 15 Myr)']:.3f} dex",
-                 fontsize=10)
+    ax.set_title(
+        f"{key} — {LABEL[key]}\nrecent {score[key]['recent (< 15 Myr)']:.3f} dex", fontsize=10
+    )
     ax.legend(fontsize=8.5, loc="upper left", framealpha=0.92)
     ax.grid(alpha=0.22, lw=0.4)
 axes[0].set_ylabel(r"SFR [$M_\odot\,\mathrm{yr}^{-1}$]")
 # Window labels sit at the FOOT of each shaded band: at the top they collide with
 # the legend, and the SFR curves never come near the floor on the left.
 for _ax in axes:
-    _ax.text(np.sqrt(t_plot.min() * YOUNG_GYR), top * 0.03, "recent", fontsize=8,
-             color="#a06a10", ha="center", va="bottom")
-    _ax.text(np.sqrt(MID_GYR * t_plot.max()), top * 0.03, "old", fontsize=8,
-             color="#5c4080", ha="center", va="bottom")
+    _ax.text(
+        np.sqrt(t_plot.min() * YOUNG_GYR),
+        top * 0.03,
+        "recent",
+        fontsize=8,
+        color="#a06a10",
+        ha="center",
+        va="bottom",
+    )
+    _ax.text(
+        np.sqrt(MID_GYR * t_plot.max()),
+        top * 0.03,
+        "old",
+        fontsize=8,
+        color="#5c4080",
+        ha="center",
+        va="bottom",
+    )
 fig.suptitle("Photometry alone smooths the bursts away; the lines put them back", y=1.0)
 fig.tight_layout()
 fig.savefig(FIG_DIR / "sfh_recovery_by_observable.png", dpi=150, bbox_inches="tight")
@@ -447,11 +544,18 @@ plt.show()
 fig, (ax_dex, ax_mass) = plt.subplots(1, 2, figsize=(11.6, 4.2))
 x = np.arange(3)
 w = 0.36
-for i, (name, off) in enumerate((("recent (< 15 Myr)", -w / 2),
-                                ("intermediate (15 Myr - 1 Gyr)", +w / 2))):
-    ax_dex.bar(x + off, [score[k][name] for k in "ABC"], w,
-               color=[C[k] for k in "ABC"], alpha=1.0 if i == 0 else 0.45,
-               hatch=None if i == 0 else "//", label=name)
+for i, (name, off) in enumerate(
+    (("recent (< 15 Myr)", -w / 2), ("intermediate (15 Myr - 1 Gyr)", +w / 2))
+):
+    ax_dex.bar(
+        x + off,
+        [score[k][name] for k in "ABC"],
+        w,
+        color=[C[k] for k in "ABC"],
+        alpha=1.0 if i == 0 else 0.45,
+        hatch=None if i == 0 else "//",
+        label=name,
+    )
 ax_dex.set_xticks(x)
 ax_dex.set_xticklabels(["A\nfilters", "B\n+ lines", "C\n+ spectrum"])
 ax_dex.set_ylabel("SFH error [dex, RMS on log-age nodes]")
@@ -532,9 +636,15 @@ plt.show()
 # publish wants several times the samples and a convergence check.
 t0 = time.perf_counter()
 posterior = ForwardModel.build(sed=model["B"], observation=OBSERVATION["B"]).fit(
-    *DATA["B"], method="mcmc_hmc", init_from=fits["B"],
-    n_warmup=300, n_samples=200, n_leapfrog_steps=100, dense_mass_matrix=True,
-    key=jax.random.PRNGKey(SEED + 7), verbose=False,
+    *DATA["B"],
+    method="mcmc_hmc",
+    init_from=fits["B"],
+    n_warmup=300,
+    n_samples=200,
+    n_leapfrog_steps=100,
+    dense_mass_matrix=True,
+    key=jax.random.PRNGKey(SEED + 7),
+    verbose=False,
 )
 print(f"HMC in {time.perf_counter() - t0:.0f} s")
 
@@ -545,11 +655,19 @@ n_div = diag.get("n_divergent", 0)
 max_rhat = float(np.nanmax(list(posterior.rhat().values())))
 print(f"HMC diagnostics: {n_div} divergences, max R-hat {max_rhat:.4f}")
 if n_div > 0 or max_rhat > 1.01:
-    print("  ⚠ WARNING: Posterior may not have converged properly. "
-          "For publication, increase n_warmup and n_leapfrog_steps.")
+    print(
+        "  ⚠ WARNING: Posterior may not have converged properly. "
+        "For publication, increase n_warmup and n_leapfrog_steps."
+    )
 
-ax = plot_sfh(model["B"], posterior, true_params=truth_full,
-              method="HMC", xscale="log", label="posterior (case B)")
+ax = plot_sfh(
+    model["B"],
+    posterior,
+    true_params=truth_full,
+    method="HMC",
+    xscale="log",
+    label="posterior (case B)",
+)
 ax.set_title("Case B posterior — 7 filters + 8 emission lines")
 ax.set_xlabel("lookback time [Gyr]")
 ax.figure.savefig(FIG_DIR / "sfh_posterior_lines.png", dpi=150, bbox_inches="tight")

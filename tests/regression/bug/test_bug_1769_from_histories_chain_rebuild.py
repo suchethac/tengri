@@ -44,7 +44,8 @@ def fwd_for_chain_test(synthetic_ssp_wide, synthetic_tophat_obs):
             ssp_data=synthetic_ssp_wide,
             observation=synthetic_tophat_obs,
             sfh={"type": "table"},
-            dust={"law": "power_law", 
+            dust={
+                "law": "power_law",
                 "type": "two_component",
                 "all_params": FIXED,
                 "tau_bc": 0.5,

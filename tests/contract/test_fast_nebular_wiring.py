@@ -63,7 +63,8 @@ def _build(neb, *, dust_on=True, precomp=True, met=None):
     ssp = load_ssp_data(_BARE)
     obs = Observation(photometry=Photometry.from_names(_BANDS), line_fluxes=_LINE_DATA)
     taus = (0.25, 0.4) if dust_on else (0.0, 0.0)
-    dust = {"law_diff": 'calzetti', 
+    dust = {
+        "law_diff": "calzetti",
         "type": "two_component",
         "law_bc": "calzetti",
         "*": FIXED,

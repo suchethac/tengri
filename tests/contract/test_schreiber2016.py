@@ -40,7 +40,8 @@ def test_schreiber2016_builds_and_balances():
     m = tengri.SEDModel.build(
         ssp,
         sfh={"type": "tsnorm", "*": tengri.FIXED},
-        dust={"law": "power_law", 
+        dust={
+            "law": "power_law",
             "type": "two_component",
             "*": tengri.FIXED,
             "tau_diff": 0.3,

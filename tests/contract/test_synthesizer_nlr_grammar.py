@@ -45,7 +45,13 @@ def _build(ssp, block, logU):
             "log_total_mass": Fixed(0.0),
             "*": FIXED,
         },
-        dust={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+        dust={
+            "law": "power_law",
+            "type": "two_component",
+            "tau_bc": Fixed(0.0),
+            "tau_diff": Fixed(0.0),
+            "*": FIXED,
+        },
         agn={
             "type": "composable",
             "*": FIXED,

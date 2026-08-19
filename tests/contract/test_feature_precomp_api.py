@@ -91,7 +91,8 @@ def _build(ssp, *, cue, approx, line_data=None, emission=True, dust=True):
             "logZ_gas": Uniform(-1.5, 0.3),
         }
     if dust:
-        d = {"law_diff": 'calzetti', 
+        d = {
+            "law_diff": "calzetti",
             "type": "two_component",
             "law_bc": "calzetti",
             "*": FIXED,

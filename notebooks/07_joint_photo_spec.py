@@ -126,6 +126,7 @@ def build(obs, approx=None):
             defaults=FIXED, log_total_mass=FREE, peak_lbt_gyr=FREE, width_gyr=FREE
         ),
         dust=builders.dust.two_component(
+            law_diff="calzetti",
             defaults=FIXED,
             law_bc="calzetti",
             tau_bc=Uniform(0.0, 1.0),
@@ -145,7 +146,10 @@ def build(obs, approx=None):
 # slow exact wave-grid integration.
 model_phot = build(obs_phot, approx=WavePrecomp())
 model_joint = build(obs_joint, approx=SpectrumPrecomp())
-print(f"Free parameters ({model_joint.spec.n_free}): {', '.join(model_joint.spec.free_params)}", flush=True)
+print(
+    f"Free parameters ({model_joint.spec.n_free}): {', '.join(model_joint.spec.free_params)}",
+    flush=True,
+)
 
 # %% [markdown]
 # ## Mock observation
@@ -177,7 +181,10 @@ flux_spec = p_spec + _rng.normal(size=p_spec.shape) * n_spec
 
 wave_eff_um = effective_wavelengths_um(phot_obs)
 print(f"Truth metallicity log(Z/Zsun) = {float(truth['met_logzsol']):+.2f}", flush=True)
-print(f"Mock: {len(flux_phot)} bands (SNR 20) + {len(flux_spec)}-pixel spectrum (SNR 30/pix)", flush=True)
+print(
+    f"Mock: {len(flux_phot)} bands (SNR 20) + {len(flux_spec)}-pixel spectrum (SNR 30/pix)",
+    flush=True,
+)
 
 # %% [markdown]
 # ## Fit
@@ -193,10 +200,9 @@ def run(model, data, label):
     post = ForwardModel.build(sed=model).fit(data, key=key_fit, **HMC_VALIDATED)
     elapsed = time.perf_counter() - t0
     rmax = max(float(v) for v in post.rhat().values())
-    n_div = post.diagnostics.get('n_divergent', 0)
+    n_div = post.diagnostics.get("n_divergent", 0)
     print(
-        f"  {label:12s} {elapsed:6.0f}s   max R-hat {rmax:.3f}   "
-        f"divergences {n_div}", flush=True
+        f"  {label:12s} {elapsed:6.0f}s   max R-hat {rmax:.3f}   divergences {n_div}", flush=True
     )
 
     # R-hat cannot see a chain that never moved: with zero within- and
@@ -298,7 +304,9 @@ for p in params:
     tv = float(truth_full[p])
     ok = lo <= tv <= hi
     n_cov += ok
-    print(f"{p:<28}{tv:>9.3f}{lo:>9.3f}{med:>9.3f}{hi:>9.3f}  {'ok' if ok else 'miss'}", flush=True)
+    print(
+        f"{p:<28}{tv:>9.3f}{lo:>9.3f}{med:>9.3f}{hi:>9.3f}  {'ok' if ok else 'miss'}", flush=True
+    )
 print(f"\n68% coverage: {n_cov}/{len(params)}", flush=True)
 
 # %% [markdown]

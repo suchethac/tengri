@@ -170,7 +170,8 @@ class TestComposabilityWithHostDust:
             model = tengri.SEDModel.build(
                 ssp,
                 sfh={"type": "tsnorm", "*": tengri.FIXED},
-                dust={"law": "power_law", 
+                dust={
+                    "law": "power_law",
                     "type": "two_component",
                     "*": tengri.FIXED,
                     "tau_bc": tengri.Fixed(0.5),

@@ -544,7 +544,12 @@ class TestUniversalKeyValidator:
             ("sfh", {"type": "dpl", "*": FIXED, "pretend_param": 5}),
             (
                 "dust",
-                {"law": "power_law", "type": "two_component", "*": FIXED, "completely_fake_key": 99},
+                {
+                    "law": "power_law",
+                    "type": "two_component",
+                    "*": FIXED,
+                    "completely_fake_key": 99,
+                },
             ),
             ("neb", {"type": "none", "phantom_neb_key": 3}),
             ("igm", {"type": "madau", "typo_igm_key": 1}),
@@ -636,7 +641,8 @@ class TestComposableAGNRuntimeWiring:
                 "log_total_mass": Fixed(0.0),
                 "*": FIXED,
             },
-            dust={"law": "power_law", 
+            dust={
+                "law": "power_law",
                 "type": "two_component",
                 "tau_bc": Fixed(0.0),
                 "tau_diff": Fixed(0.0),
@@ -702,7 +708,8 @@ class TestComposableAGNRuntimeWiring:
                     "log_total_mass": Fixed(0.0),
                     "*": FIXED,
                 },
-                dust={"law": "power_law", 
+                dust={
+                    "law": "power_law",
                     "type": "two_component",
                     "tau_bc": Fixed(0.0),
                     "tau_diff": Fixed(0.0),
@@ -769,7 +776,8 @@ class TestComposableAGNRuntimeWiring:
                 "log_total_mass": Fixed(0.0),
                 "*": FIXED,
             },
-            dust={"law": "power_law", 
+            dust={
+                "law": "power_law",
                 "type": "two_component",
                 "tau_bc": Fixed(0.0),
                 "tau_diff": Fixed(0.0),
@@ -819,7 +827,8 @@ class TestComposableAGNRuntimeWiring:
                     "log_total_mass": Fixed(0.0),
                     "*": FIXED,
                 },
-                dust={"law": "power_law", 
+                dust={
+                    "law": "power_law",
                     "type": "two_component",
                     "tau_bc": Fixed(0.0),
                     "tau_diff": Fixed(0.0),
@@ -891,7 +900,8 @@ class TestComposableAGNRuntimeWiring:
                 "log_total_mass": Fixed(0.0),
                 "*": FIXED,
             },
-            dust={"law": "power_law", 
+            dust={
+                "law": "power_law",
                 "type": "two_component",
                 "tau_bc": Fixed(0.0),
                 "tau_diff": Fixed(0.0),

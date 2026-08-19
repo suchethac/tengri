@@ -112,6 +112,7 @@ for i, tau_v in enumerate(tau_v_values):
             "log_total_mass": 10.0,  # log10(10 Msun/yr) = 1.0
         },
         "dust": {
+            "law_diff": "calzetti",
             "type": "two_component",
             "law_bc": "calzetti",
             "tau_bc": Fixed(tau_bc),

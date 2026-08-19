@@ -197,6 +197,7 @@ for d in MyModifiedBlackbody().declared_parameters():
 # hand-rolled input/output names — the shape that looks right and isn't.
 # It registers. It is still unusable.
 
+
 # %%
 class _BrokenMBB(SEDModelComponent):
     """Registers fine. `build()` will never accept it."""

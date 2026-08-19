@@ -59,6 +59,7 @@ for i, beta in enumerate(betas):
                 "log_total_mass": 10.0,
             },
             dust={
+                "law": "power_law",
                 "type": "two_component",
                 "all_params": tengri.FIXED,
                 "tau_diff": 0.2,
@@ -129,7 +130,13 @@ model_alpha = tengri.SEDModel.build(
         "tau_gyr": 1.5,
         "log_total_mass": 10.0,
     },
-    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
+    dust={
+        "law": "power_law",
+        "type": "two_component",
+        "all_params": tengri.FIXED,
+        "tau_diff": 0.2,
+        "tau_bc": 0.3,
+    },
     redshift=tengri.Fixed(0.1),
 )
 baseline_alpha = dict(model_alpha.spec.sample(jax.random.PRNGKey(0)))
@@ -170,7 +177,13 @@ model_beta = tengri.SEDModel.build(
         "tau_gyr": 3.0,
         "log_total_mass": 10.0,
     },
-    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
+    dust={
+        "law": "power_law",
+        "type": "two_component",
+        "all_params": tengri.FIXED,
+        "tau_diff": 0.2,
+        "tau_bc": 0.3,
+    },
     redshift=tengri.Fixed(0.1),
 )
 baseline_beta = dict(model_beta.spec.sample(jax.random.PRNGKey(0)))

@@ -48,7 +48,8 @@ def model_with_cue(ssp_bare):
             "start_gyr": 10.0,
             "end_gyr": 0.0,
         },
-        dust={"law_diff": 'calzetti', 
+        dust={
+            "law_diff": "calzetti",
             "type": "two_component",
             "*": FIXED,
             "law_bc": "calzetti",

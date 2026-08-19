@@ -128,7 +128,8 @@ def test_balmer_decrement_rises_under_dust_sweep(ssp_bare):
                 "start_gyr": 10.0,
                 "end_gyr": 0.0,
             },
-            dust={"law_diff": 'calzetti', 
+            dust={
+                "law_diff": "calzetti",
                 "type": "two_component",
                 "*": FIXED,
                 "law_bc": "calzetti",
@@ -162,7 +163,13 @@ def test_cue_exposes_more_than_thirteen_species(ssp_bare):
             "start_gyr": 10.0,
             "end_gyr": 0.0,
         },
-        dust={"law": "power_law", "type": "two_component", "*": FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+        dust={
+            "law": "power_law",
+            "type": "two_component",
+            "*": FIXED,
+            "tau_diff": 0.0,
+            "tau_bc": 0.0,
+        },
         neb={"type": "cue", "*": FIXED},
         redshift=Fixed(0.05),
     )
@@ -190,7 +197,13 @@ def test_stellar_lyc_attenuated_by_fesc(ssp_bare):
                 "end_gyr": 0.0,
             },
             neb={"type": "cue", "*": FIXED, "fesc": fesc},
-            dust={"law": "power_law", "type": "two_component", "*": FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+            dust={
+                "law": "power_law",
+                "type": "two_component",
+                "*": FIXED,
+                "tau_diff": 0.0,
+                "tau_bc": 0.0,
+            },
             redshift=Fixed(0.05),
         )
         p = dict(m.spec.sample(jax.random.PRNGKey(0)))
