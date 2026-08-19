@@ -12,7 +12,7 @@ users can organize parameters into semantic groups::
 
     params = parse_groups(
         sfh={"type": "dpl", "all_params": FREE, "beta": 0.5},
-        dust={"type": "two_component", "law_bc": "calzetti", "all_params": FIXED},
+        dust={"type": "two_component", "law": "calzetti", "all_params": FIXED},
         neb={"type": "cue"},
         redshift=FREE,
     )
@@ -2124,28 +2124,102 @@ def _translate_dust(dust_dict: dict, result: dict) -> None:
                 result[result_key] = val
         return
 
-    # Extract dust laws. Leave each unset (None) when the user did not give it,
-    # so Parameters can apply symmetric inheritance (set one law -> both share
-    # it; set neither -> power_law for both).
+    # Extract and validate dust laws. Attenuation laws are now EXPLICIT and required.
+    # For single_component: 'law' is required (singular, one screen).
+    # For two_component: either 'law' (shared by both screens) XOR both 'law_bc' AND 'law_diff'.
+    valid_laws = _valid_dust_laws()
+
+    # Extract the law keys from the dict (make a copy to avoid mutation)
+    dust_law = dust_dict.get("law")
     dust_law_bc = dust_dict.get("law_bc")
     dust_law_diff = dust_dict.get("law_diff")
     dust_law_neb = dust_dict.get("law_neb")
 
-    valid_laws = _valid_dust_laws()
-    if dust_law_bc is not None:
-        if dust_law_bc not in valid_laws:
-            suggestions = difflib.get_close_matches(dust_law_bc, valid_laws, n=2, cutoff=0.6)
+    # For single_component: require 'law', reject law_bc/law_diff
+    if dust_type == "single_component":
+        if dust_law_bc is not None or dust_law_diff is not None:
+            raise ValueError(
+                f"dust type='single_component' has a single attenuation screen. "
+                f"Use 'law' to set the attenuation law, not 'law_bc' or 'law_diff'. "
+                f"Example: dust={{'type': 'single_component', 'law': 'calzetti', ...}}"
+            )
+        if dust_law is None:
+            laws_list = ", ".join(sorted(valid_laws))
+            raise ValueError(
+                f"dust type='single_component' requires 'law' to be specified. "
+                f"Valid laws: {laws_list}. "
+                f"Example: dust={{'type': 'single_component', 'law': 'calzetti', 'tau_v': ...}}"
+            )
+        if dust_law not in valid_laws:
+            suggestions = difflib.get_close_matches(dust_law, valid_laws, n=2, cutoff=0.6)
             suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-            raise ValueError(f"Unknown dust law '{dust_law_bc}'.{suggest_str}")
-        result["dust_law_bc"] = dust_law_bc
+            raise ValueError(f"Unknown dust law '{dust_law}'.{suggest_str}")
+        # Store law on both _bc and _diff for consistency (single screen)
+        result["dust_law_bc"] = dust_law
+        result["dust_law_diff"] = dust_law
 
-    if dust_law_diff is not None:
-        if dust_law_diff not in valid_laws:
-            suggestions = difflib.get_close_matches(dust_law_diff, valid_laws, n=2, cutoff=0.6)
-            suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-            raise ValueError(f"Unknown dust law '{dust_law_diff}'.{suggest_str}")
-        result["dust_law_diff"] = dust_law_diff
+    # For two_component: either 'law' XOR (law_bc AND law_diff)
+    elif dust_type == "two_component":
+        has_law = dust_law is not None
+        has_law_bc = dust_law_bc is not None
+        has_law_diff = dust_law_diff is not None
 
+        # Check for invalid combinations
+        if has_law and (has_law_bc or has_law_diff):
+            raise ValueError(
+                f"dust type='two_component' grammar is ambiguous: "
+                f"cannot specify both 'law' and 'law_bc'/'law_diff'. "
+                f"Use EITHER 'law' (shared by both screens) "
+                f"OR both 'law_bc' and 'law_diff' (per-screen). "
+                f"Example 1: dust={{'type': 'two_component', 'law': 'calzetti', ...}} "
+                f"Example 2: dust={{'type': 'two_component', 'law_bc': 'calzetti', "
+                f"'law_diff': 'power_law', ...}}"
+            )
+
+        if not has_law and not (has_law_bc and has_law_diff):
+            if has_law_bc or has_law_diff:
+                raise ValueError(
+                    f"dust type='two_component' requires BOTH 'law_bc' and 'law_diff' "
+                    f"for per-screen specification, or use 'law' for a shared law. "
+                    f"You gave: {[k for k in ['law_bc', 'law_diff'] if dust_dict.get(k) is not None]}. "
+                    f"Example 1: dust={{'type': 'two_component', 'law': 'calzetti', ...}} "
+                    f"Example 2: dust={{'type': 'two_component', 'law_bc': 'calzetti', "
+                    f"'law_diff': 'power_law', ...}}"
+                )
+            # Neither form given
+            laws_list = ", ".join(sorted(valid_laws))
+            raise ValueError(
+                f"dust type='two_component' requires either 'law' (applied to both screens) "
+                f"or both 'law_bc' and 'law_diff' (per-screen). "
+                f"Valid laws: {laws_list}. "
+                f"Example 1: dust={{'type': 'two_component', 'law': 'calzetti', "
+                f"'tau_bc': ..., 'tau_diff': ...}} "
+                f"Example 2: dust={{'type': 'two_component', 'law_bc': 'calzetti', "
+                f"'law_diff': 'power_law', 'tau_bc': ..., 'tau_diff': ...}}"
+            )
+
+        # Resolve to the two-screen form
+        if has_law:
+            if dust_law not in valid_laws:
+                suggestions = difflib.get_close_matches(dust_law, valid_laws, n=2, cutoff=0.6)
+                suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+                raise ValueError(f"Unknown dust law '{dust_law}'.{suggest_str}")
+            result["dust_law_bc"] = dust_law
+            result["dust_law_diff"] = dust_law
+        else:
+            # Both law_bc and law_diff are given (already checked above)
+            if dust_law_bc not in valid_laws:
+                suggestions = difflib.get_close_matches(dust_law_bc, valid_laws, n=2, cutoff=0.6)
+                suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+                raise ValueError(f"Unknown dust law '{dust_law_bc}'.{suggest_str}")
+            if dust_law_diff not in valid_laws:
+                suggestions = difflib.get_close_matches(dust_law_diff, valid_laws, n=2, cutoff=0.6)
+                suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+                raise ValueError(f"Unknown dust law '{dust_law_diff}'.{suggest_str}")
+            result["dust_law_bc"] = dust_law_bc
+            result["dust_law_diff"] = dust_law_diff
+
+    # law_neb: optional per-screen override for nebular birth cloud. None -> inherit dust_law_bc
     if dust_law_neb is not None:
         if dust_law_neb not in valid_laws:
             suggestions = difflib.get_close_matches(dust_law_neb, valid_laws, n=2, cutoff=0.6)
@@ -2703,6 +2777,7 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
         {
             "type",
             "*",
+            "law",
             "law_bc",
             "law_diff",
             "law_neb",
@@ -2821,6 +2896,11 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
     # No 'stellar' entry: that group is gone (#1720). Its one setting was the
     # metallicity mode, and it is emitted above as met={'type': ...}.
     "dust": (
+        # Dust attenuation laws: emit 'law' when both screens share, or 'law_bc'/'law_diff' otherwise.
+        # This is handled by custom logic in _emit_declared_structural for dust.
+        # Markers for the handler to know which attributes to check:
+        _Structural("law_bc", "dust_law_bc", None, only_types=("single_component", "two_component")),
+        _Structural("law_diff", "dust_law_diff", None, only_types=("single_component", "two_component")),
         # Witt & Gordon (2000) screen selectors (FSPS dust_type=3). Only read
         # by the parser when the dust type is wg00, so a non-WG00 spec always
         # holds the defaults and never emits them.
@@ -2910,7 +2990,33 @@ def _emit_declared_structural(group_name: str, group_output: dict, spec: Paramet
         The Parameters object to read settings from.
     """
     group_type = group_output.get("type")
+    entries_to_skip = set()
+
+    # Special handling for dust laws: emit 'law' when both screens share, or 'law_bc'/'law_diff' otherwise
+    if group_name == "dust" and group_type in ("single_component", "two_component"):
+        law_bc = getattr(spec, "dust_law_bc", None)
+        law_diff = getattr(spec, "dust_law_diff", None)
+        if law_bc is not None or law_diff is not None:
+            if group_type == "single_component":
+                # single_component: emit as 'law'
+                if law_bc is not None:
+                    group_output["law"] = law_bc
+            elif law_bc == law_diff and law_bc is not None:
+                # two_component with shared law: emit as 'law'
+                group_output["law"] = law_bc
+            else:
+                # two_component with different laws: emit as 'law_bc' and 'law_diff'
+                if law_bc is not None:
+                    group_output["law_bc"] = law_bc
+                if law_diff is not None:
+                    group_output["law_diff"] = law_diff
+            # Skip the normal law_bc/law_diff handling below to avoid duplication
+            entries_to_skip.add("law_bc")
+            entries_to_skip.add("law_diff")
+
     for entry in _STRUCTURAL_ROUNDTRIP.get(group_name, ()):
+        if entry.key in entries_to_skip:
+            continue
         if entry.only_types is not None and group_type not in entry.only_types:
             continue
         default = entry.default if entry.resolved_default is None else entry.resolved_default(spec)
@@ -4128,11 +4234,7 @@ def _add_structural_settings(group_name: str, group_output: dict, spec: Paramete
     _emit_declared_structural(group_name, group_output, spec)
 
     if group_name == "dust":
-        # Add law_bc and law_diff if non-default
-        if spec.dust_law_bc != "power_law":
-            group_output["law_bc"] = spec.dust_law_bc
-        if hasattr(spec, "dust_law_diff") and spec.dust_law_diff != spec.dust_law_bc:
-            group_output["law_diff"] = spec.dust_law_diff
+        # Dust laws are now handled in _emit_declared_structural with the new 'law' key.
         # Nebular birth-cloud law (None -> inherits bc; only emit when set).
         if getattr(spec, "dust_law_neb", None) is not None:
             group_output["law_neb"] = spec.dust_law_neb

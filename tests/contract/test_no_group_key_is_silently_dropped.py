@@ -66,7 +66,7 @@ def _emission_params(ssp, obs) -> list[str]:
     Discovered rather than listed, so a new emission template is covered the
     day it registers.
     """
-    base = {"type": "two_component", "law_bc": "calzetti", "all_params": FIXED}
+    base = {"type": "two_component", "law": "calzetti", "all_params": FIXED}
     without = set(_build(ssp, obs, dict(base)).spec.all_params)
     with_em = _build(ssp, obs, {**base, "emission": _EMIS})
     return sorted(set(with_em.spec.all_params) - without)
@@ -85,7 +85,7 @@ class TestFlattenedKeysAreRefusedNotDropped:
         """Accepted-and-ignored is the failure; refusal is the fix."""
         base = {
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "all_params": FIXED,
             "emission": _EMIS,
         }
@@ -109,7 +109,7 @@ class TestFlattenedKeysAreRefusedNotDropped:
         """'Unknown key alpha ... Did you mean: alpha?' is not a fix."""
         base = {
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "all_params": FIXED,
             "emission": _EMIS,
         }
@@ -125,7 +125,7 @@ class TestFlattenedKeysAreRefusedNotDropped:
         """The silent version cost a free parameter, not just a value."""
         base = {
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "all_params": FIXED,
             "emission": _EMIS,
         }
@@ -139,7 +139,7 @@ class TestFlattenedKeysAreRefusedNotDropped:
             obs,
             {
                 "type": "two_component",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "all_params": FIXED,
                 "emission": {**_EMIS, "alpha": Uniform(1.0, 3.0)},
             },
@@ -165,7 +165,7 @@ class TestCrossLevelAcceptanceThatWorksIsKept:
                 ssp_data=ssp_data_fsps,
                 observation=obs,
                 sfh=_SFH,
-                dust={"type": "two_component", "law_bc": "calzetti", "all_params": FIXED},
+                dust={"type": "two_component", "law": "calzetti", "all_params": FIXED},
                 neb={"type": "none"},
                 redshift=Fixed(0.1),
                 agn=agn,
@@ -180,7 +180,7 @@ class TestCrossLevelAcceptanceThatWorksIsKept:
                 ssp_data=ssp_data_fsps,
                 observation=obs,
                 sfh=_SFH,
-                dust={"type": "two_component", "law_bc": "calzetti", "all_params": FIXED},
+                dust={"type": "two_component", "law": "calzetti", "all_params": FIXED},
                 neb={"type": "none"},
                 redshift=Fixed(0.1),
                 agn={**agn, short: baseline + 0.25},

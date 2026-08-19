@@ -163,7 +163,7 @@ def test_dust_ir_emission_e2e(ssp, obs, emission_type):
             sfh={"type": "dpl", "*": FIXED},
             dust={
                 "type": "two_component",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "*": FIXED,
                 "emission": {"type": emission_type, "*": FIXED},
             },
@@ -188,7 +188,7 @@ def _fixed_dust() -> dict:
     A fresh dict is returned each call because ``SEDModel.build`` consumes the
     group dicts it is handed.
     """
-    return {"type": "two_component", "*": FIXED, "tau_bc": Fixed(0.3), "tau_diff": Fixed(0.2)}
+    return {"type": "two_component", "law": "power_law", "*": FIXED, "tau_bc": Fixed(0.3), "tau_diff": Fixed(0.2)}
 
 
 # AGN is built through the composable block grammar (the canonical AGN surface,
