@@ -849,13 +849,6 @@ class Parameters:
         if self.dust_approx not in ("fast", "exact"):
             raise ValueError(f"dust_approx must be 'fast' or 'exact', got '{self.dust_approx}'")
 
-        # Dust law requirement: grammar builds (with explicit dust block) require
-        # explicit laws (no defaults); flat-kwarg builds use power_law defaults.
-        # _translate_dust sets this marker so it doesn't leak as an unknown
-        # parameter; grammar builds already validated/set the laws by this
-        # point, so the marker itself needs no further branching here.
-        kwargs.pop("_dust_block_provided", None)
-
         # Pop the law keys without defaults so we can distinguish between:
         # - Grammar: laws already validated and set by _translate_dust
         # - Flat-kwarg: laws unset, apply power_law defaults

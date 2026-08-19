@@ -2062,11 +2062,6 @@ def _translate_dust(dust_dict: dict, result: dict) -> None:
     (two_component, single_component, wg00) and extracts structural
     configuration and law selections.
     """
-    # Mark that dust block was explicitly provided so Parameters can
-    # distinguish grammar builds from flat-kwarg builds and validate
-    # law requirements appropriately.
-    result["_dust_block_provided"] = True
-
     dust_type = dust_dict.get("type", "two_component")
 
     # 'none'/'off' disable the dust block entirely — parity with neb/agn/radio/
@@ -2134,7 +2129,6 @@ def _translate_dust(dust_dict: dict, result: dict) -> None:
     # For two_component: either 'law' (shared by both screens) XOR both 'law_bc' AND 'law_diff'.
     valid_laws = _valid_dust_laws()
 
-    # Extract the law keys from the dict (make a copy to avoid mutation)
     dust_law = dust_dict.get("law")
     dust_law_bc = dust_dict.get("law_bc")
     dust_law_diff = dust_dict.get("law_diff")
@@ -2902,10 +2896,11 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
     # No 'stellar' entry: that group is gone (#1720). Its one setting was the
     # metallicity mode, and it is emitted above as met={'type': ...}.
     "dust": (
-        # Dust attenuation laws: emit 'law' when both screens share, or
-        # 'law_bc'/'law_diff' otherwise. This is handled by custom logic in
-        # _emit_declared_structural for dust.
-        # Markers for the handler to know which attributes to check:
+        # The two law attributes are emitted by hand in
+        # _emit_declared_structural (one 'law' when both screens agree, the
+        # pair when they differ), which then skips these entries. They stay
+        # because test_structural_settings_roundtrip asserts every structural
+        # attribute is named here -- they are coverage, not logic.
         _Structural(
             "law_bc", "dust_law_bc", None, only_types=("single_component", "two_component")
         ),
