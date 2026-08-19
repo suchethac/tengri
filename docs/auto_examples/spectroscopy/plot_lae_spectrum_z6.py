@@ -52,6 +52,7 @@ model = tengri.SEDModel.build(
         "beta": 2.5,
     },  # Declining late SFR
     dust={
+        "law": "power_law",
         "type": "two_component",
         "all_params": tengri.FIXED,
         "tau_diff": 0.02,  # Minimal diffuse dust

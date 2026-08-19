@@ -146,7 +146,13 @@ ssp = tengri.load_ssp_data(str(repo_root / "data" / "fsps_prsc_miles_chabrier.h5
 model = tengri.SEDModel.build(
     ssp,
     sfh={"type": "dpl", "all_params": tengri.FIXED, "log_total_mass": 10.0},
-    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+    dust={
+        "law": "power_law",
+        "type": "two_component",
+        "all_params": tengri.FIXED,
+        "tau_diff": 0.0,
+        "tau_bc": 0.0,
+    },
     neb={"type": "cue", "all_params": tengri.FIXED},
 )
 

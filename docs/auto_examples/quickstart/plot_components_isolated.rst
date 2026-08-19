@@ -29,7 +29,7 @@ lines added at the source), then dust (UV attenuated, reprocessed
 into the FIR), then AGN (disc + torus + NLR), then radio, then X-ray.
 The color at each wavelength tells you which block matters most.
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-111
+.. GENERATED FROM PYTHON SOURCE LINES 13-118
 
 
 
@@ -75,13 +75,20 @@ The color at each wavelength tells you which block matters most.
         redshift=tengri.Fixed(0.05),
     )
     DUST_ON = {
+        "law": "power_law",
         "type": "two_component",
         "all_params": tengri.FIXED,
         "tau_diff": 0.4,
         "tau_bc": 0.6,
         "emission": {"type": "dale2014", "all_params": tengri.FIXED},
     }
-    DUST_OFF = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+    DUST_OFF = {
+        "law": "power_law",
+        "type": "two_component",
+        "all_params": tengri.FIXED,
+        "tau_diff": 0.0,
+        "tau_bc": 0.0,
+    }
 
 
     def _nuLnu(**blocks):
@@ -146,7 +153,7 @@ The color at each wavelength tells you which block matters most.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 21.578 seconds)
+   **Total running time of the script:** (0 minutes 21.631 seconds)
 
 
 .. _sphx_glr_download_auto_examples_quickstart_plot_components_isolated.py:

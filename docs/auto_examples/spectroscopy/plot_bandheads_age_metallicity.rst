@@ -52,7 +52,7 @@ References
    and Population Diagnostics," ApJS 94, 687.
    https://doi.org/10.1086/192220
 
-.. GENERATED FROM PYTHON SOURCE LINES 36-276
+.. GENERATED FROM PYTHON SOURCE LINES 36-283
 
 
 
@@ -66,47 +66,47 @@ References
 
  .. code-block:: none
 
-    /tengri/src/tengri/forward/sed_model.py:1594: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.864 Gyr at peak sfh_tsnorm_peak_lbt_gyr=6.51 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.864 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.864 Gyr at peak sfh_tsnorm_peak_lbt_gyr=6.51 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.864 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1594: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.122 Gyr at peak sfh_tsnorm_peak_lbt_gyr=1 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.122 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.122 Gyr at peak sfh_tsnorm_peak_lbt_gyr=1 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.122 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1594: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.122 Gyr at peak sfh_tsnorm_peak_lbt_gyr=1 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.122 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.122 Gyr at peak sfh_tsnorm_peak_lbt_gyr=1 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.122 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1594: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.122 Gyr at peak sfh_tsnorm_peak_lbt_gyr=1 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.122 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.122 Gyr at peak sfh_tsnorm_peak_lbt_gyr=1 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.122 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1594: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.122 Gyr at peak sfh_tsnorm_peak_lbt_gyr=1 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.122 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.122 Gyr at peak sfh_tsnorm_peak_lbt_gyr=1 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.122 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1594: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.273 Gyr at peak sfh_tsnorm_peak_lbt_gyr=2 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.273 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.273 Gyr at peak sfh_tsnorm_peak_lbt_gyr=2 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.273 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1594: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.273 Gyr at peak sfh_tsnorm_peak_lbt_gyr=2 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.273 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.273 Gyr at peak sfh_tsnorm_peak_lbt_gyr=2 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.273 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1594: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.273 Gyr at peak sfh_tsnorm_peak_lbt_gyr=2 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.273 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.273 Gyr at peak sfh_tsnorm_peak_lbt_gyr=2 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.273 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1594: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.273 Gyr at peak sfh_tsnorm_peak_lbt_gyr=2 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.273 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.273 Gyr at peak sfh_tsnorm_peak_lbt_gyr=2 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.273 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1594: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.612 Gyr at peak sfh_tsnorm_peak_lbt_gyr=5 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.612 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.612 Gyr at peak sfh_tsnorm_peak_lbt_gyr=5 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.612 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1594: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.612 Gyr at peak sfh_tsnorm_peak_lbt_gyr=5 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.612 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.612 Gyr at peak sfh_tsnorm_peak_lbt_gyr=5 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.612 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1594: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.612 Gyr at peak sfh_tsnorm_peak_lbt_gyr=5 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.612 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.612 Gyr at peak sfh_tsnorm_peak_lbt_gyr=5 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.612 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1594: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.612 Gyr at peak sfh_tsnorm_peak_lbt_gyr=5 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.612 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.612 Gyr at peak sfh_tsnorm_peak_lbt_gyr=5 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.612 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1594: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 1.09 Gyr at peak sfh_tsnorm_peak_lbt_gyr=8 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.09 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 1.09 Gyr at peak sfh_tsnorm_peak_lbt_gyr=8 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.09 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1594: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 1.09 Gyr at peak sfh_tsnorm_peak_lbt_gyr=8 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.09 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 1.09 Gyr at peak sfh_tsnorm_peak_lbt_gyr=8 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.09 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1594: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 1.09 Gyr at peak sfh_tsnorm_peak_lbt_gyr=8 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.09 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 1.09 Gyr at peak sfh_tsnorm_peak_lbt_gyr=8 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.09 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1594: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 1.09 Gyr at peak sfh_tsnorm_peak_lbt_gyr=8 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.09 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 1.09 Gyr at peak sfh_tsnorm_peak_lbt_gyr=8 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.09 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1594: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 1.37 Gyr at peak sfh_tsnorm_peak_lbt_gyr=11 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.37 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 1.37 Gyr at peak sfh_tsnorm_peak_lbt_gyr=11 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.37 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1594: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 1.37 Gyr at peak sfh_tsnorm_peak_lbt_gyr=11 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.37 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 1.37 Gyr at peak sfh_tsnorm_peak_lbt_gyr=11 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.37 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1594: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 1.37 Gyr at peak sfh_tsnorm_peak_lbt_gyr=11 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.37 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 1.37 Gyr at peak sfh_tsnorm_peak_lbt_gyr=11 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.37 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1594: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 1.37 Gyr at peak sfh_tsnorm_peak_lbt_gyr=11 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.37 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 1.37 Gyr at peak sfh_tsnorm_peak_lbt_gyr=11 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.37 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
 
 
@@ -238,7 +238,13 @@ References
             "skew": 0.0,
             "trunc": 13.0,
         },
-        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+        dust={
+            "law": "power_law",
+            "type": "two_component",
+            "all_params": tengri.FIXED,
+            "tau_diff": 0.0,
+            "tau_bc": 0.0,
+        },
         redshift=Fixed(REDSHIFT),
         observation=obs,
     )
@@ -282,6 +288,7 @@ References
                     "trunc": 13.0,
                 },
                 dust={
+                    "law": "power_law",
                     "type": "two_component",
                     "all_params": tengri.FIXED,
                     "tau_diff": 0.0,
@@ -358,11 +365,6 @@ References
     ax_met.grid(True, alpha=0.3, linestyle="--")
 
     plt.savefig("plot_bandheads_age_metallicity.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 3.097 seconds)
 
 
 .. _sphx_glr_download_auto_examples_spectroscopy_plot_bandheads_age_metallicity.py:

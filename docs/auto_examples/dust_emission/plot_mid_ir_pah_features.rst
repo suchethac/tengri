@@ -35,7 +35,7 @@ References:
   Smith et al. 2007, ApJ, 656, 770 (PAH feature identification).
   Hao et al. 2007, ApJL, 655, L77 (silicate absorption in AGN).
 
-.. GENERATED FROM PYTHON SOURCE LINES 19-272
+.. GENERATED FROM PYTHON SOURCE LINES 19-275
 
 
 
@@ -95,6 +95,7 @@ References:
             "end_gyr": 0.0,
         },
         dust={
+            "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
             "tau_diff": 0.5,  # diffuse dust: moderate optical depth
@@ -131,6 +132,7 @@ References:
             "end_gyr": 1.0,
         },
         dust={
+            "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
             "tau_diff": 1.5,  # warm dust around AGN
@@ -175,6 +177,7 @@ References:
             "end_gyr": 0.0,
         },
         dust={
+            "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
             "tau_diff": 1.0,
@@ -318,7 +321,7 @@ References:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 11.958 seconds)
+   **Total running time of the script:** (0 minutes 11.301 seconds)
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_mid_ir_pah_features.py:

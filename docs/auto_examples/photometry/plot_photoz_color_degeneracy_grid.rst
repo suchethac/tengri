@@ -28,7 +28,7 @@ follow nearly identical (u-g, g-r) tracks and intersect at a single point.
 This shows why intermediate-wavelength photometry is essential for robust
 photo-z classification.
 
-.. GENERATED FROM PYTHON SOURCE LINES 12-119
+.. GENERATED FROM PYTHON SOURCE LINES 12-120
 
 
 
@@ -42,7 +42,7 @@ photo-z classification.
 
  .. code-block:: none
 
-    /tengri/src/tengri/forward/sed_model.py:1594: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.37 Gyr at peak sfh_tsnorm_peak_lbt_gyr=10.5 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.37 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.37 Gyr at peak sfh_tsnorm_peak_lbt_gyr=10.5 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.37 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
 
 
@@ -83,6 +83,7 @@ photo-z classification.
                 "width_gyr": width,
             },
             dust={
+                "law": "power_law",
                 "type": "two_component",
                 "all_params": tengri.FIXED,
                 "tau_diff": tau_diff,
@@ -161,11 +162,6 @@ photo-z classification.
 
     fig.tight_layout()
     plt.savefig("plot_photoz_color_degeneracy_grid.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 5.362 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_photoz_color_degeneracy_grid.py:

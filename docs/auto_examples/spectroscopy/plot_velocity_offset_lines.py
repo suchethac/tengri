@@ -49,7 +49,13 @@ model = tengri.SEDModel.build(
         "tau_gyr": 0.03,
         "log_total_mass": 8.48,
     },
-    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_bc": 0.0, "tau_diff": 0.05},
+    dust={
+        "law": "power_law",
+        "type": "two_component",
+        "all_params": tengri.FIXED,
+        "tau_bc": 0.0,
+        "tau_diff": 0.05,
+    },
     neb={
         "type": "cue",
         "all_params": tengri.FIXED,

@@ -31,7 +31,7 @@ inefficient ADAF, empirical composite vs first-principles continuum.
 
 Swap any one into a full model with ``agn={'disc': {'type': <name>}}``.
 
-.. GENERATED FROM PYTHON SOURCE LINES 15-97
+.. GENERATED FROM PYTHON SOURCE LINES 15-103
 
 
 
@@ -97,7 +97,13 @@ Swap any one into a full model with ``agn={'disc': {'type': <name>}}``.
 
     C_AA_PER_S = 2.998e18
     SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
-    DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+    DUST = {
+        "law": "power_law",
+        "type": "two_component",
+        "all_params": tengri.FIXED,
+        "tau_diff": 0.0,
+        "tau_bc": 0.0,
+    }
 
     # `powerlaw` is a bare phenomenological disc that tengri deprecates for science
     # fits (use multicolor or kubota_done for that). It is on this panel to show
@@ -145,7 +151,7 @@ Swap any one into a full model with ``agn={'disc': {'type': <name>}}``.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 9.235 seconds)
+   **Total running time of the script:** (0 minutes 8.607 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_disc_compare.py:

@@ -31,7 +31,7 @@ Physics: older stars redden due to turnoff mass loss; higher metallicity
 increases line blanketing, also reddening. At UV wavelengths the degeneracy
 breaks (young stars are bluer).
 
-.. GENERATED FROM PYTHON SOURCE LINES 15-118
+.. GENERATED FROM PYTHON SOURCE LINES 15-119
 
 
 
@@ -86,6 +86,7 @@ breaks (young stars are bluer).
                     "log_total_mass": 10.0,
                 },
                 dust={
+                    "law": "power_law",
                     "type": "two_component",
                     "all_params": tengri.FIXED,
                     "tau_bc": 0.0,

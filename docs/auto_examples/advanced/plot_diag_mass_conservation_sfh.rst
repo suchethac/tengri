@@ -68,7 +68,7 @@ Reference: Mass conservation identity: M_formed = ∫ SFR(t) dt.
     model = tengri.SEDModel.build(
         ssp,
         sfh={"type": "dpl", "all_params": tengri.FIXED},
-        dust={"type": "two_component", "all_params": tengri.FIXED},
+        dust={"law": "power_law", "type": "two_component", "all_params": tengri.FIXED},
         redshift=tengri.Fixed(0.0),
     )
 
@@ -158,11 +158,6 @@ Reference: Mass conservation identity: M_formed = ∫ SFR(t) dt.
 
     plt.tight_layout()
     plt.savefig("plot_diag_mass_conservation_sfh.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.374 seconds)
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_diag_mass_conservation_sfh.py:

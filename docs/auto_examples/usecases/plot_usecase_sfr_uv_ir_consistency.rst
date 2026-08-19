@@ -146,7 +146,7 @@ References
             },
             "dust": {
                 "type": "two_component",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "tau_bc": Fixed(tau_bc),
                 "tau_diff": Fixed(tau_diff),
                 "emission": {"type": "dale2014", "all_params": FIXED},
@@ -264,7 +264,7 @@ References
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.616 seconds)
+   **Total running time of the script:** (0 minutes 7.007 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_sfr_uv_ir_consistency.py:

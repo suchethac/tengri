@@ -103,7 +103,7 @@ IGM attenuation.
         "all_params": tengri.FIXED,
         "tau_diff": 0.3,  # Diffuse attenuation
         "tau_bc": 0.5,  # Dust clouds
-        "law_bc": "calzetti",  # Starburst attenuation law
+        "law": "calzetti",  # Starburst attenuation law
         "emission": {"type": "dale2014", "all_params": tengri.FIXED},
     }
 
@@ -208,7 +208,7 @@ IGM attenuation.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 6.163 seconds)
+   **Total running time of the script:** (0 minutes 2.474 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_filter_throughput_overlay.py:

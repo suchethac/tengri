@@ -31,7 +31,7 @@ radio-loud / radio-quiet division emerges from this competition.
 This is the figure that motivates separating SF-driven from
 AGN-driven radio in unresolved sources (Best+2005, Pracy+2016).
 
-.. GENERATED FROM PYTHON SOURCE LINES 15-105
+.. GENERATED FROM PYTHON SOURCE LINES 15-106
 
 
 
@@ -79,6 +79,7 @@ AGN-driven radio in unresolved sources (Best+2005, Pracy+2016).
         "end_gyr": 0.0,
     }
     DUST = {
+        "law": "power_law",
         "type": "two_component",
         "all_params": tengri.FIXED,
         "tau_diff": 0.3,

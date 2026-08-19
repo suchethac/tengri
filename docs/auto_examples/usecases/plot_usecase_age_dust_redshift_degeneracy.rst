@@ -107,7 +107,7 @@ References:
         },
         dust={
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "all_params": tengri.FIXED,
             "tau_bc": 2.0,
             "tau_diff": 0.8,
@@ -136,7 +136,7 @@ References:
         },
         dust={
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "all_params": tengri.FIXED,
             "tau_bc": 0.1,
             "tau_diff": 0.05,
@@ -166,7 +166,7 @@ References:
         },
         dust={
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "all_params": tengri.FIXED,
             "tau_bc": 0.7,
             "tau_diff": 0.3,
@@ -378,7 +378,7 @@ References:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 11.284 seconds)
+   **Total running time of the script:** (0 minutes 3.125 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_age_dust_redshift_degeneracy.py:
