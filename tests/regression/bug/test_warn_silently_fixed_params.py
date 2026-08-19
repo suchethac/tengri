@@ -279,16 +279,15 @@ class TestDefect2MessageAccuracy:
 class TestShippedRecipesNoWarning:
     """DEFECT 3: Shipped recipes must build without emitting this warning."""
 
-    def test_recipes_build_without_warning(self):
-        """High-z, photoz, mock_recovery_minimal must not emit warnings."""
+    def test_recipes_build_without_warning(self, ssp_data_wne):
+        """High-z, photoz, mock_recovery_minimal must not emit warnings.
+
+        Uses the session ``ssp_data_wne`` fixture, which skips on a missing data
+        file specifically. A blanket ``except Exception: pytest.skip`` here would
+        make a genuinely broken recipe look like absent data (#1615).
+        """
         import tengri
         from tengri import Observation, Photometry, SEDModel
-
-        # Skip test if SSP not available (test environment)
-        try:
-            ssp = tengri.load_ssp("prsc_miles_chabrier_wNE")
-        except Exception:
-            pytest.skip("SSP data not available")
 
         obs = Observation(photometry=Photometry.from_names(["jwst_f150w", "jwst_f356w"]))
 
@@ -296,11 +295,12 @@ class TestShippedRecipesNoWarning:
             with warnings.catch_warnings(record=True) as w:
                 warnings.simplefilter("always")
                 rec = getattr(tengri.recipes, recipe_name)()
-                model = SEDModel.build(ssp_data=ssp, observation=obs, **rec)
+                SEDModel.build(ssp_data=ssp_data_wne, observation=obs, **rec)
 
                 dfp_warnings = [
                     x for x in w if issubclass(x.category, DefaultFixedParametersWarning)
                 ]
-                assert len(dfp_warnings) == 0, (
-                    f"{recipe_name} recipe emitted {len(dfp_warnings)} warnings"
+                assert not dfp_warnings, (
+                    f"recipe {recipe_name!r} emitted {len(dfp_warnings)} "
+                    f"DefaultFixedParametersWarning: {[str(x.message)[:80] for x in dfp_warnings]}"
                 )
