@@ -168,7 +168,7 @@ def fiducial_kwargs(
         if not with_ir:
             del kw["dust"]["emission"]
     else:
-        kw["dust"] = {
+        kw["dust"] = {"law": "power_law", 
             "type": "two_component",
             "tau_bc": Fixed(0.0),
             "tau_diff": Fixed(0.0),

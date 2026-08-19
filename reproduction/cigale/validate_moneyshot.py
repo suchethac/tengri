@@ -75,7 +75,7 @@ def tengri_moneyshot(ssp):
         },
         dust={
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "*": FIXED,
             "tau_bc": 0.8,
             "tau_diff": 0.3,

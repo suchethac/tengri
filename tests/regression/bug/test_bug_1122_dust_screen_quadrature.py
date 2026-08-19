@@ -176,14 +176,14 @@ def test_single_component_screen_is_also_quadratured(ssp):
     m_exact = SEDModel.build(
         **kw,
         sfh={"type": "dpl", "*": FREE},
-        dust={"type": "single_component", "law_bc": "calzetti", "tau_v": Fixed(0.4)},
+        dust={"type": "single_component", "law": "calzetti", "tau_v": Fixed(0.4)},
         redshift=Fixed(0.1),
         approx=None,
     )
     m_lut = SEDModel.build(
         **kw,
         sfh={"type": "dpl", "*": FREE},
-        dust={"type": "single_component", "law_bc": "calzetti", "tau_v": Fixed(0.4)},
+        dust={"type": "single_component", "law": "calzetti", "tau_v": Fixed(0.4)},
         redshift=Fixed(0.1),
         approx=WavePrecomp(),
     )
