@@ -62,7 +62,7 @@ class TestDale2014RadioDoubleCount1970:
                 sfh={"type": "const"},
                 dust={
                     "type": "two_component",
-                    "law_bc": "calzetti",
+                    "law": "calzetti",
                     "emission": {"type": "dale2014"},
                 },
                 radio={"sf": {"type": "bell2003"}},
@@ -85,7 +85,7 @@ class TestDale2014RadioDoubleCount1970:
                 sfh={"type": "const"},
                 dust={
                     "type": "two_component",
-                    "law_bc": "calzetti",
+                    "law": "calzetti",
                     "emission": {"type": "dale2014"},
                 },
                 radio={"sf": {"type": "delvecchio2021"}},
@@ -103,7 +103,7 @@ class TestDale2014RadioDoubleCount1970:
             sfh={"type": "const"},
             dust={
                 "type": "two_component",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "emission": {"type": "dale2014"},
             },
             radio={
@@ -125,7 +125,7 @@ class TestDale2014RadioDoubleCount1970:
             sfh={"type": "const"},
             dust={
                 "type": "two_component",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "emission": {"type": "dale2014"},
             },
         )
@@ -144,7 +144,7 @@ class TestDale2014RadioDoubleCount1970:
             sfh={"type": "const"},
             dust={
                 "type": "two_component",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "emission": {"type": "dale2014_cigale"},
             },
             radio={"sf": {"type": "bell2003"}},
@@ -171,7 +171,7 @@ class TestDale2014RadioDoubleCount1970:
             sfh={"type": "const", "*": FIXED},
             dust={
                 "type": "two_component",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "emission": {"type": "dale2014_cigale"},
             },
             radio={"sf": {"type": "bell2003"}},

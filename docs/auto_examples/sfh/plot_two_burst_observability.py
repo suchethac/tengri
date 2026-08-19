@@ -66,7 +66,13 @@ model_ancient = tengri.SEDModel.build(
         "skew": 0.3,
         "trunc": 3.0,
     },
-    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+    dust={
+        "law": "power_law",
+        "type": "two_component",
+        "all_params": tengri.FIXED,
+        "tau_diff": 0.0,
+        "tau_bc": 0.0,
+    },
     neb={"type": "cue", "all_params": tengri.FIXED},
     redshift=tengri.Fixed(z),
 )
@@ -94,7 +100,13 @@ model_young = tengri.SEDModel.build(
         "skew": 0.3,
         "trunc": 3.0,
     },
-    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+    dust={
+        "law": "power_law",
+        "type": "two_component",
+        "all_params": tengri.FIXED,
+        "tau_diff": 0.0,
+        "tau_bc": 0.0,
+    },
     neb={"type": "cue", "all_params": tengri.FIXED},
     redshift=tengri.Fixed(z),
 )
@@ -140,7 +152,13 @@ model_combined_ancient = tengri.SEDModel.build(
         "skew": 0.3,
         "trunc": 3.0,
     },
-    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+    dust={
+        "law": "power_law",
+        "type": "two_component",
+        "all_params": tengri.FIXED,
+        "tau_diff": 0.0,
+        "tau_bc": 0.0,
+    },
     neb={"type": "cue", "all_params": tengri.FIXED},
     redshift=tengri.Fixed(z),
 )
@@ -156,7 +174,13 @@ model_combined_young = tengri.SEDModel.build(
         "skew": 0.3,
         "trunc": 3.0,
     },
-    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+    dust={
+        "law": "power_law",
+        "type": "two_component",
+        "all_params": tengri.FIXED,
+        "tau_diff": 0.0,
+        "tau_bc": 0.0,
+    },
     neb={"type": "cue", "all_params": tengri.FIXED},
     redshift=tengri.Fixed(z),
 )

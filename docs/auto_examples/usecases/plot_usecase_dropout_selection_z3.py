@@ -55,6 +55,7 @@ def build_model(z: float) -> tengri.SEDModel:
             "logzsol": tengri.Fixed(-0.1),
         },
         dust={
+            "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
             "tau_bc": 0.3,

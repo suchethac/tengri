@@ -30,7 +30,7 @@ attenuation and thermal emission from warm dust.
 
 Reference: Conroy 2013 (stellar), Silva et al. 1998 (dust emission).
 
-.. GENERATED FROM PYTHON SOURCE LINES 14-86
+.. GENERATED FROM PYTHON SOURCE LINES 14-87
 
 
 
@@ -87,6 +87,7 @@ Reference: Conroy 2013 (stellar), Silva et al. 1998 (dust emission).
             "log_total_mass": 10.0,
         },
         dust={
+            "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
             "tau_bc": 1.0,
@@ -132,7 +133,7 @@ Reference: Conroy 2013 (stellar), Silva et al. 1998 (dust emission).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.073 seconds)
+   **Total running time of the script:** (0 minutes 3.602 seconds)
 
 
 .. _sphx_glr_download_auto_examples_metallicity_plot_logzsol_panchromatic.py:

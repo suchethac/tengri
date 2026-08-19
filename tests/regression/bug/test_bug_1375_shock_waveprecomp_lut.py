@@ -42,6 +42,7 @@ def _build(ssp, obs, *, shock, approx, tau_bc=0.5):
         observation=obs,
         sfh={"type": "const", "all_params": FIXED, "log_total_mass": 10.0},
         dust={
+            "law": "power_law",
             "type": "two_component",
             "all_params": FIXED,
             "tau_bc": tau_bc,

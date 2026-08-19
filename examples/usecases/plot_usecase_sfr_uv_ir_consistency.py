@@ -113,7 +113,7 @@ for i, tau_v in enumerate(tau_v_values):
         },
         "dust": {
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "tau_bc": Fixed(tau_bc),
             "tau_diff": Fixed(tau_diff),
             "emission": {"type": "dale2014", "all_params": FIXED},

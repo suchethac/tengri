@@ -52,7 +52,7 @@ References:
 - Inoue, A. T., Iwata, I., Deharveng, J. M., et al. 2014, MNRAS, 442, 1805
   (modern IGM prescription used here)
 
-.. GENERATED FROM PYTHON SOURCE LINES 37-174
+.. GENERATED FROM PYTHON SOURCE LINES 37-180
 
 
 
@@ -125,7 +125,13 @@ References:
     }
 
     # Minimal dust to preserve continuum strength
-    DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.05}
+    DUST = {
+        "law": "power_law",
+        "type": "two_component",
+        "all_params": tengri.FIXED,
+        "tau_diff": 0.05,
+        "tau_bc": 0.05,
+    }
 
     # Build model with IGM absorption enabled
     ssp = tengri.load_ssp()

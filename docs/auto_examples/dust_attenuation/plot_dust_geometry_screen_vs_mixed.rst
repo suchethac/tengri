@@ -41,7 +41,7 @@ References
 - Witt & Gordon 2000, ApJ, 528, 799 (dust geometry effects)
 - Kramer et al. 2003, ApJS, 144, 1 (mixed geometry approximation)
 
-.. GENERATED FROM PYTHON SOURCE LINES 26-173
+.. GENERATED FROM PYTHON SOURCE LINES 26-179
 
 
 
@@ -96,7 +96,13 @@ References
     intrinsic_model = tengri.SEDModel.build(
         ssp,
         sfh=SFH,
-        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_bc": 0.0, "tau_diff": 0.0},
+        dust={
+            "law": "power_law",
+            "type": "two_component",
+            "all_params": tengri.FIXED,
+            "tau_bc": 0.0,
+            "tau_diff": 0.0,
+        },
         redshift=tengri.Fixed(0.05),
     )
     p_intrinsic = dict(intrinsic_model.spec.sample(jax.random.PRNGKey(0)))
@@ -203,11 +209,6 @@ References
 
     fig.tight_layout()
     plt.savefig("plot_dust_geometry_screen_vs_mixed.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 6.255 seconds)
 
 
 .. _sphx_glr_download_auto_examples_dust_attenuation_plot_dust_geometry_screen_vs_mixed.py:

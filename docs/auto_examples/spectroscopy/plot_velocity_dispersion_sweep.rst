@@ -28,7 +28,7 @@ of higher-velocity stellar populations.
 
 .. sphx-glr-precomputed-img:
 
-.. GENERATED FROM PYTHON SOURCE LINES 17-101
+.. GENERATED FROM PYTHON SOURCE LINES 17-102
 
 
 
@@ -84,6 +84,7 @@ of higher-velocity stellar populations.
             "trunc": 3.0,
         },
         dust={
+            "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
             "tau_bc": 0.1,
@@ -127,11 +128,6 @@ of higher-velocity stellar populations.
 
     fig.tight_layout()
     plt.savefig("plot_velocity_dispersion_sweep.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 3.965 seconds)
 
 
 .. _sphx_glr_download_auto_examples_spectroscopy_plot_velocity_dispersion_sweep.py:

@@ -98,7 +98,7 @@ Reference: Conroy+2013.
         observation=obs,
         sfh={"type": "table"},
         met={"type": "table"},
-        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_bc": 0.4},
+        dust={"law": "power_law", "type": "two_component", "all_params": tengri.FIXED, "tau_bc": 0.4},
         redshift=tengri.Fixed(Z_OBS),
     )
     fwd_zt = tengri.ForwardModel.build(sed=model_zt, observation=obs)
@@ -118,7 +118,7 @@ Reference: Conroy+2013.
         observation=obs,
         sfh={"type": "table"},
         met={"logzsol": tengri.Uniform(grid_lo, grid_hi)},
-        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_bc": 0.4},
+        dust={"law": "power_law", "type": "two_component", "all_params": tengri.FIXED, "tau_bc": 0.4},
         redshift=tengri.Fixed(Z_OBS),
     )
     fwd_mean = tengri.ForwardModel.build(sed=model_mean, observation=obs)
@@ -208,7 +208,7 @@ Reference: Conroy+2013.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.796 seconds)
+   **Total running time of the script:** (0 minutes 3.375 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_simulation_seds.py:

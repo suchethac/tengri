@@ -54,7 +54,7 @@ def rest_sed(ssp):
         ssp_data=ssp,
         observation=Observation(photometry=Photometry.from_names(["des_g"])),
         sfh={"type": "dpl", "*": FREE},
-        dust={"type": "two_component", "*": FIXED, "tau_diff": 0.3},
+        dust={"law": "power_law", "type": "two_component", "*": FIXED, "tau_diff": 0.3},
         redshift=Fixed(0.1),
     )
     pred = m.predict(dict(m.spec.sample(KEY)))
@@ -181,7 +181,7 @@ def _model(ssp, resample, wave_obs, z=0.1, free_z=False):
             ),
         ),
         sfh={"type": "dpl", "*": FREE},
-        dust={"type": "two_component", "*": FIXED, "tau_diff": 0.3},
+        dust={"law": "power_law", "type": "two_component", "*": FIXED, "tau_diff": 0.3},
         redshift=(Uniform(0.05, 0.5) if free_z else Fixed(z)),
     )
 
@@ -238,7 +238,7 @@ def test_spectrum_precomp_warns_that_it_ignores_conserving(ssp):
                 ),
             ),
             sfh={"type": "dpl", "*": FREE},
-            dust={"type": "two_component", "*": FIXED, "tau_diff": 0.3},
+            dust={"law": "power_law", "type": "two_component", "*": FIXED, "tau_diff": 0.3},
             redshift=Fixed(0.1),
             approx=SpectrumPrecomp(),
         )

@@ -92,7 +92,7 @@ def test_catalog_range_distinct_compile_signature_from_no_range():
                 ssp_data=ssp,
                 observation=obs,
                 sfh={"type": "dpl", "*": FIXED},
-                dust={"type": "single_component", "law_bc": "calzetti", "tau_v": Fixed(0.3)},
+                dust={"type": "single_component", "law": "calzetti", "tau_v": Fixed(0.3)},
                 redshift=Fixed(0.1),
                 approx=approx,
             )
@@ -133,7 +133,7 @@ def test_catalog_range_shared_signature_across_fixed_z_values():
                 ssp_data=ssp,
                 observation=obs,
                 sfh={"type": "dpl", "*": FIXED},
-                dust={"type": "single_component", "law_bc": "calzetti", "tau_v": Fixed(0.3)},
+                dust={"type": "single_component", "law": "calzetti", "tau_v": Fixed(0.3)},
                 redshift=Fixed(z),
                 approx=cz,
             )

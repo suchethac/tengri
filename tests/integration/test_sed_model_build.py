@@ -50,7 +50,12 @@ class TestFromGroupsConstruction:
         """The internal spec is exactly what parse_groups would produce."""
         groups = dict(
             sfh={"type": "dpl", "*": FREE, "beta": Uniform(1, 3)},
-            dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED, "tau_bc": 0.5},
+            dust={
+                "type": "two_component",
+                "law": "calzetti",
+                "*": FIXED,
+                "tau_bc": 0.5,
+            },
             redshift=Fixed(0.05),
         )
         model = SEDModel.build(ssp_data=ssp, **groups)
@@ -92,7 +97,7 @@ class TestFlatEquivalence:
             },
             dust={
                 "type": "two_component",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "tau_bc": Fixed(0.5),
                 "tau_diff": Fixed(0.3),
                 "slope": Fixed(-0.7),

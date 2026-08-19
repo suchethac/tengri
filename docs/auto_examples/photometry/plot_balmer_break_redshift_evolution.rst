@@ -49,7 +49,7 @@ Reference: For dust absorption modeling and SED fundamentals, see Calzetti
 et al. 2000 (PASP, 112, 1145) and the Bruzual & Charlot 2003 (MNRAS, 344,
 1000) SSP synthesis code.
 
-.. GENERATED FROM PYTHON SOURCE LINES 33-194
+.. GENERATED FROM PYTHON SOURCE LINES 33-200
 
 
 
@@ -130,7 +130,13 @@ et al. 2000 (PASP, 112, 1145) and the Bruzual & Charlot 2003 (MNRAS, 344,
             "skew": 0.0,
             "trunc": 13.0,
         },
-        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+        dust={
+            "law": "power_law",
+            "type": "two_component",
+            "all_params": tengri.FIXED,
+            "tau_diff": 0.0,
+            "tau_bc": 0.0,
+        },
         redshift=tengri.Uniform(0.05, 4.5),
     )
 

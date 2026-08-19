@@ -107,6 +107,7 @@ def test_boost_raises_youngest_weight_and_conserves_mass():
         },
         met={"logzsol": Fixed(0.0), "*": FIXED},
         dust={
+            "law": "power_law",
             "type": "two_component",
             "tau_bc": Fixed(0.0),
             "tau_diff": Fixed(0.0),
@@ -181,7 +182,13 @@ def test_qh_recovers_exact_convolution_real_grid(real_ssp_only):
             "*": FIXED,
         },
         met={"logzsol": Fixed(0.0), "*": FIXED},
-        dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+        dust={
+            "law": "power_law",
+            "type": "two_component",
+            "tau_bc": Fixed(0.0),
+            "tau_diff": Fixed(0.0),
+            "*": FIXED,
+        },
         redshift=Fixed(z),
     )
     st = m.predict_state(dict(m.spec.sample(jax.random.PRNGKey(0))))

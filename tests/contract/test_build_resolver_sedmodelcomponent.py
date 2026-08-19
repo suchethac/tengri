@@ -40,7 +40,7 @@ class TestBuildResolverDustAttenuation:
         builds and threads the chosen law through to the engine (not dropped)."""
         model = SEDModel.build(
             ssp_data=ssp_data_bc03,
-            dust={"type": "two_component", "law_bc": law, "*": FIXED},
+            dust={"type": "two_component", "law": law, "*": FIXED},
             redshift=Fixed(0.1),
         )
         assert model is not None
@@ -63,7 +63,7 @@ class TestBuildResolverDustEmission:
         try:
             model = SEDModel.build(
                 ssp_data=ssp_data_bc03,
-                dust={"emission": {"type": emission}},
+                dust={"law": "power_law", "emission": {"type": emission}},
                 redshift=Fixed(0.1),
             )
         except (FileNotFoundError, OSError) as exc:

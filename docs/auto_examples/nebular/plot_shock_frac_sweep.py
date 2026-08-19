@@ -70,6 +70,7 @@ model = tengri.SEDModel.build(
         "log_total_mass": 10.0,
     },
     dust={
+        "law": "power_law",
         "type": "two_component",
         "all_params": tengri.FIXED,
         "tau_diff": 0.05,

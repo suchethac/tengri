@@ -81,7 +81,7 @@ def _model(ssp, backend):
             "tau_gyr": Uniform(0.5, 3.0),
             "age_gyr": Fixed(5.0),
         },
-        dust={"type": "two_component", "all_params": FIXED},
+        dust={"law": "power_law", "type": "two_component", "all_params": FIXED},
         neb={"type": backend, "all_params": FIXED},
     )
 

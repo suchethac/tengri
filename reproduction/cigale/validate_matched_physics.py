@@ -232,7 +232,7 @@ def xray_seds(ssp):
                 "log_total_mass": Fixed(0.0),
                 "*": FIXED,
             },
-            dust={
+            dust={"law": "power_law", 
                 "type": "two_component",
                 "tau_bc": Fixed(0.0),
                 "tau_diff": Fixed(TAU_DIFF),

@@ -44,7 +44,7 @@ model = tengri.SEDModel.build(
     },
     dust={
         "type": "two_component",
-        "law_bc": "calzetti",
+        "law": "calzetti",
         "all_params": tengri.FREE,  # Allow dust parameters to vary
     },
     redshift=tengri.Fixed(0.0),

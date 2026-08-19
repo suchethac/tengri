@@ -61,7 +61,7 @@ def _build_xray_model(ssp, obs, *, sfr_100myr=None, agn_model=None, xray_model="
         "ssp_data": ssp,
         "observation": obs,
         "sfh": {"type": "delayed", "all_params": FIXED},
-        "dust": {"all_params": FIXED},
+        "dust": {"law": "power_law", "all_params": FIXED},
         "met": {"logzsol": Fixed(Z_SUN if Z_SUN > 0 else 0.0)},
         "xray": {"type": xray_model, "all_params": FIXED},
         "redshift": Fixed(0.05),

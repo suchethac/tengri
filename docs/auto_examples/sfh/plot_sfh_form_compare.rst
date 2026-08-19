@@ -92,7 +92,7 @@ when the data resolve > 5 SFR-bins.
         model = tengri.SEDModel.build(
             ssp,
             sfh={"type": form, "all_params": tengri.FIXED},
-            dust={"type": "two_component", "all_params": tengri.FIXED},
+            dust={"law": "power_law", "type": "two_component", "all_params": tengri.FIXED},
             redshift=tengri.Fixed(0.0),
         )
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))

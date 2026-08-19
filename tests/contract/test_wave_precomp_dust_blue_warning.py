@@ -48,7 +48,11 @@ def _obs(bands: list[tuple[float, str]]) -> Observation:
 
 
 def _build(ssp, obs, approx, tau, z: float = 1.0) -> SEDModel:
-    dust: dict = {"type": "two_component", "law_bc": "calzetti", "*": FIXED}
+    dust: dict = {
+        "type": "two_component",
+        "law": "calzetti",
+        "*": FIXED,
+    }
     if tau == "free":
         dust["tau_diff"] = Uniform(0.0, 1.0)
     else:  # explicit numeric optical depth on both components

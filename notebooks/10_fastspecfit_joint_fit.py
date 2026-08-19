@@ -140,7 +140,7 @@ def build(line_data, approx):
         met={"logzsol": Uniform(-1.5, 0.3)},
         dust={
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "all_params": FIXED,
             "tau_bc": Uniform(0.0, 4.0),
             "tau_diff": Uniform(0.0, 3.0),

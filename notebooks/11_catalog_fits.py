@@ -143,7 +143,7 @@ def build_model():
         # Free diffuse dust optical depth: marginalize the dust-redshift degeneracy.
         dust={
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "all_params": FIXED,
             "tau_diff": Uniform(0.0, 2.0),
         },

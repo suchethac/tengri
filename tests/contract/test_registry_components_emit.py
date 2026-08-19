@@ -227,7 +227,7 @@ class TestRegistryComponentsEmit:
                         sfh={"type": "const"},
                         dust={
                             "type": "two_component",
-                            "law_bc": "calzetti",
+                            "law": "calzetti",
                             "emission": {"type": name},
                         },
                     )
@@ -261,7 +261,7 @@ class TestRegistryComponentsEmit:
                         sfh={"type": "const"},
                         dust={
                             "type": "single_component",
-                            "law_bc": name,
+                            "law": name,
                         },
                     )
 

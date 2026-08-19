@@ -61,7 +61,11 @@ def _build(ssp, obs, approx, redshift, dust=None):
 
     from tengri import FIXED, SEDModel
 
-    dust = dust or {"type": "two_component", "law_bc": "calzetti", "*": FIXED}
+    dust = dust or {
+        "type": "two_component",
+        "law": "calzetti",
+        "*": FIXED,
+    }
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         return SEDModel.build(
@@ -108,7 +112,12 @@ class TestSpectrumLUTAccuracy:
         # excluded here so this test isolates the normalization contract.
         from tengri import FIXED as _FIXED
 
-        diffuse_dust = {"type": "two_component", "law_bc": "calzetti", "*": _FIXED, "tau_bc": 0.0}
+        diffuse_dust = {
+            "type": "two_component",
+            "law": "calzetti",
+            "*": _FIXED,
+            "tau_bc": 0.0,
+        }
         m_exact = _build(ssp, obs, None, Fixed(0.05), dust=diffuse_dust)
         m_lut = _build(ssp, obs, SpectrumPrecomp(), Fixed(0.05), dust=diffuse_dust)
         # The LUT path must actually engage (not silently fall through).
@@ -138,7 +147,12 @@ class TestSpectrumLUTAccuracy:
         # the critical low-z case that the mstar_obs normalization broke.
         from tengri import FIXED as _FIXED
 
-        diffuse_dust = {"type": "two_component", "law_bc": "calzetti", "*": _FIXED, "tau_bc": 0.0}
+        diffuse_dust = {
+            "type": "two_component",
+            "law": "calzetti",
+            "*": _FIXED,
+            "tau_bc": 0.0,
+        }
         m_exact = _build(ssp, obs, None, Uniform(0.01, 0.5, "redshift"), dust=diffuse_dust)
         m_lut = _build(
             ssp, obs, SpectrumPrecomp(), Uniform(0.01, 0.5, "redshift"), dust=diffuse_dust
@@ -190,7 +204,11 @@ class TestSpectrumLUTGuards:
                 ssp_data=ssp,
                 observation=obs,
                 sfh={"type": "dpl", "*": FIXED},
-                dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED},
+                dust={
+                    "type": "two_component",
+                    "law": "calzetti",
+                    "*": FIXED,
+                },
                 neb={"type": "none"},
                 redshift=Fixed(0.05),
                 approx=SpectrumPrecomp(),
@@ -218,7 +236,11 @@ class TestSpectrumLUTGuards:
                 ssp_data=ssp,
                 observation=obs,
                 sfh={"type": "dpl", "alpha": Uniform(0.1, 5.0, "sfh_dpl_alpha"), "*": FIXED},
-                dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED},
+                dust={
+                    "type": "two_component",
+                    "law": "calzetti",
+                    "*": FIXED,
+                },
                 neb={"type": "none"},
                 redshift=Fixed(0.05),
                 approx=SpectrumPrecomp(),
@@ -251,7 +273,11 @@ class TestSpectrumLUTLines:
                 ssp_data=ssp,
                 observation=obs,
                 sfh={"type": "dpl", "*": FIXED},
-                dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED},
+                dust={
+                    "type": "two_component",
+                    "law": "calzetti",
+                    "*": FIXED,
+                },
                 neb={"type": "cue", "*": FIXED},
                 redshift=Fixed(0.05),
                 approx=approx,
@@ -335,7 +361,12 @@ class TestJointPrecomp:
 
         # Diffuse-only dust isolates the normalization contract from the
         # birth-cloud LUT residual (#617).
-        dust = {"type": "two_component", "law_bc": "calzetti", "*": FIXED, "tau_bc": 0.0}
+        dust = {
+            "type": "two_component",
+            "law": "calzetti",
+            "*": FIXED,
+            "tau_bc": 0.0,
+        }
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             return SEDModel.build(

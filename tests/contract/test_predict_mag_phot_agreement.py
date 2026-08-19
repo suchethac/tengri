@@ -34,6 +34,7 @@ def model(synthetic_ssp_wide, synthetic_tophat_obs):
         observation=synthetic_tophat_obs,
         sfh={"type": "tsnorm", "*": tengri.FIXED},
         dust={
+            "law": "power_law",
             "type": "two_component",
             "*": tengri.FIXED,
             "tau_diff": 0.3,

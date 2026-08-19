@@ -26,7 +26,7 @@ AGN accretion disk reaches thousands of km/s. The [NII] doublet is separated
 by 35.4 Å (6549.86 and 6585.28 Å vacuum), which corresponds to σ_v ≈ 1600
 km/s — above that the two lines merge into the wing of Hα.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-97
+.. GENERATED FROM PYTHON SOURCE LINES 10-103
 
 
 
@@ -83,7 +83,13 @@ km/s — above that the two lines merge into the wing of Hα.
             "tau_gyr": 0.03,
             "log_total_mass": 8.48,
         },
-        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_bc": 0.0, "tau_diff": 0.05},
+        dust={
+            "law": "power_law",
+            "type": "two_component",
+            "all_params": tengri.FIXED,
+            "tau_bc": 0.0,
+            "tau_diff": 0.05,
+        },
         neb={
             "type": "cue",
             "all_params": tengri.FIXED,
@@ -132,7 +138,7 @@ km/s — above that the two lines merge into the wing of Hα.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 9.375 seconds)
+   **Total running time of the script:** (0 minutes 6.082 seconds)
 
 
 .. _sphx_glr_download_auto_examples_spectroscopy_plot_velocity_offset_lines.py:

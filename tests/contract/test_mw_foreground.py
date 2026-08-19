@@ -87,7 +87,7 @@ class TestForwardPassScreen:
             return tengri.SEDModel.build(
                 ssp,
                 sfh={"type": "tsnorm", "*": tengri.FIXED},
-                dust={"type": "two_component", "*": tengri.FIXED},
+                dust={"law": "power_law", "type": "two_component", "*": tengri.FIXED},
                 redshift=tengri.Fixed(0.05),
             )
 
@@ -100,7 +100,7 @@ class TestForwardPassScreen:
             return tengri.SEDModel.build(
                 ssp,
                 sfh={"type": "tsnorm", "*": tengri.FIXED},
-                dust={"type": "two_component", "*": tengri.FIXED},
+                dust={"law": "power_law", "type": "two_component", "*": tengri.FIXED},
                 foreground={"ebmv_mw": 0.1, "law": "cardelli", "rv": 3.1},
                 redshift=tengri.Fixed(0.05),
             )
@@ -118,7 +118,7 @@ class TestForwardPassScreen:
             zero_model = tengri.SEDModel.build(
                 ssp,
                 sfh={"type": "tsnorm", "*": tengri.FIXED},
-                dust={"type": "two_component", "*": tengri.FIXED},
+                dust={"law": "power_law", "type": "two_component", "*": tengri.FIXED},
                 foreground={"ebmv_mw": 0.0},
                 redshift=tengri.Fixed(0.05),
             )
@@ -171,6 +171,7 @@ class TestComposabilityWithHostDust:
                 ssp,
                 sfh={"type": "tsnorm", "*": tengri.FIXED},
                 dust={
+                    "law": "power_law",
                     "type": "two_component",
                     "*": tengri.FIXED,
                     "tau_bc": tengri.Fixed(0.5),

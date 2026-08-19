@@ -35,7 +35,7 @@ Silva) vs phenomenological graybodies.
 this panel isolates the smooth-vs-clumpy silicate-feature behavior
 near 9.7 and 18 μm.
 
-.. GENERATED FROM PYTHON SOURCE LINES 19-97
+.. GENERATED FROM PYTHON SOURCE LINES 19-103
 
 
 
@@ -84,7 +84,13 @@ near 9.7 and 18 μm.
 
     C_AA_PER_S = 2.998e18
     SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
-    DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+    DUST = {
+        "law": "power_law",
+        "type": "two_component",
+        "all_params": tengri.FIXED,
+        "tau_diff": 0.0,
+        "tau_bc": 0.0,
+    }
 
     ssp = tengri.load_ssp()
     fig, ax = plt.subplots(figsize=(7.2, 4.6))
@@ -132,7 +138,7 @@ near 9.7 and 18 μm.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 6.534 seconds)
+   **Total running time of the script:** (0 minutes 6.598 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_torus_compare.py:

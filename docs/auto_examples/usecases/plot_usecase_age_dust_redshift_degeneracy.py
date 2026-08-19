@@ -61,7 +61,7 @@ model_a = SEDModel.build(
     },
     dust={
         "type": "two_component",
-        "law_bc": "calzetti",
+        "law": "calzetti",
         "all_params": tengri.FIXED,
         "tau_bc": 2.0,
         "tau_diff": 0.8,
@@ -90,7 +90,7 @@ model_b = SEDModel.build(
     },
     dust={
         "type": "two_component",
-        "law_bc": "calzetti",
+        "law": "calzetti",
         "all_params": tengri.FIXED,
         "tau_bc": 0.1,
         "tau_diff": 0.05,
@@ -120,7 +120,7 @@ model_c = SEDModel.build(
     },
     dust={
         "type": "two_component",
-        "law_bc": "calzetti",
+        "law": "calzetti",
         "all_params": tengri.FIXED,
         "tau_bc": 0.7,
         "tau_diff": 0.3,

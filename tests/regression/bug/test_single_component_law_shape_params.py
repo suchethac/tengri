@@ -120,7 +120,7 @@ def _max_rel(a: np.ndarray, b: np.ndarray) -> float:
 def test_freed_shape_parameter_has_a_nonzero_gradient(law, param, uv_ssp, uv_obs):
     """A free shape parameter must be fittable, not merely declared."""
     prior = Uniform(-1.5, -0.3) if param == "dust_slope" else Uniform(-1.0, 0.4)
-    model = _build(uv_ssp, uv_obs, {"type": "single_component", "law_bc": law, param: prior})
+    model = _build(uv_ssp, uv_obs, {"type": "single_component", "law": law, param: prior})
     params = model.spec.sample(jax.random.PRNGKey(0))
     assert param in model.spec.free_params, f"{law}: {param} was not freed by the prior"
 
@@ -149,8 +149,8 @@ def test_freed_shape_parameter_has_a_nonzero_gradient(law, param, uv_ssp, uv_obs
 )
 def test_user_set_shape_parameter_reaches_the_curve(law, param, value, uv_ssp, uv_obs):
     """An explicitly-set value must change the SED, not be silently discarded."""
-    base = _sed(_build(uv_ssp, uv_obs, {"type": "single_component", "law_bc": law}))
-    set_ = _sed(_build(uv_ssp, uv_obs, {"type": "single_component", "law_bc": law, param: value}))
+    base = _sed(_build(uv_ssp, uv_obs, {"type": "single_component", "law": law}))
+    set_ = _sed(_build(uv_ssp, uv_obs, {"type": "single_component", "law": law, param: value}))
     assert _max_rel(set_, base) > _INERT_TOL, (
         f"{law}: setting {param}={value} did not change the SED. The grammar accepted "
         "the value and the curve never saw it."
@@ -170,7 +170,7 @@ def test_published_law_defaults_are_not_overridden_by_the_shared_spec_default(uv
     — measured, on a first attempt at #1808.
     """
     seds = {
-        law: _sed(_build(uv_ssp, uv_obs, {"type": "single_component", "law_bc": law}))
+        law: _sed(_build(uv_ssp, uv_obs, {"type": "single_component", "law": law}))
         for law in ("kriek_conroy", "narayanan_z", "salim")
     }
     pairs = [("kriek_conroy", "narayanan_z"), ("kriek_conroy", "salim"), ("narayanan_z", "salim")]
@@ -191,8 +191,8 @@ def test_laws_with_no_shape_parameters_are_untouched(law, uv_ssp, uv_obs):
     them means a change to the shape-parameter plumbing cannot quietly move the
     default build's physics — ``calzetti`` is the default law.
     """
-    a = _sed(_build(uv_ssp, uv_obs, {"type": "single_component", "law_bc": law}))
-    b = _sed(_build(uv_ssp, uv_obs, {"type": "single_component", "law_bc": law}))
+    a = _sed(_build(uv_ssp, uv_obs, {"type": "single_component", "law": law}))
+    b = _sed(_build(uv_ssp, uv_obs, {"type": "single_component", "law": law}))
     assert np.array_equal(a, b), f"{law}: not reproducible between builds"
     # Not ``all > 0``: the SED is legitimately zero at the extreme blue end of
     # the grid, where the stellar continuum has nothing left.

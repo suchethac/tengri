@@ -71,6 +71,7 @@ def _build(synthetic_ssp_wide, synthetic_tophat_obs, *, met_table=False):
         observation=synthetic_tophat_obs,
         sfh={"type": "table"},
         dust={
+            "law": "power_law",
             "type": "two_component",
             "all_params": FIXED,
             "tau_bc": 0.5,
@@ -276,6 +277,7 @@ def test_tabulated_history_reproduces_the_parametric_sfh(synthetic_ssp_wide, syn
                 observation=synthetic_tophat_obs,
                 sfh=sfh_group,
                 dust={
+                    "law": "power_law",
                     "type": "two_component",
                     "all_params": FIXED,
                     "tau_bc": 0.5,

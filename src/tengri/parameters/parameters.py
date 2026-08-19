@@ -849,49 +849,39 @@ class Parameters:
         if self.dust_approx not in ("fast", "exact"):
             raise ValueError(f"dust_approx must be 'fast' or 'exact', got '{self.dust_approx}'")
 
-        # For single-component, accept `dust_law` as cleaner alias for `dust_law_bc`.
-        # Pop both laws WITHOUT defaults first so inheritance can tell which the
-        # user actually set.
-        dust_law_alias = kwargs.pop("dust_law", None)
-        law_bc_explicit = kwargs.pop("dust_law_bc", dust_law_alias)
+        # Pop the law keys without defaults so we can distinguish between:
+        # - Grammar: laws already validated and set by _translate_dust
+        # - Flat-kwarg: laws unset, apply power_law defaults
+        law_bc_explicit = kwargs.pop("dust_law_bc", None)
         law_diff_explicit = kwargs.pop("dust_law_diff", None)
+        law_neb_explicit = kwargs.pop("dust_law_neb", None)
 
+        # Grammar builds: dust_law_bc/dust_law_diff are already set by _translate_dust
+        # (after validation). Flat-kwarg: both None, apply power_law defaults.
         if self.dust_model == "single_component":
-            if law_diff_explicit is not None:
-                import warnings
-
-                warnings.warn(
-                    "dust_law_diff is ignored with dust_model='single_component' "
-                    "(only one attenuation curve is used).",
-                    UserWarning,
-                    stacklevel=2,
-                )
-            self.dust_law_bc = law_bc_explicit or "power_law"
+            # Single-component: law_bc is the only law, law_diff is inherited from it.
+            if law_bc_explicit is not None:
+                self.dust_law_bc = law_bc_explicit
+            else:
+                # Flat-kwarg: no law provided, use power_law default.
+                self.dust_law_bc = "power_law"
             self.dust_law_diff = self.dust_law_bc
         else:
-            # Symmetric inheritance: setting either law alone applies it to BOTH
-            # components (a single shared attenuation curve); setting neither
-            # defaults both to "power_law". This makes the birth cloud follow
-            # the diffuse ISM law when only ``dust_law_diff`` is given, instead
-            # of silently mixing power_law (BC) with the user's diffuse curve.
-            if law_bc_explicit is None and law_diff_explicit is None:
+            # Two-component or off/wg00: use laws as provided or apply power_law defaults.
+            if law_bc_explicit is not None or law_diff_explicit is not None:
+                # At least one law provided (grammar already validated the XOR).
+                self.dust_law_bc = law_bc_explicit or law_diff_explicit
+                self.dust_law_diff = law_diff_explicit or law_bc_explicit
+            else:
+                # Flat-kwarg: no laws provided, use power_law for both.
                 self.dust_law_bc = "power_law"
                 self.dust_law_diff = "power_law"
-            elif law_bc_explicit is None:
-                self.dust_law_bc = law_diff_explicit
-                self.dust_law_diff = law_diff_explicit
-            elif law_diff_explicit is None:
-                self.dust_law_bc = law_bc_explicit
-                self.dust_law_diff = law_bc_explicit
-            else:
-                self.dust_law_bc = law_bc_explicit
-                self.dust_law_diff = law_diff_explicit
 
         # Nebular birth-cloud law. None -> inherit the stellar birth cloud
         # (``dust_law_bc``), so the nebular continuum is reddened exactly like
         # the youngest stars (default). Set it to give HII-region emission its
         # own birth-cloud curve while still sharing the diffuse ISM screen.
-        self.dust_law_neb = kwargs.pop("dust_law_neb", None)
+        self.dust_law_neb = law_neb_explicit
 
         # Per-component law-parameter overrides: {'bc': {law_kwarg: value}, ...,
         # 'neb': {...}}. Empty -> both stellar components share the global

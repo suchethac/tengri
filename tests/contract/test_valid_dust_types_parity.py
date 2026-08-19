@@ -60,7 +60,7 @@ def test_dust_validator_still_rejects_unknown_law_with_suggestion() -> None:
     from tengri.parameters.groups import _translate_dust
 
     with pytest.raises(ValueError, match="Unknown dust law 'calzeti'"):
-        _translate_dust({"type": "two_component", "law_bc": "calzeti"}, {})  # typo
+        _translate_dust({"type": "two_component", "law": "calzeti"}, {})  # typo
 
 
 def test_dust_validator_still_rejects_unknown_emission_with_suggestion() -> None:
@@ -68,7 +68,11 @@ def test_dust_validator_still_rejects_unknown_emission_with_suggestion() -> None
 
     with pytest.raises(ValueError, match="Unknown dust emission type 'modified_blakbody'"):
         _translate_dust(
-            {"type": "two_component", "emission": {"type": "modified_blakbody"}},  # typo
+            {
+                "type": "two_component",
+                "law": "power_law",
+                "emission": {"type": "modified_blakbody"},
+            },  # typo
             {},
         )
 
@@ -101,5 +105,5 @@ def test_previously_rejected_dust_laws_now_accepted() -> None:
     for law in ("prevot_smc", "lmc", "wd01_mwrv31", "vw07_bc"):
         result: dict = {}
         # Should not raise.
-        _translate_dust({"type": "two_component", "law_bc": law}, result)
+        _translate_dust({"type": "two_component", "law": law}, result)
         assert result["dust_law_bc"] == law

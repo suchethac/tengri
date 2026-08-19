@@ -60,7 +60,7 @@ def _build(ssp, obs, forward_dtype):
         },
         dust={
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "all_params": FIXED,
             "tau_diff": Uniform(0.0, 1.5),
             "tau_bc": 0.0,

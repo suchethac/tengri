@@ -93,7 +93,7 @@ def _build(ssp, *, cue, approx, line_data=None, emission=True, dust=True):
     if dust:
         d = {
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "*": FIXED,
             "tau_bc": Uniform(0.0, 4.0),
             "tau_diff": Uniform(0.0, 3.0),

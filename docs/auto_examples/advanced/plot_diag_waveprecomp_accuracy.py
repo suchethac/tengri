@@ -30,7 +30,13 @@ obs = tengri.Observation(
 
 baseline_spec = {
     "sfh": {"type": "tsnorm", "all_params": tengri.FIXED},
-    "dust": {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.3, "tau_bc": 0.2},
+    "dust": {
+        "law": "power_law",
+        "type": "two_component",
+        "all_params": tengri.FIXED,
+        "tau_diff": 0.3,
+        "tau_bc": 0.2,
+    },
     "redshift": tengri.Uniform(0.0, 3.0),
 }
 

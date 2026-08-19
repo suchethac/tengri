@@ -34,7 +34,7 @@ added by re-shaping them with CIGALE's DustEM alpha grid, anchored so that
 (``scripts/build_themis_alpha_axis.py``). This sweeps alpha at fixed grain
 composition and radiation-field minimum.
 
-.. GENERATED FROM PYTHON SOURCE LINES 18-77
+.. GENERATED FROM PYTHON SOURCE LINES 18-78
 
 
 
@@ -74,6 +74,7 @@ composition and radiation-field minimum.
         ssp,
         sfh={"type": "const", "all_params": tengri.FIXED, "log_total_mass": 11.0},
         dust={
+            "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
             "tau_diff": 1.0,
@@ -112,7 +113,7 @@ composition and radiation-field minimum.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.355 seconds)
+   **Total running time of the script:** (0 minutes 2.737 seconds)
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_themis_alpha_sweep.py:

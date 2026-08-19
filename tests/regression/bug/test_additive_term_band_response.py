@@ -159,7 +159,7 @@ def _model(name, *, approx, free_shape=False, bands=None):
         sfh={"type": "dpl", "*": FIXED},
         dust={
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "*": FIXED,
             "emission": {"type": "dale2014_cigale", "*": FIXED},
         },

@@ -51,7 +51,13 @@ model = tengri.SEDModel.build(
         "alpha": 4.0,
         "beta": 2.0,
     },
-    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+    dust={
+        "law": "power_law",
+        "type": "two_component",
+        "all_params": tengri.FIXED,
+        "tau_diff": 0.0,
+        "tau_bc": 0.0,
+    },
     neb={"type": "cue", "all_params": tengri.FIXED, "logZ_gas": tengri.Uniform(-2.0, 0.5)},
     redshift=tengri.Fixed(0.0),
 )

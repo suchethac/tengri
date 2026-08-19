@@ -304,6 +304,7 @@ def _component_config_summary(c) -> str:
         "n_grid",
         "backend",
         "model",
+        "law",
         "law_bc",
         "law_diff",
         "emission_model",
