@@ -2230,6 +2230,31 @@ class Fitter:
             # ``Uniform(9.6, 11.1)`` to ``Uniform(7, 13)`` changes no name, no
             # shape, no dtype and no control flow.
             self._free_prior_key(),
+            # Spec FIXED values (#1972 instance 2). ``_primals_to_params`` also
+            # bakes ``fitter._fixed_values``, so two models differing only in a
+            # fixed scalar share one engine and fit #2 runs fit #1's physics —
+            # measured -0.18 dex on mass for ``dust_slope`` -0.7 -> 0.4.
+            #
+            # ``SEDModel.compile_signature`` dropped these on 2026-05-20 on the
+            # grounds that they "are threaded as a runtime JIT input"; that is
+            # true of the forward observables path and false of this closure, so
+            # do not take that comment as cover for removing this entry.
+            #
+            # Keying rather than threading is deliberate:
+            # ``get_or_build_signal_response`` returns a *stable function
+            # object* because JAX's trace cache is keyed by function identity,
+            # so partial-applying fixed values per fit would re-trace the whole
+            # physics stack per galaxy — the cost that cache exists to avoid.
+            # The keying is free for catalogs: these are per-MODEL values and a
+            # catalog uses one model, with per-galaxy variation flowing through
+            # ``_params_override`` (keyed above) or a runtime-routed redshift.
+            self._fixed_value_key(),
+            # Mirror map (#1972 instance 3). ``_primals_to_params`` calls
+            # ``spec.resolve_mirrors``, baking target -> source. Two specs can
+            # share every free name, every fixed name and every prior while
+            # tying the same target to a DIFFERENT source; without this entry
+            # the second silently ties to the first's source.
+            self._mirror_key(),
         )
 
     def _free_prior_key(self) -> tuple:
@@ -2263,6 +2288,38 @@ class Fitter:
                 (n, self.spec.get_distribution(n)) for n in sorted(self._free_names)
             )
         )
+
+    def _fixed_value_key(self) -> tuple:
+        """Return the spec's fixed parameter VALUES, in sorted order.
+
+        The per-fit override is keyed separately (the ``params_override`` entry),
+        and a runtime-routed redshift is excluded for the same reason it is
+        excluded there: under ``catalog_z_range`` it rides ``data_args`` as a
+        traced input (#1316), so distinct redshifts legitimately share one
+        program and keying it would recompile per galaxy.
+
+        Values are read from ``self.spec`` rather than ``self._fixed_values``
+        because the latter already has the override merged in, which would
+        double-count it and reintroduce the per-galaxy recompile.
+        """
+        from tengri.parameters.priors import hashable_baked_value
+
+        fixed = self.spec.get_fixed_values()
+        return tuple(
+            (name, hashable_baked_value(fixed[name]))
+            for name in sorted(fixed)
+            if not (name == "redshift" and self._runtime_redshift is not None)
+        )
+
+    def _mirror_key(self) -> tuple:
+        """Return the mirror map (target -> source), in sorted order.
+
+        ``_primals_to_params`` calls ``spec.resolve_mirrors``, so the map is a
+        baked constant. Only the *map* is keyed; the mirrored values themselves
+        arrive from the latents and need no key.
+        """
+        mirrors = getattr(self.spec, "mirrors", None) or {}
+        return tuple(sorted((str(target), str(source)) for target, source in mirrors.items()))
 
     def _get_or_build_engine(self, pos_dict: dict) -> dict:
         """Return the JIT engine, reusing a cached version when possible.
