@@ -408,10 +408,7 @@ def _usage_hint(name: str, kind: str) -> str:
     if kind == "dust_emission":
         # The dust dict's own 'type' defaults to two_component, which needs
         # an explicit law; show it alongside the emission sub-block.
-        return (
-            f"SEDModel.build(..., dust={{'law': 'calzetti', "
-            f"'emission': {{'type': '{name}'}}}})"
-        )
+        return f"SEDModel.build(..., dust={{'law': 'calzetti', 'emission': {{'type': '{name}'}}}})"
     if kind == "sfh_model":
         return f"SEDModel.build(..., sfh={{'type': '{name}'}})"
     if kind == "nebular_backend":

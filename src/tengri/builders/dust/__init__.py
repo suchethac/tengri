@@ -170,10 +170,12 @@ def _make_dust_factory(
                 settings["law_bc"] = law_bc
                 settings["law_diff"] = law_diff
             elif law_bc is not None or law_diff is not None:
+                _pairs = (("law_bc", law_bc), ("law_diff", law_diff))
+                given = [n for n, v in _pairs if v is not None]
                 raise ValueError(
                     "dust.two_component(): requires BOTH 'law_bc' and 'law_diff' "
                     "for per-screen specification, or 'law' for a shared law. "
-                    f"You gave: {[n for n, v in (('law_bc', law_bc), ('law_diff', law_diff)) if v is not None]}. "
+                    f"You gave: {given}. "
                     "Example 1: dust.two_component(law='calzetti', ...) "
                     "Example 2: dust.two_component(law_bc='calzetti', "
                     "law_diff='power_law', ...)"
@@ -299,8 +301,7 @@ def _make_dust_factory(
     if dust_model == "two_component":
         doc_lines.append("law : str, optional")
         doc_lines.append(
-            "    Attenuation law shared by both screens. Mutually exclusive "
-            "with law_bc/law_diff."
+            "    Attenuation law shared by both screens. Mutually exclusive with law_bc/law_diff."
         )
         doc_lines.append("law_bc : str, optional")
         doc_lines.append("    Birth-cloud attenuation law. Requires law_diff too.")
@@ -313,9 +314,7 @@ def _make_dust_factory(
                 f"    Attenuation law name from DUST_LAWS. Default {setting_defaults[s]!r}."
             )
         else:
-            doc_lines.append(
-                f"    Attenuation law name from DUST_LAWS. Required (no default)."
-            )
+            doc_lines.append("    Attenuation law name from DUST_LAWS. Required (no default).")
     doc_lines.append("emission : dict, optional")
     doc_lines.append(
         "    Nested config from ``builders.dust.emission.<variant>(...)`` "

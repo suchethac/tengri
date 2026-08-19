@@ -2286,9 +2286,9 @@ def _translate_dust(dust_dict: dict, result: dict) -> None:
     if dust_type == "single_component":
         if dust_law_bc is not None or dust_law_diff is not None:
             raise ValueError(
-                f"dust type='single_component' has a single attenuation screen. "
-                f"Use 'law' to set the attenuation law, not 'law_bc' or 'law_diff'. "
-                f"Example: dust={{'type': 'single_component', 'law': 'calzetti', ...}}"
+                "dust type='single_component' has a single attenuation screen. "
+                "Use 'law' to set the attenuation law, not 'law_bc' or 'law_diff'. "
+                "Example: dust={'type': 'single_component', 'law': 'calzetti', ...}"
             )
         if dust_law is None:
             laws_list = ", ".join(sorted(valid_laws))
@@ -2314,13 +2314,13 @@ def _translate_dust(dust_dict: dict, result: dict) -> None:
         # Check for invalid combinations
         if has_law and (has_law_bc or has_law_diff):
             raise ValueError(
-                f"dust type='two_component' grammar is ambiguous: "
-                f"cannot specify both 'law' and 'law_bc'/'law_diff'. "
-                f"Use EITHER 'law' (shared by both screens) "
-                f"OR both 'law_bc' and 'law_diff' (per-screen). "
-                f"Example 1: dust={{'type': 'two_component', 'law': 'calzetti', ...}} "
-                f"Example 2: dust={{'type': 'two_component', 'law_bc': 'calzetti', "
-                f"'law_diff': 'power_law', ...}}"
+                "dust type='two_component' grammar is ambiguous: "
+                "cannot specify both 'law' and 'law_bc'/'law_diff'. "
+                "Use EITHER 'law' (shared by both screens) "
+                "OR both 'law_bc' and 'law_diff' (per-screen). "
+                "Example 1: dust={'type': 'two_component', 'law': 'calzetti', ...} "
+                "Example 2: dust={'type': 'two_component', 'law_bc': 'calzetti', "
+                "'law_diff': 'power_law', ...}"
             )
 
         if not has_law and not (has_law_bc and has_law_diff):
@@ -2328,7 +2328,8 @@ def _translate_dust(dust_dict: dict, result: dict) -> None:
                 raise ValueError(
                     f"dust type='two_component' requires BOTH 'law_bc' and 'law_diff' "
                     f"for per-screen specification, or use 'law' for a shared law. "
-                    f"You gave: {[k for k in ['law_bc', 'law_diff'] if dust_dict.get(k) is not None]}. "
+                    f"You gave: "
+                    f"{[k for k in ['law_bc', 'law_diff'] if dust_dict.get(k) is not None]}. "
                     f"Example 1: dust={{'type': 'two_component', 'law': 'calzetti', ...}} "
                     f"Example 2: dust={{'type': 'two_component', 'law_bc': 'calzetti', "
                     f"'law_diff': 'power_law', ...}}"
@@ -3043,11 +3044,16 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
     # No 'stellar' entry: that group is gone (#1720). Its one setting was the
     # metallicity mode, and it is emitted above as met={'type': ...}.
     "dust": (
-        # Dust attenuation laws: emit 'law' when both screens share, or 'law_bc'/'law_diff' otherwise.
-        # This is handled by custom logic in _emit_declared_structural for dust.
+        # Dust attenuation laws: emit 'law' when both screens share, or
+        # 'law_bc'/'law_diff' otherwise. This is handled by custom logic in
+        # _emit_declared_structural for dust.
         # Markers for the handler to know which attributes to check:
-        _Structural("law_bc", "dust_law_bc", None, only_types=("single_component", "two_component")),
-        _Structural("law_diff", "dust_law_diff", None, only_types=("single_component", "two_component")),
+        _Structural(
+            "law_bc", "dust_law_bc", None, only_types=("single_component", "two_component")
+        ),
+        _Structural(
+            "law_diff", "dust_law_diff", None, only_types=("single_component", "two_component")
+        ),
         # Witt & Gordon (2000) screen selectors (FSPS dust_type=3). Only read
         # by the parser when the dust type is wg00, so a non-WG00 spec always
         # holds the defaults and never emits them.
@@ -3139,7 +3145,8 @@ def _emit_declared_structural(group_name: str, group_output: dict, spec: Paramet
     group_type = group_output.get("type")
     entries_to_skip = set()
 
-    # Special handling for dust laws: emit 'law' when both screens share, or 'law_bc'/'law_diff' otherwise
+    # Special handling for dust laws: emit 'law' when both screens share,
+    # or 'law_bc'/'law_diff' otherwise
     if group_name == "dust" and group_type in ("single_component", "two_component"):
         law_bc = getattr(spec, "dust_law_bc", None)
         law_diff = getattr(spec, "dust_law_diff", None)
