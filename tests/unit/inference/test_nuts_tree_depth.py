@@ -6,8 +6,12 @@ iterations on the heavy-tailed StudentT SFR-ratio geometry of the
 nonparametric SFH priors (19-band continuity fit, D=9, 2026-08-18) — 118 s
 of wall dominated by 1023-gradient trajectories. Lowering the default was
 measured and *rejected*: cap 6 cut the wall to 11 s but collapsed min-ESS
-93 → 5, strictly worse per effective sample; ``dense_mass_matrix=True`` is
-the fix that wins on both axes (28 s, min-ESS 45). What ships instead:
+93 → 5, strictly worse per effective sample. ``dense_mass_matrix=True`` was
+the original recommendation and is no longer: re-measured on the same fit it
+buys wall time (35 s against 69 s) with 23 divergences per 400 draws against
+6 for the diagonal, and the saturation itself is largely a model defect, since
+bin edges past the age of the universe leave prior-only bins (#1975). What
+ships instead:
 
 1. the pure stats helper that turns per-iteration trajectory-expansion
    counts into ``posterior.diagnostics`` entries — depth saturation was

@@ -147,9 +147,12 @@ def _bounded_pathfinder_elbo_draws(n_draws: int | None = None):
 #: geometry of the nonparametric SFHs and is a trap: on a 19-band continuity
 #: fit (D=9, 500 warmup + 500 samples, CPU, 2026-08-18) cap 6 cut the wall
 #: 118 s → 11 s but collapsed min-ESS 93 → 5 — per *effective* sample it is
-#: strictly worse (1.99 vs 1.27 s/ESS). The genuine fix on that geometry is
-#: ``dense_mass_matrix=True``: 28 s wall, min-ESS 45, 0.62 s/ESS — better
-#: than the diagonal default on both axes at once. Saturation of a deep cap
+#: strictly worse (1.99 vs 1.27 s/ESS). ``dense_mass_matrix=True`` was the
+#: recommendation here and no longer is: re-measured it buys wall time at the
+#: cost of 23 divergences per 400 draws against 6 for the diagonal. On that
+#: geometry the genuine fixes are bin edges that stop at the age of the
+#: universe (#1975) and a longer fixed-length trajectory
+#: (``mcmc_hmc``, ``n_leapfrog_steps=150``). Saturation of a deep cap
 #: is surfaced by ``NUTSTreeDepthWarning`` and the ``tree_depth_*``
 #: diagnostics every NUTS fit now reports; a deliberate low cap for a
 #: wall-bounded quick look is one kwarg, taken knowingly.

@@ -13,7 +13,7 @@ import warnings
 import jax
 import jax.numpy as jnp
 
-from tengri.config.exceptions import NUTSTreeDepthWarning
+from tengri.config.exceptions import NUTSTreeDepthWarning, warn_measured
 from tengri.inference._sample_utils import _maybe_map_init, _mean_params, _vmap_samples_to_physical
 from tengri.inference.backends.mcmc._shared import (
     DEFAULT_MAX_NUM_DOUBLINGS,
@@ -81,21 +81,31 @@ def _warn_if_tree_depth_saturated(stats: dict) -> None:
     frac = stats["frac_max_depth"]
     if cap < _SATURATION_WARN_MIN_CAP or frac < _SATURATION_WARN_FRAC:
         return
-    warnings.warn(
+    warn_measured(
         f"NUTS hit its tree-depth cap on {frac:.0%} of post-burnin iterations "
         f"at max_num_doublings={cap} — each such iteration paid up to "
         f"{2**cap - 1} gradient evaluations on a trajectory the U-turn "
         f"criterion never terminated. On SED posteriors this is the signature "
         f"of heavy-tailed priors or strong parameter correlations (the "
         f"nonparametric-SFH StudentT ratio priors are the measured case). "
-        f"Try dense_mass_matrix=True first: on a D=9 continuity fit it beat "
-        f"the diagonal default on wall AND effective samples at once "
-        f"(118 s -> 28 s, min-ESS 93 -> 45 per 500 draws, s/ESS halved). "
-        f"Lowering max_num_doublings bounds the wall instead, at a real ESS "
-        f"cost (cap 6 measured min-ESS 5 on the same fit) — quick looks only. "
+        f"Check the model before the sampler: a nonparametric SFH whose bin "
+        f"edges run past the age of the universe at the fit redshift leaves "
+        f"bins with no likelihood, sampling a heavy-tailed prior that nothing "
+        f"constrains. Fixing that on a D=9 continuity fit at z=1.5 cut the "
+        f"wall from 174 s to 69 s on its own. After that, trajectory LENGTH is "
+        f"the lever: mcmc_hmc with n_leapfrog_steps=150 measured min-ESS 105 "
+        f"against 84 for this sampler, and 201 at the validated warmup. "
+        f"dense_mass_matrix=True is not a safe default here — it measured 23 "
+        f"divergences per 400 draws on that fit (77 before the bins were "
+        f"fixed) against 6 for the diagonal, so check n_divergent before "
+        f"trusting its higher speed. Lowering max_num_doublings bounds the "
+        f"wall instead, at a real ESS cost (cap 6 measured min-ESS 5 on the "
+        f"same fit) — quick looks only. "
         f"See posterior.diagnostics['tree_depth_mean'/'frac_max_depth'].",
         NUTSTreeDepthWarning,
         stacklevel=3,
+        frac_max_depth=frac,
+        max_num_doublings=cap,
     )
 
 
@@ -257,10 +267,16 @@ def run_nuts(
         cut the wall 118 s → 11 s but collapsed min-ESS 93 → 5, strictly
         worse per effective sample. When a fit saturates this cap (the same
         measurement saw 46% of iterations at depth 10), the geometry — not
-        the cap — is the problem: ``dense_mass_matrix=True`` measured 28 s
-        wall at min-ESS 45 on that fit, beating the diagonal default on both
-        axes at once. Lower the cap only to bound worst-case wall for a
-        quick look, knowingly paying ESS. Saturation of a cap >= 7 on > 25%
+        the cap — is the problem, and on a nonparametric SFH part of that
+        geometry is self-inflicted: bin edges running past the age of the
+        universe leave bins with no likelihood sampling a heavy-tailed prior
+        (#1975). Matching the edges to the redshift took the same fit from
+        174 s to 69 s. ``mcmc_hmc`` with ``n_leapfrog_steps=150`` then
+        measured min-ESS 105 per 400 draws against 84 here.
+        ``dense_mass_matrix=True`` is quicker still but measured 23
+        divergences per 400 draws against 6 for the diagonal, so check
+        ``n_divergent`` before trusting it. Lower the cap only to bound
+        worst-case wall for a quick look, knowingly paying ESS. Saturation of a cap >= 7 on > 25%
         of iterations warns via
         :class:`~tengri.config.exceptions.NUTSTreeDepthWarning`, and every
         fit reports ``tree_depth_mean`` / ``tree_depth_max`` /
