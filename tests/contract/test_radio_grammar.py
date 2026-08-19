@@ -319,3 +319,79 @@ class TestRadioComponentPhysics:
             redshift=Fixed(0.1),
         )
         assert jnp.all(jnp.isfinite(model.predict_state({}).sed_intrinsic))
+
+
+class TestRadioLegacyTypeRetirement:
+    """PR6: Legacy radio={'type': X} form is retired.
+
+    Users who relied on the flat legacy form must use the composable surface.
+    The error message preserves the mapping so they can mechanically convert.
+    """
+
+    def test_legacy_condon92_type_raises_with_composable_equivalent(self):
+        """radio={'type': 'condon92'} raises, showing composable form."""
+        with pytest.raises(ValueError, match="legacy.*retired"):
+            parse_groups(
+                sfh={"type": "dpl", "*": FIXED},
+                radio={"type": "condon92"},
+            )
+
+    def test_legacy_none_type_raises(self):
+        """radio={'type': 'none'} raises (use radio={'sf': None} instead)."""
+        with pytest.raises(ValueError, match="legacy.*retired"):
+            parse_groups(
+                sfh={"type": "dpl", "*": FIXED},
+                radio={"type": "none"},
+            )
+
+    def test_legacy_radio_dpl_type_raises(self):
+        """radio={'type': 'radio_dpl'} raises."""
+        with pytest.raises(ValueError, match="legacy.*retired"):
+            parse_groups(
+                sfh={"type": "dpl", "*": FIXED},
+                radio={"type": "radio_dpl"},
+            )
+
+    def test_legacy_error_message_shows_mapping_for_condon92(self):
+        """Error message for condon92 includes the composable equivalent."""
+        with pytest.raises(ValueError) as excinfo:
+            parse_groups(
+                sfh={"type": "dpl", "*": FIXED},
+                radio={"type": "condon92"},
+            )
+        message = str(excinfo.value)
+        # Should show the mapping: condon92 -> sf=bell2003, agn=powerlaw
+        assert "radio=" in message
+        assert "sf" in message
+        assert "agn" in message or "bell2003" in message
+
+    def test_composable_radio_sf_still_works(self):
+        """radio={'sf': {'type': 'bell2003'}} still works (non-legacy form)."""
+        params = parse_groups(
+            sfh={"type": "dpl", "*": FIXED},
+            radio={"sf": {"type": "bell2003"}},
+        )
+        assert params.radio is True
+        assert params.radio_sfr_mode == "bell2003"
+
+    def test_composable_radio_agn_still_works(self):
+        """radio={'agn': {'type': 'powerlaw'}} still works (non-legacy form)."""
+        params = parse_groups(
+            sfh={"type": "dpl", "*": FIXED},
+            radio={"agn": {"type": "powerlaw"}},
+        )
+        assert params.radio is True
+        assert params.radio_agn_model == "powerlaw"
+
+    def test_composable_radio_both_axes_still_works(self):
+        """radio={'sf': {...}, 'agn': {...}} still works (non-legacy form)."""
+        params = parse_groups(
+            sfh={"type": "dpl", "*": FIXED},
+            radio={
+                "sf": {"type": "bell2003"},
+                "agn": {"type": "powerlaw"},
+            },
+        )
+        assert params.radio is True
+        assert params.radio_sfr_mode == "bell2003"
+        assert params.radio_agn_model == "powerlaw"

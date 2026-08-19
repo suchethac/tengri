@@ -975,3 +975,88 @@ class TestAGNLinesDeprecation:
                 },
                 redshift=Fixed(0.1),
             )
+
+
+class TestAGNSubblockStrictness:
+    """Sub-block-owned parameters must be nested, not written flat at agn level.
+
+    PR6: AGN adopts the dust.emission policy — rejecting sub-block params
+    written at the wrong level with a clear error naming the correct nesting.
+    """
+
+    def test_subblock_owned_param_at_agn_level_raises_with_guidance(self):
+        """A torus parameter written flat at agn level raises with nesting hint."""
+        # agn_tau_skirtor is owned by the torus block, not shared
+        with pytest.raises(ValueError, match="is a 'agn\\.torus' parameter"):
+            parse_groups(
+                sfh={"type": "dpl", "*": FIXED},
+                agn={
+                    "disc": {"type": "powerlaw", "*": FIXED},
+                    "tau_skirtor": Uniform(3, 11),  # Wrong level!
+                },
+            )
+
+    def test_subblock_owned_param_error_names_correct_nesting(self):
+        """Error message for misplaced sub-block param shows correct nesting."""
+        with pytest.raises(ValueError) as excinfo:
+            parse_groups(
+                sfh={"type": "dpl", "*": FIXED},
+                agn={
+                    "disc": {"type": "powerlaw", "*": FIXED},
+                    "tau_skirtor": Uniform(3, 11),
+                },
+            )
+        message = str(excinfo.value)
+        # The error should name the correct nesting path
+        assert "agn=" in message
+        assert "torus" in message
+        assert "tau_skirtor" in message
+
+    def test_subblock_owned_param_in_correct_nest_works(self):
+        """Same parameter nested correctly under torus dict works fine."""
+        params = parse_groups(
+            sfh={"type": "dpl", "*": FIXED},
+            agn={
+                "disc": {"type": "powerlaw", "*": FIXED},
+                "torus": {"type": "skirtor", "*": FIXED, "tau_skirtor": Uniform(3, 11)},
+            },
+            redshift=Fixed(0.1),
+        )
+        dist = params.get_distribution("agn_tau_skirtor")
+        assert dist.bounds == (3, 11)
+
+    def test_disc_owned_param_at_agn_level_raises(self):
+        """A disc parameter at agn level raises."""
+        with pytest.raises(ValueError, match="is a 'agn\\.disc' parameter"):
+            parse_groups(
+                sfh={"type": "dpl", "*": FIXED},
+                agn={
+                    "alpha": Uniform(1, 3),  # disc param at wrong level
+                },
+            )
+
+    def test_shared_agn_params_still_work_at_agn_level(self):
+        """Genuinely shared params (agn_log_lbol, agn_lum_ratio) work at agn level."""
+        # These are shared across all blocks, not owned by any sub-block
+        params = parse_groups(
+            sfh={"type": "dpl", "*": FIXED},
+            agn={
+                "disc": {"type": "powerlaw", "*": FIXED},
+                "log_lbol": Uniform(9.42, 13.42),  # Shared param at agn level is OK
+            },
+            redshift=Fixed(0.1),
+        )
+        dist = params.get_distribution("agn_log_lbol")
+        assert dist.bounds == (9.42, 13.42)
+
+    def test_multiple_subblock_params_at_agn_level_all_rejected(self):
+        """Multiple misplaced sub-block params all raise (first one caught)."""
+        with pytest.raises(ValueError, match="is a 'agn"):
+            parse_groups(
+                sfh={"type": "dpl", "*": FIXED},
+                agn={
+                    "disc": {"type": "powerlaw", "*": FIXED},
+                    "tau_skirtor": Uniform(3, 11),  # torus param
+                    "nlr_cf": Uniform(0.01, 0.5),  # nlr param
+                },
+            )
