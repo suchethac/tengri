@@ -26,6 +26,15 @@ class Dale2014IRSEDComponent(EmissionComponent):
     The model interpolates in the 1D alpha grid and optionally mixes a
     pure-AGN QSO template when frac_agn > 0.
 
+    **Embedded star-forming radio continuum**: The Dale+2014 templates include
+    a rising star-forming radio synchrotron continuum that extends to 2.2459e9 Å
+    (1.335 GHz). When this variant is combined with an active SF radio block
+    (``radio.sf.type != 'none'``), the synchrotron is double-counted in rest_sed
+    between ~1.34 and ~10 GHz (3–22 cm), and the composed SED steps down ~2x at
+    the 1.335 GHz template edge where the embedded tail ends. **Combining
+    dale2014 with SF radio raises ConfigError at build time by design; use
+    dale2014_cigale instead** (see issue #1970).
+
     Notes
     -----
     **JIT-compatible**: yes — all operations are ``jnp`` primitives.
@@ -100,9 +109,12 @@ class Dale2014CigaleIRSEDComponent(EmissionComponent):
     library, using the CIGALE variant parameterization (dust-to-stellar mass
     ratio alpha and AGN power contribution frac_agn).
 
-    This is the CIGALE-specific variant; functionality is identical to
-    ``Dale2014IRSEDComponent``, with the only difference being the grammar
-    type name for model selection.
+    **Radio tail stripped per CIGALE convention**: Unlike the standard dale2014
+    variant, this CIGALE-adapted version has the star-forming radio synchrotron
+    continuum removed beyond 7.727e7 Å. This makes it safe to combine with
+    an active SF radio block (``radio.sf.type != 'none'``) without double-counting
+    the radio continuum. This is the recommended variant when using the radio
+    component.
 
     Notes
     -----

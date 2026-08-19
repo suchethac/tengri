@@ -58,7 +58,7 @@ def _model(ssp, radio):
             "all_params": FIXED,
             "tau_diff": 0.5,
             "tau_bc": 0.0,
-            "emission": {"type": "dale2014", "all_params": FIXED},
+            "emission": {"type": "dale2014_cigale", "all_params": FIXED},
         },
         agn={
             "type": "composable",
