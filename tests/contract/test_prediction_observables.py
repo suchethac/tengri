@@ -47,7 +47,7 @@ _EXTRA = "jwst_f356w"
 # NOT: they sample rest-frame >3700 A, where IGM transmission is ~1.
 _FOREST_FILTERS = ["sdss_u", "sdss_g"]
 _SFH = {"type": "dpl", "*": FIXED}
-_DUST = {"type": "single_component", "law_bc": "calzetti", "*": FIXED}
+_DUST = {"type": "single_component", "law": "calzetti", "*": FIXED}
 # z=3 keeps the IGM transmission live: at low z it is ~1 and would mask a
 # projection path that drops it entirely.
 _Z = 3.0
