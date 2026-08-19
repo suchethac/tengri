@@ -68,7 +68,11 @@ def obs():
 def _model(ssp, obs, *, dust_type, approx):
     dust = {"law": "power_law", "type": dust_type, "all_params": FIXED}
     if dust_type == "two_component":
-        dust["law_bc"] = "calzetti"
+        # `law`, not `law_bc`: under the old symmetric inheritance naming one
+        # screen applied that curve to both, so a single `law` reproduces it.
+        # Assigning `law_bc` here alongside the literal `law` above would form
+        # the ambiguous pair the grammar now rejects.
+        dust["law"] = "calzetti"
     return SEDModel.build(
         ssp_data=ssp,
         observation=obs,
