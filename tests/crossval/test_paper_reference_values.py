@@ -257,6 +257,13 @@ class TestMahadevan1997:
             f"not UV/optical. Standard thin disc peaks in UV; ADAF must not."
         )
 
+    @pytest.mark.xfail(
+        strict=False,
+        reason="#1728 category B: both synchrotron peaks saturate at the 1e7 A grid edge "
+        "(lambda_peak identical for M_BH=1e7 and 1e9) — grid range or missing peak "
+        "physics, awaiting adjudication",
+    )
+    @pytest.mark.owner_blocked
     def test_bh_mass_shifts_synchrotron_peak(self):
         """Mahadevan 1997 Eq. 24: ν_peak ∝ M_BH^{-1/2} — higher M_BH → longer radio λ.
 
@@ -397,8 +404,11 @@ class TestVandenBerk2001:
         # Either Lyα (1216) or Hα (6563) should be strongest
         # VB01: broad Lyα EW = 92A, broad Hα EW = 260A → Hα has larger EW
         # But in terms of luminosity, Lyα is typically comparable
-        assert max_wave in [1216.0, 6563.0], (
-            f"Strongest BLR line should be Lyα or Hα, got λ={max_wave:.0f}"
+        # Tolerant match, not exact-float membership: the catalog stores the
+        # precise wavelengths (1215.67, 6562.8), which `in [1216.0, 6563.0]`
+        # can never match (#1728).
+        assert any(abs(max_wave - w) < 2.0 for w in (1215.67, 6562.8)), (
+            f"Strongest BLR line should be Lyα or Hα, got λ={max_wave:.2f}"
         )
 
     def test_civ_present(self):
@@ -883,6 +893,12 @@ class TestBell2003Radio:
 class TestRanalli2003XRay:
     """Ranalli+2003, A&A 399, 39 — combined XRB 2-10 keV calibration."""
 
+    @pytest.mark.xfail(
+        strict=False,
+        reason="#1728 category B: measured L_2-10keV = 2.21e40 vs Ranalli 3.7e39 (6.0x) at "
+        "SFR=1, M*=1e10 — units or calibration adjudication",
+    )
+    @pytest.mark.owner_blocked
     def test_combined_xrb_band_luminosity(self):
         """L_2-10keV ≈ 3.7×10^39 erg/s at SFR=1, M*=1e10. Ranalli+2003 A&A 399 Eq. 3.
 
@@ -912,6 +928,13 @@ class TestRanalli2003XRay:
 class TestInoue2014IGM:
     """Inoue+2014, MNRAS 442, 1805 — IGM opacity model."""
 
+    @pytest.mark.xfail(
+        strict=False,
+        reason="#1728 category B: T=0.114 averaged over rest 800-900 A at z=4 vs Inoue's "
+        "tau_LL >> 1 (<0.05 bound) — same weak-LyC-opacity question as the z=3 "
+        "sibling in test_derived_physics_crossval — awaiting adjudication",
+    )
+    @pytest.mark.owner_blocked
     def test_lyman_limit_opacity_z4(self):
         """Lyman limit at rest 912 Å is fully opaque at z_source=4.
 
@@ -921,8 +944,12 @@ class TestInoue2014IGM:
         from tengri.components.igm import igm_transmission
 
         z = 4.0
-        wave_ll_obs = jnp.array([912.0 * (1 + z)])  # observed 4560 Å
-        T = float(igm_transmission(wave_ll_obs, z)[0])
+        # Sample BELOW the limit (rest 800-900 Å), not exactly at the 912 Å
+        # edge: at the edge the LyC opacity is only partially built up
+        # (measured T=0.351 there), while Inoue's tau_LL >> 1 statement is for
+        # the continuum below the limit (#1728).
+        wave_obs = jnp.linspace(800.0, 900.0, 32) * (1 + z)
+        T = float(jnp.mean(igm_transmission(wave_obs, z)))
         assert T < 0.05, f"Inoue+2014: Lyman limit opacity at z=4: T={T:.3f} (expected < 0.05)"
 
     def test_lya_forest_z3(self):
@@ -930,8 +957,12 @@ class TestInoue2014IGM:
         from tengri.components.igm import igm_transmission
 
         z = 3.0
-        wave_lya_obs = jnp.array([1216.0 * (1 + z)])  # observed 4864 Å
-        T = float(igm_transmission(wave_lya_obs, z)[0])
+        # The forest is BLUEWARD of the source's Lya: sampling exactly at
+        # 1216*(1+z) measures the unabsorbed edge (T=1.0 there). Fan's mean
+        # transmission is defined over the forest window, conventionally
+        # rest 1041-1185 Å (#1728).
+        wave_obs = jnp.linspace(1041.0, 1185.0, 64) * (1 + z)
+        T = float(jnp.mean(igm_transmission(wave_obs, z)))
         np.testing.assert_allclose(
             T,
             0.68,

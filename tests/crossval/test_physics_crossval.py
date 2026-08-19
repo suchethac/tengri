@@ -51,7 +51,9 @@ class TestCosmologyCrossval:
         from tengri.utils.cosmology import age_at_z
 
         for z in [0.0, 0.5, 1.0]:
-            age_astropy = Planck18.age(z).to("yr").value
+            # tengri's age_at_z returns Gyr; converting astropy to yr made the
+            # ratio 1e-9 and the test unpassable (#1728).
+            age_astropy = Planck18.age(z).to("Gyr").value
             age_tengri = float(age_at_z(z))
             ratio = age_tengri / age_astropy
             np.testing.assert_allclose(
@@ -226,8 +228,12 @@ class TestSpectroscopyCrossval:
         wave = jnp.linspace(4800, 4920, 1000)
         spec = jnp.exp(-0.5 * ((wave - 4861) / 0.5) ** 2)
 
-        # Note: velocity_broaden signature is (flux, wave, sigma_km_s)
-        broadened = np.asarray(velocity_broaden(spec, wave, 200.0))
+        # velocity_broaden requires a log-uniform wavelength grid (see issue #1742).
+        # Resample to log grid, broaden, and interpolate back.
+        wave_log = jnp.logspace(jnp.log10(wave[0]), jnp.log10(wave[-1]), wave.size)
+        spec_log = jnp.interp(wave_log, wave, spec)
+        broadened_log = velocity_broaden(spec_log, wave_log, 200.0)
+        broadened = np.asarray(jnp.interp(wave, wave_log, broadened_log))
         original = np.asarray(spec)
 
         # FWHM should increase
@@ -242,7 +248,13 @@ class TestSpectroscopyCrossval:
         wave = jnp.linspace(4700, 5000, 2000)
         spec = jnp.exp(-0.5 * ((wave - 4861) / 2.0) ** 2)
 
-        broadened = velocity_broaden(spec, wave, 300.0)
+        # velocity_broaden requires a log-uniform wavelength grid (see issue #1742).
+        # Resample to log grid, broaden, and interpolate back for accurate flux conservation.
+        wave_log = jnp.logspace(jnp.log10(wave[0]), jnp.log10(wave[-1]), wave.size)
+        spec_log = jnp.interp(wave_log, wave, spec)
+        broadened_log = velocity_broaden(spec_log, wave_log, 300.0)
+        broadened = jnp.interp(wave, wave_log, broadened_log)
+
         flux_orig = float(jnp.trapezoid(spec, wave))
         flux_broad = float(jnp.trapezoid(broadened, wave))
 
