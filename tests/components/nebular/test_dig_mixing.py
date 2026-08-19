@@ -52,7 +52,7 @@ def base_model():
             "alpha": 1.0,
             "beta": 2.5,
         },
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+        dust={"law": "power_law", "type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
         neb={
             "type": "cue",
             "*": tengri.FIXED,

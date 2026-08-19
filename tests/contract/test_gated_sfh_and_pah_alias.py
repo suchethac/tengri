@@ -64,7 +64,7 @@ def test_draine2021_pah_builds_and_emits(synthetic_ssp_wide):
     model = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
         sfh={"type": "delayed", "*": FIXED, "log_total_mass": 10.0},
-        dust={
+        dust={"law": "power_law", 
             "type": "two_component",
             "*": FIXED,
             "tau_diff": Fixed(1.5),

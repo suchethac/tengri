@@ -44,7 +44,7 @@ def model_with_filters():
         ssp,
         observation=obs,
         sfh={"type": "dpl", "*": tengri.FIXED},
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+        dust={"law": "power_law", "type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
         redshift=tengri.Fixed(0.05),
     )
 

@@ -65,7 +65,7 @@ _SEAM_MODELS = {
     # balance peak-factors the absorbed bolometric integral: forward/energy_balance.py
     # and utils/sed_quantities.py.
     "dust_ir": dict(
-        dust={
+        dust={"law_diff": 'calzetti', 
             "type": "two_component",
             "law_bc": "calzetti",
             "all_params": FIXED,
@@ -77,7 +77,7 @@ _SEAM_MODELS = {
     # The CIGALE-joint AGN renormalization forms trapz(L_disc) ~ L_bol (~1e44), peak
     # factored in components/agn/disc.py.
     "agn": dict(
-        dust={
+        dust={"law_diff": 'calzetti', 
             "type": "two_component",
             "law_bc": "calzetti",
             "all_params": FIXED,
@@ -103,7 +103,7 @@ _SEAM_MODELS = {
     # model under test (stellar + dust) was the only one with no large positive scale
     # seam, so it measured 7.3e-05 and passed while dust IR and AGN were 30% wrong.
     "panchromatic": dict(
-        dust={
+        dust={"law_diff": 'calzetti', 
             "type": "two_component",
             "law_bc": "calzetti",
             "all_params": FIXED,

@@ -127,7 +127,7 @@ def _redshift_gradient(ssp, n_bands, x64):
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "dpl", "all_params": FREE},
-        dust={"type": "two_component", "all_params": FIXED},
+        dust={"law": "power_law", "type": "two_component", "all_params": FIXED},
         redshift=Uniform(0.01, 2.0, "redshift"),
         approx=None,
     )

@@ -85,7 +85,7 @@ def _build(ssp, obs, sfh):
             ssp_data=ssp,
             observation=obs,
             sfh=sfh,
-            dust={
+            dust={"law": "power_law", 
                 "type": "two_component",
                 "all_params": FIXED,
                 "tau_bc": 0.0,

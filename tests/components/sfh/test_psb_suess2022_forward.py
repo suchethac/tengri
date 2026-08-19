@@ -18,7 +18,7 @@ from tengri import FIXED, Fixed, SEDModel
 pytestmark = pytest.mark.conservation
 
 
-_DUST_OFF = {"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED}
+_DUST_OFF = {"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED}
 
 
 def _build_psb(ssp, log_total_mass=10.0):

@@ -80,7 +80,7 @@ class TestToGroupsBasic:
         """to_groups() preserves nested dust.emission subgroup structure."""
         spec = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
-            dust={
+            dust={"law_diff": 'calzetti', 
                 "type": "two_component",
                 "law_bc": "calzetti",
                 "*": FIXED,
@@ -140,7 +140,7 @@ class TestToGroupsRoundtrip:
         """Nested dust.emission sub-block roundtrips."""
         original = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
-            dust={
+            dust={"law_diff": 'calzetti', 
                 "type": "two_component",
                 "law_bc": "calzetti",
                 "*": FIXED,
@@ -167,7 +167,7 @@ class TestToGroupsRoundtrip:
 
         original = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
-            dust={"type": "two_component", "*": FIXED},
+            dust={"law": "power_law", "type": "two_component", "*": FIXED},
             agn={
                 "disc": {"type": "powerlaw", "*": FREE},
                 "torus": {"type": "simple", "*": FIXED},
@@ -199,7 +199,7 @@ class TestToGroupsRoundtrip:
         """Mixed free and fixed params roundtrip."""
         original = parse_groups(
             sfh={"type": "dpl", "alpha": FREE, "beta": Uniform(0.5, 2.0), "tau_gyr": Fixed(1.0)},
-            dust={
+            dust={"law_diff": 'calzetti', 
                 "type": "two_component",
                 "law_bc": "calzetti",
                 "*": FIXED,
@@ -348,7 +348,7 @@ class TestToGroupsStructuralSettings:
         """dust_law_bc setting is preserved."""
         original = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
-            dust={"type": "two_component", "law_bc": "kriek_conroy", "*": FIXED},
+            dust={"law_diff": 'kriek_conroy', "type": "two_component", "law_bc": "kriek_conroy", "*": FIXED},
             redshift=Fixed(0.1),
         )
         result = original.to_groups()
@@ -359,7 +359,7 @@ class TestToGroupsStructuralSettings:
         """dust_emission type is preserved."""
         original = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
-            dust={
+            dust={"law": "power_law", 
                 "type": "two_component",
                 "*": FIXED,
                 "emission": {"type": "dale2014", "*": FIXED},

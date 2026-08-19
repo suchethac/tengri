@@ -110,7 +110,7 @@ class TestRecipeParametersManualRecipes:
         """Minimal recipe with FREE/FIXED sentinels works correctly."""
         recipe = {
             "sfh": {"type": "dpl", "*": FREE},
-            "dust": {"type": "two_component", "*": FIXED},
+            "dust": {"law": "power_law", "type": "two_component", "*": FIXED},
             "neb": {"type": "none"},
             "redshift": Fixed(0.05),
         }
@@ -125,7 +125,7 @@ class TestRecipeParametersManualRecipes:
         """Recipe with explicit Uniform priors for free params."""
         recipe = {
             "sfh": {"type": "dpl", "*": FREE},
-            "dust": {
+            "dust": {"law_diff": 'calzetti', 
                 "type": "two_component",
                 "law_bc": "calzetti",
                 "*": FREE,

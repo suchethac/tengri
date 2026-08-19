@@ -58,7 +58,7 @@ def _build(ssp, obs, forward_dtype):
             "tau_gyr": 1.0,
             "age_gyr": 5.0,
         },
-        dust={
+        dust={"law_diff": 'calzetti', 
             "type": "two_component",
             "law_bc": "calzetti",
             "all_params": FIXED,

@@ -225,7 +225,7 @@ class TestRegistryComponentsEmit:
                         ssp_data=synthetic_ssp_wide,
                         observation=synthetic_tophat_obs,
                         sfh={"type": "const"},
-                        dust={
+                        dust={"law_diff": 'calzetti', 
                             "type": "two_component",
                             "law_bc": "calzetti",
                             "emission": {"type": name},

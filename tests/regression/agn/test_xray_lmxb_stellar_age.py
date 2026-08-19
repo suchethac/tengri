@@ -39,7 +39,7 @@ def test_lmxb_uses_mass_weighted_age(synthetic_ssp_wide) -> None:
             "log_total_mass": Fixed(10.0),
             "*": FIXED,
         },
-        dust={
+        dust={"law": "power_law", 
             "type": "two_component",
             "tau_bc": Fixed(0.0),
             "tau_diff": Fixed(0.3),

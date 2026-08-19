@@ -51,7 +51,7 @@ def _age_marginal(ssp, sfh):
         ssp_data=ssp,
         met={"logzsol": Fixed(0.0), "*": FIXED},
         sfh=sfh,
-        dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+        dust={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
         redshift=Fixed(0.0),
     )
     s = m.predict_state({})
