@@ -121,10 +121,15 @@ FLAT_SAMPLERS: dict[str, str] = {
 #: Registered backends that this seam deliberately does NOT drive, and why.
 #: Listed so ``PopulationFitter`` can raise a specific error instead of a generic
 #: "unknown method", and so the reason survives longer than a commit message.
-#: Empty since ``nss`` — the founding entry — gained its real driver (#1429);
-#: the table stays because the next honest refusal belongs here, with its
-#: reason, not in a commit message.
-FLAT_UNSUPPORTED: dict[str, str] = {}
+FLAT_UNSUPPORTED: dict[str, str] = {
+    "hmc_is": (
+        "importance-sampled evidence needs a proposal that covers the posterior; "
+        "hierarchical D grows with the catalog, and a single Student-t fitted to "
+        "the flat chain misses mass long before that (ESS collapses). Run "
+        "mcmc_hmc for the hierarchical posterior and per-galaxy hmc_is/nss for "
+        "evidences."
+    ),
+}
 
 
 @dataclass(frozen=True)
@@ -925,7 +930,7 @@ def run_flat_sampler(
                 ghmc_delta,
             )
         else:
-            positions, divergent, step_size, _imm = _nuts_full_scan(
+            positions, divergent, _expansions, step_size, _imm = _nuts_full_scan(
                 prob.init_flat,
                 wkey,
                 chain_keys,

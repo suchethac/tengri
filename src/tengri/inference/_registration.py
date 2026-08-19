@@ -39,6 +39,7 @@ from tengri.inference.backends.mcmc import (
     run_dynamic_hmc as _ctx_run_dynamic_hmc,
     run_ghmc as _ctx_run_ghmc,
     run_hmc as _ctx_run_hmc,
+    run_hmc_is as _ctx_run_hmc_is,
     run_mclmc as _ctx_run_mclmc,
     run_nuts as _ctx_run_nuts,
     run_raytrace as _ctx_run_raytrace,
@@ -246,6 +247,18 @@ register_backend(
     legacy_fitter=False,
     accepts_precondition=True,
 )(_ctx_run_hmc)
+
+register_backend(
+    "hmc_is",
+    tier="experimental",
+    short_doc=(
+        "HMC posterior + importance-sampled log-evidence (cold ~30s at D=6; "
+        "check diagnostics['ess'] and diagnostics['max_weight_frac'] for quality)"
+    ),
+    requires=("blackjax",),
+    legacy_fitter=False,
+    accepts_precondition=True,
+)(_ctx_run_hmc_is)
 
 register_backend(
     "mcmc_dynamic_hmc",

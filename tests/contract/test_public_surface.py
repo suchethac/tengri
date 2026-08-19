@@ -150,6 +150,7 @@ EXPECTED_ALL = frozenset(
         # Component helpers (closes #497 / #498)
         "igm_transmission",
         "igm_transmission_madau",
+        "igm_transmission_meiksin06",
         "velocity_broaden",
         "apply_lsf",
         # GP-noise kernels + spectral-index helpers (closes #511)
@@ -189,6 +190,9 @@ EXPECTED_ALL = frozenset(
         "SEDResult",
         # Top-level convenience verbs
         "fit_batch",
+        # Bayesian model averaging over per-model evidences (nss/laplace/hmc_is)
+        "bma_weights",
+        "bma_resample",
         # Catalog fitting — the astronomer-facing noun (#1317, spec §6.2)
         "Catalog",
         # Data discovery helpers

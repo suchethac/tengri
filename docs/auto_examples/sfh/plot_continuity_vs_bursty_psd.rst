@@ -38,8 +38,26 @@ Visual width difference reveals each prior's implicit stochastic assumptions.
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /tengri/src/tengri/forward/sed_model.py:8580: WildcardPartialFreeWarning: sfh={'all_params': FREE} no longer frees metallicity parameters when there is no explicit met block. Before this change, met_logzsol (and other met_* params) were freed by the sfh wildcard.
+
+    To free metallicity parameters explicitly, pass either:
+      met={'all_params': FREE}
+    or:
+      met={'logzsol': Uniform(-2, 0.2)}
+
+    Issue #1796
+      spec = parse_groups(**groups)
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -51,7 +69,7 @@ Visual width difference reveals each prior's implicit stochastic assumptions.
     import numpy as np
 
     from tengri import FREE, Fixed, SEDModel, load_ssp
-    from tengri.analysis.plotting import setup_style
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -124,11 +142,6 @@ Visual width difference reveals each prior's implicit stochastic assumptions.
     fig.legend(["Mean SFH"], loc="upper center", bbox_to_anchor=(0.5, 1.02), fontsize=10)
     fig.tight_layout()
     plt.savefig("plot_continuity_vs_bursty_psd.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 5.332 seconds)
 
 
 .. _sphx_glr_download_auto_examples_sfh_plot_continuity_vs_bursty_psd.py:

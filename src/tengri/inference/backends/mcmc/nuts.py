@@ -13,8 +13,10 @@ import warnings
 import jax
 import jax.numpy as jnp
 
+from tengri.config.exceptions import NUTSTreeDepthWarning, warn_measured
 from tengri.inference._sample_utils import _maybe_map_init, _mean_params, _vmap_samples_to_physical
 from tengri.inference.backends.mcmc._shared import (
+    DEFAULT_MAX_NUM_DOUBLINGS,
     _get_cached_adaptation,
     _get_flat_logdensity,
     _nuts_chain_scan,
@@ -26,6 +28,85 @@ from tengri.inference.preconditioning import prepare_preconditioning
 from tengri.utils.compile_log import compile_timer
 
 logger = logging.getLogger(__name__)
+
+#: Post-burnin fraction of iterations at the tree-depth cap above which a
+#: deep cap triggers NUTSTreeDepthWarning. 0.25 keeps the warning out of
+#: healthy runs — a well-adapted chain touches its cap on a few percent of
+#: iterations — while catching the pathological regime: the measured
+#: continuity fit saturated 46% of iterations at cap 10.
+_SATURATION_WARN_FRAC = 0.25
+
+#: Caps below this stay silent when saturated: at cap <= 6 a truncated tree
+#: costs at most 63 gradient evaluations, and a low cap is typically a
+#: deliberate wall-time bound (taken knowingly, at a measured ESS cost).
+#: At cap >= 7 each saturated iteration burns >= 127 gradients on a
+#: trajectory the U-turn criterion never terminated — the signature of
+#: heavy-tailed or strongly-correlated geometry worth surfacing.
+_SATURATION_WARN_MIN_CAP = 7
+
+
+def _tree_depth_stats(expansions, max_num_doublings: int) -> dict:
+    """Tree-depth diagnostics from per-iteration trajectory-expansion counts.
+
+    Parameters
+    ----------
+    expansions : array_like, shape (n_draws,)
+        ``NUTSInfo.num_trajectory_expansions`` per post-burnin iteration.
+    max_num_doublings : int
+        The cap those counts ran under.
+
+    Returns
+    -------
+    dict
+        ``tree_depth_mean`` / ``tree_depth_max`` / ``frac_max_depth`` /
+        ``max_num_doublings``, all Python scalars so the diagnostics dict
+        survives pickling and repr without device arrays.
+    """
+    expansions = jnp.asarray(expansions)
+    return {
+        "max_num_doublings": int(max_num_doublings),
+        "tree_depth_mean": float(jnp.mean(expansions)),
+        "tree_depth_max": int(jnp.max(expansions)),
+        "frac_max_depth": float(jnp.mean(expansions >= max_num_doublings)),
+    }
+
+
+def _warn_if_tree_depth_saturated(stats: dict) -> None:
+    """Warn when a deep tree-depth cap is saturating (see NUTSTreeDepthWarning).
+
+    Silent below ``_SATURATION_WARN_MIN_CAP``: a low cap that saturates is
+    usually a deliberate wall-time bound doing its job, not a pathology.
+    """
+    cap = stats["max_num_doublings"]
+    frac = stats["frac_max_depth"]
+    if cap < _SATURATION_WARN_MIN_CAP or frac < _SATURATION_WARN_FRAC:
+        return
+    warn_measured(
+        f"NUTS hit its tree-depth cap on {frac:.0%} of post-burnin iterations "
+        f"at max_num_doublings={cap} — each such iteration paid up to "
+        f"{2**cap - 1} gradient evaluations on a trajectory the U-turn "
+        f"criterion never terminated. On SED posteriors this is the signature "
+        f"of heavy-tailed priors or strong parameter correlations (the "
+        f"nonparametric-SFH StudentT ratio priors are the measured case). "
+        f"Check the model before the sampler: a nonparametric SFH whose bin "
+        f"edges run past the age of the universe at the fit redshift leaves "
+        f"bins with no likelihood, sampling a heavy-tailed prior that nothing "
+        f"constrains. Fixing that on a D=9 continuity fit at z=1.5 cut the "
+        f"wall from 174 s to 69 s on its own. After that, trajectory LENGTH is "
+        f"the lever: mcmc_hmc with n_leapfrog_steps=150 measured min-ESS 105 "
+        f"against 84 for this sampler, and 201 at the validated warmup. "
+        f"dense_mass_matrix=True is not a safe default here — it measured 23 "
+        f"divergences per 400 draws on that fit (77 before the bins were "
+        f"fixed) against 6 for the diagonal, so check n_divergent before "
+        f"trusting its higher speed. Lowering max_num_doublings bounds the "
+        f"wall instead, at a real ESS cost (cap 6 measured min-ESS 5 on the "
+        f"same fit) — quick looks only. "
+        f"See posterior.diagnostics['tree_depth_mean'/'frac_max_depth'].",
+        NUTSTreeDepthWarning,
+        stacklevel=3,
+        frac_max_depth=frac,
+        max_num_doublings=cap,
+    )
 
 
 def _resolve_dense_mass_matrix(dense_mass_matrix: bool | None, n_dim: int) -> bool:
@@ -114,7 +195,7 @@ def run_nuts(
     n_samples=1000,
     n_chains=1,
     target_accept_rate=0.85,
-    max_num_doublings=10,
+    max_num_doublings=DEFAULT_MAX_NUM_DOUBLINGS,
     dense_mass_matrix: bool | None = None,
     pathfinder_warmstart=False,
     precondition: bool | float | None = None,
@@ -178,19 +259,33 @@ def run_nuts(
         reducing divergences in the SED degeneracy banana. Range
         0.7-0.95; higher = smaller steps = fewer divergences but
         slower mixing.
-    max_num_doublings : int, default 10
-        Maximum tree depth for NUTS trajectory (2^max_num_doublings
-        leapfrog steps per sample). Default 10 follows BlackJAX/Stan
-        convention. Lower to 7 (2^7=128 leapfrogs/step) if you observe
-        a chain running far longer than expected and want to bound the
-        worst-case per-sample cost — at the price of higher
-        autocorrelation on heavy-tailed or strongly-curved posteriors.
-        See ``bench/reports/2026-05-06_compile_vs_sampling_breakdown.md``
-        for the prior measurement that found 10→8 gave no benefit on
-        nb06's well-conditioned spec posterior; the cap matters only
-        when NUTS is hitting deep trees, which is workload-specific.
-        Compile cost scales with this knob but is typically <3s at
-        warm cache (see docs/performance/compilation.md).
+    max_num_doublings : int, default DEFAULT_MAX_NUM_DOUBLINGS (10)
+        Maximum tree depth for NUTS trajectory (up to 2^max_num_doublings - 1
+        leapfrog steps per sample). Default 10 follows the BlackJAX/Stan
+        convention — and survived a deliberate attempt to lower it
+        (2026-08-18): on a 19-band continuity fit (D=9, 500+500 draws) cap 6
+        cut the wall 118 s → 11 s but collapsed min-ESS 93 → 5, strictly
+        worse per effective sample. When a fit saturates this cap (the same
+        measurement saw 46% of iterations at depth 10), the geometry — not
+        the cap — is the problem, and on a nonparametric SFH part of that
+        geometry is self-inflicted: bin edges running past the age of the
+        universe leave bins with no likelihood sampling a heavy-tailed prior
+        (#1975). Matching the edges to the redshift took the same fit from
+        174 s to 69 s. ``mcmc_hmc`` with ``n_leapfrog_steps=150`` then
+        measured min-ESS 105 per 400 draws against 84 here.
+        ``dense_mass_matrix=True`` is quicker still but measured 23
+        divergences per 400 draws against 6 for the diagonal, so check
+        ``n_divergent`` before trusting it. Lower the cap only to bound
+        worst-case wall for a quick look, knowingly paying ESS. Saturation of a cap >= 7 on > 25%
+        of iterations warns via
+        :class:`~tengri.config.exceptions.NUTSTreeDepthWarning`, and every
+        fit reports ``tree_depth_mean`` / ``tree_depth_max`` /
+        ``frac_max_depth`` in ``posterior.diagnostics``. The earlier finding
+        that 10→8 gave no benefit on nb06's well-conditioned posterior
+        (``bench/reports/2026-05-06_compile_vs_sampling_breakdown.md``) is
+        the quiet side of the same fact — a chain that never builds deep
+        trees does not feel the cap. Compile cost scales with this knob but
+        is typically <3s at warm cache (see docs/performance/compilation.md).
     dense_mass_matrix : bool or None, optional
         Use a dense (full) mass matrix instead of diagonal. Captures
         parameter correlations (e.g. age-dust-metallicity) and
@@ -442,7 +537,7 @@ def run_nuts(
             )
 
         with compile_timer("nuts_chain_scan_vmap", fitter.compile_signature(), method="mcmc_nuts"):
-            positions, divergent = _vmap_chains(
+            positions, divergent, expansions = _vmap_chains(
                 _init,
                 _scan,
                 init_flat=init_flat,
@@ -457,7 +552,7 @@ def run_nuts(
         state = blackjax.mcmc.nuts.init(init_flat, ld_1arg)
         chain_keys = jax.random.split(chain_key, n_burnin + n_samples)
         with compile_timer("nuts_chain_scan", fitter.compile_signature(), method="mcmc_nuts"):
-            positions, divergent = _nuts_chain_scan(
+            positions, divergent, expansions = _nuts_chain_scan(
                 state,
                 chain_keys,
                 log_posterior_flat_2arg,
@@ -476,7 +571,10 @@ def run_nuts(
     if n_burnin > 0 and not _multichain_burnin_done:
         positions = positions[n_burnin:]
         divergent = divergent[n_burnin:]
+        expansions = expansions[n_burnin:]
     n_divergent = int(jnp.sum(divergent))
+    depth_stats = _tree_depth_stats(expansions, max_num_doublings)
+    _warn_if_tree_depth_saturated(depth_stats)
 
     wall_time = time.time() - t0
 
@@ -506,6 +604,7 @@ def run_nuts(
             "n_divergent": n_divergent,
             "step_size": float(parameters["step_size"]),
             "warmup": "pathfinder" if pathfinder_warmstart else "window",
+            **depth_stats,
         },
         loss_history=None,
         _model=context.model,

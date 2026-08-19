@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:12.619** total execution time for 18 files **from auto_examples/photometry**:
+**00:12.619** total execution time for 7 files **from auto_examples/photometry**:
 
 .. container::
 
@@ -41,48 +41,15 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_photometry_plot_color_tracks_redshift.py` (``plot_color_tracks_redshift.py``)
      - 00:01.308
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_photometry_plot_nuv_r_age_track.py` (``plot_nuv_r_age_track.py``)
-     - 00:00.841
-     - 0.0
    * - :ref:`sphx_glr_auto_examples_photometry_plot_red_sequence_blue_cloud.py` (``plot_red_sequence_blue_cloud.py``)
      - 00:00.583
      - 0.0
    * - :ref:`sphx_glr_auto_examples_photometry_plot_balmer_break_redshift_evolution.py` (``plot_balmer_break_redshift_evolution.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_photometry_plot_band_count_mass_recovery.py` (``plot_band_count_mass_recovery.py``)
-     - 00:00.000
-     - 0.0
    * - :ref:`sphx_glr_auto_examples_photometry_plot_cosmic_dimming_observed_flux.py` (``plot_cosmic_dimming_observed_flux.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_photometry_plot_filter_set_comparison.py` (``plot_filter_set_comparison.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_photometry_plot_galaxy_with_filters.py` (``plot_galaxy_with_filters.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_photometry_plot_hsc_vs_des_color_high_z.py` (``plot_hsc_vs_des_color_high_z.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_photometry_plot_k_correction_grid.py` (``plot_k_correction_grid.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_photometry_plot_photometric_fit.py` (``plot_photometric_fit.py``)
-     - 00:00.000
-     - 0.0
    * - :ref:`sphx_glr_auto_examples_photometry_plot_photoz_color_degeneracy_grid.py` (``plot_photoz_color_degeneracy_grid.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_photometry_plot_redshift_filter_grid.py` (``plot_redshift_filter_grid.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_photometry_plot_snr_sweep.py` (``plot_snr_sweep.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_photometry_plot_spitzer_irac_agn_wedge.py` (``plot_spitzer_irac_agn_wedge.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_photometry_plot_uvj_diagram.py` (``plot_uvj_diagram.py``)
      - 00:00.000
      - 0.0

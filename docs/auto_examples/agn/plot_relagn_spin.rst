@@ -62,7 +62,7 @@ formulation).
     import numpy as np
 
     import tengri
-    from tengri.analysis.plotting import setup_style
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -125,6 +125,11 @@ formulation).
 
     fig.tight_layout()
     plt.savefig("plot_relagn_spin.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 3.847 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_relagn_spin.py:

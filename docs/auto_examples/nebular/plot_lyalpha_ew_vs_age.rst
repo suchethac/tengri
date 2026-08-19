@@ -40,25 +40,8 @@ Schaerer 2003, A&A, 397, 527 (ionizing photon production in massive starburst po
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /tengri/examples/nebular/plot_lyalpha_ew_vs_age.py:113: UserWarning: Glyph 945 (\N{GREEK SMALL LETTER ALPHA}) missing from font(s) cmr10.
-      fig.tight_layout()
-    /tengri/examples/nebular/plot_lyalpha_ew_vs_age.py:113: UserWarning: Glyph 197 (\N{LATIN CAPITAL LETTER A WITH RING ABOVE}) missing from font(s) cmr10.
-      fig.tight_layout()
-    /tengri/examples/nebular/plot_lyalpha_ew_vs_age.py:114: UserWarning: Glyph 945 (\N{GREEK SMALL LETTER ALPHA}) missing from font(s) cmr10.
-      plt.savefig("plot_lyalpha_ew_vs_age.png", dpi=150, bbox_inches="tight")
-    /tengri/examples/nebular/plot_lyalpha_ew_vs_age.py:114: UserWarning: Glyph 197 (\N{LATIN CAPITAL LETTER A WITH RING ABOVE}) missing from font(s) cmr10.
-      plt.savefig("plot_lyalpha_ew_vs_age.png", dpi=150, bbox_inches="tight")
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -75,7 +58,7 @@ Schaerer 2003, A&A, 397, 527 (ionizing photon production in massive starburst po
     import numpy as np
 
     import tengri
-    from tengri.analysis.plotting import setup_style
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -167,7 +150,7 @@ Schaerer 2003, A&A, 397, 527 (ionizing photon production in massive starburst po
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 30.243 seconds)
+   **Total running time of the script:** (0 minutes 14.417 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_lyalpha_ew_vs_age.py:

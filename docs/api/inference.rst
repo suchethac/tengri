@@ -60,6 +60,18 @@ input is already in memory as arrays rather than a table.
 
 .. autofunction:: tengri.fit_batch
 
+Bayesian model averaging
+------------------------
+
+Combine fits of *different models* to the same data, weighting each by its
+marginal likelihood. Every posterior must carry ``Posterior.log_evidence`` —
+fit with an evidence-returning method (``"nss"``, ``"laplace"``, or
+``"hmc_is"``).
+
+.. autofunction:: tengri.bma_weights
+
+.. autofunction:: tengri.bma_resample
+
 Hierarchical inference
 ----------------------
 

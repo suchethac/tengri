@@ -972,8 +972,8 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "_cython_3_2_4",
-   "module_short": "_cython_3_2_4",
+   "module": "_cython_3_2_9",
+   "module_short": "_cython_3_2_9",
    "name": "cython_function_or_method"
   },
   {
@@ -1139,8 +1139,8 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "tengri.analysis.plotting",
-   "module_short": "tengri.analysis.plotting",
+   "module": "tengri.plot",
+   "module_short": "tengri",
    "name": "setup_style"
   }
  ],

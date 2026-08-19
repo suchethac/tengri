@@ -47,8 +47,19 @@ References:
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /tengri/examples/nebular/plot_fesc_sweep.py:107: UserWarning: This figure includes Axes that are not compatible with tight_layout, so results might be incorrect.
+      fig.tight_layout()
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -67,7 +78,7 @@ References:
     from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
     import tengri
-    from tengri.analysis.plotting import setup_style
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -143,7 +154,7 @@ References:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 9.478 seconds)
+   **Total running time of the script:** (0 minutes 7.901 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_fesc_sweep.py:

@@ -41,8 +41,21 @@ Swap any one into a full model with ``agn={'disc': {'type': <name>}}``.
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /tengri/src/tengri/parameters/parameters.py:699: RecipeWarning: Composable AGN: agn_log_mbh with the 'slone_netzer' disc block — the fixed value 7 lies outside the grid extent [7.4, 9.8], so it is clipped onto the nearest edge node. The SED there is bit-identical to the edge node and the gradient is exactly zero, so a fit cannot move it. Narrow agn_log_mbh to [7.4, 9.8], or select a disc block with no template grid.
+      validate_block_recipe(
+    /tengri/src/tengri/parameters/parameters.py:699: RecipeWarning: Composable AGN: agn_log_ledd with the 'slone_netzer' disc block — the fixed value -1 lies outside the grid extent [-4, -1.95861], so it is clipped onto the nearest edge node. The SED there is bit-identical to the edge node and the gradient is exactly zero, so a fit cannot move it. Narrow agn_log_ledd to [-4, -1.95861], or select a disc block with no template grid.
+      validate_block_recipe(
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -58,7 +71,7 @@ Swap any one into a full model with ``agn={'disc': {'type': <name>}}``.
     import numpy as np
 
     import tengri
-    from tengri.analysis.plotting import setup_style
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -132,7 +145,7 @@ Swap any one into a full model with ``agn={'disc': {'type': <name>}}``.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 10.902 seconds)
+   **Total running time of the script:** (0 minutes 9.235 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_disc_compare.py:

@@ -8,33 +8,12 @@ Showcase
 Full-stack demonstrations: population forward modeling, gradient diagnostics, end-to-end workflows.
 
 
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
-
 
 .. raw:: html
 
     <div class="sphx-glr-thumbnails">
 
 .. thumbnail-parent-div-open
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="The Fisher Information Matrix quantifies which parameter combinations are constrained by data and which are degenerate. Age-dust degeneracy: at fixed stellar mass, older stars + more dust produce the same multiwavelength SED as younger stars + less dust.">
-
-.. only:: html
-
-  .. image:: /auto_examples/showcase/images/thumb/sphx_glr_plot_gradient_degeneracy_direction_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/showcase/plot_gradient_degeneracy_direction`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Fisher Information Ellipses from the Hessian</div>
-    </div>
-
 
 .. raw:: html
 
@@ -80,7 +59,6 @@ Full-stack demonstrations: population forward modeling, gradient diagnostics, en
 .. toctree::
    :hidden:
 
-   /auto_examples/showcase/plot_gradient_degeneracy_direction
    /auto_examples/showcase/plot_jax_gradient_sensitivity
    /auto_examples/showcase/plot_recipes_gallery
 

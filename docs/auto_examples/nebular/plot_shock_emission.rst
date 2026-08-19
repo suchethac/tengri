@@ -52,8 +52,8 @@ magnetic field strength.
     import matplotlib.pyplot as plt
     import numpy as np
 
-    from tengri.analysis.plotting import setup_style
     from tengri.nebular import shock_line_ratios
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*deprecated.*")
@@ -208,11 +208,6 @@ magnetic field strength.
 
     fig.tight_layout()
     plt.savefig("plot_shock_emission.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 3.357 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_shock_emission.py:
