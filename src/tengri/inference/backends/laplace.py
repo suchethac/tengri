@@ -5,8 +5,9 @@ The cheapest uncertainty estimate available — compute the Hessian of the
 loss function H(xi) at the MAP estimate, invert to get a covariance matrix,
 then draw samples from N(theta_MAP, H^{-1}).
 
-Also provides a Laplace evidence estimate:
-    log Z_laplace = -H(theta_MAP) + (D/2)*log(2*pi) - 0.5*log(det(H))
+Also provides a Laplace evidence estimate (the loss carries the prior
+unnormalized as 0.5*sum(xi^2), so the (2*pi)^{D/2} factors cancel):
+    log Z_laplace = -H(theta_MAP) - 0.5*log(det(H))
 
 Works entirely in unbounded parameter space (where the loss is smooth),
 then transforms samples to physical space.
@@ -245,6 +246,8 @@ def run_laplace(
     -------
     Posterior
         Samples from the Gaussian approximation, with Laplace log-evidence.
+        ``Posterior.log_evidence`` is populated from the Gaussian approximation
+        formula (see Notes), valid only when stated guards are met.
 
     Warns
     -----
@@ -255,11 +258,12 @@ def run_laplace(
 
     Notes
     -----
-    ``cov = H^-1`` holds only at a mode. ``run_map`` takes a fixed number of
-    Adam steps with no convergence test, so an under-converged expansion point
-    reaches here routinely and produces a confident, plausible, wrong
-    posterior — typically far too narrow, since a point on a steep slope
-    carries much higher curvature than the mode below it. The Newton decrement
+    **Posterior samples & uncertainty**: ``cov = H^-1`` holds only at a mode.
+    ``run_map`` takes a fixed number of Adam steps with no convergence test, so
+    an under-converged expansion point reaches here routinely and produces a
+    confident, plausible, wrong posterior — typically far too narrow, since a
+    point on a steep slope carries much higher curvature than the mode below it.
+    The Newton decrement
 
     .. math::
 
@@ -268,6 +272,38 @@ def run_laplace(
     measures this, where :math:`g` is the loss gradient at the expansion point
     and :math:`H` the (eigenvalue-floored) Hessian; :math:`d` is in nats and is
     zero exactly at a mode.
+
+    **Laplace log-evidence**: The value in ``Posterior.log_evidence`` is the
+    Gaussian approximation in standardized ξ-space, given by
+
+    .. math::
+
+        \\log Z = -H(\\theta^*) - \\tfrac{1}{2} \\log \\det H
+
+    where :math:`H` is the Hessian of the loss at the expansion point
+    :math:`\\theta^*`. The loss carries the standardized prior *unnormalized*
+    (:math:`\\tfrac12\\sum\\xi^2`, no :math:`-\\tfrac{D}{2}\\log 2\\pi` term),
+    which exactly cancels the :math:`(2\\pi)^{D/2}` Gaussian-integral factor —
+    hence no explicit :math:`2\\pi` term appears. This evidence is
+    reparametrization-invariant within the standardized ξ~N(0,1) prior space
+    used internally.
+
+    Trust the evidence only when **both** of these conditions hold:
+
+    - ``diagnostics["newton_decrement"] ≤ stationarity_tol`` (default 0.1 nats):
+      expansion point is close to a stationary point of the loss.
+    - ``diagnostics["n_clipped_eigenvalues"] == 0``: no Hessian eigenvalues
+      were floored (the spectrum is positive-definite and well-conditioned).
+
+    **Known failure mode**: Posterior mass piled against a physical prior
+    boundary (|ξ| large in standardized space) breaks the Gaussian approximation;
+    the evidence can be severely biased. Remedy: cross-check against an
+    independent evidence method (e.g., ``method="nss"``) once per model family
+    to detect this.
+
+    Evidence scatter (uncertainties) are not reported — the Laplace
+    approximation has no intrinsic sampling error, only model-error bias which
+    cannot be quantified without comparison to other methods.
     """
     from tengri.inference.posterior import Posterior
 
@@ -372,10 +408,16 @@ def run_laplace(
     # Draw samples from N(theta_MAP, H^{-1})
     samples_flat = jax.random.multivariate_normal(key, theta_flat, cov, shape=(n_samples,))
 
-    # Laplace log-evidence estimate
+    # Laplace log-evidence estimate. The loss is -log L + 0.5*sum(xi^2), i.e. the
+    # prior enters UNNORMALIZED (standardized_neg_log_prior omits -(D/2) log 2pi).
+    # Restoring that constant cancels the (2pi)^{D/2} Gaussian-integral factor:
+    #   Z = (2pi)^{-D/2} * exp(-loss(xi_hat)) * (2pi)^{D/2} |H|^{-1/2}
+    # so log Z = -loss_at_map - 0.5 log det H, with no explicit 2pi term. Keeping
+    # the +(D/2) log 2pi here would bias log Z upward by 0.92 nats per free
+    # parameter and tilt model comparison toward higher-D models.
     loss_at_map = float(loss_fn(map_params_unbounded, data_args))
     log_det_h = jnp.sum(jnp.log(eigenvalues_clipped))
-    log_evidence = -loss_at_map + 0.5 * n_dim * jnp.log(2.0 * jnp.pi) - 0.5 * log_det_h
+    log_evidence = -loss_at_map - 0.5 * log_det_h
 
     if verbose:
         print(f"  Loss at MAP: {loss_at_map:.2f}")
@@ -406,5 +448,6 @@ def run_laplace(
             "grad_norm_at_expansion": grad_norm,
         },
         loss_history=None,
+        log_evidence=float(log_evidence),
         _model=model,
     )

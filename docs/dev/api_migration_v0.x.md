@@ -1080,6 +1080,32 @@ Inoue and Madau models at top level for parity with the gallery examples.
 
 ---
 
+## Bayesian Model Averaging (BMA) API (2026-08)
+
+New public functions for combining predictions from multiple models using
+Bayesian model averaging. These functions operate on posterior-like objects
+with `.log_evidence` and `.samples` attributes, enabling flexible model
+comparison and ensemble prediction.
+
+| New symbol | Module | Purpose |
+|---|---|---|
+| `tengri.bma_weights` | `tengri.inference.bma` | Compute posterior model probabilities from log evidences via softmax |
+| `tengri.bma_resample` | `tengri.inference.bma` | Pool physical-space samples from multiple models, weighted by evidence |
+
+Both are advertised in `tengri.__all__` (Tier 3: TOOLKIT). The canonical import
+paths are `tengri.bma_weights` and `tengri.bma_resample` (top-level) or
+`tengri.inference.bma_weights` / `tengri.inference.bma_resample`
+(subpackage path).
+
+**Use case:** Combine predictions from multiple model families by computing
+per-model weights from their marginal likelihoods (log evidence), then pooling
+samples. The log Z values for each model may come from any of the three evidence
+routes (`"nss"`, `"laplace"`, or `"hmc_is"`). Only parameters present in all
+models are retained (intersection semantics), enabling comparison of structurally
+different models.
+
+---
+
 ## How to update this document
 
 1. Land the rename or move with a `deprecated_alias` shim in

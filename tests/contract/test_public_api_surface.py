@@ -92,6 +92,9 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         # Only the single entry point is advertised; the rest live in
         # tengri.utils.jax_cache / tengri.inference.jit_engine.
         "clear_cache",
+        # ── Bayesian model averaging ────────────────────────────────
+        "bma_resample",
+        "bma_weights",
         # ── Top-level convenience verbs ─────────────────────────────
         "cite_components",
         "doctor",
@@ -164,6 +167,16 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         "list_dust_models",
         "list_filter_conventions",
         "list_filters",
+        "list_registered_filters",
+        "list_synthetic_bands",
+        "load_alma_band",
+        "load_custom_filter",
+        "load_filter_from_dsps_file",
+        "load_filter_from_dsps_transmission_curve",
+        "load_tophat_filter",
+        "register_filter",
+        "register_filter_from_file",
+        "unregister_filter",
         "list_igm_models",
         "list_inference_methods",
         "list_nebular_backends",
