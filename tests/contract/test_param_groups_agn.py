@@ -475,24 +475,24 @@ class TestAGNCrossLevelPlacement:
         assert dist.bounds == (supplied.lo, supplied.hi)
         assert params._group_provenance.get("agn_log_lbol") == "user_prior"
 
-    def test_sub_block_param_at_top_level_is_honored(self):
-        """``tau_skirtor`` (torus-only) supplied at the top level must apply."""
-        params = parse_groups(
-            sfh={"type": "dpl", "*": FIXED},
-            agn={
-                "*": FIXED,
-                "tau_skirtor": 7.5,
-                "disc": {"type": "qsogen", "*": FIXED},
-                "torus": {"type": "skirtor", "*": FIXED},
-                "lines": {"type": "none"},
-                "feii": {"type": "none"},
-                "atten": {"type": "none"},
-            },
-            redshift=Fixed(0.1),
-        )
-        dist = params.get_distribution("agn_tau_skirtor")
-        assert dist.is_fixed
-        assert float(dist.value) == 7.5
+    def test_sub_block_param_at_top_level_now_raises(self):
+        """Sub-block params written at top level must be nested (PR6)."""
+        # PR6: AGN adopts dust.emission strictness — sub-block params
+        # must be written under their owning sub-block, not at the agn level.
+        with pytest.raises(ValueError, match="is a 'agn\\.torus' parameter"):
+            parse_groups(
+                sfh={"type": "dpl", "*": FIXED},
+                agn={
+                    "*": FIXED,
+                    "tau_skirtor": 7.5,  # Wrong level! Should be in torus={...}
+                    "disc": {"type": "qsogen", "*": FIXED},
+                    "torus": {"type": "skirtor", "*": FIXED},
+                    "lines": {"type": "none"},
+                    "feii": {"type": "none"},
+                    "atten": {"type": "none"},
+                },
+                redshift=Fixed(0.1),
+            )
 
     def test_param_in_two_locations_raises(self):
         """Same param at top level and inside a sub-block ⇒ ValueError."""
@@ -548,7 +548,7 @@ class TestUniversalKeyValidator:
             ),
             ("neb", {"type": "none", "phantom_neb_key": 3}),
             ("igm", {"type": "madau", "typo_igm_key": 1}),
-            ("radio", {"type": "none", "synth_radio_key": 1}),
+            ("radio", {"sf": {"type": "none"}, "synth_radio_key": 1}),  # composable form, not legacy
             ("xray", {"type": "none", "typo_xray_key": 1}),
         ],
     )

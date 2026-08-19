@@ -32,25 +32,23 @@ _DUST0 = {"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0),
 class TestRadioGrammarParsing:
     """Test radio grammar parsing and parameter routing."""
 
-    def test_legacy_type_form_back_compat(self):
-        """Legacy radio={'type': X} should work (back-compat)."""
-        # Legacy 'type' (a RADIO_MODEL like condon92) predates the SF/AGN split;
-        # it turns radio on with the default sf=bell2003 + agn=powerlaw models.
-        params = parse_groups(
-            sfh={"type": "dpl", "*": FIXED},
-            radio={"type": "condon92"},
-        )
-        assert params.radio is True
-        assert params.radio_sfr_mode == "bell2003"
-        assert params.radio_agn_model == "powerlaw"  # default
+    def test_legacy_type_form_retired(self):
+        """Legacy radio={'type': X} form is retired (PR6)."""
+        # Legacy 'type' form predates the SF/AGN split and is no longer accepted.
+        # Users must use the composable surface with sf/agn axes.
+        with pytest.raises(ValueError, match="legacy.*retired"):
+            parse_groups(
+                sfh={"type": "dpl", "*": FIXED},
+                radio={"type": "condon92"},
+            )
 
-    def test_legacy_type_none_disables(self):
-        """Legacy radio={'type': 'none'} disables radio."""
-        params = parse_groups(
-            sfh={"type": "dpl", "*": FIXED},
-            radio={"type": "none"},
-        )
-        assert params.radio is False
+    def test_legacy_type_none_form_retired(self):
+        """Legacy radio={'type': 'none'} form is retired (PR6)."""
+        with pytest.raises(ValueError, match="legacy.*retired"):
+            parse_groups(
+                sfh={"type": "dpl", "*": FIXED},
+                radio={"type": "none"},
+            )
 
     def test_composable_sf_only(self):
         """radio={'sf': {'type': 'delvecchio2021'}} enables SF only."""
