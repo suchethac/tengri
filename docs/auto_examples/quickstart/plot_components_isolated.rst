@@ -29,7 +29,7 @@ lines added at the source), then dust (UV attenuated, reprocessed
 into the FIR), then AGN (disc + torus + NLR), then radio, then X-ray.
 The color at each wavelength tells you which block matters most.
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-111
+.. GENERATED FROM PYTHON SOURCE LINES 13-116
 
 
 
@@ -79,7 +79,12 @@ The color at each wavelength tells you which block matters most.
         "all_params": tengri.FIXED,
         "tau_diff": 0.4,
         "tau_bc": 0.6,
-        "emission": {"type": "dale2014", "all_params": tengri.FIXED},
+        # dale2014_cigale: the "+ radio" run composes this dust block with the
+        # radio component, and plain dale2014 embeds its own SF radio continuum —
+        # the pair is refused at build as a double-count (#1970). The stripped
+        # template also keeps the "+ dust" curve honest in the radio band: dust
+        # alone contributes nothing there.
+        "emission": {"type": "dale2014_cigale", "all_params": tengri.FIXED},
     }
     DUST_OFF = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
 
@@ -146,7 +151,7 @@ The color at each wavelength tells you which block matters most.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 21.578 seconds)
+   **Total running time of the script:** (0 minutes 17.405 seconds)
 
 
 .. _sphx_glr_download_auto_examples_quickstart_plot_components_isolated.py:

@@ -49,7 +49,10 @@ DUST = {
     "all_params": tengri.FIXED,
     "tau_diff": 0.3,
     "tau_bc": 0.5,
-    "emission": {"type": "dale2014", "all_params": tengri.FIXED},
+    # dale2014_cigale: this example enables the radio component, and plain
+    # dale2014 embeds its own SF radio continuum — the pair is refused at
+    # build as a double-count (#1970).
+    "emission": {"type": "dale2014_cigale", "all_params": tengri.FIXED},
 }
 
 ssp = tengri.load_ssp()
