@@ -682,7 +682,13 @@ def unified_agn() -> dict:
     """
     return dict(
         sfh={"type": "delayed", WILDCARD_ALIAS: FIXED},
-        dust={"type": "two_component", "law": "power_law", WILDCARD_ALIAS: FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+        dust={
+            "type": "two_component",
+            "law": "power_law",
+            WILDCARD_ALIAS: FIXED,
+            "tau_diff": 0.0,
+            "tau_bc": 0.0,
+        },
         agn={
             "type": "composable",
             "disc": {"type": "kubota_done"},

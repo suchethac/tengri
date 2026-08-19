@@ -241,7 +241,8 @@ def __getattr__(name: str):
         raise AttributeError(
             f"{name!r} was removed in tengri #871. Dust IR emission is now authored "
             "as SEDModelComponents selected via the model grammar, e.g. "
-            "SEDModel.build(dust={'law': 'calzetti', 'emission': {'type': 'astrodust'}}) with type in "
+            "SEDModel.build(dust={'law': 'calzetti', 'emission': {'type': 'astrodust'}}) "
+            "with type in "
             "{'modified_blackbody', 'draine2021_pah', 'astrodust', 'dale2014', "
             "'casey2012', 'schreiber2016', ...}. To import a component directly use e.g. "
             "tengri.components.dust.emission.templates.astrodust.AstrodustIRSEDComponent."
