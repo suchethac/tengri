@@ -2649,22 +2649,35 @@ class SEDModel:
         # Include LyC in the dust energy-balance integral (FSPS/Prospector
         # parity, #961) vs the canonical LyC mask (#922). See DustSEDComponent.
         self._dust_eb_include_lyc = bool(getattr(spec, "dust_eb_include_lyc", False))
-        from tengri.components.dust.attenuation import resolve_dust_law
 
-        self._dust_law_bc_fn = resolve_dust_law(self._dust_law_bc)
-        if self._dust_model == "single_component":
-            self._dust_law_diff_fn = self._dust_law_bc_fn
+        # Dust law resolution. Skip for dust_model='off' or 'wg00' (wg00 has no
+        # attenuation law; 'off' means no dust at all). Both store placeholder
+        # power_law values that are never used, so we skip resolution to avoid
+        # wasting compile time.
+        if self._dust_model not in ("off", "wg00"):
+            from tengri.components.dust.attenuation import resolve_dust_law
+
+            self._dust_law_bc_fn = resolve_dust_law(self._dust_law_bc)
+            if self._dust_model == "single_component":
+                self._dust_law_diff_fn = self._dust_law_bc_fn
+            else:
+                self._dust_law_diff_fn = resolve_dust_law(self._dust_law_diff)
+
+            self._neb_dust_mode = getattr(spec, "neb_dust", "bc")
+            _neb_bc_law_name = self._dust_law_neb or getattr(spec, "neb_dust_law_bc", None)
+            if _neb_bc_law_name is not None:
+                from tengri.components.dust.attenuation import resolve_dust_law as _rdl
+
+                self._neb_dust_law_bc_fn = _rdl(_neb_bc_law_name)
+            else:
+                self._neb_dust_law_bc_fn = self._dust_law_bc_fn
         else:
-            self._dust_law_diff_fn = resolve_dust_law(self._dust_law_diff)
-
-        self._neb_dust_mode = getattr(spec, "neb_dust", "bc")
-        _neb_bc_law_name = self._dust_law_neb or getattr(spec, "neb_dust_law_bc", None)
-        if _neb_bc_law_name is not None:
-            from tengri.components.dust.attenuation import resolve_dust_law as _rdl
-
-            self._neb_dust_law_bc_fn = _rdl(_neb_bc_law_name)
-        else:
-            self._neb_dust_law_bc_fn = self._dust_law_bc_fn
+            # Placeholder functions for off/wg00 (never used, but kept for
+            # attribute consistency).
+            self._dust_law_bc_fn = None
+            self._dust_law_diff_fn = None
+            self._neb_dust_law_bc_fn = None
+            self._neb_dust_mode = getattr(spec, "neb_dust", "bc")
 
         self._dust_emission_model = getattr(spec, "dust_emission", None)
         # Astrodust+PAH configuration: now always exists as a structural setting.
@@ -8605,7 +8618,7 @@ class SEDModel:
         ...     sfh={"type": "dpl", "all_params": FREE, "beta": Uniform(1, 3)},
         ...     dust={
         ...         "type": "two_component",
-        ...         "law_bc": "calzetti",
+        ...         "law": "calzetti",  # Shared law for both BC and diffuse
         ...         "all_params": FIXED,
         ...         "tau_bc": 0.5,
         ...     },

@@ -524,7 +524,7 @@ def build_components(
         elif dust_model == "single_component":
             atten_type = "single_component"
             atten_config = DustAttenuationSEDComponentConfig(
-                law=dust_law_diff,
+                law=dust_law_bc,
                 live_shape_params=frozenset(dust_live_shape_params or ()),
             )
         else:

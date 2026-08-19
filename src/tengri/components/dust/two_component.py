@@ -112,20 +112,22 @@ def _young_indicator(
     return jax.nn.sigmoid(-(log_t - jnp.log10(t_birth_yr)) / transition_width_dex)
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class DustSEDComponentConfig(SEDComponentConfig):
     """Frozen knobs for :class:`DustSEDComponent`.
 
     Parameters
     ----------
-    name : str
-        Diagnostic identifier. Default ``"dust"``.
     law_bc : str
         Attenuation-law registry key for the birth-cloud (young star)
-        component. Default ``"power_law"``.
+        component. Grammar builds require explicit specification; no default
+        is applied. Flat-kwarg builds use power_law. Required.
     law_diff : str
         Attenuation-law registry key for the diffuse ISM (old star)
-        component. Default ``"power_law"``.
+        component. Grammar builds require explicit specification; no default
+        is applied. Flat-kwarg builds use power_law. Required.
+    name : str
+        Diagnostic identifier. Default ``"dust"``.
     law_neb : str or None
         Attenuation-law registry key for the **nebular** birth-cloud
         screen. ``None`` (default) inherits ``law_bc`` — the nebular
@@ -142,9 +144,9 @@ class DustSEDComponentConfig(SEDComponentConfig):
         Sigmoid width (dex) for the BC→diffuse age transition.
     """
 
+    law_bc: str = field()
+    law_diff: str = field()
     name: str = "dust"
-    law_bc: str = "power_law"
-    law_diff: str = "power_law"
     law_neb: str | None = None
     t_birth_yr: float = 1e7
     transition_width_dex: float = 0.3
