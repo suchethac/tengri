@@ -355,6 +355,7 @@ def agn_panchromatic() -> dict:
         sfh=builders.sfh.dpl(defaults=FREE),
         dust=builders.dust.two_component(
             defaults=FREE,
+            law="calzetti",
             # ``defaults=FIXED``: the Dale+2014 knobs are a template-family
             # choice, not something a wildcard should open by default.
             # ``dale2014_cigale``: this recipe enables the radio component, and
@@ -440,6 +441,7 @@ def composable_agn() -> dict:
         sfh=builders.sfh.dpl(defaults=FREE),
         dust=builders.dust.two_component(
             defaults=FREE,
+            law="calzetti",
             # ``defaults=FIXED``: the Dale+2014 knobs are a template-family
             # choice, not something a wildcard should open by default.
             # ``dale2014_cigale``: this recipe enables the radio component, and
@@ -521,6 +523,7 @@ def stochastic_sfh_jwst() -> dict:
         sfh={"type": ["dpl", "field"], WILDCARD_ALIAS: FREE},
         dust=builders.dust.two_component(
             defaults=FREE,
+            law="calzetti",
             emission=builders.dust.emission.dale2014(defaults=FIXED),
         ),
         met={"logzsol": FREE},
