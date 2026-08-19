@@ -49,9 +49,8 @@ def _obs(bands: list[tuple[float, str]]) -> Observation:
 
 def _build(ssp, obs, approx, tau, z: float = 1.0) -> SEDModel:
     dust: dict = {
-        "law_diff": "calzetti",
         "type": "two_component",
-        "law_bc": "calzetti",
+        "law": "calzetti",
         "*": FIXED,
     }
     if tau == "free":

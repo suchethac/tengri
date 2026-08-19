@@ -93,9 +93,8 @@ def assert_precompute_matches_exact(
 
     if dust_config is None:
         dust_config = {
-            "law_diff": "calzetti",
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "*": FIXED,
             "tau_diff": 0.5,
             "emission": {"type": emission_type, "*": FIXED},
@@ -238,9 +237,8 @@ def test_dale2014_precompute_matches_exact(synthetic_ssp, dust_ir_filters):
             dust_ir_filters,
             "dale2014",
             dust_config={
-                "law_diff": "calzetti",
                 "type": "two_component",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "*": FIXED,
                 "tau_diff": 0.5,
                 "emission": {"type": "dale2014", "*": FIXED},

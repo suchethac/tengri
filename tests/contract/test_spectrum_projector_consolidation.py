@@ -209,9 +209,8 @@ class TestPublicSurfaceAgreement:
             observation=obs,
             sfh={"type": "dpl"},
             dust={
-                "law_diff": "calzetti",
                 "type": "two_component",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "tau_bc": 0.3,
                 "tau_diff": 0.1,
             },
@@ -267,9 +266,8 @@ class TestIntegrationViaForwardModel:
             observation=obs,
             sfh={"type": "dpl"},
             dust={
-                "law_diff": "calzetti",
                 "type": "two_component",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "tau_bc": 0.3,
                 "tau_diff": 0.1,
             },

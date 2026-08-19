@@ -63,9 +63,8 @@ def _model(ssp):
         sfh={"type": "dpl", "all_params": FREE},
         met={"logzsol": Fixed(-0.3)},
         dust={
-            "law_diff": "calzetti",
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "all_params": FREE,
         },
         neb={"type": "none"},

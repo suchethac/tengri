@@ -239,8 +239,7 @@ t0 = perf_counter()
 # not hours. Seven is also the emcee comparison's dimensionality, so the two
 # bars below are like-for-like rather than tengri solving a smaller problem.
 posterior = ForwardModel.build(sed=model).fit(
-    flux_obs,
-    noise,
+    flux_obs, noise,
     method="mcmc_nuts",
     key=jax.random.PRNGKey(2),
     n_warmup=100,

@@ -30,9 +30,8 @@ class TestFromGroupsBridge:
         kwargs = dict(
             sfh={"type": "dpl", "*": FREE, "beta": Uniform(1, 3)},
             dust={
-                "law_diff": "calzetti",
                 "type": "two_component",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "*": FIXED,
                 "tau_bc": 0.5,
             },
@@ -50,9 +49,8 @@ class TestFromGroupsBridge:
         spec = parse_groups(
             sfh={"type": "dpl", "*": FREE, "beta": Uniform(1, 3)},
             dust={
-                "law_diff": "calzetti",
                 "type": "two_component",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "*": FIXED,
                 "tau_bc": 0.5,
                 "emission": {"type": "dale2014", "*": FIXED},

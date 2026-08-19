@@ -43,7 +43,7 @@ def model(synthetic_ssp_wide, synthetic_tophat_obs):
         ssp_data=synthetic_ssp_wide,
         observation=synthetic_tophat_obs,
         sfh={"type": "dpl", "*": FIXED, "log_total_mass": Uniform(9.0, 11.0)},
-        dust={"law_diff": "calzetti", "type": "two_component", "law_bc": "calzetti", "*": FIXED},
+        dust={"type": "two_component", "law": "calzetti", "*": FIXED},
         neb={"type": "none"},
         redshift=Fixed(0.1),
     )
@@ -85,7 +85,7 @@ def test_the_catalog_works_on_a_fresh_model(synthetic_ssp_wide, synthetic_tophat
         ssp_data=synthetic_ssp_wide,
         observation=synthetic_tophat_obs,
         sfh={"type": "dpl", "*": FIXED, "log_total_mass": Uniform(9.0, 11.0)},
-        dust={"law_diff": "calzetti", "type": "two_component", "law_bc": "calzetti", "*": FIXED},
+        dust={"type": "two_component", "law": "calzetti", "*": FIXED},
         neb={"type": "none"},
         redshift=Fixed(0.1),
     )

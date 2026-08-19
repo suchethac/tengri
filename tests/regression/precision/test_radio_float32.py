@@ -53,9 +53,8 @@ def _model(ssp, radio):
             "age_gyr": 5.0,
         },
         dust={
-            "law_diff": "calzetti",
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "all_params": FIXED,
             "tau_diff": 0.5,
             "tau_bc": 0.0,

@@ -231,9 +231,8 @@ def _shock_cases():
             "shock_",
             {
                 "dust": {
-                    "law_diff": "calzetti",
                     "type": "two_component",
-                    "law_bc": "calzetti",
+                    "law": "calzetti",
                     "*": FIXED,
                 },
                 "neb": {"type": "none"},
@@ -290,9 +289,8 @@ def _xray_cases():
             "xray_",
             {
                 "dust": {
-                    "law_diff": "calzetti",
                     "type": "two_component",
-                    "law_bc": "calzetti",
+                    "law": "calzetti",
                     "*": FIXED,
                 },
                 "neb": {"type": "none"},
@@ -618,9 +616,8 @@ def test_the_threaded_values_actually_reach_the_backend(synthetic_ssp_wide, panc
             observation=panchromatic_obs,
             sfh={"type": "dpl", "*": FIXED},
             dust={
-                "law_diff": "calzetti",
                 "type": "two_component",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "*": FIXED,
             },
             neb={"type": "cb19", "*": FREE},

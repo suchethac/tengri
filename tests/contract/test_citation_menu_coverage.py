@@ -116,7 +116,7 @@ def test_dust_model_is_cited() -> None:
     """
     spec = parse_groups(
         sfh={"type": "dpl"},
-        dust={"law_diff": "calzetti", "type": "two_component", "law_bc": "calzetti"},
+        dust={"type": "two_component", "law": "calzetti"},
     )
     citation = _citation_for(spec, "dust") or ""
     assert "Charlot" in citation, (

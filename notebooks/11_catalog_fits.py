@@ -142,9 +142,8 @@ def build_model():
         met={"logzsol": Fixed(0.0)},
         # Free diffuse dust optical depth: marginalize the dust-redshift degeneracy.
         dust={
-            "law_diff": "calzetti",
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "all_params": FIXED,
             "tau_diff": Uniform(0.0, 2.0),
         },

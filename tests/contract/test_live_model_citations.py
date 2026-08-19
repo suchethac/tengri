@@ -31,7 +31,7 @@ def _build(ssp, **extra):
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "dpl", "*": FREE},
-        dust={"law_diff": "calzetti", "type": "two_component", "law_bc": "calzetti", "*": FIXED},
+        dust={"type": "two_component", "law": "calzetti", "*": FIXED},
         redshift=Fixed(0.1),
     )
     kwargs.update(extra)

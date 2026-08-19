@@ -63,9 +63,8 @@ def test_misscaled_line_channel_raises():
         observation=obs,
         sfh={"type": "delayed", "all_params": FREE},
         dust={
-            "law_diff": "calzetti",
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "all_params": FREE,
         },
         redshift=0.05,
@@ -136,9 +135,8 @@ def test_healthy_multichannel_fit_constructs_silently():
         observation=obs,
         sfh={"type": "delayed", "all_params": FREE},
         dust={
-            "law_diff": "calzetti",
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "all_params": FREE,
         },
         redshift=0.05,

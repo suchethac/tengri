@@ -81,9 +81,8 @@ class TestToGroupsBasic:
         spec = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
             dust={
-                "law_diff": "calzetti",
                 "type": "two_component",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "*": FIXED,
                 "emission": {"type": "dale2014", "*": FIXED},
             },
@@ -142,9 +141,8 @@ class TestToGroupsRoundtrip:
         original = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
             dust={
-                "law_diff": "calzetti",
                 "type": "two_component",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "*": FIXED,
                 "tau_bc": 0.5,
                 # FIXED, not FREE: FREE frees nothing on dale2014 and is now
@@ -202,9 +200,8 @@ class TestToGroupsRoundtrip:
         original = parse_groups(
             sfh={"type": "dpl", "alpha": FREE, "beta": Uniform(0.5, 2.0), "tau_gyr": Fixed(1.0)},
             dust={
-                "law_diff": "calzetti",
                 "type": "two_component",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "*": FIXED,
                 "tau_bc": Uniform(0, 1),
             },

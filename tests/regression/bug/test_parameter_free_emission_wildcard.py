@@ -116,9 +116,8 @@ def _build(ir_ssp, ir_obs, engine: str):
             observation=ir_obs,
             sfh={"type": "dpl", "all_params": FIXED},
             dust={
-                "law_diff": "calzetti",
                 "type": "two_component",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "tau_bc": Fixed(2.0),
                 "tau_diff": Fixed(1.5),
                 "emission": {"type": engine, "all_params": FREE},

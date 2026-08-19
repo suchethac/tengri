@@ -55,7 +55,7 @@ def _sfh_dust_neb():
             "peak_lbt_gyr": Fixed(0.1),
             "width_gyr": Fixed(0.3),
         },
-        dust={"law_diff": "calzetti", "type": "two_component", "law_bc": "calzetti", "*": FIXED},
+        dust={"type": "two_component", "law": "calzetti", "*": FIXED},
         neb={"type": "cue", "*": FIXED},
     )
 

@@ -98,9 +98,8 @@ def _build(
         redshift = Fixed(0.05)
     obs = Observation(photometry=Photometry(filters=tuple(filters)))
     dust = {
-        "law_diff": "calzetti",
         "type": "two_component",
-        "law_bc": "calzetti",
+        "law": "calzetti",
         "*": FIXED,
         "tau_diff": 0.5,  # real attenuation → real L_ir to (re-)emit
     }
@@ -235,9 +234,8 @@ def test_taylor_correction_toggle_two_component(synthetic_ssp):
     # Two-component dust with an active birth-cloud layer (tau_bc>0) — this is
     # where the flat effective-wavelength approximation is worst.
     dust = {
-        "law_diff": "calzetti",
         "type": "two_component",
-        "law_bc": "calzetti",
+        "law": "calzetti",
         "*": FIXED,
         "tau_bc": 0.8,
         "tau_diff": 0.4,

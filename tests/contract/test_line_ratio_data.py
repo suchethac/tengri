@@ -83,9 +83,8 @@ class TestLineRatioPrediction:
                 observation=obs,
                 sfh={"type": "dpl", "*": FIXED},
                 dust={
-                    "law_diff": "calzetti",
                     "type": "two_component",
-                    "law_bc": "calzetti",
+                    "law": "calzetti",
                     "*": FIXED,
                 },
                 neb={"type": "cue", "*": FIXED},
@@ -128,9 +127,8 @@ class TestLineRatioLikelihood:
                 observation=obs,
                 sfh={"type": "dpl", "*": FIXED},
                 dust={
-                    "law_diff": "calzetti",
                     "type": "two_component",
-                    "law_bc": "calzetti",
+                    "law": "calzetti",
                     "*": FIXED,
                 },
                 neb={"type": "cue", "*": FIXED},

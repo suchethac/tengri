@@ -48,9 +48,8 @@ def _intrinsic_luminosities(ssp, disc, lbol):
                 "age_gyr": 5.0,
             },
             dust={
-                "law_diff": "calzetti",
                 "type": "two_component",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "all_params": FIXED,
                 "tau_diff": 0.3,
                 "tau_bc": 0.0,

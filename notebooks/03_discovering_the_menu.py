@@ -114,12 +114,7 @@ def _build_sfh(sfh_factory):
         ssp_data=ssp,
         observation=obs,
         sfh=sfh_factory(defaults=FIXED),
-        dust={
-            "law_diff": "calzetti",
-            "type": "two_component",
-            "law_bc": "calzetti",
-            "all_params": FIXED,
-        },
+        dust={"type": "two_component", "law": "calzetti", "all_params": FIXED},
         neb={"type": "none"},
         redshift=0.05,
     )
