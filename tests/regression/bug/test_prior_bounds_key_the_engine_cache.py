@@ -37,7 +37,7 @@ from tengri.inference.jit_engine import clear_shared_caches, get_or_build_signal
 from tengri.observation.observation import Observation
 from tengri.observation.photometry_config import Photometry
 
-pytestmark = pytest.mark.regression
+pytestmark = pytest.mark.regression_bug
 
 
 @pytest.fixture

@@ -42,7 +42,7 @@ from tengri.inference.jit_engine import clear_shared_caches, get_or_build_signal
 from tengri.observation.observation import Observation
 from tengri.observation.photometry_config import Photometry
 
-pytestmark = pytest.mark.regression
+pytestmark = pytest.mark.regression_bug
 
 
 @pytest.fixture
@@ -150,8 +150,11 @@ def test_model_structure_keys_the_signal_response_cache(ssp, obs):
             sfh={
                 "type": "dpl",
                 "all_params": tengri.FIXED,
-                "alpha": Uniform(0.5, 4.0),
-                "beta": Uniform(0.3, 3.0),
+                # Short form, so it must be a name that resolves unambiguously:
+                # tools/check_param_ranges.py reads a bare ``alpha`` as
+                # ``agn_alpha`` (declared support [-2, 0]) rather than
+                # ``sfh_dpl_alpha``, and flags the range as a units error.
+                "log_total_mass": Uniform(9.0, 11.0),
             },
             dust={"type": "two_component", "all_params": tengri.FIXED, "law_bc": law},
             redshift=0.1,
@@ -177,8 +180,11 @@ def test_same_model_still_shares_one_closure(ssp, obs):
             sfh={
                 "type": "dpl",
                 "all_params": tengri.FIXED,
-                "alpha": Uniform(0.5, 4.0),
-                "beta": Uniform(0.3, 3.0),
+                # Short form, so it must be a name that resolves unambiguously:
+                # tools/check_param_ranges.py reads a bare ``alpha`` as
+                # ``agn_alpha`` (declared support [-2, 0]) rather than
+                # ``sfh_dpl_alpha``, and flags the range as a units error.
+                "log_total_mass": Uniform(9.0, 11.0),
             },
             dust={"type": "two_component", "all_params": tengri.FIXED, "law_bc": "calzetti"},
             redshift=0.1,
