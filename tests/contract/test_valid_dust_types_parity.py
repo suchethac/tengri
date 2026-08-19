@@ -101,5 +101,5 @@ def test_previously_rejected_dust_laws_now_accepted() -> None:
     for law in ("prevot_smc", "lmc", "wd01_mwrv31", "vw07_bc"):
         result: dict = {}
         # Should not raise.
-        _translate_dust({"type": "two_component", "law_bc": law}, result)
+        _translate_dust({"type": "two_component", "law": law}, result)
         assert result["dust_law_bc"] == law
