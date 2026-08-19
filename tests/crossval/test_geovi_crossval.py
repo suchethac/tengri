@@ -31,7 +31,16 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-pytestmark = pytest.mark.crossval
+pytestmark = [
+    pytest.mark.crossval,
+    # The whole module, not just the largest test, exceeds CI memory: the
+    # per-file census measured this file at ~20 GB even with the single
+    # 26 GB draw test deselected, and the first per-file CI run (workflow
+    # dispatch 32287379706) died by runner shutdown inside this file after
+    # ~11 minutes on a 7 GB VM. The NIFTy/JIT CG-inversion fixtures are
+    # intrinsically dense. Run manually on a large-memory machine (#1728).
+    pytest.mark.oom,
+]
 
 jft = pytest.importorskip("nifty8.re", reason="nifty8.re not installed")
 
