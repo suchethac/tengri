@@ -2062,6 +2062,11 @@ def _translate_dust(dust_dict: dict, result: dict) -> None:
     (two_component, single_component, wg00) and extracts structural
     configuration and law selections.
     """
+    # Mark that dust block was explicitly provided so Parameters can
+    # distinguish grammar builds from flat-kwarg builds and validate
+    # law requirements appropriately.
+    result["_dust_block_provided"] = True
+
     dust_type = dust_dict.get("type", "two_component")
 
     # 'none'/'off' disable the dust block entirely — parity with neb/agn/radio/
