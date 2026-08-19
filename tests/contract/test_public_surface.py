@@ -150,6 +150,7 @@ EXPECTED_ALL = frozenset(
         # Component helpers (closes #497 / #498)
         "igm_transmission",
         "igm_transmission_madau",
+        "igm_transmission_meiksin06",
         "velocity_broaden",
         "apply_lsf",
         # GP-noise kernels + spectral-index helpers (closes #511)
