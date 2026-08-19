@@ -222,32 +222,40 @@ plt.show()
 # ## Individual mode
 #
 # MAP for the point estimate, then a posterior. With the bins fixed, the lever
-# that matters is trajectory length. Same data, same seed, 400 samples each:
+# that matters is trajectory length. Every row is one campaign on one machine,
+# one fit per process, repeated over three to six seeds, 400 samples each, with
+# a dense metric on the `mcmc_hmc` rows:
 #
-# | sampler | warmup | wall | min ESS | s per effective sample | divergences |
+# | sampler | warmup | wall | min ESS, median | min ESS, worst seed | divergences per run |
 # | --- | --- | --- | --- | --- | --- |
-# | `mcmc_nuts`, diagonal mass (default) | 400 | 69 s | 84 | 0.82 | 6 |
-# | `mcmc_nuts`, `dense_mass_matrix=True` | 400 | 35 s | 56 | 0.63 | 23 |
-# | `mcmc_hmc`, 20 leapfrog steps | 400 | 10 s | 6 | 1.50 | 0 |
-# | `mcmc_hmc`, 150 leapfrog steps | 400 | 39 s | 105 | 0.37 | 2 |
-# | `mcmc_hmc`, 150 steps, dense mass | 1000 | 66 s | 201 | 0.33 | 1 |
+# | `mcmc_nuts`, diagonal mass (default) | 400 | 75 s | 179 | 122 | 2.0 |
+# | `mcmc_nuts`, `dense_mass_matrix=True` | 400 | 44 s | 35 | 32 | 12.3 |
+# | `mcmc_hmc`, 20 leapfrog steps | 400 | 10 s | 13 | 9 | 2.0 |
+# | `mcmc_hmc`, 60 leapfrog steps | 1000 | 27 s | 113 | 19 | 0.7 |
+# | `mcmc_hmc`, 80 leapfrog steps | 1000 | 35 s | 122 | 48 | 0.3 |
+# | `mcmc_hmc`, 150 leapfrog steps | 1000 | 62 s | 219 | 155 | 2.2 |
 #
 # The bin ratios are correlated, and a 20-step trajectory cannot cross that
-# geometry: it never diverges and it barely moves, returning 6 effective samples
-# out of 400. Lengthening the trajectory to 150 steps is what fixes it, taking
-# the same sampler to 105. The last row is the recipe the method selection page
-# validates for `mcmc_hmc` (warmup at least 1000, a dense metric, at least 20
-# steps) at that length, and it is the best of the five on every column that
-# matters: 201 effective samples and one divergence.
+# geometry: it barely moves, returning 13 effective samples out of 400. Short
+# trajectories are also biased rather than merely noisy. Against the 150-step
+# posterior, the 20-step metallicity median sits 0.30 sigma away and the
+# 40-step one 0.17 sigma, while every length from 60 steps up agrees to better
+# than 0.07 sigma.
 #
-# Read seconds per effective sample, not wall time. The quickest row here is the
-# one that did not sample, and the NUTS row that looks second-quickest bought its
-# speed with 23 divergences, which is a biased chain rather than a fast one.
+# The last two columns are the reason the fit below runs 150 steps rather than
+# 60. On the median, 60 steps is the cheaper route to a usable answer, at 0.24
+# seconds per effective sample against 0.28. On the worst of six seeds it is
+# not: one seed returned 19 effective samples at 60 steps and one returned 48
+# at 80, while the six 150-step seeds stayed between 155 and 298. A short
+# trajectory fails occasionally rather than uniformly, and a page that is run
+# once, with one seed, has to be told the floor rather than the average. A
+# `target_accept_rate` of 0.8 and a 120-step trajectory were measured too, and
+# both push divergences past six per run for a worse floor.
 #
-# The rows come from separate processes, one fit each, because warmup can peak
-# well above the resident model. Repeating them moves the effective sample sizes
-# by tens of percent, and the wall times with whatever else the machine is doing,
-# but not by enough to reorder them.
+# Each row is a separate process, one fit each, because warmup can peak well
+# above the resident model. Repeating a row moves min ESS by a factor of
+# several and can reorder the table, which is why every row here is three to
+# six seeds: a comparison of two samplers from one fit each is not evidence.
 
 # %%
 forward = ForwardModel.build(sed=model)
