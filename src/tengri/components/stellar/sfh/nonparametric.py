@@ -18,6 +18,12 @@ in N lookback-time bins.
 Convention: t_lookback in years, SFR returned in Msun/yr.
 All functions are pure JAX and JIT-compatible.
 
+Bin boundaries are asymmetric, deliberately. Ages older than the last edge form
+no stars: the bins are the model, and extending the oldest one past its edge
+puts mass outside the normalization, which sums bin widths only (#1978). Ages
+younger than the first edge take the youngest bin's rate, because
+``psb_suess2022`` anchors its edges at 0.3 Gyr and relies on it.
+
 References
 ----------
 
@@ -39,6 +45,48 @@ import numpy as np
 # Default bin edges in Gyr (8 edges = 7 bins), log-spaced from 30 Myr to 13.7 Gyr.
 DEFAULT_BIN_EDGES_GYR = jnp.array([0.0, 0.03, 0.1, 0.3, 1.0, 3.0, 6.0, 13.7])
 DEFAULT_N_BINS = 7
+
+
+def _piecewise_constant_sfr(age_yr, bin_edges_yr, sfr_bins, n_bins):
+    """Evaluate a binned SFR on an age grid, forming nothing past the last edge.
+
+    Parameters
+    ----------
+    age_yr : array_like, shape (n_age,)
+        Lookback times to evaluate [yr].
+    bin_edges_yr : array_like, shape (n_bins+1,)
+        Bin edges [yr], ascending.
+    sfr_bins : array_like, shape (n_bins,)
+        SFR in each bin [Msun/yr].
+    n_bins : int
+        Number of bins. Passed explicitly because ``len`` on a traced array
+        raises under JIT.
+
+    Returns
+    -------
+    ndarray, shape (n_age,)
+        SFR at each lookback time [Msun/yr], non-negative, and exactly zero
+        for ages beyond ``bin_edges_yr[-1]``.
+
+    Notes
+    -----
+    **JIT-compatible**: yes — ``jnp`` primitives only.
+
+    Ages *below* the first edge are deliberately clamped into the youngest bin.
+    ``psb_suess2022`` starts its edges at 0.3 Gyr and relies on that.
+
+    Ages *above* the last edge are zeroed, and that is the fix for #1978. They
+    used to be clamped into the oldest bin, which extended that bin's SFR to the
+    end of the age grid, outside any declared bin and outside the mass
+    normalization, which sums bin widths only. With the default ladder ending at
+    13.7 Gyr this was a sliver and went unnoticed; once #1975 allowed a ladder
+    bounded to the age of the universe, it was 21% of the declared mass forming
+    after the model said star formation stopped.
+    """
+    bin_idx = jnp.searchsorted(bin_edges_yr, age_yr, side="right") - 1
+    bin_idx = jnp.clip(bin_idx, 0, n_bins - 1)
+    sfr = jnp.where(age_yr > bin_edges_yr[-1], 0.0, sfr_bins[bin_idx])
+    return jnp.maximum(sfr, 0.0)
 
 
 # ── Continuity SFH (Leja+2019) ────────────────────────────────────
@@ -114,11 +162,7 @@ def continuity(
     # for searchsorted so ages near boundaries are assigned to the correct bin.
     bin_edges_yr = bin_edges_gyr * 1e9
 
-    # bin_idx: which bin each age falls in, using left-edge convention [edge_j, edge_{j+1})
-    bin_idx = jnp.searchsorted(bin_edges_yr, age_yr, side="right") - 1
-    bin_idx = jnp.clip(bin_idx, 0, n_bins - 1)
-    sfr = sfr_bins[bin_idx]
-    return jnp.maximum(sfr, 0.0)
+    return _piecewise_constant_sfr(age_yr, bin_edges_yr, sfr_bins, n_bins)
 
 
 def continuity_prior_logp(
@@ -358,10 +402,7 @@ def dirichlet(
     # (not centers) so ages near boundaries go to the correct bin.
     bin_edges_yr = bin_edges_gyr * 1e9
 
-    bin_idx = jnp.searchsorted(bin_edges_yr, age_yr, side="right") - 1
-    bin_idx = jnp.clip(bin_idx, 0, n_bins - 1)
-    sfr = sfr_bins[bin_idx]
-    return jnp.maximum(sfr, 0.0)
+    return _piecewise_constant_sfr(age_yr, bin_edges_yr, sfr_bins, n_bins)
 
 
 # ── Redshift-aware bin edges (Prospector-β scheme) ─────────────────
@@ -560,10 +601,7 @@ def psb_continuity(
 
     # Piecewise-constant lookup
     bin_edges_yr = all_edges_gyr * 1e9
-    bin_idx = jnp.searchsorted(bin_edges_yr, age_yr, side="right") - 1
-    bin_idx = jnp.clip(bin_idx, 0, n_bins_total - 1)
-    sfr = sfr_bins_norm[bin_idx]
-    return jnp.maximum(sfr, 0.0)
+    return _piecewise_constant_sfr(age_yr, bin_edges_yr, sfr_bins_norm, n_bins_total)
 
 
 # ── ContinuityFlex SFH (Leja+2019) ────────────────────────────────
@@ -736,9 +774,7 @@ def continuity_flex(
     )
 
     n_bins_total = n_flex_bins + 2  # young + flex bins + old
-    bin_idx = jnp.searchsorted(all_edges_yr, age_yr, side="right") - 1
-    bin_idx = jnp.clip(bin_idx, 0, n_bins_total - 1)
-    return jnp.maximum(sfr_bins[bin_idx], 0.0)
+    return _piecewise_constant_sfr(age_yr, all_edges_yr, sfr_bins, n_bins_total)
 
 
 def _continuity_flex_edges_yr(sfh_kwargs: dict, bin_edges_gyr=None) -> jnp.ndarray:

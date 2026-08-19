@@ -45,8 +45,6 @@ red curve for reference.
 
  .. code-block:: none
 
-    /tengri/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
-      return load_ssp_data(str(candidate))
     /tengri/examples/dust_attenuation/plot_grahsp_paper_fig7_galaxy_attenuation.py:154: RuntimeWarning: divide by zero encountered in divide
       "top", functions=(lambda x: C_NM_HZ / 1e3 / x, lambda nu: C_NM_HZ / 1e3 / nu)
 
@@ -75,7 +73,7 @@ red curve for reference.
 
     import tengri
     from tengri import FIXED, Fixed, SEDModel
-    from tengri.analysis.plotting import setup_style
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -214,7 +212,7 @@ red curve for reference.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (12 minutes 50.332 seconds)
+   **Total running time of the script:** (0 minutes 3.381 seconds)
 
 
 .. _sphx_glr_download_auto_examples_dust_attenuation_plot_grahsp_paper_fig7_galaxy_attenuation.py:

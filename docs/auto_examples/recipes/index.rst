@@ -5,12 +5,8 @@
 Recipes
 =======
 
-Common workflows: prior comparison, photometry I/O, redshift fixing, filter set swapping, posterior persistence.
+Recipe comparison, introspection tour, and custom filter design.
 
-
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
 
 
 .. raw:: html
@@ -70,57 +66,6 @@ Common workflows: prior comparison, photometry I/O, redshift fixing, filter set 
     </div>
 
 
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Mock 3 galaxies, fit each independently with MAP. The workflow is: sample true parameters → generate mock fluxes + noise → fit with free SFH/dust and fixed redshift. Demonstrates vectorizing catalog-scale fits when redshift is already known (e.g., spectroscopy).">
-
-.. only:: html
-
-  .. image:: /auto_examples/recipes/images/thumb/sphx_glr_plot_recipe_load_real_csv_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/recipes/plot_recipe_load_real_csv`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Load and fit photometry from CSV</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="MAP-fit a model, serialize the Posterior to HDF5 with .save(), reload in a new session with Posterior.load(), and recover the fit parameters and diagnostics. Enables checkpoint-driven analysis pipelines and multi-stage fits.">
-
-.. only:: html
-
-  .. image:: /auto_examples/recipes/images/thumb/sphx_glr_plot_recipe_save_load_posterior_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/recipes/plot_recipe_save_load_posterior`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Save and load a posterior to disk</div>
-    </div>
-
-
-.. raw:: html
-
-    <div class="sphx-glr-thumbcontainer" tooltip="Two fits on the same mock data: one with redshift fixed (spectroscopic known, free SFH/dust/met), one with redshift free (photometric only). The fixed-z fit converges to truth; free-z is degenerate with dust and SFH, showing why spectroscopy breaks the age-dust-redshift degeneracies that plague photometry-only fitting.">
-
-.. only:: html
-
-  .. image:: /auto_examples/recipes/images/thumb/sphx_glr_plot_recipe_specific_redshift_thumb.png
-    :alt:
-
-  :doc:`/auto_examples/recipes/plot_recipe_specific_redshift`
-
-.. raw:: html
-
-      <div class="sphx-glr-thumbnail-title">Redshift constraint: spectroscopy vs photometry alone</div>
-    </div>
-
-
 .. thumbnail-parent-div-close
 
 .. raw:: html
@@ -134,7 +79,4 @@ Common workflows: prior comparison, photometry I/O, redshift fixing, filter set 
    /auto_examples/recipes/plot_recipe_compare
    /auto_examples/recipes/plot_recipe_custom_filter
    /auto_examples/recipes/plot_recipe_introspection_tour
-   /auto_examples/recipes/plot_recipe_load_real_csv
-   /auto_examples/recipes/plot_recipe_save_load_posterior
-   /auto_examples/recipes/plot_recipe_specific_redshift
 

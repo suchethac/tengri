@@ -22,8 +22,8 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING l
 import matplotlib.pyplot as plt
 import numpy as np
 
-from tengri.analysis.plotting import setup_style
 from tengri.cosmology import age_at_z0
+from tengri.plot import setup_style
 from tengri.sfh import closed_box_metallicity
 
 setup_style()
@@ -119,34 +119,36 @@ ax.grid(True, alpha=0.2)
 ax.set_xlim(0, 13)
 ax.set_ylim(0, 0.6)
 
-# Panel 4: Assembly-metallicity analog
+# Panel 4: Metallicity vs epoch — how enrichment at different lookback times evolves
+# with a fixed τ=3 Gyr SFR profile and leaky box (η=0.2).
 ax = axes[1, 1]
-t_assembly = np.array([1.0, 3.0, 7.0, 10.0])  # Lookback time of assembly (Gyr)
-z_assembly = []
+t_assembly = np.array([1.0, 3.0, 7.0, 10.0])  # Lookback times (Gyr)
 
+# Compute full metallicity history with τ=3 Gyr SFR and η=0.2 outflow
+sfr_tau3 = np.exp(-age_from_start / 3.0)
+log_z_full = closed_box_metallicity(
+    t_yr, sfr_tau3, yield_y=0.03, eta_outflow=0.2, f_gas_init=0.9
+)
+z_ratio_full = 10.0 ** np.array(log_z_full)
+
+# Extract Z at each lookback time point
+z_values = []
 for t_lbt in t_assembly:
     idx = int(np.argmin(np.abs(t_gyr - t_lbt)))
-    if 0 <= idx < len(t_gyr):
-        sfr_tau3 = np.exp(-age_from_start / 3.0)
-        # idx is the closest bin to t_lbt; include it (use [:idx+1])
-        # closed_box_metallicity expects youngest-first convention (now to past)
-        log_z = closed_box_metallicity(
-            t_yr[: idx + 1], sfr_tau3[: idx + 1], yield_y=0.03, eta_outflow=0.2, f_gas_init=0.9
-        )
-        if len(log_z) > 0:
-            z_assembly.append(10.0 ** log_z[-1])
-        else:
-            z_assembly.append(0.0)
+    if 0 <= idx < len(z_ratio_full):
+        z_values.append(z_ratio_full[idx])
+    else:
+        z_values.append(z_ratio_full[-1])
 
-ax.scatter(t_assembly, z_assembly, s=80, color="#9467bd", alpha=0.7, edgecolors="black", lw=1.2)
-ax.plot(t_assembly, z_assembly, lw=2.0, color="#9467bd", alpha=0.4)
+ax.scatter(t_assembly, z_values, s=80, color="#9467bd", alpha=0.7, edgecolors="black", lw=1.2)
+ax.plot(t_assembly, z_values, lw=2.0, color="#9467bd", alpha=0.4)
 
-ax.set_xlabel("Assembly Look-back Time [Gyr]", fontsize=9)
-ax.set_ylabel(r"$Z/Z_\odot$ at assembly", fontsize=9)
+ax.set_xlabel("Look-back Time [Gyr]", fontsize=9)
+ax.set_ylabel(r"$Z/Z_\odot$ (η=0.2)", fontsize=9)
 ax.text(
     0.05,
     0.95,
-    "Assembly-metallicity relation",
+    r"Metallicity evolution (τ=3 Gyr, η=0.2)",
     transform=ax.transAxes,
     fontsize=9,
     verticalalignment="top",
@@ -154,7 +156,7 @@ ax.text(
 )
 ax.grid(True, alpha=0.2)
 ax.set_xlim(0, 11)
-ax.set_ylim(0, 1.0)
+ax.set_ylim(0, max(z_values) * 1.15 if z_values else 0.2)
 
 fig.tight_layout()
 plt.savefig("plot_zh_evolution_compare.png", dpi=150, bbox_inches="tight")

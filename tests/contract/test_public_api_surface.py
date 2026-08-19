@@ -92,6 +92,9 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         # Only the single entry point is advertised; the rest live in
         # tengri.utils.jax_cache / tengri.inference.jit_engine.
         "clear_cache",
+        # ── Bayesian model averaging ────────────────────────────────
+        "bma_resample",
+        "bma_weights",
         # ── Top-level convenience verbs ─────────────────────────────
         "cite_components",
         "doctor",
@@ -114,6 +117,7 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         # build for a curve-only check is unnecessary friction.
         "igm_transmission",
         "igm_transmission_madau",
+        "igm_transmission_meiksin06",
         "velocity_broaden",
         "apply_lsf",
         # ── GP-noise kernels + spectral indices (closes #511) ───────
@@ -163,6 +167,16 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         "list_dust_models",
         "list_filter_conventions",
         "list_filters",
+        "list_registered_filters",
+        "list_synthetic_bands",
+        "load_alma_band",
+        "load_custom_filter",
+        "load_filter_from_dsps_file",
+        "load_filter_from_dsps_transmission_curve",
+        "load_tophat_filter",
+        "register_filter",
+        "register_filter_from_file",
+        "unregister_filter",
         "list_igm_models",
         "list_inference_methods",
         "list_nebular_backends",
@@ -360,15 +374,17 @@ def test_new_subpackages_resolve() -> None:
 
     import tengri.analysis.plotting as _plotting
     import tengri.cosmology
+    import tengri.parameters.translate as _parameters_translate
     import tengri.plot
     import tengri.units
     import tengri.utils.conversions as _conversions
     import tengri.utils.cosmology as _cosmology
     import tengri.utils.magnitudes as _magnitudes
+    import tengri.utils.physics_constants as _physics_constants
 
     shim_sources = [
         (tengri.cosmology, (_cosmology,)),
-        (tengri.units, (_conversions, _magnitudes)),
+        (tengri.units, (_conversions, _magnitudes, _physics_constants, _parameters_translate)),
         (tengri.plot, (_plotting,)),
     ]
     for shim, sources in shim_sources:

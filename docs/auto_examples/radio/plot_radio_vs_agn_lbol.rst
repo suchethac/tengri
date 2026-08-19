@@ -31,7 +31,7 @@ radio-loud / radio-quiet division emerges from this competition.
 This is the figure that motivates separating SF-driven from
 AGN-driven radio in unresolved sources (Best+2005, Pracy+2016).
 
-.. GENERATED FROM PYTHON SOURCE LINES 15-105
+.. GENERATED FROM PYTHON SOURCE LINES 15-108
 
 
 
@@ -60,7 +60,7 @@ AGN-driven radio in unresolved sources (Best+2005, Pracy+2016).
     import numpy as np
 
     import tengri
-    from tengri.analysis.plotting import setup_style
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -83,7 +83,10 @@ AGN-driven radio in unresolved sources (Best+2005, Pracy+2016).
         "all_params": tengri.FIXED,
         "tau_diff": 0.3,
         "tau_bc": 0.5,
-        "emission": {"type": "dale2014", "all_params": tengri.FIXED},
+        # dale2014_cigale: this example enables the radio component, and plain
+        # dale2014 embeds its own SF radio continuum — the pair is refused at
+        # build as a double-count (#1970).
+        "emission": {"type": "dale2014_cigale", "all_params": tengri.FIXED},
     }
 
     ssp = tengri.load_ssp()
@@ -140,7 +143,7 @@ AGN-driven radio in unresolved sources (Best+2005, Pracy+2016).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.230 seconds)
+   **Total running time of the script:** (0 minutes 3.770 seconds)
 
 
 .. _sphx_glr_download_auto_examples_radio_plot_radio_vs_agn_lbol.py:

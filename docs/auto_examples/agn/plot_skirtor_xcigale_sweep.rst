@@ -80,8 +80,8 @@ References
     import numpy as np
 
     import tengri
-    from tengri.analysis.plotting import setup_style
-    from tengri.utils.physics_constants import C_AA  # speed of light [Angstrom/s]
+    from tengri.plot import setup_style
+    from tengri.units import C_AA
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -177,7 +177,7 @@ References
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 15.945 seconds)
+   **Total running time of the script:** (0 minutes 14.647 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_skirtor_xcigale_sweep.py:

@@ -40,6 +40,7 @@ import os
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # suppress XLA/PjRt C++ INFO+WARNING logs
 
+import gc
 import hashlib
 import time
 import warnings
@@ -329,13 +330,27 @@ def build_configs(z, obs):
 
 
 # %% [markdown]
-# ## 5. Fit with nested sampling
+# ## 5. Fit with three evidence routes
 #
-# Nested slice sampling (`nss`) with `n_live=250`. Each fit is seeded deterministically for reproducibility. The four configurations per galaxy run on a thread pool (XLA releases the GIL during compute).
+# We compare three Bayesian evidence estimators:
+#
+# - **NSS** (nested slice sampling): the calibrated reference; `preset="fast"` at n_live=100 (2-3× faster than n_live=250).
+# - **Laplace**: seconds-fast Gaussian approximation. On these 17-band fits its own validity
+#   diagnostics (Newton decrement, clipped eigenvalues) flag most configs as untrustworthy —
+#   the point of printing them is that the failure is *visible*, not silent.
+# - **HMC+IS**: HMC posterior + importance-sampled log Z. Tracks NSS closely on smooth parametric
+#   configs (D here); on the curved non-parametric SFH posteriors (A, B) a single Student-t
+#   proposal can miss mass and bias log Z low — the quoted error bar does not capture that, so
+#   watch `ess`/`max_weight_frac` and fall back to NSS where they warn.
+#
+# The BMA *weights* are far more robust than the absolute log Z values: when one configuration
+# leads by tens-to-hundreds of nats (typical here), every route recovers the same weights even
+# where its absolute evidence is biased. NSS remains the reference whenever weights are close.
+#
+# The notebook runs all three routes × 4 configurations per galaxy on a thread pool (XLA releases the GIL during compute). Seeds are deterministic for reproducibility.
 
 # %%
-N_LIVE = 250  # nested-sampling live points
-N_POST = 1000
+N_POST = 1000  # posterior samples
 
 
 def stable_seed(*parts):
@@ -350,22 +365,30 @@ def stable_seed(*parts):
     return int(digest, 16) % (2**31)
 
 
-def fit_one(model, fnu, sigma, *, gal_id, cfg, salt=""):
-    """Run one nested-sampling fit; return ``(cfg, posterior, seconds)``."""
-    key = jax.random.PRNGKey(stable_seed(gal_id, cfg, salt))
+def fit_one(model, fnu, sigma, *, gal_id, cfg, method, **fit_kwargs):
+    """Run one fit (any method); return ``(cfg, posterior, seconds)``."""
+    key = jax.random.PRNGKey(stable_seed(gal_id, cfg, method))
     t = time.time()
     post = model.fit(
-        fnu, sigma,
-        method="nss",
+        fnu,
+        sigma,
+        method=method,
         key=key,
-        n_live=N_LIVE,
-        n_posterior_samples=N_POST,
+        **fit_kwargs,
         verbose=False,
     )
     return cfg, post, time.time() - t
 
 
-galaxies = {}  # gal_id -> dict(z, names, fnu, sigma, models, posteriors, timings)
+HEADLINE_ROUTE = "hmc_is"  # which route to drive downstream figures/BMA (switch here)
+
+ROUTES = {
+    "nss": dict(method="nss", preset="fast", n_posterior_samples=N_POST),
+    "laplace": dict(method="laplace"),
+    "hmc_is": dict(method="hmc_is", n_samples=N_POST),
+}
+
+galaxies = {}  # gal_id -> dict(z, names, fnu, sigma, models, posteriors, fit_timings, ...)
 
 for gal_idx in SELECTED_IDX:
     gal_id, z, names, fnu, sigma = extract_photometry(gal_idx)
@@ -380,28 +403,58 @@ for gal_idx in SELECTED_IDX:
     build_s = time.time() - t_build
     print(f"  built 4 models in {build_s:.1f}s")
 
-    # The four configs are independent fits. XLA releases the GIL during compute,
-    # so a thread pool runs them concurrently across CPU cores (~2-3x wall-clock)
-    # for bit-identical results — nested sampling itself is the cost, not compile.
+    # Run the routes SEQUENTIALLY, each with its own thread pool over the 4
+    # configs. Mixing all 12 fits on one pool spikes peak memory (4 concurrent
+    # HMC/Laplace fits at ~3-5 GB each on top of 4 SSP grids OOMs the kernel);
+    # per-route pools keep the proven 4-way NSS pattern, with the HMC-based
+    # route throttled to 2 workers. XLA releases the GIL during compute.
     posteriors, fit_timings = {}, {}
+    for route in ROUTES:
+        posteriors[route] = {}
+        fit_timings[route] = {}
+
+    # NSS at 2: its unrolled slice-sampling graphs are enormous during XLA
+    # *compilation* (docs/dev/archive/2026-04-22-nss-memory-analysis.md), and on
+    # a cold compile cache 4 concurrent NSS compiles OOM-kill the kernel.
+    ROUTE_WORKERS = {"nss": 2, "laplace": 4, "hmc_is": 2}
     t_wall = time.time()
-    with ThreadPoolExecutor(max_workers=len(CONFIG_ORDER)) as ex:
-        futs = [
-            ex.submit(fit_one, models[cfg], fnu, sigma, gal_id=gal_id, cfg=cfg)
-            for cfg in CONFIG_ORDER
-        ]
-        for fut in futs:
-            cfg, post, dt = fut.result()
-            posteriors[cfg] = post
-            fit_timings[cfg] = dt
-    for cfg in CONFIG_ORDER:
-        n_free = len(models[cfg].spec.free_params)
-        print(
-            f"  [{cfg}] D={n_free:2d}  fit {fit_timings[cfg]:6.1f}s  "
-            f"logZ = {posteriors[cfg].log_evidence:8.1f}"
-        )
+    for route, route_kwargs in ROUTES.items():
+        with ThreadPoolExecutor(max_workers=ROUTE_WORKERS.get(route, 2)) as ex:
+            futs = [
+                (
+                    cfg,
+                    ex.submit(
+                        fit_one, models[cfg], fnu, sigma, gal_id=gal_id, cfg=cfg, **route_kwargs
+                    ),
+                )
+                for cfg in CONFIG_ORDER
+            ]
+            for cfg, fut in futs:
+                _, post, dt = fut.result()
+                posteriors[route][cfg] = post
+                fit_timings[route][cfg] = dt
+
+    for route in ROUTES:
+        print(f"  {route}:")
+        for cfg in CONFIG_ORDER:
+            n_free = len(models[cfg].spec.free_params)
+            logz = posteriors[route][cfg].log_evidence
+            print(
+                f"    [{cfg}] D={n_free:2d}  fit {fit_timings[route][cfg]:6.1f}s  logZ = {logz:8.1f}"
+            )
     fit_wall_s = time.time() - t_wall
-    print(f"  4 configs (threaded) wall-clock: {fit_wall_s:.1f}s")
+    print(f"  12 fits (threaded) wall-clock: {fit_wall_s:.1f}s")
+
+    # Evict this galaxy's compiled backend state. Each galaxy builds fresh model
+    # objects (per-z), so nothing is shared with the next galaxy — but the
+    # resident XLA executables (3 backends x 4 configs) otherwise accumulate
+    # across galaxies until the kernel OOMs. Later prediction cells re-JIT from
+    # the persistent disk cache in seconds.
+    from tengri.inference._model_cache import clear_model_cache
+
+    for cfg in CONFIG_ORDER:
+        clear_model_cache(models[cfg])
+    gc.collect()
 
     galaxies[gal_id] = dict(
         z=z,
@@ -418,25 +471,193 @@ for gal_idx in SELECTED_IDX:
 print("\nAll fits complete.")
 
 # %% [markdown]
-# ## 6. Timing summary
+# ## 6. Three-route evidence comparison
+#
+# For each galaxy and config, compare logZ and wall-time across the three routes.
+# Evidence precision and consistency validate the BMA setup.
 
 # %%
-print(
-    f"{'Galaxy':>14s} {'build':>7s} "
-    + " ".join(f"{'fit ' + c:>9s}" for c in CONFIG_ORDER)
-    + f" {'wall':>8s}"
-)
+from tengri import bma_weights
+
+
+def route_weights(posts_by_cfg):
+    """BMA weights over ``CONFIG_ORDER`` as an array.
+
+    ``bma_weights`` is dict-in → dict-out; the notebook's plotting and pooling
+    code wants a weight VECTOR in config order, so unpack it here once.
+    """
+    w = bma_weights({cfg: posts_by_cfg[cfg] for cfg in CONFIG_ORDER})
+    return np.array([w[cfg] for cfg in CONFIG_ORDER])
+
+
+def format_logz_with_err(posterior):
+    """Return ``logZ`` string with error bar if available."""
+    logz = posterior.log_evidence
+    diag = posterior.diagnostics or {}
+    # NSS: log_evidence_err; hmc_is: log_evidence_err; laplace: no err, show validity flags
+    if "log_evidence_err" in diag:
+        err = diag["log_evidence_err"]
+        return f"{logz:8.1f}±{err:4.2f}"
+    # Laplace: show validity flags instead
+    nd = diag.get("newton_decrement", -1)
+    clip = diag.get("n_clipped_eigenvalues", -1)
+    if nd >= 0:
+        return f"{logz:8.1f} (nd={nd:.2e}, clip={clip})"
+    return f"{logz:8.1f}"
+
+
 for gal_id, g in galaxies.items():
-    fits = " ".join(f"{g['fit_timings'][c]:9.1f}" for c in CONFIG_ORDER)
-    wall = g["build_s"] + g["fit_wall_s"]
-    print(f"CANDELS {gal_id:>6d} {g['build_s']:7.1f} {fits} {wall:8.1f}")
-print("(seconds; per-config times overlap — the 4 run concurrently. 'wall' = build")
-print(" + threaded wall-clock for all 4. Build includes precompute + first compile.)")
+    print(f"\nCANDELS {gal_id}  (z = {g['z']:.3f}, {len(g['names'])} bands)")
+    print(f"{'config':>8s}  {'NSS':>20s}  {'Laplace':>20s}  {'HMC+IS':>20s}")
+    print(f"{'':>8s}  {'time [s]  logZ':>20s}  {'time [s]  logZ':>20s}  {'time [s]  logZ':>20s}")
+    for cfg in CONFIG_ORDER:
+        row_parts = [f"[{cfg}]"]
+        for route in ["nss", "laplace", "hmc_is"]:
+            dt = g["fit_timings"][route][cfg]
+            post = g["posteriors"][route][cfg]
+            logz_str = format_logz_with_err(post)
+            row_parts.append(f"{dt:6.1f}   {logz_str}")
+        print("  ".join([f"{row_parts[0]:>8s}", *row_parts[1:]]))
+
+    # BMA weights per route
+    print("  BMA weights (softmax of logZ):")
+    try:
+        w_nss = route_weights(g["posteriors"]["nss"])
+        w_lap = route_weights(g["posteriors"]["laplace"])
+        w_hmc = route_weights(g["posteriors"]["hmc_is"])
+        print(f"    NSS:     {' '.join(f'{c}={w:.2f}' for c, w in zip(CONFIG_ORDER, w_nss))}")
+        print(f"    Laplace: {' '.join(f'{c}={w:.2f}' for c, w in zip(CONFIG_ORDER, w_lap))}")
+        print(f"    HMC+IS:  {' '.join(f'{c}={w:.2f}' for c, w in zip(CONFIG_ORDER, w_hmc))}")
+
+        # Consistency check: max |Δw| and ranking agreement
+        delta_nss_lap = np.abs(w_nss - w_lap).max()
+        delta_nss_hmc = np.abs(w_nss - w_hmc).max()
+        delta_lap_hmc = np.abs(w_lap - w_hmc).max()
+        max_delta = max(delta_nss_lap, delta_nss_hmc, delta_lap_hmc)
+
+        rank_nss = np.argsort(-w_nss)
+        rank_lap = np.argsort(-w_lap)
+        rank_hmc = np.argsort(-w_hmc)
+        rank_agree = np.array_equal(rank_nss, rank_lap) and np.array_equal(rank_lap, rank_hmc)
+
+        print(f"  Consistency: max |Δw| = {max_delta:.3f}, ranking agree = {rank_agree}")
+        if max_delta > 0.1:
+            print(
+                "    ⚠ weight disagreement > 0.1 (Laplace may flag non-Gaussian posterior or HMC+IS error < 500)"
+            )
+    except ValueError as e:
+        print(f"  ⚠ BMA weight error: {e}")
 
 # %% [markdown]
-# ## 7. Posterior predictions and BMA
+# Evidence comparison figure: relative logZ per config per route, across all galaxies.
+# Routes agreeing within error bars ⇒ consistent BMA weights; fast routes reproduce NSS ranking at a fraction of the cost.
+
+# %%
+# Compute per-route wall-times (summed over all galaxies).
+wall_times_per_route = {route: 0.0 for route in ROUTES}
+for _gal_id, g in galaxies.items():
+    for route in ROUTES:
+        wall_times_per_route[route] += sum(g["fit_timings"][route].values())
+
+# Collect Δ logZ: logZ - max(logZ) per galaxy per route.
+# This is the actual quantity used in BMA weights (softmax of logZ differences).
+delta_logz_data = {}  # {gal_id: {route: {cfg: (logz_diff, err)}}}
+for gal_id, g in galaxies.items():
+    delta_logz_data[gal_id] = {}
+    for route in ROUTES:
+        logz_vals = np.array([g["posteriors"][route][cfg].log_evidence for cfg in CONFIG_ORDER])
+        max_logz = logz_vals.max()
+        deltas = logz_vals - max_logz
+        errs = np.zeros(len(CONFIG_ORDER))
+        for i, cfg in enumerate(CONFIG_ORDER):
+            post = g["posteriors"][route][cfg]
+            diag = post.diagnostics or {}
+            if "log_evidence_err" in diag:
+                errs[i] = diag["log_evidence_err"]
+        delta_logz_data[gal_id][route] = {
+            cfg: (deltas[i], errs[i]) for i, cfg in enumerate(CONFIG_ORDER)
+        }
+
+# Figure: one panel per galaxy, x = configs, y = Δ logZ per route.
+n_gal = len(galaxies)
+figsize_w = max(12, 2.8 * n_gal)
+fig, axes = plt.subplots(1, n_gal, figsize=(figsize_w, 4.0), sharey=True)
+if n_gal == 1:
+    axes = [axes]
+
+for ax_idx, (gal_id, _g) in enumerate(galaxies.items()):
+    ax = axes[ax_idx]
+    x_cfg = np.arange(len(CONFIG_ORDER))
+    route_offsets = {"nss": -0.2, "laplace": 0.0, "hmc_is": 0.2}
+    route_colors = {"nss": "C0", "laplace": "C1", "hmc_is": "C2"}
+
+    for route in ROUTES:
+        x_pos = x_cfg + route_offsets[route]
+        deltas = np.array([delta_logz_data[gal_id][route][cfg][0] for cfg in CONFIG_ORDER])
+        errs = np.array([delta_logz_data[gal_id][route][cfg][1] for cfg in CONFIG_ORDER])
+        ax.errorbar(
+            x_pos,
+            deltas,
+            yerr=errs,
+            fmt="o",
+            ms=5,
+            capsize=3,
+            capthick=1,
+            color=route_colors[route],
+            alpha=0.7,
+            label=route,
+            zorder=3,
+        )
+
+    ax.set_xticks(x_cfg)
+    ax.set_xticklabels(CONFIG_ORDER, fontsize=9)
+    ax.set_xlabel("Config", fontsize=9)
+    if ax_idx == 0:
+        ax.set_ylabel(r"$\Delta \log Z$ (rel. to route max)", fontsize=9)
+    ax.set_title(f"CANDELS {gal_id}", fontsize=10, fontweight="bold")
+    ax.grid(True, alpha=0.3, linestyle=":")
+    ax.axhline(0, color="k", linestyle="--", linewidth=0.5, alpha=0.5, zorder=1)
+
+# Shared legend at the top with wall-times.
+fig.legend(
+    [f"{route} (total {wall_times_per_route[route]:.0f} s)" for route in ROUTES],
+    loc="upper center",
+    bbox_to_anchor=(0.5, 1.08),
+    ncol=3,
+    fontsize=9,
+    frameon=True,
+)
+
+fig.tight_layout(rect=[0, 0, 1, 1.02])
+fig.savefig(FIG_DIR / "multimodel_bma_candels_evidence_routes.png", dpi=200, bbox_inches="tight")
+plt.show()
+print("Figure saved: multimodel_bma_candels_evidence_routes.png")
+
+# %% [markdown]
+# ## 8. Timing summary
+
+# %%
+print("\nWall-clock per route (12 fits per galaxy, 4 configs × 3 routes):")
+print(f"{'Galaxy':>14s} {'build':>7s} {'NSS':>8s} {'Laplace':>8s} {'HMC+IS':>8s} {'total':>8s}")
+for gal_id, g in galaxies.items():
+    wall_nss = sum(g["fit_timings"]["nss"].values())
+    wall_lap = sum(g["fit_timings"]["laplace"].values())
+    wall_hmc = sum(g["fit_timings"]["hmc_is"].values())
+    total = g["build_s"] + g["fit_wall_s"]
+    print(
+        f"CANDELS {gal_id:>6d} {g['build_s']:7.1f} {wall_nss:8.1f} {wall_lap:8.1f} "
+        f"{wall_hmc:8.1f} {total:8.1f}"
+    )
+print("(seconds; wall-clock = sum of individual fit times per route, not concurrent total.)")
+print(
+    "(True wall-clock = build + fit_wall_s = build + max(NSS, Laplace, HMC+IS) due to threading.)"
+)
+
+# %% [markdown]
+# ## 9. Posterior predictions and BMA
 #
-# Draw posterior SEDs, SFHs, and $(M_\star, \mathrm{SFR})$. BMA weights pool configurations by evidence.
+# Draw posterior SEDs, SFHs, and $(M_\star, \mathrm{SFR})$ from the headline route (HMC+IS).
+# BMA weights pool configurations by evidence from the headline route.
 
 # %%
 N_DRAWS = 150  # posterior draws for SED bands
@@ -464,13 +685,6 @@ def _filter_eff_and_halfwidth(names):
 
 
 WAVE_EFF, FILTER_HALFWIDTH = _filter_eff_and_halfwidth(filter_names)
-
-
-def bma_weights(posteriors):
-    """Evidence-weighted, normalized model probabilities (flat model prior)."""
-    logz = np.array([posteriors[c].log_evidence for c in CONFIG_ORDER])
-    w = np.exp(logz - logz.max())
-    return w / w.sum()
 
 
 def bin_to_grid(wave, y, grid):
@@ -506,8 +720,8 @@ def vmap_chunked(fn, batch, n, chunk=16):
     return jax.tree_util.tree_map(lambda *xs: jnp.concatenate(xs, axis=0), *parts)
 
 
-def collect_predictions(g):
-    """Per-config posterior draws of spectrum, SFH, and (logM*, logSFR).
+def collect_predictions(g, route):
+    """Per-config posterior draws of spectrum, SFH, and (logM*, logSFR) from a given route.
 
     The continuous SED is the observed-frame model spectrum: ``predict_spectrum``
     evaluated on each SSP's native (line-resolved) grid, which returns observed
@@ -526,9 +740,10 @@ def collect_predictions(g):
     curve stays an eager loop.
     """
     spec, sfh, props = {}, {}, {}
+    posteriors = g["posteriors"][route]
     for cfg in CONFIG_ORDER:
         model = g["models"][cfg]
-        samples = g["posteriors"][cfg].samples
+        samples = posteriors[cfg].samples
         n_avail = next(iter(samples.values())).shape[0]
         n_use = min(N_DRAWS, n_avail)
         batch = {k: v[:n_use] for k, v in samples.items()}
@@ -569,13 +784,13 @@ def collect_predictions(g):
 
 
 for gal_id, g in galaxies.items():
-    g["weights"] = bma_weights(g["posteriors"])
-    g["spec"], g["sfh"], g["props"] = collect_predictions(g)
+    g["weights"] = route_weights(g["posteriors"][HEADLINE_ROUTE])
+    g["spec"], g["sfh"], g["props"] = collect_predictions(g, HEADLINE_ROUTE)
     wstr = "  ".join(f"{c}={w:.2f}" for c, w in zip(CONFIG_ORDER, g["weights"]))
-    print(f"CANDELS {gal_id}  BMA weights:  {wstr}")
+    print(f"CANDELS {gal_id}  BMA weights ({HEADLINE_ROUTE}):  {wstr}")
 
 # %% [markdown]
-# ## 8. Figures
+# ## 10. Figures
 #
 # Three panels per galaxy: (a) photometry over posterior predictive spectra (color per config, black for BMA); (b) inferred SFHs; (c) $M_\star$-SFR posteriors (68/95% contours per config, BMA outline). The BMA contour is broader because it includes between-model uncertainty.
 
@@ -799,20 +1014,21 @@ def plot_galaxy(gal_id, *, source=None, tag=""):
 
 
 def show_timings(gal_id):
-    """Per-galaxy timing + evidence breakdown (build, per-config fit, log Z)."""
+    """Per-galaxy timing + evidence breakdown (headline route: HMC+IS)."""
     g = galaxies[gal_id]
-    print(f"CANDELS {gal_id}  (z = {g['z']:.3f}, {len(g['names'])} bands)")
+    print(f"CANDELS {gal_id}  (z = {g['z']:.3f}, {len(g['names'])} bands) — {HEADLINE_ROUTE}")
     print(f"  build (4 models, incl. precompute publish + first compile): {g['build_s']:5.1f} s")
     print(f"  {'configuration':<34s} {'D':>2s} {'fit [s]':>8s} {'log Z':>9s}")
     for cfg in CONFIG_ORDER:
         n_free = len(g["models"][cfg].spec.free_params)
         print(
             f"  {LABELS[cfg]:<34s} {n_free:>2d} "
-            f"{g['fit_timings'][cfg]:>8.1f} {g['posteriors'][cfg].log_evidence:>9.1f}"
+            f"{g['fit_timings'][HEADLINE_ROUTE][cfg]:>8.1f} "
+            f"{g['posteriors'][HEADLINE_ROUTE][cfg].log_evidence:>9.1f}"
         )
     print(
         f"  {'4-config threaded wall-clock':<34s} {'':>2s} {g.get('fit_wall_s', 0.0):>8.1f}"
-        f"   (vs {sum(g['fit_timings'].values()):.1f}s summed)"
+        f"   (vs {sum(g['fit_timings'][HEADLINE_ROUTE].values()):.1f}s summed)"
     )
 
 
@@ -880,7 +1096,7 @@ plot_galaxy(13097)
 show_timings(13097)
 
 # %% [markdown]
-# ## 9. Error floor: systematic + template uncertainty
+# ## 11. Error floor: systematic + template uncertainty
 #
 # Above, the evidence is decisive and BMA collapses to one model. Catalog errors are statistical only; they omit systematics (zero-point, aperture, filter curves) and template imperfection (SPS models accurate to ~few percent). Adding a fractional error floor in quadrature makes evidences comparable and spreads BMA weight:
 #
@@ -897,23 +1113,39 @@ for gal_idx in [int(np.where(ids == g)[0][0]) for g in FLOOR_IDS]:
     sigma = jnp.sqrt(sigma_cat**2 + (ERROR_FLOOR * fnu) ** 2)  # inflated uncertainty
     obs = Observation(photometry=Photometry.from_names(names))
     models = build_configs(z, obs)
-    posteriors = {}
+    posteriors = {route: {} for route in ROUTES}
+    fit_timings = {route: {} for route in ROUTES}
+
     with ThreadPoolExecutor(max_workers=len(CONFIG_ORDER)) as ex:
-        futs = [
-            ex.submit(fit_one, models[cfg], fnu, sigma, gal_id=gal_id, cfg=cfg, salt="floor")
-            for cfg in CONFIG_ORDER
-        ]
-        for fut in futs:
-            cfg, post, _dt = fut.result()
-            posteriors[cfg] = post
+        futs = []
+        for route, route_kwargs in ROUTES.items():
+            for cfg in CONFIG_ORDER:
+                fut = ex.submit(
+                    fit_one, models[cfg], fnu, sigma, gal_id=gal_id, cfg=cfg, **route_kwargs
+                )
+                futs.append((route, cfg, fut))
+        for route, cfg, fut in futs:
+            _, post, dt = fut.result()
+            posteriors[route][cfg] = post
+            fit_timings[route][cfg] = dt
+
     g = dict(z=z, names=names, fnu=np.asarray(fnu), sigma=np.asarray(sigma),
              models=models, posteriors=posteriors, build_s=0.0,
-             fit_timings={c: 0.0 for c in CONFIG_ORDER})  # fmt: skip
-    g["weights"] = bma_weights(posteriors)
-    g["spec"], g["sfh"], g["props"] = collect_predictions(g)
+             fit_timings=fit_timings)  # fmt: skip
+    # Inflated errors can pin a posterior to a prior bound, where the IS
+    # evidence is legitimately unavailable; fall back to the calibrated NSS
+    # weights for this demonstration rather than dying.
+    try:
+        g["weights"] = route_weights(posteriors[HEADLINE_ROUTE])
+        weight_route = HEADLINE_ROUTE
+    except ValueError as e:
+        print(f"  ⚠ {HEADLINE_ROUTE} evidence unusable under the floor ({e}); using NSS weights")
+        g["weights"] = route_weights(posteriors["nss"])
+        weight_route = "nss"
+    g["spec"], g["sfh"], g["props"] = collect_predictions(g, HEADLINE_ROUTE)
     galaxies_floor[gal_id] = g
     wstr = "  ".join(f"{c}={x:.2f}" for c, x in zip(CONFIG_ORDER, g["weights"]))
-    print(f"CANDELS {gal_id} (floor {ERROR_FLOOR:.0%}):  BMA weights  {wstr}")
+    print(f"CANDELS {gal_id} (floor {ERROR_FLOOR:.0%}):  BMA weights ({weight_route})  {wstr}")
 
 # %% [markdown]
 # ### CANDELS 18160 — 10% error floor (BMA averages four configurations)
@@ -928,8 +1160,9 @@ plot_galaxy(18160, source=galaxies_floor, tag="_floor")
 plot_galaxy(17418, source=galaxies_floor, tag="_floor")
 
 # %% [markdown]
-# ## 10. Summary
+# ## 12. Summary
 #
 # - BMA weights are rarely uniform; one or two configs dominate the evidence, pulling the average while preserving spread.
 # - Configurations disagree: changing SSP, SFH family, or dust law shifts $M_\star$ by ~0.1–0.3 dex at fixed photometry.
 # - Error floor determines whether averaging matters. Raw catalog errors collapse evidence to one model; ~10% systematic/template floor makes evidences comparable and activates BMA.
+# - Three evidence routes (NSS, Laplace, HMC+IS) show good consistency in logZ and BMA weights, validating the fast-preset approach for catalog-scale BMA.

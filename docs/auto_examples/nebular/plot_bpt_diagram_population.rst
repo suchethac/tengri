@@ -43,21 +43,8 @@ Allen et al. 2008, ApJS, 178, 20 (MAPPINGS V shocks).
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /tengri/examples/nebular/plot_bpt_diagram_population.py:264: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
-      fig.tight_layout()
-    /tengri/examples/nebular/plot_bpt_diagram_population.py:265: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
-      plt.savefig("plot_bpt_diagram_population.png", dpi=150, bbox_inches="tight")
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -73,8 +60,8 @@ Allen et al. 2008, ApJS, 178, 20 (MAPPINGS V shocks).
     import numpy as np
 
     import tengri
-    from tengri.analysis.plotting import setup_style
     from tengri.nebular import shock_line_ratios
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -314,7 +301,7 @@ Allen et al. 2008, ApJS, 178, 20 (MAPPINGS V shocks).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 55.215 seconds)
+   **Total running time of the script:** (0 minutes 27.489 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_bpt_diagram_population.py:

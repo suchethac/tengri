@@ -65,7 +65,7 @@ References
 
     import tengri
     from tengri.agn import register_agn_block
-    from tengri.analysis.plotting import setup_style
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -172,6 +172,11 @@ References
     ax.legend(frameon=False, fontsize=9, loc="lower center")
     fig.tight_layout()
     plt.savefig("plot_custom_torus_extension.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 11.645 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_custom_torus_extension.py:

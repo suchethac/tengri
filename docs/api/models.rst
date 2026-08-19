@@ -183,6 +183,8 @@ Mean IGM attenuation blueward of Lyman-alpha.
 
 .. autofunction:: tengri.igm_transmission_madau
 
+.. autofunction:: tengri.igm_transmission_meiksin06
+
 Stellar Population Synthesis
 ----------------------------
 

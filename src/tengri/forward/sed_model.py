@@ -970,6 +970,72 @@ def _validate_fracagn_requires_dust(spec) -> None:
         )
 
 
+def _validate_dale2014_requires_no_sf_radio(spec) -> None:
+    """Raise if dale2014 dust emission is combined with SF radio (#1970).
+
+    The Dale+2014 dust emission template (component name 'dale2014') embeds a
+    star-forming radio synchrotron continuum rising to 2.2459e9 Å (1.335 GHz).
+    The stripped variant 'dale2014_cigale' removes the radio tail beyond
+    7.727e7 Å per CIGALE convention.
+
+    When dale2014 is paired with an active SF radio block (radio enabled and
+    radio_sfr_mode != 'none'), the synchrotron is double-counted in rest_sed
+    between ~1.34 and ~10 GHz (3–22 cm), and the composed SED steps down ~2x at
+    the 1.335 GHz template edge (measured slope −4.93 vs. +0.77 expected).
+
+    This is a build-time safety gate: dale2014 is only safe when combined with
+    AGN-only radio (radio_sfr_mode='none') or when radio is disabled entirely.
+    The remedy: switch to dale2014_cigale, which composes correctly with SF radio.
+
+    Deliberately NOT guarded: the radio component's free-free term (emitted only
+    when a nebular component publishes ``log_nion``; no grammar knob controls it)
+    overlaps the template's embedded thermal radio at the <~10% level near
+    1.4 GHz. Refusing it would block dale2014 + AGN radio + nebular with no
+    grammar-reachable remedy, so that overlap is documented on both Dale
+    components instead of guarded here.
+
+    Raises
+    ------
+    ConfigError
+        If dust.emission == 'dale2014' AND radio is active with SF synchrotron
+        enabled (radio=True and radio_sfr_mode != 'none').
+
+    See Also
+    --------
+    #1970 : Dale2014 embedded SF radio double-counted when combined with radio block.
+    """
+    from tengri.config.exceptions import ConfigError
+
+    # Check if dust emission is dale2014 (the radio-bearing variant)
+    if getattr(spec, "dust_emission", None) != "dale2014":
+        return  # Not dale2014, no guard needed
+
+    # Check if radio is enabled
+    if not getattr(spec, "radio", False):
+        return  # Radio disabled, no conflict
+
+    # Check if SF synchrotron is active (radio_sfr_mode != 'none')
+    # The default for radio_sfr_mode is 'bell2003', so if it exists and is not
+    # 'none', we have an active SF radio component
+    radio_sfr_mode = getattr(spec, "radio_sfr_mode", "bell2003")
+    if radio_sfr_mode == "none":
+        return  # SF synchrotron is disabled (AGN-only), no conflict
+
+    # Both conditions met: dale2014 + active SF radio = double-count
+    raise ConfigError(
+        "The Dale+2014 dust emission template (dust.emission='dale2014') "
+        "embeds its own star-forming radio synchrotron continuum to 1.335 GHz. "
+        "Combining it with an active SF radio block (radio.sf.type != 'none') "
+        "causes double-counting of the radio continuum (~2x in rest_sed "
+        "between ~1.34 and ~10 GHz). "
+        "Fix: use dust.emission='dale2014_cigale' instead, which has the radio "
+        "tail stripped per CIGALE convention and composes correctly with the "
+        "radio component. Alternatively, disable SF synchrotron with "
+        "radio={'sf': {'type': 'none'}} if you only want AGN radio. "
+        "See issue #1970."
+    )
+
+
 def _state_has_content(state) -> bool:
     """Report whether a component state carries anything beyond its name.
 
@@ -4074,6 +4140,17 @@ class SEDModel:
         # differing only in ``age_kernel`` share a compiled kernel and the
         # second silently returns the first's photometry.
         age_kernel = str(getattr(self.spec, "age_kernel", None) or "auto")
+        # Non-parametric SFH bin edges (#1975). Exactly the ``age_kernel``
+        # hazard: custom edges change the age weights on the SAME graph shape,
+        # so without this entry two models differing only in their bin layout
+        # share a compiled kernel and the second silently returns the first's
+        # photometry. Hashed by value; "default" is the model's own ladder.
+        _bin_edges = getattr(self.spec, "bin_edges_gyr", None)
+        sfh_bin_edges = (
+            "default"
+            if _bin_edges is None
+            else hash(tuple(map(float, np.asarray(_bin_edges).ravel())))
+        )
         # GP-field parameterization (#1355). Same hazard as ``age_kernel``: a
         # different ``centering`` changes the xi -> SFH map without changing the
         # graph shape, so without this entry two models differing only in
@@ -4352,6 +4429,7 @@ class SEDModel:
             stochastic,
             n_grid,
             age_kernel,
+            sfh_bin_edges,
             field_centering,
             alpha_fe_evolving,
             z_fixed,
@@ -8068,6 +8146,7 @@ class SEDModel:
             n_grid=int(getattr(self.spec, "n_grid", 256)),
             lgmet_scatter=float(getattr(self, "_lgmet_scatter", 0.2)),
             age_kernel=getattr(self.spec, "age_kernel", None),
+            sfh_bin_edges_gyr=getattr(self.spec, "bin_edges_gyr", None),
             field_centering=float(getattr(self.spec, "field_centering", 1.0)),
             nebular_backend=neb_backend_name,
             nebular_backend_instance=neb_backend_instance,
@@ -8665,6 +8744,7 @@ class SEDModel:
 
         spec = parse_groups(**groups)
         _validate_fracagn_requires_dust(spec)
+        _validate_dale2014_requires_no_sf_radio(spec)
         _warn_agn_dust_double_count(spec)
         _warn_dead_gradient_params(spec)
         return cls(

@@ -326,6 +326,22 @@ Used for X-ray SED grids:
     nu_hz = energy_keV * KEV_TO_HZ
 """
 
+HC_KEV_ANGSTROM: float = 12.39841984
+"""Planck constant × speed of light in keV·Å (for X-ray wavelength conversions).
+
+Derivation: hc [erg·cm] = 6.62607015e-27 [erg s] × 2.99792458e10 [cm/s]
+                        = 1.98644568e-16 erg·cm
+            hc [keV·Å] = 1.98644568e-16 [erg·cm] × (1e8 Å/cm)
+                        / 1.6022e-9 [erg/keV]
+                        = 12.39841984 keV·Å
+
+Used for X-ray energy ↔ wavelength conversions:
+    lambda [Å] = HC_KEV_ANGSTROM / E_keV
+    E [keV] = HC_KEV_ANGSTROM / lambda [Å]
+
+Standard constant in X-ray astronomy (sometimes cited as ~12.398).
+"""
+
 V_BAND_ANGSTROM: float = 5500.0
 """V-band central wavelength [Å].
 

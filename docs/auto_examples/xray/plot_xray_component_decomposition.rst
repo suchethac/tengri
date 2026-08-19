@@ -57,7 +57,7 @@ log-luminosity offset to −∞ (the ``det_hmxb`` / ``det_lmxb`` knobs).
     import numpy as np
     from matplotlib import pyplot as plt
 
-    from tengri.analysis.plotting import setup_style
+    from tengri.plot import setup_style
     from tengri.xray import xray_agn_corona, xray_hotgas, xray_xrb
 
     setup_style()
@@ -134,6 +134,11 @@ log-luminosity offset to −∞ (the ``det_hmxb`` / ``det_lmxb`` knobs).
     ax.legend(frameon=True, fontsize=10, loc="lower right", title="component")
     fig.tight_layout()
     plt.savefig("plot_xray_component_decomposition.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 3.966 seconds)
 
 
 .. _sphx_glr_download_auto_examples_xray_plot_xray_component_decomposition.py:
