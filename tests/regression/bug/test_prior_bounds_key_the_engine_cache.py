@@ -175,7 +175,7 @@ def test_prior_only_siblings_do_not_share_a_signal_response(ssp, obs):
     interval, so assert the two never receive the same object.
 
     Deterministic and fit-free: unlike an end-to-end value comparison, this
-    cannot go vacuous when the optimiser happens to land on the same latent.
+    cannot go vacuous when the optimizer happens to land on the same latent.
     """
     clear_shared_caches()
 
