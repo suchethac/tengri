@@ -59,7 +59,7 @@ Steidel et al. 1996, ApJL, 462, L17 (Lyman-break selection at z ~ 3).
     import numpy as np
 
     import tengri
-    from tengri.analysis.plotting import setup_style
+    from tengri.plot import setup_style
     from tengri.units import fnu_to_ab_mag
 
     setup_style()
@@ -235,7 +235,7 @@ Steidel et al. 1996, ApJL, 462, L17 (Lyman-break selection at z ~ 3).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.862 seconds)
+   **Total running time of the script:** (0 minutes 3.743 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_dropout_selection_z3.py:

@@ -106,3 +106,10 @@ __all__ = [
     "vacuum_to_air",
     "vega_to_ab",
 ]
+
+# Physical constants re-exported from their canonical sources.
+# These are imported at the end to avoid circular import issues.
+from tengri.parameters.translate import LOG10_ZSUN
+from tengri.utils.physics_constants import C_AA
+
+__all__ += ["C_AA", "LOG10_ZSUN"]

@@ -124,9 +124,8 @@ sphinx_gallery_conf = {
     "filename_pattern": (
         rf"(?:{_only_alt})\.py$" if _only_alt else rf"^(?!.*(?:{_skip_alt})).*plot_[^/]+\.py$"
     ),
-    # No ignore_pattern: the gallery carries no heavy NUTS/VI/population
-    # scripts anymore (2026-07 overhaul removed them — every remaining fit
-    # example is MAP or native-VI and renders in seconds). If a future
+    # No ignore_pattern: the gallery is forward-model only (2026-07 overhaul
+    # removed inference/fit scripts). All examples render quickly. If a future
     # example is too heavy to build, delete or lighten it rather than
     # hiding it here: hidden scripts bit-rot invisibly because CI never
     # executes the gallery.
@@ -189,12 +188,11 @@ sphinx_gallery_conf = {
 # move the toctree to the top of the file (right after the page title)
 # so it's not a child of any heading, and reorder the entries
 # pedagogically (onboarding → physics building blocks → observation
-# layer → inference → applications) rather than alphabetical.
+# layer → applications) rather than alphabetical.
 _GALLERY_SECTION_ORDER = (
     # Onboarding: where every astronomer should start.
     "quickstart",
     "recipes",
-    "workflows",
     # The stellar engine: what produces the continuum.
     "sps",
     "sfh",
@@ -217,9 +215,7 @@ _GALLERY_SECTION_ORDER = (
     # Observation layer: how the SED couples to instruments.
     "photometry",
     "spectroscopy",
-    "multiwavelength",
-    # Inference and science applications.
-    "inference",
+    # Science applications.
     "usecases",
     "advanced",
     # Headline end-to-end demonstrations.

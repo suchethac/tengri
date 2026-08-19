@@ -80,3 +80,14 @@ ParameterRecord
 .. autoclass:: tengri.ParameterRecord
    :members:
    :show-inheritance:
+
+Physical Constants
+------------------
+
+Fundamental physical constants in CGS units.
+
+.. autodata:: tengri.units.C_AA
+   :no-value:
+
+.. autodata:: tengri.units.LOG10_ZSUN
+   :no-value:

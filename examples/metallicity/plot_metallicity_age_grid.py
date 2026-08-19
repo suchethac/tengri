@@ -22,10 +22,11 @@ import warnings
 import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
 import numpy as np
 
 import tengri
-from tengri.analysis.plotting import setup_style
+from tengri.plot import setup_style
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -73,6 +74,12 @@ for i, age_gyr in enumerate(age_gyr_grid):
         mask = (wave_um > 0.3) & (wave_um < 2.0) & (sed_norm > 0)
         ax.loglog(wave_um[mask], sed_norm[mask], color=age_colors[i], lw=2.0)
         ax.set(xlim=(0.3, 2.0), ylim=(0.1, 10.0))
+
+        # Fix x-axis ticks to avoid label collision in loglog plot
+        ax.set_xticks([0.3, 0.5, 1.0, 2.0])
+        ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
+        ax.xaxis.set_minor_formatter(ticker.NullFormatter())
+
         ax.tick_params(labelsize=7)
 
         if j == 0:

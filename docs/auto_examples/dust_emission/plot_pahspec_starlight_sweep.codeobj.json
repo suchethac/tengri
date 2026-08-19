@@ -400,7 +400,7 @@
    "name": "ndarray"
   }
  ],
- "load_pahspec_or_raise": [
+ "load_pahspec_draine2021": [
   {
    "is_class": false,
    "is_explicit": false,
@@ -411,9 +411,9 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "tengri.components.dust.draine2021_pah",
-   "module_short": "tengri.components.dust.draine2021_pah",
-   "name": "load_pahspec_or_raise"
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "load_pahspec_draine2021"
   }
  ],
  "mpl.cm.ScalarMappable": [
@@ -665,8 +665,8 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "tengri.components.dust.draine2021_pah",
-   "module_short": "tengri.components.dust.draine2021_pah",
+   "module": "tengri",
+   "module_short": "tengri",
    "name": "select_pahspec_axes"
   }
  ],
@@ -681,8 +681,8 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "tengri.analysis.plotting",
-   "module_short": "tengri.analysis.plotting",
+   "module": "tengri.plot",
+   "module_short": "tengri",
    "name": "setup_style"
   }
  ],

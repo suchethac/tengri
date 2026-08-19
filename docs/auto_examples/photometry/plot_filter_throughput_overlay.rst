@@ -77,8 +77,8 @@ IGM attenuation.
 
     import tengri
     from tengri import load_filter
-    from tengri.analysis.plotting import setup_style
     from tengri.igm import igm_transmission
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -208,7 +208,7 @@ IGM attenuation.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.287 seconds)
+   **Total running time of the script:** (0 minutes 6.163 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_filter_throughput_overlay.py:

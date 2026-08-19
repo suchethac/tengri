@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:01.903** total execution time for 13 files **from auto_examples/spectroscopy**:
+**00:01.903** total execution time for 7 files **from auto_examples/spectroscopy**:
 
 .. container::
 
@@ -41,28 +41,10 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_spectroscopy_plot_d4000_hdelta_diagram.py` (``plot_d4000_hdelta_diagram.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_spectroscopy_plot_jwst_nirspec_high_z_spectrum.py` (``plot_jwst_nirspec_high_z_spectrum.py``)
-     - 00:00.000
-     - 0.0
    * - :ref:`sphx_glr_auto_examples_spectroscopy_plot_lae_spectrum_z6.py` (``plot_lae_spectrum_z6.py``)
      - 00:00.000
      - 0.0
-   * - :ref:`sphx_glr_auto_examples_spectroscopy_plot_nirspec_prism_vs_grating.py` (``plot_nirspec_prism_vs_grating.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_spectroscopy_plot_post_starburst_diagnostic.py` (``plot_post_starburst_diagnostic.py``)
-     - 00:00.000
-     - 0.0
    * - :ref:`sphx_glr_auto_examples_spectroscopy_plot_resolution_sweep.py` (``plot_resolution_sweep.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_spectroscopy_plot_sigma_v_absorption_broadening.py` (``plot_sigma_v_absorption_broadening.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_spectroscopy_plot_spectral_features.py` (``plot_spectral_features.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_spectroscopy_plot_spectrum_fit.py` (``plot_spectrum_fit.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_spectroscopy_plot_velocity_dispersion_sweep.py` (``plot_velocity_dispersion_sweep.py``)

@@ -34,21 +34,8 @@ Z☉ = 0.0190, PARSEC Z☉ = 0.0152, BASTI Z☉ = 0.0200.
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /tengri/examples/sps/plot_ssp_grid.py:150: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
-      fig.tight_layout()
-    /tengri/examples/sps/plot_ssp_grid.py:151: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
-      plt.savefig("plot_ssp_grid.png", dpi=150, bbox_inches="tight")
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -64,7 +51,7 @@ Z☉ = 0.0190, PARSEC Z☉ = 0.0152, BASTI Z☉ = 0.0200.
     import numpy as np
 
     import tengri
-    from tengri.analysis.plotting import setup_style
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")

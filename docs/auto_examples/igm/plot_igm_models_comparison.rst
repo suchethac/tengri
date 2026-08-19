@@ -21,19 +21,20 @@
 Comparison of IGM absorption models at high redshift
 ======================================================
 
-Four IGM transmission variants available in tengri are compared at z=7,
+Five IGM transmission variants available in tengri are compared at z=7,
 applied to a young star-forming SED. This diagnostic isolates the differences
 between models around the Lyman-alpha forest:
 
 - **No IGM** (intrinsic SED, reference)
 - **Madau (1995)**: foundational model with 17 Lyman lines + continuum
+- **Meiksin (2006)**: smooth Lyman-alpha forest continuum with LLS damping
 - **Inoue+2014**: modern prescription with 39 Lyman lines, LAF, and DLA
 - **Inoue+2014 + CGM damping wing (Asada+2025)**: Inoue extended with
   neutral-hydrogen damping wing in the circumgalactic medium at z > 5
 
 The key diagnostic at z=7 is the **Lyman-alpha forest** (blue-wing
-absorption shortward of Lyα at 1216 Å), where the blueward Inoue and
-Asada models are nearly identical in the rest-frame region shown.
+absorption shortward of Lyα at 1216 Å), where the Meiksin, Inoue, and
+Asada models show varying levels of attenuation blueward of Lyα.
 The CGM damping wing (Asada extension) primarily affects wavelengths
 redward of observed-frame Lyα (at 1216Å × 8 ≈ 9728 Å), which appears
 beyond the rest-frame window displayed here.
@@ -43,12 +44,13 @@ rest-frame), the Lyman forest dominates the observed transmission.
 
 References:
   .. [1] Madau, P. 1995, ApJ, 441, 18 — foundational IGM absorption model
-  .. [2] Inoue, A. K., Shimizu, I., Iwata, I., & Tanaka, M. 2014, MNRAS,
+  .. [2] Meiksin, A. 2006, MNRAS, 365, 807 — smooth forest continuum with LLS damping
+  .. [3] Inoue, A. K., Shimizu, I., Iwata, I., & Tanaka, M. 2014, MNRAS,
          442, 1805 — modern IGM prescription (Lyman-series + continuum)
-  .. [3] Asada, R., Ouchi, M., & collaborators 2025 — CGM damping wing
+  .. [4] Asada, R., Ouchi, M., & collaborators 2025 — CGM damping wing
          absorption at z > 5 (experimental extension to Inoue+2014)
 
-.. GENERATED FROM PYTHON SOURCE LINES 32-202
+.. GENERATED FROM PYTHON SOURCE LINES 34-218
 
 
 
@@ -58,19 +60,8 @@ References:
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /tengri/src/tengri/forward/orchestrator.py:951: SFHBeforeBigBangWarning: Star formation history forms 100% of its stellar mass before the Big Bang at z=7.00 (cosmic age 0.76 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
-      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -86,8 +77,8 @@ References:
     import numpy as np
 
     import tengri
-    from tengri import igm_transmission, igm_transmission_madau
-    from tengri.analysis.plotting import setup_style
+    from tengri import igm_transmission, igm_transmission_madau, igm_transmission_meiksin06
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -109,6 +100,7 @@ References:
         "type": "dpl",
         "all_params": tengri.FIXED,
         "tau_gyr": 0.1,
+        "age_gyr": 0.5,  # Bound to 0.5 Gyr to fit within cosmic age at z=7 (0.76 Gyr)
         "log_total_mass": 10.0,
         "alpha": 2.5,
         "beta": 1.5,
@@ -160,10 +152,13 @@ References:
     # (2) Madau (1995) model
     transmission_madau = np.asarray(igm_transmission_madau(wave_obs, z=Z_SOURCE))
 
-    # (3) Inoue+2014 (default) model
+    # (3) Meiksin (2006) model
+    transmission_meiksin = np.asarray(igm_transmission_meiksin06(wave_obs, z=Z_SOURCE))
+
+    # (4) Inoue+2014 (default) model
     transmission_inoue = np.asarray(igm_transmission(wave_obs, z_source=Z_SOURCE, add_cgm=False))
 
-    # (4) Inoue+2014 with CGM damping wing (Asada+2025 extension)
+    # (5) Inoue+2014 with CGM damping wing (Asada+2025 extension)
     transmission_asada = np.asarray(
         igm_transmission(wave_obs, z_source=Z_SOURCE, add_cgm=True, cgm_log_nhi=21.0)
     )
@@ -173,6 +168,7 @@ References:
     # Apply transmission to intrinsic SED (scaling in observed frame)
     sed_intrinsic_norm = sed_intrinsic / np.max(sed_intrinsic)
     sed_madau = sed_intrinsic_norm * transmission_madau
+    sed_meiksin = sed_intrinsic_norm * transmission_meiksin
     sed_inoue = sed_intrinsic_norm * transmission_inoue
     sed_asada = sed_intrinsic_norm * transmission_asada
 
@@ -200,9 +196,18 @@ References:
     )
     ax.plot(
         wave_rest,
+        sed_meiksin,
+        label="Meiksin (2006)",
+        color="C1",
+        lw=2.0,
+        alpha=0.8,
+        zorder=3,
+    )
+    ax.plot(
+        wave_rest,
         sed_inoue,
         label="Inoue+2014",
-        color="C1",
+        color="C2",
         lw=2.0,
         alpha=0.8,
         zorder=3,
@@ -211,7 +216,7 @@ References:
         wave_rest,
         sed_asada,
         label="Inoue+2014 + CGM damping wing",
-        color="C2",
+        color="C3",
         lw=2.0,
         alpha=0.8,
         zorder=2,
