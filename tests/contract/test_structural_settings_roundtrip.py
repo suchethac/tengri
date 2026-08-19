@@ -245,6 +245,8 @@ def test_every_structural_key_has_a_roundtrip_rule():
     # law_diff inherits from law_bc, the per-component overrides live in a
     # flattened dict, and two booleans are stored as a float cutoff. None is a
     # plain "attribute differs from default" comparison.
+    # AGN.atten 'law' key is similarly hand-written: it maps to the smc_prevot
+    # block type and is emitted back as law='prevot_smc' in to_groups().
     hand_written = {
         "law_bc",
         "law_diff",
@@ -252,6 +254,7 @@ def test_every_structural_key_has_a_roundtrip_rule():
         "lyman_cutoff",
         "lyc_absorb_all",
         "eb_include_lyc",
+        "law",  # agn.atten law key (for smc_prevot via law='prevot_smc')
     } | {
         f"{stem}_{comp}"
         for stem in ("slope", "bump_strength", "delta", "Rv")
@@ -268,7 +271,7 @@ def test_every_structural_key_has_a_roundtrip_rule():
             # is emitted by the per-group walk, not by a structural rule.
             if f"{group}.{key}" in _GROUP_STRUCTURAL_KEYS:
                 continue
-            if group == "dust" and key in hand_written:
+            if (group == "dust" or group == "agn.atten") and key in hand_written:
                 continue
             missing.append(f"{group}.{key}")
 

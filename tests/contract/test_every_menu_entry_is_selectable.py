@@ -147,11 +147,17 @@ def _cases() -> list[tuple[str, str, dict]]:
         m = re.search(r"agn=\{'(\w+)':", row.get("use", ""))
         if m is None:
             continue
+        # Special handling for atten/smc_prevot: use law key instead of type
+        axis = m.group(1)
+        if axis == "atten" and name == "smc_prevot":
+            sub_block_spec = {"law": "prevot_smc", "all_params": FIXED}
+        else:
+            sub_block_spec = {"type": name, "all_params": FIXED}
         out.append(
             (
-                f"agn.{m.group(1)}",
+                f"agn.{axis}",
                 name,
-                {"agn": {"type": "composable", m.group(1): {"type": name, "all_params": FIXED}}},
+                {"agn": {"type": "composable", axis: sub_block_spec}},
             )
         )
     return out

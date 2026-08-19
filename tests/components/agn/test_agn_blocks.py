@@ -519,6 +519,7 @@ def test_agn_attenuation_ebv_settable_via_sedbuild(synthetic_ssp_wide, synthetic
     Regression: agn_attenuation_ebv had no ParamDeclaration and no partition
     entry, so ``atten={'type': 'smc_prevot'}`` built a block pinned at
     E(B−V)=0 — a silent no-op. It now lowers via the agn.atten sub-block.
+    Updated to use law='prevot_smc' syntax (new form).
     """
     from tengri import FIXED, Fixed, SEDModel
 
@@ -526,7 +527,7 @@ def test_agn_attenuation_ebv_settable_via_sedbuild(synthetic_ssp_wide, synthetic
     ssp = synthetic_ssp_wide
 
     # Build two models: one with agn_attenuation_ebv=0.0, one with 0.5
-    # Use smc_prevot attenuation block; fix all parameters
+    # Use smc_prevot attenuation block via law='prevot_smc'; fix all parameters
     model_no_atten = SEDModel.build(
         ssp_data=ssp,
         observation=obs,
@@ -546,7 +547,7 @@ def test_agn_attenuation_ebv_settable_via_sedbuild(synthetic_ssp_wide, synthetic
             "torus": {"type": "none"},
             "nlr": {"type": "none"},
             "blr": {"type": "none"},
-            "atten": {"type": "smc_prevot", "agn_attenuation_ebv": Fixed(0.0), "*": FIXED},
+            "atten": {"law": "prevot_smc", "attenuation_ebv": Fixed(0.0), "*": FIXED},
             "agn_log_lbol": Fixed(11.0),
             "*": FIXED,
         },
@@ -571,7 +572,7 @@ def test_agn_attenuation_ebv_settable_via_sedbuild(synthetic_ssp_wide, synthetic
             "torus": {"type": "none"},
             "nlr": {"type": "none"},
             "blr": {"type": "none"},
-            "atten": {"type": "smc_prevot", "agn_attenuation_ebv": Fixed(0.5), "*": FIXED},
+            "atten": {"law": "prevot_smc", "attenuation_ebv": Fixed(0.5), "*": FIXED},
             "agn_log_lbol": Fixed(11.0),
             "*": FIXED,
         },

@@ -368,16 +368,38 @@ class TestAGNValidBlockTypes:
 
     @pytest.mark.parametrize(
         "block_type",
-        ["none", "smc_prevot", "polar_dust", "grahsp_biatten", "qsogen_smc"],
+        ["none", "polar_dust", "grahsp_biatten", "qsogen_smc", "qsogen"],
     )
     def test_valid_atten_types(self, block_type):
-        """All known attenuation block types accepted."""
+        """All known attenuation block types accepted via type key."""
         params = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
             agn={"atten": {"type": block_type, "*": FIXED}},
             redshift=Fixed(0.1),
         )
         assert params.agn_attenuation_block == block_type
+
+    def test_valid_atten_smc_prevot_via_law_key(self):
+        """smc_prevot is now selected via law='prevot_smc', not type key."""
+        params = parse_groups(
+            sfh={"type": "dpl", "*": FIXED},
+            agn={"atten": {"law": "prevot_smc", "*": FIXED}},
+            redshift=Fixed(0.1),
+        )
+        assert params.agn_attenuation_block == "smc_prevot"
+
+    def test_old_smc_prevot_type_key_raises(self):
+        """Old type='smc_prevot' spelling is rejected with helpful message."""
+        with pytest.raises(ValueError) as exc_info:
+            parse_groups(
+                sfh={"type": "dpl", "*": FIXED},
+                agn={"atten": {"type": "smc_prevot"}},
+                redshift=Fixed(0.1),
+            )
+        error_msg = str(exc_info.value)
+        assert "smc_prevot" in error_msg
+        assert "law" in error_msg
+        assert "prevot_smc" in error_msg
 
 
 class TestAGNComplexScenarios:
@@ -415,7 +437,7 @@ class TestAGNComplexScenarios:
                 "blr": {"type": "none", "*": FIXED},
                 "feii": {"type": "none", "*": FIXED},
                 "torus": {"type": "two_temperature", "*": FIXED},
-                "atten": {"type": "smc_prevot", "*": FIXED},
+                "atten": {"law": "prevot_smc", "*": FIXED},
             },
             redshift=Fixed(0.1),
         )
