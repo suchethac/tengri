@@ -334,6 +334,49 @@ class OutOfSSPGridWarning(UserWarning):
     """
 
 
+class NUTSTreeDepthWarning(UserWarning):
+    """A NUTS run spent a large share of its iterations at a deep tree-depth cap.
+
+    Each NUTS iteration doubles its trajectory until the U-turn criterion
+    fires or ``max_num_doublings`` is reached; an iteration that hits the cap
+    costs up to ``2**max_num_doublings - 1`` gradient evaluations. When a
+    large fraction of iterations saturate a *deep* cap (>= 7), the sampler is
+    paying hundreds of gradients per iteration on trajectories the U-turn
+    criterion never terminates — on tengri's SED posteriors the measured case
+    is the heavy-tailed StudentT SFR-ratio priors of the nonparametric SFHs
+    under a diagonal mass matrix (46% of iterations at depth 10 on a 19-band
+    continuity fit, D=9, 2026-08-18).
+
+    The advice ranks by measurement, not wall time, and the first thing to check
+    is the model rather than the sampler. A nonparametric SFH whose bin edges run
+    past the age of the universe at the fit redshift leaves bins that take no
+    likelihood and sample a heavy-tailed prior nothing constrains; matching the
+    edges to the redshift cut the wall from 174 s to 69 s on a D=9 continuity fit
+    at z=1.5 and made the mass parameter mean what it says (#1975).
+
+    After that, trajectory length is the lever. ``mcmc_hmc`` with
+    ``n_leapfrog_steps=150`` measured min-ESS 105 per 400 draws on that fit
+    against 84 for NUTS, and 201 at the warmup and metric the method-selection
+    page validates. ``dense_mass_matrix=True`` is *not* a safe default here: it
+    is quicker (35 s against 69 s) but measured 23 divergences per 400 draws
+    against 6 for the diagonal, and 77 before the bin edges were corrected, so
+    read ``n_divergent`` before believing the speed. Lowering
+    ``max_num_doublings`` bounds the worst-case wall but collapses sampling
+    quality — cap 6 measured min-ESS 5 on the same posterior, an 11x wall win
+    that evaporates the moment cost is counted per effective sample. Bound the
+    cap for wall-limited quick looks only, and read the truncation you bought off
+    ``posterior.diagnostics`` (``tree_depth_mean`` / ``tree_depth_max`` /
+    ``frac_max_depth``).
+
+    Saturating a cap below 7 is silent by design: a low cap is a deliberate
+    wall-time bound, and hitting it is the bound working.
+
+    Deliberately **not** an :class:`AdvisoryWarning`: it describes a *fit*
+    that already ran, not a model being constructed, and must survive the
+    introspection paths that silence advisories wholesale.
+    """
+
+
 class MetallicityUnitWarning(UserWarning):
     """A metallicity history looks like a metal mass fraction read as log10(Z/Zsun).
 

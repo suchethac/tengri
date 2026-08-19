@@ -27,6 +27,7 @@ from __future__ import annotations
 import jax
 
 from tengri.inference.backends.mcmc._shared import (
+    DEFAULT_MAX_NUM_DOUBLINGS,
     _get_flat_logdensity,
     _hmc_full_scan,
     _nuts_full_scan,
@@ -43,7 +44,7 @@ def build_catalog_mcmc_engine(
     n_warmup: int,
     n_burnin: int,
     n_samples: int,
-    max_num_doublings: int = 10,
+    max_num_doublings: int = DEFAULT_MAX_NUM_DOUBLINGS,
     n_leapfrog: int = 10,
     target_accept_rate: float = 0.85,
     use_dense: bool = False,
@@ -67,8 +68,10 @@ def build_catalog_mcmc_engine(
         Post-warmup samples discarded (sliced inside the traced call — static).
     n_samples : int
         Posterior samples kept per galaxy.
-    max_num_doublings : int, default 10
-        NUTS tree depth cap (ignored for HMC).
+    max_num_doublings : int, default DEFAULT_MAX_NUM_DOUBLINGS (10)
+        NUTS tree depth cap (ignored for HMC). Shares the single-fit
+        default and its rationale — see ``DEFAULT_MAX_NUM_DOUBLINGS`` in
+        ``tengri.inference.backends.mcmc._shared``.
     n_leapfrog : int, default 10
         HMC leapfrog steps per proposal (ignored for NUTS).
     target_accept_rate : float, default 0.85
@@ -141,7 +144,7 @@ def build_catalog_mcmc_engine(
         chain_keys = jax.random.split(chain_key, n_chain)
 
         if sampler == "nuts":
-            positions, divergent, _step_size, _inv_mass = _nuts_full_scan(
+            positions, divergent, _expansions, _step_size, _inv_mass = _nuts_full_scan(
                 init_flat,
                 warmup_key,
                 chain_keys,
