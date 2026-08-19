@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:00.488** total execution time for 6 files **from auto_examples/radio**:
+**00:13.276** total execution time for 7 files **from auto_examples/radio**:
 
 .. container::
 
@@ -32,13 +32,16 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_radio_plot_radio_crossover_frequency.py` (``plot_radio_crossover_frequency.py``)
-     - 00:00.488
+   * - :ref:`sphx_glr_auto_examples_radio_plot_radio_model_family_compare.py` (``plot_radio_model_family_compare.py``)
+     - 00:13.276
      - 0.0
    * - :ref:`sphx_glr_auto_examples_radio_plot_alpha_sf_sweep.py` (``plot_alpha_sf_sweep.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_radio_plot_q_ir_sweep.py` (``plot_q_ir_sweep.py``)
+     - 00:00.000
+     - 0.0
+   * - :ref:`sphx_glr_auto_examples_radio_plot_radio_crossover_frequency.py` (``plot_radio_crossover_frequency.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_radio_plot_radio_lir_relation.py` (``plot_radio_lir_relation.py``)

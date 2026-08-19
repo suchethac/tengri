@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:07.599** total execution time for 121 files **from all galleries**:
+**00:13.276** total execution time for 121 files **from all galleries**:
 
 .. container::
 
@@ -32,8 +32,8 @@ Computation times
    * - Example
      - Time
      - Mem (MB)
-   * - :ref:`sphx_glr_auto_examples_igm_plot_igm_models_comparison.py` (``../examples/igm/plot_igm_models_comparison.py``)
-     - 00:07.599
+   * - :ref:`sphx_glr_auto_examples_radio_plot_radio_model_family_compare.py` (``../examples/radio/plot_radio_model_family_compare.py``)
+     - 00:13.276
      - 0.0
    * - :ref:`sphx_glr_auto_examples_advanced_plot_custom_attenuation_component.py` (``../examples/advanced/plot_custom_attenuation_component.py``)
      - 00:00.000
@@ -152,6 +152,9 @@ Computation times
    * - :ref:`sphx_glr_auto_examples_igm_plot_dla_redshift_evolution.py` (``../examples/igm/plot_dla_redshift_evolution.py``)
      - 00:00.000
      - 0.0
+   * - :ref:`sphx_glr_auto_examples_igm_plot_igm_models_comparison.py` (``../examples/igm/plot_igm_models_comparison.py``)
+     - 00:00.000
+     - 0.0
    * - :ref:`sphx_glr_auto_examples_igm_plot_igm_redshift.py` (``../examples/igm/plot_igm_redshift.py``)
      - 00:00.000
      - 0.0
@@ -249,9 +252,6 @@ Computation times
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_radio_plot_radio_loudness_sweep.py` (``../examples/radio/plot_radio_loudness_sweep.py``)
-     - 00:00.000
-     - 0.0
-   * - :ref:`sphx_glr_auto_examples_radio_plot_radio_model_family_compare.py` (``../examples/radio/plot_radio_model_family_compare.py``)
      - 00:00.000
      - 0.0
    * - :ref:`sphx_glr_auto_examples_radio_plot_radio_vs_agn_lbol.py` (``../examples/radio/plot_radio_vs_agn_lbol.py``)
