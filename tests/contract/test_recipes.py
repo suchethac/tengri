@@ -328,7 +328,7 @@ class TestRecipeStructure:
         r = recipes.star_forming_photometry()
         assert r["sfh"]["type"] == "dpl"
         assert r["dust"]["type"] == "two_component"
-        assert r["dust"]["law_bc"] == "calzetti"
+        assert r["dust"]["law"] == "calzetti"
         assert r["dust"]["emission"]["type"] == "dale2014"
         assert r["neb"]["type"] == "cue"
         assert r.get("apply_igm", True) is True
@@ -376,7 +376,7 @@ class TestRecipeStructure:
         """Top-hat (tsnorm) SFH, Calzetti dust, nebular off, z pinned to 0.05."""
         r = recipes.mock_recovery_minimal()
         assert r["sfh"]["type"] == "tsnorm"
-        assert r["dust"]["law_bc"] == "calzetti"
+        assert r["dust"]["law"] == "calzetti"
         assert r["neb"]["type"] == "none"
         spec = parse_groups(**r)
         assert "redshift" in spec.fixed_params
