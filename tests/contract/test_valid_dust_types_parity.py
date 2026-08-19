@@ -60,7 +60,7 @@ def test_dust_validator_still_rejects_unknown_law_with_suggestion() -> None:
     from tengri.parameters.groups import _translate_dust
 
     with pytest.raises(ValueError, match="Unknown dust law 'calzeti'"):
-        _translate_dust({"type": "two_component", "law_bc": "calzeti"}, {})  # typo
+        _translate_dust({"type": "two_component", "law": "calzeti"}, {})  # typo
 
 
 def test_dust_validator_still_rejects_unknown_emission_with_suggestion() -> None:

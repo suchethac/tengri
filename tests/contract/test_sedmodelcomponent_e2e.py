@@ -126,7 +126,7 @@ def test_dust_attenuation_e2e(ssp, obs, law):
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "dpl", "*": FIXED},
-        dust={"type": "two_component", "law_bc": law, "*": FIXED},
+        dust={"type": "two_component", "law": law, "*": FIXED},
         redshift=Fixed(0.05),
     )
     _assert_phot_ok(model.predict_photometry({}))
@@ -583,7 +583,7 @@ def test_catalog_z_range_end_to_end(real_ssp_only, ssp, obs):
             ssp_data=ssp,
             observation=obs,
             sfh={"type": "dpl", "*": FIXED},
-            dust={"type": "single_component", "law_bc": "calzetti", "tau_v": Fixed(0.3)},
+            dust={"type": "single_component", "law": "calzetti", "tau_v": Fixed(0.3)},
             redshift=Fixed(z),
             approx=cz,
         )
@@ -629,7 +629,7 @@ def test_waveprecomp_agreement_with_exact(ssp, obs):
             ssp_data=ssp,
             observation=obs,
             sfh={"type": "dpl", "*": FIXED},
-            dust={"type": "single_component", "law_bc": "calzetti", "tau_v": Fixed(0.4)},
+            dust={"type": "single_component", "law": "calzetti", "tau_v": Fixed(0.4)},
             redshift=Fixed(0.1),
             approx=approx,
         )

@@ -148,9 +148,11 @@ class DustSEDComponentConfig(SEDComponentConfig):
     # tests that build DustSEDComponentConfig()/DustSEDComponent() directly
     # to exercise pipeline mechanics, not curve choice); the public grammar
     # (SEDModel.build / Parameters) always resolves and passes law_bc/
-    # law_diff explicitly before reaching this dataclass.
-    law_bc: str = "calzetti"
-    law_diff: str = "calzetti"
+    # law_diff explicitly before reaching this dataclass. "power_law" matches
+    # build_components()'s own dust_law_bc/dust_law_diff kwarg defaults, the
+    # other low-level entry point at this same layer.
+    law_bc: str = "power_law"
+    law_diff: str = "power_law"
     name: str = "dust"
     law_neb: str | None = None
     t_birth_yr: float = 1e7

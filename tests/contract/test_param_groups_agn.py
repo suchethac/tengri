@@ -562,6 +562,7 @@ class TestUniversalKeyValidator:
                 sfh={"type": "dpl", "*": FIXED},
                 dust={
                     "type": "two_component",
+                    "law": "calzetti",
                     "*": FIXED,
                     "emission": {
                         "type": "draine_li2007",

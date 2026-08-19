@@ -13,6 +13,7 @@ dust top-level (its own wrapper), and agn.composable (its own wrapper).
 
 from __future__ import annotations
 
+import functools
 import warnings
 
 import pytest
@@ -23,13 +24,16 @@ import tengri.builders as builders
 from tengri.parameters.sentinels import FIXED, FREE
 
 # One factory per wrapper implementation, exercising all three code paths.
+# dust.two_component requires an explicit attenuation law (no default) — a
+# concern orthogonal to the defaults=/_= wildcard mechanics under test here,
+# so it is pinned via a partial rather than exercised bare like the others.
 _FACTORIES = {
     "generic (igm.inoue14)": builders.igm.inoue14,
     "generic (neb.cue)": builders.neb.cue,
     "generic (radio.condon92)": builders.radio.condon92,
     "generic (dust.emission.dale2014)": builders.dust.emission.dale2014,
     "sfh.dpl": builders.sfh.dpl,
-    "dust.two_component": builders.dust.two_component,
+    "dust.two_component": functools.partial(builders.dust.two_component, law="calzetti"),
     "agn.composable": builders.agn.composable,
 }
 
