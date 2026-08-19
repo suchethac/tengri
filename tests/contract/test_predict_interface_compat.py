@@ -32,9 +32,8 @@ def model(synthetic_ssp_wide, synthetic_tophat_obs):
         observation=synthetic_tophat_obs,
         sfh={"type": "dpl"},
         dust={
-            "law_diff": "calzetti",
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "tau_bc": 0.3,
             "tau_diff": 0.2,
         },

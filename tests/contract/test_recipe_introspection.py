@@ -126,9 +126,8 @@ class TestRecipeParametersManualRecipes:
         recipe = {
             "sfh": {"type": "dpl", "*": FREE},
             "dust": {
-                "law_diff": "calzetti",
                 "type": "two_component",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "*": FREE,
                 "tau_bc": Uniform(0, 1),
             },

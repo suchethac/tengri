@@ -103,9 +103,8 @@ def test_window_lut_reproduces_wne_reconstruction_bitexact():
             sfh={"type": "dpl", "*": FREE},
             # explicit zero taus — NOT dust=None (which auto-fills FREE taus)
             dust={
-                "law_diff": "calzetti",
                 "type": "two_component",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "*": FIXED,
                 "tau_diff": Fixed(0.0),
                 "tau_bc": Fixed(0.0),
@@ -193,9 +192,8 @@ def _dust_model():
             observation=obs,
             sfh={"type": "dpl", "*": FREE},
             dust={
-                "law_diff": "calzetti",
                 "type": "two_component",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "*": FIXED,
                 "tau_diff": Uniform(0.0, 2.0),
                 "tau_bc": Uniform(0.0, 2.0),

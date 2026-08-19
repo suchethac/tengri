@@ -38,8 +38,7 @@ LYMAN_LIMIT_AA = 912.0
 def _build(ssp, obs, **dust_extra):
     dust = {
         "type": "two_component",
-        "law_bc": "calzetti",
-        "law_diff": "calzetti",
+        "law": "calzetti",
         "*": tengri.FIXED,
         "tau_bc": 0.0,
         "tau_diff": 0.5,
@@ -150,8 +149,7 @@ class TestGrammar:
         _translate_dust(
             {
                 "type": "two_component",
-                "law_bc": "calzetti",
-                "law_diff": "calzetti",
+                "law": "calzetti",
                 "lyman_cutoff": True,
             },
             result,

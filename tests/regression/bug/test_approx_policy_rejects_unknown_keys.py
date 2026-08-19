@@ -179,9 +179,8 @@ def test_every_policy_field_reaches_the_compile_signature():
     common = dict(
         sfh={"type": "dpl", "all_params": FIXED, "log_total_mass": 10.0},
         dust={
-            "law_diff": "calzetti",
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "all_params": FIXED,
         },
         neb={"type": "none"},

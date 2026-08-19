@@ -90,9 +90,8 @@ def population():
                 "psd_tau_myr": Fixed(float(psd_tau_myr)),
             },
             dust={
-                "law_diff": "calzetti",
                 "type": "two_component",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "all_params": FIXED,
             },
             neb={"type": "none"},
@@ -135,9 +134,8 @@ def spectroscopic_population():
                 "psd_tau_myr": Fixed(float(psd_tau_myr)),
             },
             dust={
-                "law_diff": "calzetti",
                 "type": "two_component",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "all_params": FIXED,
             },
             neb={"type": "none"},

@@ -63,9 +63,8 @@ def test_dust_ir_in_waveprecomp_photometry(emission):
     groups = dict(
         sfh={"type": "dpl", "*": FIXED},
         dust={
-            "law_diff": "calzetti",
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "*": FIXED,
             "tau_diff": 0.5,  # real attenuation → real L_ir to re-emit
             "emission": {"type": emission, "*": FIXED},
@@ -133,9 +132,8 @@ def test_dust_ir_optical_reddest_band_not_inflated(filters):
     groups = dict(
         sfh={"type": "dpl", "*": FIXED},
         dust={
-            "law_diff": "calzetti",
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "*": FIXED,
             "tau_diff": 0.5,  # real attenuation → real L_ir to (not) re-emit in the optical
             "emission": {"type": "modified_blackbody", "*": FIXED},

@@ -62,9 +62,8 @@ def _build(ssp, obs, approx, redshift, dust=None):
     from tengri import FIXED, SEDModel
 
     dust = dust or {
-        "law_diff": "calzetti",
         "type": "two_component",
-        "law_bc": "calzetti",
+        "law": "calzetti",
         "*": FIXED,
     }
     with warnings.catch_warnings():
@@ -114,9 +113,8 @@ class TestSpectrumLUTAccuracy:
         from tengri import FIXED as _FIXED
 
         diffuse_dust = {
-            "law_diff": "calzetti",
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "*": _FIXED,
             "tau_bc": 0.0,
         }
@@ -150,9 +148,8 @@ class TestSpectrumLUTAccuracy:
         from tengri import FIXED as _FIXED
 
         diffuse_dust = {
-            "law_diff": "calzetti",
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "*": _FIXED,
             "tau_bc": 0.0,
         }
@@ -208,9 +205,8 @@ class TestSpectrumLUTGuards:
                 observation=obs,
                 sfh={"type": "dpl", "*": FIXED},
                 dust={
-                    "law_diff": "calzetti",
                     "type": "two_component",
-                    "law_bc": "calzetti",
+                    "law": "calzetti",
                     "*": FIXED,
                 },
                 neb={"type": "none"},
@@ -241,9 +237,8 @@ class TestSpectrumLUTGuards:
                 observation=obs,
                 sfh={"type": "dpl", "alpha": Uniform(0.1, 5.0, "sfh_dpl_alpha"), "*": FIXED},
                 dust={
-                    "law_diff": "calzetti",
                     "type": "two_component",
-                    "law_bc": "calzetti",
+                    "law": "calzetti",
                     "*": FIXED,
                 },
                 neb={"type": "none"},
@@ -279,9 +274,8 @@ class TestSpectrumLUTLines:
                 observation=obs,
                 sfh={"type": "dpl", "*": FIXED},
                 dust={
-                    "law_diff": "calzetti",
                     "type": "two_component",
-                    "law_bc": "calzetti",
+                    "law": "calzetti",
                     "*": FIXED,
                 },
                 neb={"type": "cue", "*": FIXED},
@@ -368,9 +362,8 @@ class TestJointPrecomp:
         # Diffuse-only dust isolates the normalization contract from the
         # birth-cloud LUT residual (#617).
         dust = {
-            "law_diff": "calzetti",
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "*": FIXED,
             "tau_bc": 0.0,
         }

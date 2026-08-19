@@ -92,9 +92,8 @@ def _build_with_wave_precomp(ssp_data, filters):
         sfh={"type": "dpl", "*": FIXED},
         neb={"type": "none"},
         dust={
-            "law_diff": "calzetti",
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "*": FIXED,
             "tau_diff": 0.5,
         },
@@ -145,9 +144,8 @@ def test_unconditional_pass_still_resolves_without_approx(synthetic_ssp, tophat_
         sfh={"type": "dpl", "*": FIXED},
         neb={"type": "none"},
         dust={
-            "law_diff": "calzetti",
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "*": FIXED,
             "tau_diff": 0.5,
         },

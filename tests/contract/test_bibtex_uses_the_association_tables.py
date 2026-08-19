@@ -108,9 +108,8 @@ def bibtex_text(ssp_data_fsps):
         observation=obs,
         sfh={"type": "dpl", "all_params": FIXED},
         dust={
-            "law_diff": "calzetti",
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "all_params": FIXED,
         },
         neb={"type": "none"},
@@ -244,9 +243,8 @@ class TestTheTwoSurfacesAgree:
             observation=obs,
             sfh={"type": "delayed", "all_params": FIXED},
             dust={
-                "law_diff": "calzetti",
                 "type": "two_component",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "all_params": FIXED,
             },
             neb={"type": "none"},

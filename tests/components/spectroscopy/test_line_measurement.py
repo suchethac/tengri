@@ -61,9 +61,8 @@ def _model(ssp_path, neb, tau=0.0):
             observation=obs,
             sfh={"type": "dpl", "*": FREE},
             dust={
-                "law_diff": "calzetti",
                 "type": "two_component",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "*": FIXED,
                 "tau_diff": Uniform(0.0, 2.0),
                 "tau_bc": Uniform(0.0, 2.0),

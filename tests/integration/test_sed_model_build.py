@@ -51,9 +51,8 @@ class TestFromGroupsConstruction:
         groups = dict(
             sfh={"type": "dpl", "*": FREE, "beta": Uniform(1, 3)},
             dust={
-                "law_diff": "calzetti",
                 "type": "two_component",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "*": FIXED,
                 "tau_bc": 0.5,
             },
@@ -97,9 +96,8 @@ class TestFlatEquivalence:
                 "logzsol": Fixed(-0.1),
             },
             dust={
-                "law_diff": "calzetti",
                 "type": "two_component",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "tau_bc": Fixed(0.5),
                 "tau_diff": Fixed(0.3),
                 "slope": Fixed(-0.7),

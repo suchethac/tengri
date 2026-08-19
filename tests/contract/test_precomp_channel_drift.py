@@ -82,9 +82,8 @@ def _build(ssp, approx, *, tau_diff, tau_bc, z, neb, shock, dust_type="two_compo
         }
     else:
         dust_group = {
-            "law_diff": "calzetti",
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "all_params": FIXED,
             "tau_diff": tau_diff,
             "tau_bc": tau_bc,

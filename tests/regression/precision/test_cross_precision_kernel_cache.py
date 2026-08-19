@@ -70,9 +70,8 @@ def _build(ssp, obs):
         # ``dust_tau_diff`` / ``dust_tau_bc`` free, which would leave the free set
         # out of step with the truth dict below.
         dust={
-            "law_diff": "calzetti",
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "all_params": FIXED,
             "tau_diff": 0.3,
             "tau_bc": 0.0,

@@ -158,9 +158,8 @@ def _model(name, *, approx, free_shape=False, bands=None):
         redshift=Fixed(0.1),
         sfh={"type": "dpl", "*": FIXED},
         dust={
-            "law_diff": "calzetti",
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "*": FIXED,
             "emission": {"type": "dale2014_cigale", "*": FIXED},
         },

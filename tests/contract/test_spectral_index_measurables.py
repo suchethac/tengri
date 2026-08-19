@@ -48,9 +48,8 @@ def _build(approx, wave_lo=3500.0):
             observation=obs,
             sfh={"type": "dpl", "*": FIXED},
             dust={
-                "law_diff": "calzetti",
                 "type": "two_component",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "*": FIXED,
             },
             neb={"type": "none"},
@@ -132,9 +131,8 @@ class TestSpectralIndexAsData:
                 observation=obs,
                 sfh={"type": "dpl", "*": FIXED},
                 dust={
-                    "law_diff": "calzetti",
                     "type": "two_component",
-                    "law_bc": "calzetti",
+                    "law": "calzetti",
                     "*": FIXED,
                 },
                 neb={"type": "none"},

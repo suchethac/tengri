@@ -279,13 +279,7 @@ def build_configs(z, obs):
             "met_logzsol": Uniform(-2.0, 0.3),
             **CONT_SFH,
         },
-        dust={
-            "law_diff": "salim_sbl18",
-            "type": "two_component",
-            "law_bc": "salim_sbl18",
-            "all_params": FIXED,
-            **DUST,
-        },
+        dust={"type": "two_component", "law": "salim_sbl18", "all_params": FIXED, **DUST},
         neb={"type": "ssp"},
         **common,
     )
@@ -297,13 +291,7 @@ def build_configs(z, obs):
             "met_logzsol": Uniform(-2.0, 0.3),
             **DIR_SFH,
         },
-        dust={
-            "law_diff": "calzetti",
-            "type": "two_component",
-            "law_bc": "calzetti",
-            "all_params": FIXED,
-            **DUST,
-        },
+        dust={"type": "two_component", "law": "calzetti", "all_params": FIXED, **DUST},
         neb={"type": "ssp"},
         **common,
     )
@@ -319,13 +307,7 @@ def build_configs(z, obs):
             "skew": Uniform(-1.0, 1.0),
             "trunc": Uniform(1.0, 10.0),
         },
-        dust={
-            "law_diff": "kriek_conroy",
-            "type": "two_component",
-            "law_bc": "kriek_conroy",
-            "all_params": FIXED,
-            **DUST,
-        },
+        dust={"type": "two_component", "law": "kriek_conroy", "all_params": FIXED, **DUST},
         neb={"type": "ssp"},
         **common,
     )
@@ -340,13 +322,7 @@ def build_configs(z, obs):
             "tau_gyr": Uniform(0.5, 13.0),
             "log_total_mass": Uniform(8.0, 12.0),
         },
-        dust={
-            "law_diff": "power_law",
-            "type": "two_component",
-            "law_bc": "power_law",
-            "all_params": FIXED,
-            **DUST,
-        },
+        dust={"type": "two_component", "law": "power_law", "all_params": FIXED, **DUST},
         neb={"type": "ssp"},
         **common,
     )

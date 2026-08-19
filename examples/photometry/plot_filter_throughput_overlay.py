@@ -54,12 +54,11 @@ sfh_config = {
 }
 
 dust_config = {
-    "law_diff": "calzetti",
     "type": "two_component",
     "all_params": tengri.FIXED,
     "tau_diff": 0.3,  # Diffuse attenuation
     "tau_bc": 0.5,  # Dust clouds
-    "law_bc": "calzetti",  # Starburst attenuation law
+    "law": "calzetti",  # Starburst attenuation law
     "emission": {"type": "dale2014", "all_params": tengri.FIXED},
 }
 

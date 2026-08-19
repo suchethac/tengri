@@ -57,9 +57,8 @@ def _build(ssp, obs, approx):
         sfh={"type": ["dpl", "field"], "all_params": FREE},
         met={"logzsol": Fixed(-0.3)},
         dust={
-            "law_diff": "calzetti",
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "all_params": FREE,
         },
         neb={"type": "ssp"},

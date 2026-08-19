@@ -73,9 +73,8 @@ def _build(ssp, approx, obs, *, dust: bool):
 
     dust_block = (
         {
-            "law_diff": "calzetti",
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "all_params": FIXED,
         }
         if dust

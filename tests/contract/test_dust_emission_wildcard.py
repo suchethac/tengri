@@ -226,9 +226,8 @@ def _build(ssp, obs, emission_type, wildcard=FREE):
         observation=obs,
         sfh={"type": "dpl", "*": FIXED},
         dust={
-            "law_diff": "calzetti",
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "*": FIXED,
             "tau_bc": _TAU_BC,
             "tau_diff": _TAU_DIFF,
@@ -406,9 +405,8 @@ def test_an_explicit_prior_reaches_the_parameter_the_wildcard_cannot(
         observation=panchromatic_obs,
         sfh={"type": "dpl", "*": FIXED},
         dust={
-            "law_diff": "calzetti",
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "*": FIXED,
             "tau_bc": _TAU_BC,
             "tau_diff": _TAU_DIFF,
@@ -437,9 +435,8 @@ def test_dust_emission_actually_contributes(synthetic_ssp_wide, panchromatic_obs
         observation=panchromatic_obs,
         sfh={"type": "dpl", "*": FIXED},
         dust={
-            "law_diff": "calzetti",
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "*": FIXED,
             "tau_bc": _TAU_BC,
             "tau_diff": _TAU_DIFF,

@@ -98,10 +98,9 @@ for i in range(n_sf):
     }
 
     dust_config = {
-        "law_diff": "calzetti",
         "type": "two_component",
         "all_params": tengri.FIXED,
-        "law_bc": "calzetti",
+        "law": "calzetti",
         "tau_diff": tau_diff_samples[i],
         "tau_bc": tau_bc_samples[i],
         "slope": -0.7,
@@ -181,10 +180,9 @@ for i in range(n_agn):
     }
 
     dust_config = {
-        "law_diff": "calzetti",
         "type": "two_component",
         "all_params": tengri.FIXED,
-        "law_bc": "calzetti",
+        "law": "calzetti",
         "tau_diff": 0.5 + 0.1 * i,  # Variable dust opacity (AGN-heated)
         "tau_bc": 0.3 + 0.05 * i,
         "slope": -0.7,

@@ -64,9 +64,8 @@ def _build(neb, *, dust_on=True, precomp=True, met=None):
     obs = Observation(photometry=Photometry.from_names(_BANDS), line_fluxes=_LINE_DATA)
     taus = (0.25, 0.4) if dust_on else (0.0, 0.0)
     dust = {
-        "law_diff": "calzetti",
         "type": "two_component",
-        "law_bc": "calzetti",
+        "law": "calzetti",
         "*": FIXED,
         "tau_diff": Fixed(taus[0]),
         "tau_bc": Fixed(taus[1]),

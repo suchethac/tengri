@@ -97,9 +97,8 @@ def _build(ssp, obs, approx, *, tau_diff=1.5, z=0.05):
             # Diffuse-only: isolates the screen quadrature from the birth-cloud
             # LUT residual (#617).
             dust={
-                "law_diff": "calzetti",
                 "type": "two_component",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "*": FIXED,
                 "tau_bc": 0.0,
                 "tau_diff": tau_diff,

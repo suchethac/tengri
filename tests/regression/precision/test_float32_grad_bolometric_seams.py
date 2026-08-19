@@ -66,9 +66,8 @@ _SEAM_MODELS = {
     # and utils/sed_quantities.py.
     "dust_ir": dict(
         dust={
-            "law_diff": "calzetti",
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "all_params": FIXED,
             "tau_diff": Uniform(0.0, 1.5),
             "tau_bc": 0.0,
@@ -79,9 +78,8 @@ _SEAM_MODELS = {
     # factored in components/agn/disc.py.
     "agn": dict(
         dust={
-            "law_diff": "calzetti",
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "all_params": FIXED,
             "tau_diff": 0.3,
             "tau_bc": 0.0,
@@ -106,9 +104,8 @@ _SEAM_MODELS = {
     # seam, so it measured 7.3e-05 and passed while dust IR and AGN were 30% wrong.
     "panchromatic": dict(
         dust={
-            "law_diff": "calzetti",
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "all_params": FIXED,
             "tau_diff": Uniform(0.0, 1.5),
             "tau_bc": 0.0,

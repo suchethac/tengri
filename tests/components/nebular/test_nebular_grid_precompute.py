@@ -104,9 +104,8 @@ def _wave_model(neb, sfh_wild=FREE, met=None):
             observation=obs,
             sfh={"type": "dpl", "*": sfh_wild},
             dust={
-                "law_diff": "calzetti",
                 "type": "two_component",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "*": FIXED,
                 "tau_diff": Fixed(0.0),
                 "tau_bc": Fixed(0.0),

@@ -89,9 +89,8 @@ def test_n_latent_exceeds_n_free_for_field_sfh(ssp_data_fsps):
             "psd_tau_myr": Uniform(100, 500),
         },
         dust={
-            "law_diff": "calzetti",
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "all_params": FIXED,
         },
         neb={"type": "none"},

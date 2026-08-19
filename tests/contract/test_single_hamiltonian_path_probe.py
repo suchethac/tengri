@@ -28,7 +28,7 @@ def _template(synthetic_ssp, simple_observation):
         ssp_data=synthetic_ssp,
         observation=simple_observation,
         sfh={"type": "dpl", "*": FIXED, "log_total_mass": Uniform(-1.0, 3.0)},
-        dust={"law_diff": "calzetti", "type": "two_component", "law_bc": "calzetti", "*": FIXED},
+        dust={"type": "two_component", "law": "calzetti", "*": FIXED},
         neb={"type": "none"},
         redshift=0.05,
     )

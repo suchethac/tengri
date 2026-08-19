@@ -107,9 +107,8 @@ def _build(approx, index_data):
             observation=obs,
             sfh={"type": "dpl", "all_params": FIXED},
             dust={
-                "law_diff": "calzetti",
                 "type": "two_component",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "all_params": FIXED,
             },
             neb={"type": "cue", "all_params": FIXED},

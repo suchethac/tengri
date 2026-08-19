@@ -139,9 +139,8 @@ def build(line_data, approx):
         sfh={"type": "dpl", "all_params": FREE},
         met={"logzsol": Uniform(-1.5, 0.3)},
         dust={
-            "law_diff": "calzetti",
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "all_params": FIXED,
             "tau_bc": Uniform(0.0, 4.0),
             "tau_diff": Uniform(0.0, 3.0),
@@ -400,7 +399,7 @@ posterior = ForwardModel.build(sed=model_fast).fit(
 )
 elapsed = time.perf_counter() - t0
 rmax = max(float(v) for v in posterior.rhat().values())
-n_divergent = posterior.diagnostics.get("n_divergent", 0)
+n_divergent = posterior.diagnostics.get('n_divergent', 0)
 
 # R-hat cannot see a chain that never moved — it scores ~1.0 on one — so check the
 # draws directly, across every free parameter (#1734). Only the free ones: a Fixed
@@ -497,7 +496,6 @@ w_full_um = WAVE_FULL / 1e4
 # attaches a per-Q_H nebular grid that disables exact rest_sed(); WavePrecomp()
 # alone is exact for rest_sed() while remaining LUT-fast for photometry.
 model_sed = build(line_data, approx=WavePrecomp())
-
 
 def _sed_fnu(p):
     lnu = np.interp(

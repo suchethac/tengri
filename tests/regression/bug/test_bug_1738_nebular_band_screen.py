@@ -118,9 +118,8 @@ def _build(ssp, approx, *, tau_diff, tau_bc, z, neb="cue", free_mass=False):
             "age_gyr": 5.0,
         },
         dust={
-            "law_diff": "calzetti",
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "all_params": FIXED,
             "tau_diff": tau_diff,
             "tau_bc": tau_bc,

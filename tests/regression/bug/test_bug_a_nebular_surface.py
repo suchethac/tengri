@@ -129,10 +129,9 @@ def test_balmer_decrement_rises_under_dust_sweep(ssp_bare):
                 "end_gyr": 0.0,
             },
             dust={
-                "law_diff": "calzetti",
                 "type": "two_component",
                 "*": FIXED,
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "tau_diff": tau_diff,
                 "tau_bc": 0.0,
                 "slope": -0.7,

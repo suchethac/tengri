@@ -152,9 +152,8 @@ class TestEquivalence:
                 "beta": Fixed(1.5),
             },
             dust={
-                "law_diff": "calzetti",
                 "type": "two_component",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "*": FIXED,
                 "tau_bc": 0.5,
                 "emission": {
@@ -377,9 +376,8 @@ class TestTypeMapping:
         """dust={'type': ..., 'law_bc': ...} should set dust_law_bc."""
         params = parse_groups(
             dust={
-                "law_diff": "calzetti",
                 "type": "two_component",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "*": FIXED,
             },
             redshift=Fixed(0.1),
@@ -495,9 +493,8 @@ class TestCanonicalExample:
                 "beta": Uniform(0.3, 2.0),  # Must be positive
             },
             dust={
-                "law_diff": "calzetti",
                 "type": "two_component",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "*": FIXED,
                 "tau_bc": 0.5,
                 "emission": {"type": "dale2014", "*": FIXED},
@@ -741,7 +738,7 @@ class TestAllParamsAlias:
     def test_alias_equivalent_to_star(self):
         """``all_params`` and ``'*'`` produce bit-identical free/fixed partitions."""
         common = dict(
-            dust={"law_diff": "calzetti", "type": "two_component", "law_bc": "calzetti"},
+            dust={"type": "two_component", "law": "calzetti"},
             neb={"type": "cue"},
             redshift=Uniform(0.01, 5.0),
         )

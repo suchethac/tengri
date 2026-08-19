@@ -50,9 +50,8 @@ def _model(ssp, observation):
         observation=observation,
         sfh={"type": "dpl", "all_params": FIXED, "log_total_mass": Uniform(8, 12)},
         dust={
-            "law_diff": "calzetti",
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "all_params": FIXED,
         },
         neb={"type": "none"},

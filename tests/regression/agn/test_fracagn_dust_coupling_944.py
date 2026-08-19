@@ -145,9 +145,8 @@ class TestFracAGNDustCoupling944:
             observation=synthetic_tophat_obs,
             sfh={"type": "const"},
             dust={
-                "law_diff": "calzetti",
                 "type": "two_component",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "emission": {"type": "dale2014"},
             },
             agn={
@@ -177,9 +176,8 @@ class TestFracAGNDustCoupling944:
             observation=synthetic_tophat_obs,
             sfh={"type": "const", "*": FIXED},
             dust={
-                "law_diff": "calzetti",
                 "type": "two_component",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "emission": {"type": "dale2014"},
             },
             agn={
@@ -201,9 +199,8 @@ class TestFracAGNDustCoupling944:
             observation=synthetic_tophat_obs,
             sfh={"type": "const", "*": FIXED},
             dust={
-                "law_diff": "calzetti",
                 "type": "two_component",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "emission": {"type": "dale2014"},
             },
             agn={
@@ -250,9 +247,8 @@ class TestFracAGNDustCoupling944:
                 observation=synthetic_tophat_obs,
                 sfh={"type": "const"},
                 dust={
-                    "law_diff": "calzetti",
                     "type": "two_component",
-                    "law_bc": "calzetti",
+                    "law": "calzetti",
                     "emission": {"type": "dale2014"},
                 },
                 agn={

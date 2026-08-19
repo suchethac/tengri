@@ -33,9 +33,8 @@ def _build(ssp, obs, approx):
         observation=obs,
         sfh={"type": "dpl", "all_params": FIXED, "log_total_mass": Uniform(9.0, 11.0)},
         dust={
-            "law_diff": "calzetti",
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "all_params": FIXED,
         },
         neb={"type": "none"},

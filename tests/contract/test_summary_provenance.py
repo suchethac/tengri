@@ -33,9 +33,8 @@ def grouped_spec():
             "alpha": Fixed(2.0),  # user_fixed
         },
         dust={
-            "law_diff": "calzetti",
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "*": FIXED,
             "tau_bc": 0.5,  # user_fixed (bare value)
         },
@@ -89,9 +88,8 @@ class TestProvenanceAttribution:
             spec = parse_groups(
                 sfh={"type": "dpl", "*": FREE},
                 dust={
-                    "law_diff": "calzetti",
                     "type": "two_component",
-                    "law_bc": "calzetti",
+                    "law": "calzetti",
                     "*": FREE,
                 },
             )

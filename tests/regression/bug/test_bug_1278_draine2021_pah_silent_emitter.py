@@ -68,8 +68,7 @@ def test_draine2021_pah_publishes_its_declared_output(synthetic_ssp_wide, synthe
             ssp_data=synthetic_ssp_wide,
             observation=synthetic_tophat_obs,
             dust={
-                "law_diff": "calzetti",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "tau_bc": 1.0,
                 "tau_diff": 1.0,
                 "emission": {"type": "draine2021_pah"},
@@ -116,8 +115,7 @@ def test_draine2021_pah_contributes_infrared_emission(synthetic_ssp_wide, synthe
             ssp_data=synthetic_ssp_wide,
             observation=synthetic_tophat_obs,
             dust={
-                "law_diff": "calzetti",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "tau_bc": 1.0,
                 "tau_diff": 1.0,
                 "emission": {"type": "draine2021_pah"},
@@ -167,8 +165,7 @@ def test_sibling_emission_models_publish(synthetic_ssp_wide, synthetic_tophat_ob
             ssp_data=synthetic_ssp_wide,
             observation=synthetic_tophat_obs,
             dust={
-                "law_diff": "calzetti",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "tau_bc": 1.0,
                 "tau_diff": 1.0,
                 "emission": {"type": model_name},
