@@ -417,6 +417,26 @@ class GasStellarMetallicityWarning(UserWarning):
     """
 
 
+class DefaultFixedParametersWarning(AdvisoryWarning):
+    """A parameter group with no disposition silently fixes all its parameters.
+
+    When a group dict (``sfh={...}``, ``dust={...}``, etc.) states no
+    ``'all_params'`` directive, the build grammar fixes all parameters in that
+    group at their declared defaults. No error is raised and no warning was
+    emitted, so a user could believe they had configured an SFH when they had
+    actually pinned it entirely.
+
+    Pass ``'all_params': FREE`` to fit the parameters, or ``'all_params': FIXED``
+    to state the intent explicitly and silence this warning. See
+    :func:`~tengri.parameters.groups.parse_groups` for the grammar.
+
+    Warns rather than raising: explicitly stating ``'all_params': FIXED`` is a
+    legitimate and common pattern (e.g. when fitting only redshift). This warns
+    to catch the accidental case where the user forgot to state a disposition.
+    Filter this category if the silent FIXED is deliberate.
+    """
+
+
 class PrecompBiasWarning(AdvisoryWarning):
     """The precompute LUT's forward bias, amplified by this fit's SNR, is material.
 
