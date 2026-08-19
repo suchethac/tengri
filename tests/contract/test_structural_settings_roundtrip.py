@@ -68,16 +68,19 @@ CASES = [
         0.5,
     ),
     (
+        # Eight edges, not any five: ``continuity`` declares six ratio
+        # parameters and derives its bin count from the edges, so a shorter
+        # array leaves declared ratios with no bin (#1975).
         "sfh.bin_edges_gyr",
         dict(
             sfh={
                 "type": "continuity",
                 "all_params": FIXED,
-                "bin_edges_gyr": [0.0, 0.1, 0.5, 1.0, 13.0],
+                "bin_edges_gyr": [0.0, 0.03, 0.1, 0.3, 1.0, 3.0, 6.0, 13.0],
             }
         ),
         "bin_edges_gyr",
-        [0.0, 0.1, 0.5, 1.0, 13.0],
+        [0.0, 0.03, 0.1, 0.3, 1.0, 3.0, 6.0, 13.0],
     ),
     (
         "stellar.met_mode",
