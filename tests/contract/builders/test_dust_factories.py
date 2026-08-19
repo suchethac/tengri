@@ -61,22 +61,42 @@ def test_emission_dale2014_signature_lists_canonical_short_params() -> None:
 # ── Default-call shape ────────────────────────────────────────────
 
 
-def test_two_component_default_carries_law_strings() -> None:
-    out = builders.dust.two_component()
+def test_two_component_requires_a_law() -> None:
+    """No default law: attenuation must be named explicitly."""
+    with pytest.raises((TypeError, ValueError), match="law"):
+        builders.dust.two_component()
+
+
+def test_two_component_shared_law_carries_law_string() -> None:
+    out = builders.dust.two_component(law="calzetti")
+    assert out == {
+        "type": "two_component",
+        "all_params": FIXED,
+        "law": "calzetti",
+    }
+
+
+def test_two_component_pair_law_carries_both_strings() -> None:
+    out = builders.dust.two_component(law_bc="calzetti", law_diff="power_law")
     assert out == {
         "type": "two_component",
         "all_params": FIXED,
         "law_bc": "calzetti",
-        "law_diff": "calzetti",
+        "law_diff": "power_law",
     }
 
 
-def test_single_component_default_carries_one_law() -> None:
-    out = builders.dust.single_component()
+def test_single_component_requires_a_law() -> None:
+    with pytest.raises((TypeError, ValueError), match="law"):
+        builders.dust.single_component()
+
+
+def test_single_component_carries_one_law() -> None:
+    out = builders.dust.single_component(law="calzetti")
     assert out == {
         "type": "single_component",
         "all_params": FIXED,
-        "law_bc": "calzetti",
+        "law": "calzetti",
     }
 
 
@@ -89,7 +109,7 @@ def test_emission_default_does_not_include_settings() -> None:
 
 def test_unknown_law_raises_with_valid_list() -> None:
     with pytest.raises(ValueError, match="unknown attenuation law") as exc:
-        builders.dust.two_component(law_bc="callzeti")  # typo
+        builders.dust.two_component(law="callzeti")  # typo
     msg = str(exc.value)
     assert "calzetti" in msg
 
@@ -97,8 +117,8 @@ def test_unknown_law_raises_with_valid_list() -> None:
 def test_every_dust_law_key_is_accepted() -> None:
     """Sanity check: any key in DUST_LAWS is valid."""
     for law in list(DUST_LAWS)[:3]:  # first three suffice
-        out = builders.dust.two_component(law_bc=law)
-        assert out["law_bc"] == law
+        out = builders.dust.two_component(law=law)
+        assert out["law"] == law
 
 
 # ── Composition with nested emission ──────────────────────────────
@@ -106,6 +126,7 @@ def test_every_dust_law_key_is_accepted() -> None:
 
 def test_two_component_with_nested_emission() -> None:
     out = builders.dust.two_component(
+        law="calzetti",
         _=FREE,
         tau_bc=Uniform(0.0, 2.0),
         emission=builders.dust.emission.dale2014(_=FIXED),
@@ -117,7 +138,7 @@ def test_two_component_with_nested_emission() -> None:
 
 def test_emission_kwarg_must_be_dict() -> None:
     with pytest.raises(TypeError, match="emission"):
-        builders.dust.two_component(emission="dale2014")  # forgot to call
+        builders.dust.two_component(law="calzetti", emission="dale2014")  # forgot to call
 
 
 # ── Round-trip through parser ─────────────────────────────────────
@@ -128,7 +149,7 @@ def test_two_component_free_round_trips_tau_bc_tau_diff() -> None:
     pathway for dust (unlike radio/xray) flips the attenuation knobs."""
     spec = parse_groups(
         sfh={"type": "dpl"},
-        dust=builders.dust.two_component(_=FREE),
+        dust=builders.dust.two_component(law="calzetti", _=FREE),
     )
     free_dust = {p for p in spec.free_params if p.startswith("dust_")}
     assert "dust_tau_bc" in free_dust
@@ -138,7 +159,7 @@ def test_two_component_free_round_trips_tau_bc_tau_diff() -> None:
 def test_single_component_uses_tau_v_not_tau_bc() -> None:
     spec = parse_groups(
         sfh={"type": "dpl"},
-        dust=builders.dust.single_component(_=FREE),
+        dust=builders.dust.single_component(law="calzetti", _=FREE),
     )
     free_dust = {p for p in spec.free_params if p.startswith("dust_")}
     assert "dust_tau_v" in free_dust
@@ -148,7 +169,7 @@ def test_single_component_uses_tau_v_not_tau_bc() -> None:
 def test_per_param_override_survives_round_trip() -> None:
     spec = parse_groups(
         sfh={"type": "dpl"},
-        dust=builders.dust.two_component(tau_bc=Uniform(0.5, 3.0)),
+        dust=builders.dust.two_component(law="calzetti", tau_bc=Uniform(0.5, 3.0)),
     )
     assert "dust_tau_bc" in spec.free_params
 
@@ -158,7 +179,7 @@ def test_per_param_override_survives_round_trip() -> None:
 
 def test_unknown_kwarg_raises_with_valid_list() -> None:
     with pytest.raises(TypeError, match="two_component") as exc:
-        builders.dust.two_component(tau_bcc=Uniform(0, 2))  # typo
+        builders.dust.two_component(law="calzetti", tau_bcc=Uniform(0, 2))  # typo
     msg = str(exc.value)
     assert "tau_bcc" in msg
     assert "tau_bc" in msg
@@ -166,4 +187,4 @@ def test_unknown_kwarg_raises_with_valid_list() -> None:
 
 def test_invalid_wildcard_rejected() -> None:
     with pytest.raises(ValueError, match="FREE or FIXED"):
-        builders.dust.two_component(_="free")
+        builders.dust.two_component(law="calzetti", _="free")

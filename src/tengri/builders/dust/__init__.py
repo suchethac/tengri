@@ -7,34 +7,50 @@ Two top-level factories — ``single_component`` and ``two_component`` —
 plus a nested :mod:`~tengri.builders.dust.emission` submodule for the IR
 emission sub-block.
 
-The grammar:
+The grammar (single-component example):
+
+>>> dust = {
+...     "type": "single_component",
+...     "law": "calzetti",  # Required: no defaults in grammar
+...     "all_params": FREE,
+...     "tau_v": Uniform(0, 4),
+... }
+
+The grammar (two-component example):
 
 >>> dust = {
 ...     "type": "two_component",
-...     "law_bc": "calzetti",
-...     "law_diff": "calzetti",
+...     "law": "calzetti",  # Shared law, or use law_bc/law_diff separately
 ...     "all_params": FREE,
-...     "tau_bc": Uniform(0, 4),
+...     "tau_bc": Uniform(0, 2),
+...     "tau_diff": Uniform(0, 4),
 ...     "emission": {"type": "dale2014", "all_params": FIXED},
 ... }
 
-The factory mirror:
+The factory mirror (single-component):
 
 >>> from tengri import builders, FREE, Uniform, FIXED
->>> dust = builders.dust.two_component(
-...     law_bc="calzetti",
-...     law_diff="calzetti",
+>>> dust = builders.dust.single_component(
+...     law="calzetti",  # Required
 ...     defaults=FREE,
-...     tau_bc=Uniform(0, 4),
+...     tau_v=Uniform(0, 4),
+... )
+
+The factory mirror (two-component):
+
+>>> dust = builders.dust.two_component(
+...     law="calzetti",  # Shared law, or use law_bc/law_diff
+...     defaults=FREE,
+...     tau_bc=Uniform(0, 2),
+...     tau_diff=Uniform(0, 4),
 ...     emission=builders.dust.emission.dale2014(defaults=FIXED),
 ... )
 
-The ``law_bc`` / ``law_diff`` kwargs accept any key registered in
-:data:`tengri.components.dust.attenuation.DUST_LAWS`. Single-component
-factories use ``law`` (a singular alias that the grammar parser
-accepts) — the attenuation law string is the only setting that
-distinguishes one ``two_component`` model from another (the parameter
-list is identical across laws).
+The ``law`` / ``law_bc`` / ``law_diff`` kwargs accept any key registered in
+:data:`tengri.components.dust.attenuation.DUST_LAWS`. Single-component requires
+``law`` (singular); two-component accepts either a single shared ``law`` or
+separate ``law_bc`` and ``law_diff``. Grammar builds require explicit law
+specification; flat-kwarg Parameter construction uses power_law defaults.
 """
 
 from __future__ import annotations
@@ -77,8 +93,7 @@ def _discover_attenuation_params(dust_model: str) -> list[str]:
         "sfh": {"type": "dpl"},
         "dust": {
             "type": dust_model,
-            "law_bc": "calzetti",
-            "law_diff": "calzetti",
+            "law": "calzetti",  # Shared law for discovery; grammar validates this later
             WILDCARD_ALIAS: FREE,
         },
     }
@@ -116,8 +131,63 @@ def _make_dust_factory(
                 f"dust.{dust_model}(defaults=...): expected FREE or FIXED, got "
                 f"{wildcard!r}. Use tengri.FREE or tengri.FIXED."
             )
-        # String settings (e.g. law_bc, law_diff).
+        # String settings (e.g. law, law_bc, law_diff). No defaults are applied;
+        # grammar requires explicit specification. Flat-kwarg builds get power_law
+        # defaults in Parameters.
         settings: dict[str, str] = {}
+
+        if dust_model == "two_component":
+            # law (shared) XOR (law_bc AND law_diff) (per-screen). Handled here
+            # rather than the generic per-setting loop below, since the two
+            # forms are mutually exclusive, not independently required.
+            law = kwargs.pop("law", None)
+            law_bc = kwargs.pop("law_bc", None)
+            law_diff = kwargs.pop("law_diff", None)
+            if law is not None and (law_bc is not None or law_diff is not None):
+                raise ValueError(
+                    "dust.two_component(): grammar is ambiguous: cannot specify "
+                    "both 'law' and 'law_bc'/'law_diff'. Use EITHER 'law' (shared "
+                    "by both screens) OR both 'law_bc' and 'law_diff' (per-screen). "
+                    "Example 1: dust.two_component(law='calzetti', ...) "
+                    "Example 2: dust.two_component(law_bc='calzetti', "
+                    "law_diff='power_law', ...)"
+                )
+            if law is not None:
+                for name, value in (("law", law),):
+                    if value not in DUST_LAWS:
+                        raise ValueError(
+                            f"dust.two_component({name}={value!r}): unknown "
+                            f"attenuation law. Valid: {sorted(DUST_LAWS)}."
+                        )
+                settings["law"] = law
+            elif law_bc is not None and law_diff is not None:
+                for name, value in (("law_bc", law_bc), ("law_diff", law_diff)):
+                    if value not in DUST_LAWS:
+                        raise ValueError(
+                            f"dust.two_component({name}={value!r}): unknown "
+                            f"attenuation law. Valid: {sorted(DUST_LAWS)}."
+                        )
+                settings["law_bc"] = law_bc
+                settings["law_diff"] = law_diff
+            elif law_bc is not None or law_diff is not None:
+                raise ValueError(
+                    "dust.two_component(): requires BOTH 'law_bc' and 'law_diff' "
+                    "for per-screen specification, or 'law' for a shared law. "
+                    f"You gave: {[n for n, v in (('law_bc', law_bc), ('law_diff', law_diff)) if v is not None]}. "
+                    "Example 1: dust.two_component(law='calzetti', ...) "
+                    "Example 2: dust.two_component(law_bc='calzetti', "
+                    "law_diff='power_law', ...)"
+                )
+            else:
+                raise TypeError(
+                    "dust.two_component(): requires either 'law' (shared) or "
+                    "both 'law_bc' and 'law_diff' (per-screen). "
+                    f"Valid laws: {sorted(DUST_LAWS)}. "
+                    "Example 1: dust.two_component(law='calzetti', ...) "
+                    "Example 2: dust.two_component(law_bc='calzetti', "
+                    "law_diff='power_law', ...)"
+                )
+
         for s in setting_names:
             if s in kwargs:
                 value = kwargs.pop(s)
@@ -127,8 +197,15 @@ def _make_dust_factory(
                         f"law. Valid: {sorted(DUST_LAWS)}."
                     )
                 settings[s] = value
-            else:
+            elif s in setting_defaults:
+                # Fallback default if one is provided
                 settings[s] = setting_defaults[s]
+            else:
+                # No default and not provided: required.
+                raise TypeError(
+                    f"dust.{dust_model}() missing required argument: {s!r}. "
+                    f"Example: dust.{dust_model}({s}='calzetti', ...)."
+                )
         emission_block = kwargs.pop("emission", None)
         valid_kwargs = ["defaults", *setting_names, "emission", *short_params]
         unknown = [k for k in kwargs if k not in short_params]
@@ -158,14 +235,25 @@ def _make_dust_factory(
         ),
     ]
     for s in setting_names:
+        default = setting_defaults.get(s, inspect.Parameter.empty)
         sig_params.append(
             inspect.Parameter(
                 s,
                 inspect.Parameter.KEYWORD_ONLY,
-                default=setting_defaults[s],
+                default=default,
                 annotation=str,
             )
         )
+    if dust_model == "two_component":
+        # law/law_bc/law_diff form an XOR group (see factory() above); shown
+        # here as optional (UNSET) for IDE autocomplete, not enforced by the
+        # signature itself — factory() enforces the actual XOR requirement.
+        for law_kw in ("law", "law_bc", "law_diff"):
+            sig_params.append(
+                inspect.Parameter(
+                    law_kw, inspect.Parameter.KEYWORD_ONLY, default=UNSET, annotation=str
+                )
+            )
     for short in short_params:
         sig_params.append(
             inspect.Parameter(short, inspect.Parameter.KEYWORD_ONLY, default=UNSET, annotation=Any)
@@ -186,12 +274,20 @@ def _make_dust_factory(
     doc_lines: list[str] = []
     doc_lines.append(f"Build a config dict for the {dust_model!r} attenuation model.")
     doc_lines.append("")
-    settings_desc = ", ".join(f"``{s}``" for s in setting_names)
-    doc_lines.append(
-        f"Settings: {settings_desc}. Each accepts any key registered in "
-        f"``tengri.components.dust.attenuation.DUST_LAWS`` "
-        f"(e.g. ``'calzetti'``, ``'smc'``, ``'cardelli'``)."
-    )
+    if dust_model == "two_component":
+        doc_lines.append(
+            "Law: ``law`` (shared by both screens) XOR both ``law_bc`` and "
+            "``law_diff`` (per-screen). Required — no default. Each accepts "
+            "any key registered in ``tengri.components.dust.attenuation.DUST_LAWS`` "
+            "(e.g. ``'calzetti'``, ``'smc'``, ``'cardelli'``)."
+        )
+    else:
+        settings_desc = ", ".join(f"``{s}``" for s in setting_names)
+        doc_lines.append(
+            f"Settings: {settings_desc}. Each accepts any key registered in "
+            f"``tengri.components.dust.attenuation.DUST_LAWS`` "
+            f"(e.g. ``'calzetti'``, ``'smc'``, ``'cardelli'``)."
+        )
     doc_lines.append("")
     doc_lines.append("Parameters")
     doc_lines.append("----------")
@@ -200,11 +296,26 @@ def _make_dust_factory(
         "    Wildcard policy. ``FREE`` makes unspecified attenuation params "
         "fit; ``FIXED`` (default) pins them to registry defaults."
     )
-    for s in setting_names:
-        doc_lines.append(f"{s} : str, optional")
+    if dust_model == "two_component":
+        doc_lines.append("law : str, optional")
         doc_lines.append(
-            f"    Attenuation law name from DUST_LAWS. Default {setting_defaults[s]!r}."
+            "    Attenuation law shared by both screens. Mutually exclusive "
+            "with law_bc/law_diff."
         )
+        doc_lines.append("law_bc : str, optional")
+        doc_lines.append("    Birth-cloud attenuation law. Requires law_diff too.")
+        doc_lines.append("law_diff : str, optional")
+        doc_lines.append("    Diffuse-ISM attenuation law. Requires law_bc too.")
+    for s in setting_names:
+        doc_lines.append(f"{s} : str")
+        if s in setting_defaults:
+            doc_lines.append(
+                f"    Attenuation law name from DUST_LAWS. Default {setting_defaults[s]!r}."
+            )
+        else:
+            doc_lines.append(
+                f"    Attenuation law name from DUST_LAWS. Required (no default)."
+            )
     doc_lines.append("emission : dict, optional")
     doc_lines.append(
         "    Nested config from ``builders.dust.emission.<variant>(...)`` "
@@ -223,17 +334,22 @@ def _make_dust_factory(
 
 
 # Build the two top-level factories at import time.
+# Note: builders now require explicit laws (no defaults). Grammar validation
+# enforces this; flat-kwarg builds apply power_law defaults in Parameters.
 single_component = _make_dust_factory(
     dust_model="single_component",
     short_params=_discover_attenuation_params("single_component"),
-    setting_names=("law_bc",),
-    setting_defaults={"law_bc": "calzetti"},
+    setting_names=("law",),
+    setting_defaults={},  # No defaults; grammar requires explicit law
 )
 two_component = _make_dust_factory(
     dust_model="two_component",
     short_params=_discover_attenuation_params("two_component"),
-    setting_names=("law_bc", "law_diff"),
-    setting_defaults={"law_bc": "calzetti", "law_diff": "calzetti"},
+    # law/law_bc/law_diff are handled by the dedicated XOR branch in factory()
+    # above, not the generic per-setting loop (they are mutually exclusive
+    # forms, not independently required settings).
+    setting_names=(),
+    setting_defaults={},
 )
 
 
