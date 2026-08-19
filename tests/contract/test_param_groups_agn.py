@@ -977,6 +977,7 @@ class TestAGNLinesDeprecation:
             )
 
 
+@pytest.mark.contract
 class TestAGNSubblockStrictness:
     """Sub-block-owned parameters must be nested, not written flat at agn level.
 
@@ -1025,13 +1026,14 @@ class TestAGNSubblockStrictness:
         dist = params.get_distribution("agn_tau_skirtor")
         assert dist.bounds == (3, 11)
 
-    def test_disc_owned_param_at_agn_level_raises(self):
-        """A disc parameter at agn level raises."""
-        with pytest.raises(ValueError, match="is a 'agn\\.disc' parameter"):
+    def test_nlr_owned_param_at_agn_level_raises(self):
+        """A NLR parameter at agn level raises."""
+        with pytest.raises(ValueError, match="is a 'agn\\.nlr' parameter"):
             parse_groups(
                 sfh={"type": "dpl", "*": FIXED},
                 agn={
-                    "alpha": Uniform(1, 3),  # disc param at wrong level
+                    "disc": {"type": "powerlaw", "*": FIXED},
+                    "nlr_cf": Uniform(0.01, 0.5),  # nlr param at wrong level
                 },
             )
 

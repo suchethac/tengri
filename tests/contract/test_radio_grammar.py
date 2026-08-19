@@ -321,6 +321,7 @@ class TestRadioComponentPhysics:
         assert jnp.all(jnp.isfinite(model.predict_state({}).sed_intrinsic))
 
 
+@pytest.mark.contract
 class TestRadioLegacyTypeRetirement:
     """PR6: Legacy radio={'type': X} form is retired.
 

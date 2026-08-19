@@ -185,7 +185,18 @@ def axes() -> dict[str, list[str]]:
 def _discover_legacy_params(variant: str) -> list[str]:
     if variant == "none":
         return []
-    recipe = {"sfh": {"type": "dpl"}, "radio": {"type": variant, WILDCARD_ALIAS: FREE}}
+    # Use the composable form to discover parameters for legacy variant
+    # (legacy flat form is retired from the public API)
+    from tengri.parameters.groups import _legacy_radio_type_to_blocks
+
+    sf_variant, agn_variant = _legacy_radio_type_to_blocks(variant)
+    recipe = {
+        "sfh": {"type": "dpl"},
+        "radio": {
+            "sf": {"type": sf_variant, WILDCARD_ALIAS: FREE},
+            "agn": {"type": agn_variant, WILDCARD_ALIAS: FREE},
+        },
+    }
     records = recipe_parameters(recipe, free_only=False)
     return [
         short_form(rec.name, prefixes=("radio_",))
