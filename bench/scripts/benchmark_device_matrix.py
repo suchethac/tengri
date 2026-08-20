@@ -601,14 +601,27 @@ def cell_posterior(model, args) -> dict:
     # chains, cheap next to the fit, but a 2048-galaxy catalog does not need
     # 2048 of them to characterize the worst case.
     n_diag = min(n_gal, args.n_diagnose)
-    ess_min, rhat_max, n_finite, n_dead, n_unique = [], [], 0, 0, []
+    ess_min, rhat_max, n_finite, n_dead, n_unique, n_div, n_moving = [], [], 0, 0, [], [], []
     for i in range(n_diag):
         post = cp[i]
         leaves = jax.tree_util.tree_leaves(post.samples)
         if leaves and bool(np.all(np.isfinite(np.asarray(leaves[0])))):
             n_finite += 1
+        # Count how many parameters actually MOVED in this galaxy. Taking one
+        # leaf is not enough: post.samples carries the Fixed parameters too
+        # (redshift, sigma_v_kms, ...), which are constant by construction, and
+        # a healthy fit moves exactly the free ones.
+        n_moving.append(sum(1 for v in post.samples.values() if np.ptp(np.asarray(v)) > 0))
         if leaves:
             n_unique.append(int(np.unique(np.asarray(leaves[0])).size))
+        # n_divergent discriminates the two ways fixed-length HMC freezes: equal
+        # to n_samples means every proposal was hard-rejected (NaN energy ->
+        # -inf -> p_accept 0); zero means the mass matrix collapsed and the
+        # chain is standing still with healthy-looking acceptance.
+        if post.diagnostics:
+            d = post.diagnostics.get("n_divergent")
+            if d is not None:
+                n_div.append(int(d))
         ess = post.effective_sample_size()
         try:
             rhat = post.rhat()
@@ -644,7 +657,18 @@ def cell_posterior(model, args) -> dict:
         "n_diagnosed": n_diag,
         "draws_finite_frac": round(n_finite / max(1, n_diag), 4),
         "dead_chain_frac": round(n_dead / max(1, n_diag), 4),
+        "n_divergent_median": int(np.median(n_div)) if n_div else None,
+        "n_divergent_max": int(np.max(n_div)) if n_div else None,
         "unique_draws_median": int(np.median(n_unique)) if n_unique else 0,
+        "n_params_moving_median": int(np.median(n_moving)) if n_moving else 0,
+        "frac_galaxies_fully_frozen": round(float(np.mean(np.asarray(n_moving) == 0)), 4)
+        if n_moving
+        else None,
+        "frac_galaxies_all_free_moving": round(
+            float(np.mean(np.asarray(n_moving) >= args.n_free_expected)), 4
+        )
+        if n_moving
+        else None,
         "ess_min_median": round(float(np.median(ess_min_arr)), 1),
         "ess_min_worst": round(float(np.min(ess_min_arr)), 1),
         "ess_min_best": round(float(np.max(ess_min_arr)), 1),
@@ -846,6 +870,7 @@ def main(argv=None) -> int:
     ap.add_argument("--warmup", type=int, default=30)
     ap.add_argument("--burnin", type=int, default=10)
     ap.add_argument("--n-diagnose", type=int, default=64)
+    ap.add_argument("--n-free-expected", type=int, default=7)
     ap.add_argument(
         "--leapfrog", type=int, default=20, help="HMC n_leapfrog_steps (HMC_VALIDATED: 20)"
     )

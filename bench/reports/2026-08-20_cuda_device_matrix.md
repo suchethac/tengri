@@ -396,6 +396,74 @@ photometry needs, since each galaxy already carries 22x more work. **The batched
 spectroscopy sweep was not run**, and it is the most promising unmeasured cell in
 this report.
 
+## Finding 13 — catalog `mcmc_hmc` does not converge on this model at any warmup, and #1999 is the same signature
+
+Finding 9 established that the cheap HMC draws were not samples. This is the
+matrix behind that, and it also connects to an open issue. All rows are the same
+D=7 model (`mock_recovery_minimal`, 5 SDSS bands, z fixed), float32,
+`K = n_gal`, `mcmc_hmc`.
+
+| device | n_gal | warmup | samples | L | target | mass | ESS_min med | R-hat max | divergent med | verdict |
+|---|---:|---:|---:|---:|---:|---|---:|---:|---:|---|
+| GPU | 1000 | 300 | 1000 | 10 | 0.85 | diag | 1.5 | 3.22 | — | not mixing |
+| GPU | 1000 | 1000 | 600 | 20 | 0.9 | **dense** | — | — | — | **fully frozen**, #1438 guard raised |
+| GPU | 1000 | 300 | 600 | 20 | 0.7 | diag | 2.3 | 1.94 | — | not mixing |
+| CPU | 64 | 1000 | 600 | 20 | 0.9 | diag | 1.9 | 1.93 | 0 | not mixing |
+| CPU | 64 | 200 | 200 | 20 | 0.9 | diag | 1.4 | 2.66 | 0 | not mixing |
+| CPU | 64 | 500 | 200 | 20 | 0.9 | diag | 1.3 | 3.30 | 0 | not mixing |
+| CPU | 64 | 2000 | 200 | 20 | 0.9 | diag | 1.3 | 3.01 | 0 | not mixing |
+| CPU | 64 | 1000 | 600 | 20 | 0.9 | **dense** | 2.2 | 1.39 | 0 | not mixing |
+| CPU | 64 | 300 | 300 | **150** | 0.8 | diag | 3.0 | **1.037** | 0 | closest to converged |
+
+Read off the rows, in order of what each rules out:
+
+1. **Warmup length is not the lever.** 200 → 2000 warmup at L=20 changes nothing
+   (ESS_min 1.3-1.4, R-hat 2.7-3.3). I expected the opposite and was wrong.
+2. **A dense mass matrix is not the lever either** — 1.9 → 2.2 ESS_min at 64
+   galaxies. It helps R-hat (1.93 → 1.39) and does not fix it.
+3. **Trajectory length is the lever that moves the needle.** L=20 → 150 takes max
+   R-hat from 1.93 to **1.037** and the fraction of unconverged galaxies from
+   100% to 37.5%. This matches #1986, which measured median min ESS 13 at 20
+   steps against 219 at 150 on a 9-D problem. **`HMC_VALIDATED`'s L=20 is simply
+   too short for this posterior**, and it is scoped to notebook fits in its own
+   docstring.
+4. **The chains are not frozen at 64 galaxies** — all 7 free parameters move in
+   every diagnosed galaxy (`frac_galaxies_fully_frozen = 0.0`). They mix badly.
+   The *fully frozen* case, where every draw of every parameter is identical and
+   `rhat()` raises, appeared only at 1000 galaxies under `HMC_VALIDATED`.
+5. **Divergences are ~0 throughout**, so nothing in the sampler's own reporting
+   flags any of this. As `bench/reports/2026-08-17_nb01_nb05_nuts_vs_hmc.md` put
+   it: "A divergence count of zero is not evidence of convergence for
+   fixed-length HMC — it cannot report the failure mode that a fixed trajectory
+   actually has, which is not exploring the direction at all."
+
+**This is very likely the same defect as open issue #1999**
+("mcmc_hmc freezes on 06_fitting_spectroscopy: 600/600 identical draws, both
+precondition arms now broken"): same `HMC_VALIDATED` recipe, same 600/600
+identical-draw signature, and #1999 reports 600 divergent transitions where the
+catalog path reports ~0 — which is itself worth reconciling. #1999 is scoped to
+one notebook and to single-galaxy spectroscopy; the catalog path, both devices
+and photometry all show it too, so **the scope in #1999 is narrower than the
+defect**.
+
+Two wiring differences make the catalog path more exposed, both from reading
+`catalog_fitter.py` rather than from measurement:
+
+- **No MAP initialization.** Single-fit HMC runs an 8-restart ADAM MAP first
+  (`hmc.py` `_maybe_map_init`); the catalog path starts every galaxy from
+  `_initialize_unbounded`, i.e. `0.1 * normal` about the prior centre
+  (`fitter.py:2810-2812`).
+- **`dense_mass_matrix` is hardcoded `False`** (`catalog_fitter.py:1412`) and
+  applied as `bool(dense_mass_matrix)` (`:1478`), where single-fit resolves
+  `None` → `n_dim < 8` → **dense at D=7** (`nuts.py:138-140`). Passing the
+  documented default `None` to the catalog path therefore silently selects
+  diagonal, and unlike `run_nuts` the catalog path never logs which it chose.
+- `precondition` — the whitening escape hatch for exactly this kind of geometry
+  — is **unreachable** from `CatalogFitter` (`_run_native_mcmc` takes no
+  `**kwargs`).
+
+Neither is confirmed as *the* cause; item 3 is the only lever measured to help.
+
 ## Interpretation
 
 The GPU question is a shape question. tengri's forward model is memory- and
@@ -471,34 +539,113 @@ accelerator will make a non-mixing chain 48x faster and tell you nothing.
 
 ## To file
 
-Not filed from this session (no `gh` available). Ready to open:
+`gh` is not installed in this environment, so none of these were opened. Bodies
+are written out here so they can be filed verbatim.
+
+### A. Comment on the OPEN issue #1999 (do this first — do not open a duplicate)
+
+#1999 is "mcmc_hmc freezes on 06_fitting_spectroscopy: 600/600 identical draws,
+both precondition arms now broken" (`area:inference`, `area:notebooks`, `bug`).
+The catalog path shows the same thing, so #1999's scope is too narrow:
+
+> Same signature outside that notebook. `CatalogFitter.run("mcmc_hmc", ...)` on a
+> D=7 photometric model (`mock_recovery_minimal`, 5 SDSS bands, z fixed, float32)
+> under the same `HMC_VALIDATED` recipe returns 600/600 identical draws for every
+> parameter at 1000 galaxies, and `Posterior.rhat()` raises the #1438 guard. So
+> this is not specific to `06_fitting_spectroscopy`, to spectroscopy, or to the
+> single-galaxy path — it reproduces on catalog photometry, on **both CPU and
+> CUDA**.
+>
+> A convergence matrix over warmup, trajectory length and mass matrix is in
+> `bench/reports/2026-08-20_cuda_device_matrix.md` Finding 13. The short version:
+> warmup length (200-2000) changes nothing; a dense mass matrix helps R-hat but
+> does not fix it; **trajectory length is the only lever that moves** — L=20 → 150
+> takes max split R-hat from 1.93 to 1.037, consistent with #1986's median min ESS
+> 13 → 219. That points at `HMC_VALIDATED`'s `n_leapfrog_steps=20` being too short
+> for these posteriors rather than at a recent regression in the sampler, which is
+> worth checking against #1999's "the published render shows healthy results"
+> claim before hunting for a regression commit.
+>
+> One discrepancy worth reconciling: #1999 reports **600 divergent transitions**,
+> while every catalog row here reports a median of **0** divergences with equally
+> bad mixing. If both are the same defect, the divergence count is not a reliable
+> discriminator.
+
+Command:
+
+```bash
+gh issue comment 1999 --body-file <that text>
+```
+
+### B. New issue — catalog HMC drops the stabilizers single-fit HMC relies on
+
+Title: *catalog `mcmc_hmc` silently drops MAP init and the `dense_mass_matrix=None`
+auto-policy, and cannot report step size or acceptance*
+Labels: `area:inference`, `bug`, `silent-failure`
+
+Body: `CatalogFitter.run("mcmc_hmc", ...)` is not the same sampler as
+`Fitter.fit("mcmc_hmc", ...)`.
+
+1. **No MAP initialization.** Single-fit runs an 8-restart ADAM MAP
+   (`backends/mcmc/hmc.py`, `_maybe_map_init`); the catalog path starts every
+   galaxy at `0.1 * normal` about the prior centre (`fitter.py:2810-2812`). The
+   docstring of `_maybe_map_init` documents this exact failure shape for #1529
+   ("killed six of eight NUTS fits with R-hat up to 10.74 and zero divergences").
+2. **`dense_mass_matrix` is hardcoded `False`** (`catalog_fitter.py:1412`) and
+   consumed as `bool(dense_mass_matrix)` (`:1478`). Single-fit resolves `None` to
+   `n_dim < 8`, i.e. **dense at D=7** (`nuts.py:138-140`). So passing the
+   documented default silently downgrades to diagonal, and unlike `run_nuts`
+   (`nuts.py:422-424`) the catalog path never logs the choice.
+3. **`precondition` is unreachable.** `_run_native_mcmc` takes no `**kwargs`
+   (`catalog_fitter.py:1394-1414`), so the whitening path
+   (`hmc.py:172-173 prepare_preconditioning`) cannot be used from a catalog fit —
+   which is the escape hatch for the geometry that makes fixed-L HMC fail.
+4. **Step size and acceptance rate are discarded.** `catalog.py:160` drops the
+   adapted step size into `_step_size`; single-fit both logs and returns it
+   (`hmc.py:245-249`, `:334`). Acceptance rate is never captured by any sampler
+   (`_shared.py:496-500` records only position and `is_divergent`). With ~0
+   divergences reported, a badly-mixing catalog fit produces **no** signal.
+
+### C. New issue — the only catalog HMC test cannot fail
+
+Title: *`test_mcmc_hmc_vectorizes_too` is D=1 and asserts only shape and finiteness*
+Labels: `area:tests`, `area:inference`, `silent-failure`
+
+`tests/inference/test_catalog_mcmc_vmap.py:241-268` is the sole catalog HMC test:
+`n_warmup=15, n_samples=15, n_leapfrog_steps=8`, on a model where six of seven
+parameters are `Fixed` (D=1), asserting `shape[0] == 15` and `all(isfinite)`. **A
+completely frozen chain passes both.** Every other test in the file uses
+`mcmc_nuts`, and no catalog test asserts `ptp > 0`, R-hat or ESS. The convention
+exists elsewhere — `tests/inference/test_hierarchical_backends_actually_run.py:182`
+asserts `np.unique(values).size > 1` — but only for `PopulationFitter`. Port it.
+
+### D. Docs steer catalog users to the sampler that does not converge
+
+Title: *`method_selection.md` recommends `mcmc_hmc` for catalog mode on compile-time
+grounds, with no convergence evidence*
+Labels: `area:docs`, `area:inference`
+
+`docs/method_selection.md:26` recommends `mcmc_hmc` for catalog mode because
+"batched NUTS spent over fifteen minutes in XLA compilation without sampling",
+and `docs/known_limitations.md:131` recommends it at D >= 8 for memory. Neither
+carries a convergence caveat, and `mcmc_hmc` has no `[POOR MIXING]` flag while
+`mcmc_ghmc` / `mcmc_mclmc` / `pathfinder` do. Given Finding 13 and the two
+2026-08-17 reports, both need the caveat and a pointer to the trajectory-length
+finding.
+
+### E. The four items from the CUDA work itself
 
 1. **float32 `jax.grad` of photometry returns exactly zero** — `area:perf`,
-   `area:forward`, `bug`, `silent-failure`. Evidence: Finding 5. Note the existing
-   test asserts finiteness, which zero satisfies; a regression test should assert
-   *nonzero* against a float64 reference.
+   `area:forward`, `bug`, `silent-failure`. Finding 5. A regression test should
+   assert *nonzero* against a float64 reference; the existing test asserts
+   finiteness, which zero satisfies.
 2. **`~/.cache/tengri_precomp` is keyed on neither dtype nor backend** —
-   `area:perf`, `bug`, `silent-failure`. Two values in the z-table (`dl_cm`,
-   `igm_transmission`) go through `jnp`, so a float32 run can write an entry a
-   float64 run later reads.
-3. **Nine bench scripts hard-pin `JAX_PLATFORMS=cpu`** — `area:perf`, `area:tests`,
-   `type:refactor`. They cannot be run on a device without editing.
-   `benchmark_catalog_throughput.py` and `benchmark_device_matrix.py` are the two
-   that select the platform from the environment.
-4. **`bench/README.md`'s script table is missing entries**, including
-   `benchmark_catalog_throughput.py` — `area:tests`, `documentation`.
-5. **float32 geoVI emission-line marginalization dies on cuBLASLt** —
-   `area:inference`, `area:nebular`, `bug`. `INTERNAL: GEMM is not supported by
-   cublasLt and legacy cublas fallback is removed`, two tests in
-   `test_geovi_metric_float32.py`, CUDA only, not precision-related.
-6. **`test_float64_gradient_does_not_poison_a_later_float32_gradient` is
-   GPU-intermittent** — `area:tests`, `area:perf`. Exact `assert_array_equal` at
-   ~8 ulp on a device that need not reproduce its reduction order; wants a GPU
-   tolerance.
-7. **tengri should consider defaulting `jax_default_matmul_precision` to
-   `highest` on GPU** when x64 is off — `area:api`, `area:perf`,
-   `silent-failure`. It costs nothing measurable (Finding 7) and its absence
-   silently degrades every float32 matmul on Ampere+.
+   `area:perf`, `bug`, `silent-failure`. An fp32 run can write an entry an fp64
+   run later reads.
+3. **float32 geoVI emission-line marginalization dies on cuBLASLt** —
+   `area:inference`, `area:nebular`, `bug`. Finding 8.
+4. **`forward_chunk_size`'s 2 GB budget is ~30% off on a 12 GB card, and 107x
+   matters** — `area:inference`, `area:perf`. Finding 11.
 
 ## Reproduce
 
