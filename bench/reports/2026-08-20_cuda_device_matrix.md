@@ -139,7 +139,9 @@ But it buys nothing at small width: every f32-vs-f64 comparison in Finding 1 sit
 | float32 | 988 GFLOP/s | **10,740 GFLOP/s** |
 | float64 | **379 GFLOP/s** | 189 GFLOP/s |
 
-— is real and simply never reached, because the workload is ~0.12 FLOP/byte. Note
+— is real and simply never reached, because the workload is ~0.12 FLOP/byte (that
+intensity is measured in `notebooks/apple_mps.py`, on the compiled graph rather
+than the device, which is why it predicts this backend too). Note
 the float64 row: **this GPU is half the CPU's float64 throughput**, because GeForce
 cards run fp64 at 1/64 rate. On A100/H100 it is ~1/2, so that row is the one result
 here that does not transfer.
@@ -378,29 +380,25 @@ JAX_PLATFORMS=cpu .venv/bin/python bench/scripts/benchmark_device_matrix.py --al
 .venv/bin/python bench/scripts/benchmark_device_matrix.py --compare
 ```
 
-## Not done
+## Published
 
-`notebooks/nvidia_cuda.py` is **not registered in the published docs spine.**
-Publishing it requires an executed render carrying `image/png` outputs —
-`tools/check_notebook_renders.py` enforces that, correctly — and this environment
-has no kernel stack to produce one (`ipykernel`, `jupyter_client`, `nbclient` and
-`nbconvert` are all absent from the venv). The notebook itself runs end to end on
-CUDA; only the render is missing. To publish:
+`notebooks/nvidia_cuda.py` is registered in the docs spine
+(`docs/spine/experimental/nvidia_cuda.ipynb`), executed on this CUDA box with its
+figure captured. Re-render after editing it with
 
 ```bash
-pip install nbclient ipykernel                       # not installed here
-python scripts/execute_notebooks.py nvidia_cuda      # never set MPLBACKEND
+python scripts/execute_notebooks.py nvidia_cuda   # never set MPLBACKEND
 ```
 
-then add `"nvidia_cuda"` to `EXPERIMENTAL_SLUGS` in
-`scripts/sync_spine_notebooks_for_docs.py` and a bullet plus toctree entry in
-`docs/spine/experimental/index.md`.
+Executing needs `nbclient`, `ipykernel` and `nbconvert`, which are not in the base
+environment; they were installed into `.venv` for this work.
 
 One warning learned by doing it: `scripts/sync_spine_notebooks_for_docs.py`
-rewrites *every* published render, not just the one you added. Two unrelated
-notebooks (`08_emission_lines`, `09_parameter_sweeps`) picked up 1226 lines of
-diff from source drift that predates this work. Check `git status` after running
-it and restore anything you did not mean to touch.
+rewrites *every* published render, not only the one you added. Two unrelated
+notebooks (`08_emission_lines`, `09_parameter_sweeps`) picked up 1226 lines of diff
+from source drift predating this work. `scripts/execute_notebooks.py` writes the
+render itself and is the safer entry point; if you do run the sync, check
+`git status` afterwards.
 
 ## See also
 

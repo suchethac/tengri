@@ -32,9 +32,11 @@
 # ```
 #
 # The reason is arithmetic intensity, and it is the same reason as on Apple
-# silicon: tengri moves a lot of memory and does very little arithmetic —
-# about **0.12 FLOP per byte** on the `WavePrecomp` path, against the 25–50
-# FLOP/byte a GPU needs before its ALUs are the limiting factor. A single
+# silicon: tengri moves a lot of memory and does very little arithmetic — about
+# **0.12 FLOP per byte** on the `WavePrecomp` path, against the 25–50 FLOP/byte
+# a GPU needs before its ALUs are the limiting factor. (That figure is measured
+# in `notebooks/apple_mps.py`, not here; it is a property of the compiled graph
+# rather than of the device, which is why it predicts both backends.) A single
 # galaxy gives the card nothing to do but wait for memory and for the host.
 #
 # There is a second effect specific to consumer NVIDIA hardware. GeForce cards
