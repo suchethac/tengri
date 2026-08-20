@@ -29,6 +29,7 @@ def _spec(dust_frac_agn, agn_fracagn, *, emission="dale2014", with_agn=True):
     groups = dict(
         sfh={"type": "dpl", "*": FIXED},
         dust={
+            "law": "power_law",
             "type": "two_component",
             "emission": {"type": emission, "frac_agn": dust_frac_agn}
             if emission == "dale2014"
@@ -102,6 +103,7 @@ class TestGuardEndToEndAndFilterable:
                 ssp_data=synthetic_ssp_wide,
                 sfh={"type": "delayed", "*": FIXED},
                 dust={
+                    "law": "power_law",
                     "type": "two_component",
                     "tau_bc": Fixed(0.0),
                     "tau_diff": Fixed(0.0),
@@ -125,6 +127,7 @@ class TestGuardEndToEndAndFilterable:
                 ssp_data=synthetic_ssp_wide,
                 sfh={"type": "delayed", "*": FIXED},
                 dust={
+                    "law": "power_law",
                     "type": "two_component",
                     "tau_bc": Fixed(0.0),
                     "tau_diff": Fixed(0.0),

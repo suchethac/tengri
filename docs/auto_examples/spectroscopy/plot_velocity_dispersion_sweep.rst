@@ -28,7 +28,7 @@ of higher-velocity stellar populations.
 
 .. sphx-glr-precomputed-img:
 
-.. GENERATED FROM PYTHON SOURCE LINES 17-101
+.. GENERATED FROM PYTHON SOURCE LINES 17-102
 
 
 
@@ -38,19 +38,8 @@ of higher-velocity stellar populations.
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /tengri/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
-      return load_ssp_data(str(candidate))
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -68,7 +57,7 @@ of higher-velocity stellar populations.
     import numpy as np
 
     import tengri
-    from tengri.analysis.plotting import setup_style
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -95,6 +84,7 @@ of higher-velocity stellar populations.
             "trunc": 3.0,
         },
         dust={
+            "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
             "tau_bc": 0.1,

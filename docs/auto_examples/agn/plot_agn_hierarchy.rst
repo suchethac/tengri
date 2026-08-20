@@ -33,7 +33,7 @@ Reference: Kubota & Done 2018, MNRAS, 480, 1247 (multicolor disc);
 Stalevski et al. 2016, MNRAS, 458, 2288 (SKIRTOR);
 Temple, Hewett & Banerji 2021, MNRAS, 508, 737 (QSOgen).
 
-.. GENERATED FROM PYTHON SOURCE LINES 17-88
+.. GENERATED FROM PYTHON SOURCE LINES 17-94
 
 
 
@@ -60,7 +60,7 @@ Temple, Hewett & Banerji 2021, MNRAS, 508, 737 (QSOgen).
     import numpy as np
 
     import tengri
-    from tengri.analysis.plotting import setup_style
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -68,7 +68,13 @@ Temple, Hewett & Banerji 2021, MNRAS, 508, 737 (QSOgen).
     C_AA_PER_S = 2.998e18
     LOG_LBOL = 12.5
     SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
-    DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+    DUST = {
+        "law": "power_law",
+        "type": "two_component",
+        "all_params": tengri.FIXED,
+        "tau_diff": 0.0,
+        "tau_bc": 0.0,
+    }
 
     ssp = tengri.load_ssp()
 
@@ -119,6 +125,11 @@ Temple, Hewett & Banerji 2021, MNRAS, 508, 737 (QSOgen).
     ax.legend(frameon=False, fontsize=9, loc="lower center")
     fig.tight_layout()
     plt.savefig("plot_agn_hierarchy.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 6.538 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_hierarchy.py:

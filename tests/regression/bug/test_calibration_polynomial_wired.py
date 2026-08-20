@@ -39,7 +39,7 @@ pytestmark = pytest.mark.regression_bug
 
 _WAVE_OBS = jnp.linspace(4000.0, 9000.0, 300)
 _SFH = {"type": "dpl", "*": FIXED}
-_DUST = {"type": "single_component", "law_bc": "calzetti", "*": FIXED}
+_DUST = {"type": "single_component", "law": "calzetti", "*": FIXED}
 
 
 @pytest.fixture(scope="module")

@@ -47,7 +47,11 @@ def _build(approx, wave_lo=3500.0):
             ssp_data=ssp,
             observation=obs,
             sfh={"type": "dpl", "*": FIXED},
-            dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED},
+            dust={
+                "type": "two_component",
+                "law": "calzetti",
+                "*": FIXED,
+            },
             neb={"type": "none"},
             redshift=Fixed(0.05),
             approx=approx,
@@ -126,7 +130,11 @@ class TestSpectralIndexAsData:
                 ssp_data=ssp,
                 observation=obs,
                 sfh={"type": "dpl", "*": FIXED},
-                dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED},
+                dust={
+                    "type": "two_component",
+                    "law": "calzetti",
+                    "*": FIXED,
+                },
                 neb={"type": "none"},
                 redshift=Fixed(0.05),
             )

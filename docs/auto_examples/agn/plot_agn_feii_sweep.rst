@@ -44,7 +44,7 @@ References
    in active galactic nuclei," ApJ 641, 689–709 (2006).
    arXiv:astro-ph/0601042.
 
-.. GENERATED FROM PYTHON SOURCE LINES 28-138
+.. GENERATED FROM PYTHON SOURCE LINES 28-144
 
 
 
@@ -73,7 +73,7 @@ References
     import numpy as np
 
     import tengri
-    from tengri.analysis.plotting import setup_style
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -83,7 +83,13 @@ References
 
     # Minimal host: suppress stellar emission, focus on AGN continuum
     SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
-    DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+    DUST = {
+        "law": "power_law",
+        "type": "two_component",
+        "all_params": tengri.FIXED,
+        "tau_diff": 0.0,
+        "tau_bc": 0.0,
+    }
 
     # Fe II strength sweep: 0 (none) → 1.5 (strong)
     fe2_strength_values = np.linspace(0.0, 1.5, 6)

@@ -324,6 +324,8 @@ def build_components(
     # SFH -> SSP age-weight kernel: "cic" (dense cloud-in-cell integrand),
     # "dsps" (DSPS's histogram kernel), or None to auto-select (#964).
     age_kernel: str | None = None,
+    # Non-parametric SFH bin edges [Gyr]; None uses the model default (#1975).
+    sfh_bin_edges_gyr: Any = None,
     # GP-field parameterization: 1.0 = non-centered (shipped), a < 1 moves
     # amplitude dependence out of the xi -> SFH map (#1355).
     field_centering: float = 1.0,
@@ -494,6 +496,7 @@ def build_components(
                 lgmet_scatter=lgmet_scatter,
                 age_kernel=age_kernel,
                 field_centering=field_centering,
+                sfh_bin_edges_gyr=sfh_bin_edges_gyr,
             ),
             ssp_data=ssp_data,
         )
@@ -524,7 +527,7 @@ def build_components(
         elif dust_model == "single_component":
             atten_type = "single_component"
             atten_config = DustAttenuationSEDComponentConfig(
-                law=dust_law_diff,
+                law=dust_law_bc,
                 live_shape_params=frozenset(dust_live_shape_params or ()),
             )
         else:

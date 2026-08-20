@@ -99,7 +99,7 @@ def _build(
     obs = Observation(photometry=Photometry(filters=tuple(filters)))
     dust = {
         "type": "two_component",
-        "law_bc": "calzetti",
+        "law": "calzetti",
         "*": FIXED,
         "tau_diff": 0.5,  # real attenuation → real L_ir to (re-)emit
     }
@@ -235,7 +235,7 @@ def test_taylor_correction_toggle_two_component(synthetic_ssp):
     # where the flat effective-wavelength approximation is worst.
     dust = {
         "type": "two_component",
-        "law_bc": "calzetti",
+        "law": "calzetti",
         "*": FIXED,
         "tau_bc": 0.8,
         "tau_diff": 0.4,

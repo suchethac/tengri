@@ -36,7 +36,7 @@ Panels:
 
 Reference: Charlot & Fall 2000, ApJ, 539, 718.
 
-.. GENERATED FROM PYTHON SOURCE LINES 20-200
+.. GENERATED FROM PYTHON SOURCE LINES 20-202
 
 
 
@@ -58,8 +58,25 @@ Reference: Charlot & Fall 2000, ApJ, 539, 718.
          :class: sphx-glr-multi-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.1 Gyr is narrower than the SSP grid spacing 0.77 Gyr at peak sfh_tsnorm_peak_lbt_gyr=6 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.77 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.1 Gyr is narrower than the SSP grid spacing 0.864 Gyr at peak sfh_tsnorm_peak_lbt_gyr=7 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.864 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.1 Gyr is narrower than the SSP grid spacing 1.09 Gyr at peak sfh_tsnorm_peak_lbt_gyr=8 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.09 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -76,7 +93,7 @@ Reference: Charlot & Fall 2000, ApJ, 539, 718.
     import numpy as np
 
     import tengri
-    from tengri.analysis.plotting import setup_style
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -99,6 +116,7 @@ Reference: Charlot & Fall 2000, ApJ, 539, 718.
             ssp,
             sfh=SFH,
             dust={
+                "law": "power_law",
                 "type": "two_component",
                 "all_params": tengri.FIXED,
                 "tau_diff": tau_diff,
@@ -200,6 +218,7 @@ Reference: Charlot & Fall 2000, ApJ, 539, 718.
                 "log_total_mass": 10.0,
             },
             dust={
+                "law": "power_law",
                 "type": "two_component",
                 "all_params": tengri.FIXED,
                 "tau_bc": TAU_BC,

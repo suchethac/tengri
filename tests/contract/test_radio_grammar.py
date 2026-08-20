@@ -25,7 +25,13 @@ from tengri.parameters import parse_groups
 pytest.importorskip("dsps")  # Need DSPS for StellarSEDComponent
 
 #: Zero-dust two-component block for predict_state({}) builds.
-_DUST0 = {"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED}
+_DUST0 = {
+    "type": "two_component",
+    "law": "power_law",
+    "tau_bc": Fixed(0.0),
+    "tau_diff": Fixed(0.0),
+    "*": FIXED,
+}
 
 
 @pytest.mark.contract

@@ -278,7 +278,11 @@ from tengri.components.dust.draine2021_pah import (
     load_pahspec_draine2021,
     select_pahspec_axes,
 )
-from tengri.components.igm import igm_transmission, igm_transmission_madau
+from tengri.components.igm import (
+    igm_transmission,
+    igm_transmission_madau,
+    igm_transmission_meiksin06,
+)
 from tengri.components.igm.dla import dla_transmission, dla_transmission_obs
 from tengri.components.stellar.sfh import (
     AGEMAX_YR,
@@ -671,6 +675,7 @@ __all__ = [  # noqa: RUF022
     "velocity_broaden",
     "igm_transmission",
     "igm_transmission_madau",
+    "igm_transmission_meiksin06",
     # Spectral indices
     "measure_index_jax",
     "STANDARD_INDICES",

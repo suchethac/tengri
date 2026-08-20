@@ -62,7 +62,11 @@ def _model(ssp):
         observation=obs,
         sfh={"type": "dpl", "all_params": FREE},
         met={"logzsol": Fixed(-0.3)},
-        dust={"type": "two_component", "law_bc": "calzetti", "all_params": FREE},
+        dust={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": FREE,
+        },
         neb={"type": "none"},
         redshift=Fixed(0.1),
         apply_igm=False,

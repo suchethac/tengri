@@ -40,7 +40,7 @@ References
    MNRAS, 491, 740 (2020). arXiv:1909.09632.
    https://doi.org/10.1093/mnras/stz3001
 
-.. GENERATED FROM PYTHON SOURCE LINES 24-131
+.. GENERATED FROM PYTHON SOURCE LINES 24-137
 
 
 
@@ -55,12 +55,8 @@ References
  .. code-block:: none
 
     Building shared AGN model (polar_ebv and cos_inc FREE)...
-    /tengri/examples/agn/plot_polar_dust_ebv_type12_sweep.py:128: UserWarning: This figure includes Axes that are not compatible with tight_layout, so results might be incorrect.
+    /tengri/examples/agn/plot_polar_dust_ebv_type12_sweep.py:134: UserWarning: This figure includes Axes that are not compatible with tight_layout, so results might be incorrect.
       fig.tight_layout()
-    /tengri/examples/agn/plot_polar_dust_ebv_type12_sweep.py:128: UserWarning: Glyph 952 (\N{GREEK SMALL LETTER THETA}) missing from font(s) cmr10.
-      fig.tight_layout()
-    /tengri/examples/agn/plot_polar_dust_ebv_type12_sweep.py:129: UserWarning: Glyph 952 (\N{GREEK SMALL LETTER THETA}) missing from font(s) cmr10.
-      plt.savefig("plot_polar_dust_ebv_type12_sweep.png", dpi=150, bbox_inches="tight")
     Saved: plot_polar_dust_ebv_type12_sweep.png
 
 
@@ -82,7 +78,7 @@ References
     import numpy as np
 
     import tengri
-    from tengri.analysis.plotting import setup_style
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -97,7 +93,13 @@ References
     # Suppress stellar/nebular component so the AGN SED is unambiguous.
     COMMON = dict(
         sfh={"type": "const", "all_params": tengri.FIXED, "log_total_mass": -30.0},
-        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+        dust={
+            "law": "power_law",
+            "type": "two_component",
+            "all_params": tengri.FIXED,
+            "tau_diff": 0.0,
+            "tau_bc": 0.0,
+        },
         redshift=tengri.Fixed(0.05),
     )
 
@@ -183,7 +185,7 @@ References
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 6.013 seconds)
+   **Total running time of the script:** (0 minutes 5.165 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_polar_dust_ebv_type12_sweep.py:

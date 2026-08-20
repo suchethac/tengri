@@ -40,7 +40,7 @@ Physical insight made obvious:
 - **Green valley** (intermediate): transitional populations; sparse in modern
   surveys due to fast quenching timescales
 
-.. GENERATED FROM PYTHON SOURCE LINES 25-168
+.. GENERATED FROM PYTHON SOURCE LINES 25-169
 
 
 
@@ -67,7 +67,7 @@ Physical insight made obvious:
     import numpy as np
 
     import tengri
-    from tengri.analysis.plotting import setup_style
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -120,6 +120,7 @@ Physical insight made obvious:
                 "trunc": 13.0,
             },
             dust={
+                "law": "power_law",
                 "type": "two_component",
                 "all_params": tengri.FIXED,
                 "tau_diff": tau_diff,

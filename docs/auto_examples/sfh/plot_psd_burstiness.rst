@@ -28,7 +28,7 @@ the mean smooth SFH (dashed) and colored realizations. Bottom panels show
 representative SEDs for σ alone (left) and τ alone (right), illustrating how
 each parameter independently shapes the UV continuum and optical colors.
 
-.. GENERATED FROM PYTHON SOURCE LINES 12-182
+.. GENERATED FROM PYTHON SOURCE LINES 12-194
 
 
 
@@ -69,7 +69,7 @@ each parameter independently shapes the UV continuum and optical colors.
     import numpy as np
 
     import tengri
-    from tengri.analysis.plotting import setup_style
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -150,7 +150,13 @@ each parameter independently shapes the UV continuum and optical colors.
                 "psd_tau_myr": 100.0,
             },
         ],
-        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
+        dust={
+            "law": "power_law",
+            "type": "two_component",
+            "all_params": tengri.FIXED,
+            "tau_diff": 0.2,
+            "tau_bc": 0.3,
+        },
         redshift=tengri.Fixed(0.1),
     )
     baseline_sigma = dict(model_sigma.spec.sample(jax.random.PRNGKey(0)))
@@ -195,7 +201,13 @@ each parameter independently shapes the UV continuum and optical colors.
                 "psd_tau_myr": tengri.Uniform(30, 3000),
             },
         ],
-        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
+        dust={
+            "law": "power_law",
+            "type": "two_component",
+            "all_params": tengri.FIXED,
+            "tau_diff": 0.2,
+            "tau_bc": 0.3,
+        },
         redshift=tengri.Fixed(0.1),
     )
     baseline_tau = dict(model_tau.spec.sample(jax.random.PRNGKey(0)))
@@ -229,7 +241,7 @@ each parameter independently shapes the UV continuum and optical colors.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.004 seconds)
+   **Total running time of the script:** (0 minutes 4.474 seconds)
 
 
 .. _sphx_glr_download_auto_examples_sfh_plot_psd_burstiness.py:

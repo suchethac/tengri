@@ -31,7 +31,7 @@ Physics: older stars redden due to turnoff mass loss; higher metallicity
 increases line blanketing, also reddening. At UV wavelengths the degeneracy
 breaks (young stars are bluer).
 
-.. GENERATED FROM PYTHON SOURCE LINES 15-111
+.. GENERATED FROM PYTHON SOURCE LINES 15-119
 
 
 
@@ -41,19 +41,8 @@ breaks (young stars are bluer).
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /tengri/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
-      return load_ssp_data(str(candidate))
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -67,10 +56,11 @@ breaks (young stars are bluer).
     import jax
     import jax.numpy as jnp
     import matplotlib.pyplot as plt
+    import matplotlib.ticker as ticker
     import numpy as np
 
     import tengri
-    from tengri.analysis.plotting import setup_style
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -96,6 +86,7 @@ breaks (young stars are bluer).
                     "log_total_mass": 10.0,
                 },
                 dust={
+                    "law": "power_law",
                     "type": "two_component",
                     "all_params": tengri.FIXED,
                     "tau_bc": 0.0,
@@ -118,6 +109,12 @@ breaks (young stars are bluer).
             mask = (wave_um > 0.3) & (wave_um < 2.0) & (sed_norm > 0)
             ax.loglog(wave_um[mask], sed_norm[mask], color=age_colors[i], lw=2.0)
             ax.set(xlim=(0.3, 2.0), ylim=(0.1, 10.0))
+
+            # Fix x-axis ticks to avoid label collision in loglog plot
+            ax.set_xticks([0.3, 0.5, 1.0, 2.0])
+            ax.xaxis.set_major_formatter(ticker.ScalarFormatter())
+            ax.xaxis.set_minor_formatter(ticker.NullFormatter())
+
             ax.tick_params(labelsize=7)
 
             if j == 0:
@@ -153,11 +150,6 @@ breaks (young stars are bluer).
 
     fig.tight_layout()
     plt.savefig("plot_metallicity_age_grid.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.474 seconds)
 
 
 .. _sphx_glr_download_auto_examples_metallicity_plot_metallicity_age_grid.py:

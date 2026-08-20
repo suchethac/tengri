@@ -31,7 +31,7 @@ power-law index per Δβ = 1.
 Useful when interpreting FIR fits as the ``(T, β)`` degeneracy
 projected onto a single sub-mm photometric point.
 
-.. GENERATED FROM PYTHON SOURCE LINES 15-112
+.. GENERATED FROM PYTHON SOURCE LINES 15-113
 
 
 
@@ -41,19 +41,8 @@ projected onto a single sub-mm photometric point.
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /tengri/src/tengri/components/stellar/sps/dsps_wrapper.py:208: UserWarning: 'ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5' is a wNE (with-Nebular-Emission) SSP: nebular continuum and lines are already baked into the templates at fixed logU/logZ_gas. Pair it with the default baked-in nebular backend only — adding neb={'type': 'cue'} or a CLOUDY grid on top double-counts nebular emission.
-      return load_ssp_data(str(candidate))
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -71,7 +60,7 @@ projected onto a single sub-mm photometric point.
     import numpy as np
 
     import tengri
-    from tengri.analysis.plotting import setup_style
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -83,6 +72,7 @@ projected onto a single sub-mm photometric point.
 
     def _build(t_dust=None, beta=None):
         dust = {
+            "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
             "tau_diff": 0.5,

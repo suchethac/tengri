@@ -145,7 +145,7 @@ model = SEDModel.build(
     observation=Observation(photometry=Photometry.from_names(["sdss_u", "sdss_g"])),
     dust={
         'type': 'single_component',
-        'law_bc': 'calzetti',
+        'law': 'calzetti',
         'emission': {'type': 'custom_blackbody',   # ← your component
                      'T': Uniform(20.0, 80.0),
                      'beta_ir': Uniform(1.0, 3.0)},
@@ -179,7 +179,7 @@ Import it before `SEDModel.build()`, then select it as a **law**, not a type:
 model = SEDModel.build(
     ...,
     dust={'type': 'single_component',   # the dust *model*
-          'law_bc': 'my_powerlaw',      # ← your law
+          'law': 'my_powerlaw',      # ← your law
           'tau_v': Fixed(0.4)},
 )
 ```

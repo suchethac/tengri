@@ -55,7 +55,7 @@ def test_sedmodel_preloads_dale2014_at_construction():
             sfh={"type": "dpl", "*": tengri.FIXED},
             dust={
                 "type": "single_component",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "*": tengri.FIXED,
                 "emission": {"type": "dale2014", "*": tengri.FIXED},
             },

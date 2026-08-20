@@ -117,6 +117,7 @@ ALLOWED_TOP_LEVEL: frozenset[str] = frozenset(
         # build for a curve-only check is unnecessary friction.
         "igm_transmission",
         "igm_transmission_madau",
+        "igm_transmission_meiksin06",
         "velocity_broaden",
         "apply_lsf",
         # ── GP-noise kernels + spectral indices (closes #511) ───────
@@ -373,15 +374,17 @@ def test_new_subpackages_resolve() -> None:
 
     import tengri.analysis.plotting as _plotting
     import tengri.cosmology
+    import tengri.parameters.translate as _parameters_translate
     import tengri.plot
     import tengri.units
     import tengri.utils.conversions as _conversions
     import tengri.utils.cosmology as _cosmology
     import tengri.utils.magnitudes as _magnitudes
+    import tengri.utils.physics_constants as _physics_constants
 
     shim_sources = [
         (tengri.cosmology, (_cosmology,)),
-        (tengri.units, (_conversions, _magnitudes)),
+        (tengri.units, (_conversions, _magnitudes, _physics_constants, _parameters_translate)),
         (tengri.plot, (_plotting,)),
     ]
     for shim, sources in shim_sources:

@@ -31,7 +31,7 @@ import numpy as np
 
 import tengri
 from tengri.agn import register_agn_block
-from tengri.analysis.plotting import setup_style
+from tengri.plot import setup_style
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -90,7 +90,13 @@ def demo_graybody_torus(
 # to the AGN luminosity below. ``log_sfr`` was the legacy kwarg; current
 # ``const`` SFH parametrizes by total mass over [start_gyr, end_gyr].
 SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
-DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+DUST = {
+    "law": "power_law",
+    "type": "two_component",
+    "all_params": tengri.FIXED,
+    "tau_diff": 0.0,
+    "tau_bc": 0.0,
+}
 LOG_LBOL = 12.0
 ssp = tengri.load_ssp()
 

@@ -5,12 +5,8 @@
 Quick Start
 ===========
 
-End-to-end fit walkthrough: from mock data to posterior corner plots and convergence diagnostics.
+Model-summary walkthrough, SED dust anatomy, nebular-backend swap, and components-isolated anatomy tour. Fitting and inference examples live in the tutorial notebooks.
 
-
-.. raw:: html
-
-  <div id='sg-tag-list' class='sphx-glr-tag-list'></div>
 
 
 .. raw:: html
@@ -21,18 +17,18 @@ End-to-end fit walkthrough: from mock data to posterior corner plots and converg
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="MAP returns a point estimate; nothing here estimates uncertainty. Six free parameters, which is the validated ceiling for method=&quot;mcmc_nuts&quot;; method=&quot;laplace&quot; is the cheaper route to intervals, from the Hessian at the MAP. vi and mcmc_raytrace target D ≳ 20. See the method-selection page for the full decision table.">
+    <div class="sphx-glr-thumbcontainer" tooltip="Six physics blocks added cumulatively to the same star-forming host so the contribution of each is visible at every wavelength.">
 
 .. only:: html
 
-  .. image:: /auto_examples/quickstart/images/thumb/sphx_glr_plot_first_fit_thumb.png
+  .. image:: /auto_examples/quickstart/images/thumb/sphx_glr_plot_components_isolated_thumb.png
     :alt:
 
-  :doc:`/auto_examples/quickstart/plot_first_fit`
+  :doc:`/auto_examples/quickstart/plot_components_isolated`
 
 .. raw:: html
 
-      <div class="sphx-glr-thumbnail-title">Recovering stellar mass from 5-band SDSS photometry</div>
+      <div class="sphx-glr-thumbnail-title">Each tengri SED component shown in isolation</div>
     </div>
 
 
@@ -97,7 +93,7 @@ End-to-end fit walkthrough: from mock data to posterior corner plots and converg
 .. toctree::
    :hidden:
 
-   /auto_examples/quickstart/plot_first_fit
+   /auto_examples/quickstart/plot_components_isolated
    /auto_examples/quickstart/plot_model_summary_walkthrough
    /auto_examples/quickstart/plot_sed_components
    /auto_examples/quickstart/plot_swap_nebular_backend

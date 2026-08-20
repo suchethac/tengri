@@ -28,7 +28,7 @@ for Cardelli MW attenuation. Standard reference points (SMC, LMC,
 Milky Way diffuse, Calzetti starburst) sit on different iso-β_UV contours,
 illustrating why dust-law assumptions strongly bias inferred properties.
 
-.. GENERATED FROM PYTHON SOURCE LINES 12-137
+.. GENERATED FROM PYTHON SOURCE LINES 12-140
 
 
 
@@ -51,7 +51,7 @@ illustrating why dust-law assumptions strongly bias inferred properties.
     import numpy as np
 
     import tengri
-    from tengri.analysis.plotting import setup_style
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -105,6 +105,9 @@ illustrating why dust-law assumptions strongly bias inferred properties.
                 "all_params": tengri.FIXED,
                 "tau_bc": 0.0,
                 "tau_diff": av / 1.086,
+                # Per-screen pair: this example varies R_V on the diffuse screen,
+                # so the two screens deliberately differ and both must be named.
+                "law_bc": "power_law",
                 "law_diff": "cardelli",
                 "Rv": rv,
             },
@@ -172,7 +175,7 @@ illustrating why dust-law assumptions strongly bias inferred properties.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 8.292 seconds)
+   **Total running time of the script:** (0 minutes 6.470 seconds)
 
 
 .. _sphx_glr_download_auto_examples_dust_attenuation_plot_rv_av_uv_slope_degeneracy.py:

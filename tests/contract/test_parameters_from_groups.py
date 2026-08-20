@@ -29,7 +29,12 @@ class TestFromGroupsBridge:
         """Both paths produce Parameters with identical free/fixed partitions."""
         kwargs = dict(
             sfh={"type": "dpl", "*": FREE, "beta": Uniform(1, 3)},
-            dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED, "tau_bc": 0.5},
+            dust={
+                "type": "two_component",
+                "law": "calzetti",
+                "*": FIXED,
+                "tau_bc": 0.5,
+            },
             neb={"type": "cue", "*": FIXED},
             redshift=Fixed(0.05),
         )
@@ -45,7 +50,7 @@ class TestFromGroupsBridge:
             sfh={"type": "dpl", "*": FREE, "beta": Uniform(1, 3)},
             dust={
                 "type": "two_component",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "*": FIXED,
                 "tau_bc": 0.5,
                 "emission": {"type": "dale2014", "*": FIXED},

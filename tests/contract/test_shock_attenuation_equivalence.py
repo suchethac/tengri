@@ -55,7 +55,7 @@ class TestShockAttenuationEquivalence:
             sfh={"type": "delayed", "all_params": FIXED, "tau_gyr": 1.0, "log_total_mass": 10.0},
             dust={
                 "type": "two_component",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "all_params": FIXED,
                 "tau_bc": 2.0,
                 "tau_diff": 1.0,
@@ -76,7 +76,7 @@ class TestShockAttenuationEquivalence:
             sfh={"type": "delayed", "all_params": FIXED, "tau_gyr": 1.0, "log_total_mass": 10.0},
             dust={
                 "type": "two_component",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "all_params": FIXED,
                 "tau_bc": 2.0,
                 "tau_diff": 1.0,

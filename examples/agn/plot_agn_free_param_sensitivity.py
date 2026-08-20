@@ -36,7 +36,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import tengri
-from tengri.analysis.plotting import setup_style
+from tengri.plot import setup_style
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -44,7 +44,13 @@ warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 C_AA_PER_S = 2.998e18
 
 SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
-DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+DUST = {
+    "law": "power_law",
+    "type": "two_component",
+    "all_params": tengri.FIXED,
+    "tau_diff": 0.0,
+    "tau_bc": 0.0,
+}
 # Bare type selectors: no per-block ``'all_params'``, so the *top-level* AGN
 # wildcard governs every block's parameters. (A sub-block's own ``'all_params'``
 # would override

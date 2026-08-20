@@ -23,7 +23,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import tengri
-from tengri.analysis.plotting import setup_style
+from tengri.plot import setup_style
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -41,10 +41,13 @@ baseline = dict(
     log_total_mass=10.0,
 )
 
+# Pre-compute y-axis limits across all panels for consistent scaling
+y_min = float("inf")
+y_max = float("-inf")
+sed_cache = {}
+
 for i, beta in enumerate(betas):
     for j, alpha in enumerate(alphas):
-        ax = axes[i, j]
-
         model = tengri.SEDModel.build(
             ssp,
             sfh={
@@ -56,6 +59,7 @@ for i, beta in enumerate(betas):
                 "log_total_mass": 10.0,
             },
             dust={
+                "law": "power_law",
                 "type": "two_component",
                 "all_params": tengri.FIXED,
                 "tau_diff": 0.2,
@@ -73,13 +77,38 @@ for i, beta in enumerate(betas):
 
         # Optical region
         mask = (wave > 4000) & (wave < 8000)
+        sed_cache[(i, j)] = (wave[mask], sed[mask])
+
+        # Track limits for shared y-axis
+        y_min = min(y_min, sed[mask].min())
+        y_max = max(y_max, sed[mask].max())
+
+# Now plot with shared y-limits and labels
+for i, beta in enumerate(betas):
+    for j, alpha in enumerate(alphas):
+        ax = axes[i, j]
+        wave_opt, sed_opt = sed_cache[(i, j)]
 
         ax.plot(
-            wave[mask],
-            sed[mask],
+            wave_opt,
+            sed_opt,
             "C0-",
             lw=2.0,
         )
+
+        # Add panel label
+        ax.text(
+            0.98,
+            0.98,
+            rf"$\alpha={alpha:.1f}$, $\beta={beta:.1f}$",
+            transform=ax.transAxes,
+            fontsize=9,
+            verticalalignment="top",
+            horizontalalignment="right",
+            bbox=dict(boxstyle="round", facecolor="white", alpha=0.85),
+        )
+
+        ax.set_ylim(y_min * 0.9, y_max * 1.1)
         ax.set_xlabel(r"Wavelength [$\AA$]", fontsize=9)
         ax.set_ylabel(r"$L_\nu$ [erg/s/Hz]", fontsize=9)
         ax.grid(True, alpha=0.2)
@@ -101,7 +130,13 @@ model_alpha = tengri.SEDModel.build(
         "tau_gyr": 1.5,
         "log_total_mass": 10.0,
     },
-    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
+    dust={
+        "law": "power_law",
+        "type": "two_component",
+        "all_params": tengri.FIXED,
+        "tau_diff": 0.2,
+        "tau_bc": 0.3,
+    },
     redshift=tengri.Fixed(0.1),
 )
 baseline_alpha = dict(model_alpha.spec.sample(jax.random.PRNGKey(0)))
@@ -142,7 +177,13 @@ model_beta = tengri.SEDModel.build(
         "tau_gyr": 3.0,
         "log_total_mass": 10.0,
     },
-    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
+    dust={
+        "law": "power_law",
+        "type": "two_component",
+        "all_params": tengri.FIXED,
+        "tau_diff": 0.2,
+        "tau_bc": 0.3,
+    },
     redshift=tengri.Fixed(0.1),
 )
 baseline_beta = dict(model_beta.spec.sample(jax.random.PRNGKey(0)))

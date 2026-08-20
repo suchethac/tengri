@@ -25,7 +25,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import tengri
-from tengri.analysis.plotting import setup_style
+from tengri.plot import setup_style
 from tengri.units import fnu_to_ab_mag
 
 setup_style()
@@ -55,6 +55,7 @@ def build_model(z: float) -> tengri.SEDModel:
             "logzsol": tengri.Fixed(-0.1),
         },
         dust={
+            "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
             "tau_bc": 0.3,

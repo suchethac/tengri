@@ -1861,6 +1861,84 @@ def apply_compositor_swap(names: list[str]) -> list[str]:
     return [_DB_TO_PURE.get(n, n) for n in names]
 
 
+# The SFH models whose bin layout is user-settable via ``bin_edges_gyr``.
+# Module scope, not a local inside ``resolve_sfh``: the live stellar component
+# needs the same set to decide whether to forward the edges, and a second copy
+# would drift (#1975).
+_NONPARAM_NAMES = frozenset(
+    {
+        "continuity",
+        "dirichlet",
+        "continuity_flex",
+        "bursty_continuity",
+        "psb_suess2022",
+        "prospector_beta",
+    }
+)
+
+
+def validate_bin_edges_gyr(sfh_type, edges) -> None:
+    """Reject a ``bin_edges_gyr`` array that the named SFH cannot use.
+
+    Parameters
+    ----------
+    sfh_type : str
+        Registry name of the SFH the edges are for.
+    edges : array_like, shape (n_edges,)
+        Candidate bin edges [Gyr], expected strictly ascending.
+
+    Raises
+    ------
+    ValueError
+        If the edges are not 1-D ascending, if the SFH does not take custom
+        edges at all, or if a ``continuity``-shaped SFH is given a count its
+        declared ratio parameters cannot fill.
+
+    Notes
+    -----
+    The ratio-count rule holds only for the models whose shape function *is*
+    :func:`continuity` (``continuity``, ``bursty_continuity``,
+    ``prospector_beta``): they declare ``n_bins - 1`` ratios, so an array of
+    ``n`` edges needs exactly ``n - 2`` declared ratios. ``continuity_flex``
+    spends some of its parameters on bin *widths* and ``dirichlet`` declares no
+    ratios at all, so the rule is not applied to them.
+
+    A mismatched count is not cosmetic: the surplus ratios are swallowed by the
+    SFH's ``**ratio_kwargs``, sample a prior that reaches no bin, and change no
+    output. That is the silent-config failure of #1975 one step later, so it is
+    refused rather than warned about.
+    """
+    import numpy as _np
+
+    arr = _np.asarray(edges, dtype=float)
+    if arr.ndim != 1 or arr.shape[0] < 2:
+        raise ValueError(
+            f"bin_edges_gyr must be a 1-D array of at least 2 edges, got shape {arr.shape}."
+        )
+    if not _np.all(_np.diff(arr) > 0):
+        raise ValueError(f"bin_edges_gyr must be strictly ascending, got {arr}.")
+
+    if not isinstance(sfh_type, str):
+        return
+    if sfh_type not in _NONPARAM_NAMES:
+        raise ValueError(
+            f"bin_edges_gyr applies only to the non-parametric SFHs {sorted(_NONPARAM_NAMES)}, "
+            f"not {sfh_type!r}. Passing it here would have no effect."
+        )
+
+    spec = SFH_REGISTRY.get(sfh_type)
+    if spec is None or spec.fn is not continuity:
+        return
+    n_declared = sum(1 for name in spec.params if "ratio" in name)
+    n_needed = arr.shape[0] - 2  # n_bins - 1 ratios, with n_bins = len(edges) - 1
+    if n_declared and n_needed != n_declared:
+        raise ValueError(
+            f"sfh type={sfh_type!r} declares {n_declared} ratio parameters, which needs "
+            f"{n_declared + 2} bin edges, but bin_edges_gyr has {arr.shape[0]}. Supply "
+            f"{n_declared + 2} edges (for example tengri.make_agebins_from_zred(zred=...))."
+        )
+
+
 def resolve_sfh(
     mean_sfh_type: str | list[str],
     bin_edges_gyr: object = None,
@@ -1966,14 +2044,6 @@ def resolve_sfh(
     # two additive SFHs sharing the same internal kwarg (e.g. ``log_total_mass``
     # for any two parametric SFHs after the 2026-05-25 normalization refactor)
     # do not collide. See #372 for the bug this fixes.
-    _NONPARAM_NAMES = {
-        "continuity",
-        "dirichlet",
-        "continuity_flex",
-        "bursty_continuity",
-        "psb_suess2022",
-        "prospector_beta",
-    }
     additive_info = []
     for s in additive:
         pub_to_internal = dict(

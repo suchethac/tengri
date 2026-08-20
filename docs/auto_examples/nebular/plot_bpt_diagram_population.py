@@ -26,8 +26,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import tengri
-from tengri.analysis.plotting import setup_style
 from tengri.nebular import shock_line_ratios
+from tengri.plot import setup_style
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -69,6 +69,7 @@ for logu in logu_array:
                 "log_total_mass": 10.0,
             },
             dust={
+                "law": "power_law",
                 "type": "two_component",
                 "all_params": tengri.FIXED,
                 "tau_diff": 0.05,
@@ -128,7 +129,13 @@ for config in agn_configs:
             "tau_gyr": 0.15,
             "log_total_mass": 10.0,
         },
-        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.2},
+        dust={
+            "law": "power_law",
+            "type": "two_component",
+            "all_params": tengri.FIXED,
+            "tau_diff": 0.1,
+            "tau_bc": 0.2,
+        },
         neb={
             "type": "cue",
             "all_params": tengri.FIXED,

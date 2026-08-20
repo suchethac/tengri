@@ -36,7 +36,7 @@ References
 .. [1] Stalevski, M., Fritz, J., Baes, M., & Lutz, D. 2012, MNRAS, 420,
    3576 — SKIRTOR library and inclination effects.
 
-.. GENERATED FROM PYTHON SOURCE LINES 20-141
+.. GENERATED FROM PYTHON SOURCE LINES 20-147
 
 
 
@@ -65,7 +65,7 @@ References
 
     import tengri
     from tengri.agn import register_agn_block
-    from tengri.analysis.plotting import setup_style
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -124,7 +124,13 @@ References
     # to the AGN luminosity below. ``log_sfr`` was the legacy kwarg; current
     # ``const`` SFH parametrizes by total mass over [start_gyr, end_gyr].
     SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
-    DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+    DUST = {
+        "law": "power_law",
+        "type": "two_component",
+        "all_params": tengri.FIXED,
+        "tau_diff": 0.0,
+        "tau_bc": 0.0,
+    }
     LOG_LBOL = 12.0
     ssp = tengri.load_ssp()
 
@@ -172,6 +178,11 @@ References
     ax.legend(frameon=False, fontsize=9, loc="lower center")
     fig.tight_layout()
     plt.savefig("plot_custom_torus_extension.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 7.971 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_custom_torus_extension.py:

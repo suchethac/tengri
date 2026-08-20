@@ -26,7 +26,7 @@ with standard filters. The Photometry object merges them, then SEDModel
 predicts photometry on all bands at once — custom filters compose naturally
 with the standard library.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-104
+.. GENERATED FROM PYTHON SOURCE LINES 10-105
 
 
 
@@ -54,7 +54,7 @@ with the standard library.
 
     import tengri
     from tengri import FilterCurve
-    from tengri.analysis.plotting import setup_style
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -93,6 +93,7 @@ with the standard library.
             "trunc": 5.0,
         },
         dust={
+            "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
             "tau_bc": 0.1,
@@ -135,11 +136,6 @@ with the standard library.
     ax_filters.set_xlim(2e3, 2.5e4)
 
     plt.savefig("plot_recipe_custom_filter.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.002 seconds)
 
 
 .. _sphx_glr_download_auto_examples_recipes_plot_recipe_custom_filter.py:

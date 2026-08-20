@@ -65,7 +65,7 @@ def _build(neb, *, dust_on=True, precomp=True, met=None):
     taus = (0.25, 0.4) if dust_on else (0.0, 0.0)
     dust = {
         "type": "two_component",
-        "law_bc": "calzetti",
+        "law": "calzetti",
         "*": FIXED,
         "tau_diff": Fixed(taus[0]),
         "tau_bc": Fixed(taus[1]),

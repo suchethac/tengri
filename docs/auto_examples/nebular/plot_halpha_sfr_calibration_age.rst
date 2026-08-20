@@ -29,7 +29,7 @@ show the calibration validity range is weakly sensitive to Z: higher Z
 reduces ionizing photon production, compressing the valid age window slightly
 toward older ages.
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-86
+.. GENERATED FROM PYTHON SOURCE LINES 13-87
 
 
 
@@ -57,7 +57,7 @@ toward older ages.
     import numpy as np
 
     import tengri
-    from tengri.analysis.plotting import setup_style
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -88,6 +88,7 @@ toward older ages.
                     "end_gyr": 0.0,
                 },
                 dust={
+                    "law": "power_law",
                     "type": "two_component",
                     "all_params": tengri.FIXED,
                     "tau_diff": 0.0,
@@ -121,7 +122,7 @@ toward older ages.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 12.139 seconds)
+   **Total running time of the script:** (0 minutes 3.783 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_halpha_sfr_calibration_age.py:

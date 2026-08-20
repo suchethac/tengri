@@ -1616,10 +1616,20 @@ class StellarSEDComponentConfig(SEDComponentConfig):
     # SFH's ``sfh_t_gyr`` nodes (requires ``sfh_model="table"``; #996).
     met_table_log_age_yr: Any = None
     met_table_log_z_abs: Any = None
+    # Age bin edges [Gyr] for the non-parametric SFHs (``continuity``,
+    # ``dirichlet``, ``prospector_beta``, ...), sorted ascending. ``None``
+    # falls back to the model's ``DEFAULT_BIN_EDGES_GYR``. Carried on the
+    # config rather than read from the registry so the live component sees
+    # the same edges ``resolve_sfh`` would bind (#1975): before that the
+    # component used the bare registry ``fn`` and the user's edges were
+    # accepted, stored on the spec, and silently ignored.
+    sfh_bin_edges_gyr: Any = None
 
     def __post_init__(self):
         """Emit deprecation warning for sps_backend (issue #1470)."""
         import warnings
+
+        self._validate_bin_edges()
 
         if self.sps_backend != "dsps":
             warnings.warn(
@@ -1630,6 +1640,32 @@ class StellarSEDComponentConfig(SEDComponentConfig):
                 DeprecationWarning,
                 stacklevel=3,
             )
+
+    def bin_edges_sfh_kwarg(self) -> dict:
+        """``{'bin_edges_gyr': ...}`` when the SFH takes it, else ``{}``.
+
+        ``resolve_sfh`` binds these edges with ``functools.partial`` for the
+        models in ``_NONPARAM_NAMES``. The live component calls the bare
+        registry ``fn`` instead, so every call site has to merge this in or the
+        user's edges are accepted and silently ignored (#1975). Shared by
+        ``apply`` and ``compute_joint_weights`` so the exact forward and the
+        precompute fast path cannot read different bins.
+        """
+        if self.sfh_bin_edges_gyr is None:
+            return {}
+        from tengri.components.stellar.sfh.registry import _NONPARAM_NAMES
+
+        if self.sfh_model not in _NONPARAM_NAMES:
+            return {}
+        return {"bin_edges_gyr": jnp.asarray(self.sfh_bin_edges_gyr)}
+
+    def _validate_bin_edges(self):
+        """Refuse an edge array this SFH cannot use (see the registry validator)."""
+        if self.sfh_bin_edges_gyr is None:
+            return
+        from tengri.components.stellar.sfh.registry import validate_bin_edges_gyr
+
+        validate_bin_edges_gyr(self.sfh_model, self.sfh_bin_edges_gyr)
 
 
 @dataclass(frozen=True)
@@ -2195,6 +2231,7 @@ class StellarSEDComponent:
         if self.config.sfh_model == "dense_basis":
             age_universe_gyr = sfh_spec.settings.get("sfh_db_age_universe_gyr", 13.47)
             sfh_kwargs["age_universe_yr"] = float(age_universe_gyr) * 1e9
+        sfh_kwargs.update(self.config.bin_edges_sfh_kwarg())
 
         # ── 2a′. Runtime tabular SFH (sfh_model="table", #996) ──────────
         # Simulation SFHs arrive as runtime arrays: ``params["sfh_t_gyr"]``
@@ -3296,6 +3333,7 @@ class StellarSEDComponent:
         if self.config.sfh_model == "dense_basis":
             age_universe_gyr = sfh_spec.settings.get("sfh_db_age_universe_gyr", 13.47)
             sfh_kwargs["age_universe_yr"] = float(age_universe_gyr) * 1e9
+        sfh_kwargs.update(self.config.bin_edges_sfh_kwarg())
 
         z = jnp.asarray(
             require_redshift(params, "components.stellar.component.compute_joint_weights")

@@ -37,7 +37,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import tengri
-from tengri.analysis.plotting import setup_style
+from tengri.plot import setup_style
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -79,7 +79,13 @@ model = tengri.SEDModel.build(
         "trunc": 13.5,
         "log_total_mass": 10.0,  # ~ log M* = 11 when integrated
     },
-    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+    dust={
+        "law": "power_law",
+        "type": "two_component",
+        "all_params": tengri.FIXED,
+        "tau_diff": 0.0,
+        "tau_bc": 0.0,
+    },
     redshift=tengri.Fixed(REDSHIFT),
 )
 

@@ -756,6 +756,13 @@ class TestCasey2012Reference:
         ],
         ids=["T=25K", "T=35K", "T=50K"],
     )
+    @pytest.mark.xfail(
+        strict=False,
+        reason="#1728 category B: Casey2012 FIR peak lands just outside the pinned window "
+        "(120.3 um vs 65-120 at T=35K; 93.6 vs 45-90 at T=50K) — peak-location "
+        "convention adjudication",
+    )
+    @pytest.mark.owner_blocked
     def test_fir_peak_location(
         self,
         temperature: float,

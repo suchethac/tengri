@@ -48,6 +48,7 @@ def photometric_model(ssp, synthetic_tophat_obs):
         observation=synthetic_tophat_obs,
         sfh={"type": "dexp", "*": tengri.FIXED},
         dust={
+            "law": "power_law",
             "type": "two_component",
             "*": tengri.FIXED,
             "tau_diff": tengri.Fixed(0.3),
@@ -113,6 +114,7 @@ class TestMetallicityBoundsValidation:
                 "logzsol": met_dist,
             },
             dust={
+                "law": "power_law",
                 "type": "two_component",
                 "*": tengri.FIXED,
                 "tau_diff": tengri.Fixed(0.1),

@@ -126,7 +126,7 @@ def test_every_registered_selector_resolves_to_a_structural_attribute():
     from tengri.parameters.groups import _selected_component
 
     spec = _spec(
-        dust={"type": "two_component", "emission": {"type": "dl07"}},
+        dust={"law": "power_law", "type": "two_component", "emission": {"type": "dl07"}},
         agn={"type": "composable", "disc": {"type": "slone_netzer"}},
     )
     unresolved = sorted({sel for sel, _ in GRID_SUPPORT if _selected_component(sel, spec) is None})
@@ -221,7 +221,11 @@ def test_astrodust_lgu_free_prior_is_narrowed_to_the_grid():
     if not grid_support("dust.emission", "astrodust"):
         pytest.skip("astrodust grid not installed")
     spec = _spec(
-        dust={"type": "two_component", "emission": {"type": "astrodust", "all_params": FREE}}
+        dust={
+            "law": "power_law",
+            "type": "two_component",
+            "emission": {"type": "astrodust", "all_params": FREE},
+        }
     )
     assert spec._distributions["dust_lgU"].bounds == pytest.approx((0.0, 6.0))
     # Narrowing only ever shrinks: the grid reaches lgU = -3 but the declaration
@@ -238,6 +242,7 @@ def test_a_narrowed_prior_no_longer_warns():
     assert (
         _grid_warnings(
             dust={
+                "law": "power_law",
                 "type": "two_component",
                 "emission": {"type": "astrodust", "all_params": FREE},
             }
@@ -254,7 +259,11 @@ def test_an_explicit_user_prior_is_warned_about_not_overridden():
     """
     if not grid_support("dust.emission", "astrodust"):
         pytest.skip("astrodust grid not installed")
-    group = {"type": "two_component", "emission": {"type": "astrodust", "lgU": Uniform(0.0, 7.0)}}
+    group = {
+        "law": "power_law",
+        "type": "two_component",
+        "emission": {"type": "astrodust", "lgU": Uniform(0.0, 7.0)},
+    }
     spec = _spec(dust=group)
     assert spec._distributions["dust_lgU"].bounds == pytest.approx((0.0, 7.0))
 
@@ -276,7 +285,11 @@ def test_a_narrowed_prior_still_round_trips_through_to_groups():
     if not grid_support("dust.emission", "astrodust"):
         pytest.skip("astrodust grid not installed")
     spec = _spec(
-        dust={"type": "two_component", "emission": {"type": "astrodust", "all_params": FREE}}
+        dust={
+            "law": "power_law",
+            "type": "two_component",
+            "emission": {"type": "astrodust", "all_params": FREE},
+        }
     )
     emitted = spec.to_groups()["dust"]["emission"]
     assert emitted["all_params"] is FREE
@@ -314,7 +327,11 @@ def test_the_narrowed_range_is_entirely_live():
 
     lo, hi = (
         _spec(
-            dust={"type": "two_component", "emission": {"type": "astrodust", "all_params": FREE}}
+            dust={
+                "law": "power_law",
+                "type": "two_component",
+                "emission": {"type": "astrodust", "all_params": FREE},
+            }
         )
         ._distributions["dust_lgU"]
         .bounds
@@ -331,6 +348,7 @@ def test_a_prior_inside_the_grid_is_silent():
     assert (
         _grid_warnings(
             dust={
+                "law": "power_law",
                 "type": "two_component",
                 "emission": {"type": "dl14", "umin": Uniform(0.1, 50.0)},
             }
@@ -349,6 +367,7 @@ def test_the_same_prior_warns_on_a_narrower_backend():
         pytest.skip("dl07 grid not installed")
     messages = _grid_warnings(
         dust={
+            "law": "power_law",
             "type": "two_component",
             "emission": {"type": "dl07", "umin": Uniform(0.1, 50.0)},
         }

@@ -120,6 +120,7 @@ class TestEquivalence:
                 "*": FREE,
             },
             dust={
+                "law": "power_law",
                 "type": "two_component",
                 "*": FIXED,
             },
@@ -152,7 +153,7 @@ class TestEquivalence:
             },
             dust={
                 "type": "two_component",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "*": FIXED,
                 "tau_bc": 0.5,
                 "emission": {
@@ -193,6 +194,7 @@ class TestNesting:
         params = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
             dust={
+                "law": "power_law",
                 "type": "two_component",
                 "*": FIXED,
                 # FIXED, not FREE: every Dale+2014 param has a Fixed registry
@@ -217,6 +219,7 @@ class TestNesting:
         params = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
             dust={
+                "law": "power_law",
                 "type": "two_component",
                 "*": FIXED,
             },
@@ -374,7 +377,7 @@ class TestTypeMapping:
         params = parse_groups(
             dust={
                 "type": "two_component",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "*": FIXED,
             },
             redshift=Fixed(0.1),
@@ -385,6 +388,7 @@ class TestTypeMapping:
         """dust={'type': 'single_component'} should set dust_model."""
         params = parse_groups(
             dust={
+                "law": "power_law",
                 "type": "single_component",
                 "*": FIXED,
             },
@@ -490,7 +494,7 @@ class TestCanonicalExample:
             },
             dust={
                 "type": "two_component",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "*": FIXED,
                 "tau_bc": 0.5,
                 "emission": {"type": "dale2014", "*": FIXED},
@@ -734,7 +738,7 @@ class TestAllParamsAlias:
     def test_alias_equivalent_to_star(self):
         """``all_params`` and ``'*'`` produce bit-identical free/fixed partitions."""
         common = dict(
-            dust={"type": "two_component", "law_bc": "calzetti"},
+            dust={"type": "two_component", "law": "calzetti"},
             neb={"type": "cue"},
             redshift=Uniform(0.01, 5.0),
         )
@@ -742,7 +746,7 @@ class TestAllParamsAlias:
             sfh={"type": "dpl", "*": FREE, "beta": Fixed(1.5)},
             **{
                 **common,
-                "dust": {**common["dust"], "*": FIXED},
+                "dust": {"law": "power_law", **common["dust"], "*": FIXED},
                 "neb": {**common["neb"], "*": FIXED},
             },
         )
@@ -750,7 +754,7 @@ class TestAllParamsAlias:
             sfh={"type": "dpl", "all_params": FREE, "beta": Fixed(1.5)},
             **{
                 **common,
-                "dust": {**common["dust"], "all_params": FIXED},
+                "dust": {"law": "power_law", **common["dust"], "all_params": FIXED},
                 "neb": {**common["neb"], "all_params": FIXED},
             },
         )
@@ -775,6 +779,7 @@ class TestAllParamsAlias:
             return parse_groups(
                 sfh={"type": "dpl", wk: FIXED},
                 dust={
+                    "law": "power_law",
                     "type": "two_component",
                     wk: FIXED,
                     # FIXED, not FREE: this test is about the alias resolving

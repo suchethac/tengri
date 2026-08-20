@@ -31,7 +31,12 @@ def model(synthetic_ssp_wide, synthetic_tophat_obs):
         ssp_data=synthetic_ssp_wide,
         observation=synthetic_tophat_obs,
         sfh={"type": "dpl"},
-        dust={"type": "two_component", "law_bc": "calzetti", "tau_bc": 0.3, "tau_diff": 0.2},
+        dust={
+            "type": "two_component",
+            "law": "calzetti",
+            "tau_bc": 0.3,
+            "tau_diff": 0.2,
+        },
         neb={"type": "none"},
         redshift=Fixed(0.1),
     )

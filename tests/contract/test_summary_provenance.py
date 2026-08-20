@@ -34,7 +34,7 @@ def grouped_spec():
         },
         dust={
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "*": FIXED,
             "tau_bc": 0.5,  # user_fixed (bare value)
         },
@@ -87,7 +87,11 @@ class TestProvenanceAttribution:
             warnings.simplefilter("ignore")
             spec = parse_groups(
                 sfh={"type": "dpl", "*": FREE},
-                dust={"type": "two_component", "law_bc": "calzetti", "*": FREE},
+                dust={
+                    "type": "two_component",
+                    "law": "calzetti",
+                    "*": FREE,
+                },
             )
 
         provenance = spec._group_provenance

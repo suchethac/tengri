@@ -39,7 +39,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from tengri import FIXED, Fixed, SEDModel, load_ssp
-from tengri.analysis.plotting import setup_style
+from tengri.plot import setup_style
 
 # Suppress JAX and matplotlib warnings
 jax.config.update("jax_enable_x64", True)
@@ -113,7 +113,7 @@ for i, tau_v in enumerate(tau_v_values):
         },
         "dust": {
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "tau_bc": Fixed(tau_bc),
             "tau_diff": Fixed(tau_diff),
             "emission": {"type": "dale2014", "all_params": FIXED},

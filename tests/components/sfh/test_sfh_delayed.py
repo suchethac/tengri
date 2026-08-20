@@ -113,7 +113,7 @@ def test_delayed_buildable_via_sedmodel_build():
             "tau_gyr": 1.0,
             "age_gyr": 5.0,
         },
-        dust={"type": "single_component", "law_bc": "calzetti", "*": tengri.FIXED},
+        dust={"type": "single_component", "law": "calzetti", "*": tengri.FIXED},
         neb={"type": "ssp", "*": tengri.FIXED},
         redshift=tengri.Fixed(0.05),
     )

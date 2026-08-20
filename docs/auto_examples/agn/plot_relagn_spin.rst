@@ -34,7 +34,7 @@ Reference: Kubota & Done 2018, MNRAS, 480, 1247 (warm-Compton disc with
 relativistic ISCO); Hagen & Done 2023, MNRAS, 525, 3455 (RELAGN
 formulation).
 
-.. GENERATED FROM PYTHON SOURCE LINES 18-94
+.. GENERATED FROM PYTHON SOURCE LINES 18-100
 
 
 
@@ -62,7 +62,7 @@ formulation).
     import numpy as np
 
     import tengri
-    from tengri.analysis.plotting import setup_style
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -70,7 +70,13 @@ formulation).
     C_AA_PER_S = 2.998e18
     SPIN_VALUES = (0.0, 0.3, 0.6, 0.9, 0.998)
     SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
-    DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+    DUST = {
+        "law": "power_law",
+        "type": "two_component",
+        "all_params": tengri.FIXED,
+        "tau_diff": 0.0,
+        "tau_bc": 0.0,
+    }
 
     ssp = tengri.load_ssp()
     model = tengri.SEDModel.build(
@@ -125,6 +131,11 @@ formulation).
 
     fig.tight_layout()
     plt.savefig("plot_relagn_spin.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 3.595 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_relagn_spin.py:

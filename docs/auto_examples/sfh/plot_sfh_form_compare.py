@@ -33,7 +33,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import tengri
-from tengri.analysis.plotting import setup_style
+from tengri.plot import setup_style
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -58,7 +58,7 @@ for (form, label), color in zip(FORMS, COLORS):
     model = tengri.SEDModel.build(
         ssp,
         sfh={"type": form, "all_params": tengri.FIXED},
-        dust={"type": "two_component", "all_params": tengri.FIXED},
+        dust={"law": "power_law", "type": "two_component", "all_params": tengri.FIXED},
         redshift=tengri.Fixed(0.0),
     )
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))

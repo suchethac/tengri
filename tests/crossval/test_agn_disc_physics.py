@@ -476,6 +476,12 @@ class TestUnifiedAGNPhysics:
         from tengri.components.agn import AGN_MODELS
 
         for name in AGN_MODELS:
+            if name == "composable":
+                # The composable container is the sum of its selected blocks and
+                # emits zero when called bare, by design — the SEDModel.build
+                # grammar (not this raw registry surface) guards real users, and
+                # the per-block emission census covers the blocks (#1956, #1488).
+                continue
             model_fn = AGN_MODELS[name]
             try:
                 l_nu = model_fn(WAVE, agn_log_lbol=11.0)

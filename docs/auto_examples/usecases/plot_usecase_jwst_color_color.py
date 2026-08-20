@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import tengri
-from tengri.analysis.plotting import setup_style
+from tengri.plot import setup_style
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -54,6 +54,7 @@ for _i in range(50):
             "logzsol": tengri.Uniform(-1.0, 0.1),
         },
         dust={
+            "law": "power_law",
             "type": "two_component",
             "tau_bc": tengri.Uniform(0.0, 0.8),
             "tau_diff": tengri.Uniform(0.0, 0.5),
@@ -87,6 +88,7 @@ for _i in range(50):
             "logzsol": tengri.Uniform(-0.2, 0.3),
         },
         dust={
+            "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
             "tau_bc": 0.05,
@@ -121,6 +123,7 @@ for _i in range(50):
             "logzsol": tengri.Uniform(-0.5, 0.2),
         },
         dust={
+            "law": "power_law",
             "type": "two_component",
             "tau_bc": tengri.Uniform(0.8, 2.0),
             "tau_diff": tengri.Uniform(0.5, 1.5),

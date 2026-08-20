@@ -35,7 +35,7 @@ References
 .. [1] Temple, M. J., Hewett, P. C., & Banerji, M. 2021, MNRAS, 508, 737
    — QSOgen empirical template with Baldwin effect parametrization.
 
-.. GENERATED FROM PYTHON SOURCE LINES 19-87
+.. GENERATED FROM PYTHON SOURCE LINES 19-93
 
 
 
@@ -63,7 +63,7 @@ References
     import numpy as np
 
     import tengri
-    from tengri.analysis.plotting import setup_style
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -72,7 +72,13 @@ References
     C_AA_PER_S = 2.998e18
 
     SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
-    DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+    DUST = {
+        "law": "power_law",
+        "type": "two_component",
+        "all_params": tengri.FIXED,
+        "tau_diff": 0.0,
+        "tau_bc": 0.0,
+    }
 
     ssp = tengri.load_ssp()
 

@@ -44,7 +44,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import tengri
-from tengri.analysis.plotting import setup_style
+from tengri.plot import setup_style
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -64,7 +64,13 @@ model = tengri.SEDModel.build(
         "alpha": 3.0,
         "beta": 2.0,
     },
-    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.1},
+    dust={
+        "law": "power_law",
+        "type": "two_component",
+        "all_params": tengri.FIXED,
+        "tau_diff": 0.05,
+        "tau_bc": 0.1,
+    },
     neb={
         "type": "cue",
         "all_params": tengri.FIXED,

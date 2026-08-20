@@ -41,7 +41,7 @@ References
 - Witt & Gordon 2000, ApJ, 528, 799 (dust geometry effects)
 - Kramer et al. 2003, ApJS, 144, 1 (mixed geometry approximation)
 
-.. GENERATED FROM PYTHON SOURCE LINES 26-173
+.. GENERATED FROM PYTHON SOURCE LINES 26-179
 
 
 
@@ -72,8 +72,8 @@ References
     import numpy as np
 
     import tengri
-    from tengri.analysis.plotting import setup_style
     from tengri.dust import calzetti
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -96,7 +96,13 @@ References
     intrinsic_model = tengri.SEDModel.build(
         ssp,
         sfh=SFH,
-        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_bc": 0.0, "tau_diff": 0.0},
+        dust={
+            "law": "power_law",
+            "type": "two_component",
+            "all_params": tengri.FIXED,
+            "tau_bc": 0.0,
+            "tau_diff": 0.0,
+        },
         redshift=tengri.Fixed(0.05),
     )
     p_intrinsic = dict(intrinsic_model.spec.sample(jax.random.PRNGKey(0)))

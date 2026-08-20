@@ -71,7 +71,7 @@ def _build(ssp, obs):
         # out of step with the truth dict below.
         dust={
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "all_params": FIXED,
             "tau_diff": 0.3,
             "tau_bc": 0.0,

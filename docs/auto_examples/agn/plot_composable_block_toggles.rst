@@ -35,7 +35,7 @@ log L_bol = 12.0, all built via the public nested-dict grammar:
 
 Reference: Buchner et al. 2024 (GRAHSP recipe).
 
-.. GENERATED FROM PYTHON SOURCE LINES 19-112
+.. GENERATED FROM PYTHON SOURCE LINES 19-118
 
 
 
@@ -62,14 +62,20 @@ Reference: Buchner et al. 2024 (GRAHSP recipe).
     import numpy as np
 
     import tengri
-    from tengri.analysis.plotting import setup_style
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
     C_AA_PER_S = 2.998e18
     SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
-    DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+    DUST = {
+        "law": "power_law",
+        "type": "two_component",
+        "all_params": tengri.FIXED,
+        "tau_diff": 0.0,
+        "tau_bc": 0.0,
+    }
 
     ssp = tengri.load_ssp()
 
@@ -143,6 +149,11 @@ Reference: Buchner et al. 2024 (GRAHSP recipe).
     axes[0].set_ylabel(r"$\nu L_\nu$  [erg s$^{-1}$]")
     fig.tight_layout()
     plt.savefig("plot_composable_block_toggles.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.324 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_composable_block_toggles.py:

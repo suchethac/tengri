@@ -46,6 +46,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- **Example gallery curated and refocused**: Pruned 283 → 121 gallery
+  scripts across 17 sections; removed inference/fit-comparison examples (they
+  belong in notebooks), dissolved `inference`, `workflows`, `multiwavelength`,
+  and `contrib` sections, collapsed duplicates, and routed all kept examples
+  through the public API. Every example now fits in a single render
+  timebox. Added the composable shock-group sweep example (shock parameters ×
+  physics code choice × SSP grid). New top-level export: `igm_transmission_meiksin06`;
+  physical constants `C_AA` and `LOG10_ZSUN` are now exposed via `tengri.units`.
 - **Fits default to the precompute LUT** (behavioral change). `Fitter`,
   `forward.fit(...)` and `Galaxy.fit(...)` gained `approx="auto"` (the default):
   a fit now auto-routes through the fast precompute lookup table chosen by data

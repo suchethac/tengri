@@ -31,7 +31,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import tengri
-from tengri.analysis.plotting import setup_style
+from tengri.plot import setup_style
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -80,7 +80,13 @@ SFH = {
     "skew": 0.0,
     "trunc": 13.0,
 }
-DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+DUST = {
+    "law": "power_law",
+    "type": "two_component",
+    "all_params": tengri.FIXED,
+    "tau_diff": 0.0,
+    "tau_bc": 0.0,
+}
 
 ssp = tengri.load_ssp()
 model = tengri.SEDModel.build(ssp, sfh=SFH, dust=DUST, redshift=tengri.Fixed(0.0))
