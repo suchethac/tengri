@@ -156,7 +156,15 @@ def test_model_structure_keys_the_signal_response_cache(ssp, obs):
                 # ``sfh_dpl_alpha``, and flags the range as a units error.
                 "log_total_mass": Uniform(9.0, 11.0),
             },
-            dust={"type": "two_component", "all_params": tengri.FIXED, "law_bc": law},
+            dust={
+                "type": "two_component",
+                "all_params": tengri.FIXED,
+                # #1989: laws are explicit — law_bc VARIES between the two
+                # models (that is the structural difference under test);
+                # law_diff is held fixed so only one thing changes.
+                "law_bc": law,
+                "law_diff": "calzetti",
+            },
             redshift=0.1,
         )
 
@@ -186,7 +194,14 @@ def test_same_model_still_shares_one_closure(ssp, obs):
                 # ``sfh_dpl_alpha``, and flags the range as a units error.
                 "log_total_mass": Uniform(9.0, 11.0),
             },
-            dust={"type": "two_component", "all_params": tengri.FIXED, "law_bc": "calzetti"},
+            dust={
+                "type": "two_component",
+                "all_params": tengri.FIXED,
+                # #1989: laws are explicit — both laws pinned so the two
+                # builds in this test are structurally identical.
+                "law_bc": "calzetti",
+                "law_diff": "calzetti",
+            },
             redshift=0.1,
         )
 
