@@ -44,7 +44,7 @@ def _build(dust):
     return tengri.SEDModel.build(
         ssp_data=tengri.load_ssp(),
         sfh={"type": "delayed", "*": tengri.FIXED, "log_total_mass": 10.0},
-        dust=dust,
+        dust_attenuation=dust,
         redshift=tengri.Fixed(0.05),
     )
 

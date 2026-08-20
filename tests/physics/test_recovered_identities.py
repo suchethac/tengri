@@ -137,7 +137,7 @@ def test_kennicutt_1998_halpha_sfr_chabrier(ssp_fsps_chabrier):
             "end_gyr": 0.0,
             "log_total_mass": tengri.FREE,
         },
-        dust={
+        dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
@@ -290,7 +290,7 @@ def test_sed_additivity():
         ssp,
         observation=obs,
         sfh=sfh_cfg,
-        dust=dust_cfg,
+        dust_attenuation=dust_cfg,
         neb={"type": "cue", "all_params": tengri.FIXED},
         redshift=tengri.Fixed(0.05),
     )
@@ -300,7 +300,7 @@ def test_sed_additivity():
 
     # Stellar + dust model (no nebular)
     model_dust = tengri.SEDModel.build(
-        ssp, sfh=sfh_cfg, dust=dust_cfg, redshift=tengri.Fixed(0.05)
+        ssp, sfh=sfh_cfg, dust_attenuation=dust_cfg, redshift=tengri.Fixed(0.05)
     )
 
     # Sample parameters

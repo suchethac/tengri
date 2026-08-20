@@ -88,7 +88,7 @@ def _build(ssp, dust, approx=None):
             skew=0.0,
             trunc=5.5,
         ),
-        dust=dust,
+        dust_attenuation=dust,
         neb={"type": "none"},
         redshift=Fixed(0.05),
     )

@@ -70,7 +70,7 @@ def _build_model(ssp, *, with_dust_emission: bool):
             "log_total_mass": Fixed(10.0),
             "*": FIXED,
         },
-        dust=dust_kwargs,
+        dust_attenuation=dust_kwargs,
         redshift=Fixed(0.0),
     )
 

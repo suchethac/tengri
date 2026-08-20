@@ -116,7 +116,7 @@ for i in range(n_sf):
         ssp_data=ssp,
         observation=observation,
         sfh=sfh_config,
-        dust=dust_config,
+        dust_attenuation=dust_config,
         redshift=tengri.Fixed(z_gal),
     )
 
@@ -198,7 +198,7 @@ for i in range(n_agn):
         ssp_data=ssp,
         observation=observation,
         sfh=sfh_config,
-        dust=dust_config,
+        dust_attenuation=dust_config,
         redshift=tengri.Fixed(z_gal),
     )
 

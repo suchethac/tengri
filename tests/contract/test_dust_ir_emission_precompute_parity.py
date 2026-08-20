@@ -120,7 +120,7 @@ def assert_precompute_matches_exact(
         observation=obs,
         redshift=redshift_dist,
         approx=None,
-        dust=dust_config,
+        dust_attenuation=dust_config,
         **groups,
     )
 
@@ -130,7 +130,7 @@ def assert_precompute_matches_exact(
         observation=obs,
         redshift=redshift_dist,
         approx=WavePrecomp(),
-        dust=dust_config,
+        dust_attenuation=dust_config,
         **groups,
     )
 
@@ -154,7 +154,7 @@ def assert_precompute_matches_exact(
         observation=obs,
         redshift=redshift_dist,
         approx=None,
-        dust=dust_config_no_emission,
+        dust_attenuation=dust_config_no_emission,
         **groups,
     )
     pe_ref = np.asarray(ref_model.predict_photometry(params_dict))

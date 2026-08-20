@@ -92,7 +92,7 @@ class TestSilentlyFixedParametersWarning:
             warnings.simplefilter("always")
             params = parse_groups(
                 sfh={"type": "dpl"},  # 7 parameters, no disposition
-                dust={"type": "two_component", "law": "calzetti"},  # no disposition
+                dust_attenuation={"type": "two_component", "law": "calzetti"},  # no disposition
                 redshift=0.5,
             )
 
@@ -156,14 +156,14 @@ class TestSilentlyFixedParametersWarning:
             warnings.simplefilter("ignore")
             params_implicit = parse_groups(
                 sfh={"type": "dpl"},  # implicit FIXED
-                dust={"type": "single_component", "law": "calzetti"},  # implicit FIXED
+                dust_attenuation={"type": "single_component", "law": "calzetti"},  # implicit FIXED
                 redshift=0.5,
             )
 
         # Build with explicit FIXED
         params_explicit = parse_groups(
             sfh={"type": "dpl", "all_params": FIXED},  # explicit FIXED
-            dust={
+            dust_attenuation={
                 "type": "single_component",
                 "law": "calzetti",
                 "all_params": FIXED,
@@ -245,7 +245,7 @@ class TestDefect2MessageAccuracy:
             warnings.simplefilter("always")
             # Provide dust with some explicit params, none for others
             params = parse_groups(
-                dust={
+                dust_attenuation={
                     "type": "two_component",
                     "law": "calzetti",
                     "tau_bc": 0.5,  # Explicit override

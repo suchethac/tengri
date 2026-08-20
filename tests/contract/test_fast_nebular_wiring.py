@@ -76,7 +76,7 @@ def _build(neb, *, dust_on=True, precomp=True, met=None):
             ssp_data=ssp,
             observation=obs,
             sfh={"type": "dpl", "*": FREE},
-            dust=dust,
+            dust_attenuation=dust,
             neb=neb,
             redshift=Fixed(Z),
             approx=WavePrecomp() if precomp else None,

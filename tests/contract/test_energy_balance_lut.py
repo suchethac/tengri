@@ -63,7 +63,7 @@ def _build(ssp, approx):
         observation=_obs(),
         approx=approx,
         sfh=builders.sfh.tsnorm(defaults=FIXED),
-        dust=builders.dust.two_component(
+        dust_attenuation=builders.dust.two_component(
             defaults=FIXED,
             law="calzetti",
             tau_bc=Uniform(0.0, 1.0),

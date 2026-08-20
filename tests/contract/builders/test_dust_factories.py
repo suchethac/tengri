@@ -149,7 +149,7 @@ def test_two_component_free_round_trips_tau_bc_tau_diff() -> None:
     pathway for dust (unlike radio/xray) flips the attenuation knobs."""
     spec = parse_groups(
         sfh={"type": "dpl"},
-        dust=builders.dust.two_component(law="calzetti", _=FREE),
+        dust_attenuation=builders.dust.two_component(law="calzetti", _=FREE),
     )
     free_dust = {p for p in spec.free_params if p.startswith("dust_")}
     assert "dust_tau_bc" in free_dust
@@ -159,7 +159,7 @@ def test_two_component_free_round_trips_tau_bc_tau_diff() -> None:
 def test_single_component_uses_tau_v_not_tau_bc() -> None:
     spec = parse_groups(
         sfh={"type": "dpl"},
-        dust=builders.dust.single_component(law="calzetti", _=FREE),
+        dust_attenuation=builders.dust.single_component(law="calzetti", _=FREE),
     )
     free_dust = {p for p in spec.free_params if p.startswith("dust_")}
     assert "dust_tau_v" in free_dust
@@ -169,7 +169,7 @@ def test_single_component_uses_tau_v_not_tau_bc() -> None:
 def test_per_param_override_survives_round_trip() -> None:
     spec = parse_groups(
         sfh={"type": "dpl"},
-        dust=builders.dust.two_component(law="calzetti", tau_bc=Uniform(0.5, 3.0)),
+        dust_attenuation=builders.dust.two_component(law="calzetti", tau_bc=Uniform(0.5, 3.0)),
     )
     assert "dust_tau_bc" in spec.free_params
 

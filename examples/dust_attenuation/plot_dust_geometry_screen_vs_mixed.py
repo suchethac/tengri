@@ -63,7 +63,7 @@ ssp = tengri.load_ssp()
 intrinsic_model = tengri.SEDModel.build(
     ssp,
     sfh=SFH,
-    dust={
+    dust_attenuation={
         "law": "power_law",
         "type": "two_component",
         "all_params": tengri.FIXED,

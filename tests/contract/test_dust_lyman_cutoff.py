@@ -49,7 +49,7 @@ def _build(ssp, obs, **dust_extra):
         ssp,
         observation=obs,
         sfh={"type": "tsnorm", "*": tengri.FIXED},
-        dust=dust,
+        dust_attenuation=dust,
         neb={"type": "none"},
         redshift=tengri.Fixed(0.0),
     )

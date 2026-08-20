@@ -125,7 +125,7 @@ def build(obs, approx=None):
         sfh=builders.sfh.tsnorm(
             defaults=FIXED, log_total_mass=FREE, peak_lbt_gyr=FREE, width_gyr=FREE
         ),
-        dust=builders.dust.two_component(
+        dust_attenuation=builders.dust.two_component(
             defaults=FIXED,
             law="calzetti",
             tau_bc=Uniform(0.0, 1.0),

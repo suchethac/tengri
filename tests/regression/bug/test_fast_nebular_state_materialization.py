@@ -75,9 +75,9 @@ _DUST_EMIT = {
 #: there, and it must stay bit-exact so a regression is distinguishable from
 #: this defect.
 _MODELS = {
-    "dust_free_cue": dict(dust={"type": "none"}, neb=_CUE),
-    "dust_free_cue_shock": dict(dust={"type": "none"}, neb=_CUE, shock={"frac": 0.1}),
-    "dust_emitting_cue": dict(dust=_DUST_EMIT, neb=_CUE),
+    "dust_free_cue": dict(dust_attenuation={"type": "none"}, neb=_CUE),
+    "dust_free_cue_shock": dict(dust_attenuation={"type": "none"}, neb=_CUE, shock={"frac": 0.1}),
+    "dust_emitting_cue": dict(dust_attenuation=_DUST_EMIT, neb=_CUE),
 }
 
 _BANDS = ["sdss_g", "sdss_r", "wise_w1", "herschel_250"]

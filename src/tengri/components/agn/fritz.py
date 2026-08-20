@@ -204,7 +204,7 @@ def load_fritz_grid(grid_path: str) -> FritzGrid:
     with jax.ensure_compile_time_eval():
         axes = tuple(jnp.array(ax) for ax in raw["axes"])
         return FritzGrid(
-            dust=jnp.array(raw["dust"]),
+            dust_attenuation=jnp.array(raw["dust"]),
             wave_grid=jnp.array(raw["wave"]),
             axes=axes,
             edges=tuple(edges_for_grid(ax) for ax in axes),
@@ -479,7 +479,7 @@ def create_fritz_components_from_grid(grid_path: str) -> Callable:
         dust = _interpolate_and_normalize(
             dust_jax, wave_grid, axes, edges, wavelength, point, l_scale
         )
-        return FritzComponents(disk=disk, dust=dust)
+        return FritzComponents(disk=disk, dust_attenuation=dust)
 
     return fritz_components
 

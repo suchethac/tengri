@@ -90,7 +90,7 @@ def _build(ssp, obs, **groups):
             ssp_data=ssp,
             observation=obs,
             sfh={"type": "dpl", "all_params": FIXED},
-            dust={"law": "power_law", "type": "two_component", "all_params": FIXED},
+            dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
             redshift=Fixed(0.1),
             **groups,
         )

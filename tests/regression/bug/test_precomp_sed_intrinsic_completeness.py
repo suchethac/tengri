@@ -54,7 +54,7 @@ def _model(approx, *, emission=True):
         observation=Observation(photometry=Photometry.from_names(BANDS)),
         redshift=Fixed(0.1),
         sfh={"type": "dpl", "*": FIXED},
-        dust=dust,
+        dust_attenuation=dust,
         approx=approx,
     )
 

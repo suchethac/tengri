@@ -166,7 +166,7 @@ def tengri_stellar_dust(ssp, tau_bc):
             "log_total_mass": Fixed(LOG_MASS),
             "*": FIXED,
         },
-        dust={
+        dust_attenuation={
             "type": "two_component",
             "law_bc": "calzetti",
             "law_diff": "calzetti",
@@ -264,7 +264,7 @@ def dust_emission_only(ssp):
                 "log_total_mass": Fixed(LOG_MASS),
                 "*": FIXED,
             },
-            dust=dust,
+            dust_attenuation=dust,
             redshift=Fixed(0.0),
         )
         s = m.predict_state({})
@@ -309,7 +309,7 @@ def nebular_only(ssp):
             "log_total_mass": Fixed(NEB_LOGMASS),
             "*": FIXED,
         },
-        dust={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+        dust_attenuation={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
         neb={
             "type": "cue",
             "neb_logU": Fixed(NEB_LOGU),

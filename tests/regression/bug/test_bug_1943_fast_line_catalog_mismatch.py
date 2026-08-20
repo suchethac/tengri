@@ -86,7 +86,7 @@ def _build(ssp, approx, obs, *, dust: bool):
             ssp_data=ssp,
             observation=obs,
             sfh={"type": "dpl", "all_params": FREE},
-            dust=dust_block,
+            dust_attenuation=dust_block,
             neb={"type": "cue", "all_params": FIXED},
             redshift=Fixed(0.1),
             approx=approx,
@@ -114,7 +114,7 @@ def fixtures(ssp):
 
     out = {}
     for dust in (True, False):
-        base = _build(ssp, None, _phot_obs(), dust=dust)
+        base = _build(ssp, None, _phot_obs(), dust_attenuation=dust)
         params = base.spec.sample(jax.random.PRNGKey(0))
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -136,7 +136,7 @@ def _lut_model(ssp, obs, *, dust: bool):
     """The model a line fit resolves to under the default ``approx='auto'``."""
     from tengri import FeaturePrecomp
 
-    return _build(ssp, FeaturePrecomp(), obs, dust=dust)
+    return _build(ssp, FeaturePrecomp(), obs, dust_attenuation=dust)
 
 
 def _fluxes(model, params, *, state):
@@ -154,7 +154,7 @@ def test_a_supplied_state_does_not_change_the_line_fluxes(ssp, fixtures, dust):
     exists so the forward runs once, not so the result differs.
     """
     obs, params = fixtures[dust]
-    model = _lut_model(ssp, obs, dust=dust)
+    model = _lut_model(ssp, obs, dust_attenuation=dust)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         state = model.predict_state(params)
@@ -180,8 +180,8 @@ def test_the_lut_line_fluxes_match_the_exact_path(ssp, fixtures, dust):
     *wrong* number would satisfy it.
     """
     obs, params = fixtures[dust]
-    exact_m = _build(ssp, None, obs, dust=dust)
-    lut_m = _lut_model(ssp, obs, dust=dust)
+    exact_m = _build(ssp, None, obs, dust_attenuation=dust)
+    lut_m = _lut_model(ssp, obs, dust_attenuation=dust)
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
@@ -204,7 +204,7 @@ def test_the_two_catalogs_really_do_differ_in_length(ssp, fixtures):
     fails to say so.
     """
     obs, params = fixtures[True]
-    model = _lut_model(ssp, obs, dust=True)
+    model = _lut_model(ssp, obs, dust_attenuation=True)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         state = model.predict_state(params)

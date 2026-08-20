@@ -48,7 +48,7 @@ def _build(t_dust=None, beta=None):
     model = tengri.SEDModel.build(
         ssp,
         sfh={"type": "const", "all_params": tengri.FIXED, "log_total_mass": 11.13},
-        dust=dust,
+        dust_attenuation=dust,
         redshift=tengri.Fixed(0.05),
     )
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))

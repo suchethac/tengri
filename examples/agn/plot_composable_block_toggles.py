@@ -90,7 +90,7 @@ BLOCK_PROGRESSION = [
 
 def predict_nu_lnu(blocks):
     agn = {"all_params": tengri.FIXED, "log_lbol": 12.0, "lum_ratio": 1.0, **blocks}
-    model = tengri.SEDModel.build(ssp, sfh=SFH, dust=DUST, agn=agn, redshift=tengri.Fixed(0.0))
+    model = tengri.SEDModel.build(ssp, sfh=SFH, dust_attenuation=DUST, agn=agn, redshift=tengri.Fixed(0.0))
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
     out = model.predict(p)
     wave_um = np.asarray(model.wavelengths) * 1.0e-4

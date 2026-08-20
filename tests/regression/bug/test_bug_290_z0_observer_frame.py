@@ -40,7 +40,7 @@ def test_predict_photometry_z0_returns_finite_fluxes():
             ssp,
             observation=obs,
             sfh={"type": "const", "*": tengri.FIXED},
-            dust={
+            dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
                 "*": tengri.FIXED,

@@ -85,7 +85,7 @@ def _build(ssp, obs, sfh):
             ssp_data=ssp,
             observation=obs,
             sfh=sfh,
-            dust={
+            dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
                 "all_params": FIXED,

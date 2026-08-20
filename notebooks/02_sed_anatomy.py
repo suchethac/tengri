@@ -139,7 +139,7 @@ kitchen_sink = dict(
         "beta": 1.4,
         "tau_gyr": 4.0,
     },
-    dust={
+    dust_attenuation={
         "type": "two_component",
         "law": "calzetti",
         "all_params": FIXED,
@@ -152,8 +152,7 @@ kitchen_sink = dict(
         # the radio continuum (~2x between ~1.34 and ~10 GHz), which #1983 made a
         # ConfigError. The _cigale variant has that tail stripped, per CIGALE
         # convention — the remedy that error itself prescribes.
-        "emission": {"type": "dale2014_cigale", "all_params": FIXED, "alpha_dale": 2.2},
-    },
+    }, dust_emission={"type": "dale2014_cigale", "all_params": FIXED, "alpha_dale": 2.2},
     neb={"type": "cue", "all_params": FIXED},
     agn={
         "disc": {"type": "multicolor", "all_params": FIXED, "log_lbol": 10.5},
@@ -462,7 +461,7 @@ money_shot = dict(
         "beta": 2.7,
         "tau_gyr": 13.2,
     },
-    dust={
+    dust_attenuation={
         "type": "two_component",
         "law": "calzetti",
         "all_params": FIXED,
@@ -475,8 +474,7 @@ money_shot = dict(
         # the radio continuum (~2x between ~1.34 and ~10 GHz), which #1983 made a
         # ConfigError. The _cigale variant has that tail stripped, per CIGALE
         # convention — the remedy that error itself prescribes.
-        "emission": {"type": "dale2014_cigale", "all_params": FIXED, "alpha_dale": 2.2},
-    },
+    }, dust_emission={"type": "dale2014_cigale", "all_params": FIXED, "alpha_dale": 2.2},
     neb={"type": "cue", "all_params": FIXED},
     agn={
         "disc": {"type": "multicolor", "all_params": FIXED, "log_lbol": 10.5},

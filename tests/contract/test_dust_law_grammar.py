@@ -28,7 +28,7 @@ class TestSingleComponentMissingLaw:
         with pytest.raises(ValueError) as exc_info:
             parse_groups(
                 sfh={"type": "dpl"},
-                dust={"type": "single_component", "tau_v": Fixed(0.1)},
+                dust_attenuation={"type": "single_component", "tau_v": Fixed(0.1)},
                 redshift=Fixed(0.1),
             )
         error_msg = str(exc_info.value)
@@ -40,7 +40,11 @@ class TestSingleComponentMissingLaw:
         with pytest.raises(ValueError) as exc_info:
             parse_groups(
                 sfh={"type": "dpl"},
-                dust={"type": "single_component", "law_bc": "calzetti", "tau_v": Fixed(0.1)},
+                dust_attenuation={
+                    "type": "single_component",
+                    "law_bc": "calzetti",
+                    "tau_v": Fixed(0.1),
+                },
                 redshift=Fixed(0.1),
             )
         error_msg = str(exc_info.value)
@@ -51,7 +55,11 @@ class TestSingleComponentMissingLaw:
         with pytest.raises(ValueError) as exc_info:
             parse_groups(
                 sfh={"type": "dpl"},
-                dust={"type": "single_component", "law_diff": "calzetti", "tau_v": Fixed(0.1)},
+                dust_attenuation={
+                    "type": "single_component",
+                    "law_diff": "calzetti",
+                    "tau_v": Fixed(0.1),
+                },
                 redshift=Fixed(0.1),
             )
         error_msg = str(exc_info.value)
@@ -65,7 +73,7 @@ class TestSingleComponentValidLaw:
         """Using law key on single_component should work."""
         params = parse_groups(
             sfh={"type": "dpl"},
-            dust={"type": "single_component", "law": "calzetti", "tau_v": Fixed(0.1)},
+            dust_attenuation={"type": "single_component", "law": "calzetti", "tau_v": Fixed(0.1)},
             redshift=Fixed(0.1),
         )
         assert params.dust_model == "single_component"
@@ -77,7 +85,7 @@ class TestSingleComponentValidLaw:
         """Using law='power_law' on single_component should work."""
         params = parse_groups(
             sfh={"type": "dpl"},
-            dust={"type": "single_component", "law": "power_law", "tau_v": Fixed(0.1)},
+            dust_attenuation={"type": "single_component", "law": "power_law", "tau_v": Fixed(0.1)},
             redshift=Fixed(0.1),
         )
         assert params.dust_law_bc == "power_law"
@@ -88,7 +96,11 @@ class TestSingleComponentValidLaw:
         with pytest.raises(ValueError, match="Unknown dust law"):
             parse_groups(
                 sfh={"type": "dpl"},
-                dust={"type": "single_component", "law": "calzeti", "tau_v": Fixed(0.1)},
+                dust_attenuation={
+                    "type": "single_component",
+                    "law": "calzeti",
+                    "tau_v": Fixed(0.1),
+                },
                 redshift=Fixed(0.1),
             )
 
@@ -101,7 +113,11 @@ class TestTwoComponentMissingLaw:
         with pytest.raises(ValueError) as exc_info:
             parse_groups(
                 sfh={"type": "dpl"},
-                dust={"type": "two_component", "tau_bc": Fixed(0.1), "tau_diff": Fixed(0.2)},
+                dust_attenuation={
+                    "type": "two_component",
+                    "tau_bc": Fixed(0.1),
+                    "tau_diff": Fixed(0.2),
+                },
                 redshift=Fixed(0.1),
             )
         error_msg = str(exc_info.value)
@@ -113,7 +129,7 @@ class TestTwoComponentMissingLaw:
         with pytest.raises(ValueError) as exc_info:
             parse_groups(
                 sfh={"type": "dpl"},
-                dust={
+                dust_attenuation={
                     "type": "two_component",
                     "law_bc": "calzetti",
                     "tau_bc": Fixed(0.1),
@@ -129,7 +145,7 @@ class TestTwoComponentMissingLaw:
         with pytest.raises(ValueError) as exc_info:
             parse_groups(
                 sfh={"type": "dpl"},
-                dust={
+                dust_attenuation={
                     "type": "two_component",
                     "law_diff": "calzetti",
                     "tau_bc": Fixed(0.1),
@@ -145,7 +161,7 @@ class TestTwoComponentMissingLaw:
         with pytest.raises(ValueError, match="ambiguous"):
             parse_groups(
                 sfh={"type": "dpl"},
-                dust={
+                dust_attenuation={
                     "type": "two_component",
                     "law": "calzetti",
                     "law_bc": "smc",
@@ -163,7 +179,7 @@ class TestTwoComponentValidLaw:
         """Using law key on two_component should set both law_bc and law_diff."""
         params = parse_groups(
             sfh={"type": "dpl"},
-            dust={
+            dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
                 "tau_bc": Fixed(0.1),
@@ -178,7 +194,7 @@ class TestTwoComponentValidLaw:
         """Using law_bc and law_diff pair on two_component should work."""
         params = parse_groups(
             sfh={"type": "dpl"},
-            dust={
+            dust_attenuation={
                 "type": "two_component",
                 "law_bc": "calzetti",
                 "law_diff": "power_law",
@@ -194,7 +210,7 @@ class TestTwoComponentValidLaw:
         with pytest.raises(ValueError, match="Unknown dust law"):
             parse_groups(
                 sfh={"type": "dpl"},
-                dust={
+                dust_attenuation={
                     "type": "two_component",
                     "law_bc": "calzeti",
                     "law_diff": "power_law",
@@ -211,7 +227,7 @@ class TestWG00Unaffected:
     def test_wg00_builds_without_law_keys(self):
         params = parse_groups(
             sfh={"type": "dpl"},
-            dust={
+            dust_attenuation={
                 "type": "wg00",
                 "dust_curve": "mw",
                 "geometry": "shell",
@@ -322,7 +338,7 @@ class TestRoundTrip:
 
         params = parse_groups(
             sfh={"type": "dpl"},
-            dust={"type": "single_component", "law": "calzetti", "tau_v": Fixed(0.1)},
+            dust_attenuation={"type": "single_component", "law": "calzetti", "tau_v": Fixed(0.1)},
             redshift=Fixed(0.1),
         )
         groups = parameters_to_groups(params)
@@ -335,7 +351,7 @@ class TestRoundTrip:
 
         params = parse_groups(
             sfh={"type": "dpl"},
-            dust={
+            dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
                 "tau_bc": Fixed(0.1),
@@ -354,7 +370,7 @@ class TestRoundTrip:
 
         params = parse_groups(
             sfh={"type": "dpl"},
-            dust={
+            dust_attenuation={
                 "type": "two_component",
                 "law_bc": "calzetti",
                 "law_diff": "power_law",
@@ -374,7 +390,7 @@ class TestRoundTrip:
 
         params = parse_groups(
             sfh={"type": "dpl", "all_params": FIXED},
-            dust={
+            dust_attenuation={
                 "type": "two_component",
                 "law_bc": "calzetti",
                 "law_diff": "smc",

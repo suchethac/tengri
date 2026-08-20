@@ -83,7 +83,7 @@ def _build_sed(torus: dict | None) -> tuple[np.ndarray, np.ndarray]:
     agn = dict(BASE_AGN)
     if torus is not None:
         agn["torus"] = torus
-    model = tengri.SEDModel.build(ssp, sfh=SFH, dust=DUST, agn=agn, redshift=tengri.Fixed(0.05))
+    model = tengri.SEDModel.build(ssp, sfh=SFH, dust_attenuation=DUST, agn=agn, redshift=tengri.Fixed(0.05))
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
     out = model.predict(p)
     return np.asarray(model.wavelengths), np.asarray(out.rest_sed())

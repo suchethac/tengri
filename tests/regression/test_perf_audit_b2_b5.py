@@ -81,7 +81,7 @@ def test_forward_predict_under_jit_with_dust_ir(emission_label):
         observation=obs,
         approx=WavePrecomp(),
         sfh=builders.sfh.tsnorm(defaults=FREE),
-        dust=builders.dust.two_component(
+        dust_attenuation=builders.dust.two_component(
             defaults=FIXED,
             law="calzetti",
             tau_bc=Uniform(0, 1),

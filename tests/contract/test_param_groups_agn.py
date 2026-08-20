@@ -565,15 +565,15 @@ class TestUniversalKeyValidator:
         with pytest.raises(ValueError, match=r"Unknown key '[^']+' in group 'dust.emission'"):
             parse_groups(
                 sfh={"type": "dpl", "*": FIXED},
-                dust={
+                dust_attenuation={
                     "type": "two_component",
                     "law": "calzetti",
                     "*": FIXED,
-                    "emission": {
-                        "type": "draine_li2007",
-                        "*": FIXED,
-                        "phantom_emission_key": 77,
-                    },
+                },
+                dust_emission={
+                    "type": "draine_li2007",
+                    "*": FIXED,
+                    "phantom_emission_key": 77,
                 },
                 redshift=Fixed(0.1),
             )
@@ -641,7 +641,7 @@ class TestComposableAGNRuntimeWiring:
                 "log_total_mass": Fixed(0.0),
                 "*": FIXED,
             },
-            dust={
+            dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
                 "tau_bc": Fixed(0.0),
@@ -708,7 +708,7 @@ class TestComposableAGNRuntimeWiring:
                     "log_total_mass": Fixed(0.0),
                     "*": FIXED,
                 },
-                dust={
+                dust_attenuation={
                     "law": "power_law",
                     "type": "two_component",
                     "tau_bc": Fixed(0.0),
@@ -776,7 +776,7 @@ class TestComposableAGNRuntimeWiring:
                 "log_total_mass": Fixed(0.0),
                 "*": FIXED,
             },
-            dust={
+            dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
                 "tau_bc": Fixed(0.0),
@@ -827,7 +827,7 @@ class TestComposableAGNRuntimeWiring:
                     "log_total_mass": Fixed(0.0),
                     "*": FIXED,
                 },
-                dust={
+                dust_attenuation={
                     "law": "power_law",
                     "type": "two_component",
                     "tau_bc": Fixed(0.0),
@@ -900,7 +900,7 @@ class TestComposableAGNRuntimeWiring:
                 "log_total_mass": Fixed(0.0),
                 "*": FIXED,
             },
-            dust={
+            dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
                 "tau_bc": Fixed(0.0),

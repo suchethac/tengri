@@ -66,7 +66,7 @@ dust_config = {
 model = tengri.SEDModel.build(
     ssp_data=tengri.load_ssp("fsps_prsc_miles_chabrier"),
     sfh=sfh_config,
-    dust=dust_config,
+    dust_attenuation=dust_config,
     neb={"type": "cue", "all_params": tengri.FIXED, "logZ_gas": -0.5, "logU": -2.0},
     redshift=tengri.Fixed(z),
 )

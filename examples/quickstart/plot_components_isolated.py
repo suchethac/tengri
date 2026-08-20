@@ -71,14 +71,14 @@ def _nuLnu(**blocks):
 
 
 RUNS = [
-    ("stellar", "#666666", dict(dust=DUST_OFF)),
-    ("+ nebular", "#33aa55", dict(dust=DUST_OFF, neb={"type": "cue", "all_params": tengri.FIXED})),
-    ("+ dust", "#cc6633", dict(dust=DUST_ON)),
+    ("stellar", "#666666", dict(dust_attenuation=DUST_OFF)),
+    ("+ nebular", "#33aa55", dict(dust_attenuation=DUST_OFF, neb={"type": "cue", "all_params": tengri.FIXED})),
+    ("+ dust", "#cc6633", dict(dust_attenuation=DUST_ON)),
     (
         "+ AGN",
         "#cc3399",
         dict(
-            dust=DUST_ON,
+            dust_attenuation=DUST_ON,
             agn={
                 "disc": {"type": "multicolor", "all_params": tengri.FIXED},
                 "torus": {"type": "skirtor", "all_params": tengri.FIXED},
@@ -93,12 +93,12 @@ RUNS = [
     (
         "+ radio",
         "#3377cc",
-        dict(dust=DUST_ON, radio={"type": "condon92", "all_params": tengri.FIXED}),
+        dict(dust_attenuation=DUST_ON, radio={"type": "condon92", "all_params": tengri.FIXED}),
     ),
     (
         "+ X-ray (XRBs)",
         "#9933cc",
-        dict(dust=DUST_ON, xray={"type": "simple", "all_params": tengri.FIXED}),
+        dict(dust_attenuation=DUST_ON, xray={"type": "simple", "all_params": tengri.FIXED}),
     ),
 ]
 

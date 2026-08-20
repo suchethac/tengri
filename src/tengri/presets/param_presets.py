@@ -136,7 +136,7 @@ def starforming(redshift: float | None = None) -> tuple[Parameters, SEDModelConf
 
     config = SEDModelConfig(
         sfh=SFHConfig(mean_type=("dpl",)),
-        dust=DustConfig(
+        dust_attenuation=DustConfig(
             model="two_component",
             law_bc="calzetti",
             law_diff="power_law",
@@ -216,7 +216,7 @@ def quiescent(redshift: float | None = None) -> tuple[Parameters, SEDModelConfig
 
     config = SEDModelConfig(
         sfh=SFHConfig(mean_type=("dexp",)),
-        dust=DustConfig(
+        dust_attenuation=DustConfig(
             model="two_component",
             law_bc="power_law",
             law_diff="power_law",
@@ -299,7 +299,7 @@ def high_z(redshift: float | None = None) -> tuple[Parameters, SEDModelConfig]:
 
     config = SEDModelConfig(
         sfh=SFHConfig(mean_type=("tsnorm",)),
-        dust=DustConfig(
+        dust_attenuation=DustConfig(
             model="two_component",
             law_bc="calzetti",
             law_diff="power_law",
@@ -379,7 +379,7 @@ def photoz(redshift: float | None = None) -> tuple[Parameters, SEDModelConfig]:
 
     config = SEDModelConfig(
         sfh=SFHConfig(mean_type=("dpl",)),
-        dust=DustConfig(
+        dust_attenuation=DustConfig(
             model="two_component",
             law_bc="calzetti",
             law_diff="power_law",
@@ -463,7 +463,7 @@ def jwst_spec(redshift: float | None = None) -> tuple[Parameters, SEDModelConfig
 
     config = SEDModelConfig(
         sfh=SFHConfig(mean_type=("dpl",)),
-        dust=DustConfig(
+        dust_attenuation=DustConfig(
             model="two_component",
             law_bc="calzetti",
             law_diff="power_law",
@@ -556,7 +556,7 @@ def agn_host(redshift: float | None = None) -> tuple[Parameters, SEDModelConfig]
 
     config = SEDModelConfig(
         sfh=SFHConfig(mean_type=("dpl",)),
-        dust=DustConfig(
+        dust_attenuation=DustConfig(
             model="two_component",
             law_bc="calzetti",
             law_diff="power_law",

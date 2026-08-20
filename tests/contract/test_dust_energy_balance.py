@@ -51,7 +51,7 @@ def intrinsic_sed():
     m = tengri.SEDModel.build(
         ssp,
         sfh={"type": "tsnorm", "*": tengri.FIXED},
-        dust={
+        dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "*": tengri.FIXED,
@@ -77,14 +77,14 @@ def test_dust_energy_balance(intrinsic_sed, emission_type, tau):
     m = tengri.SEDModel.build(
         ssp,
         sfh={"type": "tsnorm", "*": tengri.FIXED},
-        dust={
+        dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "*": tengri.FIXED,
             "tau_diff": tau,
             "tau_bc": tau,
-            "emission": {"type": emission_type, "*": tengri.FIXED},
         },
+        dust_emission={"type": emission_type, "*": tengri.FIXED},
         redshift=tengri.Fixed(0.05),
     )
     p = dict(m.spec.sample(jax.random.PRNGKey(0)))
@@ -146,14 +146,14 @@ def _build_emission(ssp, emission, tau=0.6):
     return tengri.SEDModel.build(
         ssp,
         sfh={"type": "tsnorm", "*": tengri.FIXED},
-        dust={
+        dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "*": tengri.FIXED,
             "tau_diff": tau,
             "tau_bc": tau,
-            "emission": emission,
         },
+        dust_emission=emission,
         redshift=tengri.Fixed(0.05),
     )
 

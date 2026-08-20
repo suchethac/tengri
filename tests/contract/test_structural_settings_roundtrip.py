@@ -92,28 +92,28 @@ CASES = [
         "chem_evol",
     ),
     (
-        "dust.dust_curve",
+        "dust_attenuation.dust_curve",
         dict(
             sfh={"type": "dpl", "all_params": FIXED},
-            dust={"type": "wg00", "all_params": FIXED, "dust_curve": "smc"},
+            dust_attenuation={"type": "wg00", "all_params": FIXED, "dust_curve": "smc"},
         ),
         "dust_wg00_curve",
         "smc",
     ),
     (
-        "dust.geometry",
+        "dust_attenuation.geometry",
         dict(
             sfh={"type": "dpl", "all_params": FIXED},
-            dust={"type": "wg00", "all_params": FIXED, "geometry": "dusty"},
+            dust_attenuation={"type": "wg00", "all_params": FIXED, "geometry": "dusty"},
         ),
         "dust_wg00_geometry",
         "dusty",
     ),
     (
-        "dust.structure",
+        "dust_attenuation.structure",
         dict(
             sfh={"type": "dpl", "all_params": FIXED},
-            dust={"type": "wg00", "all_params": FIXED, "structure": "clumpy"},
+            dust_attenuation={"type": "wg00", "all_params": FIXED, "structure": "clumpy"},
         ),
         "dust_wg00_structure",
         "clumpy",
@@ -257,6 +257,9 @@ def test_every_structural_key_has_a_roundtrip_rule():
         "lyman_cutoff",
         "lyc_absorb_all",
         "eb_include_lyc",
+        # a PARAMETER (dust_eta_balance) reachable as a dust_emission grammar key,
+        # emitted by the parameter walk rather than by a structural rule
+        "eta_balance",
     } | {
         f"{stem}_{comp}"
         for stem in ("slope", "bump_strength", "delta", "Rv")
@@ -273,7 +276,7 @@ def test_every_structural_key_has_a_roundtrip_rule():
             # is emitted by the per-group walk, not by a structural rule.
             if f"{group}.{key}" in _GROUP_STRUCTURAL_KEYS:
                 continue
-            if group == "dust" and key in hand_written:
+            if group in ("dust_attenuation", "dust_emission") and key in hand_written:
                 continue
             missing.append(f"{group}.{key}")
 

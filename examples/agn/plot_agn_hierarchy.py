@@ -75,7 +75,7 @@ colors = plt.cm.viridis(np.linspace(0.05, 0.9, len(TIERS)))
 fig, ax = plt.subplots(figsize=(7.5, 4.8))
 for (label, blocks), color in zip(TIERS, colors):
     agn = {"all_params": tengri.FIXED, "log_lbol": LOG_LBOL, "lum_ratio": 1.0, **blocks}
-    model = tengri.SEDModel.build(ssp, sfh=SFH, dust=DUST, agn=agn, redshift=tengri.Fixed(0.0))
+    model = tengri.SEDModel.build(ssp, sfh=SFH, dust_attenuation=DUST, agn=agn, redshift=tengri.Fixed(0.0))
     p = dict(model.spec.sample(jax.random.PRNGKey(0)))
     out = model.predict(p)
     wave = np.asarray(model.wavelengths)

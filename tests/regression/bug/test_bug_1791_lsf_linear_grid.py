@@ -228,7 +228,7 @@ def test_the_local_scale_path_engages_inside_predict_spectrum(ssp_data_wne):
             ssp_data=ssp_data_wne,
             observation=Spectroscopy(wave_obs=wave_obs, resolution=2000.0),
             sfh={"type": "dpl", "all_params": FREE},
-            dust={"type": "none"},
+            dust_attenuation={"type": "none"},
             redshift=Fixed(0.05),
         )
         model.predict_spectrum(model.spec.sample(jax.random.PRNGKey(0)))

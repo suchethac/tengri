@@ -68,7 +68,7 @@ def _sed(ssp, obs, *, dust: bool):
             ssp_data=ssp,
             observation=obs,
             sfh={"type": "dpl", "all_params": FREE},
-            dust=dust_group,
+            dust_attenuation=dust_group,
             neb={"type": "none"},
             redshift=Fixed(0.1),
             approx=None,
@@ -88,7 +88,7 @@ def test_a_dust_free_model_can_still_engage(synthetic_ssp_wide, synthetic_tophat
     assertion in this file while silently withdrawing the speedup #1748 measured
     at 30.63x on a dust-free model.
     """
-    sed = _sed(synthetic_ssp_wide, synthetic_tophat_obs, dust=False)
+    sed = _sed(synthetic_ssp_wide, synthetic_tophat_obs, dust_attenuation=False)
     assert fast_nebular_can_engage(sed), (
         "a dust-free SEDModel must still be able to engage the fast nebular grid"
     )
@@ -102,7 +102,7 @@ def test_the_wrapper_agrees_with_the_sed_it_wraps(synthetic_ssp_wide, synthetic_
     SED said ``True``.
     """
     for dust in (True, False):
-        sed = _sed(synthetic_ssp_wide, synthetic_tophat_obs, dust=dust)
+        sed = _sed(synthetic_ssp_wide, synthetic_tophat_obs, dust_attenuation=dust)
         forward = _forward(sed, synthetic_tophat_obs)
         assert fast_nebular_can_engage(forward) == fast_nebular_can_engage(sed), (
             f"ForwardModel and its inner SEDModel disagree for dust={dust}; the "
@@ -113,7 +113,7 @@ def test_the_wrapper_agrees_with_the_sed_it_wraps(synthetic_ssp_wide, synthetic_
 
 def test_a_dusty_forward_model_is_refused(synthetic_ssp_wide, synthetic_tophat_obs):
     """The headline: the canonical path must refuse the inert config."""
-    sed = _sed(synthetic_ssp_wide, synthetic_tophat_obs, dust=True)
+    sed = _sed(synthetic_ssp_wide, synthetic_tophat_obs, dust_attenuation=True)
     forward = _forward(sed, synthetic_tophat_obs)
     assert not fast_nebular_can_engage(forward), (
         "a dusty ForwardModel was told the fast nebular grid can engage; dust "

@@ -67,7 +67,7 @@ def spectrum(radio, *, with_agn):
     model = tengri.SEDModel.build(
         ssp_data=ssp,
         sfh=SFH,
-        dust=DUST,
+        dust_attenuation=DUST,
         radio=radio,
         redshift=tengri.Fixed(0.05),
         **({"agn": AGN} if with_agn else {}),

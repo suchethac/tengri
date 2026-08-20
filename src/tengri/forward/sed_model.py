@@ -8598,7 +8598,7 @@ class SEDModel:
             cls,
             ssp,
             sfh=_r(sfh),
-            dust=_r(dust),
+            dust_attenuation=_r(dust),
             nebular=_r(nebular),
             agn=_r(agn),
             redshift=_r(redshift),
@@ -8711,7 +8711,7 @@ class SEDModel:
             for k, v in dict(
                 sfh=sfh,
                 met=met,
-                dust=dust,
+                dust_attenuation=dust,
                 neb=neb,
                 shock=shock,
                 agn=agn,

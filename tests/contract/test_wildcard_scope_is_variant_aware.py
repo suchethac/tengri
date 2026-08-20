@@ -544,7 +544,7 @@ def test_an_omitted_law_scopes_as_its_resolved_default():
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             spec = tengri.parse_groups(
-                sfh={"type": "dpl", "*": FIXED}, dust=dust, neb={"type": "none"}
+                sfh={"type": "dpl", "*": FIXED}, dust_attenuation=dust, neb={"type": "none"}
             )
         return {p for p in spec.free_params if p.startswith("dust_")}
 
@@ -615,7 +615,7 @@ def test_the_threaded_values_actually_reach_the_backend(synthetic_ssp_wide, panc
             ssp_data=synthetic_ssp_wide,
             observation=panchromatic_obs,
             sfh={"type": "dpl", "*": FIXED},
-            dust={
+            dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
                 "*": FIXED,

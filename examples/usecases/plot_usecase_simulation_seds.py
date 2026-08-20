@@ -64,7 +64,7 @@ model_zt = tengri.SEDModel.build(
     observation=obs,
     sfh={"type": "table"},
     met={"type": "table"},
-    dust={"law": "power_law", "type": "two_component", "all_params": tengri.FIXED, "tau_bc": 0.4},
+    dust_attenuation={"law": "power_law", "type": "two_component", "all_params": tengri.FIXED, "tau_bc": 0.4},
     redshift=tengri.Fixed(Z_OBS),
 )
 fwd_zt = tengri.ForwardModel.build(sed=model_zt, observation=obs)
@@ -84,7 +84,7 @@ model_mean = tengri.SEDModel.build(
     observation=obs,
     sfh={"type": "table"},
     met={"logzsol": tengri.Uniform(grid_lo, grid_hi)},
-    dust={"law": "power_law", "type": "two_component", "all_params": tengri.FIXED, "tau_bc": 0.4},
+    dust_attenuation={"law": "power_law", "type": "two_component", "all_params": tengri.FIXED, "tau_bc": 0.4},
     redshift=tengri.Fixed(Z_OBS),
 )
 fwd_mean = tengri.ForwardModel.build(sed=model_mean, observation=obs)

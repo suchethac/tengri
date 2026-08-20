@@ -86,7 +86,12 @@ def _build(ssp, *, z, approx, bands=BANDS, patchy=True, x_HI=None):
         ssp_data=ssp,
         observation=Observation(photometry=Photometry.from_names(bands)),
         sfh={"type": "dpl", "*": FREE},
-        dust={"law": "power_law", "type": "two_component", "*": FIXED, "tau_diff": 0.3},
+        dust_attenuation={
+            "law": "power_law",
+            "type": "two_component",
+            "*": FIXED,
+            "tau_diff": 0.3,
+        },
         redshift=Fixed(z),
         approx=approx,
         igm=igm,

@@ -35,7 +35,7 @@ def _build(ssp, obs, **dust_extra):
         ssp,
         observation=obs,
         sfh={"type": "tsnorm", "*": tengri.FIXED},
-        dust=dust,
+        dust_attenuation=dust,
         neb={"type": "none"},
         redshift=tengri.Fixed(0.05),
     )
@@ -109,7 +109,7 @@ class TestLawInheritance:
                 synthetic_ssp_wide,
                 observation=synthetic_tophat_obs,
                 sfh={"type": "tsnorm", "*": tengri.FIXED},
-                dust=self._dust_no_law(law_diff="calzetti"),
+                dust_attenuation=self._dust_no_law(law_diff="calzetti"),
                 neb={"type": "none"},
                 redshift=tengri.Fixed(0.05),
             )
@@ -121,7 +121,7 @@ class TestLawInheritance:
                 synthetic_ssp_wide,
                 observation=synthetic_tophat_obs,
                 sfh={"type": "tsnorm", "*": tengri.FIXED},
-                dust=self._dust_no_law(law_bc="calzetti"),
+                dust_attenuation=self._dust_no_law(law_bc="calzetti"),
                 neb={"type": "none"},
                 redshift=tengri.Fixed(0.05),
             )
@@ -133,7 +133,7 @@ class TestLawInheritance:
                 synthetic_ssp_wide,
                 observation=synthetic_tophat_obs,
                 sfh={"type": "tsnorm", "*": tengri.FIXED},
-                dust=self._dust_no_law(),
+                dust_attenuation=self._dust_no_law(),
                 neb={"type": "none"},
                 redshift=tengri.Fixed(0.05),
             )

@@ -47,7 +47,7 @@ def _build(ssp, include_lyc: bool, *, tau_diff: float = 1.0):
             "log_total_mass": Fixed(10.0),
             "*": FIXED,
         },
-        dust=dust,
+        dust_attenuation=dust,
         redshift=Fixed(0.0),
     )
 
@@ -138,7 +138,7 @@ def _build_emitting(ssp, include_lyc: bool, approx):
             "log_total_mass": Fixed(10.0),
             "*": FIXED,
         },
-        dust=dust,
+        dust_attenuation=dust,
         neb={"type": "none"},
         redshift=Fixed(0.05),
     )

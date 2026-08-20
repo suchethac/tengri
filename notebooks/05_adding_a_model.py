@@ -254,12 +254,11 @@ if ssp is not None:
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "dpl", "all_params": FIXED},
-        dust={
+        dust_attenuation={
             "type": "single_component",
             "law": "calzetti",
             "tau_v": Fixed(0.4),
-            "emission": {"type": "my_modified_blackbody", "T": Fixed(35.0), "beta_ir": Fixed(1.8)},
-        },
+        }, dust_emission={"type": "my_modified_blackbody", "T": Fixed(35.0), "beta_ir": Fixed(1.8)},
         redshift=Fixed(0.05),
     )
     model.spec.summary()

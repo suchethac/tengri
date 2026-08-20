@@ -51,7 +51,7 @@ def _age_marginal(ssp, sfh):
         ssp_data=ssp,
         met={"logzsol": Fixed(0.0), "*": FIXED},
         sfh=sfh,
-        dust={
+        dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "tau_bc": Fixed(0.0),

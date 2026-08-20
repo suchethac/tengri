@@ -143,7 +143,7 @@ model = SEDModel.build(
     redshift=Fixed(Z_GAL),
     sfh={"type": "continuity", "all_params": FREE, "bin_edges_gyr": BIN_EDGES},
     met={"logzsol": Uniform(-1.5, 0.3)},
-    dust={
+    dust_attenuation={
         "type": "two_component",
         "law": "calzetti",
         "all_params": FIXED,
