@@ -125,36 +125,11 @@ def test_every_dust_law_key_is_accepted() -> None:
 
 
 # ── Composition: emission is a peer group, not a nested block ──────
-
-
-def test_two_component_refuses_a_nested_emission_block() -> None:
-    """The retired spelling raises and names where emission went.
-
-    It used to return the block under an ``emission`` key, which the parser then
-    accepted as a sub-block. Both halves are gone, so the factory refusing here
-    is what keeps a caller from building a dict the parser would reject later,
-    further from the mistake.
-    """
-    with pytest.raises(TypeError, match="emission"):
-        builders.dust.two_component(
-            law="calzetti",
-            _=FREE,
-            tau_bc=Uniform(0.0, 2.0),
-            emission=builders.dust.emission.dale2014(_=FIXED),
-        )
-
-
-def test_the_two_factories_produce_two_independent_group_dicts() -> None:
-    """Each factory yields exactly its own group, ready for its own keyword."""
-    atten = builders.dust.two_component(
-        law="calzetti", tau_bc=Uniform(0.0, 2.0), tau_diff=Uniform(0.0, 1.0)
-    )
-    emis = builders.dust.emission.dale2014(_=FIXED)
-
-    assert atten["type"] == "two_component"
-    assert atten["law"] == "calzetti"
-    assert "emission" not in atten
-    assert emis == {"type": "dale2014", "all_params": FIXED}
+#
+# The behaviour lives in tests/contract/test_dust_split_builders.py, which owns
+# the refusal (test_attenuation_builder_raises_on_emission_kwarg), the emission
+# dict, and the dust_emission= build path. This file's own contribution is the
+# signature assertion above: `emission` is not a parameter of two_component.
 
 
 # ── Round-trip through parser ─────────────────────────────────────

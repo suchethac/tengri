@@ -56,12 +56,12 @@ class TestSpectrumPrecompDataclass:
         assert (sp.n_z, sp.z_min, sp.z_max) == (200, 0.0, 3.0)
 
 
-def _build(ssp, obs, approx, redshift, dust=None):
+def _build(ssp, obs, approx, redshift, dust_attenuation=None):
     import warnings
 
     from tengri import FIXED, SEDModel
 
-    dust = dust or {
+    dust_attenuation = dust_attenuation or {
         "type": "two_component",
         "law": "calzetti",
         "*": FIXED,
@@ -72,7 +72,7 @@ def _build(ssp, obs, approx, redshift, dust=None):
             ssp_data=ssp,
             observation=obs,
             sfh={"type": "dpl", "*": FIXED},
-            dust_attenuation=dust,
+            dust_attenuation=dust_attenuation,
             neb={"type": "none"},
             redshift=redshift,
             approx=approx,
