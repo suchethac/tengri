@@ -312,8 +312,19 @@ def _component_config_summary(c) -> str:
     parts = []
     for k in candidate_keys:
         v = getattr(cfg, k, None)
-        if v is not None:
-            parts.append(f"{k}={v}")
+        if v is None:
+            continue
+        # Agreeing screens read back as ONE law, matching what the grammar
+        # accepts and what to_groups() emits. Rendering
+        # "law_bc=calzetti, law_diff=calzetti" for a config written as
+        # law='calzetti' shows a key the user did not write, and spends two of
+        # the three displayed slots saying it twice.
+        if k == "law_bc" and getattr(cfg, "law_diff", None) == v:
+            parts.append(f"law={v}")
+            continue
+        if k == "law_diff" and getattr(cfg, "law_bc", None) == v:
+            continue  # already shown as the shared law
+        parts.append(f"{k}={v}")
     if not parts:
         return ""
     return f"[{', '.join(parts[:3])}]"
