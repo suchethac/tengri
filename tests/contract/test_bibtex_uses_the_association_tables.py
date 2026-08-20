@@ -107,7 +107,11 @@ def bibtex_text(ssp_data_fsps):
         ssp_data=ssp_data_fsps,
         observation=obs,
         sfh={"type": "dpl", "all_params": FIXED},
-        dust={"type": "two_component", "law_bc": "calzetti", "all_params": FIXED},
+        dust={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": FIXED,
+        },
         neb={"type": "none"},
         xray={"type": "simple"},
         radio={"type": "condon92"},
@@ -238,7 +242,11 @@ class TestTheTwoSurfacesAgree:
             ssp_data=ssp_data_fsps,
             observation=obs,
             sfh={"type": "delayed", "all_params": FIXED},
-            dust={"type": "two_component", "law_bc": "calzetti", "all_params": FIXED},
+            dust={
+                "type": "two_component",
+                "law": "calzetti",
+                "all_params": FIXED,
+            },
             neb={"type": "none"},
             redshift=Fixed(0.1),
         )

@@ -40,7 +40,7 @@ References
    MNRAS, 491, 740 (2020). arXiv:1909.09632.
    https://doi.org/10.1093/mnras/stz3001
 
-.. GENERATED FROM PYTHON SOURCE LINES 24-131
+.. GENERATED FROM PYTHON SOURCE LINES 24-137
 
 
 
@@ -55,7 +55,7 @@ References
  .. code-block:: none
 
     Building shared AGN model (polar_ebv and cos_inc FREE)...
-    /tengri/examples/agn/plot_polar_dust_ebv_type12_sweep.py:128: UserWarning: This figure includes Axes that are not compatible with tight_layout, so results might be incorrect.
+    /tengri/examples/agn/plot_polar_dust_ebv_type12_sweep.py:134: UserWarning: This figure includes Axes that are not compatible with tight_layout, so results might be incorrect.
       fig.tight_layout()
     Saved: plot_polar_dust_ebv_type12_sweep.png
 
@@ -93,7 +93,13 @@ References
     # Suppress stellar/nebular component so the AGN SED is unambiguous.
     COMMON = dict(
         sfh={"type": "const", "all_params": tengri.FIXED, "log_total_mass": -30.0},
-        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+        dust={
+            "law": "power_law",
+            "type": "two_component",
+            "all_params": tengri.FIXED,
+            "tau_diff": 0.0,
+            "tau_bc": 0.0,
+        },
         redshift=tengri.Fixed(0.05),
     )
 
@@ -179,7 +185,7 @@ References
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 26.611 seconds)
+   **Total running time of the script:** (0 minutes 5.165 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_polar_dust_ebv_type12_sweep.py:

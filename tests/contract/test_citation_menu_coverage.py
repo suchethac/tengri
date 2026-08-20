@@ -116,7 +116,7 @@ def test_dust_model_is_cited() -> None:
     """
     spec = parse_groups(
         sfh={"type": "dpl"},
-        dust={"type": "two_component", "law_bc": "calzetti"},
+        dust={"type": "two_component", "law": "calzetti"},
     )
     citation = _citation_for(spec, "dust") or ""
     assert "Charlot" in citation, (
@@ -136,7 +136,7 @@ def test_disabled_components_are_not_cited() -> None:
     defaults while their gate is ``False``, so a gate-blind walk would
     attach Bell 2003 and Yang+2020 to a plain stellar+dust fit.
     """
-    spec = parse_groups(sfh={"type": "dpl"}, dust={"type": "two_component"})
+    spec = parse_groups(sfh={"type": "dpl"}, dust={"law": "power_law", "type": "two_component"})
     # Premise: the defaults really are non-None while the gates are off.
     assert spec.radio is False
     assert spec.shock is False

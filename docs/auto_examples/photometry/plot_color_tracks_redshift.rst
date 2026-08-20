@@ -40,7 +40,7 @@ Useful intuition this figure makes obvious:
   z = 0.5 SF galaxy from an unobscured z = 3 LBG (the LBG dropout
   degeneracy demonstrated in workflows/plot_workflow_photoz_degeneracy)
 
-.. GENERATED FROM PYTHON SOURCE LINES 25-112
+.. GENERATED FROM PYTHON SOURCE LINES 25-113
 
 
 
@@ -94,6 +94,7 @@ Useful intuition this figure makes obvious:
                 "trunc": 13.0,
             },
             dust={
+                "law": "power_law",
                 "type": "two_component",
                 "all_params": tengri.FIXED,
                 "tau_diff": tau_diff,
@@ -142,11 +143,6 @@ Useful intuition this figure makes obvious:
 
     fig.tight_layout()
     plt.savefig("plot_color_tracks_redshift.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.603 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_color_tracks_redshift.py:

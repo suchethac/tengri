@@ -54,6 +54,7 @@ for met in met_logzsol:
                 "end_gyr": 0.0,
             },
             dust={
+                "law": "power_law",
                 "type": "two_component",
                 "all_params": tengri.FIXED,
                 "tau_diff": 0.0,

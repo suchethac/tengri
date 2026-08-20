@@ -256,7 +256,7 @@ if ssp is not None:
         sfh={"type": "dpl", "all_params": FIXED},
         dust={
             "type": "single_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "tau_v": Fixed(0.4),
             "emission": {"type": "my_modified_blackbody", "T": Fixed(35.0), "beta_ir": Fixed(1.8)},
         },

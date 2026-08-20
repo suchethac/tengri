@@ -42,7 +42,7 @@ the 2.0 used here is a radio-loud source; its prior runs to 4. Passing 100
 
 Reference: Bell+2003; Delvecchio+2021; McCheyne+2022 (q_IR calibrations).
 
-.. GENERATED FROM PYTHON SOURCE LINES 26-121
+.. GENERATED FROM PYTHON SOURCE LINES 26-122
 
 
 
@@ -78,6 +78,7 @@ Reference: Bell+2003; Delvecchio+2021; McCheyne+2022 (q_IR calibrations).
 
     SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": 10.5}
     DUST = {
+        "law": "power_law",
         "type": "two_component",
         "all_params": tengri.FIXED,
         "tau_diff": 1.0,
@@ -156,7 +157,7 @@ Reference: Bell+2003; Delvecchio+2021; McCheyne+2022 (q_IR calibrations).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 13.276 seconds)
+   **Total running time of the script:** (0 minutes 3.821 seconds)
 
 
 .. _sphx_glr_download_auto_examples_radio_plot_radio_model_family_compare.py:

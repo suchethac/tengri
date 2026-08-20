@@ -33,7 +33,7 @@ Kewley et al. 2001, ApJ, 556, 121 (SF/AGN demarcation).
 Kauffmann et al. 2003, MNRAS, 346, 1055 (SF/composite line).
 Allen et al. 2008, ApJS, 178, 20 (MAPPINGS V shocks).
 
-.. GENERATED FROM PYTHON SOURCE LINES 17-266
+.. GENERATED FROM PYTHON SOURCE LINES 17-273
 
 
 
@@ -103,6 +103,7 @@ Allen et al. 2008, ApJS, 178, 20 (MAPPINGS V shocks).
                     "log_total_mass": 10.0,
                 },
                 dust={
+                    "law": "power_law",
                     "type": "two_component",
                     "all_params": tengri.FIXED,
                     "tau_diff": 0.05,
@@ -162,7 +163,13 @@ Allen et al. 2008, ApJS, 178, 20 (MAPPINGS V shocks).
                 "tau_gyr": 0.15,
                 "log_total_mass": 10.0,
             },
-            dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.2},
+            dust={
+                "law": "power_law",
+                "type": "two_component",
+                "all_params": tengri.FIXED,
+                "tau_diff": 0.1,
+                "tau_bc": 0.2,
+            },
             neb={
                 "type": "cue",
                 "all_params": tengri.FIXED,
@@ -301,7 +308,7 @@ Allen et al. 2008, ApJS, 178, 20 (MAPPINGS V shocks).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 27.489 seconds)
+   **Total running time of the script:** (0 minutes 8.140 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_bpt_diagram_population.py:

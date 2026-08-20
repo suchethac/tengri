@@ -51,6 +51,7 @@ model = tengri.SEDModel.build(
         "log_total_mass": 10.0,
     },
     dust={
+        "law": "power_law",
         "type": "two_component",
         "all_params": tengri.FIXED,
         "tau_bc": tengri.FIXED,  # Birth cloud dust fixed

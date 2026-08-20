@@ -76,14 +76,14 @@ def _build(ssp, approx, *, tau_diff, tau_bc, z, neb, shock, dust_type="two_compo
         # One screen over all stars; tau_v is its depth. tau_bc has no analog here.
         dust_group = {
             "type": "single_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "all_params": FIXED,
             "tau_v": tau_diff,
         }
     else:
         dust_group = {
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "all_params": FIXED,
             "tau_diff": tau_diff,
             "tau_bc": tau_bc,

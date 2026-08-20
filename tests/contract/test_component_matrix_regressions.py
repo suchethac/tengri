@@ -38,6 +38,7 @@ def test_lazy_dust_templates_survive_cross_model_use(synthetic_ssp_wide, synthet
                 redshift=Fixed(0.1),
                 sfh={"type": "delayed", "*": FIXED},
                 dust={
+                    "law": "power_law",
                     "type": "two_component",
                     "tau_bc": Fixed(0.5),
                     "tau_diff": Fixed(0.3),

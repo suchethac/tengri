@@ -33,7 +33,7 @@ different final metal content.
 Reference: Maeder 1992, A&A, 264, 105 (chemical evolution); Schmidt 1959 (solar
 neighborhood models); Dalcanton et al. 2007 (mass-metallicity relation physics).
 
-.. GENERATED FROM PYTHON SOURCE LINES 17-163
+.. GENERATED FROM PYTHON SOURCE LINES 17-161
 
 
 
@@ -160,9 +160,7 @@ neighborhood models); Dalcanton et al. 2007 (mass-metallicity relation physics).
 
     # Compute full metallicity history with τ=3 Gyr SFR and η=0.2 outflow
     sfr_tau3 = np.exp(-age_from_start / 3.0)
-    log_z_full = closed_box_metallicity(
-        t_yr, sfr_tau3, yield_y=0.03, eta_outflow=0.2, f_gas_init=0.9
-    )
+    log_z_full = closed_box_metallicity(t_yr, sfr_tau3, yield_y=0.03, eta_outflow=0.2, f_gas_init=0.9)
     z_ratio_full = 10.0 ** np.array(log_z_full)
 
     # Extract Z at each lookback time point

@@ -261,7 +261,7 @@ m_sfh = SEDModel.build(
         "log_total_mass": Fixed(LOG_MASS_SNORM),
         "all_params": FIXED,
     },
-    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+    dust={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
 s_sfh = m_sfh.predict_state({})
@@ -337,7 +337,7 @@ m_zmm = SEDModel.build(
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
         "all_params": FIXED,
     },
-    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+    dust={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
 s_zmm = m_zmm.predict_state({})
@@ -373,7 +373,7 @@ m_zmb = SEDModel.build(
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
         "all_params": FIXED,
     },
-    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+    dust={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
 _Z_box_t = 10.0 ** np.asarray(m_zmb.predict_state({}).derived["log_metallicity_history"])
@@ -453,7 +453,7 @@ m_stellar = SEDModel.build(
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
         "all_params": FIXED,
     },
-    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+    dust={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
 s_stellar = m_stellar.predict_state({})
@@ -829,7 +829,7 @@ m_neb = SEDModel.build(
         "log_total_mass": Fixed(NEB_LOG_MASS),
         "all_params": FIXED,
     },
-    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+    dust={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
     neb={"type": "cue", "neb_logU": Fixed(-2.0), "neb_logZ_gas": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
@@ -953,7 +953,7 @@ m_agn = SEDModel.build(
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
         "all_params": FIXED,
     },
-    dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+    dust={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
     # Raw-Stalevski SKIRTOR model. ProSpect's `SKIRTOR_interp` reads the
     # SKIRTOR template directly — the disc + torus as Stalevski's radiative
     # transfer computed them. tengri's `skirtor_stalevski` model does the same:

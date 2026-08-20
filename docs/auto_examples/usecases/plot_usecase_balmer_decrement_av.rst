@@ -36,7 +36,7 @@ the dust normalization both differ from that idealization.
 Reference: Calzetti et al. 2000, ApJ, 533, 682 (Balmer decrement and dust
 attenuation law).
 
-.. GENERATED FROM PYTHON SOURCE LINES 20-157
+.. GENERATED FROM PYTHON SOURCE LINES 20-158
 
 
 
@@ -85,6 +85,7 @@ attenuation law).
             "log_total_mass": 10.0,
         },
         dust={
+            "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
             "tau_bc": tengri.FIXED,  # Birth cloud dust fixed
@@ -192,7 +193,7 @@ attenuation law).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.442 seconds)
+   **Total running time of the script:** (0 minutes 2.367 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_balmer_decrement_av.py:

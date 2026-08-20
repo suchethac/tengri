@@ -41,6 +41,7 @@ def test_predict_photometry_z0_returns_finite_fluxes():
             observation=obs,
             sfh={"type": "const", "*": tengri.FIXED},
             dust={
+                "law": "power_law",
                 "type": "two_component",
                 "*": tengri.FIXED,
                 "tau_diff": 0.0,

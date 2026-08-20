@@ -25,6 +25,11 @@ import pytest
 
 pytestmark = pytest.mark.crossval
 
+# numpy 2.0 removed np.trapz in favor of np.trapezoid; dense_basis uses the old name.
+# Add a compat shim so the reference package works across numpy versions.
+if not hasattr(np, "trapz"):
+    np.trapz = np.trapezoid
+
 try:
     import dense_basis as db
 

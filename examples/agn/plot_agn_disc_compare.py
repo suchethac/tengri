@@ -50,7 +50,13 @@ COLORS = plt.cm.tab20(np.linspace(0, 1, 20))[: len(DISC_MODELS)]
 
 C_AA_PER_S = 2.998e18
 SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
-DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+DUST = {
+    "law": "power_law",
+    "type": "two_component",
+    "all_params": tengri.FIXED,
+    "tau_diff": 0.0,
+    "tau_bc": 0.0,
+}
 
 # `powerlaw` is a bare phenomenological disc that tengri deprecates for science
 # fits (use multicolor or kubota_done for that). It is on this panel to show

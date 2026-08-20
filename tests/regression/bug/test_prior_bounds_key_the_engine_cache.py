@@ -149,6 +149,9 @@ def _mass_model(ssp_real, mass_prior):
         },
         dust={
             "type": "two_component",
+            # #1989: attenuation laws are explicit — 'law' applies one curve
+            # to both screens, matching this test's pre-#1989 implicit default.
+            "law": "calzetti",
             "all_params": tengri.FIXED,
             "tau_diff": Uniform(0.0, 0.6),
             "tau_bc": Uniform(0.0, 0.8),

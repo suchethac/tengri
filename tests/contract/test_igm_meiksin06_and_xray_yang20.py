@@ -87,7 +87,13 @@ def test_meiksin06_builds_through_grammar(ssp):
     m = tengri.SEDModel.build(
         ssp,
         sfh={"type": "tsnorm", "*": tengri.FIXED},
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+        dust={
+            "law": "power_law",
+            "type": "two_component",
+            "*": tengri.FIXED,
+            "tau_diff": 0.0,
+            "tau_bc": 0.0,
+        },
         igm={"type": "meiksin06"},
         redshift=tengri.Fixed(3.0),
     )
@@ -102,7 +108,13 @@ def test_yang20_alias_builds(ssp):
     m = tengri.SEDModel.build(
         ssp,
         sfh={"type": "tsnorm", "*": tengri.FIXED},
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+        dust={
+            "law": "power_law",
+            "type": "two_component",
+            "*": tengri.FIXED,
+            "tau_diff": 0.0,
+            "tau_bc": 0.0,
+        },
         xray={"type": "yang20"},
         redshift=tengri.Fixed(0.05),
     )

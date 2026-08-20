@@ -146,7 +146,7 @@ class TestFracAGNDustCoupling944:
             sfh={"type": "const"},
             dust={
                 "type": "two_component",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "emission": {"type": "dale2014"},
             },
             agn={
@@ -177,7 +177,7 @@ class TestFracAGNDustCoupling944:
             sfh={"type": "const", "*": FIXED},
             dust={
                 "type": "two_component",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "emission": {"type": "dale2014"},
             },
             agn={
@@ -200,7 +200,7 @@ class TestFracAGNDustCoupling944:
             sfh={"type": "const", "*": FIXED},
             dust={
                 "type": "two_component",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "emission": {"type": "dale2014"},
             },
             agn={
@@ -248,7 +248,7 @@ class TestFracAGNDustCoupling944:
                 sfh={"type": "const"},
                 dust={
                     "type": "two_component",
-                    "law_bc": "calzetti",
+                    "law": "calzetti",
                     "emission": {"type": "dale2014"},
                 },
                 agn={

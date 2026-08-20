@@ -85,6 +85,7 @@ def _build_model(u_min: float) -> tuple:
         Other parameters sampled from priors.
     """
     dust_config = {
+        "law": "power_law",
         "type": "two_component",
         "all_params": tengri.FIXED,
         "tau_diff": 1.0,

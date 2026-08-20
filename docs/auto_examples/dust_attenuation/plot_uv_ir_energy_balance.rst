@@ -34,7 +34,7 @@ optical/NIR window that the model treats separately. Deviations from
 the diagonal indicate either model approximations or numerical
 integration error.
 
-.. GENERATED FROM PYTHON SOURCE LINES 18-108
+.. GENERATED FROM PYTHON SOURCE LINES 18-109
 
 
 
@@ -82,6 +82,7 @@ integration error.
                 "end_gyr": 0.0,
             },
             dust={
+                "law": "power_law",
                 "type": "two_component",
                 "all_params": tengri.FIXED,
                 "tau_diff": tau_diff,
@@ -143,7 +144,7 @@ integration error.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 9.772 seconds)
+   **Total running time of the script:** (0 minutes 5.503 seconds)
 
 
 .. _sphx_glr_download_auto_examples_dust_attenuation_plot_uv_ir_energy_balance.py:

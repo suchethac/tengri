@@ -27,7 +27,7 @@ reveals the redshifted Lyα emission line at 8512 Å, the Lyman break at
 6384 Å, characteristic IGM blue-wing absorption, and the rest-UV continuum.
 Demonstrates Lyα radiative transfer and reionization-era observability.
 
-.. GENERATED FROM PYTHON SOURCE LINES 11-160
+.. GENERATED FROM PYTHON SOURCE LINES 11-161
 
 
 
@@ -97,6 +97,7 @@ Demonstrates Lyα radiative transfer and reionization-era observability.
             "beta": 2.5,
         },  # Declining late SFR
         dust={
+            "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
             "tau_diff": 0.02,  # Minimal diffuse dust

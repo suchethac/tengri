@@ -50,6 +50,7 @@ model_sf = tengri.SEDModel.build(
         "end_gyr": 0.0,
     },
     dust={
+        "law": "power_law",
         "type": "two_component",
         "all_params": tengri.FIXED,
         "tau_diff": 0.5,  # diffuse dust: moderate optical depth
@@ -86,6 +87,7 @@ model_agn = tengri.SEDModel.build(
         "end_gyr": 1.0,
     },
     dust={
+        "law": "power_law",
         "type": "two_component",
         "all_params": tengri.FIXED,
         "tau_diff": 1.5,  # warm dust around AGN
@@ -130,6 +132,7 @@ model_composite = tengri.SEDModel.build(
         "end_gyr": 0.0,
     },
     dust={
+        "law": "power_law",
         "type": "two_component",
         "all_params": tengri.FIXED,
         "tau_diff": 1.0,

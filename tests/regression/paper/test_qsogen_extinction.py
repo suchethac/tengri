@@ -140,6 +140,7 @@ def test_end_to_end_through_build(ssp_data_bc03):
                 "*": FIXED,
             },
             dust={
+                "law": "power_law",
                 "type": "two_component",
                 "tau_bc": Fixed(0.0),
                 "tau_diff": Fixed(0.0),

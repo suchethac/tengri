@@ -46,7 +46,7 @@ MAX_LUT_FLOPS = 1_000_000
 
 
 def _model(approx, *, emission=True):
-    dust = {"type": "two_component", "law_bc": "calzetti", "*": FIXED}
+    dust = {"type": "two_component", "law": "calzetti", "*": FIXED}
     if emission:
         dust["emission"] = {"type": "dale2014", "*": FIXED}
     return SEDModel.build(

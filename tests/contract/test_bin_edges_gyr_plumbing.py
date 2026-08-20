@@ -97,7 +97,7 @@ class TestForwardPassPropagation:
             model = tengri.SEDModel.build(
                 ssp,
                 sfh={"type": _SFH, "*": tengri.FIXED, "bin_edges_gyr": edges_z2},
-                dust={"type": "two_component", "*": tengri.FIXED},
+                dust={"law": "power_law", "type": "two_component", "*": tengri.FIXED},
                 redshift=tengri.Fixed(2.0),
             )
         # Edges live on the spec…
@@ -113,7 +113,7 @@ class TestForwardPassPropagation:
             model = tengri.SEDModel.build(
                 ssp,
                 sfh={"type": _SFH, "*": tengri.FIXED},
-                dust={"type": "two_component", "*": tengri.FIXED},
+                dust={"law": "power_law", "type": "two_component", "*": tengri.FIXED},
                 redshift=tengri.Fixed(2.0),
             )
         assert model.spec.bin_edges_gyr is None
