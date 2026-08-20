@@ -250,14 +250,13 @@ def test_every_structural_key_has_a_roundtrip_rule():
     # law_bc/law_diff pair), the per-component overrides live in a flattened
     # dict, and two booleans are stored as a float cutoff.
     hand_written = {
-        "law",
+        "law",  # dust.law (single/two_component); agn.atten law (smc_prevot)
         "law_bc",
         "law_diff",
         "law_neb",
         "lyman_cutoff",
         "lyc_absorb_all",
         "eb_include_lyc",
-        "law",  # agn.atten law key (for smc_prevot via law='prevot_smc')
     } | {
         f"{stem}_{comp}"
         for stem in ("slope", "bump_strength", "delta", "Rv")

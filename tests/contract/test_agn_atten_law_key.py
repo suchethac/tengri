@@ -5,6 +5,8 @@ import pytest
 
 from tengri import FREE, Fixed, SEDModel, Uniform
 
+pytestmark = pytest.mark.contract
+
 
 class TestAgNAttenLawKey:
     """Test agn.atten law-key refactoring: smc_prevot via law, genuine models via type."""
@@ -174,3 +176,21 @@ class TestAgNAttenLawKey:
         groups1 = model.spec.to_groups()
         groups2 = model2.spec.to_groups()
         assert groups1["agn"]["atten"] == groups2["agn"]["atten"]
+
+    def test_atten_law_and_type_together_raises(self, synthetic_ssp_wide, simple_observation):
+        """Test that specifying both law and type keys raises ValueError.
+
+        The grammar enforces an XOR: law='prevot_smc' for smc_prevot, or
+        type=<other_model> for all other attenuation models. Specifying
+        both is ambiguous and must raise with a clear error naming both keys.
+        """
+        with pytest.raises(ValueError) as exc_info:
+            SEDModel.build(
+                ssp_data=synthetic_ssp_wide,
+                observation=simple_observation,
+                agn={"atten": {"law": "prevot_smc", "type": "polar_dust"}},
+            )
+        error_msg = str(exc_info.value)
+        # Error must name both conflicting keys
+        assert "law" in error_msg.lower()
+        assert "type" in error_msg.lower()
