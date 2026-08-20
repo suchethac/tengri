@@ -202,7 +202,7 @@ def _sed(group: str, cfg: dict | None, *, extra: dict | None = None) -> jnp.ndar
     groups: dict = {"sfh": {"type": "const"}}
     groups.update(_KIND_SCAFFOLD.get(group, {}))
     if cfg is not None:
-        groups[group] = cfg
+        groups[_KIND_TO_GROUP.get(group, group)] = cfg
     groups.update(extra or {})
 
     with warnings.catch_warnings():
@@ -216,6 +216,13 @@ def _sed(group: str, cfg: dict | None, *, extra: dict | None = None) -> jnp.ndar
             return sed
         axis = jnp.asarray(pred.wave_obs if surface == "obs" else pred.wave_rest)
         return sed[(axis >= band[0]) & (axis <= band[1])]
+
+
+#: Kind labels double as group keywords, with one exception since the dust group
+#: split: the tables above are keyed by the short label ``dust`` while the grammar
+#: group is ``dust_attenuation``. Map at the point of use rather than renaming the
+#: label in every table.
+_KIND_TO_GROUP = {"dust": "dust_attenuation"}
 
 
 #: Two outputs closer than this are not a distinction a user could act on.
@@ -754,7 +761,7 @@ def _photometry(group: str, cfg: dict, approx) -> np.ndarray:
     lo, hi, _ = _KIND_INSTRUMENT[group]
     groups: dict = {"sfh": {"type": "const"}}
     groups.update(_KIND_SCAFFOLD.get(group, {}))
-    groups[group] = cfg
+    groups[_KIND_TO_GROUP.get(group, group)] = cfg
     if group == "igm":
         groups["redshift"] = Fixed(_IGM_TEST_Z)
 
