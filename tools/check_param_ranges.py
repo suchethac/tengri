@@ -72,22 +72,43 @@ What this guard can now do (updated for #1884, #1887)
 As of #1887, the guard extends to short-form names in dicts using the **live
 registry** to resolve them, avoiding hand-curated type-name lists that drift.
 
-**Registry-based resolution**: For any dict literal, for each key whose value
-is a prior Call: skip structural keys (type, *, all_params, sub-block names),
-then try resolving the key as ``agn_<key>`` against the registry. If it
-resolves to a registered AGN parameter, check the prior for overlap against
-its declared support. This catches short-form AGN parameters regardless of
-dict context, and new AGN block types are automatically covered without
-updating the tool.
+**Registry-based resolution**: inside a dict the tool has identified as an
+``agn=`` block, for each key whose value is a prior Call: skip structural keys
+(type, *, all_params, sub-block names), then resolve the key as ``agn_<key>``
+against the registry and check the prior for overlap against its declared
+support. New AGN block types are covered without updating the tool.
 
-**Why only zero-overlap is flagged**: A key that (a) resolves to a registered
-parameter and (b) carries a prior literal is overwhelmingly an AGN group site.
-The overlap rule (flag only ZERO-overlap) makes rare false positives harmless,
-and any genuinely-deliberate exception can be added to the ALLOWLIST.
+**Why resolution is scoped**: it did not used to be -- the walk tried
+``agn_<key>`` on every dict literal in the file. So
+``sfh={'type': 'dpl', 'alpha': Uniform(0.5, 2)}`` was measured against
+``agn_alpha``'s ``[-2, 0]`` instead of ``sfh_dpl_alpha``'s ``[0.1, 5.0]`` and
+reported as disjoint. Nine ALLOWLIST entries accumulated for that one
+collision, each carrying the same copy-pasted reason, before the resolver was
+the thing that got fixed. ``alpha`` is an ordinary SFH parameter name, so the
+collision was structural rather than rare.
 
-**Other groups**: Short forms in SFH, dust, radio, etc. are not yet resolved,
-as the dataflow through their structural logic remains unimplemented. These
-sites are skipped. Every fully-qualified name is checked.
+The false positives were the visible half. The reverse error is the one that
+mattered: an sfh ``alpha`` genuinely outside ``[0.1, 5.0]`` was compared
+against the AGN declaration and could **pass**. A resolver that ignores
+context is unreliable in both directions, which is not a property a guard can
+have.
+
+**What counts as an agn= block**: the ``agn={...}`` keyword, the
+``{'agn': {...}}`` fragment, ``cfg['agn'] = {...}`` built by mutation, a name
+bound to a dict literal and passed as ``agn=``, and a dict literal whose
+binding name mentions agn (the case-table shape, where the config reaches the
+builder through a subscript and a local). Sub-blocks nested inside any of those
+inherit the scope. The last rule is a naming heuristic and only widens scope.
+
+**Why only zero-overlap is flagged**: narrowing or widening a prior is ordinary
+modelling. A range sharing no point with the declaration cannot be.
+
+**Other groups**: short forms in SFH, dust, radio, etc. are not resolved. The
+scope pass here answers "is this dict an agn block"; resolving those groups
+needs the prefix as well, and a group's prefix is not its name -- ``sfh``'s
+``alpha`` is ``sfh_dpl_alpha``, carrying the *type*. That wants the grammar's
+own resolution rather than a second copy of it. These sites are skipped; every
+fully-qualified name is checked regardless of group.
 
 It reads literals. A prior built from variables (``Uniform(lo, hi)``) or from
 arithmetic is skipped -- there is no number to compare.
@@ -136,48 +157,15 @@ _RANGE_DISTS = {"Uniform", "LogUniform"}
 #: range: an entry here says the declaration is wrong for this one caller, which
 #: is a claim worth having to write down.
 ALLOWLIST: dict[tuple[str, str], str] = {
-    # Registry-based resolution in tools/check_param_ranges.py catches sfh_dpl_alpha
-    # (short name "alpha" in sfh dicts) as agn_alpha false positives. These are
-    # legitimate sfh_dpl_alpha uses in correct range [0.5, 6]; they don't resolve
-    # to agn_alpha in context, but the registry contains both agn_alpha and
-    # sfh_*_alpha with different declarations. Acceptable false positives under
-    # the registry-based rule (see #1884 / #1887).
-    ("docs/auto_examples/sfh/plot_dpl_alpha_beta_grid.py", "agn_alpha"): (
-        "False positive: short name 'alpha' in sfh dict resolves to agn_alpha "
-        "in registry, but context is sfh_dpl_alpha. Legitimate sfh prior."
-    ),
-    ("examples/sfh/plot_dpl_alpha_beta_grid.py", "agn_alpha"): (
-        "False positive: short name 'alpha' in sfh dict resolves to agn_alpha "
-        "in registry, but context is sfh_dpl_alpha. Legitimate sfh prior."
-    ),
-    ("notebooks/multimodel_bma_candels.py", "agn_alpha"): (
-        "False positive: short name 'alpha' in sfh dict resolves to agn_alpha "
-        "in registry, but context is sfh_dpl_alpha. Legitimate sfh prior."
-    ),
-    ("src/tengri/recipes/__init__.py", "agn_alpha"): (
-        "False positive: short name 'alpha' in sfh dict resolves to agn_alpha "
-        "in registry, but context is sfh_dpl_alpha. Legitimate sfh prior."
-    ),
-    ("tests/contract/test_no_group_key_is_silently_dropped.py", "agn_alpha"): (
-        "False positive: short name 'alpha' in sfh dict resolves to agn_alpha "
-        "in registry, but context is sfh_dpl_alpha. Legitimate sfh prior."
-    ),
-    ("tests/contract/test_param_groups.py", "agn_alpha"): (
-        "False positive: short name 'alpha' in sfh dict resolves to agn_alpha "
-        "in registry, but context is sfh_dpl_alpha. Legitimate sfh prior."
-    ),
-    ("tests/contract/test_param_spec_invariants.py", "agn_alpha"): (
-        "False positive: short name 'alpha' in sfh dict resolves to agn_alpha "
-        "in registry, but context is sfh_dpl_alpha. Legitimate sfh prior."
-    ),
-    ("tests/contract/test_spectrum_lut.py", "agn_alpha"): (
-        "False positive: short name 'alpha' in sfh dict resolves to agn_alpha "
-        "in registry, but context is sfh_dpl_alpha. Legitimate sfh prior."
-    ),
-    ("tests/integration/test_sed_model_build.py", "agn_alpha"): (
-        "False positive: short name 'alpha' in sfh dict resolves to agn_alpha "
-        "in registry, but context is sfh_dpl_alpha. Legitimate sfh prior."
-    ),
+    # Empty, and worth keeping that way. Nine entries used to live here, every
+    # one suppressing the same thing: a short-form `alpha` in an sfh dict that
+    # the resolver measured against `agn_alpha`. Scoping resolution to actual
+    # `agn=` blocks removed the cause, and with it all nine -- measured as
+    # exactly the eleven sites that stopped being flagged.
+    #
+    # An entry here asserts the declaration is wrong for one caller. That is a
+    # real thing to be able to say, so the mechanism stays; it is not a place to
+    # record that the tool resolved a name incorrectly.
 }
 
 
@@ -249,21 +237,98 @@ def _prior_sites(tree: ast.AST):
                     yield key.value, value
 
 
+def _agn_scoped_dicts(tree: ast.AST) -> set[int]:
+    """ids of dict literals that are an ``agn=`` block, or nested inside one.
+
+    Three spellings reach the same place, so all three are recognized:
+    the ``agn={...}`` keyword, the ``{'agn': {...}}`` fragment that gets
+    splatted into a call, and a module- or function-level ``AGN = {...}``
+    constant later passed as ``agn=AGN``.
+
+    Nested dicts inherit the scope. That is what keeps
+    ``agn={'disc': {'alpha': ...}}`` resolvable: the sub-block is still the AGN
+    group, and its short names still carry the ``agn_`` prefix.
+    """
+    scoped: set[int] = set()
+
+    def mark(d: ast.Dict) -> None:
+        if id(d) in scoped:
+            return
+        scoped.add(id(d))
+        for v in d.values:
+            if isinstance(v, ast.Dict):
+                mark(v)
+
+    # Names bound to a dict literal anywhere in the file, so `agn=AGN` can be
+    # followed. Assignment order does not matter -- both passes see the tree.
+    dict_bindings: dict[str, ast.Dict] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Dict):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    dict_bindings[target.id] = node.value
+
+    # A dict literal whose binding NAME says agn. This is a naming heuristic,
+    # and deliberately so: the case-table shape reaches the builder through
+    # three hops in two functions --
+    #     _AGN_CASES = {"skirtor": {...}}
+    #     agn = _AGN_CASES[key];  groups["agn"] = agn;  build(**groups)
+    # -- which no single-file AST rule follows. Nested dict values are marked
+    # too, since indexing a case table selects one of them. The heuristic only
+    # widens scope, so its failure mode is the old over-broad behaviour confined
+    # to names that mention agn.
+    for name, node in dict_bindings.items():
+        if "agn" in name.lower():
+            mark(node)
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
+            for kw in node.keywords:
+                if kw.arg != "agn":
+                    continue
+                if isinstance(kw.value, ast.Dict):
+                    mark(kw.value)
+                elif isinstance(kw.value, ast.Name) and kw.value.id in dict_bindings:
+                    mark(dict_bindings[kw.value.id])
+        elif isinstance(node, ast.Dict):
+            for key, value in zip(node.keys, node.values, strict=False):
+                if (
+                    isinstance(key, ast.Constant)
+                    and key.value == "agn"
+                    and isinstance(value, ast.Dict)
+                ):
+                    mark(value)
+        elif isinstance(node, ast.Assign) and isinstance(node.value, ast.Dict):
+            # Config built by mutation: `cfg["agn"] = {...}`. A real AGN block,
+            # and invisible to the three passes above -- the dict is the value
+            # of an assignment whose target is a subscript, not an argument.
+            for target in node.targets:
+                if (
+                    isinstance(target, ast.Subscript)
+                    and isinstance(target.slice, ast.Constant)
+                    and target.slice.value == "agn"
+                ):
+                    mark(node.value)
+
+    return scoped
+
+
 def _agn_prior_sites(tree: ast.AST):
-    """Yield ``(agn_param_name, prior_call)`` for short-form names in dicts.
+    """Yield ``(agn_param_name, prior_call)`` for short-form names in AGN dicts.
 
     Resolves short-form names (e.g., 'log_lbol') to full AGN parameter names
-    (e.g., 'agn_log_lbol') by checking if they resolve in the live registry.
+    (e.g., 'agn_log_lbol') by checking if they resolve in the live registry --
+    no hand-curated type-name list to drift when a new AGN block is registered.
 
-    For any dict literal, for each key whose value is a prior Call:
-    - Skip structural keys (type, *, all_params, sub-block names, etc.)
-    - Try resolving as agn_<key> against the live registry
-    - If it resolves to a registered agn_* parameter, yield it for overlap check
-    - The overlap rule (flag only ZERO-overlap) makes rare false positives harmless
-
-    This approach avoids hand-curated type-name lists that drift silently when
-    new AGN block types are registered (the second-sources-of-truth problem).
+    Resolution is **scoped** to dicts :func:`_agn_scoped_dicts` identifies as an
+    ``agn=`` block. Without that scope the walk tried ``agn_<key>`` on every
+    dict in the file, so ``sfh={'alpha': Uniform(0.5, 2)}`` was measured against
+    ``agn_alpha``'s ``[-2, 0]`` and reported as disjoint. Nine allowlist entries
+    accumulated for that one collision before the resolver was the thing fixed.
+    The reverse error is the one that matters: an out-of-range sfh ``alpha``
+    compared against the AGN declaration can pass.
     """
+    scoped = _agn_scoped_dicts(tree)
     # Structural keys that are never parameters, regardless of context
     _STRUCTURAL_KEYS = {
         "type",
@@ -293,7 +358,7 @@ def _agn_prior_sites(tree: ast.AST):
         return None
 
     for node in ast.walk(tree):
-        if not isinstance(node, ast.Dict):
+        if not isinstance(node, ast.Dict) or id(node) not in scoped:
             continue
 
         # For each dict, check all keys whose values are prior Calls
