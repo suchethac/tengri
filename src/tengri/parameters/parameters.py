@@ -430,7 +430,9 @@ class Parameters:
         self.foreground_ebmv_mw = float(kwargs.pop("foreground_ebmv_mw", 0.0))
         self.foreground_law = kwargs.pop("foreground_law", "cardelli")
         self.foreground_rv = float(kwargs.pop("foreground_rv", 3.1))
-        self.apply_igm = kwargs.pop("apply_igm", True)
+        # Pop apply_igm if it's in kwargs (derived from igm dict in parse_groups)
+        # In the new API, IGM activation is derived from the igm group.
+        self.apply_igm = kwargs.pop("apply_igm", False)
         # IGM transmission model: 'inoue' (default), 'madau', or 'meiksin06'.
         # Stored as a structural setting so the grammar-layer choice
         # propagates through to :meth:`SEDModel._init_igm` (#344, #440).

@@ -19,23 +19,22 @@ from __future__ import annotations
 from tengri.parameters.priors import Fixed, Uniform
 from tengri.protocols.component import ParamDeclaration
 
+# Sentinel value that indicates redshift was not provided.
+# Use a large default range so bound checks pass, but the sentinel
+# will be caught in parse_groups and rejected before use.
+_REDSHIFT_SENTINEL = Uniform(0.0, 10.0, "SENTINEL: redshift not provided")
+
 PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "redshift",
-        Fixed(0.1),
+        _REDSHIFT_SENTINEL,
         "Source redshift",
         lambda lo, hi: lo >= 0,
         "must have lo >= 0",
-        # Deliberately NO free_prior (#887). Redshift is not a component
-        # parameter a group wildcard should reach into: it is a top-level
-        # argument of the build grammar with its own surface
-        # (``redshift=Fixed(z)`` for a known redshift, a distribution for a
-        # photo-z fit), and every recipe sets it explicitly. Its sensible range
-        # is also set by the survey rather than by physics -- there is no
-        # interval that is right for both an SDSS and a JWST target. Giving it
-        # a wildcard-reachable default range would let ``all_params: FREE``
-        # somewhere else in the model quietly turn a fixed-redshift fit into a
-        # photo-z one, which is the largest behavioral change in the package.
+        # Redshift is now REQUIRED. It is not a component parameter a group
+        # wildcard should reach into: it is a top-level argument of the build
+        # grammar with its own surface (``redshift=Fixed(z)`` for a known
+        # redshift, ``redshift=Uniform(lo, hi)`` for a photo-z fit).
     ),
     ParamDeclaration(
         "met_logzsol",

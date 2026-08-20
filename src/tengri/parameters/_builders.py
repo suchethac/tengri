@@ -170,8 +170,6 @@ SETTINGS_KEYS = frozenset(
         "stochastic",
         "n_grid",
         "mean_sfh_type",
-        # IGM absorption
-        "apply_igm",
         # Nebular emission
         "nebular",
         "nebular_ssp",

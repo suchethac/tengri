@@ -48,10 +48,9 @@ def _build(ssp, obs, *, apply_igm, approx=None, model="inoue"):
         approx=approx,
     )
     if apply_igm:
-        kwargs["apply_igm"] = True
         kwargs["igm"] = {"type": model}
     else:
-        kwargs["apply_igm"] = False
+        kwargs["igm"] = {"type": "none"}
     return SEDModel.build(**kwargs)
 
 

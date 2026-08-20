@@ -612,7 +612,6 @@ _AGN_PARTITION = {
 #: Top-level kwargs that are not groups (passed through to Parameters).
 _TOP_LEVEL_SETTINGS = {
     "redshift",
-    "apply_igm",
     "n_grid",
     # Emission-line velocity mode. Activating it (``"fixed"``/``"marginalized"``/
     # ``"fitted"``) registers the line-velocity params (``eline_sigma_kms``,
@@ -1012,6 +1011,19 @@ def parse_groups(**kwargs) -> Parameters:
     for name in list(final_params._distributions.keys()):
         provenance.setdefault(name, "registry_default")
     object.__setattr__(final_params, "_group_provenance", provenance)
+
+    # Validate that redshift was provided (not the sentinel value),
+    # unless we're in introspection mode (_allow_empty_wildcard).
+    if not allow_empty_wildcard:
+        from tengri.parameters._shared import _REDSHIFT_SENTINEL
+        redshift_dist = final_params._distributions.get("redshift")
+        if redshift_dist is _REDSHIFT_SENTINEL:
+            raise ValueError(
+                "redshift is required. Specify one of:\n"
+                "  - redshift=Fixed(z) for a known redshift\n"
+                "  - redshift=Uniform(lo, hi) for a photo-z fit\n"
+                "  - redshift=<any Distribution> for other priors"
+            )
 
     _warn_silently_fixed_parameters(final_params, param_partition, kwargs)
     _warn_firrc_slope_degeneracy(final_params)
@@ -2536,8 +2548,13 @@ def _translate_shock(shock_dict: dict, result: dict) -> None:
 
 
 def _translate_igm(igm_dict: dict, result: dict) -> None:
-    """Translate igm group to apply_igm and related settings."""
-    igm_type = igm_dict.get("type", "madau")
+    """Translate igm group to igm_model and related settings.
+
+    IGM activation is derived from the igm group presence: if igm={'type': ...}
+    is provided, IGM is activated. If igm={'type': 'none'} is provided, IGM is
+    deactivated. The apply_igm secondary switch is retired.
+    """
+    igm_type = igm_dict.get("type", "inoue14")
 
     # Validate type
     valid_igm = _valid_igm_types()
@@ -2546,7 +2563,8 @@ def _translate_igm(igm_dict: dict, result: dict) -> None:
         suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
         raise ValueError(f"Unknown IGM type '{igm_type}'.{suggest_str}")
 
-    # Map type to apply_igm + igm_model
+    # IGM is activated by the presence of the igm dict.
+    # If type='none', it is explicitly deactivated.
     if igm_type == "none":
         result["apply_igm"] = False
     else:

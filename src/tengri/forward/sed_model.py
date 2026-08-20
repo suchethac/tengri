@@ -8639,7 +8639,6 @@ class SEDModel:
         xray=None,
         foreground=None,
         redshift=None,
-        apply_igm=None,
         filters=None,
         observation=None,
         **model_kwargs,
@@ -8665,22 +8664,18 @@ class SEDModel:
             :data:`~tengri.FIXED`; the ``'*'`` synonym is also accepted),
             and per-parameter overrides. See
             :func:`tengri.parameters.parse_groups` for the full grammar.
-        redshift, apply_igm : scalar, Distribution, or sentinel, optional
-            Top-level kwargs forwarded into the parameter resolution.
+        redshift : scalar, Distribution, or sentinel
+            Source redshift. **REQUIRED** — must be specified as one of:
 
-            ``redshift`` **defaults to** ``Fixed(0.1)`` — omitting it pins the
-            galaxy at z = 0.1 rather than leaving the redshift free. Pass
-            ``redshift=Fixed(z)`` for a known redshift, or a prior such as
-            ``redshift=Uniform(0.0, 3.0)`` to fit it.
+            - ``Fixed(z)`` for a known redshift (e.g., ``Fixed(0.05)``)
+            - ``Uniform(lo, hi)`` or any Distribution for a free/photo-z fit
+            - Any other ``Distribution`` instance
 
-            Two consequences of the default are easy to miss. A model intended
-            to be free-redshift is silently at z = 0.1, and the fit then
-            reports whatever the remaining parameters can achieve at that
-            distance. And with ``approx=WavePrecomp()`` the free-redshift build
-            pays a sub-band IGM fold that the fixed-z path does not — roughly
-            9 s against 0.4 s — so a build-time measurement that omits an
-            explicit prior is measuring the cheap path. See
-            :doc:`/performance/compilation`.
+            Omitting redshift raises ``ParameterError``. With
+            ``approx=WavePrecomp()`` the free-redshift build pays a sub-band
+            IGM fold that the fixed-z path does not — roughly 9 s against 0.4 s
+            — so a build-time measurement that omits an explicit prior is
+            measuring the cheap path. See :doc:`/performance/compilation`.
         filters : list of str, optional
             Filter names; forwarded to ``__init__``.
         observation : Observation, optional
@@ -8721,6 +8716,23 @@ class SEDModel:
         ...     filters=["sdss_u", "sdss_g", "sdss_r"],
         ... )
         """
+        # Validate that redshift is provided
+        if redshift is None:
+            raise ValueError(
+                "redshift is required. Specify one of:\n"
+                "  - redshift=Fixed(z) for a known redshift\n"
+                "  - redshift=Uniform(lo, hi) for a photo-z fit\n"
+                "  - redshift=<any Distribution> for other priors"
+            )
+
+        # Reject the retired apply_igm parameter
+        if "apply_igm" in model_kwargs:
+            raise ValueError(
+                "apply_igm is retired. IGM activation is now derived from the igm dict: "
+                "pass igm={'type': 'inoue'} (or 'madau', 'meiksin06') to enable IGM, or "
+                "omit the igm dict (or pass igm={'type': 'none'}) to disable it."
+            )
+
         groups = {
             k: v
             for k, v in dict(
@@ -8735,7 +8747,6 @@ class SEDModel:
                 xray=xray,
                 foreground=foreground,
                 redshift=redshift,
-                apply_igm=apply_igm,
             ).items()
             if v is not None
         }

@@ -103,7 +103,7 @@ def star_forming_photometry() -> dict:
         met={"logzsol": FREE},
         neb=builders.neb.cue(defaults=FIXED),
         redshift=Uniform(0.01, 6.0),
-        apply_igm=True,
+        igm={"type": "inoue"},
         approx=WavePrecomp(),
     )
 
@@ -235,7 +235,7 @@ def high_z() -> dict:
         },
         neb={"type": "ssp"},
         redshift=Uniform(3.5, 10.0),
-        apply_igm=True,
+        igm={"type": "inoue"},
     )
 
 
@@ -298,7 +298,7 @@ def photoz() -> dict:
         },
         neb={"type": "none"},
         redshift=Uniform(0.01, 12.0),
-        apply_igm=True,
+        igm={"type": "inoue"},
     )
 
 
@@ -514,7 +514,7 @@ def stochastic_sfh_jwst() -> dict:
     >>> from tengri import recipes
     >>> params = recipes.stochastic_sfh_jwst()
     >>> assert params["sfh"]["type"] == ["dpl", "field"]
-    >>> assert params["apply_igm"] is True
+    >>> assert params["igm"]["type"] == "inoue"
     """
     # Composed SFH ("dpl" + "field" stochastic component) is expressed as a
     # type-list dict. The builder factories cover individual variants; the
@@ -529,7 +529,7 @@ def stochastic_sfh_jwst() -> dict:
         met={"logzsol": FREE},
         neb=builders.neb.cue(defaults=FIXED),
         redshift=Uniform(0.5, 12.0),
-        apply_igm=True,
+        igm={"type": "inoue"},
         approx=WavePrecomp(),
     )
 
