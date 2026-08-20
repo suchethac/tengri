@@ -8616,7 +8616,8 @@ class SEDModel:
         *,
         sfh=None,
         met=None,
-        dust=None,
+        dust_attenuation=None,
+        dust_emission=None,
         neb=None,
         shock=None,
         agn=None,
@@ -8645,7 +8646,7 @@ class SEDModel:
         ----------
         ssp_data : SSPData
             Pre-loaded SSP grid (from :func:`load_ssp_data`).
-        sfh, dust, neb, agn, igm, radio, xray : dict, optional
+        sfh, dust_attenuation, dust_emission, neb, agn, igm, radio, xray : dict, optional
             Per-component nested dicts. Each may carry ``'type'``,
             ``'all_params'`` (wildcard set to :data:`~tengri.FREE` or
             :data:`~tengri.FIXED`; the ``'*'`` synonym is also accepted),
@@ -8696,12 +8697,14 @@ class SEDModel:
         >>> model = SEDModel.build(
         ...     ssp_data=ssp,
         ...     sfh={"type": "dpl", "all_params": FREE, "beta": Uniform(1, 3)},
-        ...     dust={
+        ...     dust_attenuation={
         ...         "type": "two_component",
         ...         "law": "calzetti",  # Shared law for both BC and diffuse
         ...         "all_params": FIXED,
         ...         "tau_bc": 0.5,
+        ...         "tau_diff": 0.3,
         ...     },
+        ...     dust_emission={"type": "dale2014", "all_params": FIXED},
         ...     neb={"type": "cue", "all_params": FIXED},
         ...     redshift=Fixed(0.05),
         ...     filters=["sdss_u", "sdss_g", "sdss_r"],
@@ -8712,7 +8715,8 @@ class SEDModel:
             for k, v in dict(
                 sfh=sfh,
                 met=met,
-                dust_attenuation=dust,
+                dust_attenuation=dust_attenuation,
+                dust_emission=dust_emission,
                 neb=neb,
                 shock=shock,
                 agn=agn,

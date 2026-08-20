@@ -183,6 +183,47 @@ class TestOldDustRetirement:
                 ssp_data=None,
             )
 
+    def test_old_dust_raises_through_sed_model_build(self):
+        """The retirement must fire on the PUBLIC entry point, not just parse_groups.
+
+        This is the hole every other test in this class missed. ``SEDModel.build``
+        declared ``dust=None`` and mapped it to the ``dust_attenuation`` key while
+        assembling groups, so ``parse_groups`` never saw a ``dust`` key to object
+        to -- ``build(dust=...)`` built a model in silence. Since ``build`` is the
+        recommended path and ``parse_groups`` the expert one, the retirement was
+        verified only where it already worked.
+        """
+        from tengri import SEDModel
+
+        with pytest.raises(ValueError, match=r"dust.*is retired"):
+            SEDModel.build(
+                ssp_data=None,
+                sfh={"type": "dpl"},
+                dust={"type": "two_component", "law": "calzetti", "tau_bc": 0.5, "tau_diff": 1.0},
+                redshift=0.1,
+            )
+
+    def test_build_declares_the_two_groups_and_not_the_retired_one(self):
+        """The signature is a hand-maintained copy of the group census; pin it.
+
+        ``_GROUP_STRUCTURAL_KEYS`` is derived, but ``SEDModel.build``'s signature
+        is written out by hand, and the split updated the first and not the
+        second. That divergence is what let the retired keyword keep working, so
+        assert the two agree rather than trusting a comment.
+        """
+        import inspect
+
+        from tengri import SEDModel
+
+        params = inspect.signature(SEDModel.build).parameters
+        assert "dust_attenuation" in params, "build() must declare the attenuation group"
+        assert "dust_emission" in params, "build() must declare the emission group"
+        assert "dust" not in params, (
+            "build() still declares the retired 'dust' keyword; while it does, the "
+            "retirement error cannot fire, because the value is re-keyed before "
+            "parse_groups ever sees it."
+        )
+
     def test_ambiguity_dust_and_dust_attenuation(self):
         """Passing both dust= and dust_attenuation= raises as ambiguous."""
         with pytest.raises(ValueError, match=r"Ambiguous.*dust.*dust_attenuation"):
