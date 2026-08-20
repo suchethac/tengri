@@ -95,17 +95,10 @@ class TestIGMReionCrossval:
         wave_obs = jnp.linspace(10000.0, 14000.0, 300)
         t = igm_transmission_patchy(wave_obs, z, x_HI=0.9, R_bubble=0.5)
 
-        # Close to Lya: very strong absorption
+        # Close to Lya: strong absorption (corrected formula gives tau ∝ 1/(x+x_bubble))
         near_lya = (wave_obs > lya_obs + 50.0) & (wave_obs < lya_obs + 300.0)
-        assert jnp.all(t[near_lya] < 0.8), "Expected strong absorption near Lya at z=8, x_HI=0.9"
+        assert jnp.all(t[near_lya] < 0.85), "Expected strong absorption near Lya at z=8, x_HI=0.9"
 
-    @pytest.mark.xfail(
-        strict=False,
-        reason="igm_transmission_patchy damping wing is INVERTED in wavelength: T rises "
-        "toward Lya instead of falling (measured T_near=0.52 > T_far=0.42 at "
-        "x_HI=0.5, z=7) — real-bug candidate, tracked in #1987",
-    )
-    @pytest.mark.owner_blocked
     def test_damping_wing_profile_decays(self):
         """Damping wing absorption decreases with distance from Lya.
 
