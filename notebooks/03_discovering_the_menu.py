@@ -214,7 +214,7 @@ recipes.star_forming_photometry()
 tengri.list_inference_methods()
 
 # %% [markdown]
-
+#
 # ## All registries at a glance
 #
 # `list_all()` returns the master catalog of every registry in tengri.
@@ -320,7 +320,7 @@ tengri.list_plots()
 tengri.list_recipes()
 
 # %% [markdown]
-
+#
 # ## Parameter and physics provenance
 #
 # Two introspection surfaces close the loop:
