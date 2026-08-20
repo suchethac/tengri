@@ -158,8 +158,8 @@ class TestRadioRegistry:
         assert params.radio is True
 
     def test_parse_groups_rejects_unknown(self):
-        with pytest.raises(ValueError, match="Unknown radio type"):
-            parse_groups(radio={"type": "ska-2030"}, redshift=Fixed(0.1))
+        with pytest.raises(ValueError, match="Unknown radio agn type"):
+            parse_groups(radio={"agn": {"type": "ska-2030"}}, redshift=Fixed(0.1))
 
 
 class TestIGMRegistry:

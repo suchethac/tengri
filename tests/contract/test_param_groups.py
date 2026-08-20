@@ -333,9 +333,9 @@ class TestTypeMapping:
         assert params.apply_igm is False
 
     def test_radio_condon92(self):
-        """radio={'type': 'condon92'} should set radio=True."""
+        """Composable radio form should set radio=True."""
         params = parse_groups(
-            radio={"type": "condon92"},
+            radio={"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}},
             redshift=Fixed(0.1),
         )
         assert params.radio is True
@@ -882,11 +882,13 @@ class TestRoundTripGroupTypes:
         return spec, groups, parse_groups(**groups)
 
     def test_radio_types_ride_on_the_sub_blocks(self):
-        _, groups, rebuilt = self._roundtrip(radio={"type": "condon92"})
+        _, groups, rebuilt = self._roundtrip(
+            radio={"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}}
+        )
         radio = groups["radio"]
         assert radio["sf"]["type"] == "bell2003"
         assert radio["agn"]["type"] == "powerlaw"
-        # parse_groups raises on a top-level 'type' mixed with sub-blocks
+        # Composable form never has a top-level 'type' key
         assert "type" not in radio
         assert rebuilt.radio is True
 

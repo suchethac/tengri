@@ -1115,9 +1115,9 @@ def list_radio_models(*, status: str | None = None) -> _RegistryTable:
     (``tengri.parameters.groups._valid_radio_types``), which accepts the
     union of :data:`RADIO_MODELS` and the ``SEDModelComponent`` radio variants
     in ``_REGISTRY`` — so ``radio_powerlaw`` and ``radio_dpl`` are listed here
-    rather than being builder-only. This is the ``radio={'type': ...}`` axis;
-    the ``radio={'sf'/'agn': ...}`` sub-blocks live in
-    :func:`list_radio_blocks`.
+    rather than being builder-only. The legacy ``radio={'type': ...}`` form is
+    retired (PR6); use ``radio={'sf'/'agn': ...}`` instead. This menu lists the
+    retired names for reference; the composable form is the only accepted surface.
 
     See also: :func:`list_xray_models`, :func:`list_igm_models`,
     :mod:`tengri.builders.radio`.
@@ -1179,8 +1179,9 @@ def list_radio_blocks(*, category: str | None = None, status: str | None = None)
     run the other alone.
 
     This is a different axis from :func:`list_radio_models`, which lists the
-    **legacy** ``radio={'type': ...}`` key. That key predates the SF/AGN split
-    and cannot be combined with these sub-blocks; mixing the two raises.
+    **retired** ``radio={'type': ...}`` key. That key predates the SF/AGN split
+    and is no longer accepted; use the composable ``radio={'sf': {...}, 'agn': {...}}``
+    form instead. The two forms cannot be combined.
 
     Parameters
     ----------
