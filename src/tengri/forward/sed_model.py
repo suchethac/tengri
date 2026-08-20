@@ -8773,6 +8773,71 @@ class SEDModel:
             **model_kwargs,
         )
 
+    @classmethod
+    def from_dict(cls, config: dict, ssp_data, *, filters=None, observation=None, **model_kwargs) -> SEDModel:
+        """Build an SEDModel from a serialized config dict."""
+        from tengri.config.serialize import deserialize_config
+        deserialized = deserialize_config(config)
+        return cls.build(ssp_data, filters=filters, observation=observation, **deserialized, **model_kwargs)
+
+    @classmethod
+    def from_file(cls, path: str | pathlib.Path, ssp_data, *, filters=None, observation=None, **model_kwargs) -> SEDModel:
+        """Build an SEDModel from a config file (JSON or YAML)."""
+        from tengri.config.serialize import load_config_from_file
+        config = load_config_from_file(path)
+        return cls.from_dict(config, ssp_data, filters=filters, observation=observation, **model_kwargs)
+
+    @classmethod
+    def from_yaml(cls, yaml_str: str, ssp_data, *, filters=None, observation=None, **model_kwargs) -> SEDModel:
+        """Build an SEDModel from a YAML string."""
+        try:
+            import yaml
+        except ImportError:
+            raise ImportError("from_yaml requires pyyaml. Install with: pip install pyyaml")
+        from tengri.config.exceptions import ConfigError
+        try:
+            config = yaml.safe_load(yaml_str)
+        except yaml.YAMLError as e:
+            raise ConfigError(f"Invalid YAML: {e}")
+        if not isinstance(config, dict):
+            raise ConfigError(f"YAML must deserialize to a dict, got {type(config)}")
+        return cls.from_dict(config, ssp_data, filters=filters, observation=observation, **model_kwargs)
+
+    @property
+    def config(self) -> dict:
+        """Return the model configuration as a nested-dict (fully resolved)."""
+        from tengri.parameters.groups import parameters_to_groups
+        return parameters_to_groups(self.spec)
+
+    def to_yaml(self, path: str | pathlib.Path | None = None) -> str:
+        """Serialize the model configuration to YAML format."""
+        try:
+            import yaml
+        except ImportError:
+            raise ImportError("to_yaml requires pyyaml. Install with: pip install pyyaml")
+        from tengri.config.serialize import serialize_config
+        config_dict = self.config
+        serialized = serialize_config(config_dict)
+        yaml_str = yaml.dump(serialized, default_flow_style=False, sort_keys=False)
+        if path is not None:
+            with open(path, "w") as f:
+                f.write(yaml_str)
+            return ""
+        return yaml_str
+
+    def to_json(self, path: str | pathlib.Path | None = None) -> str:
+        """Serialize the model configuration to JSON format."""
+        import json
+        from tengri.config.serialize import serialize_config
+        config_dict = self.config
+        serialized = serialize_config(config_dict)
+        json_str = json.dumps(serialized, indent=2)
+        if path is not None:
+            with open(path, "w") as f:
+                f.write(json_str)
+            return ""
+        return json_str
+
     def prior_predictive(self, n: int = 500, seed: int = 42) -> PriorPredictive:
         """Sample from the prior and evaluate forward model on each draw.
 

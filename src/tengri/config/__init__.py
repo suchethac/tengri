@@ -9,6 +9,14 @@ from tengri.config.exceptions import (
     TengriError,
     TengriIOError,
 )
+from tengri.config.serialize import (
+    deserialize_config,
+    dict_to_distribution,
+    distribution_to_dict,
+    load_config_from_file,
+    save_config_to_file,
+    serialize_config,
+)
 from tengri.config.settings import (
     AGNConfig,
     DustConfig,
@@ -22,12 +30,18 @@ __all__ = [
     "AGNConfig",
     "BackendError",
     "ConfigError",
+    "deserialize_config",
+    "dict_to_distribution",
+    "distribution_to_dict",
     "DustConfig",
     "InferenceError",
+    "load_config_from_file",
     "MultiwavelengthConfig",
     "NebularConfig",
     "ParameterError",
+    "save_config_to_file",
     "SEDModelConfig",
+    "serialize_config",
     "SFHConfig",
     "TengriError",
     "TengriIOError",
