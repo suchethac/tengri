@@ -601,6 +601,8 @@ _AGN_PARTITION = {
     # Attenuation
     "agn_polar_ebv": "agn.atten",
     "agn_polar_oa": "agn.atten",
+    "agn_polar_T": "agn.atten",
+    "agn_polar_beta": "agn.atten",
     "agn_attenuation_ebv": "agn.atten",  # smc_prevot block E(B-V)
     # Radiation physics (shared disc normalization)
     "agn_f_hard": "agn",
@@ -3588,11 +3590,16 @@ def _build_agn_search_view(param_name: str, agn_dict: dict, group: str) -> dict:
 
     AGN parameters live in a two-level nest: the top-level ``agn`` dict
     plus up to six sub-block dicts (``disc``/``torus``/``nlr``/``blr``/
-    ``feii``/``atten``). To keep the API friendly, a parameter can be supplied
-    at *either* level — the partition table records the canonical location,
-    but a user who writes ``agn={'disc': {'agn_log_lbol': Uniform(...)}}``
-    expects the value to take effect even though ``agn_log_lbol`` is
-    nominally a shared (top-level) param.
+    ``feii``/``atten``). To keep the API friendly, a shared parameter can be
+    supplied at *either* level — the partition table records the canonical
+    location, but a user who writes ``agn={'disc': {'agn_log_lbol': Uniform(...)}}``
+    expects the value to take effect even though ``agn_log_lbol`` is nominally
+    a shared (top-level) param.
+
+    A SUB-BLOCK parameter, however, must be nested under its OWNING sub-block
+    per the partition table. Writing a sub-block-owned parameter under a
+    non-owning sub-block (one that consumes but does not own it) raises
+    with guidance.
 
     This helper assembles a single dict the caller can pass to
     :func:`_resolve_value`:
@@ -3600,7 +3607,7 @@ def _build_agn_search_view(param_name: str, agn_dict: dict, group: str) -> dict:
     1. The canonical location for ``param_name`` (top level if
        ``group == "agn"``; the matching sub-block if ``group.startswith("agn.")``).
     2. Every sibling location that also carries an override for the same
-       short name.
+       short name (with validation that the parameter is allowed there).
 
     If a parameter appears in more than one location with conflicting
     values, raise :class:`ValueError` to flag the ambiguity instead of
@@ -3621,6 +3628,11 @@ def _build_agn_search_view(param_name: str, agn_dict: dict, group: str) -> dict:
     dict
         Search dict for :func:`_resolve_value`. The wildcard ``'*'``
         from the canonical location is preserved when present.
+
+    Raises
+    ------
+    ValueError
+        If a parameter is written under a non-owning sub-block.
     """
     if not isinstance(agn_dict, dict):
         return {}
@@ -3646,8 +3658,16 @@ def _build_agn_search_view(param_name: str, agn_dict: dict, group: str) -> dict:
             if isinstance(sub, dict):
                 siblings.append((k, sub))
     else:
-        # Sub-block param: also accept it at the top level.
+        # Sub-block param: also check the top level and OTHER sub-blocks for
+        # stray overrides. The top level is allowed (shared params can land there);
+        # other sub-blocks are not allowed (a sub-block param belongs only in its owner).
         siblings.append(("<top>", agn_dict))
+        # Check other sub-blocks for stray overrides (will be rejected if found)
+        for k in _AGN_SUBBLOCK_KEYS:
+            if k != canonical_subkey:
+                sub = agn_dict.get(k)
+                if isinstance(sub, dict):
+                    siblings.append((k, sub))
 
     # Collect (location, value) for every place this param appears.
     hits = []
@@ -3658,6 +3678,23 @@ def _build_agn_search_view(param_name: str, agn_dict: dict, group: str) -> dict:
     for location, sub in siblings:
         for key in (short_name, param_name):
             if key in sub and key not in ("type", "*"):
+                # VALIDATION: Check if this parameter is allowed in this sibling location.
+                # RULE: Sub-block-owned parameters must be in their owner sub-block.
+                # Shared parameters can go anywhere (top level or any sub-block).
+                param_owner = _AGN_PARTITION.get(param_name, "agn")
+                if location != "<top>" and location != "none":
+                    # location is a sub-block name (e.g., "torus", "disc", "atten")
+                    sibling_group = f"agn.{location}"
+                    # Only reject if this is a sub-block-owned parameter in the wrong sub-block
+                    if param_owner != "agn" and param_owner != sibling_group:
+                        # Sub-block parameter in wrong sub-block
+                        owner_subblock = param_owner.replace("agn.", "")
+                        raise ValueError(
+                            f"{key!r} is a {param_owner!r} parameter, not a "
+                            f"{sibling_group!r} one. Nest it: "
+                            f"agn={{{owner_subblock!r}: {{{key!r}: ...}}}}."
+                        )
+                    # Otherwise: shared param in sub-block (OK) or right sub-block (OK)
                 hits.append((location, sub[key]))
                 break
 
