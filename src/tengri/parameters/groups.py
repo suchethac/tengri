@@ -735,6 +735,29 @@ def parse_groups(**kwargs) -> Parameters:
     # never mistaken for a group name.
     allow_empty_wildcard = bool(kwargs.pop("_allow_empty_wildcard", False))
 
+    # Redshift is required, and the question asked here is whether the caller
+    # PASSED it -- not what its value is. A value-based sentinel cannot answer
+    # that: any object standing in for "absent" is also a legal prior. The one
+    # tried first was ``Uniform(0.0, 10.0)``, which is the most natural photo-z
+    # prior in this package's target science and compares equal to a user's own
+    # ``Uniform(0, 10)`` with an identical repr. That left two silent failures,
+    # one on each side of the identity check: compare with ``is`` and any path
+    # that REBUILDS the default (a copy, a serializer, a to_groups round-trip)
+    # yields a free z in [0, 10] fit where no redshift was given; tighten it to
+    # ``==`` and every genuine photo-z fit over that range is refused as
+    # missing. Presence has neither failure mode. Introspection callers pass
+    # ``_allow_empty_wildcard`` and legitimately have no redshift.
+    if not allow_empty_wildcard and "redshift" not in kwargs:
+        raise ValueError(
+            "redshift is required. Specify one of:\n"
+            "  - redshift=Fixed(z)             a known redshift\n"
+            "  - redshift=Uniform(lo, hi)      a photo-z fit\n"
+            "  - redshift=<any Distribution>   any other prior\n"
+            "\n"
+            "It used to default to Fixed(0.1), which put every model that "
+            "omitted it at z=0.1 without saying so."
+        )
+
     # ── Pass 0a: Normalize the preferred ``all_params`` wildcard alias ──
     # Rewrite ``all_params`` -> ``'*'`` in every group dict (and nested
     # sub-block) so all downstream logic operates on the single canonical key.
@@ -1011,19 +1034,6 @@ def parse_groups(**kwargs) -> Parameters:
     for name in list(final_params._distributions.keys()):
         provenance.setdefault(name, "registry_default")
     object.__setattr__(final_params, "_group_provenance", provenance)
-
-    # Validate that redshift was provided (not the sentinel value),
-    # unless we're in introspection mode (_allow_empty_wildcard).
-    if not allow_empty_wildcard:
-        from tengri.parameters._shared import _REDSHIFT_SENTINEL
-        redshift_dist = final_params._distributions.get("redshift")
-        if redshift_dist is _REDSHIFT_SENTINEL:
-            raise ValueError(
-                "redshift is required. Specify one of:\n"
-                "  - redshift=Fixed(z) for a known redshift\n"
-                "  - redshift=Uniform(lo, hi) for a photo-z fit\n"
-                "  - redshift=<any Distribution> for other priors"
-            )
 
     _warn_silently_fixed_parameters(final_params, param_partition, kwargs)
     _warn_firrc_slope_degeneracy(final_params)
@@ -2560,6 +2570,19 @@ def _translate_igm(igm_dict: dict, result: dict) -> None:
     IGM activation is derived from the igm group presence: if igm={'type': ...}
     is provided, IGM is activated. If igm={'type': 'none'} is provided, IGM is
     deactivated. The apply_igm secondary switch is retired.
+
+    The typeless default is ``inoue14``, changed here from ``madau``. Those are
+    different transmission curves, not two names for one -- but the two entry
+    points disagreed about which the grammar meant. ``Parameters.__init__``
+    defaults ``igm_model="inoue"`` (an alias of ``inoue14``), so the same model
+    written flat and written as a group got different IGM physics, and
+    ``components/igm/igm.py`` documents the intent as "the dict-grammar API
+    consistently used ``inoue14``" -- which this function contradicted. The
+    comment described the design; the code had drifted from it.
+
+    Measured: no call site in the tree omits ``type``, so this moves nothing
+    today. That is also why it survived -- a latent default is invisible until
+    someone relies on it.
     """
     igm_type = igm_dict.get("type", "inoue14")
 

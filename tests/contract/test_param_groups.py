@@ -469,15 +469,25 @@ class TestTopLevel:
         assert isinstance(dist, Fixed)
         assert dist.value == 0.1
 
-    def test_apply_igm_passthrough(self):
-        """apply_igm=False should override apply_igm=True from igm group."""
-        # Note: This tests that top-level can override group-derived settings
-        params = parse_groups(
-            igm={"type": "madau"},
-            igm={"type": "none"},  # explicit override
-            redshift=Fixed(0.1),
-        )
-        # apply_igm from top-level should win
+    def test_apply_igm_no_longer_overrides_the_group(self):
+        """There is nothing left to override with.
+
+        This used to assert that a top-level ``apply_igm=False`` beat an
+        activating ``igm`` group -- the behaviour of the secondary switch that
+        has now been retired precisely because it could disagree with the group
+        beside it. The group is the only statement of activation, so passing
+        the old kwarg raises instead of quietly winning.
+        """
+        with pytest.raises(ValueError, match="apply_igm is retired"):
+            parse_groups(
+                igm={"type": "madau"},
+                apply_igm=False,
+                redshift=Fixed(0.1),
+            )
+
+    def test_igm_type_none_is_how_you_turn_it_off(self):
+        """The replacement for the retired override."""
+        params = parse_groups(igm={"type": "none"}, redshift=Fixed(0.1))
         assert params.apply_igm is False
 
 

@@ -72,7 +72,9 @@ def test_changed_inputs_miss(
 
     pc.precompute_photometry_ztable(synthetic_ssp_wide, fw, ft, n_z=7, z_max=2.0)
     pc.precompute_photometry_ztable(synthetic_ssp_wide, fw, ft, n_z=9, z_max=2.0)
-    pc.precompute_photometry_ztable(synthetic_ssp_wide, fw, ft, n_z=7, z_max=2.0, igm={"type": "inoue"})
+    pc.precompute_photometry_ztable(
+        synthetic_ssp_wide, fw, ft, n_z=7, z_max=2.0, igm={"type": "inoue"}
+    )
     pc.precompute_photometry_ztable(synthetic_ssp_wide, fw[:1], ft[:1], n_z=7, z_max=2.0)
 
     assert len(counting_compute) == 4, "different z grid / flags / filters must recompute"

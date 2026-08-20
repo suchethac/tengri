@@ -102,7 +102,8 @@ def test_predict_obs_sed_runs_with_igm_and_dla(synthetic_ssp_wide, synthetic_top
         sfh={"type": "dpl", "*": FREE},
         dust={"type": "two_component", "law": "calzetti", "*": FIXED},
         neb={"type": "none"},
-        redshift=Fixed(3.0),igm={"type": "inoue", "dla": {"log_n_hi": Fixed(21.0)}},
+        redshift=Fixed(3.0),
+        igm={"type": "inoue", "dla": {"log_n_hi": Fixed(21.0)}},
     )
     params = model.spec.sample(jax.random.PRNGKey(1))
     sed = np.asarray(model.predict_obs_sed(params).sed)
@@ -152,7 +153,8 @@ def _igm_parity_ratios(ssp, obs, *, redshift_spec, params=None, approx=None):
             "tau_diff": 0.0,
         },
         neb={"type": "none"},
-        redshift=redshift_spec,igm={"type": "inoue"},
+        redshift=redshift_spec,
+        igm={"type": "inoue"},
     )
     exact = SEDModel.build(**common)
     lut = SEDModel.build(approx=approx or WavePrecomp(), **common)

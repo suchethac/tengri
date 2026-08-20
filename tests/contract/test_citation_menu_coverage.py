@@ -98,12 +98,15 @@ def test_igm_explicit_is_cited() -> None:
     citation = _citation_for(spec, "igm") or ""
     assert "Inoue" in citation, f"IGM enabled but not cited (got {citation!r})"
 
+
 def test_igm_disabled_not_cited() -> None:
     """When IGM is disabled, no IGM paper is cited."""
     spec = parse_groups(sfh={"type": "dpl"})  # No igm dict -> IGM disabled
     assert not getattr(spec, "apply_igm", False), "default should have IGM disabled"
     citation = _citation_for(spec, "igm") or ""
-    assert not citation or "Inoue" not in citation, f"IGM disabled but cited anyway (got {citation!r})"
+    assert not citation or "Inoue" not in citation, (
+        f"IGM disabled but cited anyway (got {citation!r})"
+    )
 
 
 def test_xray_is_cited() -> None:

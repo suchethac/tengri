@@ -19,22 +19,36 @@ from __future__ import annotations
 from tengri.parameters.priors import Fixed, Uniform
 from tengri.protocols.component import ParamDeclaration
 
-# Sentinel value that indicates redshift was not provided.
-# Use a large default range so bound checks pass, but the sentinel
-# will be caught in parse_groups and rejected before use.
-_REDSHIFT_SENTINEL = Uniform(0.0, 10.0, "SENTINEL: redshift not provided")
-
 PARAMS: tuple[ParamDeclaration, ...] = (
     ParamDeclaration(
         "redshift",
-        _REDSHIFT_SENTINEL,
+        Fixed(0.1),
         "Source redshift",
         lambda lo, hi: lo >= 0,
         "must have lo >= 0",
-        # Redshift is now REQUIRED. It is not a component parameter a group
-        # wildcard should reach into: it is a top-level argument of the build
-        # grammar with its own surface (``redshift=Fixed(z)`` for a known
-        # redshift, ``redshift=Uniform(lo, hi)`` for a photo-z fit).
+        # Redshift is REQUIRED by both grammar entry points --
+        # ``SEDModel.build`` (signature default ``None``) and ``parse_groups``
+        # (absent from kwargs) -- so this declared default is reachable only
+        # through the flat ``Parameters(...)`` escape hatch and by registry
+        # introspection. It stays ``Fixed(0.1)`` rather than becoming a
+        # sentinel: requiredness is a question about the CALL, and encoding it
+        # as a value means picking an object that is simultaneously "absent"
+        # and a legal prior. The attempt to do that used
+        # ``Uniform(0.0, 10.0)`` -- the most natural photo-z prior in this
+        # package's target science, equal to a user's own ``Uniform(0, 10)``
+        # with an identical repr -- so it was silently wrong whichever
+        # comparison the check used. See the note in ``parse_groups``.
+        #
+        # Deliberately NO free_prior (#887). Redshift is not a component
+        # parameter a group wildcard should reach into: it is a top-level
+        # argument of the build grammar with its own surface
+        # (``redshift=Fixed(z)`` for a known redshift, a distribution for a
+        # photo-z fit). Its sensible range is set by the survey rather than by
+        # physics -- there is no interval that is right for both an SDSS and a
+        # JWST target. Giving it a wildcard-reachable default range would let
+        # ``all_params: FREE`` somewhere else in the model quietly turn a
+        # fixed-redshift fit into a photo-z one, which is the largest
+        # behavioral change in the package.
     ),
     ParamDeclaration(
         "met_logzsol",
