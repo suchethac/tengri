@@ -122,8 +122,14 @@ class TestCompileSignatureInvariants:
         # NAMES (field 5) do not cover it: changing Uniform(9.6, 11.1) to
         # Uniform(7, 13) alters no name, shape, dtype or control flow. See
         # tests/regression/bug/test_prior_bounds_key_the_engine_cache.py.
-        assert len(fitter_sig) == 16, (
-            f"fitter_sig field count changed from 16 to {len(fitter_sig)}. "
+        # 17. spec fixed VALUES (#1972 instance 2): _primals_to_params also
+        # bakes fitter._fixed_values, so two models differing only in a fixed
+        # scalar shared one engine — measured -0.18 dex on mass via dust_slope.
+        # 18. mirror map (#1972 instance 3): spec.resolve_mirrors bakes
+        # target -> source, so two specs sharing every name and prior but tying
+        # to different sources silently tied to the same one.
+        assert len(fitter_sig) == 18, (
+            f"fitter_sig field count changed from 18 to {len(fitter_sig)}. "
             "If intentional, update this assertion and the docstring."
         )
 

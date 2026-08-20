@@ -300,19 +300,36 @@ class Distribution:
             ``LogUniform(1e-30, 1e-20)``) into one key.
         """
         entries = tuple(
-            (name, _hashable_attr(getattr(self, name)))
+            (name, hashable_baked_value(getattr(self, name)))
             for name in sorted(vars(self))
             if name not in self._JIT_IRRELEVANT_ATTRS
         )
         return (type(self).__name__, entries)
 
 
-def _hashable_attr(value):
-    """Return a hashable, equality-stable stand-in for a distribution attribute.
+def hashable_baked_value(value) -> object:
+    """Return a hashable, equality-stable stand-in for a baked constant.
+
+    Shared by the two things that get baked into the inference closure and so
+    must key it: a distribution's attributes (:meth:`Distribution.jit_cache_key`)
+    and the spec's fixed parameter values
+    (``Fitter._fixed_value_key``). Both reach ``_primals_to_params``.
 
     Arrays are reduced to ``(shape, dtype, bytes-hash)`` — ``StudentT`` caches
     an interpolation grid derived from its scalars, and any future family that
     tabulates its transform must key on it too.
+
+    Parameters
+    ----------
+    value : object
+        A scalar, string, ``None``, array, or arbitrary object.
+
+    Returns
+    -------
+    object
+        Hashable stand-in. Unrecognized types fall back to ``repr``, which
+        fails safe: a default ``repr`` carries the instance address, so two
+        such values never share a cache entry.
     """
     if value is None or isinstance(value, (bool, int, float, str)):
         return value
