@@ -86,7 +86,13 @@ def _sed_radio(ssp, radio, x64):
 @pytest.mark.parametrize(
     "radio",
     [
-        pytest.param({"type": "condon92"}, id="sf+ff+agn_powerlaw"),
+        # #1980: condon92's retired {'type': ...} spelling, spelled composably
+        # (its documented resolution) so the float32 census still covers the
+        # sf+ff+agn arm.
+        pytest.param(
+            {"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}},
+            id="sf+ff+agn_powerlaw",
+        ),
         pytest.param({"sf": {"type": "bell2003"}, "agn": {"type": "none"}}, id="sf+ff_only"),
     ],
 )

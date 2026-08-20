@@ -329,7 +329,10 @@ DECLARED_COINCIDENT: list[dict] = [
             "function's own docstring. One pair of names, one resolved model."
         ),
         "separator": (
-            {"type": "condon92"},
+            # #1980: condon92's retired {'type': ...} spelling, in its
+            # composable resolution (bell2003 + powerlaw — the alias pair's
+            # shared model).
+            {"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}},
             {"agn": {"type": "dpl"}},
         ),
     },
@@ -432,9 +435,18 @@ def _type_cfg(group: str, name: str) -> dict:
     ``law_bc`` inside a dust config, so the dust group needs its own spelling.
     ``single_component`` is used deliberately: it is the path on which the
     law shape parameters are dead, and that is what this census must see.
+    Radio menu names are presets over the composable sf/agn axes since #1980
+    retired the ``{'type': name}`` spelling — the census builds each name
+    through the same mapping the retirement error advertises, so the alias
+    ledger (condon92 vs radio_powerlaw) still measures real outputs.
     """
     if group == "dust":
         return {"type": "single_component", "law": name}
+    if group == "radio":
+        from tengri.parameters.groups import _legacy_radio_type_to_blocks
+
+        sf_variant, agn_variant = _legacy_radio_type_to_blocks(name)
+        return {"sf": {"type": sf_variant}, "agn": {"type": agn_variant}}
     return {"type": name}
 
 
