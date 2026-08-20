@@ -599,8 +599,8 @@ base_groups_dust = {
 for dust_law in dust_laws:
     # Swap dust law: one-line edit
     groups_dust_var = base_groups_dust.copy()
-    groups_dust_var["dust"] = base_groups_dust["dust"].copy()
-    groups_dust_var["dust"]["law"] = dust_law
+    groups_dust_var["dust_attenuation"] = base_groups_dust["dust_attenuation"].copy()
+    groups_dust_var["dust_attenuation"]["law"] = dust_law
 
     spec = parse_groups(**groups_dust_var)
     free_dust = [p for p in spec.free_params if p.startswith("dust_")]
@@ -807,8 +807,7 @@ for emission in dust_emissions:
     try:
         # Swap emission type: one-line edit
         groups_emission_var = base_groups_emission.copy()
-        groups_emission_var["dust"] = base_groups_emission["dust"].copy()
-        groups_emission_var["dust"]["emission"] = {"type": emission}
+        groups_emission_var["dust_emission"] = {"type": emission}
 
         spec = parse_groups(**groups_emission_var)
         emission_params = [p for p in spec.free_params if p.startswith("dust_")]

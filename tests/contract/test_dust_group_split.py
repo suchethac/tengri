@@ -20,6 +20,8 @@ import pytest
 
 from tengri.parameters import Uniform, parse_groups
 
+pytestmark = pytest.mark.contract
+
 
 class TestNewDustAttenuationEmission:
     """Test the new dust_attenuation and dust_emission top-level groups."""

@@ -57,8 +57,12 @@ def _build_model(ssp, *, with_dust_emission: bool):
         "tau_diff": Fixed(0.5),
         "*": FIXED,
     }
+    emission_group = {}
     if with_dust_emission:
-        dust_kwargs["emission"] = {"type": "dale2014", "*": FIXED}
+        # A peer group now: the with_dust_emission=False arm must omit it, not
+        # pass a disabled one, since the test contrasts having IR emission with
+        # not having it.
+        emission_group["dust_emission"] = {"type": "dale2014", "*": FIXED}
 
     return SEDModel.build(
         ssp_data=ssp,
@@ -71,6 +75,7 @@ def _build_model(ssp, *, with_dust_emission: bool):
             "*": FIXED,
         },
         dust_attenuation=dust_kwargs,
+        **emission_group,
         redshift=Fixed(0.0),
     )
 

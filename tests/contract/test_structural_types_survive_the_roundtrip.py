@@ -77,6 +77,19 @@ _AGN_CASES = sorted(
 
 _BASE = dict(sfh={"type": "dpl", "all_params": FIXED})
 
+#: Groups that are legitimately absent from a default spec, so ``None`` there is
+#: the correct answer rather than a gap in ``_extract_group_type``. Measured:
+#: ``Parameters().dust_emission is None`` while a selected one reports its type.
+_OFF_BY_DEFAULT: frozenset[str] = frozenset({"radio", "agn", "dust_emission"})
+
+#: One valid non-default selection per excused group, so the excuse is checked
+#: rather than trusted. ``radio`` and ``agn`` compose from sub-blocks instead of a
+#: single ``type`` and are covered by their own suites, so only the groups whose
+#: type IS a single structural string appear here.
+_OFF_BY_DEFAULT_SELECTIONS: dict[str, dict] = {
+    "dust_emission": {"type": "dale2014", "all_params": FIXED},
+}
+
 
 def _roundtrip(**kwargs) -> tuple[Parameters, Parameters, dict]:
     """spec -> groups -> spec, returning both specs and the emitted dict."""
@@ -210,9 +223,26 @@ class TestTheCensusIsComplete:
         silent = [
             g
             for g in sorted(_TOP_LEVEL_TYPED_GROUPS)
-            if _extract_group_type(g, Parameters()) is None and g not in {"radio", "agn"}
+            if _extract_group_type(g, Parameters()) is None and g not in _OFF_BY_DEFAULT
         ]
         assert not silent, (
             f"{silent} report no type on a default spec, so a non-default "
             f"selection there cannot be detected as differing from it."
+        )
+
+    @pytest.mark.parametrize("group", sorted(_OFF_BY_DEFAULT_SELECTIONS))
+    def test_an_off_by_default_group_reports_its_type_once_selected(self, group):
+        """The excuse above must be "optional", never "unreadable".
+
+        A bare ``None`` cannot tell those apart, which is what makes an allowlist
+        dangerous here: adding a genuinely unreadable group would silence exactly
+        the defect this class exists to catch. So each excused group has to
+        demonstrate it reports a type when something IS selected.
+        """
+        selection = _OFF_BY_DEFAULT_SELECTIONS[group]
+        spec = parse_groups(**_BASE, redshift=0.1, **{group: selection})
+        assert _extract_group_type(group, spec) == selection["type"], (
+            f"{group} is excused from the census as off-by-default, but it does "
+            f"not report its type when selected either — that is the unreadable "
+            f"case, not the optional one."
         )
