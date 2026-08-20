@@ -145,7 +145,7 @@ AGN-driven radio in unresolved sources (Best+2005, Pracy+2016).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.474 seconds)
+   **Total running time of the script:** (0 minutes 3.428 seconds)
 
 
 .. _sphx_glr_download_auto_examples_radio_plot_radio_vs_agn_lbol.py:

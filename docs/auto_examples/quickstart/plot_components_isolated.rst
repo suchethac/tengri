@@ -29,7 +29,7 @@ lines added at the source), then dust (UV attenuated, reprocessed
 into the FIR), then AGN (disc + torus + NLR), then radio, then X-ray.
 The color at each wavelength tells you which block matters most.
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-136
+.. GENERATED FROM PYTHON SOURCE LINES 13-140
 
 
 
@@ -135,7 +135,11 @@ The color at each wavelength tells you which block matters most.
             dict(
                 dust_attenuation=DUST_ON,
                 dust_emission=DUST_EMISSION,
-                radio={"type": "condon92", "all_params": tengri.FIXED},
+                radio={
+                    "sf": {"type": "bell2003"},
+                    "agn": {"type": "powerlaw"},
+                    "all_params": tengri.FIXED,
+                },
             ),
         ),
         (
@@ -171,7 +175,7 @@ The color at each wavelength tells you which block matters most.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 26.040 seconds)
+   **Total running time of the script:** (0 minutes 17.321 seconds)
 
 
 .. _sphx_glr_download_auto_examples_quickstart_plot_components_isolated.py:
