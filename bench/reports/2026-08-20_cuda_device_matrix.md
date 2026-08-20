@@ -265,41 +265,136 @@ Three distinct causes:
 
 In **float64** — the default — nothing in this tree fails on CUDA at all.
 
-## Finding 9 — the sampler matters ~50x more than the device: NUTS is the wrong choice under vmap
+## Finding 9 — HMC is ~50x cheaper per draw and does not mix: the speed was a dead chain
 
-Same catalog, same 256 galaxies, same 10 warmup + 10 burnin + 20 samples, float32,
-`K = n_gal`. Only the backend name changes. Warm seconds.
+**This finding replaces an earlier version of itself, and the correction is the
+point.** Measured at a token budget (10 warmup, 10 burnin, 20 samples, 256
+galaxies, float32, `K = n_gal`), swapping `mcmc_nuts` for `mcmc_hmc` looked like a
+transformation:
 
-| | CPU f32 | GPU f32 | galaxies/s (GPU) |
-|---|---:|---:|---:|
-| `mcmc_nuts` | 334.7 | 274.5 | 0.93 |
-| `mcmc_hmc` | **4.92** | **5.71** | **44.9** |
-| NUTS / HMC | **68.0x** | **48.1x** | |
+| | CPU f32 | GPU f32 |
+|---|---:|---:|
+| `mcmc_nuts` | 334.7 s | 274.5 s |
+| `mcmc_hmc` | 4.92 s | 5.71 s |
 
-Switching NUTS to fixed-length HMC is worth **48x on the GPU** and **68x on the
-CPU**. The device choice at this width is worth 1.16x. The sampler is the
-decision; the device is a detail.
+48x on the GPU, 68x on the CPU. That number is real and it means nothing, because
+20 draws cannot tell you whether a chain moved. Re-run at a real budget — 1000
+galaxies, 300 warmup, 1000 samples, GPU float32, 149 s — and the diagnostics say
+the sampler is not sampling:
 
-The mechanism is structural, not statistical. NUTS chooses its trajectory length
-per draw by doubling until a U-turn, which is a `lax.while` whose trip count
-varies per galaxy. Under `vmap` the batch cannot retire until the *longest*
-trajectory in it finishes, so every galaxy pays for the worst-mixing galaxy in the
-chunk, and the wider the batch the more likely it contains an expensive one.
-Fixed-length HMC gives every galaxy identical work, which is exactly what a
-vectorized axis wants. It is also why widening helped NUTS so little in Finding 6.
+| | value |
+|---|---:|
+| ESS_min, median galaxy | **1.5** (of 1000 draws) |
+| ESS_min, worst galaxy | 0.7 |
+| split R-hat, max | **3.22** |
+| galaxies with R-hat > 1.01 | **100%** |
 
-**Caveat, and it matters before anyone acts on the 48x:** HMC at the default
-`n_leapfrog_steps=10` does less work per draw than NUTS, which may take up to
-`2**max_num_doublings`. The honest comparison is effective samples per second, and
-**ESS was not measured here** — this is cost per draw. A 48x gap is far larger than
-any plausible mixing penalty (and `notebooks/_setup.py` ships `HMC_VALIDATED`
-precisely because fixed-length HMC mixes these posteriors cleanly, max split-R-hat
-< 1.01), but the number to quote in a paper is ESS/s, not this.
+Two further attempts, both worse than they look:
 
-Also note the crossover moved: with HMC, 256 galaxies is no longer enough work to
-saturate the card (CPU 4.92 s against GPU 5.71 s), because the per-draw cost fell
-by ~50x while the GPU's fixed overhead did not. A cheaper sampler needs a wider
-batch to reach the same crossover.
+- **`HMC_VALIDATED` from `notebooks/_setup.py`** (1000 warmup, 20 leapfrog steps,
+  `target_accept_rate=0.9`) produces a **completely dead chain** — all 600 draws
+  identical. tengri raises on it rather than reporting a number, and the message
+  is worth quoting because it names the trap: *"This is a dead fit, not a
+  converged one — R-hat cannot detect it (both variances are zero, so it reads
+  ~1.0)."* That recipe is validated for single-galaxy notebook fits, not for this
+  catalog.
+
+  **That guard is #1438 ("a frozen chain must not report as converged"), and the
+  convention that would have caught this at the 20-draw budget already exists:**
+  `docs/dev/hierarchical-flat-seam.md` prescribes asserting that draws *move*
+  (`unique > 1`), for exactly this failure — "a tuner that returns NaN at short
+  warmup and hands back a frozen chain that looks like a posterior". So the
+  symptom is a known class with a working guard; what is not on record is the
+  catalog path failing to mix at these settings. `benchmark_device_matrix.py` now
+  records `draws_moved` / `n_unique_draws` alongside every cost number, which is
+  the convention it should have followed from the start.
+- **Lowering `target_accept_rate` to 0.7** (300 warmup, 600 samples, 20 leapfrog,
+  183 s) improves nothing that matters: ESS_min median 2.3, max R-hat 1.94, 87.5%
+  of galaxies above 1.01.
+
+So the honest ordering inverts. **NUTS is expensive because it is doing the work
+the geometry requires**; fixed-length HMC is cheap here because it is failing, and
+at a 20-draw budget that failure is invisible. Per-draw cost is not a sampler
+comparison. ESS per second is, and a cost ratio quoted without a convergence
+diagnostic beside it is exactly the kind of number this report exists to avoid.
+
+The general lesson for the device question: **an accelerator cannot rescue a
+sampler that is not mixing, and it will happily make a dead chain 48x faster.**
+
+## Finding 10 — a million galaxies' photometry in 0.68 s, which is 67x the CPU
+
+Forward prediction over 10^3 and 10^6 galaxies, chunked, each chunk reduced to a
+scalar before the next is dispatched so memory stays bounded. Each device at its
+own best chunk size — they do not agree, see Finding 11.
+
+| | 1000 galaxies | 1,000,000 galaxies | galaxies/s | best chunk |
+|---|---:|---:|---:|---:|
+| CPU f64 | 53.5 ms | 45.67 s | 21,900 | 50,000 |
+| CPU f32 | 18.1 ms | 22.99 s | 43,500 | 1,000 |
+| GPU f64 | 16.6 ms | 7.55 s | 132,500 | 50,000 |
+| GPU f32 | **8.5 ms** | **0.679 s** | **1,472,000** | 100,000 |
+
+**67x** against CPU float64, the default precision — far more than the 4.3-14.7x
+the per-galaxy sweep of Finding 2 suggested, because at batch 2048 the card was
+still partly overhead-bound and 100,000 is where it stops being. This is the one
+regime where the GPU is unambiguously the right tool.
+
+Two notes. GPU float64 is 11x slower than GPU float32 here, tracking the 1/64 fp64
+rate, and lands almost exactly on CPU float32 — a coincidence worth remembering
+when someone reports "the GPU was no faster". And CPU float32 showed a 1.6x
+run-to-run spread (14.3 s once, then 22.99 / 23.50 / 23.53 s on a quiet box); the
+table takes the reproducible value and no ordering depends on the choice.
+
+A billion was started and abandoned: at this rate it is ~11 minutes, which is
+measurable but was not worth the session time. Do not quote it as measured.
+
+## Finding 11 — `forward_chunk_size` is worth 107x on the GPU and nothing on the CPU
+
+One million galaxies, float32, varying only the chunk — the number of galaxies in
+one `vmap`:
+
+| chunk | GPU f32 | CPU f32 | GPU VRAM |
+|---:|---:|---:|---:|
+| 100 | 72.81 s | 29.88 s | 0.8 GB |
+| 1,000 | 8.17 | **22.99** | 0.8 |
+| 5,000 | 2.29 | 24.22 | 1.1 |
+| 10,000 | 1.48 | 26.38 | 1.1 |
+| 25,000 | 0.97 | — | 2.6 |
+| 50,000 | 0.76 | 25.04 | 4.7 |
+| 100,000 | **0.68** | — | 8.8 |
+| 200,000 | `RESOURCE_EXHAUSTED` | — | — |
+
+**107x on the GPU from one integer**, and the CPU is flat: 23-30 s across the whole
+range, best at 1,000, because it is already saturated by its cores and larger
+chunks only cost it cache. There is therefore no single good default — the GPU
+wants the largest chunk that fits, the CPU wants about a thousand.
+
+The card saturates near 100,000 (the last doubling buys 12% for twice the memory)
+and dies at 200,000 trying to allocate 4.51 GiB. Note `forward_chunk_size` derives
+from a **2 GB** budget (`inference/_batching.py`), which on a 12 GB card lands near
+chunk 25,000 — about 30% off the best available. Raise
+`TENGRI_FORWARD_MEMORY_BUDGET_GB` on a GPU.
+
+## Finding 12 — spectroscopy is the shape the GPU is waiting for
+
+A single galaxy, `predict_spectrum` on 2000 pixels (3800-9200 A, R = 2000) under
+`SpectrumPrecomp`, against the 5-band photometry of Finding 1:
+
+| | FLOPs | GPU f32 | CPU f32 | CPU f64 |
+|---|---:|---:|---:|---:|
+| photometry, 5 bands | 534,050 | 7308 us | 162 | 227 |
+| spectrum, 2000 pixels | 12,040,605 | 7927 us | 896 | 2056 |
+| ratio | **22.5x** | **1.08x** | 5.5x | 9.1x |
+
+**22.5x the arithmetic for 8% more GPU time.** The CPU pays 5.5x. That is the
+dispatch-bound regime stated as plainly as it can be: on the GPU the spectrum is
+very nearly free relative to the photometry, because the card was idle either way.
+
+The single-galaxy spectrum still loses to the CPU (7927 us against 896), so this is
+not yet a GPU win — it is the reason to expect one at far smaller catalogs than
+photometry needs, since each galaxy already carries 22x more work. **The batched
+spectroscopy sweep was not run**, and it is the most promising unmeasured cell in
+this report.
 
 ## Interpretation
 
@@ -328,10 +423,11 @@ galaxy; 4.3x–14.7x for a batched forward or gradient at 2048; only 1.22x for
 catalog NUTS at 256, because a sampler's sequential half does not batch. Use width,
 and expect a sampler to convert less of it than a forward pass does.
 
-**And fix the sampler before the hardware.** NUTS to fixed-length HMC on the same
-catalog is worth 48x on the GPU (Finding 9) — roughly forty times more than the
-device choice is worth at that width. A GPU cannot rescue a backend whose cost
-under `vmap` is set by its worst-case galaxy.
+**And do not read a cost ratio as a sampler recommendation.** Fixed-length HMC is
+~50x cheaper per draw than NUTS on this catalog and does not mix — ESS_min ~1.5 of
+1000 draws, split R-hat to 3.2, and a dead chain under the repo's own validated
+recipe (Finding 9). NUTS costs what it costs because it is doing the work. An
+accelerator will make a non-mixing chain 48x faster and tell you nothing.
 
 ## Caveats
 

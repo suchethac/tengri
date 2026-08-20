@@ -26,6 +26,8 @@ Shapes
 ``D``  MAP fit, adam
 ``E``  catalog NUTS, sweeping ``forward_chunk_size``
 ``G``  dump raw outputs for the cross-precision accuracy comparison
+``H``  a converged catalog fit: ESS, split R-hat, ESS/second
+``I``  forward throughput at scale, 1e3 to 1e6 galaxies, chunked
 
 Usage::
 
@@ -70,7 +72,7 @@ DEFAULT_OUT = os.path.join("bench", "results", "device_matrix.json")
 DEFAULT_DUMP_DIR = os.path.join("bench", "results", "device_matrix_arrays")
 SSP_BARE = "fsps_prsc_miles_chabrier"  # bare-stellar; load_ssp resolves the path
 BATCHES = (1, 8, 32, 128, 512, 2048)
-SHAPES = ("A", "B", "C", "D", "E", "G")
+SHAPES = ("A", "B", "C", "D", "E", "G", "H", "I")
 
 
 # ── precision and device bookkeeping ──────────────────────────────────────
@@ -218,7 +220,7 @@ def flops(fn, *args) -> int | None:
 # ── fixture ───────────────────────────────────────────────────────────────
 
 
-def build(approx: str):
+def build(approx: str, obs_kind: str = "photometry", n_wave: int = 2000):
     """Build the benchmark model: ``recipes.mock_recovery_minimal`` at z = 0.05.
 
     Nebular emission and AGN are off. That is not only for speed: the pure-f32
@@ -226,23 +228,44 @@ def build(approx: str):
     AGN discs and records SKIRTOR interpolation failures, so an AGN model would
     measure a known-broken path rather than the common one.
 
+    ``obs_kind`` selects the observable, and it changes the shape of the work by
+    two to three orders of magnitude per galaxy: five broadband fluxes against
+    ``n_wave`` spectral pixels. The precompute follows it — ``WavePrecomp`` for
+    photometry, ``SpectrumPrecomp`` for a spectrum.
+
     The SSP is loaded here, inside whatever precision context the process is
     in — a grid loaded while x64 was still on never reaches the float32 gates,
     and 13 downstream gates key on ``wave.dtype``.
     """
-    from tengri import SEDModel, WavePrecomp, load_ssp, recipes
-    from tengri.observation import Observation, Photometry
+    from tengri import SEDModel, SpectrumPrecomp, WavePrecomp, load_ssp, recipes
+    from tengri.observation import Observation, Photometry, Spectroscopy
 
     ssp = load_ssp(SSP_BARE)
-    obs = Observation(
-        photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
-    )
+    if obs_kind == "spectroscopy":
+        obs = Observation(
+            spectroscopy=Spectroscopy(
+                wave_obs=jnp.linspace(3800.0, 9200.0, n_wave), resolution=2000
+            )
+        )
+        precomp = SpectrumPrecomp()
+    else:
+        obs = Observation(
+            photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+        )
+        precomp = WavePrecomp()
     recipe = recipes.mock_recovery_minimal()
-    recipe["approx"] = WavePrecomp() if approx == "wave_precomp" else None
+    recipe["approx"] = precomp if approx != "exact" else None
     t0 = time.perf_counter()
     model = SEDModel.build(ssp_data=ssp, observation=obs, **recipe)
     build_s = time.perf_counter() - t0
     return model, build_s, str(np.asarray(ssp.ssp_flux).dtype)
+
+
+def observable(model, obs_kind: str):
+    """Return ``(single_fn, batch_fn, data_type)`` for the configured observable."""
+    if obs_kind == "spectroscopy":
+        return model.predict_spectrum, model.predict_spectrum_batch, "spectroscopy"
+    return model.predict_photometry, model.predict_photometry_batch, "photometry"
 
 
 def reference_params(model) -> dict:
@@ -273,16 +296,31 @@ def batch_params(model, n: int):
     }
 
 
-def mock_catalog(model, n_gal: int, key):
-    """A photometric mock catalog, 5% noise, as the catalog cells' data."""
-    galaxies = []
-    for i in range(n_gal):
-        k = jax.random.fold_in(key, i)
-        flux = model.predict_photometry(dict(model.spec.sample(k)))
-        noise = jnp.abs(flux) * 0.05
-        draw = jax.random.normal(jax.random.fold_in(k, 1), flux.shape)
-        galaxies.append({"flux_obs": flux + noise * draw, "noise": noise})
-    return galaxies
+def mock_catalog(model, n_gal: int, key, obs_kind: str = "photometry", chunk: int = 512):
+    """A mock catalog with 5% noise, built through the batched forward surface.
+
+    Built with ``predict_*_batch`` under ``lax``-friendly chunks rather than a
+    Python loop over galaxies. The loop is what this whole benchmark warns
+    against: at 2048 galaxies it is 2048 sequential dispatches, and on a GPU that
+    alone outweighs the fit it is preparing.
+    """
+    _, batch_fn, _ = observable(model, obs_kind)
+    keys = jax.random.split(key, n_gal)
+    truth = jax.vmap(model.spec.sample)(keys)
+
+    flux_chunks = []
+    for start in range(0, n_gal, chunk):
+        sl = {k: v[start : start + chunk] for k, v in truth.items()}
+        flux_chunks.append(np.asarray(batch_fn(sl)))
+    flux = np.concatenate(flux_chunks, axis=0)
+
+    noise = np.abs(flux) * 0.05
+    draws = np.asarray(jax.random.normal(jax.random.fold_in(key, 1), flux.shape))
+    obs_flux = flux + noise * draws
+    return [
+        {"flux_obs": jnp.asarray(obs_flux[i]), "noise": jnp.asarray(noise[i])}
+        for i in range(n_gal)
+    ]
 
 
 # ── the cells ─────────────────────────────────────────────────────────────
@@ -291,7 +329,8 @@ def mock_catalog(model, n_gal: int, key):
 def cell_forward(model, args) -> dict:
     """Shape A — one galaxy through ``predict_photometry``."""
     p = reference_params(model)
-    fn = jax.jit(model.predict_photometry)
+    single, _, _ = observable(model, args.obs)
+    fn = jax.jit(single)
     compile_ms = first_call_ms(lambda: fn(p))
     dtype = confirm_output_precision(fn(p), args.precision)
     row = bench_rotated(lambda: fn(p), args.reps, args.runs)
@@ -299,16 +338,17 @@ def cell_forward(model, args) -> dict:
         **row,
         "compile_ms": compile_ms,
         "out_dtype": dtype,
-        "flops": flops(model.predict_photometry, p),
+        "flops": flops(single, p),
     }
 
 
 def cell_gradient(model, args) -> dict:
     """Shape B — gradient of the summed photometry, one galaxy."""
     p = reference_params(model)
+    single, _, _ = observable(model, args.obs)
 
     def loss(q):
-        return jnp.sum(model.predict_photometry(q))
+        return jnp.sum(single(q))
 
     fn = jax.jit(jax.grad(loss))
     compile_ms = first_call_ms(lambda: fn(p))
@@ -324,10 +364,11 @@ def cell_gradient(model, args) -> dict:
 
 def cell_batch(model, args) -> dict:
     """Shape C — the batch sweep. The widest shape, and the GPU's best case."""
-    fwd = jax.jit(model.predict_photometry_batch)
+    single, batch_fn, _ = observable(model, args.obs)
+    fwd = jax.jit(batch_fn)
 
     def grad_one(p):
-        return jax.grad(lambda q: jnp.sum(model.predict_photometry(q)))(p)
+        return jax.grad(lambda q: jnp.sum(single(q)))(p)
 
     grad_batch = jax.jit(jax.vmap(grad_one))
 
@@ -371,11 +412,12 @@ def cell_map(model, args) -> dict:
 
     key = jax.random.PRNGKey(0)
     truth = reference_params(model)
-    flux = model.predict_photometry(truth)
+    single, _, data_type = observable(model, args.obs)
+    flux = single(truth)
     sigma = jnp.abs(flux) * 0.05
     data = flux + sigma * jax.random.normal(jax.random.fold_in(key, 1), flux.shape)
 
-    fitter = Fitter(model, data, sigma, data_type="photometry")
+    fitter = Fitter(model, data, sigma, data_type=data_type)
     resolved = str(fitter.model.approx)
 
     walls = []
@@ -418,12 +460,13 @@ def cell_catalog(model, args) -> dict:
     from tengri.inference.catalog_fitter import CatalogFitter
 
     key = jax.random.PRNGKey(0)
-    galaxies = mock_catalog(model, max(args.n_gal), key)
-    run_kw = {"n_warmup": args.warmup, "n_burnin": 10, "n_samples": args.samples}
+    galaxies = mock_catalog(model, max(args.n_gal), key, args.obs)
+    _, _, data_type = observable(model, args.obs)
+    run_kw = {"n_warmup": args.warmup, "n_burnin": args.burnin, "n_samples": args.samples}
 
     rows = []
     for n_gal in args.n_gal:
-        cat = CatalogFitter(model, galaxies[:n_gal], data_type="photometry")
+        cat = CatalogFitter(model, galaxies[:n_gal], data_type=data_type)
         for chunk in args.chunk:
             if n_gal < chunk:
                 continue
@@ -442,6 +485,12 @@ def cell_catalog(model, args) -> dict:
                     jax.block_until_ready(cp[0].samples)
                     walls.append(time.perf_counter() - t0)
                 draws = np.asarray(jax.tree_util.tree_leaves(cp[0].samples)[0])
+                # "Finite" is not "sampled": a frozen chain is perfectly finite,
+                # and split R-hat reads ~1.0 on it because both variances are
+                # zero (#1438). docs/dev/hierarchical-flat-seam.md prescribes
+                # asserting the draws MOVE, and a cost number quoted without
+                # this is what made the first HMC/NUTS comparison here wrong.
+                n_unique = int(np.unique(draws).size)
                 rows.append(
                     {
                         "n_gal": n_gal,
@@ -450,6 +499,8 @@ def cell_catalog(model, args) -> dict:
                         "warm_s": round(walls[1], 3),
                         "gal_per_s": round(n_gal / walls[1], 2),
                         "draws_finite": bool(np.all(np.isfinite(draws))),
+                        "draws_moved": n_unique > 1,
+                        "n_unique_draws": n_unique,
                         "vram": gpu_snapshot().get("vram_used_mib"),
                     }
                 )
@@ -473,12 +524,16 @@ def cell_dump(model, args) -> dict:
     """
     os.makedirs(args.dump_dir, exist_ok=True)
     p = reference_params(model)
-    phot = np.asarray(model.predict_photometry(p), dtype=np.float64)
-    grad = jax.grad(lambda q: jnp.sum(model.predict_photometry(q)))(p)
+    single, _, _ = observable(model, args.obs)
+    phot = np.asarray(single(p), dtype=np.float64)
+    grad = jax.grad(lambda q: jnp.sum(single(q)))(p)
     grad_flat = {k: float(np.asarray(v, dtype=np.float64)) for k, v in grad.items()}
 
     dev = jax.devices()[0].platform
-    path = os.path.join(args.dump_dir, f"G_{dev}_{args.precision}_{args.approx}.npz")
+    tag = f"G_{dev}_{args.precision}_{args.approx}"
+    if args.obs != "photometry":
+        tag += f"_{args.obs}"
+    path = os.path.join(args.dump_dir, f"{tag}.npz")
     np.savez(
         path,
         photometry=phot,
@@ -493,6 +548,169 @@ def cell_dump(model, args) -> dict:
     }
 
 
+def cell_posterior(model, args) -> dict:
+    """Shape H — a *converged* catalog fit: ESS, split R-hat, and ESS/second.
+
+    Shape E answers "what does a draw cost". It cannot answer "which sampler is
+    better", because a cheap draw that mixes badly is not a bargain: at the
+    default ``n_leapfrog_steps=10`` HMC does less work per draw than NUTS, which
+    may take up to ``2**max_num_doublings``. The comparison that decides a fit is
+    effective samples per second, which needs a real posterior — hence the
+    backend defaults here (300 warmup, 100 burnin, 1000 samples) rather than the
+    token budget shape E uses to isolate cost.
+
+    Reports per-galaxy split R-hat and ESS, aggregated across the catalog: the
+    worst R-hat is the honest convergence statement, and the *minimum* ESS across
+    parameters is the honest per-galaxy sample count.
+    """
+    from tengri.inference.catalog_fitter import CatalogFitter
+
+    key = jax.random.PRNGKey(0)
+    n_gal = args.n_gal[0]
+    chunk = args.chunk[0]
+    galaxies = mock_catalog(model, n_gal, key, args.obs)
+    _, _, data_type = observable(model, args.obs)
+    cat = CatalogFitter(model, galaxies, data_type=data_type)
+
+    run_kw = {
+        "n_warmup": args.warmup,
+        "n_burnin": args.burnin,
+        "n_samples": args.samples,
+        "dense_mass_matrix": args.dense_mass,
+    }
+    if args.method == "mcmc_hmc":
+        # The sampler's own defaults do not mix these posteriors: measured, 10
+        # leapfrog steps gives ESS_min ~1.5 out of 1000 draws and split R-hat up
+        # to 3.2. notebooks/_setup.py ships HMC_VALIDATED for exactly this
+        # reason, and these are its knobs.
+        run_kw["n_leapfrog_steps"] = args.leapfrog
+        run_kw["target_accept_rate"] = args.target_accept
+
+    t0 = time.perf_counter()
+    cp = cat.run(
+        args.method,
+        key=key,
+        forward_chunk_size=chunk,
+        verbose=False,
+        **run_kw,
+    )
+    jax.block_until_ready(cp[0].samples)
+    wall = time.perf_counter() - t0
+
+    # Diagnose every galaxy up to a cap: this is host numpy over the drawn
+    # chains, cheap next to the fit, but a 2048-galaxy catalog does not need
+    # 2048 of them to characterize the worst case.
+    n_diag = min(n_gal, args.n_diagnose)
+    ess_min, rhat_max, n_finite, n_dead, n_unique = [], [], 0, 0, []
+    for i in range(n_diag):
+        post = cp[i]
+        leaves = jax.tree_util.tree_leaves(post.samples)
+        if leaves and bool(np.all(np.isfinite(np.asarray(leaves[0])))):
+            n_finite += 1
+        if leaves:
+            n_unique.append(int(np.unique(np.asarray(leaves[0])).size))
+        ess = post.effective_sample_size()
+        try:
+            rhat = post.rhat()
+        except ValueError:
+            # A frozen chain: tengri refuses to report split R-hat for it
+            # (#1438) rather than returning the ~1.0 that zero variance implies.
+            # Record it as the result it is instead of crashing the cell.
+            n_dead += 1
+            rhat = {}
+        vals = [float(v) for v in ess.values() if np.isfinite(v)]
+        rvals = [float(v) for v in rhat.values() if np.isfinite(v)]
+        if vals:
+            ess_min.append(min(vals))
+        if rvals:
+            rhat_max.append(max(rvals))
+
+    ess_min_arr = np.asarray(ess_min) if ess_min else np.array([np.nan])
+    rhat_arr = np.asarray(rhat_max) if rhat_max else np.array([np.nan])
+    # Total effective samples the run produced, per second of wall clock: the
+    # median galaxy's worst parameter, times the catalog, over the wall.
+    ess_per_s = float(np.median(ess_min_arr)) * n_gal / wall if wall > 0 else float("nan")
+
+    return {
+        "method": args.method,
+        "n_gal": n_gal,
+        "chunk": chunk,
+        "n_warmup": args.warmup,
+        "n_burnin": args.burnin,
+        "n_samples": args.samples,
+        "n_leapfrog_steps": args.leapfrog if args.method == "mcmc_hmc" else None,
+        "dense_mass_matrix": args.dense_mass,
+        "wall_s": round(wall, 2),
+        "n_diagnosed": n_diag,
+        "draws_finite_frac": round(n_finite / max(1, n_diag), 4),
+        "dead_chain_frac": round(n_dead / max(1, n_diag), 4),
+        "unique_draws_median": int(np.median(n_unique)) if n_unique else 0,
+        "ess_min_median": round(float(np.median(ess_min_arr)), 1),
+        "ess_min_worst": round(float(np.min(ess_min_arr)), 1),
+        "ess_min_best": round(float(np.max(ess_min_arr)), 1),
+        "rhat_max": round(float(np.max(rhat_arr)), 4),
+        "rhat_median": round(float(np.median(rhat_arr)), 4),
+        "rhat_gt_1p01_frac": round(float(np.mean(rhat_arr > 1.01)), 4),
+        "ess_per_s": round(ess_per_s, 2),
+        "s_per_1k_ess": round(1000.0 / ess_per_s, 2) if ess_per_s > 0 else None,
+        "vram": gpu_snapshot().get("vram_used_mib"),
+    }
+
+
+def cell_throughput(model, args) -> dict:
+    """Shape I — forward prediction at catalog scale: 1e3 to 1e6 galaxies.
+
+    A single ``vmap`` over a million galaxies would hold a million outputs (8 GB
+    for 2000-pixel spectra), so the work is chunked and each chunk is reduced to
+    a scalar before the next is dispatched. That is also how you would really
+    generate a mock survey, and it keeps the measurement about throughput rather
+    than about who can allocate the biggest array.
+
+    Reports galaxies/second, which is the number that decides whether a survey-
+    scale forward run takes seconds or an afternoon.
+    """
+    _, batch_fn, _ = observable(model, args.obs)
+    p = reference_params(model)
+
+    def reduced(pb):
+        return jnp.sum(batch_fn(pb))
+
+    fn = jax.jit(reduced)
+    rows = []
+    for chunk in args.chunk_size:
+        pb = {k: jnp.broadcast_to(jnp.asarray(v), (chunk,)) for k, v in p.items()}
+        try:
+            compile_ms = first_call_ms(lambda pb=pb: fn(pb))
+            confirm_output_precision(fn(pb), args.precision)
+        except Exception as exc:  # OOM at this chunk is a result, not a crash
+            rows.append({"chunk_size": chunk, "error": f"{type(exc).__name__}: {str(exc)[:160]}"})
+            continue
+        for n_total in args.n_total:
+            n_chunks = max(1, n_total // chunk)
+            jax.block_until_ready(fn(pb))  # warm, so the loop times execution
+            t0 = time.perf_counter()
+            acc = None
+            for _ in range(n_chunks):
+                out = fn(pb)
+                acc = out if acc is None else acc + out
+            jax.block_until_ready(acc)
+            wall = time.perf_counter() - t0
+            done = n_chunks * chunk
+            rows.append(
+                {
+                    "n_total": done,
+                    "chunk_size": chunk,
+                    "n_chunks": n_chunks,
+                    "compile_ms": compile_ms,
+                    "wall_s": round(wall, 4),
+                    "gal_per_s": round(done / wall, 1),
+                    "us_per_gal": round(wall / done * 1e6, 4),
+                    "vram": gpu_snapshot().get("vram_used_mib"),
+                }
+            )
+    return {"sweep": rows}
+
+
 CELLS = {
     "A": cell_forward,
     "B": cell_gradient,
@@ -500,6 +718,8 @@ CELLS = {
     "D": cell_map,
     "E": cell_catalog,
     "G": cell_dump,
+    "H": cell_posterior,
+    "I": cell_throughput,
 }
 
 
@@ -602,6 +822,15 @@ def main(argv=None) -> int:
     ap.add_argument("--shape", choices=SHAPES)
     ap.add_argument("--precision", choices=("f64", "f32"), default=None)
     ap.add_argument("--approx", choices=("wave_precomp", "exact"), default="wave_precomp")
+    ap.add_argument(
+        "--obs",
+        choices=("photometry", "spectroscopy"),
+        default="photometry",
+        help="observable: 5 broadband fluxes, or --n-wave spectral pixels",
+    )
+    ap.add_argument(
+        "--n-wave", type=int, default=2000, help="spectral pixels for --obs spectroscopy"
+    )
     ap.add_argument("--device", choices=("cpu", "gpu"), default=None)
     ap.add_argument("--reps", type=int, default=3)
     ap.add_argument("--runs", type=int, default=20)
@@ -615,6 +844,15 @@ def main(argv=None) -> int:
         help="catalog sampler (shape E); the only two the catalog path vmaps",
     )
     ap.add_argument("--warmup", type=int, default=30)
+    ap.add_argument("--burnin", type=int, default=10)
+    ap.add_argument("--n-diagnose", type=int, default=64)
+    ap.add_argument(
+        "--leapfrog", type=int, default=20, help="HMC n_leapfrog_steps (HMC_VALIDATED: 20)"
+    )
+    ap.add_argument("--target-accept", type=float, default=0.9)
+    ap.add_argument("--dense-mass", action="store_true", help="dense mass matrix (HMC_VALIDATED)")
+    ap.add_argument("--n-total", type=int, nargs="+", default=[1000, 1000000])
+    ap.add_argument("--chunk-size", type=int, nargs="+", default=[1000])
     ap.add_argument("--samples", type=int, default=50)
     ap.add_argument("--map-steps", type=int, default=300)
     ap.add_argument("--out", default=DEFAULT_OUT)
@@ -660,12 +898,14 @@ def main(argv=None) -> int:
     require_precision(want)
     args.precision = want
 
-    model, build_s, ssp_dtype = build(args.approx)
+    model, build_s, ssp_dtype = build(args.approx, args.obs, args.n_wave)
     row = {
         "shape": args.shape,
         "device": jax.devices()[0].platform,
         "precision": want,
         "approx": args.approx,
+        "obs": args.obs,
+        "n_wave": args.n_wave if args.obs == "spectroscopy" else None,
         "build_s": round(build_s, 3),
         "ssp_dtype": ssp_dtype,
         "n_free": len(list(model.spec.free_params)),

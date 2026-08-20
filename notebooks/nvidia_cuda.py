@@ -371,7 +371,129 @@ fig.tight_layout()
 plt.show()
 
 # %% [markdown]
-# ## 4. Inference
+# ## 4. Survey scale: a million galaxies
+#
+# The batch sweep above stops at 2048 because that is where a per-galaxy number
+# stops changing. The question a survey asks is different — how long does the
+# whole catalog take — so this runs the forward model over 10^3 and 10^6
+# galaxies in chunks, reducing each chunk before dispatching the next so memory
+# stays bounded. That is also how you would really generate a mock survey.
+#
+# Each device at its own best chunk size (see below — they do not agree):
+#
+# | | 1000 galaxies | 1,000,000 galaxies | galaxies/s | best chunk |
+# |---|---:|---:|---:|---:|
+# | CPU float64 | 53.5 ms | 45.67 s | 21,900 | 50,000 |
+# | CPU float32 | 18.1 ms | 22.99 s | 43,500 | 1,000 |
+# | GPU float64 | 16.6 ms | 7.55 s | 132,500 | 50,000 |
+# | GPU float32 | **8.5 ms** | **0.679 s** | **1,472,000** | 100,000 |
+#
+# **A million galaxies' photometry in 0.68 seconds**, against 45.7 s on the CPU
+# in the default precision — a factor of **67**. This is the one regime where
+# the card is unambiguously the right tool, and note it is far larger than the
+# 4-15x the per-galaxy batch sweep suggested: at 2048 galaxies the GPU was still
+# partly overhead-bound, and 100,000 is where it stops being.
+#
+# Two honest notes on that table. The GPU float64 row is *not* a small penalty —
+# it is 11x slower than float32, tracking the 1/64 fp64 rate — and it lands
+# almost exactly on CPU float32, which is a coincidence worth remembering when
+# someone reports "the GPU was no faster". And the CPU float32 number has a
+# 1.6x run-to-run spread here (14.3 s in one run, 22.99/23.50/23.53 s in three
+# later ones on a quiet box); the table takes the reproducible value, and the
+# ordering does not depend on which you pick.
+
+# %%
+import matplotlib.pyplot as plt
+
+ARMS = ["CPU f64", "CPU f32", "GPU f64", "GPU f32"]
+COLORS = ["#1f77b4", "#7fb3d5", "#d62728", "#2ca02c"]
+T_1K = np.array([53.5, 18.1, 16.6, 8.5])  # ms, 1000 galaxies
+T_1M = np.array([45.67, 22.99, 7.55, 0.679])  # s, 1e6 galaxies
+
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 4.2))
+
+for ax, vals, unit, title in (
+    (ax1, T_1K, "ms", "1000 galaxies"),
+    (ax2, T_1M, "s", "1,000,000 galaxies"),
+):
+    bars = ax.bar(ARMS, vals, color=COLORS)
+    ax.set_yscale("log")
+    ax.set_ylabel(f"forward prediction wall clock [{unit}]")
+    ax.set_title(title)
+    ax.grid(axis="y", alpha=0.3, which="both")
+    for b, v in zip(bars, vals, strict=True):
+        ax.annotate(
+            f"{v:g} {unit}",
+            xy=(b.get_x() + b.get_width() / 2, v),
+            xytext=(0, 3),
+            textcoords="offset points",
+            ha="center",
+            fontsize=9,
+        )
+    ax.set_ylim(top=vals.max() * 3)
+
+fig.suptitle(
+    "tengri photometry forward model, WavePrecomp, RTX 3060 vs Ryzen 9 5900X "
+    "(lower is better, log scale)",
+    fontsize=10,
+)
+fig.tight_layout()
+plt.show()
+
+# %% [markdown]
+# ### Chunk size is worth more than the device
+#
+# The chunk is how many galaxies go through one `vmap`. It is the single biggest
+# knob in this notebook, and the two devices want opposite settings. A million
+# galaxies, float32, varying only the chunk:
+#
+# | chunk | GPU f32 | CPU f32 | GPU VRAM |
+# |---:|---:|---:|---:|
+# | 100 | 72.81 s | 29.88 s | 0.8 GB |
+# | 1,000 | 8.17 | **22.99** | 0.8 |
+# | 5,000 | 2.29 | 24.22 | 1.1 |
+# | 10,000 | 1.48 | 26.38 | 1.1 |
+# | 25,000 | 0.97 | — | 2.6 |
+# | 50,000 | 0.76 | 25.04 | 4.7 |
+# | 100,000 | **0.68** | — | 8.8 |
+# | 200,000 | out of memory | — | — |
+#
+# **107x on the GPU, from one integer.** The CPU is flat — 23-30 s across the
+# whole range, best at 1,000 — because it is already saturated by its cores and
+# larger chunks only cost it cache. So there is no single good default: the GPU
+# wants the largest chunk that fits, the CPU wants roughly a thousand.
+#
+# The card saturates near 100,000 (the last doubling buys 12% for twice the
+# memory) and dies at 200,000 with `RESOURCE_EXHAUSTED` while trying to allocate
+# 4.51 GiB. Note that `forward_chunk_size` defaults to a **2 GB** budget in
+# `inference/_batching.py`, which on this 12 GB card lands around chunk 25,000 —
+# about 30% off the best available. On a GPU, raise
+# `TENGRI_FORWARD_MEMORY_BUDGET_GB`.
+
+# %%
+CHUNKS = np.array([100, 1000, 5000, 10000, 25000, 50000, 100000])
+GPU_CHUNK = np.array([72.81, 8.17, 2.29, 1.48, 0.966, 0.755, 0.679])
+CPU_CHUNKS = np.array([100, 1000, 5000, 10000, 50000])
+CPU_CHUNK = np.array([29.88, 22.99, 24.22, 26.38, 25.04])
+
+fig, ax = plt.subplots(figsize=(7.2, 4.2))
+x = np.arange(len(CHUNKS))
+ax.bar(x - 0.2, GPU_CHUNK, width=0.4, label="GPU float32", color="#2ca02c")
+cpu_aligned = [CPU_CHUNK[list(CPU_CHUNKS).index(c)] if c in CPU_CHUNKS else np.nan for c in CHUNKS]
+ax.bar(x + 0.2, cpu_aligned, width=0.4, label="CPU float32", color="#7fb3d5")
+ax.set_yscale("log")
+ax.set_xticks(x)
+ax.set_xticklabels([f"{c:,}" for c in CHUNKS], rotation=30, ha="right")
+ax.set_xlabel("forward_chunk_size (galaxies per vmap)")
+ax.set_ylabel("wall clock for 10$^6$ galaxies [s]")
+ax.set_title("One integer is worth 107x on the GPU, and nothing on the CPU")
+ax.legend(frameon=False)
+ax.grid(axis="y", alpha=0.3, which="both")
+fig.tight_layout()
+plt.show()
+
+# %% [markdown]
+# ## 5. Inference
 #
 # A fit is not a wide forward pass. It is a few hundred sequential steps, each
 # one a dispatch, and that is the shape a GPU is worst at. The catalog path is
@@ -453,41 +575,56 @@ print("moved off the initial point:", {k: round(post.params[k] - params[k], 4) f
 # worked.
 
 # %% [markdown]
-# ### The sampler matters about fifty times more than the device
+# ### A cheap sampler is not a fast one: HMC's 48x was a dead chain
 #
-# Everything above compares hardware. This compares the one decision that turns
-# out to dominate it. Same 256 galaxies, same iteration budget, float32,
-# `K = n_gal` — only the backend name changes:
+# This subsection replaced an earlier version of itself, and the correction is
+# worth more than the original claim. At a token budget — 20 draws, 256 galaxies
+# — swapping `mcmc_nuts` for `mcmc_hmc` looks transformative:
 #
-# | | CPU | GPU | galaxies/s (GPU) |
-# |---|---:|---:|---:|
-# | `mcmc_nuts` | 334.7 s | 274.5 s | 0.93 |
-# | `mcmc_hmc` | **4.92 s** | **5.71 s** | **44.9** |
+# | | CPU | GPU |
+# |---|---:|---:|
+# | `mcmc_nuts` | 334.7 s | 274.5 s |
+# | `mcmc_hmc` | 4.92 s | 5.71 s |
 #
-# **48x on the GPU, 68x on the CPU, from changing one string.** The device choice
-# at this width is worth 1.16x.
+# 48x on the GPU. The timing is real; the conclusion drawn from it was not,
+# because 20 draws cannot tell you whether the chain moved. At a real budget —
+# 1000 galaxies, 300 warmup, 1000 samples, 149 s on the GPU — the diagnostics
+# are unambiguous:
 #
-# The reason is structural rather than statistical. NUTS picks its trajectory
-# length per draw by doubling until a U-turn — a `lax.while` whose trip count
-# differs per galaxy. Under `vmap` the batch cannot retire until the longest
-# trajectory in it finishes, so **every galaxy pays for the worst-mixing galaxy
-# in the chunk**, and a wider batch is more likely to contain an expensive one.
-# Fixed-length HMC gives every galaxy identical work, which is what a vectorized
-# axis wants. It is also why widening bought NUTS so little above.
+# | | |
+# |---|---:|
+# | ESS_min, median galaxy | **1.5** of 1000 draws |
+# | ESS_min, worst galaxy | 0.7 |
+# | split R-hat, max | **3.22** |
+# | galaxies with R-hat > 1.01 | **100%** |
 #
-# Before acting on the 48x: HMC at the default `n_leapfrog_steps=10` does less
-# work per draw than NUTS, which may take up to `2**max_num_doublings`. This is
-# cost per draw, and **effective samples per second is the number that decides a
-# fit** — not measured here. A 48x gap is far wider than any plausible mixing
-# penalty, and `notebooks/_setup.py` ships `HMC_VALIDATED` because fixed-length
-# HMC mixes these posteriors cleanly, but quote ESS/s in a paper, not this.
+# It gets worse before it gets better. `HMC_VALIDATED` from `_setup.py` — the
+# repo's convergence-validated recipe, 1000 warmup, 20 leapfrog steps,
+# `target_accept_rate=0.9` — gives a **completely dead chain** here: all 600
+# draws identical. tengri refuses to report a number for it, and the message
+# names the trap exactly:
 #
-# Note also that the crossover moved. With HMC the CPU is *ahead* again at 256
-# (4.92 s against 5.71 s): per-draw cost fell ~50x while the GPU's fixed overhead
-# did not, so a cheaper sampler needs a wider catalog to reach the same crossing.
+# ```text
+# ValueError: the chain did not move: every one of 600 draws is identical for
+# every parameter ... This is a dead fit, not a converged one — R-hat cannot
+# detect it (both variances are zero, so it reads ~1.0).
+# ```
+#
+# Dropping `target_accept_rate` to 0.7 buys nothing that matters: ESS_min median
+# 2.3, max R-hat 1.94, 87.5% of galaxies still unconverged. That recipe is
+# validated for single-galaxy notebook fits, not for a thousand-galaxy catalog.
+#
+# So the ordering inverts. **NUTS is expensive because it is doing the work the
+# posterior geometry requires.** Fixed-length HMC is cheap here because it is
+# failing, and at 20 draws the failure is invisible. Per-draw cost is not a
+# sampler comparison; effective samples per second is, and a speed ratio without
+# a convergence diagnostic next to it is not a result.
+#
+# The device lesson generalizes: **an accelerator cannot rescue a sampler that
+# is not mixing — it will make a dead chain 48x faster.**
 
 # %% [markdown]
-# ## 5. What float32 buys, and what it costs
+# ## 6. What float32 buys, and what it costs
 #
 # On this workload float32 buys **nothing measurable**, because the workload is
 # not arithmetic-bound: the same call at the same batch size takes the same
@@ -569,7 +706,7 @@ print("grad(sum photometry):", {k: float(v) for k, v in grad.items()})
 # zero is finite, so it would not have caught this.
 
 # %% [markdown]
-# ## 6. Is the card healthy?
+# ## 7. Is the card healthy?
 #
 # If the GPU looks slow at everything, check it against work a GPU should
 # obviously win, so you can tell "wrong workload" from "broken install".
@@ -584,7 +721,7 @@ print(f"matmul 2048^3 (f32): {mm:.2f} ms  ->  {2 * 2048**3 / (mm * 1e-3) / 1e9:.
 # workload is the problem — 0.12 FLOP/byte never reaches those ALUs.
 
 # %% [markdown]
-# ## 7. What breaks on CUDA
+# ## 8. What breaks on CUDA
 #
 # The float32 regression tree — 57 files, the part of the suite most exposed to a
 # device change — run on CUDA against the same run on CPU:
@@ -631,17 +768,17 @@ print(f"matmul 2048^3 (f32): {mm:.2f} ms  ->  {2 * 2048**3 / (mm * 1e-3) / 1e9:.
 # lines in geoVI.
 
 # %% [markdown]
-# ## 8. Limits, honestly
+# ## 9. Limits, honestly
 #
 # * **The float64 penalty is consumer-specific.** 1/64 rate on GeForce, about
 #   1/2 on A100/H100. Re-measure before assuming this transfers.
 # * **This card was driving a desktop.** Absolute numbers would improve on an
 #   idle card; the direction and the crossover scale are what to carry away.
-# * **float32 gradients of raw observables are zero.** §5. Fits are fine.
+# * **float32 gradients of raw observables are zero.** §6. Fits are fine.
 # * **float32 on CUDA needs `JAX_DEFAULT_MATMUL_PRECISION=highest`**, or XLA
 #   quietly gives you TF32's 10-bit mantissa. §2.
 # * **float32 geoVI with marginalized emission lines does not run on CUDA** —
-#   cuBLASLt refuses the GEMM. §7.
+#   cuBLASLt refuses the GEMM. §8.
 # * **NIFTy `vi*` backends are not measured here.** `optimize_kl` is a
 #   Python-level outer loop with per-iteration host syncs and ~20 GB of *host*
 #   RSS; there is little for a device to win and it would dominate the run.
@@ -655,7 +792,7 @@ print(f"matmul 2048^3 (f32): {mm:.2f} ms  ->  {2 * 2048**3 / (mm * 1e-3) / 1e9:.
 # reference. Reach for the GPU when the work is wide: catalogs, posterior
 # predictive sweeps, mock generation.
 #
-# And in that order of leverage: pick `mcmc_hmc` over `mcmc_nuts` for catalogs
-# (~50x), widen the batch past a few hundred (~4-15x), then choose the device
-# (~1.2x at 256 galaxies). Reaching for the card first optimizes the smallest
-# term.
+# In order of measured leverage: widen the batch (up to 107x on throughput,
+# §3), pick the precision (~2.5x, and set the matmul flag), then choose the
+# device. Do **not** reach for a cheaper sampler without a convergence
+# diagnostic — that was worth an apparent 48x and a real zero.
