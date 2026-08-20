@@ -59,6 +59,7 @@ import contextlib
 import dataclasses
 import functools
 import inspect
+import pathlib
 import types
 import warnings
 from collections.abc import Mapping
@@ -8789,52 +8790,76 @@ class SEDModel:
         )
 
     @classmethod
-    def from_dict(cls, config: dict, ssp_data, *, filters=None, observation=None, **model_kwargs) -> SEDModel:
+    def from_dict(
+        cls, config: dict, ssp_data, *, filters=None, observation=None, **model_kwargs
+    ) -> SEDModel:
         """Build an SEDModel from a serialized config dict."""
         from tengri.config.serialize import deserialize_config
+
         deserialized = deserialize_config(config)
-        return cls.build(ssp_data, filters=filters, observation=observation, **deserialized, **model_kwargs)
+        return cls.build(
+            ssp_data, filters=filters, observation=observation, **deserialized, **model_kwargs
+        )
 
     @classmethod
-    def from_file(cls, path: str | pathlib.Path, ssp_data, *, filters=None, observation=None, **model_kwargs) -> SEDModel:
+    def from_file(
+        cls, path: str | pathlib.Path, ssp_data, *, filters=None, observation=None, **model_kwargs
+    ) -> SEDModel:
         """Build an SEDModel from a config file (JSON or YAML)."""
         from tengri.config.serialize import load_config_from_file
+
         config = load_config_from_file(path)
-        return cls.from_dict(config, ssp_data, filters=filters, observation=observation, **model_kwargs)
+        return cls.from_dict(
+            config, ssp_data, filters=filters, observation=observation, **model_kwargs
+        )
 
     @classmethod
-    def from_yaml(cls, yaml_str: str, ssp_data, *, filters=None, observation=None, **model_kwargs) -> SEDModel:
+    def from_yaml(
+        cls, yaml_str: str, ssp_data, *, filters=None, observation=None, **model_kwargs
+    ) -> SEDModel:
         """Build an SEDModel from a YAML string."""
         try:
             import yaml
         except ImportError:
-            raise ImportError("from_yaml requires pyyaml. Install with: pip install pyyaml")
+            raise ImportError(
+                "from_yaml requires pyyaml. Install with: pip install pyyaml"
+            ) from None
         from tengri.config.exceptions import ConfigError
+
         try:
             config = yaml.safe_load(yaml_str)
         except yaml.YAMLError as e:
-            raise ConfigError(f"Invalid YAML: {e}")
+            raise ConfigError(f"Invalid YAML: {e}") from e
         if not isinstance(config, dict):
             raise ConfigError(f"YAML must deserialize to a dict, got {type(config)}")
-        return cls.from_dict(config, ssp_data, filters=filters, observation=observation, **model_kwargs)
+        return cls.from_dict(
+            config, ssp_data, filters=filters, observation=observation, **model_kwargs
+        )
 
     @classmethod
-    def from_json(cls, json_str: str, ssp_data, *, filters=None, observation=None, **model_kwargs) -> SEDModel:
+    def from_json(
+        cls, json_str: str, ssp_data, *, filters=None, observation=None, **model_kwargs
+    ) -> SEDModel:
         """Build an SEDModel from a JSON string."""
         import json as json_module
+
         from tengri.config.exceptions import ConfigError
+
         try:
             config = json_module.loads(json_str)
         except json_module.JSONDecodeError as e:
-            raise ConfigError(f"Invalid JSON: {e}")
+            raise ConfigError(f"Invalid JSON: {e}") from e
         if not isinstance(config, dict):
             raise ConfigError(f"JSON must deserialize to a dict, got {type(config)}")
-        return cls.from_dict(config, ssp_data, filters=filters, observation=observation, **model_kwargs)
+        return cls.from_dict(
+            config, ssp_data, filters=filters, observation=observation, **model_kwargs
+        )
 
     @property
     def config(self) -> dict:
         """Return the model configuration as a nested-dict (fully resolved)."""
         from tengri.parameters.groups import parameters_to_groups
+
         return parameters_to_groups(self.spec)
 
     def to_yaml(self, path: str | pathlib.Path | None = None) -> str:
@@ -8842,8 +8867,11 @@ class SEDModel:
         try:
             import yaml
         except ImportError:
-            raise ImportError("to_yaml requires pyyaml. Install with: pip install pyyaml")
+            raise ImportError(
+                "to_yaml requires pyyaml. Install with: pip install pyyaml"
+            ) from None
         from tengri.config.serialize import serialize_config
+
         config_dict = self.config
         serialized = serialize_config(config_dict)
         yaml_str = yaml.dump(serialized, default_flow_style=False, sort_keys=False)
@@ -8856,7 +8884,9 @@ class SEDModel:
     def to_json(self, path: str | pathlib.Path | None = None) -> str:
         """Serialize the model configuration to JSON format."""
         import json
+
         from tengri.config.serialize import serialize_config
+
         config_dict = self.config
         serialized = serialize_config(config_dict)
         json_str = json.dumps(serialized, indent=2)

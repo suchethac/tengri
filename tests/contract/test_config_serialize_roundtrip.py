@@ -12,19 +12,16 @@ import tempfile
 import pytest
 
 from tengri import (
-    FREE,
     FIXED,
-    Fixed,
+    FREE,
     Uniform,
     load_filter_set,
     load_ssp_data,
 )
 from tengri.config.serialize import (
     deserialize_config,
-    serialize_config,
 )
 from tengri.forward.sed_model import SEDModel
-from tengri.parameters.priors import Gaussian, LogUniform
 
 pytestmark = pytest.mark.contract
 
@@ -57,8 +54,12 @@ class TestRoundTripInvariant:
         model1 = SEDModel.build(
             ssp_data=ssp_data,
             sfh={"type": "dpl", "all_params": FIXED},
-            dust_attenuation={"type": "two_component", "law_bc": "calzetti",
-                              "law_diff": "power_law", "all_params": FIXED},
+            dust_attenuation={
+                "type": "two_component",
+                "law_bc": "calzetti",
+                "law_diff": "power_law",
+                "all_params": FIXED,
+            },
             filters=filters,
         )
 
@@ -82,7 +83,11 @@ class TestRoundTripInvariant:
             ssp_data=ssp_data,
             sfh={"type": "dpl", "all_params": FIXED},
             dust_attenuation={"type": "single_component", "law": "calzetti", "all_params": FIXED},
-            dust_emission={"type": "dale2014", "eta_balance": Uniform(0.3, 0.7), "all_params": FIXED},
+            dust_emission={
+                "type": "dale2014",
+                "eta_balance": Uniform(0.3, 0.7),
+                "all_params": FIXED,
+            },
             filters=filters,
         )
 
@@ -149,10 +154,12 @@ class TestRoundTripInvariant:
         model1 = SEDModel.build(
             ssp_data=ssp_data,
             sfh={"type": "dpl", "all_params": FIXED},
-            agn={"type": "composable",
-                 "disc": {"type": "powerlaw", "all_params": FIXED},
-                 "torus": {"type": "skirtor", "all_params": FIXED},
-                 "all_params": FIXED},
+            agn={
+                "type": "composable",
+                "disc": {"type": "powerlaw", "all_params": FIXED},
+                "torus": {"type": "skirtor", "all_params": FIXED},
+                "all_params": FIXED,
+            },
             filters=filters,
         )
 
@@ -165,9 +172,21 @@ class TestRoundTripInvariant:
         model3 = SEDModel.from_json(json_str, ssp_data=ssp_data, filters=filters)
 
         # Verify nested structure is preserved in all cases
-        assert model1.config["agn"]["type"] == model2.config["agn"]["type"] == model3.config["agn"]["type"]
-        assert model1.config["agn"]["disc"]["type"] == model2.config["agn"]["disc"]["type"] == model3.config["agn"]["disc"]["type"]
-        assert model1.config["agn"]["torus"]["type"] == model2.config["agn"]["torus"]["type"] == model3.config["agn"]["torus"]["type"]
+        assert (
+            model1.config["agn"]["type"]
+            == model2.config["agn"]["type"]
+            == model3.config["agn"]["type"]
+        )
+        assert (
+            model1.config["agn"]["disc"]["type"]
+            == model2.config["agn"]["disc"]["type"]
+            == model3.config["agn"]["disc"]["type"]
+        )
+        assert (
+            model1.config["agn"]["torus"]["type"]
+            == model2.config["agn"]["torus"]["type"]
+            == model3.config["agn"]["torus"]["type"]
+        )
 
         # Verify the full config structure matches
         assert model1.config == model2.config

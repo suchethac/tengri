@@ -53,13 +53,13 @@ except ImportError:
 
 from tengri.config.exceptions import ConfigError
 from tengri.parameters.priors import Distribution
-from tengri.parameters.sentinels import FREE, FIXED, _Sentinel
+from tengri.parameters.sentinels import FIXED, FREE, _Sentinel
 
 __all__ = [
-    "serialize_config",
     "deserialize_config",
-    "distribution_to_dict",
     "dict_to_distribution",
+    "distribution_to_dict",
+    "serialize_config",
 ]
 
 #: Type alias for the serialized config format (nested dicts)
@@ -104,7 +104,7 @@ def _serialize_recursive(obj: Any, path: list[str]) -> Any:
     elif isinstance(obj, Distribution):
         return distribution_to_dict(obj)
     elif isinstance(obj, dict):
-        return {k: _serialize_recursive(v, path + [k]) for k, v in obj.items()}
+        return {k: _serialize_recursive(v, [*path, k]) for k, v in obj.items()}
     elif isinstance(obj, (list, tuple)):
         return [_serialize_recursive(item, path) for item in obj]
     else:
@@ -154,7 +154,7 @@ def _extract_distribution_params(dist: Distribution) -> dict[str, Any]:
     sig = inspect.signature(dist.__init__)
     result = {}
 
-    for param_name, param in sig.parameters.items():
+    for param_name in sig.parameters:
         if param_name in ("self", "description", "units"):
             continue
 
@@ -172,9 +172,7 @@ def _extract_distribution_params(dist: Distribution) -> dict[str, Any]:
 # ── Deserialization (JSON/YAML → Python) ──
 
 
-def deserialize_config(
-    config: ConfigDict
-) -> ConfigDict:
+def deserialize_config(config: ConfigDict) -> ConfigDict:
     """Recursively deserialize a model config from JSON/YAML input.
 
     Converts:
@@ -188,7 +186,7 @@ def deserialize_config(
     ----------
     config : dict
         Serialized configuration from JSON/YAML.
-    
+
 
     Returns
     -------
@@ -207,9 +205,7 @@ def deserialize_config(
     return _deserialize_recursive(config, path=[])
 
 
-def _deserialize_recursive(
-    obj: Any, path: list[str]
-) -> Any:
+def _deserialize_recursive(obj: Any, path: list[str]) -> Any:
     """Recursively deserialize an object."""
     if isinstance(obj, str):
         # Check for sentinels
@@ -236,10 +232,7 @@ def _deserialize_recursive(
             return dict_to_distribution(obj, path=path)
         else:
             # Regular dict, recurse
-            return {
-                k: _deserialize_recursive(v, path + [k])
-                for k, v in obj.items()
-            }
+            return {k: _deserialize_recursive(v, [*path, k]) for k, v in obj.items()}
     elif isinstance(obj, (list, tuple)):
         return [_deserialize_recursive(item, path) for item in obj]
     else:
@@ -247,9 +240,7 @@ def _deserialize_recursive(
         return obj
 
 
-def dict_to_distribution(
-    d: dict[str, Any], *, path: list[str] | None = None
-) -> Distribution:
+def dict_to_distribution(d: dict[str, Any], *, path: list[str] | None = None) -> Distribution:
     """Convert a serialized dict to a Distribution instance.
 
     Parameters
@@ -285,7 +276,6 @@ def dict_to_distribution(
 
     # Import all distribution classes
     from tengri.parameters.priors import (
-        Distribution,
         Fixed,
         Gaussian,
         Laplace,
@@ -307,9 +297,7 @@ def dict_to_distribution(
 
     if prior_name not in dist_map:
         # Suggest close matches
-        suggestions = difflib.get_close_matches(
-            prior_name, dist_map.keys(), n=3, cutoff=0.6
-        )
+        suggestions = difflib.get_close_matches(prior_name, dist_map.keys(), n=3, cutoff=0.6)
         msg = f"unknown prior '{prior_name}'"
         if suggestions:
             msg += f" — did you mean {suggestions[0]!r}?"
@@ -324,10 +312,7 @@ def dict_to_distribution(
         valid_params = set(sig.parameters.keys()) - {"self"}
         invalid = set(params.keys()) - valid_params
         if invalid:
-            msg = (
-                f"prior '{prior_name}' got unexpected "
-                f"parameter(s): {invalid}"
-            )
+            msg = f"prior '{prior_name}' got unexpected parameter(s): {invalid}"
             _raise_config_error(path, msg)
 
         # Reconstruct
@@ -346,9 +331,7 @@ def _format_path(path: list[str]) -> str:
     return ".".join(path)
 
 
-def _raise_config_error(
-    path: list[str], message: str
-) -> None:
+def _raise_config_error(path: list[str], message: str) -> None:
     """Raise a ConfigError with path context."""
     full_msg = f"{_format_path(path)}: {message}"
     raise ConfigError(full_msg)
@@ -357,9 +340,7 @@ def _raise_config_error(
 # ── File I/O ──
 
 
-def load_config_from_file(
-    path: str | pathlib.Path
-) -> ConfigDict:
+def load_config_from_file(path: str | pathlib.Path) -> ConfigDict:
     """Load a serialized config from a JSON or YAML file.
 
     Parameters
@@ -395,21 +376,18 @@ def load_config_from_file(
         try:
             raw = json.loads(content)
         except json.JSONDecodeError as e:
-            raise ConfigError(f"Invalid JSON in {path}: {e}")
+            raise ConfigError(f"Invalid JSON in {path}: {e}") from e
     elif suffix in (".yaml", ".yml"):
         if yaml is None:
             raise ConfigError(
-                "YAML support requires 'pyyaml' package. "
-                "Install with: pip install pyyaml"
+                "YAML support requires 'pyyaml' package. Install with: pip install pyyaml"
             )
         try:
             raw = yaml.safe_load(content)
         except yaml.YAMLError as e:
-            raise ConfigError(f"Invalid YAML in {path}: {e}")
+            raise ConfigError(f"Invalid YAML in {path}: {e}") from e
     else:
-        raise ConfigError(
-            f"Unknown file type {suffix}. Expected .json, .yaml, or .yml"
-        )
+        raise ConfigError(f"Unknown file type {suffix}. Expected .json, .yaml, or .yml")
 
     return deserialize_config(raw)
 
@@ -446,8 +424,7 @@ def save_config_to_file(
     elif format in ("yaml", "yml") or path.suffix.lower() in (".yaml", ".yml"):
         if yaml is None:
             raise ConfigError(
-                "YAML support requires 'pyyaml' package. "
-                "Install with: pip install pyyaml"
+                "YAML support requires 'pyyaml' package. Install with: pip install pyyaml"
             )
         with open(path, "w") as f:
             yaml.dump(serialized, f, default_flow_style=False, sort_keys=False)
