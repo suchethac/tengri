@@ -1,0 +1,521 @@
+# ---
+# jupyter:
+#   jupytext:
+#     formats: ipynb,py:percent
+#     text_representation:
+#       extension: .py
+#       format_name: percent
+#       format_version: '1.3'
+#       jupytext_version: 1.19.1
+#   kernelspec:
+#     display_name: .venv
+#     language: python
+#     name: python3
+# ---
+
+# %% [markdown]
+# # Running tengri on an NVIDIA GPU (CUDA)
+#
+# **Status: measured, supported, and mostly not worth it.** Unlike the Apple
+# path, nothing here needs a JAX version tengri does not pin: `pip install -U
+# "jax[cuda12]"` and the forward model, the gradients and the samplers all run.
+# The question is not whether it works. It is whether it is faster, and for the
+# way most people fit one galaxy at a time the answer is no.
+#
+# The one-line summary, measured on an RTX 3060 against a 12-core Ryzen 9 5900X:
+#
+# ```text
+#     one galaxy at a time    ->  CPU, by a wide margin. Nothing to amortize.
+#     a wide enough batch     ->  GPU, and the crossover is where to look.
+#     float64 on a GeForce    ->  half the CPU's throughput. The card runs it at 1/64 rate.
+#     float32                 ->  buys nothing on this workload. It is not arithmetic-bound.
+# ```
+#
+# The reason is arithmetic intensity, and it is the same reason as on Apple
+# silicon: tengri moves a lot of memory and does very little arithmetic —
+# about **0.12 FLOP per byte** on the `WavePrecomp` path, against the 25–50
+# FLOP/byte a GPU needs before its ALUs are the limiting factor. A single
+# galaxy gives the card nothing to do but wait for memory and for the host.
+#
+# There is a second effect specific to consumer NVIDIA hardware. GeForce cards
+# run float64 at 1/64 of their float32 rate, so **in tengri's default
+# precision this GPU is slower at dense arithmetic than the CPU beside it**:
+#
+# | dense 2048³ matmul | CPU | GPU |
+# |---|---:|---:|
+# | float32 | 988 GFLOP/s | **10,740 GFLOP/s** |
+# | float64 | **379 GFLOP/s** | 189 GFLOP/s |
+#
+# A datacenter card (A100, H100) has roughly 1/2 rate instead of 1/64, so the
+# float64 row is the one result here that does not transfer. Everything driven
+# by dispatch and memory traffic does.
+#
+# **Two warnings about the numbers below.**
+#
+# 1. **This GPU was also driving the desktop** — Xorg, gnome-shell and a
+#    browser held 1–3 GB and 20–40% utilization throughout. Timings were taken
+#    with rotated repetitions and an A/A control, and ratios that do not clear
+#    that control are reported as unresolved rather than quoted.
+# 2. **Benchmark one shape per process.** Running a forward pass, a gradient
+#    and a fit in one process makes the later ones look worse. The tables come
+#    from `bench/scripts/benchmark_device_matrix.py`, which spawns a child per
+#    cell for that reason.
+
+# %% [markdown]
+# ## 1. Install and select the device
+#
+# ```bash
+# pip install -U "jax[cuda12]"
+# ```
+#
+# No tengri-side change, no pinned-version dance. Check what you got:
+#
+# ```python
+# import jax; jax.devices()   # -> [CudaDevice(id=0)]
+# ```
+#
+# Two environment variables matter, and both must be set **before Python
+# starts**. Setting them after `import tengri` is too late: constants
+# allocated during the import are already placed on a device and already have
+# a width.
+#
+# ```bash
+# export JAX_PLATFORMS=cuda                    # or cpu, to compare
+# export XLA_PYTHON_CLIENT_PREALLOCATE=false   # see below
+# ```
+#
+# `XLA_PYTHON_CLIENT_PREALLOCATE=false` is not optional in practice. JAX
+# claims 75% of the card by default, so a second process — a notebook you left
+# open, a pytest worker — gets `CUDA_ERROR_OUT_OF_MEMORY` instead of a device.
+# Pair it with `XLA_PYTHON_CLIENT_MEM_FRACTION=0.85` if you want a ceiling
+# rather than growth.
+
+# %%
+import os
+
+# Must precede any import that touches JAX. In a notebook that means the very
+# first cell.
+os.environ["JAX_PLATFORMS"] = "cuda"
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+
+import jax
+import jax.numpy as jnp
+import numpy as np
+
+import tengri
+
+print("device :", jax.devices())
+print("x64    :", jax.config.jax_enable_x64)
+print("dtype  :", jnp.zeros(1).dtype)
+
+# %% [markdown]
+# ## 2. Precision is a decision, not a default
+#
+# CUDA supports both widths, so unlike the Apple backend you have to choose.
+# tengri defaults to float64 and will hold that choice through its own import.
+# To ask for float32, set it in the environment:
+#
+# ```bash
+# export JAX_ENABLE_X64=0
+# ```
+#
+# tengri honors that and says so, once:
+#
+# ```text
+# JAX_ENABLE_X64=0: tengri is honoring your request for float32 and is NOT
+# enabling 64-bit precision. Cosmological distances are the known hazard —
+# d_L^2 at z > 0.01 overflows float32 — so any code that forms d_L^2 directly
+# will produce inf. tengri's own projection avoids it by applying
+# (1+z)/(4*pi*d_L^2) as a log10 offset, but third-party code may not.
+# ```
+#
+# That warning is the whole float32 story in miniature. The forward model
+# carries unrepresentable magnitudes as log10 offsets and comes out correct;
+# code that forms the linear quantity does not.
+#
+# **Do not use `SEDModel.build(forward_dtype="float32")`.** It has cast nothing
+# since #1433 and only emits a `DeprecationWarning`. The two routes that work
+# are the environment variable above and `with jax.enable_x64(False):` wrapped
+# around the build *and* the call.
+#
+# **Load the SSP grid inside the float32 context.** A grid loaded while x64 was
+# still on stays float64, and thirteen downstream gates key on `wave.dtype` —
+# so the fast paths silently never engage and a float32 run quietly measures
+# something else.
+
+# %% [markdown]
+# ## 3. Prediction
+#
+# One galaxy, five SDSS bands, `recipes.mock_recovery_minimal` at z = 0.05
+# (seven free parameters, nebular and AGN off), on the `WavePrecomp` path that
+# every fit uses.
+
+# %%
+from tengri import SEDModel, WavePrecomp, load_ssp, recipes
+from tengri.observation import Observation, Photometry
+
+# load_ssp resolves a short alias and walks parent dirs for data/, so this works
+# whatever the working directory is. A cwd-relative data/... path only resolves
+# from the repository root, and the notebook executor runs from notebooks/.
+ssp = load_ssp("fsps_prsc_miles_chabrier")
+obs = Observation(
+    photometry=Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i", "sdss_z"])
+)
+recipe = recipes.mock_recovery_minimal()
+recipe["approx"] = WavePrecomp()
+model = SEDModel.build(ssp_data=ssp, observation=obs, **recipe)
+
+# The reference galaxy: each free parameter at the median of its declared
+# prior. Not a prior draw — jax.random returns different numbers for the same
+# key at float32 and float64, so a sampled fixture compares two different
+# galaxies across the precision arms and calls the difference precision error.
+params = {
+    name: round(float(np.asarray(model.spec.get_distribution(name).unstandardize(jnp.zeros(())))), 6)
+    for name in model.spec.free_params
+}
+flux = model.predict_photometry(params)
+print("photometry [erg/s/cm2/Hz]:", np.asarray(flux))
+print("on device                :", flux.devices())
+
+# %% [markdown]
+# ### Measured: one galaxy, five bands, `WavePrecomp`
+#
+# Warm steady-state, 30 timed calls per repetition, 4 repetitions, minimum
+# reported. The A/A column is the same arm measured against itself — the floor
+# below which nothing here is resolvable.
+#
+# | | CPU float64 | CPU float32 | GPU float64 | GPU float32 |
+# |---|---:|---:|---:|---:|
+# | forward `predict_photometry` | **227.0 us** | **162.3** | 7422.0 | 7308.2 |
+# | gradient of the sum | **587.0** | **479.9** | 7755.3 | 7398.8 |
+# | first call (compile) | 467 ms | 408 | 527 | 428 |
+# | A/A floor, forward | 1.023 | 1.242 | 1.015 | 1.010 |
+#
+# **The CPU wins the forward pass by 32.7x and the gradient by 13.2x**, in
+# float64, and both margins are two orders of magnitude clear of the A/A floor.
+# Nothing subtle is happening: a single galaxy is one dispatch of a graph that
+# moves a lookup table and does almost no arithmetic, so the GPU spends 7.4 ms
+# waiting and the CPU spends 0.2 ms working.
+#
+# Two things worth reading off this table beyond the headline.
+#
+# **The gradient is the GPU's better case**, exactly as arithmetic intensity
+# predicts — the reverse pass does more work per byte already moved, and the gap
+# closes from 32.7x to 13.2x. That is the same direction the Apple backend
+# showed, for the same reason.
+#
+# **Compile time is a wash here (467 ms against 527 ms).** This is worth stating
+# because on Apple silicon the GPU compiled roughly ten times *faster* than the
+# CPU, which was that backend's one honest advantage. It does not carry over to
+# CUDA; do not move to the GPU expecting a faster edit-run loop.
+#
+# Precision changes nothing you can measure at this width. Every f32-against-f64
+# comparison in the table sits inside its own A/A floor, except the GPU gradient
+# at about 5%. That is the first hint of §5's conclusion: this workload is not
+# arithmetic-bound, so buying cheaper arithmetic buys nothing.
+
+# %% [markdown]
+# ### Batching is the only thing that moves the needle
+#
+# `predict_photometry_batch` is a `jax.vmap` over the same call. It is the one
+# shape where the card has enough independent work to be worth waking up.
+
+# %%
+import time
+
+
+def timed(fn, arg, reps=5):
+    """Warm-time a jitted callable. Returns milliseconds per call."""
+    jitted = jax.jit(fn)
+    jax.block_until_ready(jitted(arg))  # compile
+    t0 = time.perf_counter()
+    for _ in range(reps):
+        jax.block_until_ready(jitted(arg))
+    return (time.perf_counter() - t0) / reps * 1e3
+
+
+for n in (1, 32):
+    batch = {k: jnp.broadcast_to(jnp.asarray(v), (n,)) for k, v in params.items()}
+    ms = timed(model.predict_photometry_batch, batch)
+    print(f"batch={n:5d}  total={ms:8.3f} ms   per galaxy={ms / n:7.4f} ms")
+
+# %% [markdown]
+# ### Measured: the batch sweep
+#
+# Microseconds **per galaxy**; bold is the faster device in that row. Same
+# model, same call, one leading axis.
+#
+# Forward, `predict_photometry_batch`:
+#
+# | batch | CPU f64 | CPU f32 | GPU f64 | GPU f32 |
+# |---:|---:|---:|---:|---:|
+# | 1 | **234.0** | **142.6** | 7344.4 | 7361.7 |
+# | 8 | **113.5** | **95.9** | 927.3 | 899.3 |
+# | 32 | **55.3** | **53.1** | 238.1 | 226.9 |
+# | 128 | **27.6** | **26.1** | 65.7 | 56.8 |
+# | 512 | 45.7 | 16.7 | **22.0** | **15.2** |
+# | 2048 | 48.3 | 20.0 | **11.2** | **4.5** |
+#
+# Gradient, `vmap` of `grad(sum(predict_photometry))`:
+#
+# | batch | CPU f64 | CPU f32 | GPU f64 | GPU f32 |
+# |---:|---:|---:|---:|---:|
+# | 1 | **499.4** | **435.6** | 7584.7 | 7473.8 |
+# | 8 | **299.8** | **164.0** | 977.0 | 933.1 |
+# | 32 | **131.2** | **93.6** | 250.8 | 233.2 |
+# | 128 | 211.8 | **43.7** | **77.9** | 58.5 |
+# | 512 | 206.6 | 67.4 | **31.5** | **16.3** |
+# | 2048 | 172.2 | 80.7 | **19.8** | **5.5** |
+#
+# **The crossover is between 128 and 512 galaxies, and it depends on the shape.**
+# The gradient crosses first — at 128 in float64, where the GPU is already 2.7x
+# ahead — because it is the more arithmetic-dense half. The forward pass crosses
+# at 512. By 2048 the GPU leads by **4.3x** (forward, f64), **8.7x** (gradient,
+# f64) and **14.7x** (gradient, f32), which is the best number in this notebook.
+#
+# The mechanism is in the totals rather than the per-galaxy figures. Going from
+# 1 to 2048 galaxies, **GPU float32 forward total goes from 7.36 ms to 9.12 ms**
+# — 2048x the work for 1.24x the time. The CPU goes from 0.14 ms to 40.9 ms,
+# i.e. linear. The GPU is not getting faster as the batch grows; it is finally
+# being given enough work to be worth waking up.
+#
+# This is also where float32 starts to pay, and only here: at 2048 it is a
+# further 2.5x on the GPU forward pass and 3.6x on the gradient. Below the
+# crossover it is free but pointless.
+#
+# VRAM stayed modest — 3.0 GB at 2048 in float64, 1.8 GB in float32, against
+# 12 GB on the card. Batch size was not the memory constraint at any point in
+# this sweep.
+
+# %% [markdown]
+# ### The same numbers, as a picture
+#
+# Left: cost per galaxy, where the lines cross is the only number that decides
+# which device to use. Right: total wall clock — the GPU trace is nearly
+# horizontal, which is the whole explanation.
+
+# %%
+import matplotlib.pyplot as plt
+
+BATCH = np.array([1, 8, 32, 128, 512, 2048])
+# Gradient, per galaxy [us], measured above.
+CPU_F64 = np.array([499.4, 299.8, 131.2, 211.8, 206.6, 172.2])
+GPU_F64 = np.array([7584.7, 976.96, 250.81, 77.94, 31.51, 19.76])
+GPU_F32 = np.array([7473.8, 933.14, 233.25, 58.54, 16.28, 5.49])
+
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 4.2))
+
+for y, label, color, marker in (
+    (CPU_F64, "CPU float64", "#1f77b4", "o"),
+    (GPU_F64, "GPU float64", "#d62728", "s"),
+    (GPU_F32, "GPU float32", "#2ca02c", "^"),
+):
+    ax1.loglog(BATCH, y, marker + "-", label=label, color=color)
+    ax2.loglog(BATCH, y * BATCH * 1e-3, marker + "-", label=label, color=color)
+
+cross = BATCH[np.argmax(GPU_F64 < CPU_F64)]
+ax1.axvline(cross, ls=":", color="0.4")
+ax1.annotate(
+    f"crossover\n~{cross} galaxies", xy=(cross, 300), xytext=(2, 900), fontsize=9, color="0.3"
+)
+ax1.set_xlabel("galaxies per batch")
+ax1.set_ylabel("gradient time per galaxy [us]")
+ax1.set_title("Per galaxy: lower is better")
+ax1.legend(frameon=False)
+ax1.grid(alpha=0.3, which="both")
+
+ax2.set_xlabel("galaxies per batch")
+ax2.set_ylabel("total gradient time [ms]")
+ax2.set_title("Total: the GPU is almost flat — it is all fixed overhead")
+ax2.legend(frameon=False)
+ax2.grid(alpha=0.3, which="both")
+
+fig.suptitle("tengri photometry gradient, WavePrecomp, RTX 3060 vs Ryzen 9 5900X", fontsize=11)
+fig.tight_layout()
+plt.show()
+
+# %% [markdown]
+# ## 4. Inference
+#
+# A fit is not a wide forward pass. It is a few hundred sequential steps, each
+# one a dispatch, and that is the shape a GPU is worst at. The catalog path is
+# the exception: `mcmc_nuts` and `mcmc_hmc` are the two backends
+# `CatalogFitter` maps over galaxies, so a catalog fit is wide in the way a
+# single fit is not.
+#
+# Note what `Fitter` does to `approx` — it resolves `"auto"` and **tops up** to
+# the LUT even when the model was built without one. Print it. An arm that
+# silently gained or lost its precompute is the classic way to benchmark the
+# wrong thing.
+
+# %%
+from tengri import Fitter
+
+sigma = jnp.abs(flux) * 0.05
+data = flux * 1.02
+
+fitter = Fitter(model, data, sigma, data_type="photometry")
+print("resolved approx:", fitter.model.approx)
+
+t0 = time.perf_counter()
+post = fitter.run("map", n_steps=300, verbose=False)
+print(f"MAP, 300 steps (includes compile): {time.perf_counter() - t0:.2f} s")
+print("moved off the initial point:", {k: round(post.params[k] - params[k], 4) for k in params})
+
+# %% [markdown]
+# ### Measured: one galaxy, 300 adam steps
+#
+# | | CPU f64 | CPU f32 | GPU f64 | GPU f32 |
+# |---|---:|---:|---:|---:|
+# | cold, includes compile [s] | **2.79** | **2.25** | 13.12 | 11.14 |
+# | warm [s] | **0.27** | **0.23** | 2.38 | 2.22 |
+#
+# **The CPU wins a single fit by 8.8x warm.** A fit is a few hundred sequential
+# steps, each one a dispatch, and there is no batch axis to hide them behind — the
+# worst shape for a GPU, and the one most people run most often.
+#
+# The correctness result is the more useful half of this table: **GPU float64
+# reproduced the CPU's parameter vector to six decimals** on all seven parameters.
+# The device does not change the answer.
+#
+# ### Measured: a catalog, vectorized NUTS
+#
+# `CatalogFitter.run("mcmc_nuts", forward_chunk_size=K)` with `K = n_gal`,
+# 10 warmup + 10 burnin + 20 samples, `dense_mass_matrix=False`. This is the shape
+# with a real batch axis, so it is the one where the card can win.
+#
+# | galaxies | CPU f32 | GPU f32 | faster |
+# |---:|---:|---:|---|
+# | 16 | **72.8 s** | 247.3 | CPU 3.4x |
+# | 64 | **139.0** | 261.6 | CPU 1.9x |
+# | 256 | 334.7 | **274.5** | GPU 1.2x |
+#
+# In float64 at 16 galaxies: CPU 105.7 s against GPU 279.4 s, i.e. CPU by 2.6x.
+#
+# **The inference crossover lands between 64 and 256 galaxies**, consistent with
+# the 128–512 found for the bare gradient. The mechanism is the same flatness:
+# sixteen times the work costs the GPU **247 s → 275 s**, a factor of 1.11, and
+# throughput per galaxy goes 0.06 → 0.93 galaxies/second.
+#
+# **But read the size of the win, not just its sign.** At 256 galaxies the card
+# is ahead by 1.2x, not by the 8.7x the bare gradient showed at 2048. The reason
+# is that the CPU amortizes too — 72.8 s → 334.7 s is 4.6x for 16x the work, not
+# 16x — because a vectorized NUTS over a wider axis is more efficient on either
+# device. A sampler interleaves its wide forward passes with sequential
+# leapfrog steps and per-iteration control flow, and that sequential part does
+# not shrink. So the catalog path is where a GPU starts to pay, but it converts
+# far less of the raw batch advantage than the forward numbers would suggest.
+#
+# Every arm returned finite posterior draws, float32 included. That is worth
+# stating because it was not obvious in advance: coverage for float32 inference
+# pins the *objective gradient* finite, and a converging fit with NaN posterior
+# draws is a documented failure mode of the float32 geoVI metric. NUTS in float32
+# on a catalog is not something the test suite currently asserts, and here it
+# worked.
+
+# %% [markdown]
+# ## 5. What float32 buys, and what it costs
+#
+# On this workload float32 buys **nothing measurable**, because the workload is
+# not arithmetic-bound: the same call at the same batch size takes the same
+# time at either width. That is worth stating plainly, since the 57× float32
+# advantage in the matmul table above is real and simply never reached.
+#
+# What it costs is more interesting than what it saves.
+#
+# ### Forward photometry is accurate
+#
+# Relative to a float64 **CPU** reference, on the same reference galaxy, with
+# errors masked at `|reference| > 1e-45`:
+#
+# | arm | max rel. error, photometry | median | finite |
+# |---|---:|---:|---|
+# | GPU float64 | 2.5e-16 | 1.2e-16 | yes |
+# | CPU float32 | 3.1e-07 | 1.7e-07 | yes |
+# | GPU float32 | 3.2e-07 | 1.6e-07 | yes |
+#
+# Two conclusions. **The device does not change the answer**: GPU float64 agrees
+# with CPU float64 to 2.5e-16, which is round-off on the last bit or two, and a
+# 300-step MAP fit on the GPU reproduces the CPU's parameter vector to six
+# decimals. **float32 costs about 3e-7 on photometry**, i.e. float32 epsilon and
+# nothing worse — the log-offset treatment of the cosmological flux scale is
+# doing its job at z = 0.05, where a naive linear `d_L^2` would have overflowed
+# to `inf`.
+#
+# One trap, since it cost me a wrong answer first: do **not** build this
+# comparison on `spec.sample(key)`. `jax.random` returns different numbers for
+# the same key at different widths, so the two arms get different galaxies and
+# the difference — a factor of 152, in the first version of this notebook —
+# reads as precision error. Use a fixed parameter vector.
+#
+# ### The photometry gradient is identically zero
+#
+# This is the finding to know about before running anything important in
+# float32.
+
+# %%
+grad = jax.grad(lambda q: jnp.sum(model.predict_photometry(q)))(params)
+print("grad(sum photometry):", {k: float(v) for k, v in grad.items()})
+
+# %% [markdown]
+# In float64 those seven derivatives are ~1e-26 to 1e-28 and all nonzero. In
+# float32, **every one of them is exactly zero** — on the CPU and on the GPU,
+# on the exact path and under `WavePrecomp`, with the signs preserved as `-0.0`
+# and `+0.0`. Nothing raises and nothing warns.
+#
+# The magnitudes are not the explanation: 1e-26 is comfortably inside float32,
+# whose smallest normal is 1.2e-38. The reverse pass forms an intermediate the
+# forward pass deliberately avoids — the linear cosmological flux factor, ~1e-57,
+# which the forward direction carries as a log10 offset and which is simply 0
+# in float32.
+#
+# **What this does and does not break:**
+#
+# | you differentiate | float32 |
+# |---|---|
+# | `sum(predict_photometry)` — the bare forward surface | **identically zero** |
+# | `neg_log_posterior_fn` — what a fit descends | healthy, nonzero, finite |
+#
+# A fit is safe because the likelihood standardizes the residual by σ *before*
+# squaring, which lifts the magnitudes back into range. A 300-step MAP fit in
+# float32 moves all seven parameters. So float32 inference works; float32
+# `jax.grad` of a raw observable does not, and it fails silently, which is the
+# worse failure. Existing coverage pins that objective gradient *finite* — and
+# zero is finite, so it would not have caught this.
+
+# %% [markdown]
+# ## 6. Is the card healthy?
+#
+# If the GPU looks slow at everything, check it against work a GPU should
+# obviously win, so you can tell "wrong workload" from "broken install".
+
+# %%
+a = jnp.asarray(np.random.default_rng(0).standard_normal((2048, 2048)), jnp.float32)
+mm = timed(lambda x: x @ x, a)
+print(f"matmul 2048^3 (f32): {mm:.2f} ms  ->  {2 * 2048**3 / (mm * 1e-3) / 1e9:.0f} GFLOP/s")
+
+# %% [markdown]
+# 10.7 TFLOP/s in float32 against the CPU's 988 GFLOP/s. The card is fine. The
+# workload is the problem — 0.12 FLOP/byte never reaches those ALUs.
+
+# %% [markdown]
+# ## 7. Limits, honestly
+#
+# * **The float64 penalty is consumer-specific.** 1/64 rate on GeForce, about
+#   1/2 on A100/H100. Re-measure before assuming this transfers.
+# * **This card was driving a desktop.** Absolute numbers would improve on an
+#   idle card; the direction and the crossover scale are what to carry away.
+# * **float32 gradients of raw observables are zero.** §5. Fits are fine.
+# * **NIFTy `vi*` backends are not measured here.** `optimize_kl` is a
+#   Python-level outer loop with per-iteration host syncs and ~20 GB of *host*
+#   RSS; there is little for a device to win and it would dominate the run.
+# * **`map(optimizer="lbfgs_scipy")` is host-bound by construction** — scipy
+#   drives the loop and converts every gradient to float64.
+# * **One GPU.** Multi-device sharding exists for `mcmc_nuts`/`mcmc_hmc` via
+#   `devices="all"`, but is not exercised here.
+# * **Not in CI.** Nothing here is covered by a scheduled job.
+#
+# For a fit that must be right, the default — CPU, float64 — remains the
+# reference. Reach for the GPU when the work is wide: catalogs, posterior
+# predictive sweeps, mock generation.

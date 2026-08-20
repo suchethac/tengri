@@ -27,8 +27,12 @@ for mode in ['exact','compositional','hybrid']:
 
 ## Key rules
 
-1. **Always use `JAX_PLATFORMS=cpu`** — Metal GPU is experimental and gives
-   unreliable timings. All benchmarks in the repo are CPU numbers.
+1. **Pin `JAX_PLATFORMS=cpu` unless the benchmark is about the device.** CPU is
+   the reference platform, and Apple Metal in particular gives unreliable
+   timings. Every benchmark here is a CPU number except
+   `benchmark_device_matrix.py` and `benchmark_catalog_throughput.py`, which are
+   deliberately device-agnostic and select the platform from the environment.
+   CUDA numbers live in `bench/reports/2026-08-20_cuda_device_matrix.md`.
 
 2. **Always warm up** — first call triggers XLA compilation (~30-60s).
    Run the function twice before timing. The persistent XLA cache at

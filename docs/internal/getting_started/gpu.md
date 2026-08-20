@@ -89,10 +89,18 @@ no NumPy in the forward graph). If you try it, reports welcome.
 ## Multi-device
 
 `predict_photometry_batch` is `vmap`-based and stays on one device.
-Multi-GPU sharding via `jax.pmap` or `shard_map` is not yet wired.
-Large catalog fits run sequentially on one GPU per Python process. To fan
-out across devices, use one Python process per device, each fitting a
-catalog slice.
+
+Catalog fits do shard across devices. `CatalogFitter.run(..., devices="all")`
+maps the galaxy axis over a `Mesh` via GSPMD — `_resolve_devices` and
+`_sharded_vmap` in `src/tengri/inference/catalog_fitter.py` — for the two
+backends the catalog path vectorizes, `mcmc_nuts` and `mcmc_hmc`. The galaxy
+axis must be a multiple of `lcm(forward_chunk_size, n_devices)`. Every other
+method still runs one galaxy at a time, where a second device has nothing to
+do; for those, use one process per device over catalog slices.
+
+`shard_map` specifically is not used: BlackJAX's NUTS carries a `lax.cond`
+that trips manual varying-axis tracking, so the seam is `jax.jit(jax.vmap(...))`
+over a sharded axis instead.
 
 ## See also
 

@@ -32,6 +32,15 @@ template to copy. Each states its own caveats up front.
   which is the useful part. Measured on an M4 Pro: CPU wins by 59x on a
   gradient and 86x on a MAP fit, batches of a few hundred reach parity, and the
   run-to-run spread on MPS exceeds the differences between workloads.
+- **{doc}`nvidia_cuda`**: the same question for an NVIDIA card, where both
+  precisions are available and nothing needs a JAX version tengri does not pin.
+  The GPU turns out to be a width instrument rather than a fast one: measured on
+  an RTX 3060 against a Ryzen 9 5900X, the CPU wins a single galaxy by 33x and a
+  single MAP fit by 8.8x, the crossover sits between 128 and 512 galaxies, and a
+  batch of 2048 gradients runs 14.7x faster on the card. float32 is accurate to
+  its own epsilon forward but buys no speed below the crossover — and its
+  gradient of a raw observable is identically zero, which is the one result here
+  worth knowing before trusting a number.
 
 ```{toctree}
 :maxdepth: 1
@@ -40,4 +49,5 @@ stochastic_sfh_recovery
 multimodel_bma_candels
 jwst_nonparametric_fits
 apple_mps
+nvidia_cuda
 ```

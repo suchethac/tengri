@@ -90,6 +90,10 @@ EXPERIMENTAL_SLUGS = [
     # re-execute, so a hand-run render is the intended path here rather than a
     # gap in automation.
     "apple_mps",
+    # NVIDIA/CUDA guide. Unlike apple_mps this one executes in the ordinary
+    # environment (jax[cuda12] on the pinned JAX), so its render is produced by
+    # running the notebook on a CUDA box rather than by hand.
+    "nvidia_cuda",
 ]
 EXPERIMENTAL_SUBDIR = "experimental"
 
