@@ -393,6 +393,12 @@ jobs:
       # against docs/spine/** through an explicit SPINE_SLUGS list, so anything
       # outside that list passes without being looked at. Stdlib-only.
       - run: python tools/check_notebook_pairing.py
+      # Notebooks are executed by no PR-time job (#1256), so this guard catches
+      # the #1255 class — jax.jit/vmap over the non-pytree rich prediction surface
+      # — at lint time, before the notebook runs. The scheduled notebooks.yml
+      # execution tier covers the runtime error classes (NaN, divergence, etc.).
+      # Stdlib-only.
+      - run: python tools/check_notebook_jit_surfaces.py
       # NOTE: `gen_property_table.py --check` cannot live here. This job installs
       # ruff and nothing else, and the generator imports tengri (hence jax) to read
       # the property registry. It runs in `smoke`, which does `pip install -e`.

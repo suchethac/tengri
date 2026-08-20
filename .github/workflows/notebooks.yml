@@ -1,0 +1,161 @@
+name: Notebooks
+
+on:
+  # Scheduled execution: weekly on Sunday at 05:00 UTC. The scheduled slow tier
+  # already saturates runner queue capacity; notebook runtimes are unmeasured.
+  # Weekly frequency lets us learn the actual budget before increasing cadence.
+  #
+  # This job exists to close issue #1256: CI never executes notebooks — a
+  # notebook that cannot run stayed broken for months. The render guards
+  # (`tools/check_notebook_renders.py`) are static; only execution catches
+  # runtime errors (NaN, divergence, kernel death, OOM). The multimodel_bma_candels
+  # notebook demonstrated this (#1255): jax.jit/vmap over a rich prediction
+  # surface that is not a pytree. The new `tools/check_notebook_jit_surfaces.py`
+  # lint guard now catches that class statically; this workflow catches what only
+  # execution can.
+  schedule:
+    - cron: "0 5 * * 0"
+  workflow_dispatch:
+    inputs:
+      slugs:
+        description: "Space-separated notebook stems (empty = all CI-executable)"
+        required: false
+        type: string
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+# Notebook execution must never be aborted by an unrelated push. A scheduled
+# run can take hours; a `push` event on main should not cancel it mid-suite.
+# Unlike the main test tier (`cancel-in-progress: true`), this tier uses a
+# shared concurrency group PER SCHEDULER, not per commit, so only one notebook
+# run at a time per trigger type — new PRs do not cancel a running schedule.
+# See issue #160 for the rationale.
+concurrency:
+  group: notebooks-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: false
+
+env:
+  SETUPTOOLS_SCM_PRETEND_VERSION_FOR_DSPS: "0.4.7"
+
+jobs:
+  # Generate the matrix of CI-executable notebooks. The script's --list path
+  # is stdlib-only — no pip install needed — so this job is fast.
+  list:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.generate.outputs.matrix }}
+    if: |
+      github.event_name == 'schedule'
+      || github.event_name == 'workflow_dispatch'
+      || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'run-notebooks'))
+    steps:
+      - uses: actions/checkout@v7
+      # The --list path imports only stdlib, so no pip install is needed.
+      # This keeps the job fast and verifies the flag is truly stdlib-only,
+      # which is a requirement so the notebooks.yml workflow works when
+      # dependencies break.
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - id: generate
+        name: Generate notebook matrix
+        env:
+          REQUESTED_SLUGS: ${{ github.event.inputs.slugs }}
+        run: |
+          python << 'EOFPYTHON'
+          import json
+          import subprocess
+          import sys
+          import os
+
+          # Get the list of CI-executable notebooks
+          result = subprocess.run(['python', 'scripts/execute_notebooks.py', '--list', '--ci', '--json'],
+                                 capture_output=True, text=True, check=True)
+          available = json.loads(result.stdout)
+
+          # If dispatched with specific slugs, use those (after validation)
+          dispatch_input = os.environ.get('REQUESTED_SLUGS', '').strip()
+          if dispatch_input:
+              requested = dispatch_input.split()
+              for slug in requested:
+                  if slug not in available:
+                      print(f'error: unknown notebook slug: {slug}', file=sys.stderr)
+                      sys.exit(1)
+              slugs = requested
+          else:
+              slugs = available
+
+          # Output as JSON array for GitHub Actions matrix
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write('matrix=' + json.dumps(slugs) + '\n')
+          EOFPYTHON
+
+  execute:
+    needs: list
+    runs-on: ubuntu-latest
+    # Notebook runtimes are unmeasured. 150 minutes is an unmeasured first budget
+    # to be resized from the first scheduled runs.
+    timeout-minutes: 150
+    # fail-fast: false so one notebook's failure does not cancel the others.
+    # This lets us see every broken notebook in a single run, rather than fixing
+    # them one at a time through multiple CI cycles.
+    strategy:
+      fail-fast: false
+      matrix:
+        slug: ${{ fromJSON(needs.list.outputs.matrix) }}
+    # Only run on schedule, dispatch, or PR with the run-notebooks label.
+    if: |
+      github.event_name == 'schedule'
+      || github.event_name == 'workflow_dispatch'
+      || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'run-notebooks'))
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      # Install with both dev (jupytext) and docs (jupyter/ipykernel) extras
+      # so that nbclient and ipykernel are available for notebook execution.
+      # The --list path uses only stdlib, but execution needs nbclient, nbformat,
+      # jupytext, and ipykernel. Check pyproject.toml [project.optional-dependencies]:
+      # dev has jupytext but NOT nbclient/ipykernel; docs has jupyter (which pulls
+      # nbclient, nbformat, ipykernel, matplotlib-inline).
+      - run: pip install -e ".[dev,docs]"
+      # Every grid the CI-executable notebooks load is tracked in git: fsps_prsc_miles_chabrier
+      # for the numbered spine, and ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0 for
+      # notebooks 09/11/12/jwst_nonparametric_fits/stochastic_sfh_recovery. multimodel_bma_candels
+      # is excluded via CI_UNEXECUTABLE because its three wNE grids (MIST/Padova/BaSTI) are
+      # locally generated and unobtainable on CI.
+      # Restore the JAX compilation cache to avoid re-paying the compile cost.
+      # One shared key across all matrix jobs: the first finisher's save succeeds,
+      # later jobs run with a partially warm cache.
+      - uses: actions/cache/restore@v6
+        id: jax_cache
+        with:
+          path: ~/.cache/tengri_jax_cache
+          key: tengri-jax-notebooks-${{ hashFiles('pyproject.toml') }}-${{ github.run_id }}
+          restore-keys: |
+            tengri-jax-notebooks-${{ hashFiles('pyproject.toml') }}-
+      - name: Execute ${{ matrix.slug }}
+        env:
+          JAX_PLATFORMS: cpu
+        run: python scripts/execute_notebooks.py ${{ matrix.slug }}
+        # Note: MPLBACKEND is deliberately NOT set. The script refuses it
+        # (#1506). Figures are captured via ipykernel's default inline backend
+        # (no `%matplotlib inline` in the notebooks; they rely on the default).
+        # The renders the script writes into this ephemeral workspace are
+        # discarded — publishing renders remains a local human step. This job
+        # only proves the notebook executes without error.
+      # Save the JAX cache on every run, whether the job passed or failed.
+      # (Explicit save with `if: always()` instead of the combined action's
+      # implicit post-save, because the implicit save is skipped when the job
+      # fails — a cache meant to speed up a failing job can never warm if the
+      # job must pass for the cache to update. See the slow job's cache comment
+      # for context.)
+      - uses: actions/cache/save@v6
+        if: always() && steps.jax_cache.outputs.cache-hit != 'true'
+        with:
+          path: ~/.cache/tengri_jax_cache
+          key: ${{ steps.jax_cache.outputs.cache-primary-key }}
