@@ -90,9 +90,14 @@ class TestTheAGNFamily:
     def test_a_subblock_type_survives(self, block, agn_type):
         """Every registered type of every AGN sub-block, round-tripped."""
         attr = _AGN_BLOCK_TO_KWARG[block]
+        # Special handling for atten/smc_prevot: use law key instead of type
+        if block == "atten" and agn_type == "smc_prevot":
+            sub_block_spec = {"law": "prevot_smc"}
+        else:
+            sub_block_spec = {"type": agn_type}
         spec0, spec1, groups = _roundtrip(
             **_BASE,
-            agn={"type": "composable", "all_params": FIXED, block: {"type": agn_type}},
+            agn={"type": "composable", "all_params": FIXED, block: sub_block_spec},
         )
         assert getattr(spec1, attr) == getattr(spec0, attr), (
             f"agn['{block}']['type']={agn_type!r} did not survive to_groups(): "

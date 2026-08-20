@@ -2969,7 +2969,7 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     "agn.nlr": frozenset({"type", "*"}),
     "agn.blr": frozenset({"type", "*"}),
     "agn.feii": frozenset({"type", "*"}),
-    "agn.atten": frozenset({"type", "*"}),
+    "agn.atten": frozenset({"type", "*", "law"}),
     # Deprecated: agn.lines is expanded to (agn.nlr, agn.blr) via expand_lines_alias
     "agn.lines": frozenset({"type", "*"}),
     "foreground": frozenset({"ebmv_mw", "law", "rv"}),
@@ -3688,9 +3688,54 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
                 f"got {type(block_spec).__name__}."
             )
 
-        block_type = block_spec.get("type")
+        # Special handling for atten: 'law' key selects smc_prevot via DUST_LAWS,
+        # while 'type' selects genuine attenuation models (polar_dust, grahsp_biatten, etc)
+        block_type = None
+        if block_name == "atten":
+            law_key = block_spec.get("law")
+            type_key = block_spec.get("type")
+
+            # Check for conflicting law and type keys
+            if law_key is not None and type_key is not None:
+                raise ValueError(
+                    "agn['atten'] cannot specify both 'law' and 'type' keys. "
+                    "Use 'law' for DUST_LAWS curves (e.g. law='prevot_smc') or "
+                    "'type' for genuine attenuation models (e.g. type='polar_dust')."
+                )
+
+            # Reject old law-as-type spelling: type='smc_prevot'
+            if type_key == "smc_prevot":
+                raise ValueError(
+                    "agn['atten'] type='smc_prevot' is no longer supported. "
+                    "Use the new form with law key instead:\n"
+                    "  agn={'atten': {'law': 'prevot_smc', 'ebv': Uniform(...)}}\n"
+                    "Valid DUST_LAWS names: smc, prevot_smc, calzetti, power_law, cardelli, etc."
+                )
+
+            if law_key is not None:
+                # Validate law name against DUST_LAWS
+                from tengri.components.dust.laws._registry import DUST_LAWS
+
+                if law_key not in DUST_LAWS:
+                    available = sorted(DUST_LAWS.keys())
+                    suggestions = difflib.get_close_matches(law_key, available, n=2, cutoff=0.6)
+                    suggest_str = (
+                        f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+                    )
+                    raise ValueError(
+                        f"Unknown dust law '{law_key}'.{suggest_str}\n"
+                        f"Valid DUST_LAWS: {', '.join(available)}"
+                    )
+                # Map law name to smc_prevot block (currently the only law-based wrapper)
+                block_type = "smc_prevot"
+            else:
+                block_type = type_key
+
+        else:
+            block_type = block_spec.get("type")
+
         if block_type is None:
-            # Assume 'none' if no type given
+            # Assume 'none' if no type/law given
             result[block_to_kwarg[block_name]] = "none"
             continue
 
@@ -4183,7 +4228,12 @@ def parameters_to_groups(spec: Parameters) -> dict:
         # Add type from the spec's settings
         type_value = _extract_group_type(group_name, spec)
         if type_value is not None:
-            group_output["type"] = type_value
+            # Special handling for agn.atten: emit 'law' key for smc_prevot
+            # (the DUST_LAWS wrapper), 'type' for genuine models
+            if group_name == "agn.atten" and type_value == "smc_prevot":
+                group_output["law"] = "prevot_smc"
+            else:
+                group_output["type"] = type_value
 
         # Add other structural settings
         _add_structural_settings(group_name, group_output, spec)
