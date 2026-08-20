@@ -37,7 +37,7 @@ References:
 - Li, Leja & Speagle 2023, ApJ, 956, 23 (Cue neural emulator)
 - Byler et al. 2017, ApJ, 840, 44 (BakedIn SSP-embedded lines)
 
-.. GENERATED FROM PYTHON SOURCE LINES 22-132
+.. GENERATED FROM PYTHON SOURCE LINES 22-138
 
 
 
@@ -83,7 +83,13 @@ References:
             "tau_gyr": 0.5,
             "log_total_mass": 10.0,
         },
-        "dust": {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+        "dust": {
+            "law": "power_law",
+            "type": "two_component",
+            "all_params": tengri.FIXED,
+            "tau_diff": 0.0,
+            "tau_bc": 0.0,
+        },
         "redshift": tengri.Fixed(0.0),
     }
 

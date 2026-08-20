@@ -126,7 +126,7 @@ def test_dust_attenuation_e2e(ssp, obs, law):
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "dpl", "*": FIXED},
-        dust={"type": "two_component", "law_bc": law, "*": FIXED},
+        dust={"type": "two_component", "law": law, "*": FIXED},
         redshift=Fixed(0.05),
     )
     _assert_phot_ok(model.predict_photometry({}))
@@ -163,7 +163,7 @@ def test_dust_ir_emission_e2e(ssp, obs, emission_type):
             sfh={"type": "dpl", "*": FIXED},
             dust={
                 "type": "two_component",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "*": FIXED,
                 "emission": {"type": emission_type, "*": FIXED},
             },
@@ -188,7 +188,13 @@ def _fixed_dust() -> dict:
     A fresh dict is returned each call because ``SEDModel.build`` consumes the
     group dicts it is handed.
     """
-    return {"type": "two_component", "*": FIXED, "tau_bc": Fixed(0.3), "tau_diff": Fixed(0.2)}
+    return {
+        "type": "two_component",
+        "law": "power_law",
+        "*": FIXED,
+        "tau_bc": Fixed(0.3),
+        "tau_diff": Fixed(0.2),
+    }
 
 
 # AGN is built through the composable block grammar (the canonical AGN surface,
@@ -449,7 +455,7 @@ def test_dust_law_surface_applies_law_not_silent_noop(ssp, obs):
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "dpl", "*": FIXED},
-        dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED},
+        dust={"type": "two_component", "law": "calzetti", "*": FIXED},
         redshift=Fixed(0.05),
     )
     assert model._dust_law_bc == "calzetti", (
@@ -464,7 +470,7 @@ def test_dust_law_surface_applies_law_not_silent_noop(ssp, obs):
         sfh={"type": "dpl", "*": FIXED},
         dust={
             "type": "two_component",
-            "law_bc": "smc",
+            "law": "smc",
             "*": FIXED,
             "tau_bc": 1.0,
             "tau_diff": 0.5,
@@ -477,7 +483,7 @@ def test_dust_law_surface_applies_law_not_silent_noop(ssp, obs):
         sfh={"type": "dpl", "*": FIXED},
         dust={
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "*": FIXED,
             "tau_bc": 1.0,
             "tau_diff": 0.5,
@@ -583,7 +589,7 @@ def test_catalog_z_range_end_to_end(real_ssp_only, ssp, obs):
             ssp_data=ssp,
             observation=obs,
             sfh={"type": "dpl", "*": FIXED},
-            dust={"type": "single_component", "law_bc": "calzetti", "tau_v": Fixed(0.3)},
+            dust={"type": "single_component", "law": "calzetti", "tau_v": Fixed(0.3)},
             redshift=Fixed(z),
             approx=cz,
         )
@@ -629,7 +635,7 @@ def test_waveprecomp_agreement_with_exact(ssp, obs):
             ssp_data=ssp,
             observation=obs,
             sfh={"type": "dpl", "*": FIXED},
-            dust={"type": "single_component", "law_bc": "calzetti", "tau_v": Fixed(0.4)},
+            dust={"type": "single_component", "law": "calzetti", "tau_v": Fixed(0.4)},
             redshift=Fixed(0.1),
             approx=approx,
         )

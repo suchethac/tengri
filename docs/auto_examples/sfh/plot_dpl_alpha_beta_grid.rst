@@ -28,7 +28,7 @@ each cell. Bottom panels show representative 1D sweeps: α alone (left, at fixed
 and β alone (right, at fixed α), illustrating how each parameter independently
 shapes the full UV-to-IR SED.
 
-.. GENERATED FROM PYTHON SOURCE LINES 12-200
+.. GENERATED FROM PYTHON SOURCE LINES 12-213
 
 
 
@@ -148,6 +148,7 @@ shapes the full UV-to-IR SED.
                     "log_total_mass": 10.0,
                 },
                 dust={
+                    "law": "power_law",
                     "type": "two_component",
                     "all_params": tengri.FIXED,
                     "tau_diff": 0.2,
@@ -218,7 +219,13 @@ shapes the full UV-to-IR SED.
             "tau_gyr": 1.5,
             "log_total_mass": 10.0,
         },
-        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
+        dust={
+            "law": "power_law",
+            "type": "two_component",
+            "all_params": tengri.FIXED,
+            "tau_diff": 0.2,
+            "tau_bc": 0.3,
+        },
         redshift=tengri.Fixed(0.1),
     )
     baseline_alpha = dict(model_alpha.spec.sample(jax.random.PRNGKey(0)))
@@ -259,7 +266,13 @@ shapes the full UV-to-IR SED.
             "tau_gyr": 3.0,
             "log_total_mass": 10.0,
         },
-        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
+        dust={
+            "law": "power_law",
+            "type": "two_component",
+            "all_params": tengri.FIXED,
+            "tau_diff": 0.2,
+            "tau_bc": 0.3,
+        },
         redshift=tengri.Fixed(0.1),
     )
     baseline_beta = dict(model_beta.spec.sample(jax.random.PRNGKey(0)))
@@ -290,7 +303,7 @@ shapes the full UV-to-IR SED.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.999 seconds)
+   **Total running time of the script:** (0 minutes 6.196 seconds)
 
 
 .. _sphx_glr_download_auto_examples_sfh_plot_dpl_alpha_beta_grid.py:

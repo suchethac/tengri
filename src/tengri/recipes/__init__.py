@@ -97,7 +97,7 @@ def star_forming_photometry() -> dict:
         sfh=builders.sfh.dpl(defaults=FREE),
         dust=builders.dust.two_component(
             defaults=FREE,
-            law_bc="calzetti",
+            law="calzetti",
             emission=builders.dust.emission.dale2014(defaults=FIXED),
         ),
         met={"logzsol": FREE},
@@ -161,7 +161,7 @@ def quiescent_z0() -> dict:
         # what it has always actually done.
         dust=builders.dust.two_component(
             defaults=FIXED,
-            law_bc="calzetti",
+            law="calzetti",
             tau_bc=Uniform(0, 0.5),
             tau_diff=Uniform(0, 0.3),
         ),
@@ -355,9 +355,13 @@ def agn_panchromatic() -> dict:
         sfh=builders.sfh.dpl(defaults=FREE),
         dust=builders.dust.two_component(
             defaults=FREE,
+            law="calzetti",
             # ``defaults=FIXED``: the Dale+2014 knobs are a template-family
             # choice, not something a wildcard should open by default.
-            emission=builders.dust.emission.dale2014(defaults=FIXED),
+            # ``dale2014_cigale``: this recipe enables the radio component, and
+            # plain dale2014 embeds its own SF radio continuum — the pair
+            # double-counts the synchrotron and is refused at build (#1970).
+            emission=builders.dust.emission.dale2014_cigale(defaults=FIXED),
         ),
         met={"logzsol": FREE},
         neb=builders.neb.cue(defaults=FIXED),
@@ -437,9 +441,13 @@ def composable_agn() -> dict:
         sfh=builders.sfh.dpl(defaults=FREE),
         dust=builders.dust.two_component(
             defaults=FREE,
+            law="calzetti",
             # ``defaults=FIXED``: the Dale+2014 knobs are a template-family
             # choice, not something a wildcard should open by default.
-            emission=builders.dust.emission.dale2014(defaults=FIXED),
+            # ``dale2014_cigale``: this recipe enables the radio component, and
+            # plain dale2014 embeds its own SF radio continuum — the pair
+            # double-counts the synchrotron and is refused at build (#1970).
+            emission=builders.dust.emission.dale2014_cigale(defaults=FIXED),
         ),
         met={"logzsol": FREE},
         neb=builders.neb.cue(defaults=FIXED),
@@ -515,6 +523,7 @@ def stochastic_sfh_jwst() -> dict:
         sfh={"type": ["dpl", "field"], WILDCARD_ALIAS: FREE},
         dust=builders.dust.two_component(
             defaults=FREE,
+            law="calzetti",
             emission=builders.dust.emission.dale2014(defaults=FIXED),
         ),
         met={"logzsol": FREE},
@@ -566,7 +575,7 @@ def mock_recovery_minimal() -> dict:
         sfh=builders.sfh.tsnorm(defaults=FREE),
         dust=builders.dust.two_component(
             defaults=FIXED,
-            law_bc="calzetti",
+            law="calzetti",
             tau_bc=Uniform(0, 1),
         ),
         met={"all_params": FIXED, "logzsol": FREE},
@@ -632,7 +641,7 @@ def dust_demo() -> dict:
         ),
         dust=builders.dust.two_component(
             defaults=FIXED,
-            law_bc="calzetti",
+            law="calzetti",
             tau_bc=0.5,
             tau_diff=0.3,
             slope=-0.7,
@@ -683,7 +692,13 @@ def unified_agn() -> dict:
     """
     return dict(
         sfh={"type": "delayed", WILDCARD_ALIAS: FIXED},
-        dust={"type": "two_component", WILDCARD_ALIAS: FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+        dust={
+            "type": "two_component",
+            "law": "power_law",
+            WILDCARD_ALIAS: FIXED,
+            "tau_diff": 0.0,
+            "tau_bc": 0.0,
+        },
         agn={
             "type": "composable",
             "disc": {"type": "kubota_done"},

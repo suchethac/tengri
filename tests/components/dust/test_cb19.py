@@ -707,6 +707,7 @@ class TestSEDModelInitNebularDispatch:
                 "logzsol": -0.1,
             },
             dust={
+                "law": "power_law",
                 "type": "two_component",
                 "*": tengri.FIXED,
                 "tau_bc": 0.2,

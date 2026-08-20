@@ -7,7 +7,7 @@ The grammar nests the emission model inside the dust group:
 
 >>> dust = {
 ...     "type": "two_component",
-...     "law_bc": "calzetti",
+...     "law": "calzetti",  # Shared law for birth cloud and diffuse
 ...     "emission": {"type": "dale2014", "all_params": FIXED, "alpha_dale": Fixed(2.0)},
 ... }
 
@@ -78,8 +78,7 @@ def _discover_params(variant: str) -> list[str]:
         "sfh": {"type": "dpl"},
         "dust": {
             "type": "two_component",
-            "law_bc": "calzetti",
-            "law_diff": "calzetti",
+            "law": "calzetti",  # Shared law for both BC and diffuse
             WILDCARD_ALIAS: FREE,
             "emission": {"type": variant, WILDCARD_ALIAS: FREE},
         },

@@ -296,7 +296,7 @@ def _build_chain(ssp, with_cue):
         },
         dust={
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "all_params": FIXED,
             "tau_diff": Uniform(0.0, 1.5),
             "tau_bc": 0.3,

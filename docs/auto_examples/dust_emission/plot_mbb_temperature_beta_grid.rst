@@ -31,7 +31,7 @@ power-law index per Δβ = 1.
 Useful when interpreting FIR fits as the ``(T, β)`` degeneracy
 projected onto a single sub-mm photometric point.
 
-.. GENERATED FROM PYTHON SOURCE LINES 15-112
+.. GENERATED FROM PYTHON SOURCE LINES 15-113
 
 
 
@@ -72,6 +72,7 @@ projected onto a single sub-mm photometric point.
 
     def _build(t_dust=None, beta=None):
         dust = {
+            "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
             "tau_diff": 0.5,
@@ -143,11 +144,6 @@ projected onto a single sub-mm photometric point.
     cb_b.set_label(r"emissivity index $\beta$   ($T_{\rm dust}$ = 30 K fixed)")
 
     plt.savefig("plot_mbb_temperature_beta_grid.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.141 seconds)
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_mbb_temperature_beta_grid.py:

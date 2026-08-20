@@ -256,7 +256,7 @@ def test_free_redshift_band_factor_interpolation_stays_bounded():
             observation=obs,
             redshift=Uniform(0.0, 4.0),
             sfh={"type": "dpl", "*": FIXED},
-            dust={"type": "single_component", "law_bc": "calzetti", "*": FIXED},
+            dust={"type": "single_component", "law": "calzetti", "*": FIXED},
             approx=approx,
         )
 

@@ -30,7 +30,12 @@ def base_model(synthetic_ssp_wide):
     spec = SEDModel.build(
         ssp_data=ssp,
         sfh={"type": "dpl", "*": FREE},
-        dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED, "tau_bc": 0.5},
+        dust={
+            "type": "two_component",
+            "law": "calzetti",
+            "*": FIXED,
+            "tau_bc": 0.5,
+        },
         neb={"type": "none"},
         redshift=Fixed(0.1),
     )
@@ -511,7 +516,12 @@ class TestSEDGroupBitEquality:
         spec = SEDModel.build(
             ssp_data=ssp,
             sfh={"type": "dpl", "*": FREE},
-            dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED, "tau_bc": 0.5},
+            dust={
+                "type": "two_component",
+                "law": "calzetti",
+                "*": FIXED,
+                "tau_bc": 0.5,
+            },
             neb={"type": "none"},
             redshift=Fixed(0.1),
         )
@@ -572,7 +582,12 @@ class TestLuminosityWeightedSFHBitEquality:
         spec = SEDModel.build(
             ssp_data=ssp,
             sfh={"type": "dpl", "*": FREE},
-            dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED, "tau_bc": 0.5},
+            dust={
+                "type": "two_component",
+                "law": "calzetti",
+                "*": FIXED,
+                "tau_bc": 0.5,
+            },
             neb={"type": "none"},
             redshift=Fixed(0.1),
         )
@@ -623,7 +638,12 @@ class TestIonizingGroupBitEquality:
         spec = SEDModel.build(
             ssp_data=ssp,
             sfh={"type": "dpl", "*": FREE},
-            dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED, "tau_bc": 0.5},
+            dust={
+                "type": "two_component",
+                "law": "calzetti",
+                "*": FIXED,
+                "tau_bc": 0.5,
+            },
             neb={"type": "none"},
             redshift=Fixed(0.1),
         )
@@ -662,7 +682,12 @@ class TestRadioGroupBitEquality:
         spec = SEDModel.build(
             ssp_data=ssp,
             sfh={"type": "dpl", "*": FREE},
-            dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED, "tau_bc": 0.5},
+            dust={
+                "type": "two_component",
+                "law": "calzetti",
+                "*": FIXED,
+                "tau_bc": 0.5,
+            },
             neb={"type": "none"},
             radio={"type": "condon92", "*": FIXED},
             redshift=Fixed(0.1),
@@ -704,7 +729,12 @@ class TestXRayGroupBitEquality:
         spec = SEDModel.build(
             ssp_data=ssp,
             sfh={"type": "dpl", "*": FREE},
-            dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED, "tau_bc": 0.5},
+            dust={
+                "type": "two_component",
+                "law": "calzetti",
+                "*": FIXED,
+                "tau_bc": 0.5,
+            },
             neb={"type": "none"},
             xray={"type": "simple", "*": FIXED},
             redshift=Fixed(0.1),
@@ -744,7 +774,12 @@ class TestLinesGroupNaNBehavior:
         spec = SEDModel.build(
             ssp_data=ssp,
             sfh={"type": "dpl", "*": FREE},
-            dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED, "tau_bc": 0.5},
+            dust={
+                "type": "two_component",
+                "law": "calzetti",
+                "*": FIXED,
+                "tau_bc": 0.5,
+            },
             neb={"type": "none"},  # No nebular → no line catalog
             redshift=Fixed(0.1),
         )

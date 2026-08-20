@@ -127,7 +127,7 @@ def build(obs, approx=None):
         ),
         dust=builders.dust.two_component(
             defaults=FIXED,
-            law_bc="calzetti",
+            law="calzetti",
             tau_bc=Uniform(0.0, 1.0),
             tau_diff=Uniform(0.0, 1.0),
             emission=builders.dust.emission.modified_blackbody(defaults=FIXED),

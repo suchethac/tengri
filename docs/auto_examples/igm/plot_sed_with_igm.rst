@@ -39,7 +39,7 @@ References:
 - Inoue et al. 2014, MNRAS, 442, 1805
 - Steidel et al. 1996, AJ, 112, 352 (LBG dropout origins)
 
-.. GENERATED FROM PYTHON SOURCE LINES 24-101
+.. GENERATED FROM PYTHON SOURCE LINES 24-107
 
 
 
@@ -49,25 +49,8 @@ References:
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /tengri/src/tengri/forward/orchestrator.py:951: SFHBeforeBigBangWarning: Star formation history forms 99% of its stellar mass before the Big Bang at z=1.00 (cosmic age 5.87 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
-      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
-    /tengri/src/tengri/forward/orchestrator.py:951: SFHBeforeBigBangWarning: Star formation history forms 100% of its stellar mass before the Big Bang at z=3.00 (cosmic age 2.15 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
-      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
-    /tengri/src/tengri/forward/orchestrator.py:951: SFHBeforeBigBangWarning: Star formation history forms 100% of its stellar mass before the Big Bang at z=5.00 (cosmic age 1.18 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
-      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
-    /tengri/src/tengri/forward/orchestrator.py:951: SFHBeforeBigBangWarning: Star formation history forms 100% of its stellar mass before the Big Bang at z=7.00 (cosmic age 0.76 Gyr). That mass is truncated, so the prediction does not reflect the requested SFH — bound the SFH age parameter or the redshift to keep star formation within cosmic time.
-      state = component.apply(state, sliced, ssp_data=ssp_data, template_data=template_data)
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -100,7 +83,13 @@ References:
         "alpha": 3.0,
         "beta": 2.0,
     }
-    DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.1}
+    DUST = {
+        "law": "power_law",
+        "type": "two_component",
+        "all_params": tengri.FIXED,
+        "tau_diff": 0.1,
+        "tau_bc": 0.1,
+    }
 
     fig, ax = plt.subplots(figsize=(7.4, 4.8))
 

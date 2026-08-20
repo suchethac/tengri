@@ -64,6 +64,7 @@ for met in met_logzsol:
         }
 
         dust_config = {
+            "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
             "tau_diff": 0.0,

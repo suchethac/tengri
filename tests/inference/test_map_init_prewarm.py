@@ -55,7 +55,7 @@ def model_and_external_mock():
         dust={
             "type": "two_component",
             "*": FIXED,
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "tau_bc": Uniform(0.0, 1.0),
         },
         neb={"type": "none"},
@@ -91,7 +91,7 @@ def _fresh_model() -> SEDModel:
         dust={
             "type": "two_component",
             "*": FIXED,
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "tau_bc": Uniform(0.0, 1.0),
         },
         neb={"type": "none"},

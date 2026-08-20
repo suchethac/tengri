@@ -52,7 +52,13 @@ for (ssp_name, imf_label), color in zip(IMFS, colors):
             "skew": 0.0,
             "trunc": 13.0,
         },
-        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+        dust={
+            "law": "power_law",
+            "type": "two_component",
+            "all_params": tengri.FIXED,
+            "tau_diff": 0.0,
+            "tau_bc": 0.0,
+        },
         redshift=tengri.Fixed(0.01),
     )
     params = dict(model.spec.sample(jax.random.PRNGKey(0)))

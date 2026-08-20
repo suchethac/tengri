@@ -43,20 +43,25 @@ from tengri.protocols.component import (
 __all__ = ["DustAttenuationSEDComponent", "DustAttenuationSEDComponentConfig"]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class DustAttenuationSEDComponentConfig(SEDComponentConfig):
     r"""Frozen knobs for :class:`DustAttenuationSEDComponent`.
 
     Attributes
     ----------
-    name : str
-        Diagnostic identifier. Default ``"dust_attenuation"``.
     law : str
         Attenuation law name resolved by
         :func:`tengri.components.dust.attenuation.resolve_dust_law`.
-        Default ``"calzetti"``. Other built-in choices include
-        ``"cardelli"``, ``"smc"``, ``"lmc"``, ``"prevot_smc"``,
-        ``"li08"``, etc.
+        Examples: ``"calzetti"``, ``"cardelli"``, ``"smc"``, ``"lmc"``,
+        ``"prevot_smc"``, ``"li08"``, etc. Default ``"calzetti"`` — this
+        default is a low-level construction convenience only (component
+        tests that build ``DustAttenuationSEDComponent()`` directly to
+        exercise pipeline mechanics, not curve choice); the public grammar
+        (``SEDModel.build`` / ``Parameters``) always resolves and passes
+        ``law`` explicitly before reaching this dataclass, so it never
+        observes this default.
+    name : str
+        Diagnostic identifier. Default ``"dust_attenuation"``.
 
     Notes
     -----
@@ -65,8 +70,8 @@ class DustAttenuationSEDComponentConfig(SEDComponentConfig):
     JIT scope.
     """
 
-    name: str = "dust_attenuation"
     law: str = "calzetti"
+    name: str = "dust_attenuation"
     live_shape_params: frozenset[str] = frozenset()
     r"""Shape parameters somebody actually asked for, resolved at build time.
 

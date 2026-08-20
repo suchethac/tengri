@@ -54,7 +54,7 @@ References
    *The Astrophysical Journal*, 787(1), 35.
    https://doi.org/10.1088/0004–637X/787/1/35
 
-.. GENERATED FROM PYTHON SOURCE LINES 38-230
+.. GENERATED FROM PYTHON SOURCE LINES 38-231
 
 
 
@@ -119,6 +119,7 @@ References
             Other parameters sampled from priors.
         """
         dust_config = {
+            "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
             "tau_diff": 1.0,
@@ -261,11 +262,6 @@ References
 
     fig.tight_layout()
     plt.savefig("plot_warm_cold_dust_decomposition.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 9.593 seconds)
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_warm_cold_dust_decomposition.py:

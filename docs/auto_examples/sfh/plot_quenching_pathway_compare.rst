@@ -28,7 +28,7 @@ skew-normal, peak 2 Gyr ago, width 0.3 Gyr). The resulting rest-frame SEDs exhib
 markedly different colors, equivalent widths (Hα), and spectral slopes, highlighting
 how quenching timescale imprints on observable photometry and spectroscopy.
 
-.. GENERATED FROM PYTHON SOURCE LINES 12-155
+.. GENERATED FROM PYTHON SOURCE LINES 12-156
 
 
 
@@ -113,6 +113,7 @@ how quenching timescale imprints on observable photometry and spectroscopy.
             ssp,
             sfh=scenario["sfh"],
             dust={
+                "law": "power_law",
                 "type": "two_component",
                 "all_params": tengri.FIXED,
                 "tau_diff": 0.15,
@@ -186,11 +187,6 @@ how quenching timescale imprints on observable photometry and spectroscopy.
 
     fig.tight_layout()
     plt.savefig("plot_quenching_pathway_compare.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 4.930 seconds)
 
 
 .. _sphx_glr_download_auto_examples_sfh_plot_quenching_pathway_compare.py:

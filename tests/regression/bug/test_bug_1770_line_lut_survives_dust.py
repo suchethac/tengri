@@ -84,7 +84,7 @@ def _model(ssp, obs, approx, *, dust: bool):
     dust_block = (
         {
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "all_params": FIXED,
             "tau_diff": Uniform(0.0, 2.0),
         }

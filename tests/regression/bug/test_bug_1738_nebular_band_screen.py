@@ -119,7 +119,7 @@ def _build(ssp, approx, *, tau_diff, tau_bc, z, neb="cue", free_mass=False):
         },
         dust={
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "all_params": FIXED,
             "tau_diff": tau_diff,
             "tau_bc": tau_bc,

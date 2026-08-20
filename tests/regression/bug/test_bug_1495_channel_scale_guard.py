@@ -62,7 +62,11 @@ def test_misscaled_line_channel_raises():
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "delayed", "all_params": FREE},
-        dust={"type": "two_component", "law_bc": "calzetti", "all_params": FREE},
+        dust={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": FREE,
+        },
         redshift=0.05,
     )
 
@@ -130,7 +134,11 @@ def test_healthy_multichannel_fit_constructs_silently():
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "delayed", "all_params": FREE},
-        dust={"type": "two_component", "law_bc": "calzetti", "all_params": FREE},
+        dust={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": FREE,
+        },
         redshift=0.05,
     )
 

@@ -77,7 +77,7 @@ def model_dpl_calzetti():
         dust={
             "type": "two_component",
             "*": FIXED,
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "tau_bc": Uniform(0.0, 1.0),
         },
         neb={"type": "none"},
@@ -90,7 +90,7 @@ def model_dense_basis_calzetti():
         dust={
             "type": "two_component",
             "*": FIXED,
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "tau_bc": Uniform(0.0, 1.0),
         },
         neb={"type": "none"},
@@ -103,7 +103,7 @@ def model_tsnorm_calzetti():
         dust={
             "type": "two_component",
             "*": FIXED,
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "tau_bc": Uniform(0.0, 1.0),
         },
         neb={"type": "none"},
@@ -113,7 +113,7 @@ def model_tsnorm_calzetti():
 def model_dpl_smc():
     return dict(
         sfh=builders.sfh.dpl(defaults=FREE),
-        dust={"type": "two_component", "*": FIXED, "law_bc": "smc", "tau_bc": Uniform(0.0, 1.0)},
+        dust={"type": "two_component", "*": FIXED, "law": "smc", "tau_bc": Uniform(0.0, 1.0)},
         neb={"type": "none"},
     )
 
@@ -124,7 +124,7 @@ def model_dexp_calzetti():
         dust={
             "type": "two_component",
             "*": FIXED,
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "tau_bc": Uniform(0.0, 1.0),
         },
         neb={"type": "none"},

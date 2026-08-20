@@ -48,7 +48,13 @@ warnings.filterwarnings("ignore", message=".*experimental.*")
 
 # One host galaxy for every model: only the xray block below changes.
 SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": 10.5}
-DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.4, "tau_bc": 0.5}
+DUST = {
+    "law": "power_law",
+    "type": "two_component",
+    "all_params": tengri.FIXED,
+    "tau_diff": 0.4,
+    "tau_bc": 0.5,
+}
 AGN = {
     "type": "composable",
     "all_params": tengri.FIXED,

@@ -49,7 +49,11 @@ def _model(ssp, observation):
         ssp_data=ssp,
         observation=observation,
         sfh={"type": "dpl", "all_params": FIXED, "log_total_mass": Uniform(8, 12)},
-        dust={"type": "two_component", "law_bc": "calzetti", "all_params": FIXED},
+        dust={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": FIXED,
+        },
         neb={"type": "none"},
         redshift=Fixed(0.5),
     )

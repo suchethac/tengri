@@ -970,6 +970,72 @@ def _validate_fracagn_requires_dust(spec) -> None:
         )
 
 
+def _validate_dale2014_requires_no_sf_radio(spec) -> None:
+    """Raise if dale2014 dust emission is combined with SF radio (#1970).
+
+    The Dale+2014 dust emission template (component name 'dale2014') embeds a
+    star-forming radio synchrotron continuum rising to 2.2459e9 Å (1.335 GHz).
+    The stripped variant 'dale2014_cigale' removes the radio tail beyond
+    7.727e7 Å per CIGALE convention.
+
+    When dale2014 is paired with an active SF radio block (radio enabled and
+    radio_sfr_mode != 'none'), the synchrotron is double-counted in rest_sed
+    between ~1.34 and ~10 GHz (3–22 cm), and the composed SED steps down ~2x at
+    the 1.335 GHz template edge (measured slope −4.93 vs. +0.77 expected).
+
+    This is a build-time safety gate: dale2014 is only safe when combined with
+    AGN-only radio (radio_sfr_mode='none') or when radio is disabled entirely.
+    The remedy: switch to dale2014_cigale, which composes correctly with SF radio.
+
+    Deliberately NOT guarded: the radio component's free-free term (emitted only
+    when a nebular component publishes ``log_nion``; no grammar knob controls it)
+    overlaps the template's embedded thermal radio at the <~10% level near
+    1.4 GHz. Refusing it would block dale2014 + AGN radio + nebular with no
+    grammar-reachable remedy, so that overlap is documented on both Dale
+    components instead of guarded here.
+
+    Raises
+    ------
+    ConfigError
+        If dust.emission == 'dale2014' AND radio is active with SF synchrotron
+        enabled (radio=True and radio_sfr_mode != 'none').
+
+    See Also
+    --------
+    #1970 : Dale2014 embedded SF radio double-counted when combined with radio block.
+    """
+    from tengri.config.exceptions import ConfigError
+
+    # Check if dust emission is dale2014 (the radio-bearing variant)
+    if getattr(spec, "dust_emission", None) != "dale2014":
+        return  # Not dale2014, no guard needed
+
+    # Check if radio is enabled
+    if not getattr(spec, "radio", False):
+        return  # Radio disabled, no conflict
+
+    # Check if SF synchrotron is active (radio_sfr_mode != 'none')
+    # The default for radio_sfr_mode is 'bell2003', so if it exists and is not
+    # 'none', we have an active SF radio component
+    radio_sfr_mode = getattr(spec, "radio_sfr_mode", "bell2003")
+    if radio_sfr_mode == "none":
+        return  # SF synchrotron is disabled (AGN-only), no conflict
+
+    # Both conditions met: dale2014 + active SF radio = double-count
+    raise ConfigError(
+        "The Dale+2014 dust emission template (dust.emission='dale2014') "
+        "embeds its own star-forming radio synchrotron continuum to 1.335 GHz. "
+        "Combining it with an active SF radio block (radio.sf.type != 'none') "
+        "causes double-counting of the radio continuum (~2x in rest_sed "
+        "between ~1.34 and ~10 GHz). "
+        "Fix: use dust.emission='dale2014_cigale' instead, which has the radio "
+        "tail stripped per CIGALE convention and composes correctly with the "
+        "radio component. Alternatively, disable SF synchrotron with "
+        "radio={'sf': {'type': 'none'}} if you only want AGN radio. "
+        "See issue #1970."
+    )
+
+
 def _state_has_content(state) -> bool:
     """Report whether a component state carries anything beyond its name.
 
@@ -2649,22 +2715,35 @@ class SEDModel:
         # Include LyC in the dust energy-balance integral (FSPS/Prospector
         # parity, #961) vs the canonical LyC mask (#922). See DustSEDComponent.
         self._dust_eb_include_lyc = bool(getattr(spec, "dust_eb_include_lyc", False))
-        from tengri.components.dust.attenuation import resolve_dust_law
 
-        self._dust_law_bc_fn = resolve_dust_law(self._dust_law_bc)
-        if self._dust_model == "single_component":
-            self._dust_law_diff_fn = self._dust_law_bc_fn
+        # Dust law resolution. Skip for dust_model='off' or 'wg00' (wg00 has no
+        # attenuation law; 'off' means no dust at all). Both store placeholder
+        # power_law values that are never used, so we skip resolution to avoid
+        # wasting compile time.
+        if self._dust_model not in ("off", "wg00"):
+            from tengri.components.dust.attenuation import resolve_dust_law
+
+            self._dust_law_bc_fn = resolve_dust_law(self._dust_law_bc)
+            if self._dust_model == "single_component":
+                self._dust_law_diff_fn = self._dust_law_bc_fn
+            else:
+                self._dust_law_diff_fn = resolve_dust_law(self._dust_law_diff)
+
+            self._neb_dust_mode = getattr(spec, "neb_dust", "bc")
+            _neb_bc_law_name = self._dust_law_neb or getattr(spec, "neb_dust_law_bc", None)
+            if _neb_bc_law_name is not None:
+                from tengri.components.dust.attenuation import resolve_dust_law as _rdl
+
+                self._neb_dust_law_bc_fn = _rdl(_neb_bc_law_name)
+            else:
+                self._neb_dust_law_bc_fn = self._dust_law_bc_fn
         else:
-            self._dust_law_diff_fn = resolve_dust_law(self._dust_law_diff)
-
-        self._neb_dust_mode = getattr(spec, "neb_dust", "bc")
-        _neb_bc_law_name = self._dust_law_neb or getattr(spec, "neb_dust_law_bc", None)
-        if _neb_bc_law_name is not None:
-            from tengri.components.dust.attenuation import resolve_dust_law as _rdl
-
-            self._neb_dust_law_bc_fn = _rdl(_neb_bc_law_name)
-        else:
-            self._neb_dust_law_bc_fn = self._dust_law_bc_fn
+            # Placeholder functions for off/wg00 (never used, but kept for
+            # attribute consistency).
+            self._dust_law_bc_fn = None
+            self._dust_law_diff_fn = None
+            self._neb_dust_law_bc_fn = None
+            self._neb_dust_mode = getattr(spec, "neb_dust", "bc")
 
         self._dust_emission_model = getattr(spec, "dust_emission", None)
         # Astrodust+PAH configuration: now always exists as a structural setting.
@@ -8618,7 +8697,7 @@ class SEDModel:
         ...     sfh={"type": "dpl", "all_params": FREE, "beta": Uniform(1, 3)},
         ...     dust={
         ...         "type": "two_component",
-        ...         "law_bc": "calzetti",
+        ...         "law": "calzetti",  # Shared law for both BC and diffuse
         ...         "all_params": FIXED,
         ...         "tau_bc": 0.5,
         ...     },
@@ -8678,6 +8757,7 @@ class SEDModel:
 
         spec = parse_groups(**groups)
         _validate_fracagn_requires_dust(spec)
+        _validate_dale2014_requires_no_sf_radio(spec)
         _warn_agn_dust_double_count(spec)
         _warn_dead_gradient_params(spec)
         return cls(

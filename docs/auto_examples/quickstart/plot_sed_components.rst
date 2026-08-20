@@ -72,7 +72,7 @@ Dust attenuation across the SED: intrinsic, attenuated, and absorbed
         },
         dust={
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "all_params": tengri.FIXED,
             "tau_bc": 1.0,
             "tau_diff": 0.5,
@@ -118,7 +118,7 @@ Dust attenuation across the SED: intrinsic, attenuated, and absorbed
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.886 seconds)
+   **Total running time of the script:** (0 minutes 3.946 seconds)
 
 
 .. _sphx_glr_download_auto_examples_quickstart_plot_sed_components.py:

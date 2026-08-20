@@ -41,13 +41,25 @@ HOST = dict(
     redshift=tengri.Fixed(0.05),
 )
 DUST_ON = {
+    "law": "power_law",
     "type": "two_component",
     "all_params": tengri.FIXED,
     "tau_diff": 0.4,
     "tau_bc": 0.6,
-    "emission": {"type": "dale2014", "all_params": tengri.FIXED},
+    # dale2014_cigale: the "+ radio" run composes this dust block with the
+    # radio component, and plain dale2014 embeds its own SF radio continuum —
+    # the pair is refused at build as a double-count (#1970). The stripped
+    # template also keeps the "+ dust" curve honest in the radio band: dust
+    # alone contributes nothing there.
+    "emission": {"type": "dale2014_cigale", "all_params": tengri.FIXED},
 }
-DUST_OFF = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+DUST_OFF = {
+    "law": "power_law",
+    "type": "two_component",
+    "all_params": tengri.FIXED,
+    "tau_diff": 0.0,
+    "tau_bc": 0.0,
+}
 
 
 def _nuLnu(**blocks):

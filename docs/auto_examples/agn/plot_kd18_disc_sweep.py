@@ -43,7 +43,13 @@ ssp = tengri.load_ssp()
 
 # Fixed host galaxy: minimal stellar component suppressed
 SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
-DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+DUST = {
+    "law": "power_law",
+    "type": "two_component",
+    "all_params": tengri.FIXED,
+    "tau_diff": 0.0,
+    "tau_bc": 0.0,
+}
 
 # Grid: black-hole mass vs Eddington ratio
 log_mbh_values = np.array([6.0, 7.5, 9.0])

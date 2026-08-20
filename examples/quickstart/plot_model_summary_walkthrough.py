@@ -37,7 +37,7 @@ model = tengri.SEDModel.build(
     },
     dust={
         "type": "two_component",
-        "law_bc": "calzetti",
+        "law": "calzetti",
         "all_params": tengri.FIXED,
         "tau_bc": 0.5,  # [user] override on a FIXED wildcard
     },

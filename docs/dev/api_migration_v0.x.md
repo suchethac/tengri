@@ -419,7 +419,7 @@ model = SEDModel.build(
     sfh={'type': 'dpl', 'all_params': FREE},
     dust={
         'type': 'two_component',
-        'law_bc': 'calzetti',
+        'law': 'calzetti',
         'all_params': FREE,
         'emission': {'type': 'dale2014', 'all_params': FIXED},
     },
@@ -455,7 +455,7 @@ synonym, kept for back-compat and slated for deprecation — prefer `'all_params
 ```python
 dust={
     'type': 'two_component',
-    'law_bc': 'calzetti',
+    'law': 'calzetti',
     'all_params': FIXED,  # All dust params are [all_params FIXED]
     'tau_bc': Uniform(0, 1),  # Override: explicitly free
 }
@@ -518,7 +518,7 @@ spec = Parameters(
 # New (recommended)
 spec = parse_groups(
     sfh={'type': 'dpl', 'all_params': FREE},
-    dust={'type': 'two_component', 'law_bc': 'calzetti', 'all_params': FREE},
+    dust={'type': 'two_component', 'law': 'calzetti', 'all_params': FREE},
 )
 ```
 

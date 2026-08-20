@@ -155,6 +155,7 @@ for (lib, label), color in zip(LIBS, COLORS):
             ssp,
             sfh=SFH,
             dust={
+                "law": "power_law",
                 "type": "two_component",
                 "all_params": tengri.FIXED,
                 "tau_diff": 1.0,

@@ -124,7 +124,7 @@ red curve for reference.
         },
         dust={
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "all_params": FIXED,
             "tau_bc": 0.3,  # fixed birth-cloud baseline (stabilizes the FIR peak)
             "tau_diff": 0.3,  # baseline; overridden per E(B-V) below
@@ -212,7 +212,7 @@ red curve for reference.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.381 seconds)
+   **Total running time of the script:** (0 minutes 2.720 seconds)
 
 
 .. _sphx_glr_download_auto_examples_dust_attenuation_plot_grahsp_paper_fig7_galaxy_attenuation.py:

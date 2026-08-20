@@ -108,7 +108,7 @@ sed_model = SEDModel.build(
     sfh=builders.sfh.tsnorm(defaults=FREE),
     dust=builders.dust.two_component(
         defaults=FIXED,
-        law_bc="calzetti",
+        law="calzetti",
         tau_bc=Uniform(0.0, 1.0),
     ),
     neb=builders.neb.none(),

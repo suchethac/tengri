@@ -97,6 +97,7 @@ def test_every_advertised_dust_emission_type_runs_on_both_channels(
         observation=infrared_observation,
         sfh={"type": "dpl"},
         dust={
+            "law": "power_law",
             "type": "two_component",
             "all_params": FIXED,
             "emission": {"type": name, "all_params": FIXED},
@@ -141,6 +142,7 @@ def test_predict_alone_would_compute_nothing(synthetic_ssp, infrared_observation
         observation=infrared_observation,
         sfh={"type": "dpl"},
         dust={
+            "law": "power_law",
             "type": "two_component",
             "all_params": FIXED,
             "emission": {"type": "dale2014", "all_params": FIXED},
