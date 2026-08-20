@@ -59,7 +59,7 @@ class TestGroupWithFreeParametersIsSilent:
         """Same rule on a second group, so the fix is not met-specific."""
         # Both screens named: a two-component model refuses one without the
         # other, so naming only tau_diff would fail on that guard rather than
-        # on the behaviour under test.
+        # on the behavior under test.
         params, msgs = _warnings_for(
             dust_attenuation={
                 "type": "two_component",
@@ -105,7 +105,7 @@ class TestGroupWithoutFreeParametersStillWarns:
     def test_tabulated_metallicity_keeps_warning(self):
         """Guard: ``met={'type': 'table'}`` must stay loud.
 
-        Not a red-green test -- it pins behaviour that already holds, because
+        Not a red-green test -- it pins behavior that already holds, because
         this particular warning is load-bearing. A tabulated stellar history
         sits beside ``neb_logZ_gas``'s declared ``Fixed(-0.3)``, so it enriches
         the stars and not the gas, and that shipped as a bug once already
@@ -119,7 +119,7 @@ class TestGroupWithoutFreeParametersStillWarns:
         assert len([m for m in msgs if "'met'" in m]) == 1
 
 
-class TestExistingBehaviourPreserved:
+class TestExistingBehaviorPreserved:
     """#1982's contract that is not being changed."""
 
     def test_explicit_fixed_is_silent(self):
