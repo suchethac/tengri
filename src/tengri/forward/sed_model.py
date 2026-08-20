@@ -8803,6 +8803,19 @@ class SEDModel:
             raise ConfigError(f"YAML must deserialize to a dict, got {type(config)}")
         return cls.from_dict(config, ssp_data, filters=filters, observation=observation, **model_kwargs)
 
+    @classmethod
+    def from_json(cls, json_str: str, ssp_data, *, filters=None, observation=None, **model_kwargs) -> SEDModel:
+        """Build an SEDModel from a JSON string."""
+        import json as json_module
+        from tengri.config.exceptions import ConfigError
+        try:
+            config = json_module.loads(json_str)
+        except json_module.JSONDecodeError as e:
+            raise ConfigError(f"Invalid JSON: {e}")
+        if not isinstance(config, dict):
+            raise ConfigError(f"JSON must deserialize to a dict, got {type(config)}")
+        return cls.from_dict(config, ssp_data, filters=filters, observation=observation, **model_kwargs)
+
     @property
     def config(self) -> dict:
         """Return the model configuration as a nested-dict (fully resolved)."""

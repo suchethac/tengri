@@ -139,6 +139,40 @@ class TestRoundTripInvariant:
         # Verify the Uniform prior for alpha was preserved
         assert model1.config["sfh"]["alpha"] == model2.config["sfh"]["alpha"]
 
+    def test_agn_nested_sub_blocks(self, ssp_data, filters):
+        """Test round-trip with AGN composable model with nested sub-blocks.
+
+        This tests the most complex nesting case: AGN model with disc and torus
+        as separate nested sub-blocks, each with their own parameters. This is
+        the case most likely to break a serializer with depth management.
+        """
+        model1 = SEDModel.build(
+            ssp_data=ssp_data,
+            sfh={"type": "dpl", "all_params": FIXED},
+            agn={"type": "composable",
+                 "disc": {"type": "powerlaw", "all_params": FIXED},
+                 "torus": {"type": "skirtor", "all_params": FIXED},
+                 "all_params": FIXED},
+            filters=filters,
+        )
+
+        # Round-trip via YAML
+        yaml_str = model1.to_yaml()
+        model2 = SEDModel.from_yaml(yaml_str, ssp_data=ssp_data, filters=filters)
+
+        # Round-trip via JSON
+        json_str = model1.to_json()
+        model3 = SEDModel.from_json(json_str, ssp_data=ssp_data, filters=filters)
+
+        # Verify nested structure is preserved in all cases
+        assert model1.config["agn"]["type"] == model2.config["agn"]["type"] == model3.config["agn"]["type"]
+        assert model1.config["agn"]["disc"]["type"] == model2.config["agn"]["disc"]["type"] == model3.config["agn"]["disc"]["type"]
+        assert model1.config["agn"]["torus"]["type"] == model2.config["agn"]["torus"]["type"] == model3.config["agn"]["torus"]["type"]
+
+        # Verify the full config structure matches
+        assert model1.config == model2.config
+        assert model1.config == model3.config
+
 
 class TestSerializationErrorHandling:
     """Test error handling in serialization (strict mode only)."""

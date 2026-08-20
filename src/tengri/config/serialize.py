@@ -44,7 +44,6 @@ import difflib
 import inspect
 import json
 import pathlib
-import warnings
 from typing import Any, TypeAlias
 
 try:
@@ -199,8 +198,7 @@ def deserialize_config(
     Raises
     ------
     ConfigError
-        If unknown distribution type or malformed prior dict is encountered
-        (when strict=True).
+        If unknown distribution type or malformed prior dict is encountered.
 
     Notes
     -----
@@ -210,7 +208,7 @@ def deserialize_config(
 
 
 def _deserialize_recursive(
-    obj: Any, path: list[str], strict: bool = True
+    obj: Any, path: list[str]
 ) -> Any:
     """Recursively deserialize an object."""
     if isinstance(obj, str):
@@ -250,7 +248,7 @@ def _deserialize_recursive(
 
 
 def dict_to_distribution(
-    d: dict[str, Any], *, path: list[str] | None = None, strict: bool = True
+    d: dict[str, Any], *, path: list[str] | None = None
 ) -> Distribution:
     """Convert a serialized dict to a Distribution instance.
 
@@ -260,9 +258,6 @@ def dict_to_distribution(
         Serialized distribution with "__prior__" key and param dict.
     path : list of str, optional
         Breadcrumb for error messages (path to this dict in the config).
-    strict : bool, optional
-        If True, raise on unknown distribution. If False, warn and return
-        a placeholder.
 
     Returns
     -------
@@ -315,12 +310,10 @@ def dict_to_distribution(
         suggestions = difflib.get_close_matches(
             prior_name, dist_map.keys(), n=3, cutoff=0.6
         )
-        msg = f"{_format_path(path)}: unknown prior '{prior_name}'"
+        msg = f"unknown prior '{prior_name}'"
         if suggestions:
             msg += f" — did you mean {suggestions[0]!r}?"
         _raise_config_error(path, msg)
-        if not strict:
-            return Fixed(None)  # Placeholder
 
     dist_class = dist_map[prior_name]
 
@@ -332,7 +325,7 @@ def dict_to_distribution(
         invalid = set(params.keys()) - valid_params
         if invalid:
             msg = (
-                f"{_format_path(path)}: prior '{prior_name}' got unexpected "
+                f"prior '{prior_name}' got unexpected "
                 f"parameter(s): {invalid}"
             )
             _raise_config_error(path, msg)
@@ -343,9 +336,7 @@ def dict_to_distribution(
         _raise_config_error(
             path,
             f"{prior_name}: parameter error: {e}",
-            strict=strict,
         )
-        return Fixed(None)  # Placeholder
 
 
 def _format_path(path: list[str]) -> str:
@@ -356,14 +347,11 @@ def _format_path(path: list[str]) -> str:
 
 
 def _raise_config_error(
-    path: list[str], message: str, strict: bool = True
+    path: list[str], message: str
 ) -> None:
-    """Raise a ConfigError with path context, or warn if not strict."""
+    """Raise a ConfigError with path context."""
     full_msg = f"{_format_path(path)}: {message}"
-    if strict:
-        raise ConfigError(full_msg)
-    else:
-        warnings.warn(full_msg, stacklevel=3)
+    raise ConfigError(full_msg)
 
 
 # ── File I/O ──
@@ -378,8 +366,6 @@ def load_config_from_file(
     ----------
     path : str or Path
         Path to config file (.json, .yaml, .yml).
-    strict : bool, optional
-        Passed to deserialize_config.
 
     Returns
     -------
