@@ -1889,6 +1889,13 @@ def _translate_structural(groups: dict) -> dict:
                 "removes; tengri.list_metallicity_modes() shows the current form."
             )
 
+        if group_name == "apply_igm":
+            raise ValueError(
+                "apply_igm is retired. IGM activation is now derived from the igm dict: "
+                "pass igm={'type': 'inoue'} (or 'madau', 'meiksin06') to enable IGM, or "
+                "omit the igm dict (or pass igm={'type': 'none'}) to disable it."
+            )
+
         if group_name not in valid_groups:
             suggestions = difflib.get_close_matches(group_name, valid_groups, n=2, cutoff=0.6)
             suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
