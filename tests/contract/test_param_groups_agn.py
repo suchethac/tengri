@@ -368,38 +368,16 @@ class TestAGNValidBlockTypes:
 
     @pytest.mark.parametrize(
         "block_type",
-        ["none", "polar_dust", "grahsp_biatten", "qsogen_smc", "qsogen"],
+        ["none", "smc_prevot", "polar_dust", "grahsp_biatten", "qsogen_smc"],
     )
     def test_valid_atten_types(self, block_type):
-        """All known attenuation block types accepted via type key."""
+        """All known attenuation block types accepted."""
         params = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
             agn={"atten": {"type": block_type, "*": FIXED}},
             redshift=Fixed(0.1),
         )
         assert params.agn_attenuation_block == block_type
-
-    def test_valid_atten_smc_prevot_via_law_key(self):
-        """smc_prevot is now selected via law='prevot_smc', not type key."""
-        params = parse_groups(
-            sfh={"type": "dpl", "*": FIXED},
-            agn={"atten": {"law": "prevot_smc", "*": FIXED}},
-            redshift=Fixed(0.1),
-        )
-        assert params.agn_attenuation_block == "smc_prevot"
-
-    def test_old_smc_prevot_type_key_raises(self):
-        """Old type='smc_prevot' spelling is rejected with helpful message."""
-        with pytest.raises(ValueError) as exc_info:
-            parse_groups(
-                sfh={"type": "dpl", "*": FIXED},
-                agn={"atten": {"type": "smc_prevot"}},
-                redshift=Fixed(0.1),
-            )
-        error_msg = str(exc_info.value)
-        assert "smc_prevot" in error_msg
-        assert "law" in error_msg
-        assert "prevot_smc" in error_msg
 
 
 class TestAGNComplexScenarios:
@@ -437,7 +415,7 @@ class TestAGNComplexScenarios:
                 "blr": {"type": "none", "*": FIXED},
                 "feii": {"type": "none", "*": FIXED},
                 "torus": {"type": "two_temperature", "*": FIXED},
-                "atten": {"law": "prevot_smc", "*": FIXED},
+                "atten": {"type": "smc_prevot", "*": FIXED},
             },
             redshift=Fixed(0.1),
         )
@@ -565,7 +543,7 @@ class TestUniversalKeyValidator:
         [
             ("sfh", {"type": "dpl", "*": FIXED, "pretend_param": 5}),
             (
-                "dust",
+                "dust_attenuation",
                 {
                     "law": "power_law",
                     "type": "two_component",
@@ -584,18 +562,18 @@ class TestUniversalKeyValidator:
             parse_groups(**{group_name: group_dict, "redshift": Fixed(0.1)})
 
     def test_unknown_key_in_dust_emission_subblock_raises(self):
-        with pytest.raises(ValueError, match=r"Unknown key '[^']+' in group 'dust.emission'"):
+        with pytest.raises(ValueError, match=r"Unknown key '[^']+' in group 'dust_emission'"):
             parse_groups(
                 sfh={"type": "dpl", "*": FIXED},
-                dust={
+                dust_attenuation={
                     "type": "two_component",
                     "law": "calzetti",
                     "*": FIXED,
-                    "emission": {
-                        "type": "draine_li2007",
-                        "*": FIXED,
-                        "phantom_emission_key": 77,
-                    },
+                },
+                dust_emission={
+                    "type": "draine_li2007",
+                    "*": FIXED,
+                    "phantom_emission_key": 77,
                 },
                 redshift=Fixed(0.1),
             )
@@ -663,7 +641,7 @@ class TestComposableAGNRuntimeWiring:
                 "log_total_mass": Fixed(0.0),
                 "*": FIXED,
             },
-            dust={
+            dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
                 "tau_bc": Fixed(0.0),
@@ -730,7 +708,7 @@ class TestComposableAGNRuntimeWiring:
                     "log_total_mass": Fixed(0.0),
                     "*": FIXED,
                 },
-                dust={
+                dust_attenuation={
                     "law": "power_law",
                     "type": "two_component",
                     "tau_bc": Fixed(0.0),
@@ -798,7 +776,7 @@ class TestComposableAGNRuntimeWiring:
                 "log_total_mass": Fixed(0.0),
                 "*": FIXED,
             },
-            dust={
+            dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
                 "tau_bc": Fixed(0.0),
@@ -849,7 +827,7 @@ class TestComposableAGNRuntimeWiring:
                     "log_total_mass": Fixed(0.0),
                     "*": FIXED,
                 },
-                dust={
+                dust_attenuation={
                     "law": "power_law",
                     "type": "two_component",
                     "tau_bc": Fixed(0.0),
@@ -922,7 +900,7 @@ class TestComposableAGNRuntimeWiring:
                 "log_total_mass": Fixed(0.0),
                 "*": FIXED,
             },
-            dust={
+            dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
                 "tau_bc": Fixed(0.0),

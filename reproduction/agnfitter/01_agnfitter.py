@@ -191,7 +191,7 @@ def tengri_disc(disc_type, *, log_lbol=11.0, ebv_disc=None, **disc_params):
     m = SEDModel.build(
         ssp_data=ssp,
         sfh=SFH_FIDUCIAL,
-        dust=NO_DUST,
+        dust_attenuation=NO_DUST,
         agn=agn,
         redshift=Fixed(0.0),
     )
@@ -204,7 +204,7 @@ def tengri_disc_model(model_type, *, log_lbol=11.0):
     m = SEDModel.build(
         ssp_data=ssp,
         sfh=SFH_FIDUCIAL,
-        dust=NO_DUST,
+        dust_attenuation=NO_DUST,
         agn={
             "type": model_type,
             "agn_log_lbol": Fixed(log_lbol),
@@ -225,7 +225,7 @@ def tengri_qsogen_full(*, log_lbol=11.0):
     m = SEDModel.build(
         ssp_data=ssp,
         sfh=SFH_FIDUCIAL,
-        dust=NO_DUST,
+        dust_attenuation=NO_DUST,
         agn={
             "type": "composable",
             "disc": {"type": "qsogen", "all_params": FIXED},
@@ -249,7 +249,7 @@ def tengri_torus(torus_type, *, log_lbol=11.0, **torus_params):
     m = SEDModel.build(
         ssp_data=ssp,
         sfh=SFH_FIDUCIAL,
-        dust=NO_DUST,
+        dust_attenuation=NO_DUST,
         agn={
             "type": "composable",
             "disc": {"type": "none"},
@@ -285,7 +285,7 @@ for age, c in [(0.1, "C0"), (5.0, "C3")]:
             "log_total_mass": Fixed(0.0),
             "all_params": FIXED,
         },
-        dust=NO_DUST,
+        dust_attenuation=NO_DUST,
         redshift=Fixed(0.0),
     )
     s = m.predict_state({})
@@ -311,7 +311,7 @@ save_fig("agnfitter_01_ssp_bc03.png")
 # **Verification Status:** PARTIAL (11/33) — Parametric SFH family physics
 
 # %%
-m = SEDModel.build(ssp_data=ssp, sfh=SFH_FIDUCIAL, dust=NO_DUST, redshift=Fixed(0.0))
+m = SEDModel.build(ssp_data=ssp, sfh=SFH_FIDUCIAL, dust_attenuation=NO_DUST, redshift=Fixed(0.0))
 s = m.predict_state({})
 sfr = np.asarray(s.derived["sfr_history"])
 # Lookback-time grid the pipeline actually integrates over.
@@ -350,7 +350,7 @@ print(f"§2  int SFR dt = {mass_formed:.4e} M_sun  (target 1.0000e{LOG_MASS:.0f}
 # **Verification Status:** PARTIAL (68/126) — Absolute SED normalization
 
 # %%
-m = SEDModel.build(ssp_data=ssp, sfh=SFH_FIDUCIAL, dust=NO_DUST, redshift=Fixed(0.0))
+m = SEDModel.build(ssp_data=ssp, sfh=SFH_FIDUCIAL, dust_attenuation=NO_DUST, redshift=Fixed(0.0))
 s = m.predict_state({})
 w, L = np.asarray(s.wave), np.asarray(s.derived["sed_dust_attenuated"])
 fig, ax = plt.subplots(figsize=(7, 4.5))
@@ -1205,7 +1205,7 @@ from tengri.xray import xray_agn_corona_from_disc as _xray_from_disc_9
 _m9 = SEDModel.build(
     ssp_data=ssp,
     sfh=SFH_FIDUCIAL,
-    dust=NO_DUST,
+    dust_attenuation=NO_DUST,
     agn={
         "type": "composable",
         "disc": {"type": "qsogen", "all_params": FIXED},
@@ -1723,7 +1723,7 @@ lam_grid = U.C_ANGSTROM_PER_S / nu_grid
 m_cap = SEDModel.build(
     ssp_data=ssp,
     sfh=SFH_FIDUCIAL,
-    dust=NO_DUST,
+    dust_attenuation=NO_DUST,
     agn={
         "type": "composable",
         "disc": {"type": "qsogen", "all_params": FIXED},

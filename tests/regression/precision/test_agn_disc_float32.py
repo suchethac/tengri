@@ -169,7 +169,7 @@ def _composable_intrinsics(ssp, dtype):
             "tau_gyr": 1.0,
             "age_gyr": 5.0,
         },
-        dust={
+        dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
             "all_params": FIXED,
@@ -250,14 +250,14 @@ def test_multicolor_disc_agn_fit_gradient_finite_in_float32(ssp_bare):
                 "tau_gyr": 1.0,
                 "age_gyr": 5.0,
             },
-            dust={
+            dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
                 "all_params": FIXED,
                 "tau_diff": 0.5,
                 "tau_bc": 0.0,
-                "emission": {"type": "dale2014", "all_params": FIXED},
             },
+            dust_emission={"type": "dale2014", "all_params": FIXED},
             agn={
                 "type": "composable",
                 "all_params": FIXED,

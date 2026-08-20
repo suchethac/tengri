@@ -9,7 +9,7 @@ pipeline rest-frame wavelength grid, and integrating
 
 The :class:`tengri.components.dust.draine2021_pah_ir.Draine2021PAHIRSEDComponent`
 emission component consumes this module (dispatched via
-``dust={'emission': {'type': 'draine2021_pah'}}``).
+``dust_emission={'type': 'draine2021_pah'}``).
 
 Reference
 ---------

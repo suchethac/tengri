@@ -45,7 +45,7 @@ def _model(ssp, log_mass=10.0):
             "log_total_mass": Fixed(log_mass),
             "*": FIXED,
         },
-        dust={
+        dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "tau_bc": Fixed(0.0),
@@ -129,15 +129,15 @@ def test_dust_energy_balance_uses_the_published_log_scale(synthetic_ssp_wide):
             "log_total_mass": Fixed(10.0),
             "*": FIXED,
         },
-        dust={
+        dust_attenuation={
             "type": "two_component",
             "law_bc": "calzetti",
             "law_diff": "calzetti",
             "tau_bc": Fixed(1.0),
             "tau_diff": Fixed(0.7),
             "*": FIXED,
-            "emission": {"type": "dale2014", "*": FIXED},
         },
+        dust_emission={"type": "dale2014", "*": FIXED},
         redshift=Fixed(0.0),
     )
     derived = model.predict_state({}).derived

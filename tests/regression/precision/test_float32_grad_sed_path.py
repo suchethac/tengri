@@ -102,7 +102,7 @@ def test_radio_sed_gradient_is_accurate_in_float32(ssp_bare, obs):
     photometry version of this check is vacuous, because no filter reaches cm
     wavelengths.
     """
-    groups = dict(sfh=_SFH, dust=_DUST, radio={"type": "condon92"})
+    groups = dict(sfh=_SFH, dust_attenuation=_DUST, radio={"type": "condon92"})
     kw = dict(lo=1e7, hi=1e12)
 
     _, n_in, v64, g64 = _band_gradient(ssp_bare, obs, groups, x64=True, dtype=jnp.float64, **kw)
@@ -152,7 +152,7 @@ def test_agn_sed_gradient_is_finite_in_float32(ssp_bare, obs):
     """
     groups = dict(
         sfh=_SFH,
-        dust=_DUST,
+        dust_attenuation=_DUST,
         agn={
             "type": "composable",
             "all_params": FIXED,
@@ -181,7 +181,7 @@ def test_agn_sed_gradient_is_finite_in_float32(ssp_bare, obs):
 def _agn_groups(disc):
     return dict(
         sfh=_SFH,
-        dust=_DUST,
+        dust_attenuation=_DUST,
         agn={
             "type": "composable",
             "all_params": FIXED,

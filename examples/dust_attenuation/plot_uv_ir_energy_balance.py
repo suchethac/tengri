@@ -47,14 +47,14 @@ def _build(tau_diff):
             "start_gyr": 13.0,
             "end_gyr": 0.0,
         },
-        dust={
+        dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
             "tau_diff": tau_diff,
             "tau_bc": 1.5 * tau_diff,
-            "emission": {"type": "dale2014", "all_params": tengri.FIXED},
         },
+        dust_emission={"type": "dale2014", "all_params": tengri.FIXED},
         redshift=tengri.Fixed(0.05),
     )
 

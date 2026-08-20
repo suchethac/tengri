@@ -150,7 +150,7 @@ def _sed_xray(ssp, obs, logzsol, xray_type):
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "delayed", "all_params": FIXED},
-        dust={"law": "power_law", "all_params": FIXED},
+        dust_attenuation={"law": "power_law", "all_params": FIXED},
         met={"logzsol": Fixed(logzsol)},
         xray={"type": xray_type, "all_params": FIXED},
         redshift=Fixed(0.05),

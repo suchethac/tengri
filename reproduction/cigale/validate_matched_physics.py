@@ -117,7 +117,7 @@ def tengri_stellar_dust(ssp, tau_bc):
             "log_total_mass": Fixed(0.0),
             "*": FIXED,
         },
-        dust={
+        dust_attenuation={
             "type": "two_component",
             "law_bc": "calzetti",
             "law_diff": "calzetti",
@@ -125,8 +125,7 @@ def tengri_stellar_dust(ssp, tau_bc):
             "tau_diff": Fixed(TAU_DIFF),
             "lyman_cutoff": True,
             "*": FIXED,
-            "emission": {"type": "dale2014", "alpha_dale": Fixed(2.0), "*": FIXED},
-        },
+        }, dust_emission={"type": "dale2014", "alpha_dale": Fixed(2.0), "*": FIXED},
         redshift=Fixed(0.0),
     )
     s = m.predict_state({})
@@ -232,7 +231,7 @@ def xray_seds(ssp):
                 "log_total_mass": Fixed(0.0),
                 "*": FIXED,
             },
-            dust={"law": "power_law", 
+            dust_attenuation={"law": "power_law", 
                 "type": "two_component",
                 "tau_bc": Fixed(0.0),
                 "tau_diff": Fixed(TAU_DIFF),
@@ -324,7 +323,7 @@ def radio_seds(ssp):
             "log_total_mass": Fixed(0.0),
             "*": FIXED,
         },
-        dust={
+        dust_attenuation={
             "type": "two_component",
             "law_bc": "calzetti",
             "law_diff": "calzetti",
@@ -332,8 +331,7 @@ def radio_seds(ssp):
             "tau_diff": Fixed(TAU_DIFF),
             "lyman_cutoff": True,
             "*": FIXED,
-            "emission": {"type": "dale2014", "alpha_dale": Fixed(2.0), "*": FIXED},
-        },
+        }, dust_emission={"type": "dale2014", "alpha_dale": Fixed(2.0), "*": FIXED},
         radio={
             "type": "condon92",
             "radio_q_ir": Fixed(Q_IR),

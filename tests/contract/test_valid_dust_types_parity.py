@@ -57,22 +57,20 @@ def test_valid_dust_emission_types_covers_registry_and_lazy_names() -> None:
 
 def test_dust_validator_still_rejects_unknown_law_with_suggestion() -> None:
     """The 'did you mean ...?' UX must survive the derive-from-registry change."""
-    from tengri.parameters.groups import _translate_dust
+    from tengri.parameters.groups import _translate_dust_attenuation
 
     with pytest.raises(ValueError, match="Unknown dust law 'calzeti'"):
-        _translate_dust({"type": "two_component", "law": "calzeti"}, {})  # typo
+        _translate_dust_attenuation({"type": "two_component", "law": "calzeti"}, {})  # typo
 
 
 def test_dust_validator_still_rejects_unknown_emission_with_suggestion() -> None:
-    from tengri.parameters.groups import _translate_dust
+    from tengri.parameters.groups import _translate_dust_emission
 
-    with pytest.raises(ValueError, match="Unknown dust emission type 'modified_blakbody'"):
-        _translate_dust(
+    with pytest.raises(ValueError, match="Unknown dust_emission type 'modified_blakbody'"):
+        _translate_dust_emission(
             {
-                "type": "two_component",
-                "law": "power_law",
-                "emission": {"type": "modified_blakbody"},
-            },  # typo
+                "type": "modified_blakbody",  # typo
+            },
             {},
         )
 
@@ -86,11 +84,11 @@ def test_dust_law_name_as_type_points_to_law_bc() -> None:
     mistake to the correct ``law_bc``/``law_diff`` grammar instead of a bare
     "Unknown dust type".
     """
-    from tengri.parameters.groups import _translate_dust
+    from tengri.parameters.groups import _translate_dust_attenuation
 
     for law in ("calzetti", "smc", "salim_sbl18"):
         with pytest.raises(ValueError, match=rf"'{law}' is a dust attenuation \*law\*"):
-            _translate_dust({"type": law, "tau_v": 2.0}, {})
+            _translate_dust_attenuation({"type": law, "tau_v": 2.0}, {})
 
 
 def test_previously_rejected_dust_laws_now_accepted() -> None:
@@ -100,10 +98,10 @@ def test_previously_rejected_dust_laws_now_accepted() -> None:
     from the old hand-maintained ``_VALID_DUST_LAWS`` set, to make sure
     the validator now accepts them end-to-end.
     """
-    from tengri.parameters.groups import _translate_dust
+    from tengri.parameters.groups import _translate_dust_attenuation
 
     for law in ("prevot_smc", "lmc", "wd01_mwrv31", "vw07_bc"):
         result: dict = {}
         # Should not raise.
-        _translate_dust({"type": "two_component", "law": law}, result)
+        _translate_dust_attenuation({"type": "two_component", "law": law}, result)
         assert result["dust_law_bc"] == law

@@ -154,14 +154,14 @@ for (lib, label), color in zip(LIBS, COLORS):
         model = tengri.SEDModel.build(
             ssp,
             sfh=SFH,
-            dust={
+            dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
                 "all_params": tengri.FIXED,
                 "tau_diff": 1.0,
                 "tau_bc": 1.5,
-                "emission": {"type": lib, "all_params": tengri.FIXED},
             },
+            dust_emission={"type": lib, "all_params": tengri.FIXED},
             redshift=tengri.Fixed(0.05),
         )
     except Exception as e:

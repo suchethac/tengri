@@ -55,13 +55,7 @@ def _model(ssp, obs, **block):
         "all_params": FIXED,
     }
     for key, value in block.items():
-        # #1979: smc_prevot is a DUST_LAWS curve — selected via 'law', not
-        # 'type' (the old spelling now raises). The slot still keys the
-        # signature either way, which is what this test guards.
-        if key == "atten" and value == "smc_prevot":
-            agn[key] = {"law": "prevot_smc"}
-        else:
-            agn[key] = {"type": value}
+        agn[key] = {"type": value}
     return SEDModel.build(
         ssp_data=ssp,
         observation=obs,

@@ -20,13 +20,12 @@ model = tengri.SEDModel.build(
         "tau_gyr": 1.0,
         "log_total_mass": 10.0,
     },
-    dust={"law": "power_law", 
+    dust_attenuation={"law": "power_law", 
         "type": "two_component",
         "*": tengri.FIXED,
         "tau_bc": 0.5,
         "tau_diff": tengri.Uniform(0.0, 3.0),
-        "emission": {"type": "dale2014", "*": tengri.FIXED},
-    },
+    }, dust_emission={"type": "dale2014", "*": tengri.FIXED},
     redshift=tengri.Fixed(0.05),
 )
 

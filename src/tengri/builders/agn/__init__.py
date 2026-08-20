@@ -16,7 +16,7 @@ AGN composition has five orthogonal sub-block axes (``disc``,
 ...     "nlr": {"type": "analytic"},
 ...     "blr": {"type": "analytic"},
 ...     "feii": {"type": "none"},
-...     "atten": {"law": "prevot_smc", "all_params": FIXED},
+...     "atten": {"type": "smc_prevot", "all_params": FIXED},
 ... }
 
 The factory mirror:
@@ -98,7 +98,7 @@ def _discover_shared_params() -> list[str]:
             "nlr": {"type": "analytic"},
             "blr": {"type": "analytic"},
             "feii": {"type": "none"},
-            "atten": {"law": "prevot_smc"},
+            "atten": {"type": "smc_prevot"},
         },
     }
     import warnings

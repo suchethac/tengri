@@ -53,12 +53,12 @@ def test_sedmodel_preloads_dale2014_at_construction():
         _ = tengri.SEDModel.build(
             ssp_data=ssp,
             sfh={"type": "dpl", "*": tengri.FIXED},
-            dust={
+            dust_attenuation={
                 "type": "single_component",
                 "law": "calzetti",
                 "*": tengri.FIXED,
-                "emission": {"type": "dale2014", "*": tengri.FIXED},
             },
+            dust_emission={"type": "dale2014", "*": tengri.FIXED},
             neb={"type": "ssp", "*": tengri.FIXED},
             redshift=tengri.Fixed(0.05),
         )

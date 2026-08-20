@@ -225,11 +225,11 @@ class TestRegistryComponentsEmit:
                         ssp_data=synthetic_ssp_wide,
                         observation=synthetic_tophat_obs,
                         sfh={"type": "const"},
-                        dust={
+                        dust_attenuation={
                             "type": "two_component",
                             "law": "calzetti",
-                            "emission": {"type": name},
                         },
+                        dust_emission={"type": name},
                     )
 
                 params = model.spec.sample(jax.random.PRNGKey(0))
@@ -259,7 +259,7 @@ class TestRegistryComponentsEmit:
                         ssp_data=synthetic_ssp_wide,
                         observation=synthetic_tophat_obs,
                         sfh={"type": "const"},
-                        dust={
+                        dust_attenuation={
                             "type": "single_component",
                             "law": name,
                         },
@@ -512,7 +512,7 @@ def _agn_census_context():
             redshift=Fixed(0.1),
             approx=None,
             sfh={"type": "tsnorm", "*": FIXED, "log_total_mass": 6.0},
-            dust={"type": "none"},
+            dust_attenuation={"type": "none"},
             agn=agn,
         )
 

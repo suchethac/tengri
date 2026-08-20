@@ -146,12 +146,12 @@ print()
 print("PATH 2: Nested-dict direct")
 groups_dict = {
     "sfh": {"type": "dpl", "all_params": FREE},
-    "dust": {
+    "dust_attenuation": {
         "type": "two_component",
         "law": "calzetti",
         "all_params": FREE,
-        "emission": {"type": "dale2014", "all_params": FIXED},
     },
+    "dust_emission": {"type": "dale2014", "all_params": FIXED},
     "neb": {"type": "cue", "all_params": FIXED},
     "redshift": Uniform(0.01, 6.0),
     "apply_igm": True,
@@ -173,12 +173,12 @@ print()
 print("PATH 3: Builder factories")
 factory_groups = {
     "sfh": builders.sfh.dpl(defaults=FREE, log_total_mass=Uniform(9.0, 11.0)),
-    "dust": {
+    "dust_attenuation": {
         "type": "two_component",
         "law": "calzetti",
         "all_params": FREE,
-        "emission": {"type": "dale2014", "all_params": FIXED},
     },
+    "dust_emission": {"type": "dale2014", "all_params": FIXED},
     "neb": {"type": "cue", "all_params": FIXED},
     "redshift": Uniform(0.01, 6.0),
     "apply_igm": True,
@@ -218,7 +218,7 @@ print()
 # Build a model with tsnorm (instead of dpl from PATH 3)
 groups_sfh_tour = {
     "sfh": builders.sfh.tsnorm(defaults=FREE, skew=Uniform(-1.0, 1.0)),
-    "dust": {
+    "dust_attenuation": {
         "type": "two_component",
         "law": "calzetti",
         "all_params": FIXED,
@@ -240,15 +240,15 @@ print()
 print("Dust Model Tour")
 print("─" * 70)
 
-# two_component with nested emission using a factory
+# Attenuation and IR emission are two peer groups, each with its own factory.
 groups_dust_tour = {
     "sfh": {"type": "tsnorm", "all_params": FIXED},
-    "dust": builders.dust.two_component(
+    "dust_attenuation": builders.dust.two_component(
         law="calzetti",
         defaults=FREE,
         tau_bc=Uniform(0.0, 2.0),
-        emission=builders.dust.emission.dale2014(defaults=FIXED),
     ),
+    "dust_emission": builders.dust.emission.dale2014(defaults=FIXED),
     "neb": {"type": "cue", "all_params": FIXED},
     "redshift": Fixed(0.05),
 }
@@ -272,7 +272,7 @@ print()
 try:
     groups_neb_tour = {
         "sfh": {"type": "tsnorm", "all_params": FIXED},
-        "dust": {"law": "power_law", "type": "two_component", "all_params": FIXED},
+        "dust_attenuation": {"law": "power_law", "type": "two_component", "all_params": FIXED},
         "neb": builders.neb.cb19(defaults=FREE, log_nH=Uniform(1.0, 4.0)),
         "redshift": Fixed(0.05),
     }
@@ -284,7 +284,7 @@ except Exception as e:
     print(f"cb19 skipped (bare-stellar SSP limitation): {str(e)[:50]}...")
     groups_neb_tour = {
         "sfh": {"type": "tsnorm", "all_params": FIXED},
-        "dust": {"law": "power_law", "type": "two_component", "all_params": FIXED},
+        "dust_attenuation": {"law": "power_law", "type": "two_component", "all_params": FIXED},
         "neb": builders.neb.cue(defaults=FIXED),
         "redshift": Fixed(0.05),
     }
@@ -349,7 +349,7 @@ base_groups = {
         "all_params": FREE,
         "skew": Uniform(-1.0, 1.0),
     },  # skew is [user], others are [all_params FREE]
-    "dust": {
+    "dust_attenuation": {
         "type": "two_component",
         "law": "calzetti",
         "all_params": FIXED,  # All dust params are [all_params FIXED]
@@ -428,14 +428,14 @@ print("─" * 70)
 
 # Base groups dict: reused for all SFH families, only type changes
 base_groups_sfh = {
-    "dust": {
+    "dust_attenuation": {
         "type": "two_component",
         "law": "calzetti",
         "tau_bc": Fixed(0.5),
         "tau_diff": Fixed(0.3),
         "slope": Fixed(-0.7),
-        "emission": {"type": "dale2014"},
     },
+    "dust_emission": {"type": "dale2014"},
     "neb": {"type": "cue", "all_params": FIXED},
     "redshift": Fixed(0.05),
     "apply_igm": False,
@@ -473,14 +473,14 @@ sed_rows = []
 for sfh_name, truth_sfh in sfh_families:
     groups_sfh_fig = {
         "sfh": {"type": sfh_name, "all_params": FIXED, "met_logzsol": Fixed(-0.1)},
-        "dust": {
+        "dust_attenuation": {
             "type": "two_component",
             "law": "calzetti",
             "tau_bc": Fixed(0.5),
             "tau_diff": Fixed(0.3),
             "slope": Fixed(-0.7),
-            "emission": {"type": "dale2014"},
         },
+        "dust_emission": {"type": "dale2014"},
         "neb": {"type": "cue", "all_params": FIXED},
         "redshift": Fixed(z),
         "apply_igm": False,
@@ -583,13 +583,14 @@ base_groups_dust = {
         "skew": Fixed(0.2),
         "trunc": Fixed(4.0),
     },
-    "dust": {"law": "power_law", 
+    "dust_attenuation": {
+        "law": "power_law",
         "type": "two_component",
         "tau_bc": Fixed(0.5),
         "tau_diff": Fixed(0.3),
         "slope": Fixed(-0.7),
-        "emission": {"type": "dale2014"},
     },
+    "dust_emission": {"type": "dale2014"},
     "neb": {"type": "cue", "all_params": FIXED},
     "redshift": Fixed(0.05),
     "apply_igm": False,
@@ -598,8 +599,8 @@ base_groups_dust = {
 for dust_law in dust_laws:
     # Swap dust law: one-line edit
     groups_dust_var = base_groups_dust.copy()
-    groups_dust_var["dust"] = base_groups_dust["dust"].copy()
-    groups_dust_var["dust"]["law"] = dust_law
+    groups_dust_var["dust_attenuation"] = base_groups_dust["dust_attenuation"].copy()
+    groups_dust_var["dust_attenuation"]["law"] = dust_law
 
     spec = parse_groups(**groups_dust_var)
     free_dust = [p for p in spec.free_params if p.startswith("dust_")]
@@ -639,14 +640,14 @@ groups_nodust = {
         "skew": Fixed(0.2),
         "trunc": Fixed(4.0),
     },
-    "dust": {
+    "dust_attenuation": {
         "type": "two_component",
         "law": "calzetti",
         "tau_bc": Fixed(0.0),
         "tau_diff": Fixed(0.0),
         "slope": Fixed(-0.7),
-        "emission": {"type": "dale2014"},
     },
+    "dust_emission": {"type": "dale2014"},
     "neb": {"type": "cue", "all_params": FIXED},
     "redshift": Fixed(z),
     "apply_igm": False,
@@ -707,14 +708,14 @@ for idx, dust_law in enumerate(dust_laws):
             "skew": Fixed(0.2),
             "trunc": Fixed(4.0),
         },
-        "dust": {
+        "dust_attenuation": {
             "type": "two_component",
             "law": dust_law,
             "tau_bc": Fixed(0.5),
             "tau_diff": Fixed(0.3),
             "slope": Fixed(-0.7),
-            "emission": {"type": "dale2014"},
         },
+        "dust_emission": {"type": "dale2014"},
         "neb": {"type": "cue", "all_params": FIXED},
         "redshift": Fixed(z),
         "apply_igm": False,
@@ -790,7 +791,7 @@ base_groups_emission = {
         "skew": Fixed(0.2),
         "trunc": Fixed(4.0),
     },
-    "dust": {
+    "dust_attenuation": {
         "type": "two_component",
         "law": "calzetti",
         "tau_bc": Fixed(0.5),
@@ -806,8 +807,7 @@ for emission in dust_emissions:
     try:
         # Swap emission type: one-line edit
         groups_emission_var = base_groups_emission.copy()
-        groups_emission_var["dust"] = base_groups_emission["dust"].copy()
-        groups_emission_var["dust"]["emission"] = {"type": emission}
+        groups_emission_var["dust_emission"] = {"type": emission}
 
         spec = parse_groups(**groups_emission_var)
         emission_params = [p for p in spec.free_params if p.startswith("dust_")]
@@ -853,14 +853,14 @@ for idx, emission in enumerate(dust_emissions):
             "skew": Fixed(0.2),
             "trunc": Fixed(4.0),
         },
-        "dust": {
+        "dust_attenuation": {
             "type": "two_component",
             "law": "calzetti",
             "tau_bc": Fixed(0.5),
             "tau_diff": Fixed(0.3),
             "slope": Fixed(-0.7),
-            "emission": {"type": emission},
         },
+        "dust_emission": {"type": emission},
         "neb": {"type": "cue", "all_params": FIXED},
         "redshift": Fixed(z),
         "apply_igm": False,
@@ -909,14 +909,14 @@ for emission in dust_emissions:
             "skew": Fixed(0.2),
             "trunc": Fixed(4.0),
         },
-        "dust": {
+        "dust_attenuation": {
             "type": "two_component",
             "law": "calzetti",
             "tau_bc": Fixed(0.5),
             "tau_diff": Fixed(0.3),
             "slope": Fixed(-0.7),
-            "emission": {"type": emission},
         },
+        "dust_emission": {"type": emission},
         "neb": {"type": "cue", "all_params": FIXED},
         "redshift": Fixed(z),
         "apply_igm": False,
@@ -974,13 +974,13 @@ print("─" * 70)
 # Build a reference model to show summary()
 groups_ref = {
     "sfh": {"type": "tsnorm", "all_params": FREE, "met_logzsol": Fixed(-0.1)},
-    "dust": {
+    "dust_attenuation": {
         "type": "two_component",
         "law": "calzetti",
         "all_params": FREE,
         "slope": Fixed(-0.7),
-        "emission": {"type": "dale2014", "all_params": FIXED},
     },
+    "dust_emission": {"type": "dale2014", "all_params": FIXED},
     "redshift": Uniform(0.01, 0.1),
     "apply_igm": False,
 }
@@ -991,13 +991,13 @@ print(spec_ref.summary_str())
 # Model 1: free redshift
 groups_free_z = {
     "sfh": {"type": "tsnorm", "all_params": FREE, "met_logzsol": Fixed(-0.1)},
-    "dust": {
+    "dust_attenuation": {
         "type": "two_component",
         "law": "calzetti",
         "all_params": FREE,
         "slope": Fixed(-0.7),
-        "emission": {"type": "dale2014", "all_params": FIXED},
     },
+    "dust_emission": {"type": "dale2014", "all_params": FIXED},
     "redshift": Uniform(0.01, 0.1),  # FREE
     "apply_igm": False,
 }
@@ -1006,13 +1006,13 @@ spec_free_z = parse_groups(**groups_free_z)
 # Model 2: fixed redshift
 groups_fixed_z = {
     "sfh": {"type": "tsnorm", "all_params": FREE, "met_logzsol": Fixed(-0.1)},
-    "dust": {
+    "dust_attenuation": {
         "type": "two_component",
         "law": "calzetti",
         "all_params": FREE,
         "slope": Fixed(-0.7),
-        "emission": {"type": "dale2014", "all_params": FIXED},
     },
+    "dust_emission": {"type": "dale2014", "all_params": FIXED},
     "redshift": Fixed(0.05),  # FIXED
     "apply_igm": False,
 }
@@ -1046,14 +1046,14 @@ groups_perf = {
         "skew": Fixed(0.2),
         "trunc": Fixed(4.0),
     },
-    "dust": {
+    "dust_attenuation": {
         "type": "two_component",
         "law": "calzetti",
         "tau_bc": Fixed(0.5),
         "tau_diff": Fixed(0.3),
         "slope": Fixed(-0.7),
-        "emission": {"type": "dale2014"},
     },
+    "dust_emission": {"type": "dale2014"},
     "redshift": Fixed(0.05),
     "apply_igm": False,
 }

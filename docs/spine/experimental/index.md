@@ -23,7 +23,7 @@ template to copy. Each states its own caveats up front.
   whether the fit means anything, and neither is the sampler's name: bin edges
   that stop at the age of the universe, worth half a dex in stellar mass, and a
   trajectory long enough to cross a correlated ratio posterior, worth a factor
-  of seventeen in effective samples. Seconds per effective sample is the number to
+  of thirty in effective samples. Seconds per effective sample is the number to
   compare, since the quickest run here is the one that never moved.
 - **{doc}`apple_mps`**: running the forward model and fits on the Apple GPU via
   the community `jax-mps` backend. Needs a JAX version tengri does not pin and

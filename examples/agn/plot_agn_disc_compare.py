@@ -71,7 +71,7 @@ for (disc, label), color in zip(DISC_MODELS, COLORS):
     model = tengri.SEDModel.build(
         ssp,
         sfh=SFH,
-        dust=DUST,
+        dust_attenuation=DUST,
         agn={
             "disc": {"type": disc, "all_params": tengri.FIXED},
             "all_params": tengri.FIXED,

@@ -52,7 +52,7 @@ def _model(tau_diff, tau_bc):
     return tengri.SEDModel.build(
         ssp,
         sfh=SFH,
-        dust={
+        dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
@@ -154,7 +154,7 @@ for i, (age_myr, peak_lbt_gyr) in enumerate(zip(ages_myr, peak_lbt_values)):
             "width_gyr": 0.1,
             "log_total_mass": 10.0,
         },
-        dust={
+        dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,

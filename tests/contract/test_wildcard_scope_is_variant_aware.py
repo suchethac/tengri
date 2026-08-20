@@ -206,16 +206,16 @@ def _dust_law_cases():
     for law in sorted(DUST_LAWS):
         yield Case(
             f"dust[law={law}]",
-            "dust",
+            "dust_attenuation",
             "dust_",
             {
-                "dust": {
+                "dust_attenuation": {
                     "type": "two_component",
                     "law_bc": law,
                     "law_diff": law,
                     "*": FREE,
-                    "emission": {"type": "themis", "*": FIXED},
                 },
+                "dust_emission": {"type": "themis", "*": FIXED},
                 "neb": {"type": "none"},
             },
             overrides=_DEEP_ATTENUATION,
@@ -230,7 +230,7 @@ def _shock_cases():
             "shock",
             "shock_",
             {
-                "dust": {
+                "dust_attenuation": {
                     "type": "two_component",
                     "law": "calzetti",
                     "*": FIXED,
@@ -288,7 +288,7 @@ def _xray_cases():
             "xray",
             "xray_",
             {
-                "dust": {
+                "dust_attenuation": {
                     "type": "two_component",
                     "law": "calzetti",
                     "*": FIXED,
@@ -327,7 +327,7 @@ def _simple_group_cases():
         {
             "sfh": {"type": "dpl", "*": FREE},
             "neb": {"type": "none"},
-            "dust": {"law": "power_law", "type": "two_component", "*": FIXED},
+            "dust_attenuation": {"law": "power_law", "type": "two_component", "*": FIXED},
         },
     )
     yield Case(
@@ -336,7 +336,7 @@ def _simple_group_cases():
         "met_",
         {
             "neb": {"type": "none"},
-            "dust": {"law": "power_law", "type": "two_component", "*": FIXED},
+            "dust_attenuation": {"law": "power_law", "type": "two_component", "*": FIXED},
             "met": {"*": FREE},
         },
     )
@@ -346,7 +346,7 @@ def _simple_group_cases():
         "radio_",
         {
             "neb": {"type": "none"},
-            "dust": {"law": "power_law", "type": "two_component", "*": FIXED},
+            "dust_attenuation": {"law": "power_law", "type": "two_component", "*": FIXED},
             "radio": {"type": "condon92", "*": FREE},
         },
     )
@@ -366,7 +366,7 @@ CASES = [
 #: already owns the group, the entry names it — the point is that no group is
 #: unaccounted for, not that this file must own all of them.
 _EXCUSED: dict[str, str] = {
-    "dust.emission": (
+    "dust_emission": (
         "owned by tests/contract/test_dust_emission_wildcard.py, the guard "
         "written for #1482 — it narrows the outcome to the selected engine's "
         "own declared_parameters(), which is finer than this sweep."
@@ -492,16 +492,16 @@ def test_the_dust_freed_set_depends_on_the_selected_law(synthetic_ssp_wide, panc
     for law in ("calzetti", "cardelli", "power_law", "kriek_conroy"):
         case = Case(
             law,
-            "dust",
+            "dust_attenuation",
             "dust_",
             {
-                "dust": {
+                "dust_attenuation": {
                     "type": "two_component",
                     "law_bc": law,
                     "law_diff": law,
                     "*": FREE,
-                    "emission": {"type": "themis", "*": FIXED},
                 },
+                "dust_emission": {"type": "themis", "*": FIXED},
                 "neb": {"type": "none"},
             },
         )
@@ -544,7 +544,7 @@ def test_an_omitted_law_scopes_as_its_resolved_default():
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             spec = tengri.parse_groups(
-                sfh={"type": "dpl", "*": FIXED}, dust=dust, neb={"type": "none"}
+                sfh={"type": "dpl", "*": FIXED}, dust_attenuation=dust, neb={"type": "none"}
             )
         return {p for p in spec.free_params if p.startswith("dust_")}
 
@@ -615,7 +615,7 @@ def test_the_threaded_values_actually_reach_the_backend(synthetic_ssp_wide, panc
             ssp_data=synthetic_ssp_wide,
             observation=panchromatic_obs,
             sfh={"type": "dpl", "*": FIXED},
-            dust={
+            dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
                 "*": FIXED,

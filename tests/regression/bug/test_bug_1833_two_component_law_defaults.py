@@ -116,7 +116,7 @@ def _build(dust_ssp, uv_obs, dust: dict) -> SEDModel:
             ssp_data=dust_ssp,
             observation=uv_obs,
             sfh={"type": "dpl", "all_params": FIXED},
-            dust=dust,
+            dust_attenuation=dust,
             redshift=Fixed(0.5),
         )
 
@@ -244,7 +244,11 @@ def test_per_component_overrides_are_still_honored(dust_ssp, uv_obs):
     dict, so a narrowing keyed only on provenance could drop them.
     """
     base = _sed(_build(dust_ssp, uv_obs, _two("noll09")))
-    override = _sed(_build(dust_ssp, uv_obs, _two("noll09", delta_diff=-0.6)))
+    # Naming one half of a per-screen pair now needs the partner's disposition
+    # stated too. `all_params=FIXED` says it: delta_bc stays at its declared
+    # default while delta_diff is overridden -- the asymmetry this test is about,
+    # now written down instead of implied.
+    override = _sed(_build(dust_ssp, uv_obs, _two("noll09", delta_diff=-0.6, all_params=FIXED)))
     moved = _rel(override, base)
     assert moved > 1e-3, (
         f"delta_diff=-0.6 was set per-component and did not move the SED (rel {moved:.3e}); "
@@ -276,14 +280,14 @@ def test_the_precompute_path_bakes_the_same_curve(law, dust_ssp, uv_obs):
             ssp_data=dust_ssp,
             observation=uv_obs,
             sfh={"type": "dpl", "all_params": FIXED},
-            dust=_two(law),
+            dust_attenuation=_two(law),
             redshift=Fixed(0.5),
         )
         precomp = SEDModel.build(
             ssp_data=dust_ssp,
             observation=uv_obs,
             sfh={"type": "dpl", "all_params": FIXED},
-            dust=_two(law),
+            dust_attenuation=_two(law),
             redshift=Fixed(0.5),
             approx=WavePrecomp(n_z=8, z_min=0.0, z_max=2.0),
         )

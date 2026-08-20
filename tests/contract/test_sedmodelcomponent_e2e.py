@@ -126,7 +126,7 @@ def test_dust_attenuation_e2e(ssp, obs, law):
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "dpl", "*": FIXED},
-        dust={"type": "two_component", "law": law, "*": FIXED},
+        dust_attenuation={"type": "two_component", "law": law, "*": FIXED},
         redshift=Fixed(0.05),
     )
     _assert_phot_ok(model.predict_photometry({}))
@@ -161,12 +161,12 @@ def test_dust_ir_emission_e2e(ssp, obs, emission_type):
             ssp_data=ssp,
             observation=obs,
             sfh={"type": "dpl", "*": FIXED},
-            dust={
+            dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
                 "*": FIXED,
-                "emission": {"type": emission_type, "*": FIXED},
             },
+            dust_emission={"type": emission_type, "*": FIXED},
             redshift=Fixed(0.05),
         )
     except (FileNotFoundError, OSError) as exc:
@@ -222,7 +222,7 @@ def test_agn_e2e(ssp, obs, agn_id):
             observation=obs,
             sfh={"type": "dpl", "*": FIXED},
             agn=_AGN_E2E_CASES[agn_id],
-            dust=_fixed_dust(),
+            dust_attenuation=_fixed_dust(),
             redshift=Fixed(0.05),
         )
     except FileNotFoundError as exc:
@@ -258,7 +258,7 @@ def test_nebular_e2e(bare_ssp, obs, neb_type):
             observation=obs,
             sfh={"type": "dpl", "*": FIXED},
             neb={"type": neb_type, "*": FIXED},
-            dust=_fixed_dust(),
+            dust_attenuation=_fixed_dust(),
             redshift=Fixed(0.05),
         )
     except FileNotFoundError as exc:
@@ -303,7 +303,7 @@ def test_radio_e2e(ssp, obs, radio_agn):
             observation=obs,
             sfh={"type": "dpl", "*": FIXED},
             radio={"agn": {"type": radio_agn}, "*": FIXED},
-            dust=_fixed_dust(),
+            dust_attenuation=_fixed_dust(),
             redshift=Fixed(0.05),
         )
     except (TypeError, KeyError, ValueError) as exc:
@@ -322,7 +322,7 @@ def test_xray_e2e(ssp, obs, xray_type):
             observation=obs,
             sfh={"type": "dpl", "*": FIXED},
             xray={"type": xray_type, "*": FIXED},
-            dust=_fixed_dust(),
+            dust_attenuation=_fixed_dust(),
             redshift=Fixed(0.05),
         )
     except (TypeError, KeyError, ValueError) as exc:
@@ -446,7 +446,7 @@ def test_dust_law_surface_applies_law_not_silent_noop(ssp, obs):
             ssp_data=ssp,
             observation=obs,
             sfh={"type": "dpl", "*": FIXED},
-            dust={"type": "calzetti"},
+            dust_attenuation={"type": "calzetti"},
             redshift=Fixed(0.05),
         )
 
@@ -455,7 +455,7 @@ def test_dust_law_surface_applies_law_not_silent_noop(ssp, obs):
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "dpl", "*": FIXED},
-        dust={"type": "two_component", "law": "calzetti", "*": FIXED},
+        dust_attenuation={"type": "two_component", "law": "calzetti", "*": FIXED},
         redshift=Fixed(0.05),
     )
     assert model._dust_law_bc == "calzetti", (
@@ -468,7 +468,7 @@ def test_dust_law_surface_applies_law_not_silent_noop(ssp, obs):
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "dpl", "*": FIXED},
-        dust={
+        dust_attenuation={
             "type": "two_component",
             "law": "smc",
             "*": FIXED,
@@ -481,7 +481,7 @@ def test_dust_law_surface_applies_law_not_silent_noop(ssp, obs):
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "dpl", "*": FIXED},
-        dust={
+        dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
             "*": FIXED,
@@ -589,7 +589,7 @@ def test_catalog_z_range_end_to_end(real_ssp_only, ssp, obs):
             ssp_data=ssp,
             observation=obs,
             sfh={"type": "dpl", "*": FIXED},
-            dust={"type": "single_component", "law": "calzetti", "tau_v": Fixed(0.3)},
+            dust_attenuation={"type": "single_component", "law": "calzetti", "tau_v": Fixed(0.3)},
             redshift=Fixed(z),
             approx=cz,
         )
@@ -635,7 +635,7 @@ def test_waveprecomp_agreement_with_exact(ssp, obs):
             ssp_data=ssp,
             observation=obs,
             sfh={"type": "dpl", "*": FIXED},
-            dust={"type": "single_component", "law": "calzetti", "tau_v": Fixed(0.4)},
+            dust_attenuation={"type": "single_component", "law": "calzetti", "tau_v": Fixed(0.4)},
             redshift=Fixed(0.1),
             approx=approx,
         )

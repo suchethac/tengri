@@ -149,7 +149,7 @@ def _bounded_pathfinder_elbo_draws(n_draws: int | None = None):
 #: 118 s → 11 s but collapsed min-ESS 93 → 5 — per *effective* sample it is
 #: strictly worse (1.99 vs 1.27 s/ESS). ``dense_mass_matrix=True`` was the
 #: recommendation here and no longer is: re-measured it buys wall time at the
-#: cost of 12 divergences per run against 2 for the diagonal. On that
+#: cost of 23 divergences per 400 draws against 6 for the diagonal. On that
 #: geometry the genuine fixes are bin edges that stop at the age of the
 #: universe (#1975) and a longer fixed-length trajectory
 #: (``mcmc_hmc``, ``n_leapfrog_steps=150``). Saturation of a deep cap

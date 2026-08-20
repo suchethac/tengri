@@ -26,7 +26,7 @@ model = tengri.SEDModel.build(
         "trunc": tengri.Uniform(1.0, 10.0),
         "logzsol": tengri.Uniform(-2.0, 0.2),
     },
-    dust={"law": "power_law", 
+    dust_attenuation={"law": "power_law", 
         "type": "two_component",
         "tau_bc": tengri.Uniform(0.0, 2.0),
         "tau_diff": tengri.Uniform(0.0, 1.5),

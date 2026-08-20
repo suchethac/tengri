@@ -80,7 +80,9 @@ def _cases() -> list[tuple[str, str, dict]]:
         (
             "dust law",
             tengri.list_dust_laws,
-            lambda n: {"dust": {"type": "two_component", "law": n, "all_params": FIXED}},
+            lambda n: {
+                "dust_attenuation": {"type": "two_component", "law": n, "all_params": FIXED}
+            },
         ),
         (
             "dust model",
@@ -97,12 +99,12 @@ def _cases() -> list[tuple[str, str, dict]]:
             "dust emission",
             tengri.list_dust_emission_models,
             lambda n: {
-                "dust": {
+                "dust_attenuation": {
                     "law": "calzetti",
                     "type": "two_component",
                     "all_params": FIXED,
-                    "emission": {"type": n, "all_params": FIXED},
-                }
+                },
+                "dust_emission": {"type": n, "all_params": FIXED},
             },
         ),
         ("sfh model", tengri.list_sfh_models, lambda n: {"sfh": {"type": n, "all_params": FIXED}}),
@@ -154,17 +156,11 @@ def _cases() -> list[tuple[str, str, dict]]:
         m = re.search(r"agn=\{'(\w+)':", row.get("use", ""))
         if m is None:
             continue
-        # Special handling for atten/smc_prevot: use law key instead of type
-        axis = m.group(1)
-        if axis == "atten" and name == "smc_prevot":
-            sub_block_spec = {"law": "prevot_smc", "all_params": FIXED}
-        else:
-            sub_block_spec = {"type": name, "all_params": FIXED}
         out.append(
             (
-                f"agn.{axis}",
+                f"agn.{m.group(1)}",
                 name,
-                {"agn": {"type": "composable", axis: sub_block_spec}},
+                {"agn": {"type": "composable", m.group(1): {"type": name, "all_params": FIXED}}},
             )
         )
     return out

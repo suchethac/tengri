@@ -59,7 +59,7 @@ def _build(ssp_data, observation, sfh_type):
         ssp_data=ssp_data,
         observation=observation,
         sfh={"type": sfh_type, "*": FREE},
-        dust={"type": "two_component", "law": "calzetti", "*": FIXED},
+        dust_attenuation={"type": "two_component", "law": "calzetti", "*": FIXED},
         neb={"type": "none"},
         redshift=Fixed(0.5),
     )

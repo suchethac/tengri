@@ -354,15 +354,13 @@ class NUTSTreeDepthWarning(UserWarning):
     edges to the redshift cut the wall from 174 s to 69 s on a D=9 continuity fit
     at z=1.5 and made the mass parameter mean what it says (#1975).
 
-    After that, trajectory length is the lever, and the length is judged by the
-    worst seed rather than the average. ``mcmc_hmc`` with
-    ``n_leapfrog_steps=150`` measured a median min-ESS of 219 per 400 draws
-    over six seeds on that fit against 179 for NUTS, and never fell below 155;
-    60 steps has the better median cost per effective sample but returned 19 on
-    one seed in six. ``dense_mass_matrix=True`` is *not* a safe default here: it
-    is quicker (44 s against 75 s) but measured 12 divergences per run
-    against 2 for the diagonal, and 77 per 400 draws before the bin edges were
-    corrected, so read ``n_divergent`` before believing the speed. Lowering
+    After that, trajectory length is the lever. ``mcmc_hmc`` with
+    ``n_leapfrog_steps=150`` measured min-ESS 105 per 400 draws on that fit
+    against 84 for NUTS, and 201 at the warmup and metric the method-selection
+    page validates. ``dense_mass_matrix=True`` is *not* a safe default here: it
+    is quicker (35 s against 69 s) but measured 23 divergences per 400 draws
+    against 6 for the diagonal, and 77 before the bin edges were corrected, so
+    read ``n_divergent`` before believing the speed. Lowering
     ``max_num_doublings`` bounds the worst-case wall but collapses sampling
     quality — cap 6 measured min-ESS 5 on the same posterior, an 11x wall win
     that evaporates the moment cost is counted per effective sample. Bound the
