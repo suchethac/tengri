@@ -126,7 +126,7 @@ def test_every_dust_law_key_is_accepted() -> None:
 
 # ── Composition: emission is a peer group, not a nested block ──────
 #
-# The behaviour lives in tests/contract/test_dust_split_builders.py, which owns
+# The behavior lives in tests/contract/test_dust_split_builders.py, which owns
 # the refusal (test_attenuation_builder_raises_on_emission_kwarg), the emission
 # dict, and the dust_emission= build path. This file's own contribution is the
 # signature assertion above: `emission` is not a parameter of two_component.

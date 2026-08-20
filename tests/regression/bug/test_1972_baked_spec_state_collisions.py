@@ -156,7 +156,7 @@ def test_model_structure_keys_the_signal_response_cache(ssp, obs):
                 # ``sfh_dpl_alpha``, and flags the range as a units error.
                 "log_total_mass": Uniform(9.0, 11.0),
             },
-            dust={
+            dust_attenuation={
                 "type": "two_component",
                 "all_params": tengri.FIXED,
                 # #1989: laws are explicit — law_bc VARIES between the two
@@ -194,7 +194,7 @@ def test_same_model_still_shares_one_closure(ssp, obs):
                 # ``sfh_dpl_alpha``, and flags the range as a units error.
                 "log_total_mass": Uniform(9.0, 11.0),
             },
-            dust={
+            dust_attenuation={
                 "type": "two_component",
                 "all_params": tengri.FIXED,
                 # #1989: laws are explicit — both laws pinned so the two

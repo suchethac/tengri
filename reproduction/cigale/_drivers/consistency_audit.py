@@ -156,19 +156,20 @@ def fiducial_kwargs(
         "redshift": Fixed(0.0),
     }
     if with_dust or with_ir:
-        kw["dust"] = {
+        kw["dust_attenuation"] = {
             "type": "two_component",
             "law_bc": "leitherer02",
             "law_diff": "leitherer02",
             "tau_bc": Fixed(DUST_TAU_FIDUCIAL["tau_bc"] if with_dust else 0.0),
             "tau_diff": Fixed(DUST_TAU_FIDUCIAL["tau_diff"] if with_dust else 0.0),
             "*": FIXED,
-            "emission": {"type": "dale2014", "*": FIXED} if with_ir else None,
         }
-        if not with_ir:
-            del kw["dust"]["emission"]
+        # A peer group now, so it is added when wanted rather than set to None
+        # and deleted again.
+        if with_ir:
+            kw["dust_emission"] = {"type": "dale2014", "*": FIXED}
     else:
-        kw["dust"] = {"law": "power_law", 
+        kw["dust_attenuation"] = {"law": "power_law", 
             "type": "two_component",
             "tau_bc": Fixed(0.0),
             "tau_diff": Fixed(0.0),

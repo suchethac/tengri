@@ -276,7 +276,7 @@ def test_every_structural_key_has_a_roundtrip_rule():
             # is emitted by the per-group walk, not by a structural rule.
             if f"{group}.{key}" in _GROUP_STRUCTURAL_KEYS:
                 continue
-            if (group == "dust" or group == "agn.atten") and key in hand_written:
+            if group in ("dust_attenuation", "dust_emission", "agn.atten") and key in hand_written:
                 continue
             missing.append(f"{group}.{key}")
 
