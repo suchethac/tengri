@@ -51,7 +51,7 @@ def fitted(ssp_data_fsps, tmp_path_factory):
         sfh={"type": "delayed", "all_params": FIXED, "log_total_mass": Uniform(9.0, 11.0)},
         dust={
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "all_params": FIXED,
             "tau_diff": Uniform(0.0, 2.0),
         },

@@ -66,7 +66,7 @@ def _build(ssp, obs, emission_type):
         sfh={"type": "dpl", "*": FIXED},
         dust={
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "*": FIXED,
             "tau_bc": _TAU_BC,
             "tau_diff": _TAU_DIFF,

@@ -37,7 +37,7 @@ References:
 - Coleman, Wu & Weedman 1980, ApJS, 43, 393
 - Kennicutt 1992, ApJS, 79, 255 (modern revision of the atlas)
 
-.. GENERATED FROM PYTHON SOURCE LINES 22-102
+.. GENERATED FROM PYTHON SOURCE LINES 22-103
 
 
 
@@ -92,6 +92,7 @@ References:
             "trunc": 13.5,
         },
         dust={
+            "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
             "tau_diff": tengri.Uniform(0.0, 2.0),
@@ -132,6 +133,11 @@ References:
 
     fig.tight_layout()
     plt.savefig("plot_usecase_hubble_sequence.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 3.835 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_hubble_sequence.py:

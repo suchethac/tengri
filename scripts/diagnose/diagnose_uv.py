@@ -83,7 +83,7 @@ model_dust = SEDModel.build(
     sfh={"type": "tsnorm", "*": FIXED, "peak_lbt_gyr": 0.3},
     dust={
         "type": "two_component",
-        "law_bc": "calzetti",
+        "law": "calzetti",
         "*": FIXED,
         "tau_bc": 0.5,
         "emission": {"type": "dale2014", "*": FIXED},

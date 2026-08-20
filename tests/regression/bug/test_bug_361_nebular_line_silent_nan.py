@@ -190,6 +190,7 @@ class TestBug361B_silent_nan_warning:
                     "logzsol": -0.1,
                 },
                 dust={
+                    "law": "power_law",
                     "type": "two_component",
                     "*": tengri.FIXED,
                     "tau_bc": 0.2,
@@ -219,7 +220,7 @@ class TestBug361B_silent_nan_warning:
             m = tengri.SEDModel.build(
                 ssp,
                 sfh={"type": "dpl", "*": tengri.FIXED},
-                dust={"type": "two_component", "*": tengri.FIXED},
+                dust={"law": "power_law", "type": "two_component", "*": tengri.FIXED},
             )
         pred = m.predict({"redshift": 0.05})
         with warnings.catch_warnings():

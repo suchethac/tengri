@@ -30,7 +30,7 @@ References
 
 Schaerer 2003, A&A, 397, 527 (ionizing photon production in massive starburst populations).
 
-.. GENERATED FROM PYTHON SOURCE LINES 14-115
+.. GENERATED FROM PYTHON SOURCE LINES 14-116
 
 
 
@@ -98,6 +98,7 @@ Schaerer 2003, A&A, 397, 527 (ionizing photon production in massive starburst po
             }
 
             dust_config = {
+                "law": "power_law",
                 "type": "two_component",
                 "all_params": tengri.FIXED,
                 "tau_diff": 0.0,
@@ -150,7 +151,7 @@ Schaerer 2003, A&A, 397, 527 (ionizing photon production in massive starburst po
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 14.417 seconds)
+   **Total running time of the script:** (0 minutes 17.510 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_lyalpha_ew_vs_age.py:

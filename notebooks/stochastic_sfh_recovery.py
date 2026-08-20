@@ -164,7 +164,7 @@ def build(observation, n_grid=N_GRID, approx=FAST_PATH):
         observation=observation,
         sfh={"type": ["dpl", "field"], "all_params": FREE},
         met={"logzsol": Fixed(-0.3)},
-        dust=builders.dust.two_component(defaults=FREE, law_bc="calzetti"),
+        dust=builders.dust.two_component(defaults=FREE, law="calzetti"),
         neb=builders.neb.ssp(),
         redshift=Fixed(Z_GAL),
         apply_igm=False,

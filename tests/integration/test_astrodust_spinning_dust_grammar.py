@@ -53,7 +53,7 @@ def test_grammar_accepts_spinning_dust(fixture_path, ssp_data):
         observation=obs,
         dust={
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "emission": {"type": "astrodust", "spinning_dust": True},
         },
         redshift=0.0,
@@ -77,7 +77,7 @@ def test_grammar_accepts_f_cnm(fixture_path, ssp_data):
         observation=obs,
         dust={
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "emission": {"type": "astrodust", "f_cnm": 0.5},
         },
         redshift=0.0,
@@ -105,7 +105,7 @@ def test_spinning_dust_changes_microwave_sed(ssp_data):
         sfh={"type": "dpl", "all_params": FIXED},
         dust={
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "tau_bc": 0.5,
             "tau_diff": 1.5,
             "emission": {"type": "astrodust", "spinning_dust": False},
@@ -121,7 +121,7 @@ def test_spinning_dust_changes_microwave_sed(ssp_data):
         sfh={"type": "dpl", "all_params": FIXED},
         dust={
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "tau_bc": 0.5,
             "tau_diff": 1.5,
             "emission": {"type": "astrodust", "spinning_dust": True},
@@ -201,7 +201,7 @@ def test_f_cnm_changes_spinning_dust_spectrum(ssp_data):
         sfh={"type": "dpl", "all_params": FIXED},
         dust={
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "tau_bc": 0.5,
             "tau_diff": 1.5,
             "emission": {"type": "astrodust", "spinning_dust": True, "f_cnm": 0.1},
@@ -217,7 +217,7 @@ def test_f_cnm_changes_spinning_dust_spectrum(ssp_data):
         sfh={"type": "dpl", "all_params": FIXED},
         dust={
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "tau_bc": 0.5,
             "tau_diff": 1.5,
             "emission": {"type": "astrodust", "spinning_dust": True, "f_cnm": 0.9},

@@ -104,7 +104,13 @@ model_sigma = tengri.SEDModel.build(
             "psd_tau_myr": 100.0,
         },
     ],
-    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
+    dust={
+        "law": "power_law",
+        "type": "two_component",
+        "all_params": tengri.FIXED,
+        "tau_diff": 0.2,
+        "tau_bc": 0.3,
+    },
     redshift=tengri.Fixed(0.1),
 )
 baseline_sigma = dict(model_sigma.spec.sample(jax.random.PRNGKey(0)))
@@ -149,7 +155,13 @@ model_tau = tengri.SEDModel.build(
             "psd_tau_myr": tengri.Uniform(30, 3000),
         },
     ],
-    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
+    dust={
+        "law": "power_law",
+        "type": "two_component",
+        "all_params": tengri.FIXED,
+        "tau_diff": 0.2,
+        "tau_bc": 0.3,
+    },
     redshift=tengri.Fixed(0.1),
 )
 baseline_tau = dict(model_tau.spec.sample(jax.random.PRNGKey(0)))

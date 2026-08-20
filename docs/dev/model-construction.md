@@ -39,7 +39,7 @@ model = SEDModel.build(ssp_data=ssp, observation=obs,
 model = SEDModel.build(
     ssp_data=ssp, observation=obs,
     sfh={'type': 'dpl', 'all_params': FREE, 'beta': Uniform(1, 3)},
-    dust={'type': 'two_component', 'law_bc': 'calzetti', 'all_params': FIXED,
+    dust={'type': 'two_component', 'law': 'calzetti', 'all_params': FIXED,
           'tau_bc': 0.5, 'emission': {'type': 'dale2014', 'all_params': FIXED}},
     neb={'type': 'cue', 'all_params': FIXED},
     shock={'norm': 'frac', 'frac': Uniform(0, 1)},   # composes with neb

@@ -50,7 +50,7 @@ References:
   .. [4] Asada, R., Ouchi, M., & collaborators 2025 — CGM damping wing
          absorption at z > 5 (experimental extension to Inoue+2014)
 
-.. GENERATED FROM PYTHON SOURCE LINES 34-218
+.. GENERATED FROM PYTHON SOURCE LINES 34-219
 
 
 
@@ -107,6 +107,7 @@ References:
     }
 
     DUST = {
+        "law": "power_law",
         "type": "two_component",
         "all_params": tengri.FIXED,
         "tau_diff": 0.02,

@@ -49,7 +49,13 @@ ssp = tengri.load_ssp()
 
 # Minimal host: suppress stellar emission, focus on AGN continuum
 SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
-DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+DUST = {
+    "law": "power_law",
+    "type": "two_component",
+    "all_params": tengri.FIXED,
+    "tau_diff": 0.0,
+    "tau_bc": 0.0,
+}
 
 # Fe II strength sweep: 0 (none) → 1.5 (strong)
 fe2_strength_values = np.linspace(0.0, 1.5, 6)

@@ -42,7 +42,7 @@ References:
 - Eisenstein et al. 2001, AJ, 122, 2267 (SDSS LRG selection)
 - Thomas et al. 2005, ApJ, 621, 673 (red-sequence ages)
 
-.. GENERATED FROM PYTHON SOURCE LINES 27-155
+.. GENERATED FROM PYTHON SOURCE LINES 27-161
 
 
 
@@ -56,7 +56,7 @@ References:
 
  .. code-block:: none
 
-    /tengri/src/tengri/forward/sed_model.py:1594: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.1 Gyr is narrower than the SSP grid spacing 1.09 Gyr at peak sfh_tsnorm_peak_lbt_gyr=8.5 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.09 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.1 Gyr is narrower than the SSP grid spacing 1.09 Gyr at peak sfh_tsnorm_peak_lbt_gyr=8.5 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.09 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
     Predicting 200 quiescent spectra (ages 6.0–11.0 Gyr)...
       Batch shape: (200, 2400)
@@ -125,7 +125,13 @@ References:
             "trunc": 13.5,
             "log_total_mass": 10.0,  # ~ log M* = 11 when integrated
         },
-        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+        dust={
+            "law": "power_law",
+            "type": "two_component",
+            "all_params": tengri.FIXED,
+            "tau_diff": 0.0,
+            "tau_bc": 0.0,
+        },
         redshift=tengri.Fixed(REDSHIFT),
     )
 
@@ -202,7 +208,7 @@ References:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 9.861 seconds)
+   **Total running time of the script:** (0 minutes 4.376 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_sdss_lrg_stack_template.py:

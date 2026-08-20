@@ -43,7 +43,7 @@ surface brightness; Sandage (1988) on K-corrections as pedagogical tools.
 
 .. sphx-glr-precomputed-img:
 
-.. GENERATED FROM PYTHON SOURCE LINES 32-176
+.. GENERATED FROM PYTHON SOURCE LINES 32-178
 
 
 
@@ -117,6 +117,7 @@ surface brightness; Sandage (1988) on K-corrections as pedagogical tools.
             "trunc": 13.0,  # extend to cosmic age
         },
         dust={
+            "law": "power_law",
             "type": "two_component",  # Adopted dust attenuation
             "all_params": tengri.FIXED,
             "tau_diff": 0.3,  # diffuse attenuation optical depth
@@ -153,6 +154,7 @@ surface brightness; Sandage (1988) on K-corrections as pedagogical tools.
                 "trunc": 13.0,
             },
             dust={
+                "law": "power_law",
                 "type": "two_component",
                 "all_params": tengri.FIXED,
                 "tau_diff": 0.3,
@@ -206,7 +208,7 @@ surface brightness; Sandage (1988) on K-corrections as pedagogical tools.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 8.062 seconds)
+   **Total running time of the script:** (0 minutes 5.603 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_cosmic_dimming_observed_flux.py:

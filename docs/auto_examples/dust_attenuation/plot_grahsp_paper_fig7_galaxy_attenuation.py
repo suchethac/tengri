@@ -79,7 +79,7 @@ model = SEDModel.build(
     },
     dust={
         "type": "two_component",
-        "law_bc": "calzetti",
+        "law": "calzetti",
         "all_params": FIXED,
         "tau_bc": 0.3,  # fixed birth-cloud baseline (stabilizes the FIR peak)
         "tau_diff": 0.3,  # baseline; overridden per E(B-V) below

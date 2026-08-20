@@ -31,6 +31,7 @@ def test_bakedin_predict_emission_lines_raises():
             ssp,
             sfh={"type": "const", "*": tengri.FIXED},
             dust={
+                "law": "power_law",
                 "type": "two_component",
                 "*": tengri.FIXED,
                 "tau_diff": 0.0,

@@ -43,7 +43,7 @@ References:
 - Meurer, Heckman & Calzetti 1999, ApJ, 521, 64 (starburst IRX–β relation)
 - Calzetti, Kinney & Storchi-Bergmann 1994, ApJ, 429, 582 (UV slope fitting windows)
 
-.. GENERATED FROM PYTHON SOURCE LINES 28-246
+.. GENERATED FROM PYTHON SOURCE LINES 28-253
 
 
 
@@ -57,7 +57,7 @@ References:
 
  .. code-block:: none
 
-    /tengri/src/tengri/forward/sed_model.py:1594: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.0612 Gyr at peak sfh_tsnorm_peak_lbt_gyr=0.5 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.0612 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.05 Gyr is narrower than the SSP grid spacing 0.0612 Gyr at peak sfh_tsnorm_peak_lbt_gyr=0.5 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.0612 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
 
 
@@ -151,6 +151,7 @@ References:
             "log_total_mass": 10.0,
         },
         dust={
+            "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
             "tau_diff": tengri.Uniform(0.0, 4.0),
@@ -202,7 +203,13 @@ References:
             "skew": 0.0,
             "trunc": 1.0,
         },
-        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+        dust={
+            "law": "power_law",
+            "type": "two_component",
+            "all_params": tengri.FIXED,
+            "tau_diff": 0.0,
+            "tau_bc": 0.0,
+        },
         redshift=tengri.Fixed(0.01),
     )
 
@@ -291,7 +298,7 @@ References:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 6.595 seconds)
+   **Total running time of the script:** (0 minutes 5.208 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_uv_slope_beta.py:

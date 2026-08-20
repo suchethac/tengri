@@ -49,7 +49,7 @@ def batch_fitter(synthetic_ssp_wide):
         sfh={"type": "dpl", "all_params": FIXED, "log_total_mass": Uniform(8.0, 12.0)},
         dust={
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "all_params": FIXED,
             "tau_bc": Uniform(0.0, 1.0),
         },

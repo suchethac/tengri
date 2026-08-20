@@ -55,7 +55,7 @@ def _sed(ssp, obs, *, dust: bool):
     dust_group = (
         {
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "all_params": FIXED,
             "tau_diff": Uniform(0.0, 2.0),
         }

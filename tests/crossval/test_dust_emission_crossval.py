@@ -22,6 +22,12 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+# numpy 2.0 compatibility: trapz was renamed to trapezoid but bagpipes still uses trapz.
+# Patch it before bagpipes imports run.
+if not hasattr(np, "trapz"):
+    np.trapz = np.trapezoid
+
+
 pytestmark = pytest.mark.crossval
 
 bagpipes_dust_emission = pytest.importorskip(
@@ -150,6 +156,11 @@ class TestEnergyBalanceCrossval:
 class TestBagpipesEnergyBalance:
     """Verify bagpipes' dust emission conserves energy end-to-end."""
 
+    @pytest.mark.skip(
+        reason="the installed bagpipes release is numpy-2-incompatible (np.arange with"
+        " array scalars raises inside model_galaxy) — reference unavailable in this"
+        " environment; unskip when bagpipes ships numpy-2 support (#1728)",
+    )
     def test_ir_flux_comparable_to_absorbed(self):
         """Integrated IR emission should be comparable to absorbed UV/optical.
 

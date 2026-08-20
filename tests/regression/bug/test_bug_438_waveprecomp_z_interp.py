@@ -45,7 +45,13 @@ def test_waveprecomp_error_bounded_at_high_n_z():
     )
     spec = dict(
         sfh={"type": "tsnorm", "*": tengri.FIXED},
-        dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.3, "tau_bc": 0.2},
+        dust={
+            "law": "power_law",
+            "type": "two_component",
+            "*": tengri.FIXED,
+            "tau_diff": 0.3,
+            "tau_bc": 0.2,
+        },
         redshift=tengri.Uniform(0.0, 3.0),
     )
     model_exact = tengri.SEDModel.build(ssp, observation=obs, approx=None, **spec)

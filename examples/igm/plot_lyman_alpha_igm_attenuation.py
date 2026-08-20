@@ -73,7 +73,13 @@ SFH = {
 }
 
 # Minimal dust to preserve continuum strength
-DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.05}
+DUST = {
+    "law": "power_law",
+    "type": "two_component",
+    "all_params": tengri.FIXED,
+    "tau_diff": 0.05,
+    "tau_bc": 0.05,
+}
 
 # Build model with IGM absorption enabled
 ssp = tengri.load_ssp()

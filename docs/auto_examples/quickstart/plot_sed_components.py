@@ -38,7 +38,7 @@ model = tengri.SEDModel.build(
     },
     dust={
         "type": "two_component",
-        "law_bc": "calzetti",
+        "law": "calzetti",
         "all_params": tengri.FIXED,
         "tau_bc": 1.0,
         "tau_diff": 0.5,

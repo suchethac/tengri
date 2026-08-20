@@ -75,7 +75,13 @@ def _model(scatter_dist):
             "*": FIXED,
         },
         met={"logzsol": Fixed(0.0), "logzsol_scatter": scatter_dist, "*": FIXED},
-        dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+        dust={
+            "law": "power_law",
+            "type": "two_component",
+            "tau_bc": Fixed(0.0),
+            "tau_diff": Fixed(0.0),
+            "*": FIXED,
+        },
         redshift=Fixed(0.1),
     )
 
@@ -124,7 +130,13 @@ def test_fixed_default_is_byte_identical_to_historical():
             "*": FIXED,
         },
         met={"logzsol": Fixed(0.0), "*": FIXED},
-        dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+        dust={
+            "law": "power_law",
+            "type": "two_component",
+            "tau_bc": Fixed(0.0),
+            "tau_diff": Fixed(0.0),
+            "*": FIXED,
+        },
         redshift=Fixed(0.1),
     )
     assert "met_logzsol_scatter" not in list(m_default.spec.free_params)

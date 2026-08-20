@@ -65,13 +65,21 @@ def test_single_component_emission_reradiates_absorbed_energy():
         warnings.simplefilter("ignore")
         with_em = _build(
             {
+                "law": "power_law",
                 "type": "single_component",
                 "*": tengri.FIXED,
                 "tau_v": tengri.Fixed(2.0),
                 "emission": {"type": "modified_blackbody", "*": tengri.FIXED},
             }
         )
-        no_em = _build({"type": "single_component", "*": tengri.FIXED, "tau_v": tengri.Fixed(2.0)})
+        no_em = _build(
+            {
+                "law": "power_law",
+                "type": "single_component",
+                "*": tengri.FIXED,
+                "tau_v": tengri.Fixed(2.0),
+            }
+        )
 
     fir_with = _far_ir_sum(with_em.predict_state({}))
     fir_without = _far_ir_sum(no_em.predict_state({}))
@@ -104,6 +112,7 @@ def test_single_component_emission_matches_two_component(real_ssp_only):
         warnings.simplefilter("ignore")
         single = _build(
             {
+                "law": "power_law",
                 "type": "single_component",
                 "*": tengri.FIXED,
                 "tau_v": tengri.Fixed(2.0),
@@ -112,6 +121,7 @@ def test_single_component_emission_matches_two_component(real_ssp_only):
         )
         two = _build(
             {
+                "law": "power_law",
                 "type": "two_component",
                 "*": tengri.FIXED,
                 "tau_diff": tengri.Fixed(2.0),
@@ -140,6 +150,7 @@ def test_single_component_publishes_nonzero_l_ir():
         warnings.simplefilter("ignore")
         model = _build(
             {
+                "law": "power_law",
                 "type": "single_component",
                 "*": tengri.FIXED,
                 "tau_v": tengri.Fixed(2.0),
@@ -170,13 +181,21 @@ def test_single_component_grid_emission_reradiates():
         warnings.simplefilter("ignore")
         with_em = _build(
             {
+                "law": "power_law",
                 "type": "single_component",
                 "*": tengri.FIXED,
                 "tau_v": tengri.Fixed(2.0),
                 "emission": {"type": "dale2014", "*": tengri.FIXED},
             }
         )
-        no_em = _build({"type": "single_component", "*": tengri.FIXED, "tau_v": tengri.Fixed(2.0)})
+        no_em = _build(
+            {
+                "law": "power_law",
+                "type": "single_component",
+                "*": tengri.FIXED,
+                "tau_v": tengri.Fixed(2.0),
+            }
+        )
 
     ratio = _far_ir_sum(with_em.predict_state({})) / max(
         _far_ir_sum(no_em.predict_state({})), 1e-50

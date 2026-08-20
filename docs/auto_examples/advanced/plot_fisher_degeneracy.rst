@@ -127,7 +127,7 @@ Conroy 2013 (ARA&A, 51, 393) for SED fitting context.
                 ssp,
                 observation=obs,
                 sfh={"type": "tsnorm", "all_params": tengri.FIXED},
-                dust={"type": "two_component", "all_params": tengri.FIXED},
+                dust={"law": "power_law", "type": "two_component", "all_params": tengri.FIXED},
                 redshift=tengri.Fixed(0.1),
             )
             phot = jnp.abs(mdl.predict_photometry(true_params))
@@ -156,7 +156,7 @@ Conroy 2013 (ARA&A, 51, 393) for SED fitting context.
             jac = jax.jacobian(forward_free_params)(param_array)  # shape: (n_bands, n_params)
 
             # Inverse noise covariance (diagonal).
-            noise_var = noise ** 2
+            noise_var = noise**2
             c_inv_diag = 1.0 / noise_var
 
             # Fisher = J^T C^{-1} J
@@ -206,7 +206,7 @@ Conroy 2013 (ARA&A, 51, 393) for SED fitting context.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 5.573 seconds)
+   **Total running time of the script:** (0 minutes 2.974 seconds)
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_fisher_degeneracy.py:

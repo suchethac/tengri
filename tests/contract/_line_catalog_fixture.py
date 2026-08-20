@@ -70,7 +70,7 @@ def build_two_galaxy_catalog(
         ssp_data=ssp,
         observation=obs_base,
         sfh={"type": "dpl", "*": FREE},
-        dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED},
+        dust={"type": "two_component", "law": "calzetti", "*": FIXED},
         neb={"type": "none"},
         redshift=Fixed(z),
     )
@@ -135,7 +135,7 @@ def build_two_galaxy_catalog(
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "dpl", "*": FREE},
-        dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED},
+        dust={"type": "two_component", "law": "calzetti", "*": FIXED},
         neb={"type": "none"},
         redshift=Fixed(z),
     )

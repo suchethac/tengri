@@ -130,7 +130,7 @@ def test_single_galaxy_surface_gets_the_same_answer(synthetic_ssp_wide, syntheti
         ssp_data=synthetic_ssp_wide,
         observation=synthetic_tophat_obs,
         sfh={"type": "dpl", "*": FREE},
-        dust={"type": "two_component", "law_bc": "calzetti", "*": FIXED},
+        dust={"type": "two_component", "law": "calzetti", "*": FIXED},
         neb={"type": "none"},
         redshift=Fixed(0.0),
     )

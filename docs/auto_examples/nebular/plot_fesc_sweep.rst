@@ -37,7 +37,7 @@ References:
 - Steidel et al. 2018, ApJ, 869, 123 (Lyman continuum observations)
 - Li et al. 2025, ApJ, 986, 9 (Cue emulator; arXiv:2405.04598)
 
-.. GENERATED FROM PYTHON SOURCE LINES 22-109
+.. GENERATED FROM PYTHON SOURCE LINES 22-115
 
 
 
@@ -51,7 +51,7 @@ References:
 
  .. code-block:: none
 
-    /tengri/examples/nebular/plot_fesc_sweep.py:107: UserWarning: This figure includes Axes that are not compatible with tight_layout, so results might be incorrect.
+    /tengri/examples/nebular/plot_fesc_sweep.py:113: UserWarning: This figure includes Axes that are not compatible with tight_layout, so results might be incorrect.
       fig.tight_layout()
 
 
@@ -95,7 +95,13 @@ References:
             "tau_gyr": 0.3,
             "log_total_mass": 10.0,
         },
-        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+        dust={
+            "law": "power_law",
+            "type": "two_component",
+            "all_params": tengri.FIXED,
+            "tau_diff": 0.0,
+            "tau_bc": 0.0,
+        },
         neb={"type": "cue", "all_params": tengri.FIXED, "fesc": tengri.Uniform(0.0, 1.0)},
         redshift=tengri.Fixed(0.05),
     )
@@ -154,7 +160,7 @@ References:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 7.901 seconds)
+   **Total running time of the script:** (0 minutes 6.163 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_fesc_sweep.py:

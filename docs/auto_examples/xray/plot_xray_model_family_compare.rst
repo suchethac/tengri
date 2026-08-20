@@ -46,7 +46,7 @@ rather than quietly missing it.
 
 Reference: Yang+2020 (alpha_ox corona); Lopez+2024, Asmus+2015 (alpha_IRX).
 
-.. GENERATED FROM PYTHON SOURCE LINES 30-112
+.. GENERATED FROM PYTHON SOURCE LINES 30-118
 
 
 
@@ -82,7 +82,13 @@ Reference: Yang+2020 (alpha_ox corona); Lopez+2024, Asmus+2015 (alpha_IRX).
 
     # One host galaxy for every model: only the xray block below changes.
     SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": 10.5}
-    DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.4, "tau_bc": 0.5}
+    DUST = {
+        "law": "power_law",
+        "type": "two_component",
+        "all_params": tengri.FIXED,
+        "tau_diff": 0.4,
+        "tau_bc": 0.5,
+    }
     AGN = {
         "type": "composable",
         "all_params": tengri.FIXED,
@@ -147,7 +153,7 @@ Reference: Yang+2020 (alpha_ox corona); Lopez+2024, Asmus+2015 (alpha_IRX).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.984 seconds)
+   **Total running time of the script:** (0 minutes 9.069 seconds)
 
 
 .. _sphx_glr_download_auto_examples_xray_plot_xray_model_family_compare.py:

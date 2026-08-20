@@ -53,6 +53,7 @@ def _model(tau_diff, tau_bc):
         ssp,
         sfh=SFH,
         dust={
+            "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
             "tau_diff": tau_diff,
@@ -154,6 +155,7 @@ for i, (age_myr, peak_lbt_gyr) in enumerate(zip(ages_myr, peak_lbt_values)):
             "log_total_mass": 10.0,
         },
         dust={
+            "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
             "tau_bc": TAU_BC,

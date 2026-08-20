@@ -54,7 +54,7 @@ def _model(ssp, radio):
         },
         dust={
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "all_params": FIXED,
             "tau_diff": 0.5,
             "tau_bc": 0.0,

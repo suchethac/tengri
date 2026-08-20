@@ -38,6 +38,7 @@ def _build_template(peak_lbt, width, tau_diff):
             "width_gyr": width,
         },
         dust={
+            "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
             "tau_diff": tau_diff,
