@@ -453,6 +453,40 @@ print("moved off the initial point:", {k: round(post.params[k] - params[k], 4) f
 # worked.
 
 # %% [markdown]
+# ### The sampler matters about fifty times more than the device
+#
+# Everything above compares hardware. This compares the one decision that turns
+# out to dominate it. Same 256 galaxies, same iteration budget, float32,
+# `K = n_gal` — only the backend name changes:
+#
+# | | CPU | GPU | galaxies/s (GPU) |
+# |---|---:|---:|---:|
+# | `mcmc_nuts` | 334.7 s | 274.5 s | 0.93 |
+# | `mcmc_hmc` | **4.92 s** | **5.71 s** | **44.9** |
+#
+# **48x on the GPU, 68x on the CPU, from changing one string.** The device choice
+# at this width is worth 1.16x.
+#
+# The reason is structural rather than statistical. NUTS picks its trajectory
+# length per draw by doubling until a U-turn — a `lax.while` whose trip count
+# differs per galaxy. Under `vmap` the batch cannot retire until the longest
+# trajectory in it finishes, so **every galaxy pays for the worst-mixing galaxy
+# in the chunk**, and a wider batch is more likely to contain an expensive one.
+# Fixed-length HMC gives every galaxy identical work, which is what a vectorized
+# axis wants. It is also why widening bought NUTS so little above.
+#
+# Before acting on the 48x: HMC at the default `n_leapfrog_steps=10` does less
+# work per draw than NUTS, which may take up to `2**max_num_doublings`. This is
+# cost per draw, and **effective samples per second is the number that decides a
+# fit** — not measured here. A 48x gap is far wider than any plausible mixing
+# penalty, and `notebooks/_setup.py` ships `HMC_VALIDATED` because fixed-length
+# HMC mixes these posteriors cleanly, but quote ESS/s in a paper, not this.
+#
+# Note also that the crossover moved. With HMC the CPU is *ahead* again at 256
+# (4.92 s against 5.71 s): per-draw cost fell ~50x while the GPU's fixed overhead
+# did not, so a cheaper sampler needs a wider catalog to reach the same crossing.
+
+# %% [markdown]
 # ## 5. What float32 buys, and what it costs
 #
 # On this workload float32 buys **nothing measurable**, because the workload is
@@ -620,3 +654,8 @@ print(f"matmul 2048^3 (f32): {mm:.2f} ms  ->  {2 * 2048**3 / (mm * 1e-3) / 1e9:.
 # For a fit that must be right, the default — CPU, float64 — remains the
 # reference. Reach for the GPU when the work is wide: catalogs, posterior
 # predictive sweeps, mock generation.
+#
+# And in that order of leverage: pick `mcmc_hmc` over `mcmc_nuts` for catalogs
+# (~50x), widen the batch past a few hundred (~4-15x), then choose the device
+# (~1.2x at 256 galaxies). Reaching for the card first optimizes the smallest
+# term.

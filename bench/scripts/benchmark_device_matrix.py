@@ -404,11 +404,16 @@ def cell_map(model, args) -> dict:
 
 
 def cell_catalog(model, args) -> dict:
-    """Shape E — vectorized per-galaxy NUTS, sweeping ``forward_chunk_size``.
+    """Shape E — vectorized per-galaxy sampling, sweeping ``forward_chunk_size``.
 
     ``mcmc_nuts`` and ``mcmc_hmc`` are the only backends the catalog path maps
     over galaxies; every other name falls back to a sequential per-galaxy
     ``Fitter``, where a device has nothing wide to do.
+
+    Which of the two matters on a device. NUTS chooses its trajectory length per
+    draw, so under ``vmap`` every galaxy in the batch runs until the *longest*
+    tree in that batch finishes; fixed-length HMC gives every galaxy identical
+    work. Compare them with ``--method``.
     """
     from tengri.inference.catalog_fitter import CatalogFitter
 
@@ -427,7 +432,7 @@ def cell_catalog(model, args) -> dict:
                 for _ in range(2):  # cold then warm
                     t0 = time.perf_counter()
                     cp = cat.run(
-                        "mcmc_nuts",
+                        args.method,
                         key=key,
                         forward_chunk_size=chunk,
                         verbose=False,
@@ -456,7 +461,7 @@ def cell_catalog(model, args) -> dict:
                         "error": f"{type(exc).__name__}: {str(exc)[:200]}",
                     }
                 )
-    return {"sweep": rows}
+    return {"method": args.method, "sweep": rows}
 
 
 def cell_dump(model, args) -> dict:
@@ -603,6 +608,12 @@ def main(argv=None) -> int:
     ap.add_argument("--batches", type=int, nargs="+", default=list(BATCHES))
     ap.add_argument("--n-gal", type=int, nargs="+", default=[16, 64])
     ap.add_argument("--chunk", type=int, nargs="+", default=[1, 16, 64])
+    ap.add_argument(
+        "--method",
+        default="mcmc_nuts",
+        choices=("mcmc_nuts", "mcmc_hmc"),
+        help="catalog sampler (shape E); the only two the catalog path vmaps",
+    )
     ap.add_argument("--warmup", type=int, default=30)
     ap.add_argument("--samples", type=int, default=50)
     ap.add_argument("--map-steps", type=int, default=300)

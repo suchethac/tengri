@@ -265,6 +265,42 @@ Three distinct causes:
 
 In **float64** — the default — nothing in this tree fails on CUDA at all.
 
+## Finding 9 — the sampler matters ~50x more than the device: NUTS is the wrong choice under vmap
+
+Same catalog, same 256 galaxies, same 10 warmup + 10 burnin + 20 samples, float32,
+`K = n_gal`. Only the backend name changes. Warm seconds.
+
+| | CPU f32 | GPU f32 | galaxies/s (GPU) |
+|---|---:|---:|---:|
+| `mcmc_nuts` | 334.7 | 274.5 | 0.93 |
+| `mcmc_hmc` | **4.92** | **5.71** | **44.9** |
+| NUTS / HMC | **68.0x** | **48.1x** | |
+
+Switching NUTS to fixed-length HMC is worth **48x on the GPU** and **68x on the
+CPU**. The device choice at this width is worth 1.16x. The sampler is the
+decision; the device is a detail.
+
+The mechanism is structural, not statistical. NUTS chooses its trajectory length
+per draw by doubling until a U-turn, which is a `lax.while` whose trip count
+varies per galaxy. Under `vmap` the batch cannot retire until the *longest*
+trajectory in it finishes, so every galaxy pays for the worst-mixing galaxy in the
+chunk, and the wider the batch the more likely it contains an expensive one.
+Fixed-length HMC gives every galaxy identical work, which is exactly what a
+vectorized axis wants. It is also why widening helped NUTS so little in Finding 6.
+
+**Caveat, and it matters before anyone acts on the 48x:** HMC at the default
+`n_leapfrog_steps=10` does less work per draw than NUTS, which may take up to
+`2**max_num_doublings`. The honest comparison is effective samples per second, and
+**ESS was not measured here** — this is cost per draw. A 48x gap is far larger than
+any plausible mixing penalty (and `notebooks/_setup.py` ships `HMC_VALIDATED`
+precisely because fixed-length HMC mixes these posteriors cleanly, max split-R-hat
+< 1.01), but the number to quote in a paper is ESS/s, not this.
+
+Also note the crossover moved: with HMC, 256 galaxies is no longer enough work to
+saturate the card (CPU 4.92 s against GPU 5.71 s), because the per-draw cost fell
+by ~50x while the GPU's fixed overhead did not. A cheaper sampler needs a wider
+batch to reach the same crossover.
+
 ## Interpretation
 
 The GPU question is a shape question. tengri's forward model is memory- and
@@ -291,6 +327,11 @@ lines in geoVI (Finding 8).
 galaxy; 4.3x–14.7x for a batched forward or gradient at 2048; only 1.22x for
 catalog NUTS at 256, because a sampler's sequential half does not batch. Use width,
 and expect a sampler to convert less of it than a forward pass does.
+
+**And fix the sampler before the hardware.** NUTS to fixed-length HMC on the same
+catalog is worth 48x on the GPU (Finding 9) — roughly forty times more than the
+device choice is worth at that width. A GPU cannot rescue a backend whose cost
+under `vmap` is set by its worst-case galaxy.
 
 ## Caveats
 
