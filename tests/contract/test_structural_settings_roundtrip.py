@@ -250,7 +250,7 @@ def test_every_structural_key_has_a_roundtrip_rule():
     # law_bc/law_diff pair), the per-component overrides live in a flattened
     # dict, and two booleans are stored as a float cutoff.
     hand_written = {
-        "law",
+        "law",  # dust.law (single/two_component); agn.atten law (smc_prevot)
         "law_bc",
         "law_diff",
         "law_neb",
@@ -276,7 +276,7 @@ def test_every_structural_key_has_a_roundtrip_rule():
             # is emitted by the per-group walk, not by a structural rule.
             if f"{group}.{key}" in _GROUP_STRUCTURAL_KEYS:
                 continue
-            if group in ("dust_attenuation", "dust_emission") and key in hand_written:
+            if (group == "dust" or group == "agn.atten") and key in hand_written:
                 continue
             missing.append(f"{group}.{key}")
 

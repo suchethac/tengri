@@ -20,6 +20,7 @@ dozens of no-op nuisance dimensions. These tests pin that contract:
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import jax.numpy as jnp
@@ -421,11 +422,46 @@ def test_agn_panchromatic_free_params_all_move_predict(real_ssp_only):
             "disc": {"type": "multicolor"},
             "torus": {"type": "skirtor"},
             "nlr": {"type": "analytic"},
+            "blr": {"type": "none"},
+            "feii": {"type": "none"},
+            # polar_dust, not none: the recipe frees agn_polar_ebv, and the
+            # polar params only act with the polar-dust atten stage on —
+            # atten 'none' would make them no-ops BY CONSTRUCTION here and
+            # invalidate the no-op guard for exactly those params.
+            "atten": {"type": "polar_dust"},
             "agn_log_lbol": Fixed(12.0),
             "*": FIXED,
         }
         if name is not None:
-            agn[name] = Fixed(value)
+            # #1980: sub-block-owned params must nest under their PARTITION
+            # owner — the block the flat-placement error names. The consumes
+            # map is NOT the placement authority: params consumed by several
+            # blocks (cos_inc, polar_ebv, polar_beta) are grammar-ACCEPTED
+            # under any consuming block, but only the partition owner's copy
+            # reaches the spec — the others are silently dropped (measured:
+            # torus-nested polar_ebv left the spec at its 0.03 default; that
+            # pre-existing silent drop is its own issue). So ask the grammar:
+            # try flat, and nest wherever its refusal points.
+            if name in AGN_SHARED_PARAMS:
+                agn[name] = Fixed(value)
+            else:
+                from tengri.parameters.groups import parse_groups
+
+                short = name.removeprefix("agn_")
+                try:
+                    parse_groups(
+                        agn={**agn, name: Fixed(value)},
+                        sfh={"type": "delayed", "*": FIXED},
+                        redshift=Fixed(0.05),
+                    )
+                except ValueError as exc:
+                    owner = re.search(r"'agn\.(\w+)' parameter", str(exc))
+                    assert owner, f"unexpected flat-placement refusal for {name}: {exc}"
+                    sub = owner.group(1)
+                    agn[sub] = {**agn[sub], short: Fixed(value)}
+                else:
+                    # The grammar accepts it flat (a shared-style param).
+                    agn[name] = Fixed(value)
         m = SEDModel.build(
             ssp_data=ssp,
             observation=obs,
@@ -438,7 +474,7 @@ def test_agn_panchromatic_free_params_all_move_predict(real_ssp_only):
             },
             dust_emission={"type": "dale2014_cigale"},
             agn=agn,
-            radio={"type": "condon92"},
+            radio={"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}},
             xray={"type": "simple"},
             redshift=Fixed(0.05),
         )

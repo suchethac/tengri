@@ -87,7 +87,7 @@ def tengri_moneyshot(ssp):
             "torus": {"type": "skirtor", "*": FIXED, "tau_skirtor": 5.0, "torus_frac": 0.5},
             "lines": {"type": "nlr", "*": FIXED},
         },
-        radio={"type": "condon92", "*": FIXED},
+        radio={"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}, "*": FIXED},
         xray={"type": "simple", "*": FIXED},
         redshift=Fixed(Z),
     )

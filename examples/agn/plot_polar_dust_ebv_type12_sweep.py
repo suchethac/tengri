@@ -60,17 +60,26 @@ COMMON = dict(
 # Make agn_polar_ebv and agn_cos_inc FREE so we can sweep them at predict time.
 AGN = {
     "disc": {"type": "multicolor", "all_params": tengri.FIXED},
-    "torus": {"type": "skirtor", "all_params": tengri.FIXED, "tau_skirtor": 7.0},
+    "torus": {
+        "type": "skirtor",
+        "all_params": tengri.FIXED,
+        "tau_skirtor": 7.0,
+        # A Distribution at per-param level overrides the wildcard and makes
+        # the parameter FREE (a bare FREE sentinel is swallowed by '*: FIXED').
+        # #1980: sub-block params nest under their owner — cos_inc is a torus
+        # parameter, polar_ebv an atten one; writing them flat now raises.
+        "cos_inc": tengri.Uniform(0.0, 1.0),
+    },
     "nlr": {"type": "none", "all_params": tengri.FIXED},
     "blr": {"type": "none", "all_params": tengri.FIXED},
-    "atten": {"type": "polar_dust", "all_params": tengri.FIXED},
+    "atten": {
+        "type": "polar_dust",
+        "all_params": tengri.FIXED,
+        "polar_ebv": tengri.Uniform(0.0, 0.5),
+    },
     "all_params": tengri.FIXED,
     "log_lbol": 12.0,
     "lum_ratio": 1.0,  # without this the AGN is multiplied by 0 (default)
-    # A Distribution at per-param level overrides the wildcard and makes the
-    # parameter FREE (a bare FREE sentinel here is swallowed by '*: FIXED').
-    "polar_ebv": tengri.Uniform(0.0, 0.5),
-    "cos_inc": tengri.Uniform(0.0, 1.0),
 }
 
 print("Building shared AGN model (polar_ebv and cos_inc FREE)...")

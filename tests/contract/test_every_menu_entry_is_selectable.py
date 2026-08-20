@@ -74,6 +74,31 @@ def _names(menu) -> list[str]:
     return sorted({(m.get("name") if isinstance(m, dict) else str(m)) for m in menu})
 
 
+def _radio_model_to_composable(n: str) -> dict:
+    """Convert legacy radio model name to composable form."""
+    from tengri.parameters.groups import _legacy_radio_type_to_blocks
+
+    if n == "none":
+        return {"radio": {"sf": {"type": "none"}, "agn": {"type": "none"}, "*": FIXED}}
+    elif n == "condon92":
+        return {
+            "radio": {
+                "sf": {"type": "bell2003"},
+                "agn": {"type": "powerlaw"},
+                "*": FIXED,
+            }
+        }
+    else:
+        sf_variant, agn_variant = _legacy_radio_type_to_blocks(n)
+        return {
+            "radio": {
+                "sf": {"type": sf_variant},
+                "agn": {"type": agn_variant},
+                "*": FIXED,
+            }
+        }
+
+
 def _cases() -> list[tuple[str, str, dict]]:
     """``(menu, entry, build kwargs)`` for every entry in every live menu."""
     specs = [
@@ -122,7 +147,7 @@ def _cases() -> list[tuple[str, str, dict]]:
         (
             "radio model",
             tengri.list_radio_models,
-            lambda n: {"radio": {"type": n, "all_params": FIXED}},
+            lambda n: _radio_model_to_composable(n),
         ),
         (
             "xray model",
@@ -156,11 +181,17 @@ def _cases() -> list[tuple[str, str, dict]]:
         m = re.search(r"agn=\{'(\w+)':", row.get("use", ""))
         if m is None:
             continue
+        # Special handling for atten/smc_prevot: use law key instead of type
+        axis = m.group(1)
+        if axis == "atten" and name == "smc_prevot":
+            sub_block_spec = {"law": "prevot_smc", "all_params": FIXED}
+        else:
+            sub_block_spec = {"type": name, "all_params": FIXED}
         out.append(
             (
-                f"agn.{m.group(1)}",
+                f"agn.{axis}",
                 name,
-                {"agn": {"type": "composable", m.group(1): {"type": name, "all_params": FIXED}}},
+                {"agn": {"type": "composable", axis: sub_block_spec}},
             )
         )
     return out

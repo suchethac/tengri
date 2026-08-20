@@ -652,16 +652,20 @@ def _damping_wing_tau(
     x_bubble = v_bubble / 2.998e5  # dimensionless
 
     # Integrated damping wing tau from Miralda-Escude (1998) Eq. 9:
-    # tau(x) = tau_GP * x_HI * Lambda / pi * [1/x_bubble - 1/x]
-    # for x > x_bubble (outside the bubble on the red side).
-    #
-    # The 1/x_bubble term gives the total column from the bubble edge,
-    # and 1/x corrects for the integration starting point.
-    # Use soft clipping for differentiability.
-    x_safe = jnp.maximum(x_wave, x_bubble + 1e-10)
-    tau_wing = (
-        tau_GP * x_HI * lambda_damp / jnp.pi * (1.0 / jnp.maximum(x_bubble, 1e-10) - 1.0 / x_safe)
-    )
+    # For a source behind a semi-infinite slab of neutral gas extending from
+    # the bubble edge (at offset x_bubble) to high redshift, the integrated
+    # damping wing is obtained from shifting the integration bounds by the
+    # observed frequency offset x_obs:
+    #   tau(x_obs) = tau_GP * x_HI * Lambda / (pi * x_eff)
+    # where x_eff = x_obs + x_bubble is the effective offset accounting for
+    # the bubble size. Each parcel at velocity v > v_bubble sees the photon
+    # at cumulative offset x_obs + x_bubble (the bubble suppresses the
+    # near-line absorption at x < x_bubble).
+    # This represents tau ∝ 1/x in the far wing, not 1/x^2 (which would be
+    # a thin shell at the bubble edge; the extended medium gives 1/x).
+    x_eff = x_wave + x_bubble  # Effective offset including bubble size
+    x_eff_safe = jnp.maximum(x_eff, 1e-10)  # Avoid division by zero
+    tau_wing = tau_GP * x_HI * lambda_damp / (jnp.pi * x_eff_safe)
 
     # Smooth bubble mask: suppress for x < x_bubble (inside bubble)
     bubble_mask = jax.nn.sigmoid((x_wave - x_bubble) / jnp.maximum(x_bubble * 0.1, 1e-8))

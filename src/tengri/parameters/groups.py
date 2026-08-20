@@ -1908,6 +1908,16 @@ def _translate_structural(groups: dict) -> dict:
         # loudly and point at the consistent dict grammar rather than guessing.
         if group_name in _GATE_SUGGESTED_TYPE and isinstance(group_dict, bool):
             suggested = _GATE_SUGGESTED_TYPE[group_name]
+            if group_name == "radio":
+                # Radio uses the composable form, not the legacy type form
+                sf_spec = "{'type': 'bell2003'}"
+                agn_spec = "{'type': 'powerlaw'}"
+                raise ValueError(
+                    f"{group_name}={group_dict!r} is not a valid declaration — declare "
+                    f"radio with the composable surface using 'sf' and 'agn' keys: "
+                    f"radio={{'sf': {sf_spec}, 'agn': {agn_spec}}} "
+                    f"to enable (add per-param priors), or omit to disable."
+                )
             raise ValueError(
                 f"{group_name}={group_dict!r} is not a valid declaration — declare "
                 f"{group_name} like every other component, with a dict selecting the "
@@ -2758,16 +2768,11 @@ def _translate_radio(radio_dict: dict, result: dict) -> None:
             "agn": {"type": "dpl"},  # AGN variant
         }
 
-    **Legacy form (back-compat)**:
-
-    .. code-block:: python
-
-        radio = {"type": "condon92"}  # radio on with default sf/agn models
-        radio = {"type": "radio_dpl"}  # == radio={'agn': {'type': 'dpl'}}
-
-    The legacy name is resolved onto the two axes by
-    :func:`_legacy_radio_type_to_blocks` rather than assumed to be the
-    default pair — accepting a name and then ignoring it is #1461.
+    **Legacy form (RETIRED, #1980)** — ``radio={'type': 'condon92'}`` now
+    raises with the composable equivalent in the message.
+    :func:`_legacy_radio_type_to_blocks` survives only to compute that
+    equivalent for the error text (naming the mapping rather than a
+    generic default pair — accepting a name and then ignoring it is #1461).
 
     Raises if both 'type' and 'sf'/'agn' sub-blocks are present.
     """
@@ -2776,33 +2781,45 @@ def _translate_radio(radio_dict: dict, result: dict) -> None:
     has_agn_block = "agn" in radio_dict
 
     if has_legacy_type and (has_sf_block or has_agn_block):
-        # The legacy example is derived from the live vocabulary, not written
-        # by hand: this message used to recommend ``radio={'type': 'bell2003'}``,
-        # which the validator below rejects ("Unknown radio type 'bell2003'") —
-        # ``bell2003`` is an ``sf`` variant, never a legacy ``type``. A reader
-        # following the recovery advice landed on a second error.
-        legacy_example = sorted(_valid_radio_types() - {"none"})
-        legacy_hint = legacy_example[0] if legacy_example else "none"
+        # #1980: the legacy 'type' key is retired, so the recovery advice must
+        # not offer it as one of two valid spellings — drop it and keep the
+        # composable form only.
         raise ValueError(
-            "radio: cannot mix legacy 'type' key with 'sf'/'agn' sub-blocks. "
-            f"Use either: radio={{'type': '{legacy_hint}'}} (legacy) "
-            "or radio={'sf': {'type': 'bell2003'}, 'agn': {'type': 'powerlaw'}} (new)."
+            "radio: the legacy 'type' key is retired and cannot be mixed with "
+            "'sf'/'agn' sub-blocks. Remove 'type' and use the composable form: "
+            "radio={'sf': {'type': 'bell2003'}, 'agn': {'type': 'powerlaw'}}."
         )
 
-    # Legacy form: radio={'type': 'X'} → resolve X onto the sf/agn axes
-    if has_legacy_type and not has_sf_block and not has_agn_block:
+    # Legacy form retired: radio={'type': 'X'} is no longer accepted.
+    # Users must use the composable surface: radio={'sf': {...}, 'agn': {...}}
+    if has_legacy_type:
         radio_type = radio_dict["type"]
-        valid_radio = _valid_radio_types()
-        if radio_type not in valid_radio:
-            suggestions = difflib.get_close_matches(radio_type, valid_radio, n=2, cutoff=0.6)
-            suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-            raise ValueError(f"Unknown radio type '{radio_type}'.{suggest_str}")
-        result["radio"] = radio_type != "none"
-        if radio_type != "none":
-            sf_variant, agn_variant = _legacy_radio_type_to_blocks(radio_type)
-            result["radio_sfr_mode"] = sf_variant
-            result["radio_agn_model"] = agn_variant
-        return
+        # Provide helpful guidance: show what the legacy type maps to
+        sf_variant, agn_variant = "bell2003", "powerlaw"  # defaults
+        if radio_type == "condon92":
+            # condon92 used both defaults
+            raise ValueError(
+                f"radio legacy type form is retired. "
+                f"radio={{'type': '{radio_type}'}} → use the composable form: "
+                f"radio={{'sf': {{'type': '{sf_variant}'}}, 'agn': {{'type': '{agn_variant}'}}}}"
+            )
+        elif radio_type != "none":
+            # Try to find what this maps to for a better error message
+            try:
+                sf_variant, agn_variant = _legacy_radio_type_to_blocks(radio_type)
+            except ValueError:
+                sf_variant, agn_variant = "bell2003", "powerlaw"
+            raise ValueError(
+                f"radio legacy type form is retired. "
+                f"radio={{'type': '{radio_type}'}} → use the composable form: "
+                f"radio={{'sf': {{'type': '{sf_variant}'}}, 'agn': {{'type': '{agn_variant}'}}}}"
+            )
+        else:  # radio_type == 'none'
+            raise ValueError(
+                "radio legacy type form is retired. "
+                "radio={'type': 'none'} → use the composable form with both 'none': "
+                "radio={'sf': {'type': 'none'}, 'agn': {'type': 'none'}}"
+            )
 
     # New composable form: extract SF and AGN sub-blocks
     sf_variant = "bell2003"  # default
@@ -2975,6 +2992,12 @@ def _translate_foreground(fg_dict: dict, result: dict) -> None:
     Surfaces three top-level kwargs on ``Parameters`` so the SEDModel can
     apply the screen in the observed-frame SED path, after IGM and
     redshifting, independently from the host-galaxy ``dust`` block.
+
+    **Intentional design**: ``foreground`` is deliberately settings-only
+    (no ``type`` key, no free parameters). Milky Way dust extinction is not a
+    fittable model choice — it is observational / astronomical data — so it
+    remains a bare configuration dictionary. Unlike other groups (dust, AGN,
+    radio, etc.), foreground carries no sub-blocks and no structural type.
     """
     ebmv = fg_dict.get("ebmv_mw", 0.0)
     law = fg_dict.get("law", "cardelli")
@@ -3082,7 +3105,7 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     "agn.nlr": frozenset({"type", "*"}),
     "agn.blr": frozenset({"type", "*"}),
     "agn.feii": frozenset({"type", "*"}),
-    "agn.atten": frozenset({"type", "*"}),
+    "agn.atten": frozenset({"type", "*", "law"}),
     # Deprecated: agn.lines is expanded to (agn.nlr, agn.blr) via expand_lines_alias
     "agn.lines": frozenset({"type", "*"}),
     "foreground": frozenset({"ebmv_mw", "law", "rv"}),
@@ -3409,15 +3432,13 @@ def _validate_user_keys(
         group_allowed = _GROUP_STRUCTURAL_KEYS.get(top_key, frozenset({"type", "*"}))
         param_names = _short_names_for_group(top_key, param_partition)
         if top_key == "agn":
-            # AGN top-level also accepts shared param short/full names
-            # *and* names from every sub-block (cross-level acceptance —
-            # see :func:`_build_agn_search_view`). Sub-block dicts are
-            # still tagged separately below.
+            # AGN top-level accepts only the shared param short/full names
+            # (agn_log_lbol, agn_lum_ratio), not sub-block-owned params.
+            # Sub-block params written at the top level raise with guidance
+            # on correct nesting (e.g., agn={'torus': {'tau_skirtor': ...}}).
+            # This matches dust.emission strictness: parameters must be nested
+            # under their owning sub-block.
             param_names = param_names | agn_shared_names
-            for sub_name in _AGN_SUBBLOCK_KEYS:
-                param_names = param_names | _short_names_for_group(
-                    f"agn.{sub_name}", param_partition
-                )
         # NOTE: the dust top level deliberately does NOT accept dust.emission
         # short names. It used to, "for legacy code that flattens emission
         # params at the dust level ... still resolved via the dust.emission
@@ -3823,9 +3844,54 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
                 f"got {type(block_spec).__name__}."
             )
 
-        block_type = block_spec.get("type")
+        # Special handling for atten: 'law' key selects smc_prevot via DUST_LAWS,
+        # while 'type' selects genuine attenuation models (polar_dust, grahsp_biatten, etc)
+        block_type = None
+        if block_name == "atten":
+            law_key = block_spec.get("law")
+            type_key = block_spec.get("type")
+
+            # Check for conflicting law and type keys
+            if law_key is not None and type_key is not None:
+                raise ValueError(
+                    "agn['atten'] cannot specify both 'law' and 'type' keys. "
+                    "Use 'law' for DUST_LAWS curves (e.g. law='prevot_smc') or "
+                    "'type' for genuine attenuation models (e.g. type='polar_dust')."
+                )
+
+            # Reject old law-as-type spelling: type='smc_prevot'
+            if type_key == "smc_prevot":
+                raise ValueError(
+                    "agn['atten'] type='smc_prevot' is no longer supported. "
+                    "Use the new form with law key instead:\n"
+                    "  agn={'atten': {'law': 'prevot_smc', 'ebv': Uniform(...)}}\n"
+                    "Valid DUST_LAWS names: smc, prevot_smc, calzetti, power_law, cardelli, etc."
+                )
+
+            if law_key is not None:
+                # Validate law name against DUST_LAWS
+                from tengri.components.dust.laws._registry import DUST_LAWS
+
+                if law_key not in DUST_LAWS:
+                    available = sorted(DUST_LAWS.keys())
+                    suggestions = difflib.get_close_matches(law_key, available, n=2, cutoff=0.6)
+                    suggest_str = (
+                        f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+                    )
+                    raise ValueError(
+                        f"Unknown dust law '{law_key}'.{suggest_str}\n"
+                        f"Valid DUST_LAWS: {', '.join(available)}"
+                    )
+                # Map law name to smc_prevot block (currently the only law-based wrapper)
+                block_type = "smc_prevot"
+            else:
+                block_type = type_key
+
+        else:
+            block_type = block_spec.get("type")
+
         if block_type is None:
-            # Assume 'none' if no type given
+            # Assume 'none' if no type/law given
             result[block_to_kwarg[block_name]] = "none"
             continue
 
@@ -4318,7 +4384,12 @@ def parameters_to_groups(spec: Parameters) -> dict:
         # Add type from the spec's settings
         type_value = _extract_group_type(group_name, spec)
         if type_value is not None:
-            group_output["type"] = type_value
+            # Special handling for agn.atten: emit 'law' key for smc_prevot
+            # (the DUST_LAWS wrapper), 'type' for genuine models
+            if group_name == "agn.atten" and type_value == "smc_prevot":
+                group_output["law"] = "prevot_smc"
+            else:
+                group_output["type"] = type_value
 
         # Add other structural settings
         _add_structural_settings(group_name, group_output, spec)

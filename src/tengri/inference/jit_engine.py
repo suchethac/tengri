@@ -619,12 +619,24 @@ def get_or_build_signal_response(fitter):
        ``OptimizeVI.update`` skips re-tracing the SPS/dust/AGN stack for
        every new galaxy.
 
-    Keyed by ``_engine_cache_key()`` (captures data_type, param names, model
-    structure — but not galaxy data values or shapes).
+    Keyed by ``compile_signature()`` — ``(model_sig, _engine_cache_key())``.
+
+    It keyed on ``_engine_cache_key()`` alone until #1972, on the claim that
+    that key "captures ... model structure". It does not: it carries data_type,
+    spec flags, free names, feature channels and the params override, while the
+    model's physics config (dust law, nebular backend, AGN model, SSP identity,
+    build precision) lives in ``SEDModel.compile_signature`` only. So two models
+    differing solely in an attenuation law received the SAME cached closure —
+    which then predicts with the wrong law, silently. ``_key_matches_sig`` had
+    already documented these keys as ``compile_signature()`` tuples, so surgical
+    lean was matching against a shape this cache did not store.
+
+    Free for catalogs: a catalog uses one model, so ``model_sig`` is constant
+    across rows and the cross-galaxy sharing this cache exists for is unchanged.
     """
     from tengri.utils.compile_log import instrument_first_call
 
-    cache_key = fitter._engine_cache_key()
+    cache_key = fitter.compile_signature()
 
     if _SHARED_CACHES_DISABLED:
         signal_response, _ = _build_signal_response(fitter)
