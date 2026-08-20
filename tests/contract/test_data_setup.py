@@ -12,11 +12,11 @@ pytestmark = pytest.mark.contract
 
 @pytest.mark.unit
 def test_list_known_ssps_includes_default():
-    """Verify the default FSPS PARSEC+MILES Chabrier SSP is in the known list."""
+    """Verify the default FSPS MIST+MILES Chabrier SSP is in the known list."""
     # Returns a _RegistryTable since #1285; ``.to_dict()`` is the old shape.
     ssps = list_known_ssps().to_dict("filename")
-    assert "fsps_prsc_miles_chabrier" in ssps
-    assert ssps["fsps_prsc_miles_chabrier"] == "fsps_prsc_miles_chabrier.h5"
+    assert "fsps_mist_miles_chabrier" in ssps
+    assert ssps["fsps_mist_miles_chabrier"] == "fsps_mist_miles_chabrier.h5"
 
 
 @pytest.mark.unit
@@ -32,7 +32,7 @@ def test_list_known_ssps_returns_copy():
 def test_download_ssp_skips_existing(tmp_path, monkeypatch):
     """Verify that download_ssp skips existing files without calling urlopen."""
     # Pre-create the target file with non-zero size
-    target_file = tmp_path / "fsps_prsc_miles_chabrier.h5"
+    target_file = tmp_path / "fsps_mist_miles_chabrier.h5"
     target_file.write_bytes(b"existing data")
     mtime_before = target_file.stat().st_mtime
 
@@ -86,7 +86,7 @@ def test_download_ssp_uses_env_var(tmp_path, monkeypatch):
     result = download_ssp(force=True)
 
     # Verify file was created in the env var directory
-    expected_path = tmp_path / "fsps_prsc_miles_chabrier.h5"
+    expected_path = tmp_path / "fsps_mist_miles_chabrier.h5"
     assert result == expected_path
     assert expected_path.exists()
     assert expected_path.stat().st_size == 16
@@ -150,9 +150,9 @@ def test_download_ssp_default_dest_uses_cwd(tmp_path, monkeypatch):
     result = download_ssp(force=True)
 
     # Verify file was created in data/ directory (relative to tmp_path)
-    expected_file = tmp_path / "data" / "fsps_prsc_miles_chabrier.h5"
+    expected_file = tmp_path / "data" / "fsps_mist_miles_chabrier.h5"
     assert expected_file.exists()
-    assert result.name == "fsps_prsc_miles_chabrier.h5"
+    assert result.name == "fsps_mist_miles_chabrier.h5"
     assert result.parent.name == "data"
 
 

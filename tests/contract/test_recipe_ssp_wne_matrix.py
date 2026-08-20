@@ -118,7 +118,7 @@ class TestRecipeSspMatrixWithWNE:
         error_text = str(exc_info.value)
 
         # Must mention the exact downloadable grid name
-        assert "fsps_prsc_miles_chabrier" in error_text, (
+        assert "fsps_mist_miles_chabrier" in error_text, (
             "error must name the exact downloadable grid; got:\n" + error_text
         )
 
@@ -133,7 +133,7 @@ class TestRecipeSspMatrixWithWNE:
         error_text = str(exc_info.value)
 
         # Must include the exact Python call users can copy
-        assert "tengri.download_ssp('fsps_prsc_miles_chabrier')" in error_text, (
+        assert "tengri.download_ssp('fsps_mist_miles_chabrier')" in error_text, (
             "error must include exact copy-pasteable Python command; got:\n" + error_text
         )
 
