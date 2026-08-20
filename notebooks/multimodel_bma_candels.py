@@ -248,7 +248,10 @@ DIR_SFH = {
     "log_total_mass": Uniform(8.0, 12.5),
     **{f"z_{i}": FREE for i in range(6)},  # Leja+2017 Dirichlet bin variables
 }
-DUST = {"law": "power_law", "tau_bc": Uniform(0.0, 3.0), "tau_diff": Uniform(0.0, 2.0)}
+# NO `law` here, deliberately: this fragment is splatted into each model's dict
+# AFTER that dict names its own law, so a `law` in here would silently override
+# all four and collapse the comparison to one curve (#1989 did exactly that).
+DUST = {"tau_bc": Uniform(0.0, 3.0), "tau_diff": Uniform(0.0, 2.0)}
 
 # Display metadata (colors/labels match the published proposal figure)
 CONFIG_ORDER = ["A", "B", "C", "D"]
