@@ -12,7 +12,7 @@ users can organize parameters into semantic groups::
 
     params = parse_groups(
         sfh={"type": "dpl", "all_params": FREE, "beta": 0.5},
-        dust={"type": "two_component", "law_bc": "calzetti", "all_params": FIXED},
+        dust={"type": "two_component", "law": "calzetti", "all_params": FIXED},
         neb={"type": "cue"},
         redshift=FREE,
     )
@@ -99,6 +99,7 @@ from typing import NamedTuple
 
 from tengri.config.exceptions import (
     AdvisoryWarning,
+    DefaultFixedParametersWarning,
     ParameterError,
     WildcardPartialFreeWarning,
     warn_measured,
@@ -1012,6 +1013,7 @@ def parse_groups(**kwargs) -> Parameters:
         provenance.setdefault(name, "registry_default")
     object.__setattr__(final_params, "_group_provenance", provenance)
 
+    _warn_silently_fixed_parameters(final_params, param_partition, kwargs)
     _warn_firrc_slope_degeneracy(final_params)
 
     return final_params
@@ -1449,6 +1451,134 @@ def _check_wildcard_freed_something(
         )
 
 
+def _warn_silently_fixed_parameters(
+    final_params: Parameters, param_partition: dict[str, str], kwargs: dict
+) -> None:
+    """Warn when a parameter group silently fixes parameters (no disposition).
+
+    Parameters
+    ----------
+    final_params : Parameters
+        The resolved Parameters object with _group_provenance set.
+    param_partition : dict[str, str]
+        Maps parameter names to their group (group name or "_toplevel", "_structural").
+    kwargs : dict
+        The original user-provided kwargs to parse_groups.
+
+    Notes
+    -----
+    Emits DefaultFixedParametersWarning when a group's parameters are marked as
+    "registry_default" provenance AND are Fixed, meaning the user stated no
+    'all_params' disposition and those params were pinned at defaults.
+    One warning per group, listing the first ~8 parameters and their values.
+    """
+    provenance = getattr(final_params, "_group_provenance", {})
+
+    # Collect parameters fixed by default (registry_default + Fixed)
+    # grouped by their parameter group
+    default_fixed_by_group: dict[str, list[tuple[str, float]]] = {}
+
+    # Check whether user provided an explicit met block
+    has_met_block = isinstance(kwargs.get("met"), dict)
+
+    for param_name in final_params._distributions:
+        # Skip if not in provenance (shouldn't happen) or if not registry_default
+        if provenance.get(param_name) != "registry_default":
+            continue
+
+        # Skip if not Fixed
+        dist = final_params._distributions[param_name]
+        if not dist.is_fixed:
+            continue
+
+        # Get the group this parameter belongs to
+        group = param_partition.get(param_name)
+        if group is None or group == "_structural" or group == "_toplevel":
+            # Skip structural and toplevel parameters
+            continue
+
+        # ``met_*`` sits in the ``sfh`` partition when the user passed no ``met``
+        # block, by design (#311/#1720, see ``met_group=`` above). Warning about
+        # it under the ``sfh`` label would name a group the user never wrote and
+        # hand them a remedy that does not apply: ``sfh={'all_params': FIXED}``
+        # says nothing about metallicity. Naming the wrong group is worse than
+        # staying quiet, so stay quiet.
+        if group == "sfh" and param_name.startswith("met_") and not has_met_block:
+            continue
+
+        # Collect this parameter as silently-fixed
+        value = dist.default
+        default_fixed_by_group.setdefault(group, []).append((param_name, value))
+
+    # For each group with silently-fixed parameters, check if the user
+    # explicitly stated a disposition. Only warn if they didn't.
+    for group, params_and_values in default_fixed_by_group.items():
+        # Determine if the user actually provided this group in kwargs
+        if group.startswith("dust."):
+            # Sub-group like dust.emission
+            parent_group = "dust"
+            user_provided = parent_group in kwargs
+            group_dict = kwargs.get(parent_group, {})
+            if isinstance(group_dict, dict):
+                subkey = group.replace("dust.", "")
+                group_dict = group_dict.get(subkey, {})
+            else:
+                group_dict = {}
+        elif group == "agn" or group.startswith("agn."):
+            user_provided = "agn" in kwargs
+            group_dict = kwargs.get("agn", {})
+        else:
+            user_provided = group in kwargs
+            group_dict = kwargs.get(group, {})
+
+        # Only warn if the user explicitly provided this group
+        if not user_provided:
+            continue
+
+        if not isinstance(group_dict, dict):
+            # Group was provided but not as a dict, so skip
+            continue
+
+        # Check if user stated a disposition in their provided dict
+        has_explicit_disposition = (
+            "all_params" in group_dict and group_dict["all_params"] in (FREE, FIXED)
+        ) or ("*" in group_dict and group_dict["*"] in (FREE, FIXED))
+
+        if has_explicit_disposition:
+            # User explicitly stated a disposition, so don't warn
+            continue
+
+        # Format the parameter list: first ~8 params with values, then ellipsis if more
+        formatted_params = []
+        for i, (pname, value) in enumerate(params_and_values):
+            if i >= 8:
+                formatted_params.append(f"... and {len(params_and_values) - 8} more")
+                break
+            formatted_params.append(f"{pname}={value:.4g}")
+
+        # Say how many actually defaulted, never "all": a group commonly sets
+        # some parameters explicitly and leaves the rest to the default.
+        n_params = len(params_and_values)
+        subject = "parameter" if n_params == 1 else f"{n_params} parameters"
+        verb = "was" if n_params == 1 else "were"
+
+        message = (
+            f"Group {group!r} states no 'all_params' disposition, so its remaining "
+            f"{subject} {verb} fixed at declared defaults:\n"
+            f"  {', '.join(formatted_params)}\n\n"
+            f"To fit them, pass 'all_params': FREE:\n"
+            f"  {group}={{'all_params': FREE, ...}}\n"
+            f"To keep them fixed and silence this warning, say so explicitly:\n"
+            f"  {group}={{'all_params': FIXED, ...}}"
+        )
+
+        warnings.warn(
+            message,
+            DefaultFixedParametersWarning,
+            stacklevel=4,  # Point to user's parse_groups call
+        )
+
+
 def _warn_firrc_slope_degeneracy(final_params: Parameters) -> None:
     """Warn when a FIRRC *slope* coefficient is freed (per-galaxy degeneracy).
 
@@ -1864,6 +1994,17 @@ def _normalize_sfh_field(kwargs: dict) -> dict:
     return {**kwargs, "sfh": sfh}
 
 
+def _validate_sfh_bin_edges(sfh_type, edges) -> None:
+    """Validate ``sfh['bin_edges_gyr']` at build time.
+
+    Delegates to the registry so the grammar and the stellar component apply one
+    rule; a second copy is what let #1975 ship with a green suite.
+    """
+    from tengri.components.stellar.sfh.registry import validate_bin_edges_gyr
+
+    validate_bin_edges_gyr(sfh_type, edges)
+
+
 def _translate_sfh(sfh_dict: dict, result: dict) -> None:
     """Resolve `sfh.type` (or a list composition) into `mean_sfh_type`.
 
@@ -1881,6 +2022,7 @@ def _translate_sfh(sfh_dict: dict, result: dict) -> None:
     # ``_build_legacy``. The wildcard ``'*': FREE / FIXED`` does NOT
     # apply to this — it's a config, not a free parameter.
     if "bin_edges_gyr" in sfh_dict:
+        _validate_sfh_bin_edges(sfh_type, sfh_dict["bin_edges_gyr"])
         result["bin_edges_gyr"] = sfh_dict["bin_edges_gyr"]
 
     # ``age_kernel`` is likewise a structural setting, not a free parameter:
@@ -2124,28 +2266,102 @@ def _translate_dust(dust_dict: dict, result: dict) -> None:
                 result[result_key] = val
         return
 
-    # Extract dust laws. Leave each unset (None) when the user did not give it,
-    # so Parameters can apply symmetric inheritance (set one law -> both share
-    # it; set neither -> power_law for both).
+    # Extract and validate dust laws. Attenuation laws are now EXPLICIT and required.
+    # For single_component: 'law' is required (singular, one screen).
+    # For two_component: either 'law' (shared by both screens) XOR both 'law_bc' AND 'law_diff'.
+    valid_laws = _valid_dust_laws()
+
+    dust_law = dust_dict.get("law")
     dust_law_bc = dust_dict.get("law_bc")
     dust_law_diff = dust_dict.get("law_diff")
     dust_law_neb = dust_dict.get("law_neb")
 
-    valid_laws = _valid_dust_laws()
-    if dust_law_bc is not None:
-        if dust_law_bc not in valid_laws:
-            suggestions = difflib.get_close_matches(dust_law_bc, valid_laws, n=2, cutoff=0.6)
+    # For single_component: require 'law', reject law_bc/law_diff
+    if dust_type == "single_component":
+        if dust_law_bc is not None or dust_law_diff is not None:
+            raise ValueError(
+                "dust type='single_component' has a single attenuation screen. "
+                "Use 'law' to set the attenuation law, not 'law_bc' or 'law_diff'. "
+                "Example: dust={'type': 'single_component', 'law': 'calzetti', ...}"
+            )
+        if dust_law is None:
+            laws_list = ", ".join(sorted(valid_laws))
+            raise ValueError(
+                f"dust type='single_component' requires 'law' to be specified. "
+                f"Valid laws: {laws_list}. "
+                f"Example: dust={{'type': 'single_component', 'law': 'calzetti', 'tau_v': ...}}"
+            )
+        if dust_law not in valid_laws:
+            suggestions = difflib.get_close_matches(dust_law, valid_laws, n=2, cutoff=0.6)
             suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-            raise ValueError(f"Unknown dust law '{dust_law_bc}'.{suggest_str}")
-        result["dust_law_bc"] = dust_law_bc
+            raise ValueError(f"Unknown dust law '{dust_law}'.{suggest_str}")
+        # Store law on both _bc and _diff for consistency (single screen)
+        result["dust_law_bc"] = dust_law
+        result["dust_law_diff"] = dust_law
 
-    if dust_law_diff is not None:
-        if dust_law_diff not in valid_laws:
-            suggestions = difflib.get_close_matches(dust_law_diff, valid_laws, n=2, cutoff=0.6)
-            suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-            raise ValueError(f"Unknown dust law '{dust_law_diff}'.{suggest_str}")
-        result["dust_law_diff"] = dust_law_diff
+    # For two_component: either 'law' XOR (law_bc AND law_diff)
+    elif dust_type == "two_component":
+        has_law = dust_law is not None
+        has_law_bc = dust_law_bc is not None
+        has_law_diff = dust_law_diff is not None
 
+        # Check for invalid combinations
+        if has_law and (has_law_bc or has_law_diff):
+            raise ValueError(
+                "dust type='two_component' grammar is ambiguous: "
+                "cannot specify both 'law' and 'law_bc'/'law_diff'. "
+                "Use EITHER 'law' (shared by both screens) "
+                "OR both 'law_bc' and 'law_diff' (per-screen). "
+                "Example 1: dust={'type': 'two_component', 'law': 'calzetti', ...} "
+                "Example 2: dust={'type': 'two_component', 'law_bc': 'calzetti', "
+                "'law_diff': 'power_law', ...}"
+            )
+
+        if not has_law and not (has_law_bc and has_law_diff):
+            if has_law_bc or has_law_diff:
+                raise ValueError(
+                    f"dust type='two_component' requires BOTH 'law_bc' and 'law_diff' "
+                    f"for per-screen specification, or use 'law' for a shared law. "
+                    f"You gave: "
+                    f"{[k for k in ['law_bc', 'law_diff'] if dust_dict.get(k) is not None]}. "
+                    f"Example 1: dust={{'type': 'two_component', 'law': 'calzetti', ...}} "
+                    f"Example 2: dust={{'type': 'two_component', 'law_bc': 'calzetti', "
+                    f"'law_diff': 'power_law', ...}}"
+                )
+            # Neither form given
+            laws_list = ", ".join(sorted(valid_laws))
+            raise ValueError(
+                f"dust type='two_component' requires either 'law' (applied to both screens) "
+                f"or both 'law_bc' and 'law_diff' (per-screen). "
+                f"Valid laws: {laws_list}. "
+                f"Example 1: dust={{'type': 'two_component', 'law': 'calzetti', "
+                f"'tau_bc': ..., 'tau_diff': ...}} "
+                f"Example 2: dust={{'type': 'two_component', 'law_bc': 'calzetti', "
+                f"'law_diff': 'power_law', 'tau_bc': ..., 'tau_diff': ...}}"
+            )
+
+        # Resolve to the two-screen form
+        if has_law:
+            if dust_law not in valid_laws:
+                suggestions = difflib.get_close_matches(dust_law, valid_laws, n=2, cutoff=0.6)
+                suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+                raise ValueError(f"Unknown dust law '{dust_law}'.{suggest_str}")
+            result["dust_law_bc"] = dust_law
+            result["dust_law_diff"] = dust_law
+        else:
+            # Both law_bc and law_diff are given (already checked above)
+            if dust_law_bc not in valid_laws:
+                suggestions = difflib.get_close_matches(dust_law_bc, valid_laws, n=2, cutoff=0.6)
+                suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+                raise ValueError(f"Unknown dust law '{dust_law_bc}'.{suggest_str}")
+            if dust_law_diff not in valid_laws:
+                suggestions = difflib.get_close_matches(dust_law_diff, valid_laws, n=2, cutoff=0.6)
+                suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+                raise ValueError(f"Unknown dust law '{dust_law_diff}'.{suggest_str}")
+            result["dust_law_bc"] = dust_law_bc
+            result["dust_law_diff"] = dust_law_diff
+
+    # law_neb: optional per-screen override for nebular birth cloud. None -> inherit dust_law_bc
     if dust_law_neb is not None:
         if dust_law_neb not in valid_laws:
             suggestions = difflib.get_close_matches(dust_law_neb, valid_laws, n=2, cutoff=0.6)
@@ -2703,6 +2919,7 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
         {
             "type",
             "*",
+            "law",
             "law_bc",
             "law_diff",
             "law_neb",
@@ -2821,6 +3038,17 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
     # No 'stellar' entry: that group is gone (#1720). Its one setting was the
     # metallicity mode, and it is emitted above as met={'type': ...}.
     "dust": (
+        # The two law attributes are emitted by hand in
+        # _emit_declared_structural (one 'law' when both screens agree, the
+        # pair when they differ), which then skips these entries. They stay
+        # because test_structural_settings_roundtrip asserts every structural
+        # attribute is named here -- they are coverage, not logic.
+        _Structural(
+            "law_bc", "dust_law_bc", None, only_types=("single_component", "two_component")
+        ),
+        _Structural(
+            "law_diff", "dust_law_diff", None, only_types=("single_component", "two_component")
+        ),
         # Witt & Gordon (2000) screen selectors (FSPS dust_type=3). Only read
         # by the parser when the dust type is wg00, so a non-WG00 spec always
         # holds the defaults and never emits them.
@@ -2910,7 +3138,34 @@ def _emit_declared_structural(group_name: str, group_output: dict, spec: Paramet
         The Parameters object to read settings from.
     """
     group_type = group_output.get("type")
+    entries_to_skip = set()
+
+    # Special handling for dust laws: emit 'law' when both screens share,
+    # or 'law_bc'/'law_diff' otherwise
+    if group_name == "dust" and group_type in ("single_component", "two_component"):
+        law_bc = getattr(spec, "dust_law_bc", None)
+        law_diff = getattr(spec, "dust_law_diff", None)
+        if law_bc is not None or law_diff is not None:
+            if group_type == "single_component":
+                # single_component: emit as 'law'
+                if law_bc is not None:
+                    group_output["law"] = law_bc
+            elif law_bc == law_diff and law_bc is not None:
+                # two_component with shared law: emit as 'law'
+                group_output["law"] = law_bc
+            else:
+                # two_component with different laws: emit as 'law_bc' and 'law_diff'
+                if law_bc is not None:
+                    group_output["law_bc"] = law_bc
+                if law_diff is not None:
+                    group_output["law_diff"] = law_diff
+            # Skip the normal law_bc/law_diff handling below to avoid duplication
+            entries_to_skip.add("law_bc")
+            entries_to_skip.add("law_diff")
+
     for entry in _STRUCTURAL_ROUNDTRIP.get(group_name, ()):
+        if entry.key in entries_to_skip:
+            continue
         if entry.only_types is not None and group_type not in entry.only_types:
             continue
         default = entry.default if entry.resolved_default is None else entry.resolved_default(spec)
@@ -4178,11 +4433,7 @@ def _add_structural_settings(group_name: str, group_output: dict, spec: Paramete
     _emit_declared_structural(group_name, group_output, spec)
 
     if group_name == "dust":
-        # Add law_bc and law_diff if non-default
-        if spec.dust_law_bc != "power_law":
-            group_output["law_bc"] = spec.dust_law_bc
-        if hasattr(spec, "dust_law_diff") and spec.dust_law_diff != spec.dust_law_bc:
-            group_output["law_diff"] = spec.dust_law_diff
+        # Dust laws are now handled in _emit_declared_structural with the new 'law' key.
         # Nebular birth-cloud law (None -> inherits bc; only emit when set).
         if getattr(spec, "dust_law_neb", None) is not None:
             group_output["law_neb"] = spec.dust_law_neb

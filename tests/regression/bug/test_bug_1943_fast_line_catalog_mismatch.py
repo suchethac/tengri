@@ -72,7 +72,11 @@ def _build(ssp, approx, obs, *, dust: bool):
     from tengri import FIXED, FREE, Fixed, SEDModel
 
     dust_block = (
-        {"type": "two_component", "law_bc": "calzetti", "all_params": FIXED}
+        {
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": FIXED,
+        }
         if dust
         else {"type": "none"}
     )

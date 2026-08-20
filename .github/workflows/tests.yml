@@ -1412,7 +1412,9 @@ jobs:
       github.event_name == 'schedule'
       || github.event_name == 'workflow_dispatch'
       || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'run-crossval'))
-    timeout-minutes: 30
+    # 30 -> 45: the per-file loop pays pytest+JAX startup ~55 times, and the
+    # first run on a cold compile cache also pays every compilation once.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -1421,16 +1423,88 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
       - run: pip install -e ".[dev]"
+      # Persist the JAX compile cache (same pattern as the `test` job).
+      - uses: actions/cache/restore@v6
+        id: jax_cache
+        with:
+          path: ~/.cache/tengri_jax_cache
+          key: tengri-jax-crossval-${{ hashFiles('pyproject.toml') }}-${{ github.run_id }}
+          restore-keys: |
+            tengri-jax-crossval-${{ hashFiles('pyproject.toml') }}-
       # Reference grids are not in the repo; the affected modules skip
       # themselves when absent, so a missing file is reported as a skip rather
       # than an error. Check the skip count, not just the exit status.
-      - name: Run cross-validation tier
-        run: pytest tests/crossval -q --no-header -m crossval -n 0 -rf --junit-xml=crossval-results.xml
+      #
+      # One pytest process PER FILE, deliberately: compiled XLA kernels are
+      # retained per process, and this tier builds so many distinct model
+      # structures that a single process accumulates tens of GB (measured
+      # 35.6 GB for a 27-file half, 38.5 GB for the whole tier) and dies on a
+      # 7 GB runner — which is how the tier stayed unrunnable (#1728). The
+      # per-file peak is <=2 GB, and the persistent JAX cache above carries
+      # compilations across the processes, so the loop stays cheap once warm.
+      - name: Run cross-validation tier (one process per file)
+        run: |
+          mkdir -p crossval-results
+          status=0
+          for f in $(ls -1 tests/crossval/test_*.py | sort); do
+            b=$(basename "$f" .py)
+            pytest "$f" -q --no-header -m 'crossval and not oom' -n 0 -rf \
+              --junit-xml="crossval-results/${b}.xml" || rc=$?
+            rc=${rc:-0}
+            # 0 = green, 5 = nothing selected in this file (all deselected):
+            # both fine. Anything else marks the job failed but the loop
+            # continues so every file still reports.
+            if [ "$rc" != "0" ] && [ "$rc" != "5" ]; then
+              echo "::error::$b exited $rc"
+              status=1
+            fi
+            unset rc
+          done
+          exit $status
         env:
           JAX_PLATFORMS: cpu
-      - name: Upload test results on failure
+          TENGRI_JAX_CACHE_DIR: ~/.cache/tengri_jax_cache
+      - name: Verify the per-file runs covered the whole tier
+        if: always()
+        env:
+          JAX_PLATFORMS: cpu
+        run: |
+          # Anti-rot guard: the testcases the per-file runs actually recorded
+          # must equal what a whole-tier collection selects. A missing xml (a
+          # killed file) or a glob edit that drops files fails here — the loop
+          # cannot silently shrink coverage. (Job failure on red tests comes
+          # from the pytest exit codes in the loop; this guards coverage only.)
+          expected=$(pytest tests/crossval --collect-only -q -m 'crossval and not oom' | grep -c '::')
+          ran=0
+          nfiles=$(ls -1 tests/crossval/test_*.py | wc -l)
+          nxml=$(ls -1 crossval-results/*.xml 2>/dev/null | wc -l)
+          if [ "$nfiles" != "$nxml" ]; then
+            echo "ERROR: $nfiles test files but $nxml junit reports — a file's run never finished"
+            exit 1
+          fi
+          for f in crossval-results/*.xml; do
+            # Count real testcases (non-empty classname). A module whose
+            # reference package is absent skips at COLLECTION and pytest
+            # records one placeholder <testcase classname=""> for it, which
+            # collect-only does not list — counting the testsuite's tests=
+            # attribute overcounted by one per such module (7 on hosted
+            # runners, first dispatch run 32293846721).
+            n=$(grep -o '<testcase classname="[^"]' "$f" | wc -l)
+            ran=$((ran + ${n:-0}))
+          done
+          echo "expected=$expected ran=$ran"
+          if [ "$expected" != "$ran" ]; then
+            echo "ERROR: the per-file runs recorded $ran testcases but the tier selects $expected"
+            exit 1
+          fi
+      - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: crossval-test-results
-          path: crossval-results.xml
+          path: crossval-results/
+      - uses: actions/cache/save@v6
+        if: always() && steps.jax_cache.outputs.cache-hit != 'true'
+        with:
+          path: ~/.cache/tengri_jax_cache
+          key: ${{ steps.jax_cache.outputs.cache-primary-key }}

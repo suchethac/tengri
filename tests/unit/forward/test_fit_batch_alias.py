@@ -24,7 +24,7 @@ def minimal_sed_model(synthetic_ssp_wide, simple_observation):
         ssp_data=synthetic_ssp_wide,
         observation=simple_observation,
         sfh={"type": "dpl", "all_params": FREE},
-        dust={"type": "two_component", "all_params": FIXED, "tau_bc": 0.5},
+        dust={"law": "power_law", "type": "two_component", "all_params": FIXED, "tau_bc": 0.5},
         neb={"type": "none"},
         redshift=FIXED,
     )

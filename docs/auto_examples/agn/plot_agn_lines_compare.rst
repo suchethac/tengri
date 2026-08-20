@@ -36,7 +36,7 @@ the shipped data): NLR ``analytic``/``feltre``, BLR ``grahsp``/
 with the gallery, and the ``cue`` NLR backbone is omitted here (its
 line normalization is under review, see the tracked issue).
 
-.. GENERATED FROM PYTHON SOURCE LINES 20-100
+.. GENERATED FROM PYTHON SOURCE LINES 20-106
 
 
 
@@ -63,7 +63,7 @@ line normalization is under review, see the tracked issue).
     import numpy as np
 
     import tengri
-    from tengri.analysis.plotting import setup_style
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -81,7 +81,13 @@ line normalization is under review, see the tracked issue).
 
     C_AA_PER_S = 2.998e18
     SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
-    DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+    DUST = {
+        "law": "power_law",
+        "type": "two_component",
+        "all_params": tengri.FIXED,
+        "tau_diff": 0.0,
+        "tau_bc": 0.0,
+    }
 
     ssp = tengri.load_ssp()
     fig, ax = plt.subplots(figsize=(7.4, 4.6))
@@ -135,7 +141,7 @@ line normalization is under review, see the tracked issue).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.638 seconds)
+   **Total running time of the script:** (0 minutes 3.224 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_lines_compare.py:

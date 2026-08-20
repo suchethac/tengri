@@ -30,7 +30,7 @@ passively evolving galaxy where iron features dominate the continuum absorption.
 
 Reference: Thomas et al. 2003, MNRAS, 339, 897 (alpha-element effects).
 
-.. GENERATED FROM PYTHON SOURCE LINES 14-81
+.. GENERATED FROM PYTHON SOURCE LINES 14-82
 
 
 
@@ -59,7 +59,7 @@ Reference: Thomas et al. 2003, MNRAS, 339, 897 (alpha-element effects).
     import numpy as np
 
     import tengri
-    from tengri.analysis.plotting import setup_style
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -76,6 +76,7 @@ Reference: Thomas et al. 2003, MNRAS, 339, 897 (alpha-element effects).
             "log_total_mass": 10.0,
         },
         dust={
+            "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
             "tau_bc": 0.0,
@@ -112,6 +113,11 @@ Reference: Thomas et al. 2003, MNRAS, 339, 897 (alpha-element effects).
 
     fig.tight_layout()
     plt.savefig("plot_alpha_fe_sweep.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 4.721 seconds)
 
 
 .. _sphx_glr_download_auto_examples_metallicity_plot_alpha_fe_sweep.py:

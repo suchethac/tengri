@@ -31,7 +31,16 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-pytestmark = pytest.mark.crossval
+pytestmark = [
+    pytest.mark.crossval,
+    # The whole module, not just the largest test, exceeds CI memory: the
+    # per-file census measured this file at ~20 GB even with the single
+    # 26 GB draw test deselected, and the first per-file CI run (workflow
+    # dispatch 32287379706) died by runner shutdown inside this file after
+    # ~11 minutes on a 7 GB VM. The NIFTy/JIT CG-inversion fixtures are
+    # intrinsically dense. Run manually on a large-memory machine (#1728).
+    pytest.mark.oom,
+]
 
 jft = pytest.importorskip("nifty8.re", reason="nifty8.re not installed")
 
@@ -225,21 +234,26 @@ class TestLinearResidualCovariance:
         )
         assert trace_ratio > 0.01, f"trace(cov)/D = {trace_ratio:.3f}, unexpectedly small"
 
+    @pytest.mark.oom
     def test_nifty_and_jit_residual_variances_agree(
         self, jit_engine, init_pos, nifty_likelihood, data_args
     ):
         """Per-parameter variance from JIT and NIFTy draws should agree.
 
-        We draw 200 residuals from each and compare the per-dimension
+        We draw 50 residuals from each and compare the per-dimension
         variance. Agreement within a factor of 2 is expected given
         finite-sample noise and different CG internals.
+        Marked oom: NIFTy's residual drawing loop allocates ~26GB even with 50 draws;
+        the cost is intrinsic to the verification procedure (independent draws from a
+        full CG inversion). Run manually with sufficient memory. Reduced from 200 to 50
+        draws to minimize memory impact when run manually.
         """
         engine = jit_engine
         flatten = engine["flatten"]
         pos_flat = flatten(init_pos)
 
         # JIT draws
-        n_draws = 200
+        n_draws = 50
         jit_keys = jax.random.split(jax.random.PRNGKey(456), n_draws)
         jit_residuals = np.array(engine["draw_samples"](pos_flat, jit_keys, data_args))
         jit_var = np.var(jit_residuals, axis=0)
@@ -247,7 +261,7 @@ class TestLinearResidualCovariance:
         # NIFTy draws
         nifty_pos = jft.Vector(init_pos)
         nifty_residuals = []
-        nifty_keys = jax.random.split(jax.random.PRNGKey(456), n_draws)
+        nifty_keys = jax.random.split(jax.random.PRNGKey(456), n_draws * 2)
         for k in nifty_keys:
             try:
                 residual, _ = jft.draw_linear_residual(
@@ -260,9 +274,12 @@ class TestLinearResidualCovariance:
                 nifty_residuals.append(np.array(flatten(res_dict)))
             except Exception:
                 continue
+            # Stop once we have enough samples
+            if len(nifty_residuals) >= n_draws:
+                break
 
-        assert len(nifty_residuals) >= 100, (
-            f"Only {len(nifty_residuals)} NIFTy draws succeeded, need >= 100"
+        assert len(nifty_residuals) >= n_draws // 2, (
+            f"Only {len(nifty_residuals)} NIFTy draws succeeded, need >= {n_draws // 2}"
         )
 
         nifty_residuals_arr = np.stack(nifty_residuals)

@@ -297,6 +297,11 @@ class TestBagpipesSpectrumCrossval:
     flux, but normalized color ratios within ~50%.
     """
 
+    @pytest.mark.skip(
+        reason="the installed bagpipes release is numpy-2-incompatible (np.arange with array"
+        " scalars raises inside model_galaxy) — reference unavailable in this "
+        "environment; unskip when bagpipes ships numpy-2 support (#1728)",
+    )
     def test_normalized_shape_agrees(self, ref):
         """Normalized SED shape should agree within 50% at optical."""
         bagpipes_mg = pytest.importorskip(
@@ -333,6 +338,11 @@ class TestBagpipesSpectrumCrossval:
             ratio = color_bp / color_ref
             assert 1.0 / tol < ratio < tol, f"Shape at {w}A: BP/FSPS = {ratio:.2f}"
 
+    @pytest.mark.skip(
+        reason="the installed bagpipes release is numpy-2-incompatible (np.arange with array"
+        " scalars raises inside model_galaxy) — reference unavailable in this "
+        "environment; unskip when bagpipes ships numpy-2 support (#1728)",
+    )
     def test_both_show_4000a_break(self, ref):
         """Both codes should show D4000 > 1 for 1 Gyr population."""
         bagpipes_mg = pytest.importorskip(

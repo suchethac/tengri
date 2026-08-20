@@ -35,8 +35,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import tengri
-from tengri.analysis.plotting import setup_style
-from tengri.utils.physics_constants import C_AA
+from tengri.plot import setup_style
+from tengri.units import C_AA
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -44,11 +44,12 @@ warnings.filterwarnings("ignore", message=".*experimental.*")
 
 SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": 10.5}
 DUST = {
+    "law": "power_law",
     "type": "two_component",
     "all_params": tengri.FIXED,
     "tau_diff": 1.0,
     "tau_bc": 1.5,
-    "emission": {"type": "dale2014", "all_params": tengri.FIXED},
+    "emission": {"type": "dale2014_cigale", "all_params": tengri.FIXED},
 }
 AGN = {
     "type": "composable",

@@ -19,7 +19,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import tengri
-from tengri.analysis.plotting import setup_style
+from tengri.plot import setup_style
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -32,7 +32,7 @@ model = tengri.SEDModel.build(
     ssp,
     observation=obs,
     sfh={"type": "dpl", "all_params": tengri.FIXED, "alpha": 2.0, "beta": 1.5, "tau_gyr": 5.0},
-    dust={"type": "two_component", "all_params": tengri.FIXED, "tau_bc": 0.3},
+    dust={"law": "power_law", "type": "two_component", "all_params": tengri.FIXED, "tau_bc": 0.3},
     neb={"type": "cue", "all_params": tengri.FIXED},
     redshift=tengri.Uniform(0.0, 5.0),
 )

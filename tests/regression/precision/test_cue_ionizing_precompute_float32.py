@@ -288,7 +288,7 @@ def test_cue_forward_is_finite_when_the_ssp_itself_is_float32():
             },
             dust={
                 "type": "two_component",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "all_params": FIXED,
                 "tau_diff": Uniform(0.0, 1.5),
                 "tau_bc": 0.0,

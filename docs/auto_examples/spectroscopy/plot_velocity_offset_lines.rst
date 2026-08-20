@@ -26,7 +26,7 @@ AGN accretion disk reaches thousands of km/s. The [NII] doublet is separated
 by 35.4 Å (6549.86 and 6585.28 Å vacuum), which corresponds to σ_v ≈ 1600
 km/s — above that the two lines merge into the wing of Hα.
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-97
+.. GENERATED FROM PYTHON SOURCE LINES 10-103
 
 
 
@@ -36,21 +36,8 @@ km/s — above that the two lines merge into the wing of Hα.
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /tengri/examples/spectroscopy/plot_velocity_offset_lines.py:95: UserWarning: Glyph 945 (\N{GREEK SMALL LETTER ALPHA}) missing from font(s) cmr10.
-      fig.tight_layout()
-    /tengri/examples/spectroscopy/plot_velocity_offset_lines.py:96: UserWarning: Glyph 945 (\N{GREEK SMALL LETTER ALPHA}) missing from font(s) cmr10.
-      plt.savefig("plot_velocity_offset_lines.png", dpi=150, bbox_inches="tight")
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -68,7 +55,7 @@ km/s — above that the two lines merge into the wing of Hα.
     import numpy as np
 
     import tengri
-    from tengri.analysis.plotting import setup_style
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -96,7 +83,13 @@ km/s — above that the two lines merge into the wing of Hα.
             "tau_gyr": 0.03,
             "log_total_mass": 8.48,
         },
-        dust={"type": "two_component", "all_params": tengri.FIXED, "tau_bc": 0.0, "tau_diff": 0.05},
+        dust={
+            "law": "power_law",
+            "type": "two_component",
+            "all_params": tengri.FIXED,
+            "tau_bc": 0.0,
+            "tau_diff": 0.05,
+        },
         neb={
             "type": "cue",
             "all_params": tengri.FIXED,
@@ -145,7 +138,7 @@ km/s — above that the two lines merge into the wing of Hα.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 6.769 seconds)
+   **Total running time of the script:** (0 minutes 6.082 seconds)
 
 
 .. _sphx_glr_download_auto_examples_spectroscopy_plot_velocity_offset_lines.py:

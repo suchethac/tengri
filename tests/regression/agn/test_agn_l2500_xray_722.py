@@ -120,6 +120,7 @@ class TestEndToEndPublish:
             ssp_data=synthetic_ssp_wide,
             sfh={"type": "delayed", "*": FIXED},
             dust={
+                "law": "power_law",
                 "type": "two_component",
                 "tau_bc": Fixed(0.0),
                 "tau_diff": Fixed(0.0),
@@ -140,6 +141,7 @@ class TestEndToEndPublish:
             ssp_data=synthetic_ssp_wide,
             sfh={"type": "delayed", "*": FIXED},
             dust={
+                "law": "power_law",
                 "type": "two_component",
                 "tau_bc": Fixed(0.0),
                 "tau_diff": Fixed(0.0),
@@ -161,6 +163,7 @@ class TestEndToEndPublish:
             ssp_data=synthetic_ssp_wide,
             sfh={"type": "delayed", "*": FIXED},
             dust={
+                "law": "power_law",
                 "type": "two_component",
                 "tau_bc": Fixed(0.0),
                 "tau_diff": Fixed(0.0),
@@ -205,6 +208,7 @@ class TestXRayConsumesL2500:
                 ssp_data=synthetic_ssp_wide,
                 sfh={"type": "delayed", "*": FIXED},
                 dust={
+                    "law": "power_law",
                     "type": "two_component",
                     "tau_bc": Fixed(0.0),
                     "tau_diff": Fixed(0.0),

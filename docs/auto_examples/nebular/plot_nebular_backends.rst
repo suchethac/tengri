@@ -37,7 +37,7 @@ References:
 - Li, Leja & Speagle 2023, ApJ, 956, 23 (Cue neural emulator)
 - Byler et al. 2017, ApJ, 840, 44 (BakedIn SSP-embedded lines)
 
-.. GENERATED FROM PYTHON SOURCE LINES 22-132
+.. GENERATED FROM PYTHON SOURCE LINES 22-138
 
 
 
@@ -64,7 +64,7 @@ References:
     import numpy as np
 
     import tengri
-    from tengri.analysis.plotting import setup_style
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -83,7 +83,13 @@ References:
             "tau_gyr": 0.5,
             "log_total_mass": 10.0,
         },
-        "dust": {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0},
+        "dust": {
+            "law": "power_law",
+            "type": "two_component",
+            "all_params": tengri.FIXED,
+            "tau_diff": 0.0,
+            "tau_bc": 0.0,
+        },
         "redshift": tengri.Fixed(0.0),
     }
 
@@ -162,11 +168,6 @@ References:
 
     fig.tight_layout()
     plt.savefig("plot_nebular_backends.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 10.698 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_nebular_backends.py:

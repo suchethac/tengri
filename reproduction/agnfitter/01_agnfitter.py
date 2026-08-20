@@ -150,7 +150,7 @@ SFH_FIDUCIAL = {
     "log_total_mass": Fixed(LOG_MASS),
     "all_params": FIXED,
 }
-NO_DUST = {"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED}
+NO_DUST = {"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED}
 
 
 # %% [markdown]

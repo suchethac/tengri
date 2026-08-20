@@ -1,4 +1,4 @@
 Quick Start
 ===========
 
-End-to-end fit walkthrough: from mock data to posterior corner plots and convergence diagnostics.
+Model-summary walkthrough, SED dust anatomy, nebular-backend swap, and components-isolated anatomy tour. Fitting and inference examples live in the tutorial notebooks.

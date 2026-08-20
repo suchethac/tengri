@@ -52,6 +52,7 @@ def intrinsic_sed():
         ssp,
         sfh={"type": "tsnorm", "*": tengri.FIXED},
         dust={
+            "law": "power_law",
             "type": "two_component",
             "*": tengri.FIXED,
             "tau_diff": 0.0,
@@ -77,6 +78,7 @@ def test_dust_energy_balance(intrinsic_sed, emission_type, tau):
         ssp,
         sfh={"type": "tsnorm", "*": tengri.FIXED},
         dust={
+            "law": "power_law",
             "type": "two_component",
             "*": tengri.FIXED,
             "tau_diff": tau,
@@ -145,6 +147,7 @@ def _build_emission(ssp, emission, tau=0.6):
         ssp,
         sfh={"type": "tsnorm", "*": tengri.FIXED},
         dust={
+            "law": "power_law",
             "type": "two_component",
             "*": tengri.FIXED,
             "tau_diff": tau,

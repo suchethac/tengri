@@ -43,7 +43,7 @@ by ``tests/contract/test_agn_block_consumes.py``.
 References: Nenkova et al. 2008 (CLUMPY torus); Kubota & Done 2018 (multicolor
 disc); Feltre et al. 2016 (NLR grid).
 
-.. GENERATED FROM PYTHON SOURCE LINES 27-62
+.. GENERATED FROM PYTHON SOURCE LINES 27-68
 
 .. code-block:: Python
 
@@ -59,7 +59,7 @@ disc); Feltre et al. 2016 (NLR grid).
     import numpy as np
 
     import tengri
-    from tengri.analysis.plotting import setup_style
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -67,7 +67,13 @@ disc); Feltre et al. 2016 (NLR grid).
     C_AA_PER_S = 2.998e18
 
     SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
-    DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+    DUST = {
+        "law": "power_law",
+        "type": "two_component",
+        "all_params": tengri.FIXED,
+        "tau_diff": 0.0,
+        "tau_bc": 0.0,
+    }
     # Bare type selectors: no per-block ``'all_params'``, so the *top-level* AGN
     # wildcard governs every block's parameters. (A sub-block's own ``'all_params'``
     # would override
@@ -89,12 +95,12 @@ disc); Feltre et al. 2016 (NLR grid).
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 63-65
+.. GENERATED FROM PYTHON SOURCE LINES 69-71
 
 The headline: ``'all_params': FREE`` now frees the AGN parameters the active
 blocks consume. Before the registry fix this set was empty.
 
-.. GENERATED FROM PYTHON SOURCE LINES 65-72
+.. GENERATED FROM PYTHON SOURCE LINES 71-78
 
 .. code-block:: Python
 
@@ -118,13 +124,13 @@ blocks consume. Before the registry fix this set was empty.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 73-76
+.. GENERATED FROM PYTHON SOURCE LINES 79-82
 
 Sweep three consumed parameters across their priors. We build the model once
 with the AGN sector held fixed at its defaults, then override one parameter at
 a time in the prediction dict — a clean, deterministic parameter sweep.
 
-.. GENERATED FROM PYTHON SOURCE LINES 76-112
+.. GENERATED FROM PYTHON SOURCE LINES 82-118
 
 .. code-block:: Python
 
@@ -175,11 +181,6 @@ a time in the prediction dict — a clean, deterministic parameter sweep.
 
 
 
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 7.766 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_free_param_sensitivity.py:

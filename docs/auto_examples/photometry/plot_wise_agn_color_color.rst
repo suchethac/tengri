@@ -68,21 +68,8 @@ References
    :class: sphx-glr-single-img
 
 
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    /tengri/examples/photometry/plot_wise_agn_color_color.py:273: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
-      fig.tight_layout()
-    /tengri/examples/photometry/plot_wise_agn_color_color.py:274: UserWarning: Glyph 8211 (\N{EN DASH}) missing from font(s) cmr10.
-      plt.savefig("plot_wise_agn_color_color.png", dpi=150, bbox_inches="tight")
 
 
-
-
-
-
-|
 
 .. code-block:: Python
 
@@ -98,7 +85,7 @@ References
     import numpy as np
 
     import tengri
-    from tengri.analysis.plotting import setup_style
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -146,7 +133,7 @@ References
         dust_config = {
             "type": "two_component",
             "all_params": tengri.FIXED,
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "tau_diff": tau_diff_samples[i],
             "tau_bc": tau_bc_samples[i],
             "slope": -0.7,
@@ -228,7 +215,7 @@ References
         dust_config = {
             "type": "two_component",
             "all_params": tengri.FIXED,
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "tau_diff": 0.5 + 0.1 * i,  # Variable dust opacity (AGN-heated)
             "tau_bc": 0.3 + 0.05 * i,
             "slope": -0.7,
@@ -318,11 +305,6 @@ References
 
     fig.tight_layout()
     plt.savefig("plot_wise_agn_color_color.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.650 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_wise_agn_color_color.py:

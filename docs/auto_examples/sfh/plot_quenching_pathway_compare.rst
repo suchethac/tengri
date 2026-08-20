@@ -28,7 +28,7 @@ skew-normal, peak 2 Gyr ago, width 0.3 Gyr). The resulting rest-frame SEDs exhib
 markedly different colors, equivalent widths (Hα), and spectral slopes, highlighting
 how quenching timescale imprints on observable photometry and spectroscopy.
 
-.. GENERATED FROM PYTHON SOURCE LINES 12-155
+.. GENERATED FROM PYTHON SOURCE LINES 12-156
 
 
 
@@ -56,7 +56,7 @@ how quenching timescale imprints on observable photometry and spectroscopy.
     import numpy as np
 
     import tengri
-    from tengri.analysis.plotting import setup_style
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -113,6 +113,7 @@ how quenching timescale imprints on observable photometry and spectroscopy.
             ssp,
             sfh=scenario["sfh"],
             dust={
+                "law": "power_law",
                 "type": "two_component",
                 "all_params": tengri.FIXED,
                 "tau_diff": 0.15,

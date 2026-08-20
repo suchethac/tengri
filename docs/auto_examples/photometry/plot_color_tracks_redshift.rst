@@ -40,7 +40,7 @@ Useful intuition this figure makes obvious:
   z = 0.5 SF galaxy from an unobscured z = 3 LBG (the LBG dropout
   degeneracy demonstrated in workflows/plot_workflow_photoz_degeneracy)
 
-.. GENERATED FROM PYTHON SOURCE LINES 25-112
+.. GENERATED FROM PYTHON SOURCE LINES 25-113
 
 
 
@@ -67,7 +67,7 @@ Useful intuition this figure makes obvious:
     import numpy as np
 
     import tengri
-    from tengri.analysis.plotting import setup_style
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -94,6 +94,7 @@ Useful intuition this figure makes obvious:
                 "trunc": 13.0,
             },
             dust={
+                "law": "power_law",
                 "type": "two_component",
                 "all_params": tengri.FIXED,
                 "tau_diff": tau_diff,

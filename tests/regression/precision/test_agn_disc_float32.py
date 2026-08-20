@@ -171,7 +171,7 @@ def _composable_intrinsics(ssp, dtype):
         },
         dust={
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "all_params": FIXED,
             "tau_diff": 0.3,
             "tau_bc": 0.0,
@@ -252,7 +252,7 @@ def test_multicolor_disc_agn_fit_gradient_finite_in_float32(ssp_bare):
             },
             dust={
                 "type": "two_component",
-                "law_bc": "calzetti",
+                "law": "calzetti",
                 "all_params": FIXED,
                 "tau_diff": 0.5,
                 "tau_bc": 0.0,

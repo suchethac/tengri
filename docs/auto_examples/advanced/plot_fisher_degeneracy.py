@@ -7,6 +7,10 @@ The Cramér-Rao bound from the Fisher Information Matrix shows that SDSS
 metallicity. Adding NIR or MIR bands breaks the degeneracy by factors of
 2–5×, quantifying the information gain from multiwavelength coverage.
 
+Fisher Information Matrix is computed directly via JAX differentiation on the
+public prediction surface: F = J^T C^{-1} J, where J is the Jacobian of model
+predictions w.r.t. parameters and C^{-1} is the inverse noise covariance.
+
 Reference: Fisher Information Matrix in parameter estimation; see
 Conroy 2013 (ARA&A, 51, 393) for SED fitting context.
 """
@@ -23,9 +27,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import tengri
-from tengri.analysis.diagnostics.fisher import compute_fisher_matrix, fisher_parameter_errors
+from tengri.plot import setup_style
 
-tengri.analysis.plotting.setup_style()
+setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
 
 ssp = tengri.load_ssp()
@@ -89,15 +93,50 @@ for fname, filters in FILTER_SETS.items():
             ssp,
             observation=obs,
             sfh={"type": "tsnorm", "all_params": tengri.FIXED},
-            dust={"type": "two_component", "all_params": tengri.FIXED},
+            dust={"law": "power_law", "type": "two_component", "all_params": tengri.FIXED},
             redshift=tengri.Fixed(0.1),
         )
         phot = jnp.abs(mdl.predict_photometry(true_params))
         noise = phot / 20.0
-        fim, _ = compute_fisher_matrix(
-            mdl, true_params, noise, data_type="photometry", param_names=fisher_params
-        )
-        errs = np.array(fisher_parameter_errors(fim))
+
+        # Compute Fisher Information Matrix using JAX jacobian.
+        # F = J^T C^{-1} J, where J is the Jacobian and C^{-1} is inverse noise covariance.
+        def predict_fn(params_dict, _mdl=mdl):
+            """Return photometry for a parameter dictionary."""
+            return _mdl.predict_photometry(params_dict)
+
+        # Build an array of the free parameters in the order they appear in fisher_params.
+        param_values = []
+        for pname in fisher_params:
+            param_values.append(true_params[pname])
+        param_array = jnp.array(param_values)
+
+        def forward_free_params(free_array):
+            """Forward model taking only free parameters; reconstruct full params dict."""
+            params_dict = true_params.copy()
+            for i, pname in enumerate(fisher_params):
+                params_dict[pname] = free_array[i]
+            return predict_fn(params_dict)
+
+        # Compute Jacobian of predictions w.r.t. free parameters.
+        jac = jax.jacobian(forward_free_params)(param_array)  # shape: (n_bands, n_params)
+
+        # Inverse noise covariance (diagonal).
+        noise_var = noise**2
+        c_inv_diag = 1.0 / noise_var
+
+        # Fisher = J^T C^{-1} J
+        fim = jnp.dot(jac.T, jac * c_inv_diag[:, jnp.newaxis])  # (n_params, n_params)
+
+        # Cramér-Rao bound: sqrt(diag(F^{-1}))
+        try:
+            fim_inv = jnp.linalg.inv(fim)
+            errs = np.array(np.sqrt(np.maximum(np.diag(fim_inv), 0)))
+        except np.linalg.LinAlgError:
+            # Singular matrix; use pseudoinverse as fallback.
+            fim_inv = jnp.linalg.pinv(fim)
+            errs = np.array(np.sqrt(np.maximum(np.diag(fim_inv), 0)))
+
         errs = np.where(np.isfinite(errs) & (errs > 0), errs, 5.0)
         sigmas[fname] = np.minimum(errs, 5.0)
     except Exception as e:

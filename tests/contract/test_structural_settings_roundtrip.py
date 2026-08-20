@@ -68,16 +68,19 @@ CASES = [
         0.5,
     ),
     (
+        # Eight edges, not any five: ``continuity`` declares six ratio
+        # parameters and derives its bin count from the edges, so a shorter
+        # array leaves declared ratios with no bin (#1975).
         "sfh.bin_edges_gyr",
         dict(
             sfh={
                 "type": "continuity",
                 "all_params": FIXED,
-                "bin_edges_gyr": [0.0, 0.1, 0.5, 1.0, 13.0],
+                "bin_edges_gyr": [0.0, 0.03, 0.1, 0.3, 1.0, 3.0, 6.0, 13.0],
             }
         ),
         "bin_edges_gyr",
-        [0.0, 0.1, 0.5, 1.0, 13.0],
+        [0.0, 0.03, 0.1, 0.3, 1.0, 3.0, 6.0, 13.0],
     ),
     (
         "stellar.met_mode",
@@ -242,12 +245,12 @@ def test_every_structural_key_has_a_roundtrip_rule():
     # Handled by _extract_group_type and the wildcard analyzer, not the table.
     meta_keys = {"type", "*"}
     # Dust attenuation laws stay hand-written in _add_structural_settings:
-    # law_diff inherits from law_bc, the per-component overrides live in a
-    # flattened dict, and two booleans are stored as a float cutoff. None is a
-    # plain "attribute differs from default" comparison.
-    # AGN.atten 'law' key is similarly hand-written: it maps to the smc_prevot
-    # block type and is emitted back as law='prevot_smc' in to_groups().
+    # law/law_bc/law_diff are an explicit XOR (never a default comparison:
+    # the emit collapses to shared 'law' when both screens agree, else the
+    # law_bc/law_diff pair), the per-component overrides live in a flattened
+    # dict, and two booleans are stored as a float cutoff.
     hand_written = {
+        "law",
         "law_bc",
         "law_diff",
         "law_neb",

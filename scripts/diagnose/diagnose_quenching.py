@@ -26,7 +26,7 @@ model1 = tengri.SEDModel.build(
         "tau_gyr": 3.0,
         "log_total_mass": 10.0,
     },
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
+    dust={"law": "power_law", "type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
     redshift=tengri.Fixed(0.1),
 )
 baseline1 = dict(model1.spec.sample(jax.random.PRNGKey(0)))
@@ -46,7 +46,7 @@ model2 = tengri.SEDModel.build(
         "tau_gyr": 2.0,
         "log_total_mass": 10.0,
     },
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
+    dust={"law": "power_law", "type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
     redshift=tengri.Fixed(0.1),
 )
 baseline2 = dict(model2.spec.sample(jax.random.PRNGKey(1)))
@@ -66,7 +66,7 @@ model3 = tengri.SEDModel.build(
         "tau_gyr": 1.5,
         "log_total_mass": 10.0,
     },
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
+    dust={"law": "power_law", "type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
     redshift=tengri.Fixed(0.1),
 )
 baseline3 = dict(model3.spec.sample(jax.random.PRNGKey(2)))
@@ -87,7 +87,7 @@ model4 = tengri.SEDModel.build(
         "skew": 0.3,
         "trunc": 2.0,
     },
-    dust={"type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
+    dust={"law": "power_law", "type": "two_component", "*": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.3},
     redshift=tengri.Fixed(0.1),
 )
 baseline4 = dict(model4.spec.sample(jax.random.PRNGKey(3)))

@@ -49,7 +49,7 @@ import numpy as np
 jax.config.update("jax_enable_x64", True)
 
 import tengri
-from tengri.analysis.plotting import setup_style
+from tengri.plot import setup_style
 
 setup_style()
 
@@ -89,6 +89,7 @@ model = tengri.SEDModel.build(
         "trunc": 13.0,  # extend to cosmic age
     },
     dust={
+        "law": "power_law",
         "type": "two_component",  # Adopted dust attenuation
         "all_params": tengri.FIXED,
         "tau_diff": 0.3,  # diffuse attenuation optical depth
@@ -125,6 +126,7 @@ for i, z in enumerate(z_grid):
             "trunc": 13.0,
         },
         dust={
+            "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
             "tau_diff": 0.3,

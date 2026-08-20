@@ -41,7 +41,7 @@ def test_two_step(ssp):
             "logzsol_young": Fixed(0.0),
             "step_age_gyr": Fixed(8.0),
         },
-        dust={"type": "two_component", "*": FIXED},
+        dust={"law": "power_law", "type": "two_component", "*": FIXED},
     )
     assert m.spec.met_mode == "two_step"
     fixed = m.spec.get_fixed_values()
@@ -60,7 +60,7 @@ def test_ramp(ssp):
             "logzsol_0": Fixed(-1.5),
             "logzsol_final": Fixed(0.0),
         },
-        dust={"type": "two_component", "*": FIXED},
+        dust={"law": "power_law", "type": "two_component", "*": FIXED},
     )
     assert m.spec.met_mode == "ramp"
 
@@ -80,7 +80,7 @@ def test_default_no_met_block(ssp):
     m = tengri.SEDModel.build(
         ssp,
         sfh={"type": "dpl", "*": FIXED},
-        dust={"type": "two_component", "*": FIXED},
+        dust={"law": "power_law", "type": "two_component", "*": FIXED},
     )
     assert m.spec.met_mode == "delta"
 
@@ -97,7 +97,7 @@ def test_roundtrip_emits_met_block(ssp):
             "logzsol_young": Fixed(0.0),
             "step_age_gyr": Fixed(8.0),
         },
-        dust={"type": "two_component", "*": FIXED},
+        dust={"law": "power_law", "type": "two_component", "*": FIXED},
     )
     groups = m.spec.to_groups()
     assert "met" in groups

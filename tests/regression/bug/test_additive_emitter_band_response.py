@@ -84,7 +84,7 @@ def _model(emission_type, shape, *, approx):
         sfh={"type": "dpl", "*": FIXED},
         dust={
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "*": FIXED,
             "emission": emission,
         },

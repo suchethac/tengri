@@ -58,7 +58,11 @@ def delta_model(ssp_data_fsps):
         ssp_data=ssp_data_fsps,
         observation=obs,
         sfh={"type": "dpl", "all_params": FIXED},
-        dust={"type": "two_component", "law_bc": "calzetti", "all_params": FIXED},
+        dust={
+            "type": "two_component",
+            "law": "calzetti",
+            "all_params": FIXED,
+        },
         neb={"type": "none"},
         met={"type": "delta"},
         redshift=Fixed(0.1),

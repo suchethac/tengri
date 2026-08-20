@@ -46,8 +46,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import tengri
-from tengri.analysis.plotting import setup_style
-from tengri.utils.physics_constants import C_AA  # speed of light [Angstrom/s]
+from tengri.plot import setup_style
+from tengri.units import C_AA
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -56,7 +56,13 @@ warnings.filterwarnings("ignore", message=".*deprecated.*")
 ssp = tengri.load_ssp()
 
 SFH = {"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0}
-DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.0, "tau_bc": 0.0}
+DUST = {
+    "law": "power_law",
+    "type": "two_component",
+    "all_params": tengri.FIXED,
+    "tau_diff": 0.0,
+    "tau_bc": 0.0,
+}
 
 # SKIRTOR grid (CIGALE subset): tau 3-11, oa 10-80, cos i in (0, 1].
 TAU_VALUES = np.linspace(3.0, 11.0, 7)

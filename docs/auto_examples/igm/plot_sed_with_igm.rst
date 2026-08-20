@@ -39,7 +39,7 @@ References:
 - Inoue et al. 2014, MNRAS, 442, 1805
 - Steidel et al. 1996, AJ, 112, 352 (LBG dropout origins)
 
-.. GENERATED FROM PYTHON SOURCE LINES 24-101
+.. GENERATED FROM PYTHON SOURCE LINES 24-107
 
 
 
@@ -66,7 +66,7 @@ References:
     import numpy as np
 
     import tengri
-    from tengri.analysis.plotting import setup_style
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -83,7 +83,13 @@ References:
         "alpha": 3.0,
         "beta": 2.0,
     }
-    DUST = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.1, "tau_bc": 0.1}
+    DUST = {
+        "law": "power_law",
+        "type": "two_component",
+        "all_params": tengri.FIXED,
+        "tau_diff": 0.1,
+        "tau_bc": 0.1,
+    }
 
     fig, ax = plt.subplots(figsize=(7.4, 4.8))
 

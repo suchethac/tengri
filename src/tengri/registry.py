@@ -398,11 +398,17 @@ def _usage_hint(name: str, kind: str) -> str:
     if kind == "agn_model":
         return f"SEDModel.build(..., agn={{'type': '{name}'}})"
     if kind == "dust_model":
+        if name in ("two_component", "single_component"):
+            # Attenuation law is required (no silent default); show the
+            # smallest valid spelling for this structural type.
+            return f"SEDModel.build(..., dust={{'type': '{name}', 'law': 'calzetti'}})"
         return f"SEDModel.build(..., dust={{'type': '{name}'}})"
     if kind == "dust_attenuation":
-        return f"SEDModel.build(..., dust={{'type': 'single_component', 'law_bc': '{name}'}})"
+        return f"SEDModel.build(..., dust={{'type': 'single_component', 'law': '{name}'}})"
     if kind == "dust_emission":
-        return f"SEDModel.build(..., dust={{'emission': {{'type': '{name}'}}}})"
+        # The dust dict's own 'type' defaults to two_component, which needs
+        # an explicit law; show it alongside the emission sub-block.
+        return f"SEDModel.build(..., dust={{'law': 'calzetti', 'emission': {{'type': '{name}'}}}})"
     if kind == "sfh_model":
         return f"SEDModel.build(..., sfh={{'type': '{name}'}})"
     if kind == "nebular_backend":
@@ -761,7 +767,7 @@ _DUST_MODEL_METADATA: dict[str, dict[str, str]] = {
     "single_component": {
         "status": "production",
         "citation": "Calzetti et al. 2000 (ApJ 533, 682)",
-        "short_doc": "One screen over all stars; `law_bc` sets the curve",
+        "short_doc": "One screen over all stars; `law` sets the curve",
     },
     "two_component": {
         "status": "production",
@@ -781,8 +787,9 @@ def list_dust_models(*, status: str | None = None) -> _RegistryTable:
 
     Dust is selected along three independent axes, and this is the first one:
     how the dust is *arranged* relative to the stars. The attenuation
-    **curve** is a separate choice (:func:`list_dust_laws`, via ``law_bc`` /
-    ``law_diff``), and the IR **emission** template a third
+    **curve** is a separate choice (:func:`list_dust_laws`, via ``law`` for
+    single_component or ``law_bc`` / ``law_diff`` for two_component), and the IR
+    **emission** template a third
     (:func:`list_dust_emission_models`, via ``dust={'emission': ...}``).
 
     The other two axes had menus; this one did not, so the structural
@@ -2719,7 +2726,7 @@ def suggest_parameters(
     mean_sfh_type: str | list[str] = "dpl",
     agn_model: str | None = None,
     dust_law: str | None = None,
-    dust_law_bc: str = "power_law",
+    dust_law_bc: str | None = "power_law",
     dust_law_diff: str | None = None,
     dust_emission: str | None = None,
     dust_model: str = "two_component",
@@ -2753,8 +2760,9 @@ def suggest_parameters(
     agn_model : str, optional
         Name from ``tengri.list_agn_models()``.  ``None`` → AGN off.
     dust_law : str, optional
-        Single-component attenuation curve.  Use either ``dust_law=`` or
-        ``dust_law_bc=`` / ``dust_law_diff=`` for two-component.
+        Attenuation law name. For flat-kwarg Parameter() builds, defaults to
+        power_law when unset. For grammar builds (SEDModel.build), use 'law'
+        for single_component or both 'law_bc' and 'law_diff' for two_component.
     dust_emission : str, optional
         IR emission template family from
         ``tengri.list_dust_emission_models()``.
@@ -3301,7 +3309,7 @@ tengri — differentiable galaxy SED fitting in JAX
     `tengri.list_recipes()` lists the {n_recipes} starting points. To hand-roll a
     model instead, pass group dicts to SEDModel.build:
       sfh={{'type': 'dpl', 'all_params': tengri.FREE}},
-      dust={{'type': 'two_component', 'law_bc': 'calzetti'}}, …
+      dust={{'type': 'two_component', 'law': 'calzetti'}}, …
       tengri.describe_recipe("star_forming_photometry")   # see what one sets
 
     Pick a method:

@@ -419,7 +419,7 @@ model = SEDModel.build(
     sfh={'type': 'dpl', 'all_params': FREE},
     dust={
         'type': 'two_component',
-        'law_bc': 'calzetti',
+        'law': 'calzetti',
         'all_params': FREE,
         'emission': {'type': 'dale2014', 'all_params': FIXED},
     },
@@ -455,7 +455,7 @@ synonym, kept for back-compat and slated for deprecation — prefer `'all_params
 ```python
 dust={
     'type': 'two_component',
-    'law_bc': 'calzetti',
+    'law': 'calzetti',
     'all_params': FIXED,  # All dust params are [all_params FIXED]
     'tau_bc': Uniform(0, 1),  # Override: explicitly free
 }
@@ -518,7 +518,7 @@ spec = Parameters(
 # New (recommended)
 spec = parse_groups(
     sfh={'type': 'dpl', 'all_params': FREE},
-    dust={'type': 'two_component', 'law_bc': 'calzetti', 'all_params': FREE},
+    dust={'type': 'two_component', 'law': 'calzetti', 'all_params': FREE},
 )
 ```
 
@@ -1061,6 +1061,22 @@ is a load-bearing role a string is badly suited to — it shipped once reading
 "`met={'type': 'table'}` becomes `met={'type': 'table'}`" after a rename sweep
 rewrote the before-side. A test now asserts the message names the keys it
 translates *from*.
+
+---
+
+## Physical constants re-exports (2026-08, gallery overhaul)
+
+Two physical constants and a second IGM transmission model were added to the
+public API as part of the gallery curation. `C_AA` and `LOG10_ZSUN` were
+internal utilities made top-level in the build system; they are now exposed via
+the canonical `tengri.units` namespace. `igm_transmission_meiksin06` joins the
+Inoue and Madau models at top level for parity with the gallery examples.
+
+| Old path or status                                 | New path or designation               | Status (v0.x)                                  |
+| -------------------------------------------------- | -------------------------------------- | ---------------------------------------------- |
+| `tengri.utils.physics_constants.C_AA` (internal)   | `tengri.units.C_AA` (public)           | New (advertised in `__all__`)                  |
+| `tengri.utils.physics_constants.LOG10_ZSUN` (internal) | `tengri.units.LOG10_ZSUN` (public)     | New (advertised in `__all__`)                  |
+| `tengri.components.igm.igm_transmission_meiksin06` | `tengri.igm_transmission_meiksin06`    | New (advertised in `__all__`)                  |
 
 ---
 

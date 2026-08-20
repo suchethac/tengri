@@ -26,7 +26,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import tengri
-from tengri.analysis.plotting import setup_style
+from tengri.plot import setup_style
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -45,11 +45,15 @@ SFH = {
     "end_gyr": 0.0,
 }
 DUST = {
+    "law": "power_law",
     "type": "two_component",
     "all_params": tengri.FIXED,
     "tau_diff": 0.3,
     "tau_bc": 0.5,
-    "emission": {"type": "dale2014", "all_params": tengri.FIXED},
+    # dale2014_cigale: this example enables the radio component, and plain
+    # dale2014 embeds its own SF radio continuum — the pair is refused at
+    # build as a double-count (#1970).
+    "emission": {"type": "dale2014_cigale", "all_params": tengri.FIXED},
 }
 
 ssp = tengri.load_ssp()

@@ -29,7 +29,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import tengri
-from tengri.analysis.plotting import setup_style
+from tengri.plot import setup_style
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -146,6 +146,7 @@ for shape_i, (_shape_name, sfh_dict) in enumerate(sfh_shapes):
                 "peak_lbt_gyr": age,  # Lookback time to burst
             }
             dust = {
+                "law": "power_law",
                 "type": "two_component",
                 "all_params": tengri.FIXED,
                 "tau_bc": 0.0,

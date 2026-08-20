@@ -31,7 +31,7 @@ burst lifts the recent SFR (top panel) and blues the rest-frame UV continuum
 (bottom panel). The total stellar mass is held fixed, so a larger burst
 necessarily draws mass away from the old population.
 
-.. GENERATED FROM PYTHON SOURCE LINES 15-82
+.. GENERATED FROM PYTHON SOURCE LINES 15-88
 
 
 
@@ -58,7 +58,7 @@ necessarily draws mass away from the old population.
     import numpy as np
 
     import tengri
-    from tengri.analysis.plotting import setup_style
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -80,7 +80,13 @@ necessarily draws mass away from the old population.
                 "age_gyr": 10.0,
                 "burst_age_gyr": 0.3,
             },
-            dust={"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.2, "tau_bc": 0.2},
+            dust={
+                "law": "power_law",
+                "type": "two_component",
+                "all_params": tengri.FIXED,
+                "tau_diff": 0.2,
+                "tau_bc": 0.2,
+            },
             redshift=tengri.Fixed(0.05),
         )
 

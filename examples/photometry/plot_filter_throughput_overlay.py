@@ -32,8 +32,8 @@ import numpy as np
 
 import tengri
 from tengri import load_filter
-from tengri.analysis.plotting import setup_style
 from tengri.igm import igm_transmission
+from tengri.plot import setup_style
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -58,7 +58,7 @@ dust_config = {
     "all_params": tengri.FIXED,
     "tau_diff": 0.3,  # Diffuse attenuation
     "tau_bc": 0.5,  # Dust clouds
-    "law_bc": "calzetti",  # Starburst attenuation law
+    "law": "calzetti",  # Starburst attenuation law
     "emission": {"type": "dale2014", "all_params": tengri.FIXED},
 }
 

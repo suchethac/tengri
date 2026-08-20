@@ -186,7 +186,13 @@ def test_grid_backed_lines_selectable_via_builder(monkeypatch):
             "log_total_mass": Fixed(10.0),
             "*": FIXED,
         },
-        dust={"type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+        dust={
+            "law": "power_law",
+            "type": "two_component",
+            "tau_bc": Fixed(0.0),
+            "tau_diff": Fixed(0.0),
+            "*": FIXED,
+        },
         agn={
             "type": "composable",
             "disc": {"type": "kubota_done"},
@@ -259,6 +265,7 @@ def test_synth_lines_photometry_under_jit_and_precompute(
                 "*": FIXED,
             },
             dust={
+                "law": "power_law",
                 "type": "two_component",
                 "tau_bc": Fixed(0.0),
                 "tau_diff": Fixed(0.0),

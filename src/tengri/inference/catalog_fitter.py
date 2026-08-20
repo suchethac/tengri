@@ -27,6 +27,7 @@ from tengri._mapping import ReadOnlyPropertyMapping
 from tengri.inference._batching import AUTO, chunking_was_requested, resolve_forward_chunk_size
 from tengri.inference._dimension_guard import warn_if_nuts_high_dim as _warn_if_nuts_high_dim
 from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physical
+from tengri.inference.backends.mcmc._shared import DEFAULT_MAX_NUM_DOUBLINGS
 
 DEFAULT_PERCENTILES: tuple[float, ...] = (16.0, 50.0, 84.0)
 """Percentile levels used when ``percentiles=`` is not given."""
@@ -1405,7 +1406,7 @@ class _CatalogFitterOriginal:
         n_warmup=300,
         n_burnin=100,
         n_samples=1000,
-        max_num_doublings=10,
+        max_num_doublings=DEFAULT_MAX_NUM_DOUBLINGS,
         n_leapfrog_steps=10,
         target_accept_rate=0.85,
         dense_mass_matrix=False,

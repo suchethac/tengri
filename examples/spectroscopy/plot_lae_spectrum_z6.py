@@ -20,8 +20,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import tengri
-from tengri.analysis.plotting import setup_style
 from tengri.igm import igm_transmission
+from tengri.plot import setup_style
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -52,6 +52,7 @@ model = tengri.SEDModel.build(
         "beta": 2.5,
     },  # Declining late SFR
     dust={
+        "law": "power_law",
         "type": "two_component",
         "all_params": tengri.FIXED,
         "tau_diff": 0.02,  # Minimal diffuse dust

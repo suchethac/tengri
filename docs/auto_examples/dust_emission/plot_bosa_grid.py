@@ -24,7 +24,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from tengri import data_path
-from tengri.analysis.plotting import setup_style
+from tengri.plot import setup_style
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")

@@ -40,12 +40,12 @@ _WG00_GRID = Path(__file__).resolve().parents[3] / "data" / "wg00_attenuation_gr
 
 TWO_COMPONENT = {
     "type": "two_component",
-    "law_bc": "calzetti",
+    "law": "calzetti",
     "*": FIXED,
     "tau_bc": 0.5,
     "tau_diff": 0.3,
 }
-SINGLE_SCREEN = {"type": "single_component", "*": FIXED, "tau_v": 0.5}
+SINGLE_SCREEN = {"law": "power_law", "type": "single_component", "*": FIXED, "tau_v": 0.5}
 WG00 = {"type": "wg00", "*": FIXED, "tau_v": 0.5}
 
 _DUST_CASES = [
@@ -130,7 +130,7 @@ class TestLycMaskedLAbsorbed:
         # the dusty model's own taus is wrong for the wg00 case.
         transparent = {
             "type": "two_component",
-            "law_bc": "calzetti",
+            "law": "calzetti",
             "*": FIXED,
             "tau_bc": 0.0,
             "tau_diff": 0.0,

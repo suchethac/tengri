@@ -285,8 +285,8 @@ DECLARED_COINCIDENT: list[dict] = [
             "verifiable and belongs here."
         ),
         "separator": (
-            {"type": "single_component", "law_bc": "leitherer02"},
-            {"type": "single_component", "law_bc": "salim_sbl18", "dust_delta": -0.8},
+            {"type": "single_component", "law": "leitherer02"},
+            {"type": "single_component", "law": "salim_sbl18", "dust_delta": -0.8},
         ),
     },
     {
@@ -302,8 +302,8 @@ DECLARED_COINCIDENT: list[dict] = [
             "separates salim from calzetti."
         ),
         "separator": (
-            {"type": "single_component", "law_bc": "calzetti"},
-            {"type": "single_component", "law_bc": "salim", "dust_bump_strength": 1.0},
+            {"type": "single_component", "law": "calzetti"},
+            {"type": "single_component", "law": "salim", "dust_bump_strength": 1.0},
         ),
     },
     {
@@ -315,8 +315,8 @@ DECLARED_COINCIDENT: list[dict] = [
             "same slope. One curve reached two ways, at default."
         ),
         "separator": (
-            {"type": "single_component", "law_bc": "vw07_diff"},
-            {"type": "single_component", "law_bc": "power_law", "dust_slope": -2.5},
+            {"type": "single_component", "law": "vw07_diff"},
+            {"type": "single_component", "law": "power_law", "dust_slope": -2.5},
         ),
     },
     {
@@ -434,7 +434,7 @@ def _type_cfg(group: str, name: str) -> dict:
     law shape parameters are dead, and that is what this census must see.
     """
     if group == "dust":
-        return {"type": "single_component", "law_bc": name}
+        return {"type": "single_component", "law": name}
     return {"type": name}
 
 
@@ -554,27 +554,27 @@ KNOWN_DEAD_PARAMS: dict[tuple[str, str], str] = {}
 _DUST_BUILDS: dict[str, dict] = {
     "single_component/power_law": {
         "type": "single_component",
-        "law_bc": "power_law",
+        "law": "power_law",
         "all_params": FREE,
     },
     "single_component/noll09": {
         "type": "single_component",
-        "law_bc": "noll09",
+        "law": "noll09",
         "all_params": FREE,
     },
     "single_component/salim_sbl18": {
         "type": "single_component",
-        "law_bc": "salim_sbl18",
+        "law": "salim_sbl18",
         "all_params": FREE,
     },
     "single_component/kriek_conroy": {
         "type": "single_component",
-        "law_bc": "kriek_conroy",
+        "law": "kriek_conroy",
         "all_params": FREE,
     },
     "single_component/calzetti": {
         "type": "single_component",
-        "law_bc": "calzetti",
+        "law": "calzetti",
         "all_params": FREE,
     },
     "two_component/noll09": {

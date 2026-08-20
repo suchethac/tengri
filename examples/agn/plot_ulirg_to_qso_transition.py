@@ -34,7 +34,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import tengri
-from tengri.analysis.plotting import setup_style
+from tengri.plot import setup_style
 
 setup_style()
 warnings.filterwarnings("ignore", message=".*BakedInBackend.*")
@@ -117,6 +117,7 @@ def build_ulirg_qso_model(tau_v, agn_lum_ratio):
         ssp,
         sfh={"type": "const", "all_params": tengri.FIXED, "log_total_mass": log_total_mass},
         dust={
+            "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
             "tau_bc": tau_bc,

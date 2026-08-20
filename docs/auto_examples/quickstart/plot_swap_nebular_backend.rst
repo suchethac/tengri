@@ -26,7 +26,7 @@ continuum from O/B stars. The SFH is a young starburst (peak age ≈ 30 Myr).
 
 Reference: Li+2025 (Cue emulator; arXiv:2405.04598).
 
-.. GENERATED FROM PYTHON SOURCE LINES 10-94
+.. GENERATED FROM PYTHON SOURCE LINES 10-100
 
 
 
@@ -53,7 +53,7 @@ Reference: Li+2025 (Cue emulator; arXiv:2405.04598).
     import numpy as np
 
     import tengri
-    from tengri.analysis.plotting import setup_style
+    from tengri.plot import setup_style
 
     setup_style()
     warnings.filterwarnings("ignore")
@@ -69,7 +69,13 @@ Reference: Li+2025 (Cue emulator; arXiv:2405.04598).
         "tau_gyr": 0.03,
         "log_total_mass": 10.0,
     }
-    dust = {"type": "two_component", "all_params": tengri.FIXED, "tau_diff": 0.05, "tau_bc": 0.0}
+    dust = {
+        "law": "power_law",
+        "type": "two_component",
+        "all_params": tengri.FIXED,
+        "tau_diff": 0.05,
+        "tau_bc": 0.0,
+    }
 
     model_cue = tengri.SEDModel.build(
         ssp,
@@ -129,7 +135,7 @@ Reference: Li+2025 (Cue emulator; arXiv:2405.04598).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 22.460 seconds)
+   **Total running time of the script:** (0 minutes 8.406 seconds)
 
 
 .. _sphx_glr_download_auto_examples_quickstart_plot_swap_nebular_backend.py:
