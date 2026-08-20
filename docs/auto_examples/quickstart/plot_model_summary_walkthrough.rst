@@ -35,7 +35,7 @@ Understanding model structure through parameter provenance tags
 
  .. code-block:: none
 
-    /tengri/src/tengri/forward/sed_model.py:8679: WildcardPartialFreeWarning: sfh={'all_params': FREE} no longer frees metallicity parameters when there is no explicit met block. Before this change, met_logzsol (and other met_* params) were freed by the sfh wildcard.
+    /tengri/src/tengri/forward/sed_model.py:8763: WildcardPartialFreeWarning: sfh={'all_params': FREE} no longer frees metallicity parameters when there is no explicit met block. Before this change, met_logzsol (and other met_* params) were freed by the sfh wildcard.
 
     To free metallicity parameters explicitly, pass either:
       met={'all_params': FREE}
@@ -44,6 +44,14 @@ Understanding model structure through parameter provenance tags
 
     Issue #1796
       spec = parse_groups(**groups)
+    /tengri/examples/quickstart/plot_model_summary_walkthrough.py:31: DefaultFixedParametersWarning: Group 'neb' states no 'all_params' disposition, so its remaining 8 parameters were fixed at declared defaults:
+      neb_dig_delta_logU=-1, neb_dig_frac=0, neb_eline_sigma_kms=100, neb_fdust=0, neb_fesc=0, neb_fesc_lya=0, neb_logU=-3, neb_logZ_gas=-0.3
+
+    To fit them, pass 'all_params': FREE:
+      neb={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      neb={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
 
 
 
@@ -87,7 +95,7 @@ Understanding model structure through parameter provenance tags
             "all_params": tengri.FREE,
             "logzsol": tengri.Fixed(-0.1),  # [user] override on a FREE wildcard
         },
-        dust={
+        dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
             "all_params": tengri.FIXED,
@@ -155,7 +163,7 @@ Understanding model structure through parameter provenance tags
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 7.971 seconds)
+   **Total running time of the script:** (0 minutes 8.104 seconds)
 
 
 .. _sphx_glr_download_auto_examples_quickstart_plot_model_summary_walkthrough.py:

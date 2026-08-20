@@ -77,14 +77,14 @@ model = SEDModel.build(
         "age_gyr": 3.0,
         "log_total_mass": 10.0,
     },
-    dust={
+    dust_attenuation={
         "type": "two_component",
         "law": "calzetti",
         "all_params": FIXED,
         "tau_bc": 0.3,  # fixed birth-cloud baseline (stabilizes the FIR peak)
         "tau_diff": 0.3,  # baseline; overridden per E(B-V) below
-        "emission": {"type": "dale2014", "all_params": FIXED},
     },
+    dust_emission={"type": "dale2014", "all_params": FIXED},
     redshift=Fixed(0.01),
 )
 base_params = model.spec.get_fixed_values()

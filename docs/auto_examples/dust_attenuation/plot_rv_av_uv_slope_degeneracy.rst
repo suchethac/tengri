@@ -100,7 +100,7 @@ illustrating why dust-law assumptions strongly bias inferred properties.
         return tengri.SEDModel.build(
             ssp,
             sfh=SFH,
-            dust={
+            dust_attenuation={
                 "type": "two_component",
                 "all_params": tengri.FIXED,
                 "tau_bc": 0.0,
@@ -175,7 +175,7 @@ illustrating why dust-law assumptions strongly bias inferred properties.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 6.470 seconds)
+   **Total running time of the script:** (0 minutes 6.705 seconds)
 
 
 .. _sphx_glr_download_auto_examples_dust_attenuation_plot_rv_av_uv_slope_degeneracy.py:

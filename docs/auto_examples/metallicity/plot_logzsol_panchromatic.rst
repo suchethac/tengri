@@ -86,18 +86,18 @@ Reference: Conroy 2013 (stellar), Silva et al. 1998 (dust emission).
             "tau_gyr": 1.0,
             "log_total_mass": 10.0,
         },
-        dust={
+        dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
             "tau_bc": 1.0,
             "tau_diff": 0.5,
-            "emission": {
-                "type": "modified_blackbody",
-                "all_params": tengri.FIXED,
-                "T": 30.0,
-                "beta_ir": 1.8,
-            },
+        },
+        dust_emission={
+            "type": "modified_blackbody",
+            "all_params": tengri.FIXED,
+            "T": 30.0,
+            "beta_ir": 1.8,
         },
         redshift=tengri.Fixed(0.2),
     )
@@ -133,7 +133,7 @@ Reference: Conroy 2013 (stellar), Silva et al. 1998 (dust emission).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.602 seconds)
+   **Total running time of the script:** (0 minutes 3.791 seconds)
 
 
 .. _sphx_glr_download_auto_examples_metallicity_plot_logzsol_panchromatic.py:

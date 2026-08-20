@@ -64,7 +64,7 @@ Reference: ADR-0007 (precomputation architecture).
 
     baseline_spec = {
         "sfh": {"type": "tsnorm", "all_params": tengri.FIXED},
-        "dust": {
+        "dust_attenuation": {
             "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
@@ -144,7 +144,7 @@ Reference: ADR-0007 (precomputation architecture).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 12.052 seconds)
+   **Total running time of the script:** (0 minutes 3.715 seconds)
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_diag_waveprecomp_accuracy.py:

@@ -88,7 +88,7 @@ Steidel et al. 1996, ApJL, 462, L17 (Lyman-break selection at z ~ 3).
                 "trunc": tengri.Uniform(2.0, 8.0),
                 "logzsol": tengri.Fixed(-0.1),
             },
-            dust={
+            dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
                 "all_params": tengri.FIXED,
@@ -236,7 +236,7 @@ Steidel et al. 1996, ApJL, 462, L17 (Lyman-break selection at z ~ 3).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.705 seconds)
+   **Total running time of the script:** (0 minutes 3.116 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_dropout_selection_z3.py:

@@ -147,7 +147,7 @@ shapes the full UV-to-IR SED.
                     "tau_gyr": baseline["tau_gyr"],
                     "log_total_mass": 10.0,
                 },
-                dust={
+                dust_attenuation={
                     "law": "power_law",
                     "type": "two_component",
                     "all_params": tengri.FIXED,
@@ -219,7 +219,7 @@ shapes the full UV-to-IR SED.
             "tau_gyr": 1.5,
             "log_total_mass": 10.0,
         },
-        dust={
+        dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
@@ -266,7 +266,7 @@ shapes the full UV-to-IR SED.
             "tau_gyr": 3.0,
             "log_total_mass": 10.0,
         },
-        dust={
+        dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
@@ -303,7 +303,7 @@ shapes the full UV-to-IR SED.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 6.196 seconds)
+   **Total running time of the script:** (0 minutes 5.557 seconds)
 
 
 .. _sphx_glr_download_auto_examples_sfh_plot_dpl_alpha_beta_grid.py:

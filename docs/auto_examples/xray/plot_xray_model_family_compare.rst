@@ -108,7 +108,7 @@ Reference: Yang+2020 (alpha_ox corona); Lopez+2024, Asmus+2015 (alpha_IRX).
         model = tengri.SEDModel.build(
             ssp_data=ssp,
             sfh=SFH,
-            dust=DUST,
+            dust_attenuation=DUST,
             agn=AGN,
             xray={"type": name, "all_params": tengri.FIXED},
             redshift=tengri.Fixed(0.05),
@@ -153,7 +153,7 @@ Reference: Yang+2020 (alpha_ox corona); Lopez+2024, Asmus+2015 (alpha_IRX).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 9.069 seconds)
+   **Total running time of the script:** (0 minutes 8.697 seconds)
 
 
 .. _sphx_glr_download_auto_examples_xray_plot_xray_model_family_compare.py:

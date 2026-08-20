@@ -96,7 +96,7 @@ Demonstrates Lyα radiative transfer and reionization-era observability.
             "alpha": 3.5,  # Rising early SFR
             "beta": 2.5,
         },  # Declining late SFR
-        dust={
+        dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
@@ -203,6 +203,11 @@ Demonstrates Lyα radiative transfer and reionization-era observability.
     ax_lya.grid(True, alpha=0.3, which="major", axis="y")
 
     plt.savefig("plot_lae_spectrum_z6.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 5.655 seconds)
 
 
 .. _sphx_glr_download_auto_examples_spectroscopy_plot_lae_spectrum_z6.py:

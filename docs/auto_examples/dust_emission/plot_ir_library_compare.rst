@@ -188,14 +188,14 @@ implications.
             model = tengri.SEDModel.build(
                 ssp,
                 sfh=SFH,
-                dust={
+                dust_attenuation={
                     "law": "power_law",
                     "type": "two_component",
                     "all_params": tengri.FIXED,
                     "tau_diff": 1.0,
                     "tau_bc": 1.5,
-                    "emission": {"type": lib, "all_params": tengri.FIXED},
                 },
+                dust_emission={"type": lib, "all_params": tengri.FIXED},
                 redshift=tengri.Fixed(0.05),
             )
         except Exception as e:
@@ -248,7 +248,7 @@ implications.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 9.382 seconds)
+   **Total running time of the script:** (0 minutes 11.365 seconds)
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_ir_library_compare.py:

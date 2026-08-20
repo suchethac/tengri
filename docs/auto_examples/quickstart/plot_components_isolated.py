@@ -46,13 +46,13 @@ DUST_ON = {
     "all_params": tengri.FIXED,
     "tau_diff": 0.4,
     "tau_bc": 0.6,
-    # dale2014_cigale: the "+ radio" run composes this dust block with the
-    # radio component, and plain dale2014 embeds its own SF radio continuum —
-    # the pair is refused at build as a double-count (#1970). The stripped
-    # template also keeps the "+ dust" curve honest in the radio band: dust
-    # alone contributes nothing there.
-    "emission": {"type": "dale2014_cigale", "all_params": tengri.FIXED},
 }
+# dale2014_cigale: the "+ radio" run composes this dust block with the
+# radio component, and plain dale2014 embeds its own SF radio continuum —
+# the pair is refused at build as a double-count (#1970). The stripped
+# template also keeps the "+ dust" curve honest in the radio band: dust
+# alone contributes nothing there.
+DUST_EMISSION = {"type": "dale2014_cigale", "all_params": tengri.FIXED}
 DUST_OFF = {
     "law": "power_law",
     "type": "two_component",
@@ -71,14 +71,19 @@ def _nuLnu(**blocks):
 
 
 RUNS = [
-    ("stellar", "#666666", dict(dust=DUST_OFF)),
-    ("+ nebular", "#33aa55", dict(dust=DUST_OFF, neb={"type": "cue", "all_params": tengri.FIXED})),
-    ("+ dust", "#cc6633", dict(dust=DUST_ON)),
+    ("stellar", "#666666", dict(dust_attenuation=DUST_OFF)),
+    (
+        "+ nebular",
+        "#33aa55",
+        dict(dust_attenuation=DUST_OFF, neb={"type": "cue", "all_params": tengri.FIXED}),
+    ),
+    ("+ dust", "#cc6633", dict(dust_attenuation=DUST_ON, dust_emission=DUST_EMISSION)),
     (
         "+ AGN",
         "#cc3399",
         dict(
-            dust=DUST_ON,
+            dust_attenuation=DUST_ON,
+            dust_emission=DUST_EMISSION,
             agn={
                 "disc": {"type": "multicolor", "all_params": tengri.FIXED},
                 "torus": {"type": "skirtor", "all_params": tengri.FIXED},
@@ -93,12 +98,20 @@ RUNS = [
     (
         "+ radio",
         "#3377cc",
-        dict(dust=DUST_ON, radio={"type": "condon92", "all_params": tengri.FIXED}),
+        dict(
+            dust_attenuation=DUST_ON,
+            dust_emission=DUST_EMISSION,
+            radio={"type": "condon92", "all_params": tengri.FIXED},
+        ),
     ),
     (
         "+ X-ray (XRBs)",
         "#9933cc",
-        dict(dust=DUST_ON, xray={"type": "simple", "all_params": tengri.FIXED}),
+        dict(
+            dust_attenuation=DUST_ON,
+            dust_emission=DUST_EMISSION,
+            xray={"type": "simple", "all_params": tengri.FIXED},
+        ),
     ),
 ]
 

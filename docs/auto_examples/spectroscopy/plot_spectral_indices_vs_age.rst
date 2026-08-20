@@ -123,7 +123,7 @@ The age axis is shared so the responses can be compared.
     }
 
     ssp = tengri.load_ssp()
-    model = tengri.SEDModel.build(ssp, sfh=SFH, dust=DUST, redshift=tengri.Fixed(0.0))
+    model = tengri.SEDModel.build(ssp, sfh=SFH, dust_attenuation=DUST, redshift=tengri.Fixed(0.0))
     baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
     ages = np.geomspace(0.03, 11.0, 28)

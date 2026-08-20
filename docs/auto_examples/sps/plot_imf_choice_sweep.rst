@@ -42,11 +42,11 @@ reveal the IMF signature in the SED continuum shape and M/L.
 
  .. code-block:: none
 
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.2 Gyr is narrower than the SSP grid spacing 0.386 Gyr at peak sfh_tsnorm_peak_lbt_gyr=3 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.386 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.2 Gyr is narrower than the SSP grid spacing 0.386 Gyr at peak sfh_tsnorm_peak_lbt_gyr=3 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.386 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.2 Gyr is narrower than the SSP grid spacing 0.386 Gyr at peak sfh_tsnorm_peak_lbt_gyr=3 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.386 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.2 Gyr is narrower than the SSP grid spacing 0.386 Gyr at peak sfh_tsnorm_peak_lbt_gyr=3 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.386 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.2 Gyr is narrower than the SSP grid spacing 0.386 Gyr at peak sfh_tsnorm_peak_lbt_gyr=3 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.386 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=0.2 Gyr is narrower than the SSP grid spacing 0.386 Gyr at peak sfh_tsnorm_peak_lbt_gyr=3 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 0.386 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
 
 
@@ -101,7 +101,7 @@ reveal the IMF signature in the SED continuum shape and M/L.
                 "skew": 0.0,
                 "trunc": 13.0,
             },
-            dust={
+            dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
                 "all_params": tengri.FIXED,
@@ -129,7 +129,7 @@ reveal the IMF signature in the SED continuum shape and M/L.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.379 seconds)
+   **Total running time of the script:** (0 minutes 4.167 seconds)
 
 
 .. _sphx_glr_download_auto_examples_sps_plot_imf_choice_sweep.py:

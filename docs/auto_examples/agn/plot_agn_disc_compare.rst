@@ -118,7 +118,7 @@ Swap any one into a full model with ``agn={'disc': {'type': <name>}}``.
         model = tengri.SEDModel.build(
             ssp,
             sfh=SFH,
-            dust=DUST,
+            dust_attenuation=DUST,
             agn={
                 "disc": {"type": disc, "all_params": tengri.FIXED},
                 "all_params": tengri.FIXED,
@@ -151,7 +151,7 @@ Swap any one into a full model with ``agn={'disc': {'type': <name>}}``.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 8.607 seconds)
+   **Total running time of the script:** (0 minutes 14.796 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_disc_compare.py:
