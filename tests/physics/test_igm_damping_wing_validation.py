@@ -70,30 +70,53 @@ class TestDampingWingValidation:
         assert jnp.all(jnp.diff(I_vals) > 0.0), "I(x) should increase with x"
 
     def test_code_vs_exact_relative_error(self):
-        """Code's fast approximation should agree with exact within ~25%."""
+        """The code's wing agrees with the Miralda-Escudé far-wing limit to 10%.
+
+        In the far wing (offset delta >> line core), the exact I(x) form
+        reduces to tau = tau_GP * x_HI * (R_alpha / pi) / delta_eff with
+        delta_eff = delta + x_bubble the offset to the nearest neutral gas.
+        The reference below is built from literature constants only —
+        tau_GP = 6.45e5 ((1+z)/7)^{3/2} (ME98 Eq. 1), R_alpha = 2.02e-8
+        (ME98 below Eq. 3) — and Planck 2020 numbers for the bubble's
+        Hubble-flow offset, independently of the implementation's own
+        constant definitions. A wrong prefactor OR a wrong power law
+        (e.g. the thin-shell 1/delta^2) breaks the 10% agreement.
+        """
         from tengri.components.igm.igm import _damping_wing_tau
 
         z = 7.0
         x_HI = 0.5
         R_bubble = 1.0
 
-        # Test at observed-frame wavelengths corresponding to rest offsets
         lya_rest = 1215.67
         lya_obs = lya_rest * (1.0 + z)
 
-        # Rest-frame wavelength offsets (Angstrom) to test
-        rest_offsets = jnp.array([50.0, 100.0, 200.0, 500.0, 1000.0])
+        # Observed-frame offsets (Angstrom); all are far-wing at z=7
+        # (delta = 0.005-0.2 >> the ~1e-8 damping core).
+        obs_offsets = jnp.array([50.0, 100.0, 200.0, 500.0, 1000.0, 2000.0])
+        wave_obs = lya_obs + obs_offsets
 
-        # Convert to observed-frame wavelengths
-        wave_obs = lya_obs + rest_offsets
-
-        # Code's tau (fast approximation)
         tau_code = _damping_wing_tau(wave_obs, z, x_HI=x_HI, R_bubble=R_bubble)
 
-        # Expected behavior: monotonic decrease with distance from Lyα
-        # and reasonable magnitude (not over-absorbing)
+        # Independent far-wing reference from literature constants.
+        tau_gp_ref = 6.45e5 * ((1.0 + z) / 7.0) ** 1.5
+        r_alpha_ref = 2.02e-8
+        # Bubble offset: v = R_bubble * H(z), H(z) = 100 h sqrt(Om0 (1+z)^3)
+        h_ref, om0_ref = 0.6766, 0.30966  # Planck 2020, A&A 641, A6
+        hz_ref = 100.0 * h_ref * (om0_ref * (1.0 + z) ** 3) ** 0.5
+        x_bubble_ref = R_bubble * hz_ref / 2.998e5
+        delta = obs_offsets / lya_obs
+        tau_ref = tau_gp_ref * x_HI * (r_alpha_ref / jnp.pi) / (delta + x_bubble_ref)
+
         assert jnp.all(jnp.isfinite(tau_code)), "tau should be finite"
         assert jnp.all(tau_code >= 0.0), "tau should be non-negative"
+
+        rel_err = jnp.abs(tau_code - tau_ref) / tau_ref
+        assert jnp.all(rel_err < 0.10), (
+            f"code wing deviates from the ME98 far-wing reference by "
+            f"{jnp.max(rel_err):.1%} (tolerance 10%). tau_code={tau_code}, "
+            f"tau_ref={tau_ref}"
+        )
 
         # tau should decrease as wavelength moves away from Lyα
         for i in range(len(tau_code) - 1):
