@@ -64,13 +64,13 @@ already at z > 0.01.
 ## SSP grids
 
 Tengri needs a pre-computed Simple Stellar Population grid in DSPS
-HDF5 format. The default is FSPS with PARSEC isochrones and the MILES
+HDF5 format. The default is FSPS with MIST isochrones and the MILES
 library (Chabrier IMF) — bare-stellar, so the Cue and Cloudy nebular
 backends can sit on top. It is the grid the quickstart notebook uses.
 
 ```python
 import tengri
-tengri.download_ssp()          # → data/fsps_prsc_miles_chabrier.h5 (or $TENGRI_DATA_DIR)
+tengri.download_ssp()          # → data/fsps_mist_miles_chabrier.h5 (or $TENGRI_DATA_DIR)
 tengri.list_known_ssps()       # other grids
 ```
 
@@ -79,7 +79,7 @@ Or via shell — either the wrapper script or a direct fetch:
 ```bash
 bash scripts/setup_ssp.sh
 # or
-wget https://halos.as.arizona.edu/suchethacooray/ssp-spectra/fsps_prsc_miles_chabrier.h5 -P data/
+wget https://halos.as.arizona.edu/suchethacooray/ssp-spectra/fsps_mist_miles_chabrier.h5 -P data/
 ```
 
 The full catalog of pre-formatted grids (BC03, BPASS, FSPS,

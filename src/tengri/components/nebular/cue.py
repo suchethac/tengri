@@ -920,7 +920,7 @@ class CueWNESSPError(ValueError):
     Pick one of:
 
     1. **Use a bare-stellar SSP** (no baked-in nebular). Examples in
-       ``data/``: ``fsps_prsc_miles_chabrier.h5``, ``fsps_mist_c3k_a_chabrier.h5``.
+       ``data/``: ``fsps_mist_miles_chabrier.h5``, ``fsps_mist_c3k_a_chabrier.h5``.
        The hosted catalog at https://halos.as.arizona.edu/suchethacooray/
        ssp-spectra/ ships only bare-stellar SSPs.
     2. **Keep the SSP and drop** ``neb={'type': 'cue'}`` — a wNE grid's
@@ -1068,7 +1068,7 @@ class CueBackend:
                 "\n"
                 "Fix (one of):\n"
                 "  1. Download a bare-stellar SSP and retry:\n"
-                "     tengri.download_ssp('fsps_prsc_miles_chabrier')\n"
+                "     tengri.download_ssp('fsps_mist_miles_chabrier')\n"
                 "     Then rebuild the model with that grid.\n"
                 "  2. Keep this SSP and drop neb={'type': 'cue'} — the\n"
                 "     baked-in nebular backend already models the lines."
@@ -1116,9 +1116,9 @@ class CueBackend:
                     "  1. Use a bare-stellar SSP. The four recipes that\n"
                     "     use Cue (star_forming_photometry, quiescent_z0,\n"
                     "     stochastic_sfh_jwst, agn_panchromatic) need a\n"
-                    "     file like fsps_prsc_miles_chabrier.h5. Download with:\n"
+                    "     file like fsps_mist_miles_chabrier.h5. Download with:\n"
                     "         from tengri.data import download_ssp\n"
-                    "         path = download_ssp('fsps_prsc_miles_chabrier.h5')\n"
+                    "         path = download_ssp('fsps_mist_miles_chabrier.h5')\n"
                     "     then  load_ssp_data(str(path)). See\n"
                     "     tengri.data.list_remote_ssps() for the full catalog.\n"
                     "  2. Pass ssp_data=None to CueBackend and provide Q_H\n"

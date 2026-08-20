@@ -102,7 +102,7 @@ Tengri needs a pre-computed Simple Stellar Population grid in DSPS HDF5 format. 
 
 ```python
 import tengri
-tengri.download_ssp()           # -> data/fsps_prsc_miles_chabrier.h5 (or $TENGRI_DATA_DIR)
+tengri.download_ssp()           # -> data/fsps_mist_miles_chabrier.h5 (or $TENGRI_DATA_DIR)
 tengri.list_known_ssps()        # other grids
 ```
 
