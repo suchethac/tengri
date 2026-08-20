@@ -50,7 +50,7 @@ def _build_model(ssp, observation):
         ssp_data=ssp,
         observation=observation,
         sfh={"type": "dpl", "*": FIXED, "log_total_mass": Uniform(8, 12)},
-        dust_attenuation={"type": "two_component", "law": "calzetti", "*": FIXED},
+        dust={"type": "two_component", "law": "calzetti", "*": FIXED},
         neb={"type": "none"},
         redshift=Fixed(0.5),
     )
@@ -414,7 +414,7 @@ def test_hierarchical_forwards_are_excluded_from_threading(synthetic_ssp, simple
         ssp_data=synthetic_ssp,
         observation=simple_observation,
         sfh={"type": "dpl", "*": FIXED, "log_total_mass": Uniform(8, 12)},
-        dust_attenuation={"type": "two_component", "law": "calzetti", "*": FIXED},
+        dust={"type": "two_component", "law": "calzetti", "*": FIXED},
         neb={"type": "none"},
         redshift=Fixed(0.5),
     )

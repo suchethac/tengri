@@ -31,7 +31,7 @@ def model(synthetic_ssp_wide, synthetic_tophat_obs):
         ssp_data=synthetic_ssp_wide,
         observation=synthetic_tophat_obs,
         sfh={"type": "dpl"},
-        dust_attenuation={
+        dust={
             "type": "two_component",
             "law": "calzetti",
             "tau_bc": 0.3,

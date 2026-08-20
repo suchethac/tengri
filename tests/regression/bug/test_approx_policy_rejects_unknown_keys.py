@@ -178,7 +178,7 @@ def test_every_policy_field_reaches_the_compile_signature():
     obs = Observation(photometry=Photometry.from_names(["galex_fuv", "sdss_r"]))
     common = dict(
         sfh={"type": "dpl", "all_params": FIXED, "log_total_mass": 10.0},
-        dust_attenuation={
+        dust={
             "type": "two_component",
             "law": "calzetti",
             "all_params": FIXED,

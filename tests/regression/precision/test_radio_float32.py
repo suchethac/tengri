@@ -52,14 +52,14 @@ def _model(ssp, radio):
             "tau_gyr": 1.0,
             "age_gyr": 5.0,
         },
-        dust_attenuation={
+        dust={
             "type": "two_component",
             "law": "calzetti",
             "all_params": FIXED,
             "tau_diff": 0.5,
             "tau_bc": 0.0,
+            "emission": {"type": "dale2014_cigale", "all_params": FIXED},
         },
-        dust_emission={"type": "dale2014_cigale", "all_params": FIXED},
         agn={
             "type": "composable",
             "all_params": FIXED,

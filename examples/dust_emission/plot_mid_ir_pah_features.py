@@ -49,16 +49,16 @@ model_sf = tengri.SEDModel.build(
         "start_gyr": 0.3,
         "end_gyr": 0.0,
     },
-    dust_attenuation={
+    dust={
         "law": "power_law",
         "type": "two_component",
         "all_params": tengri.FIXED,
         "tau_diff": 0.5,  # diffuse dust: moderate optical depth
         "tau_bc": 1.2,  # birth cloud opacity: birth clouds
-    },
-    dust_emission={
-        "type": "dale2014",  # Dale et al. 2014 dust SED
-        "all_params": tengri.FIXED,
+        "emission": {
+            "type": "dale2014",  # Dale et al. 2014 dust SED
+            "all_params": tengri.FIXED,
+        },
     },
     agn={
         "torus": {"type": "none"},  # No AGN torus
@@ -86,16 +86,16 @@ model_agn = tengri.SEDModel.build(
         "start_gyr": 10.0,
         "end_gyr": 1.0,
     },
-    dust_attenuation={
+    dust={
         "law": "power_law",
         "type": "two_component",
         "all_params": tengri.FIXED,
         "tau_diff": 1.5,  # warm dust around AGN
         "tau_bc": 0.0,  # no birth clouds
-    },
-    dust_emission={
-        "type": "draine_li2007",  # Draine & Li 2007 dust SED (warmer)
-        "all_params": tengri.FIXED,
+        "emission": {
+            "type": "draine_li2007",  # Draine & Li 2007 dust SED (warmer)
+            "all_params": tengri.FIXED,
+        },
     },
     agn={
         "disc": {
@@ -131,16 +131,16 @@ model_composite = tengri.SEDModel.build(
         "start_gyr": 1.0,
         "end_gyr": 0.0,
     },
-    dust_attenuation={
+    dust={
         "law": "power_law",
         "type": "two_component",
         "all_params": tengri.FIXED,
         "tau_diff": 1.0,
         "tau_bc": 0.8,
-    },
-    dust_emission={
-        "type": "dale2014",
-        "all_params": tengri.FIXED,
+        "emission": {
+            "type": "dale2014",
+            "all_params": tengri.FIXED,
+        },
     },
     agn={
         "disc": {

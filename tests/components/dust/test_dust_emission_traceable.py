@@ -64,14 +64,14 @@ def _build(ssp, obs, emission_type):
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "dpl", "*": FIXED},
-        dust_attenuation={
+        dust={
             "type": "two_component",
             "law": "calzetti",
             "*": FIXED,
             "tau_bc": _TAU_BC,
             "tau_diff": _TAU_DIFF,
+            "emission": {"type": emission_type, "*": FIXED},
         },
-        dust_emission={"type": emission_type, "*": FIXED},
         neb={"type": "none"},
         redshift=Fixed(0.5),
     )

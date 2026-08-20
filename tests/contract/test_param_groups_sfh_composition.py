@@ -175,7 +175,7 @@ class TestSFHCompositionExamples:
         """Standard dpl + field composition."""
         params = parse_groups(
             sfh={"type": ["dpl", "field"], "*": FREE},
-            dust_attenuation={"law": "power_law", "type": "two_component", "*": FIXED},
+            dust={"law": "power_law", "type": "two_component", "*": FIXED},
             redshift=Fixed(0.1),
         )
         # Standard SFH composition params present

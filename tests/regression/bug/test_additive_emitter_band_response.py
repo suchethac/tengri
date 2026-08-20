@@ -82,12 +82,12 @@ def _model(emission_type, shape, *, approx):
         observation=Observation(photometry=Photometry.from_names(FILTERS)),
         redshift=Fixed(0.1),
         sfh={"type": "dpl", "*": FIXED},
-        dust_attenuation={
+        dust={
             "type": "two_component",
             "law": "calzetti",
             "*": FIXED,
+            "emission": emission,
         },
-        dust_emission=emission,
         approx=approx,
     )
 

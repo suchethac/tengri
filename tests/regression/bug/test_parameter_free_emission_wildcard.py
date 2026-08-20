@@ -115,13 +115,13 @@ def _build(ir_ssp, ir_obs, engine: str):
             ssp_data=ir_ssp,
             observation=ir_obs,
             sfh={"type": "dpl", "all_params": FIXED},
-            dust_attenuation={
+            dust={
                 "type": "two_component",
                 "law": "calzetti",
                 "tau_bc": Fixed(2.0),
                 "tau_diff": Fixed(1.5),
+                "emission": {"type": engine, "all_params": FREE},
             },
-            dust_emission={"type": engine, "all_params": FREE},
             redshift=Fixed(0.5),
         )
 

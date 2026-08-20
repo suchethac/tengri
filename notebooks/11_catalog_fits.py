@@ -141,7 +141,7 @@ def build_model():
         sfh={"type": "dpl", "all_params": FIXED, "log_total_mass": Uniform(8.0, 12.0)},
         met={"logzsol": Fixed(0.0)},
         # Free diffuse dust optical depth: marginalize the dust-redshift degeneracy.
-        dust_attenuation={
+        dust={
             "type": "two_component",
             "law": "calzetti",
             "all_params": FIXED,

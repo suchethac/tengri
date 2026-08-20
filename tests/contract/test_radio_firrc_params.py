@@ -218,7 +218,7 @@ class TestFirrcBuilderGrammar:
         model = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
             sfh={"type": "delayed", "*": FIXED},
-            dust_attenuation={
+            dust={
                 "type": "two_component",
                 "law": "power_law",
                 "tau_bc": Fixed(0.0),
@@ -316,7 +316,7 @@ class TestFirrcEndToEnd:
         model = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
             sfh={"type": "delayed", "*": FIXED},
-            dust_attenuation=_DUST0,
+            dust=_DUST0,
             radio={"sf": {"type": "delvecchio2021"}},
             redshift=Fixed(0.5),
         )
@@ -329,7 +329,7 @@ class TestFirrcEndToEnd:
         model = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
             sfh={"type": "delayed", "*": FIXED},
-            dust_attenuation=_DUST0,
+            dust=_DUST0,
             radio={"sf": {"type": "delvecchio2021", "delv_q0": Uniform(2.4, 3.1)}},
             redshift=Fixed(0.5),
         )

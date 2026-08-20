@@ -35,7 +35,7 @@ model = tengri.SEDModel.build(
         "all_params": tengri.FREE,
         "logzsol": tengri.Fixed(-0.1),  # [user] override on a FREE wildcard
     },
-    dust_attenuation={
+    dust={
         "type": "two_component",
         "law": "calzetti",
         "all_params": tengri.FIXED,

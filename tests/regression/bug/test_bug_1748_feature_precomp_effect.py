@@ -33,7 +33,7 @@ pytestmark = pytest.mark.regression_bug
 _PARAMS_BASE = {"sfh_delayed_log_total_mass": 10.0}
 
 
-def _build(ssp, approx, *, dust_attenuation: bool):
+def _build(ssp, approx, *, dust: bool):
     from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, Uniform
 
     dust_group = (
@@ -44,8 +44,8 @@ def _build(ssp, approx, *, dust_attenuation: bool):
             "tau_diff": Uniform(0.0, 1.5),
             "tau_bc": 0.0,
         }
-        if dust_attenuation
-        # Omitting `dust_attenuation=` still builds a DustSEDComponent, which would make the
+        if dust
+        # Omitting `dust=` still builds a DustSEDComponent, which would make the
         # control identical to the treatment in the one respect under test.
         else {"type": "none"}
     )
@@ -59,7 +59,7 @@ def _build(ssp, approx, *, dust_attenuation: bool):
             "tau_gyr": 1.0,
             "age_gyr": 5.0,
         },
-        dust_attenuation=dust_group,
+        dust=dust_group,
         neb={"type": "cue", "all_params": FIXED},
         redshift=Fixed(0.1),
         approx=approx,
@@ -83,8 +83,8 @@ def test_setup_the_control_is_really_dust_free(ssp_data_fsps):
     """Guard the guard: if both arms carry dust, every ratio below is meaningless."""
     from tengri.forward.sed_model import _nebular_continuum_consumers
 
-    dusty = _build(ssp_data_fsps, None, dust_attenuation=True)
-    clean = _build(ssp_data_fsps, None, dust_attenuation=False)
+    dusty = _build(ssp_data_fsps, None, dust=True)
+    clean = _build(ssp_data_fsps, None, dust=False)
 
     dusty_consumers = _nebular_continuum_consumers(dusty._build_component_chain())
     clean_consumers = _nebular_continuum_consumers(clean._build_component_chain())
@@ -105,10 +105,8 @@ def test_feature_precomp_still_pays_on_a_dust_free_model(ssp_data_fsps):
     """
     from tengri import FeaturePrecomp, WavePrecomp
 
-    wave = _grad_flops(_build(ssp_data_fsps, (WavePrecomp(),), dust_attenuation=False))
-    pair = _grad_flops(
-        _build(ssp_data_fsps, (WavePrecomp(), FeaturePrecomp()), dust_attenuation=False)
-    )
+    wave = _grad_flops(_build(ssp_data_fsps, (WavePrecomp(),), dust=False))
+    pair = _grad_flops(_build(ssp_data_fsps, (WavePrecomp(), FeaturePrecomp()), dust=False))
     assert pair < wave / 5.0, (
         f"FeaturePrecomp buys only {wave / pair:.2f}x on a dust-free model "
         f"({wave:,} -> {pair:,} gradient FLOPs). It should be an order of magnitude; "
@@ -120,10 +118,8 @@ def test_feature_precomp_is_inert_on_a_dusty_model(ssp_data_fsps):
     """Pins the fact the advice depends on, so it cannot silently change again."""
     from tengri import FeaturePrecomp, WavePrecomp
 
-    wave = _grad_flops(_build(ssp_data_fsps, (WavePrecomp(),), dust_attenuation=True))
-    pair = _grad_flops(
-        _build(ssp_data_fsps, (WavePrecomp(), FeaturePrecomp()), dust_attenuation=True)
-    )
+    wave = _grad_flops(_build(ssp_data_fsps, (WavePrecomp(),), dust=True))
+    pair = _grad_flops(_build(ssp_data_fsps, (WavePrecomp(), FeaturePrecomp()), dust=True))
     assert pair == wave, (
         f"FeaturePrecomp changed the compiled gradient on a dusty model "
         f"({wave:,} -> {pair:,}). If the fast path became available for a chain that "
@@ -143,7 +139,7 @@ def test_the_resolver_does_not_attach_a_config_that_cannot_engage(ssp_data_fsps)
 
     from tengri.inference.fitter import Fitter, fast_nebular_can_engage
 
-    dusty = _build(ssp_data_fsps, None, dust_attenuation=True)
+    dusty = _build(ssp_data_fsps, None, dust=True)
     assert not fast_nebular_can_engage(dusty)
 
     n_bands = 3

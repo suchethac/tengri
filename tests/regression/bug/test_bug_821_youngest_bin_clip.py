@@ -106,7 +106,7 @@ def test_boost_raises_youngest_weight_and_conserves_mass():
             "*": FIXED,
         },
         met={"logzsol": Fixed(0.0), "*": FIXED},
-        dust_attenuation={
+        dust={
             "law": "power_law",
             "type": "two_component",
             "tau_bc": Fixed(0.0),
@@ -182,7 +182,7 @@ def test_qh_recovers_exact_convolution_real_grid(real_ssp_only):
             "*": FIXED,
         },
         met={"logzsol": Fixed(0.0), "*": FIXED},
-        dust_attenuation={
+        dust={
             "law": "power_law",
             "type": "two_component",
             "tau_bc": Fixed(0.0),

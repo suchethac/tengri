@@ -32,9 +32,7 @@ class TestBuildResolverDustAttenuation:
         # the law-vs-type redirect for names that ARE registered attenuation
         # laws ('calzetti', 'smc'): "<law> is a dust attenuation *law*…".
         with pytest.raises(ValueError, match=r"Unknown dust type|is a dust attenuation \*law\*"):
-            SEDModel.build(
-                ssp_data=ssp_data_bc03, dust_attenuation={"type": law}, redshift=Fixed(0.1)
-            )
+            SEDModel.build(ssp_data=ssp_data_bc03, dust={"type": law}, redshift=Fixed(0.1))
 
     @pytest.mark.parametrize("law", ["calzetti", "smc", "cardelli", "salim"])
     def test_law_surface_builds_and_threads(self, ssp_data_bc03, law):
@@ -42,7 +40,7 @@ class TestBuildResolverDustAttenuation:
         builds and threads the chosen law through to the engine (not dropped)."""
         model = SEDModel.build(
             ssp_data=ssp_data_bc03,
-            dust_attenuation={"type": "two_component", "law": law, "*": FIXED},
+            dust={"type": "two_component", "law": law, "*": FIXED},
             redshift=Fixed(0.1),
         )
         assert model is not None
@@ -65,10 +63,7 @@ class TestBuildResolverDustEmission:
         try:
             model = SEDModel.build(
                 ssp_data=ssp_data_bc03,
-                dust_attenuation={
-                    "law": "power_law",
-                },
-                dust_emission={"type": emission},
+                dust={"law": "power_law", "emission": {"type": emission}},
                 redshift=Fixed(0.1),
             )
         except (FileNotFoundError, OSError) as exc:
@@ -87,8 +82,7 @@ class TestBuildResolverDustEmission:
         with pytest.raises(ValueError, match="Unknown dust emission type"):
             SEDModel.build(
                 ssp_data=ssp_data_bc03,
-                dust_attenuation={},
-                dust_emission={"type": component_name},
+                dust={"emission": {"type": component_name}},
                 redshift=Fixed(0.1),
             )
 

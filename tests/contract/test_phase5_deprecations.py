@@ -52,7 +52,7 @@ def model(synthetic_ssp_wide, synthetic_tophat_obs):
         ssp_data=synthetic_ssp_wide,
         observation=synthetic_tophat_obs,
         sfh={"type": "dpl", "*": FIXED, "log_total_mass": Uniform(9.0, 11.0)},
-        dust_attenuation={"type": "two_component", "law": "calzetti", "*": FIXED},
+        dust={"type": "two_component", "law": "calzetti", "*": FIXED},
         neb={"type": "none"},
         redshift=Fixed(0.1),
     )
@@ -255,7 +255,7 @@ def test_wave_obs_uses_fixed_redshift_not_params_default(synthetic_ssp_wide, syn
         ssp_data=synthetic_ssp_wide,
         observation=synthetic_tophat_obs,
         sfh={"type": "dpl", "*": FIXED},
-        dust_attenuation={"type": "two_component", "law": "calzetti", "*": FIXED},
+        dust={"type": "two_component", "law": "calzetti", "*": FIXED},
         neb={"type": "none"},
         redshift=Fixed(0.1),  # ← Fixed, not Free; won't appear in params
     )

@@ -28,14 +28,14 @@ def _spec(dust_frac_agn, agn_fracagn, *, emission="dale2014", with_agn=True):
     """Build a spec with a chosen dust emission + (optional) composable AGN."""
     groups = dict(
         sfh={"type": "dpl", "*": FIXED},
-        dust_attenuation={
+        dust={
             "law": "power_law",
             "type": "two_component",
+            "emission": {"type": emission, "frac_agn": dust_frac_agn}
+            if emission == "dale2014"
+            else {"type": emission},
             "*": FIXED,
         },
-        dust_emission={"type": emission, "frac_agn": dust_frac_agn}
-        if emission == "dale2014"
-        else {"type": emission},
     )
     if with_agn:
         groups["agn"] = {
@@ -102,14 +102,14 @@ class TestGuardEndToEndAndFilterable:
             SEDModel.build(
                 ssp_data=synthetic_ssp_wide,
                 sfh={"type": "delayed", "*": FIXED},
-                dust_attenuation={
+                dust={
                     "law": "power_law",
                     "type": "two_component",
                     "tau_bc": Fixed(0.0),
                     "tau_diff": Fixed(0.0),
+                    "emission": {"type": "dale2014", "frac_agn": Fixed(0.3)},
                     "*": FIXED,
                 },
-                dust_emission={"type": "dale2014", "frac_agn": Fixed(0.3)},
                 agn={
                     "type": "composable",
                     "disc": {"type": "multicolor"},
@@ -126,15 +126,14 @@ class TestGuardEndToEndAndFilterable:
             model = SEDModel.build(
                 ssp_data=synthetic_ssp_wide,
                 sfh={"type": "delayed", "*": FIXED},
-                dust_attenuation={
+                dust={
                     "law": "power_law",
                     "type": "two_component",
                     "tau_bc": Fixed(0.0),
                     "tau_diff": Fixed(0.0),
-                    # frac_agn defaults to 0
+                    "emission": {"type": "dale2014"},  # frac_agn defaults to 0
                     "*": FIXED,
                 },
-                dust_emission={"type": "dale2014"},
                 agn={
                     "type": "composable",
                     "disc": {"type": "multicolor"},

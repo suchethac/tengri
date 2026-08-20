@@ -57,7 +57,7 @@ def _model(ssp, calibration_order: int, **spec_kw) -> SEDModel:
         ssp_data=ssp,
         observation=Observation(spectroscopy=spectroscopy),
         sfh=_SFH,
-        dust_attenuation=_DUST,
+        dust=_DUST,
         redshift=Fixed(0.1),
     )
 

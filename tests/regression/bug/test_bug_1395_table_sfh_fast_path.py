@@ -107,7 +107,7 @@ def _build(sfh, ssp, obs):
             ssp_data=ssp,
             observation=obs,
             sfh=sfh,
-            dust_attenuation=None,
+            dust=None,
             neb={"type": "none"},
             redshift=Fixed(0.05),
         )

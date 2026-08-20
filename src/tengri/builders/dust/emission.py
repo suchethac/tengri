@@ -1,13 +1,15 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # Copyright (c) 2025 Suchetha Cooray
 
-"""Callable factories for the dust_emission top-level group.
+"""Callable factories for the dust emission sub-block.
 
-The grammar now separates dust attenuation and IR emission into two peer
-top-level groups:
+The grammar nests the emission model inside the dust group:
 
->>> dust_attenuation = {"type": "two_component", "law": "calzetti"}
->>> dust_emission = {"type": "dale2014", "all_params": FIXED, "alpha_dale": Fixed(2.0)}
+>>> dust = {
+...     "type": "two_component",
+...     "law": "calzetti",  # Shared law for birth cloud and diffuse
+...     "emission": {"type": "dale2014", "all_params": FIXED, "alpha_dale": Fixed(2.0)},
+... }
 
 Each emission variant returned by
 ``tengri.parameters.groups._valid_dust_emission_types`` gets a
@@ -74,12 +76,12 @@ def _discover_params(variant: str) -> list[str]:
     """
     recipe = {
         "sfh": {"type": "dpl"},
-        "dust_attenuation": {
+        "dust": {
             "type": "two_component",
             "law": "calzetti",  # Shared law for both BC and diffuse
             WILDCARD_ALIAS: FREE,
+            "emission": {"type": variant, WILDCARD_ALIAS: FREE},
         },
-        "dust_emission": {"type": variant, WILDCARD_ALIAS: FREE},
     }
     records = recipe_parameters(recipe, free_only=False)
     out: list[str] = []
@@ -115,7 +117,7 @@ def available() -> list[str]:
 def relaxed_energy_balance(model: str = "dale2014", *, sigma: float = 0.2) -> dict:
     """Dust IR emission with a *relaxed* (opt-in) energy balance.
 
-    Returns a ``dust_emission`` group dict that frees the energy-balance factor
+    Returns an emission sub-block that frees the energy-balance factor
     ``dust_eta_balance`` (``L_IR = eta * L_absorbed``) under a soft
     ``LogNormal(mu=0, sigma)`` prior centered on strict balance (median
     ``eta = 1``). Use it for galaxies whose UV/optical and FIR are spatially
@@ -136,7 +138,7 @@ def relaxed_energy_balance(model: str = "dale2014", *, sigma: float = 0.2) -> di
     Returns
     -------
     dict
-        A ``dust_emission`` group dict, e.g. ``{'type': 'dale2014', 'all_params': FIXED,
+        An ``emission`` sub-block, e.g. ``{'type': 'dale2014', 'all_params': FIXED,
         'eta_balance': LogNormal(mu=0.0, sigma=0.2)}``.
 
     Examples
@@ -145,8 +147,11 @@ def relaxed_energy_balance(model: str = "dale2014", *, sigma: float = 0.2) -> di
     >>> model = SEDModel.build(  # doctest: +SKIP
     ...     ssp_data=ssp,
     ...     observation=obs,
-    ...     dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
-    ...     dust_emission=builders.dust.emission.relaxed_energy_balance(),
+    ...     dust={
+    ...         "type": "two_component",
+    ...         "all_params": "fixed",
+    ...         "emission": builders.dust.emission.relaxed_energy_balance(),
+    ...     },
     ... )
     """
     from tengri.parameters.priors import LogNormal

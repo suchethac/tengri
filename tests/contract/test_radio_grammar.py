@@ -294,7 +294,7 @@ class TestRadioComponentPhysics:
         model = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
             sfh={"type": "delayed", "*": FIXED},
-            dust_attenuation=_DUST0,
+            dust=_DUST0,
             radio={"sf": {"type": "none"}, "agn": {"type": "powerlaw"}},
             redshift=Fixed(0.1),
         )
@@ -307,7 +307,7 @@ class TestRadioComponentPhysics:
         model = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
             sfh={"type": "delayed", "*": FIXED},
-            dust_attenuation=_DUST0,
+            dust=_DUST0,
             radio={"sf": {"type": "bell2003"}, "agn": {"type": "none"}},
             redshift=Fixed(0.1),
         )
@@ -320,7 +320,7 @@ class TestRadioComponentPhysics:
         model = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
             sfh={"type": "delayed", "*": FIXED},
-            dust_attenuation=_DUST0,
+            dust=_DUST0,
             radio={"sf": {"type": "mccheyne2022"}, "agn": {"type": "dpl"}},
             redshift=Fixed(0.1),
         )

@@ -104,7 +104,7 @@ model_sigma = tengri.SEDModel.build(
             "psd_tau_myr": 100.0,
         },
     ],
-    dust_attenuation={
+    dust={
         "law": "power_law",
         "type": "two_component",
         "all_params": tengri.FIXED,
@@ -155,7 +155,7 @@ model_tau = tengri.SEDModel.build(
             "psd_tau_myr": tengri.Uniform(30, 3000),
         },
     ],
-    dust_attenuation={
+    dust={
         "law": "power_law",
         "type": "two_component",
         "all_params": tengri.FIXED,

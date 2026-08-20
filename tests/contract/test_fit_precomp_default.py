@@ -30,14 +30,14 @@ def _model(ssp, obs, approx=None):
         ssp,
         observation=obs,
         sfh={"type": "delayed", "*": FIXED},
-        dust_attenuation={
+        dust={
             "law": "power_law",
             "type": "two_component",
             "*": FIXED,
             "tau_diff": Uniform(0.0, 1.5),
             "tau_bc": Uniform(0.0, 1.0),
+            "emission": None,
         },
-        dust_emission=None,
         neb={"type": "none"},
         redshift=Fixed(0.05),
         approx=approx,

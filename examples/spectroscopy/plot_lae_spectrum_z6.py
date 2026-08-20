@@ -51,7 +51,7 @@ model = tengri.SEDModel.build(
         "alpha": 3.5,  # Rising early SFR
         "beta": 2.5,
     },  # Declining late SFR
-    dust_attenuation={
+    dust={
         "law": "power_law",
         "type": "two_component",
         "all_params": tengri.FIXED,

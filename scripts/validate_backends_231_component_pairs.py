@@ -74,7 +74,7 @@ HMC_KW = dict(
 def model_dpl_calzetti():
     return dict(
         sfh=builders.sfh.dpl(defaults=FREE),
-        dust_attenuation={
+        dust={
             "type": "two_component",
             "*": FIXED,
             "law": "calzetti",
@@ -87,7 +87,7 @@ def model_dpl_calzetti():
 def model_dense_basis_calzetti():
     return dict(
         sfh=builders.sfh.dense_basis(defaults=FREE),
-        dust_attenuation={
+        dust={
             "type": "two_component",
             "*": FIXED,
             "law": "calzetti",
@@ -100,7 +100,7 @@ def model_dense_basis_calzetti():
 def model_tsnorm_calzetti():
     return dict(
         sfh=builders.sfh.tsnorm(defaults=FREE),
-        dust_attenuation={
+        dust={
             "type": "two_component",
             "*": FIXED,
             "law": "calzetti",
@@ -113,7 +113,7 @@ def model_tsnorm_calzetti():
 def model_dpl_smc():
     return dict(
         sfh=builders.sfh.dpl(defaults=FREE),
-        dust_attenuation={"type": "two_component", "*": FIXED, "law": "smc", "tau_bc": Uniform(0.0, 1.0)},
+        dust={"type": "two_component", "*": FIXED, "law": "smc", "tau_bc": Uniform(0.0, 1.0)},
         neb={"type": "none"},
     )
 
@@ -121,7 +121,7 @@ def model_dpl_smc():
 def model_dexp_calzetti():
     return dict(
         sfh=builders.sfh.dexp(defaults=FREE),
-        dust_attenuation={
+        dust={
             "type": "two_component",
             "*": FIXED,
             "law": "calzetti",

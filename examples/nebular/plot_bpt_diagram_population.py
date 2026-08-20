@@ -68,7 +68,7 @@ for logu in logu_array:
                 "tau_gyr": 0.1,
                 "log_total_mass": 10.0,
             },
-            dust_attenuation={
+            dust={
                 "law": "power_law",
                 "type": "two_component",
                 "all_params": tengri.FIXED,
@@ -129,7 +129,7 @@ for config in agn_configs:
             "tau_gyr": 0.15,
             "log_total_mass": 10.0,
         },
-        dust_attenuation={
+        dust={
             "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,

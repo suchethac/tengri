@@ -137,7 +137,7 @@ def test_kennicutt_1998_halpha_sfr_chabrier(ssp_fsps_chabrier):
             "end_gyr": 0.0,
             "log_total_mass": tengri.FREE,
         },
-        dust_attenuation={
+        dust={
             "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
@@ -275,14 +275,14 @@ def test_sed_additivity():
         ),
     )
 
-    dust_attenuation_cfg = {
+    dust_cfg = {
         "type": "two_component",
         "all_params": tengri.FIXED,
         "tau_diff": 0.5,
         "law_bc": "calzetti",
         "law_diff": "calzetti",
+        "emission": {"type": "dale2014", "all_params": tengri.FIXED},
     }
-    dust_emission_cfg = {"type": "dale2014", "all_params": tengri.FIXED}
     sfh_cfg = {"type": "tsnorm", "all_params": tengri.FREE}
 
     # Full model: stellar + dust attenuation + dust emission + nebular
@@ -290,8 +290,7 @@ def test_sed_additivity():
         ssp,
         observation=obs,
         sfh=sfh_cfg,
-        dust_attenuation=dust_attenuation_cfg,
-        dust_emission=dust_emission_cfg,
+        dust=dust_cfg,
         neb={"type": "cue", "all_params": tengri.FIXED},
         redshift=tengri.Fixed(0.05),
     )
@@ -301,11 +300,7 @@ def test_sed_additivity():
 
     # Stellar + dust model (no nebular)
     model_dust = tengri.SEDModel.build(
-        ssp,
-        sfh=sfh_cfg,
-        dust_attenuation=dust_attenuation_cfg,
-        dust_emission=dust_emission_cfg,
-        redshift=tengri.Fixed(0.05),
+        ssp, sfh=sfh_cfg, dust=dust_cfg, redshift=tengri.Fixed(0.05)
     )
 
     # Sample parameters

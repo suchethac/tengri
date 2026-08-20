@@ -87,7 +87,7 @@ def _photometry(ssp, obs, law: str, approx) -> np.ndarray:
             ssp_data=ssp,
             observation=obs,
             sfh={"type": "dpl", "all_params": FIXED},
-            dust_attenuation={"type": "single_component", "law": law, "tau_v": Fixed(1.0)},
+            dust={"type": "single_component", "law": law, "tau_v": Fixed(1.0)},
             redshift=Fixed(0.5),
             approx=approx,
         )

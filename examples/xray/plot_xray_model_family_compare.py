@@ -74,7 +74,7 @@ for name, color in zip(models, colors):
     model = tengri.SEDModel.build(
         ssp_data=ssp,
         sfh=SFH,
-        dust_attenuation=DUST,
+        dust=DUST,
         agn=AGN,
         xray={"type": name, "all_params": tengri.FIXED},
         redshift=tengri.Fixed(0.05),

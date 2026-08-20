@@ -81,12 +81,13 @@ model_dust = SEDModel.build(
     observation=obs,
     redshift=Fixed(z),
     sfh={"type": "tsnorm", "*": FIXED, "peak_lbt_gyr": 0.3},
-    dust_attenuation={
+    dust={
         "type": "two_component",
         "law": "calzetti",
         "*": FIXED,
         "tau_bc": 0.5,
-    }, dust_emission={"type": "dale2014", "*": FIXED},
+        "emission": {"type": "dale2014", "*": FIXED},
+    },
     neb={"type": "cue", "*": FIXED},
 )
 print(f"Dust model free params: {model_dust.spec.free_params}")

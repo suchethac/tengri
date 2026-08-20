@@ -80,19 +80,18 @@ class TestToGroupsBasic:
         """to_groups() preserves nested dust.emission subgroup structure."""
         spec = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
-            dust_attenuation={
+            dust={
                 "type": "two_component",
                 "law": "calzetti",
                 "*": FIXED,
+                "emission": {"type": "dale2014", "*": FIXED},
             },
-            dust_emission={"type": "dale2014", "*": FIXED},
             redshift=Fixed(0.1),
         )
         result = spec.to_groups()
-        assert "dust_attenuation" in result
-        # emission is a peer group now, not a sub-block of dust
-        assert "emission" not in result["dust_attenuation"]
-        assert result["dust_emission"]["type"] == "dale2014"
+        assert "dust" in result
+        assert "emission" in result["dust"]
+        assert result["dust"]["emission"]["type"] == "dale2014"
 
 
 class TestToGroupsRoundtrip:
@@ -141,15 +140,15 @@ class TestToGroupsRoundtrip:
         """Nested dust.emission sub-block roundtrips."""
         original = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
-            dust_attenuation={
+            dust={
                 "type": "two_component",
                 "law": "calzetti",
                 "*": FIXED,
                 "tau_bc": 0.5,
                 # FIXED, not FREE: FREE frees nothing on dale2014 and is now
                 # refused. The round-trip property under test is unaffected.
+                "emission": {"type": "dale2014", "*": FIXED},
             },
-            dust_emission={"type": "dale2014", "*": FIXED},
             redshift=Fixed(0.1),
         )
         roundtripped = parse_groups(**original.to_groups())
@@ -168,7 +167,7 @@ class TestToGroupsRoundtrip:
 
         original = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
-            dust_attenuation={"law": "power_law", "type": "two_component", "*": FIXED},
+            dust={"law": "power_law", "type": "two_component", "*": FIXED},
             agn={
                 "disc": {"type": "powerlaw", "*": FREE},
                 "torus": {"type": "simple", "*": FIXED},
@@ -200,7 +199,7 @@ class TestToGroupsRoundtrip:
         """Mixed free and fixed params roundtrip."""
         original = parse_groups(
             sfh={"type": "dpl", "alpha": FREE, "beta": Uniform(0.5, 2.0), "tau_gyr": Fixed(1.0)},
-            dust_attenuation={
+            dust={
                 "type": "two_component",
                 "law": "calzetti",
                 "*": FIXED,
@@ -312,7 +311,7 @@ class TestToGroupsFlatBuilt:
 
         # Should have sfh, dust, redshift
         assert "sfh" in result
-        assert "dust_attenuation" in result
+        assert "dust" in result
         assert "redshift" in result
 
         # SFH should have type and all params explicit (no wildcard)
@@ -349,7 +348,7 @@ class TestToGroupsStructuralSettings:
         """Differing per-screen laws are preserved as the law_bc/law_diff pair."""
         original = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
-            dust_attenuation={
+            dust={
                 "type": "two_component",
                 "law_bc": "kriek_conroy",
                 "law_diff": "smc",
@@ -359,36 +358,36 @@ class TestToGroupsStructuralSettings:
         )
         result = original.to_groups()
 
-        assert result["dust_attenuation"]["law_bc"] == "kriek_conroy"
-        assert result["dust_attenuation"]["law_diff"] == "smc"
+        assert result["dust"]["law_bc"] == "kriek_conroy"
+        assert result["dust"]["law_diff"] == "smc"
 
     def test_to_groups_collapses_shared_dust_law(self):
         """Equal per-screen laws round-trip as the shared 'law' key."""
         original = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
-            dust_attenuation={"type": "two_component", "law": "kriek_conroy", "*": FIXED},
+            dust={"type": "two_component", "law": "kriek_conroy", "*": FIXED},
             redshift=Fixed(0.1),
         )
         result = original.to_groups()
 
-        assert result["dust_attenuation"]["law"] == "kriek_conroy"
-        assert "law_bc" not in result["dust_attenuation"]
+        assert result["dust"]["law"] == "kriek_conroy"
+        assert "law_bc" not in result["dust"]
 
     def test_to_groups_preserves_dust_emission_type(self):
         """dust_emission type is preserved."""
         original = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
-            dust_attenuation={
+            dust={
                 "law": "power_law",
                 "type": "two_component",
                 "*": FIXED,
+                "emission": {"type": "dale2014", "*": FIXED},
             },
-            dust_emission={"type": "dale2014", "*": FIXED},
             redshift=Fixed(0.1),
         )
         result = original.to_groups()
 
-        assert result["dust_emission"]["type"] == "dale2014"
+        assert result["dust"]["emission"]["type"] == "dale2014"
 
     def test_to_groups_preserves_nebular_type(self):
         """nebular type is preserved."""

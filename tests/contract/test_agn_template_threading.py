@@ -90,7 +90,7 @@ def _build(ssp, obs, **groups):
             ssp_data=ssp,
             observation=obs,
             sfh={"type": "dpl", "all_params": FIXED},
-            dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
+            dust={"law": "power_law", "type": "two_component", "all_params": FIXED},
             redshift=Fixed(0.1),
             **groups,
         )
@@ -175,7 +175,11 @@ def test_block_template_threads_as_argument(ssp, obs, category, block):
     — or a newly registered one — is caught the day it lands.
     """
     group = {"type": "composable", "all_params": FIXED, "disc": {"type": "multicolor"}}
-    group[_GROUP_KEY[category]] = {"type": block}
+    # Special handling for atten/smc_prevot: use law key instead of type
+    if category == "attenuation" and block == "smc_prevot":
+        group[_GROUP_KEY[category]] = {"law": "prevot_smc"}
+    else:
+        group[_GROUP_KEY[category]] = {"type": block}
 
     try:
         model = _build(ssp, obs, agn=group)

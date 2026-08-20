@@ -74,7 +74,7 @@ for met in met_logzsol:
         model = tengri.SEDModel.build(
             ssp,
             sfh=sfh_config_age,
-            dust_attenuation=dust_config,
+            dust=dust_config,
             neb=neb_config,
             redshift=tengri.Fixed(0.0),
         )

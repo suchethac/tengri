@@ -54,7 +54,7 @@ def _build(ssp, obs=None, **sfh_extra):
         ssp_data=ssp,
         met={"logzsol": Fixed(0.0), "all_params": FIXED},
         sfh=dict(SFH_FIELD, **sfh_extra),
-        dust_attenuation={
+        dust={
             "law": "power_law",
             "type": "two_component",
             "tau_bc": Fixed(0.0),
@@ -180,7 +180,7 @@ class TestFieldCenteringRejectsBadInput:
                     "field_centering": 0.5,
                     "all_params": FIXED,
                 },
-                dust_attenuation={
+                dust={
                     "type": "two_component",
                     "tau_bc": Fixed(0.0),
                     "tau_diff": Fixed(0.0),

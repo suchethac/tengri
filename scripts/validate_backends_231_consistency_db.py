@@ -66,7 +66,7 @@ def build_model_and_mock():
         ssp_data=ssp,
         observation=obs,
         sfh=builders.sfh.dense_basis(defaults=FREE),
-        dust_attenuation={
+        dust={
             "type": "two_component",
             "*": FIXED,
             "law": "calzetti",

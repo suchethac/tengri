@@ -73,14 +73,15 @@ def tengri_moneyshot(ssp):
             "beta": 2.7,
             "tau_gyr": 13.2,
         },
-        dust_attenuation={
+        dust={
             "type": "two_component",
             "law": "calzetti",
             "*": FIXED,
             "tau_bc": 0.8,
             "tau_diff": 0.3,
             "slope": -0.4,
-        }, dust_emission={"type": "dale2014", "*": FIXED, "alpha_dale": 2.2},
+            "emission": {"type": "dale2014", "*": FIXED, "alpha_dale": 2.2},
+        },
         neb={"type": "cue", "*": FIXED},
         agn={
             "disc": {"type": "multicolor", "*": FIXED, "log_lbol": 10.5},

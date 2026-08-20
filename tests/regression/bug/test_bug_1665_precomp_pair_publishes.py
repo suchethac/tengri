@@ -106,7 +106,7 @@ def _build(approx, index_data):
             ssp_data=ssp,
             observation=obs,
             sfh={"type": "dpl", "all_params": FIXED},
-            dust_attenuation={
+            dust={
                 "type": "two_component",
                 "law": "calzetti",
                 "all_params": FIXED,

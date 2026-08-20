@@ -43,7 +43,7 @@ def test_cue_predict_paths_with_observation_attached():
                 "alpha": 4,
                 "beta": 2,
             },
-            dust_attenuation={
+            dust={
                 "law": "power_law",
                 "type": "two_component",
                 "*": tengri.FIXED,

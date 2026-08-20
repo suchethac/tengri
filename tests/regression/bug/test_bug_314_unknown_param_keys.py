@@ -48,7 +48,7 @@ def small_model(ssp):
         return tengri.SEDModel.build(
             ssp,
             sfh={"type": "tsnorm", "*": tengri.FIXED},
-            dust_attenuation={"law": "power_law", "type": "two_component", "*": tengri.FIXED},
+            dust={"law": "power_law", "type": "two_component", "*": tengri.FIXED},
             redshift=tengri.Fixed(0.01),
         )
 

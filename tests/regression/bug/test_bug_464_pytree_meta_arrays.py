@@ -37,7 +37,7 @@ def test_two_cue_models_predict_photometry_does_not_crash():
             ssp,
             observation=obs,
             sfh={"type": "dexp", "*": tengri.FIXED, "tau_gyr": 0.3, "log_total_mass": 10.0},
-            dust_attenuation={
+            dust={
                 "type": "two_component",
                 "law": "calzetti",
                 "*": tengri.FIXED,
@@ -53,7 +53,7 @@ def test_two_cue_models_predict_photometry_does_not_crash():
             ssp,
             observation=obs,
             sfh={"type": "dexp", "*": tengri.FIXED, "tau_gyr": 8.0, "log_total_mass": 10.0},
-            dust_attenuation={
+            dust={
                 "type": "two_component",
                 "law": "calzetti",
                 "*": tengri.FIXED,

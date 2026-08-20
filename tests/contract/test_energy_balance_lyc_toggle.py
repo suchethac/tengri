@@ -47,7 +47,7 @@ def _build(ssp, include_lyc: bool, *, tau_diff: float = 1.0):
             "log_total_mass": Fixed(10.0),
             "*": FIXED,
         },
-        dust_attenuation=dust,
+        dust=dust,
         redshift=Fixed(0.0),
     )
 
@@ -101,9 +101,9 @@ class TestEnergyBalanceLycToggle:
     def test_grammar_round_trip(self, synthetic_ssp_wide):
         m = _build(synthetic_ssp_wide, True)
         groups = m.spec.to_groups()
-        assert groups["dust_attenuation"].get("eb_include_lyc") is True
+        assert groups["dust"].get("eb_include_lyc") is True
         m_default = _build(synthetic_ssp_wide, False)
-        assert "eb_include_lyc" not in m_default.spec.to_groups()["dust_attenuation"]
+        assert "eb_include_lyc" not in m_default.spec.to_groups()["dust"]
 
 
 def _tophat(center: float, frac: float = 0.16, n: int = 40) -> FilterCurve:
@@ -119,6 +119,7 @@ def _build_emitting(ssp, include_lyc: bool, approx):
         "law_diff": "calzetti",
         "tau_bc": Uniform(0.0, 1.0),
         "tau_diff": Fixed(0.3),
+        "emission": {"type": "modified_blackbody", "*": FIXED},
         "*": FIXED,
     }
     if include_lyc:
@@ -137,8 +138,7 @@ def _build_emitting(ssp, include_lyc: bool, approx):
             "log_total_mass": Fixed(10.0),
             "*": FIXED,
         },
-        dust_attenuation=dust,
-        dust_emission={"type": "modified_blackbody", "*": FIXED},
+        dust=dust,
         neb={"type": "none"},
         redshift=Fixed(0.05),
     )

@@ -57,7 +57,7 @@ ssp = tengri.load_ssp()
 # Shared model components (minimal star formation, no dust).
 COMMON = dict(
     sfh={"type": "const", "all_params": tengri.FIXED, "log_total_mass": -10.0},
-    dust_attenuation={
+    dust={
         "law": "power_law",
         "type": "two_component",
         "all_params": tengri.FIXED,
@@ -173,7 +173,7 @@ for label, cos_inc, color in INCLINATIONS:
     model_trans = tengri.SEDModel.build(
         ssp,
         sfh=SFH_TRANS,
-        dust_attenuation=DUST_TRANS,
+        dust=DUST_TRANS,
         agn={
             "all_params": tengri.FIXED,
             "log_lbol": 12.5,

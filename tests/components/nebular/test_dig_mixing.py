@@ -52,7 +52,7 @@ def base_model():
             "alpha": 1.0,
             "beta": 2.5,
         },
-        dust_attenuation={
+        dust={
             "law": "power_law",
             "type": "two_component",
             "*": tengri.FIXED,

@@ -157,12 +157,12 @@ def _model(name, *, approx, free_shape=False, bands=None):
         observation=Observation(photometry=_photometry(bands or name)),
         redshift=Fixed(0.1),
         sfh={"type": "dpl", "*": FIXED},
-        dust_attenuation={
+        dust={
             "type": "two_component",
             "law": "calzetti",
             "*": FIXED,
+            "emission": {"type": "dale2014_cigale", "*": FIXED},
         },
-        dust_emission={"type": "dale2014_cigale", "*": FIXED},
         agn=AGN,
         approx=approx,
         **block,

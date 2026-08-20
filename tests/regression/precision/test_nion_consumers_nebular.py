@@ -65,7 +65,7 @@ def _model(neb, sfh_wild=FREE):
             ssp_data=ssp,
             observation=obs,
             sfh={"type": "dpl", "*": sfh_wild},
-            dust_attenuation=None,
+            dust=None,
             neb=neb,
             redshift=Fixed(Z),
         )
@@ -84,7 +84,7 @@ def _wave_model(neb, sfh_wild=FREE):
             ssp_data=ssp,
             observation=obs,
             sfh={"type": "dpl", "*": sfh_wild},
-            dust_attenuation={
+            dust={
                 "type": "two_component",
                 "law": "calzetti",
                 "*": FIXED,

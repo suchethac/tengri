@@ -238,7 +238,7 @@ class _RegistryTable(list):
 
         List-table is chosen over grid-table because cell values contain
         commas, pipes, and backticks (e.g. ``use`` holds code like
-        ``SEDModel.build(..., dust_attenuation={'type': 'calzetti'})``), which cannot
+        ``SEDModel.build(..., dust={'type': 'calzetti'})``), which cannot
         be escaped safely in a grid-table markup.
         """
         if not self:
@@ -401,20 +401,14 @@ def _usage_hint(name: str, kind: str) -> str:
         if name in ("two_component", "single_component"):
             # Attenuation law is required (no silent default); show the
             # smallest valid spelling for this structural type.
-            return f"SEDModel.build(..., dust_attenuation={{'type': '{name}', 'law': 'calzetti'}})"
-        return f"SEDModel.build(..., dust_attenuation={{'type': '{name}'}})"
+            return f"SEDModel.build(..., dust={{'type': '{name}', 'law': 'calzetti'}})"
+        return f"SEDModel.build(..., dust={{'type': '{name}'}})"
     if kind == "dust_attenuation":
-        return (
-            f"SEDModel.build(..., dust_attenuation={{'type': 'single_component', "
-            f"'law': '{name}'}})"
-        )
+        return f"SEDModel.build(..., dust={{'type': 'single_component', 'law': '{name}'}})"
     if kind == "dust_emission":
-        # dust_emission requires a dust_attenuation block for energy balance;
-        # show both groups together with the minimal attenuation spelling.
-        return (
-            f"SEDModel.build(..., dust_attenuation={{'law': 'calzetti'}}, "
-            f"dust_emission={{'type': '{name}'}})"
-        )
+        # The dust dict's own 'type' defaults to two_component, which needs
+        # an explicit law; show it alongside the emission sub-block.
+        return f"SEDModel.build(..., dust={{'law': 'calzetti', 'emission': {{'type': '{name}'}}}})"
     if kind == "sfh_model":
         return f"SEDModel.build(..., sfh={{'type': '{name}'}})"
     if kind == "nebular_backend":
@@ -745,6 +739,11 @@ def list_agn_blocks(*, category: str | None = None, status: str | None = None) -
         group_key = category_to_group_key.get(cat, cat)
         for name in AGN_BLOCKS[cat]:
             meta = AGN_BLOCK_META.get((cat, name), {})
+            # Special handling for atten/smc_prevot: use law key instead of type
+            if cat == "attenuation" and name == "smc_prevot":
+                use_str = f"SEDModel.build(..., agn={{'{group_key}': {{'law': 'prevot_smc'}}}}"
+            else:
+                use_str = f"SEDModel.build(..., agn={{'{group_key}': {{'type': '{name}'}}}}"
             entry_dict = {
                 "name": name,
                 "category": cat,
@@ -752,7 +751,7 @@ def list_agn_blocks(*, category: str | None = None, status: str | None = None) -
                 "status": meta.get("status", "production"),
                 "citation": meta.get("citation", ""),
                 "short_doc": meta.get("short_doc", ""),
-                "use": f"SEDModel.build(..., agn={{'{group_key}': {{'type': '{name}'}}}})",
+                "use": use_str,
             }
             out.append(entry_dict)
 
@@ -760,7 +759,7 @@ def list_agn_blocks(*, category: str | None = None, status: str | None = None) -
     return _RegistryTable(sorted(out, key=lambda m: (m["category"], m["name"])))
 
 
-# Dust *structural* models — the ``dust_attenuation={'type': ...}`` axis. Keyed by the
+# Dust *structural* models — the ``dust={'type': ...}`` axis. Keyed by the
 # names in ``_VALID_DUST_TYPES``, which is what the build validator accepts;
 # the listing derives its names from that same set (see
 # :func:`list_dust_models`) so the menu and the validator cannot drift.
@@ -784,14 +783,14 @@ _DUST_MODEL_METADATA: dict[str, dict[str, str]] = {
 
 
 def list_dust_models(*, status: str | None = None) -> _RegistryTable:
-    """List the dust **structural** models — the ``dust_attenuation={'type': ...}`` choice.
+    """List the dust **structural** models — the ``dust={'type': ...}`` choice.
 
     Dust is selected along three independent axes, and this is the first one:
     how the dust is *arranged* relative to the stars. The attenuation
     **curve** is a separate choice (:func:`list_dust_laws`, via ``law`` for
     single_component or ``law_bc`` / ``law_diff`` for two_component), and the IR
     **emission** template a third
-    (:func:`list_dust_emission_models`, via ``dust_emission={'type': ...}``).
+    (:func:`list_dust_emission_models`, via ``dust={'emission': ...}``).
 
     The other two axes had menus; this one did not, so the structural
     names — including ``two_component``, the type the recipes themselves
@@ -1503,7 +1502,7 @@ def _plot_call_hint(name: str) -> str:
     column plus an ellipsis. Of the twenty menus that carry a ``use:`` column,
     this was the only one whose hint contained no arguments at all — the others
     give something runnable (``Photometry.from_names(["sdss_u"])``,
-    ``fitter.run("laplace")``, ``SEDModel.build(..., dust_attenuation={'type': ...})``).
+    ``fitter.run("laplace")``, ``SEDModel.build(..., dust={'type': ...})``).
 
     Derived rather than written down, so a helper that gains or loses a
     required argument cannot leave a stale hint behind.
@@ -3310,7 +3309,7 @@ tengri — differentiable galaxy SED fitting in JAX
     `tengri.list_recipes()` lists the {n_recipes} starting points. To hand-roll a
     model instead, pass group dicts to SEDModel.build:
       sfh={{'type': 'dpl', 'all_params': tengri.FREE}},
-      dust_attenuation={{'type': 'two_component', 'law': 'calzetti'}}, …
+      dust={{'type': 'two_component', 'law': 'calzetti'}}, …
       tengri.describe_recipe("star_forming_photometry")   # see what one sets
 
     Pick a method:

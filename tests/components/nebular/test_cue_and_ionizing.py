@@ -398,7 +398,7 @@ class TestCueMultiBuildBudget:
                 ssp_data=ssp,
                 sfh={"type": "delayed", "*": FIXED},
                 neb={"type": "cue", "*": FIXED},
-                dust_attenuation={
+                dust={
                     "law": "power_law",
                     "type": "two_component",
                     "tau_bc": Fixed(0.0),

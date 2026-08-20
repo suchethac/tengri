@@ -97,19 +97,15 @@ def _build(
     if redshift is None:
         redshift = Fixed(0.05)
     obs = Observation(photometry=Photometry(filters=tuple(filters)))
-    dust_atten = {
+    dust = {
         "type": "two_component",
         "law": "calzetti",
         "*": FIXED,
         "tau_diff": 0.5,  # real attenuation → real L_ir to (re-)emit
     }
-    groups = dict(
-        sfh={"type": "dpl", "*": FIXED},
-        dust_attenuation=dust_atten,
-        neb={"type": "none"},
-    )
     if emission is not None:
-        groups["dust_emission"] = {"type": emission, "*": FIXED}
+        dust["emission"] = {"type": emission, "*": FIXED}
+    groups = dict(sfh={"type": "dpl", "*": FIXED}, dust=dust, neb={"type": "none"})
     if with_radio:
         groups["radio"] = {"type": "condon92", "*": FIXED}
     if with_xray:
@@ -244,7 +240,7 @@ def test_taylor_correction_toggle_two_component(synthetic_ssp):
         "tau_bc": 0.8,
         "tau_diff": 0.4,
     }
-    groups = dict(sfh={"type": "dpl", "*": FIXED}, dust_attenuation=dust, neb={"type": "none"})
+    groups = dict(sfh={"type": "dpl", "*": FIXED}, dust=dust, neb={"type": "none"})
 
     def build(approx):
         with warnings.catch_warnings():

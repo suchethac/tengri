@@ -990,14 +990,14 @@ class Observation:
           :math:`\tau_{\rm diff} \le 2`, :math:`z \le 1`. **This is the floor
           for the whole path** — no other channel can do better than the
           bucket that dominates the broadband.
-        - **Nebular, under** ``dust_attenuation={'type': 'two_component'}`` — *exact* since
+        - **Nebular, under** ``dust={'type': 'two_component'}`` — *exact* since
           #1738. That component publishes the reddened continuum integrated
           through each band (``nebular_phot_lnu_attenuated_precomp``), so there
           is no band-averaging error left to quote: ≤3.5e-06 against the exact
           path on a fixture built to maximize it. Previously screened at
           :math:`\lambda_{\rm eff}`, which inflated the total gap by up to 26x
           over the stellar floor while carrying only 0.8-3.5 % of the band flux.
-        - **Nebular, under** ``dust_attenuation={'type': 'single_component'}`` — **still at**
+        - **Nebular, under** ``dust={'type': 'single_component'}`` — **still at**
           :math:`\lambda_{\rm eff}`. The qualifier above is not pedantry: this
           docstring claimed nebular was exact full stop, and it was measured
           wrong within a day of being written. :class:`DustAttenuationSEDComponent`

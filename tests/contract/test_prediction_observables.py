@@ -67,7 +67,7 @@ def _model(ssp, filters=_FILTERS, spectroscopy=None, **kw) -> SEDModel:
         ssp_data=ssp,
         observation=Observation(photometry=photometry, spectroscopy=spectroscopy),
         sfh=_SFH,
-        dust_attenuation=_DUST,
+        dust=_DUST,
         redshift=Fixed(_Z),
         **kw,
     )
@@ -322,7 +322,7 @@ def test_arbitrary_filters_honor_the_models_filter_convention(ssp, convention):
         ssp_data=ssp,
         observation=Observation(photometry=photometry),
         sfh=_SFH,
-        dust_attenuation=_DUST,
+        dust=_DUST,
         redshift=Fixed(_Z),
     )
     params = _params(model)

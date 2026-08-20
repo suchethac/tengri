@@ -51,11 +51,11 @@ def test_grammar_accepts_spinning_dust(fixture_path, ssp_data):
     model = SEDModel.build(
         ssp_data=ssp,
         observation=obs,
-        dust_attenuation={
+        dust={
             "type": "two_component",
             "law": "calzetti",
+            "emission": {"type": "astrodust", "spinning_dust": True},
         },
-        dust_emission={"type": "astrodust", "spinning_dust": True},
         redshift=0.0,
     )
 
@@ -75,11 +75,11 @@ def test_grammar_accepts_f_cnm(fixture_path, ssp_data):
     model = SEDModel.build(
         ssp_data=ssp,
         observation=obs,
-        dust_attenuation={
+        dust={
             "type": "two_component",
             "law": "calzetti",
+            "emission": {"type": "astrodust", "f_cnm": 0.5},
         },
-        dust_emission={"type": "astrodust", "f_cnm": 0.5},
         redshift=0.0,
     )
 
@@ -103,14 +103,14 @@ def test_spinning_dust_changes_microwave_sed(ssp_data):
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "dpl", "all_params": FIXED},
-        dust_attenuation={
+        dust={
             "type": "two_component",
             "law": "calzetti",
             "tau_bc": 0.5,
             "tau_diff": 1.5,
+            "emission": {"type": "astrodust", "spinning_dust": False},
             "all_params": FIXED,
         },
-        dust_emission={"type": "astrodust", "spinning_dust": False},
         met={"type": "delta", "logzsol": 0.0},
         redshift=0.0,
     )
@@ -119,14 +119,14 @@ def test_spinning_dust_changes_microwave_sed(ssp_data):
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "dpl", "all_params": FIXED},
-        dust_attenuation={
+        dust={
             "type": "two_component",
             "law": "calzetti",
             "tau_bc": 0.5,
             "tau_diff": 1.5,
+            "emission": {"type": "astrodust", "spinning_dust": True},
             "all_params": FIXED,
         },
-        dust_emission={"type": "astrodust", "spinning_dust": True},
         met={"type": "delta", "logzsol": 0.0},
         redshift=0.0,
     )
@@ -199,14 +199,14 @@ def test_f_cnm_changes_spinning_dust_spectrum(ssp_data):
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "dpl", "all_params": FIXED},
-        dust_attenuation={
+        dust={
             "type": "two_component",
             "law": "calzetti",
             "tau_bc": 0.5,
             "tau_diff": 1.5,
+            "emission": {"type": "astrodust", "spinning_dust": True, "f_cnm": 0.1},
             "all_params": FIXED,
         },
-        dust_emission={"type": "astrodust", "spinning_dust": True, "f_cnm": 0.1},
         met={"type": "delta", "logzsol": 0.0},
         redshift=0.0,
     )
@@ -215,14 +215,14 @@ def test_f_cnm_changes_spinning_dust_spectrum(ssp_data):
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "dpl", "all_params": FIXED},
-        dust_attenuation={
+        dust={
             "type": "two_component",
             "law": "calzetti",
             "tau_bc": 0.5,
             "tau_diff": 1.5,
+            "emission": {"type": "astrodust", "spinning_dust": True, "f_cnm": 0.9},
             "all_params": FIXED,
         },
-        dust_emission={"type": "astrodust", "spinning_dust": True, "f_cnm": 0.9},
         met={"type": "delta", "logzsol": 0.0},
         redshift=0.0,
     )

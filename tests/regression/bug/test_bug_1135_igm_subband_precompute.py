@@ -47,7 +47,7 @@ def _build(ssp, approx, *, z=0.8, tau_diff=0.0, tau_bc=0.0, igm=True, **kw):
         ssp_data=ssp,
         observation=Observation(photometry=Photometry.from_names(BANDS)),
         sfh={"type": "dpl", "*": FREE},
-        dust_attenuation={
+        dust={
             "law": "power_law",
             "type": "two_component",
             "*": FIXED,
@@ -280,7 +280,7 @@ def test_free_redshift_folds_on_the_ztable_grid(ssp):
         ssp_data=ssp,
         observation=Observation(photometry=Photometry.from_names(BANDS)),
         sfh={"type": "dpl", "*": FREE},
-        dust_attenuation={
+        dust={
             "law": "power_law",
             "type": "two_component",
             "*": FIXED,
@@ -300,7 +300,7 @@ def test_free_redshift_folds_on_the_ztable_grid(ssp):
         ssp_data=ssp,
         observation=Observation(photometry=Photometry.from_names(BANDS)),
         sfh={"type": "dpl", "*": FREE},
-        dust_attenuation={
+        dust={
             "law": "power_law",
             "type": "two_component",
             "*": FIXED,

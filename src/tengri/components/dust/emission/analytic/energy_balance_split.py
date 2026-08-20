@@ -90,9 +90,9 @@ class EnergyBalanceSplitIRSEDComponent(EmissionComponent):
     #: attenuator's knob, and an earlier revision of this set left it out on
     #: exactly that reasoning. That was wrong, and measurably so: the grammar
     #: partitions it into **dust.emission**, not ``dust``
-    #: (``dust_emission={'eta_balance': ...}`` via top-level group), so dropping
-    #: it here left it freed by no wildcard at all --
-    #: ``dust_emission={'all_params': FREE}`` does not reach it either. It is
+    #: (``dust={'eta_balance': ...}`` raises *"'eta_balance' is a 'dust.emission'
+    #: parameter, not a 'dust' one"*), so dropping it here left it freed by no
+    #: wildcard at all -- ``dust={'*': FREE}`` does not reach it either. It is
     #: live (it scales ``L_ir``, so it moves the prediction), and orphaning a
     #: live parameter is the opposite failure to the one this marker fixes.
     #:

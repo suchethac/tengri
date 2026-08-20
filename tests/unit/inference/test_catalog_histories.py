@@ -56,7 +56,7 @@ def fwd_table_sfh(synthetic_ssp_wide, synthetic_tophat_obs):
             ssp_data=synthetic_ssp_wide,
             observation=synthetic_tophat_obs,
             sfh={"type": "table"},
-            dust_attenuation={
+            dust={
                 "law": "power_law",
                 "type": "two_component",
                 "all_params": FIXED,
@@ -233,12 +233,7 @@ def test_scalar_only_catalog_still_predicts(synthetic_ssp_wide, synthetic_tophat
             ssp_data=synthetic_ssp_wide,
             observation=synthetic_tophat_obs,
             sfh={"type": "dpl", "all_params": FREE},
-            dust_attenuation={
-                "law": "power_law",
-                "type": "two_component",
-                "all_params": FIXED,
-                "tau_bc": 0.5,
-            },
+            dust={"law": "power_law", "type": "two_component", "all_params": FIXED, "tau_bc": 0.5},
             neb={"type": "none"},
             redshift=Fixed(_Z_OBS),
         )
@@ -317,12 +312,7 @@ def test_from_histories_rejects_a_non_table_model(synthetic_ssp_wide, synthetic_
             ssp_data=synthetic_ssp_wide,
             observation=synthetic_tophat_obs,
             sfh={"type": "dpl", "all_params": FREE},
-            dust_attenuation={
-                "law": "power_law",
-                "type": "two_component",
-                "all_params": FIXED,
-                "tau_bc": 0.5,
-            },
+            dust={"law": "power_law", "type": "two_component", "all_params": FIXED, "tau_bc": 0.5},
             neb={"type": "none"},
             redshift=Fixed(_Z_OBS),
         )
@@ -616,7 +606,7 @@ def roundtrip_arms(age_reddening_ssp, synthetic_tophat_obs):
                 ssp_data=age_reddening_ssp,
                 observation=synthetic_tophat_obs,
                 sfh=sfh,
-                dust_attenuation={
+                dust={
                     "law": "power_law",
                     "type": "two_component",
                     "all_params": FIXED,

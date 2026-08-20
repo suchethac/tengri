@@ -59,7 +59,7 @@ def _high_z_model(ssp, redshift, age_gyr=3.0, free_mass=False):
     return tengri.SEDModel.build(
         ssp_data=ssp,
         sfh=sfh,
-        dust_attenuation={
+        dust={
             "law": "power_law",
             "type": "two_component",
             "*": FIXED,

@@ -95,7 +95,7 @@ class TestPerAxisReachesTheBuilder:
             ssp_data=ssp_data_fsps,
             observation=synthetic_tophat_obs,
             sfh={"type": "dpl", "all_params": FREE},
-            dust_attenuation={"type": "none"},
+            dust={"type": "none"},
             redshift=0.05,
             met={"logzsol": FREE},
             neb={

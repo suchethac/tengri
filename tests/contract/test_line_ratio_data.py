@@ -82,7 +82,7 @@ class TestLineRatioPrediction:
                 ssp_data=ssp,
                 observation=obs,
                 sfh={"type": "dpl", "*": FIXED},
-                dust_attenuation={
+                dust={
                     "type": "two_component",
                     "law": "calzetti",
                     "*": FIXED,
@@ -126,7 +126,7 @@ class TestLineRatioLikelihood:
                 ssp_data=ssp,
                 observation=obs,
                 sfh={"type": "dpl", "*": FIXED},
-                dust_attenuation={
+                dust={
                     "type": "two_component",
                     "law": "calzetti",
                     "*": FIXED,

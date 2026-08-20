@@ -63,14 +63,15 @@ m_agn_base = SEDModel.build(
         "log_total_mass": Fixed(0.0),
         "*": FIXED,
     },
-    dust_attenuation={
+    dust={
         "type": "two_component",
         "law_bc": "leitherer02",
         "law_diff": "leitherer02",
         "tau_bc": Fixed(TAU_BC_FIDUCIAL),
         "tau_diff": Fixed(TAU_DIFF_FIDUCIAL),
         "*": FIXED,
-    }, dust_emission={"type": "dale2014", "*": FIXED},
+        "emission": {"type": "dale2014", "*": FIXED},
+    },
     redshift=Fixed(0.0),
 )
 s_agn_base = m_agn_base.predict_state({})
@@ -117,14 +118,15 @@ m_agn = SEDModel.build(
         "log_total_mass": Fixed(0.0),
         "*": FIXED,
     },
-    dust_attenuation={
+    dust={
         "type": "two_component",
         "law_bc": "leitherer02",
         "law_diff": "leitherer02",
         "tau_bc": Fixed(TAU_BC_FIDUCIAL),
         "tau_diff": Fixed(TAU_DIFF_FIDUCIAL),
         "*": FIXED,
-    }, dust_emission={"type": "dale2014", "*": FIXED},
+        "emission": {"type": "dale2014", "*": FIXED},
+    },
     agn={
         "type": "composable",
         "disc": {"type": "schartmann2005", "*": FIXED},

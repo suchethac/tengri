@@ -46,7 +46,7 @@ ssp = tengri.load_ssp()
 # Suppress stellar/nebular component so the AGN SED is unambiguous.
 COMMON = dict(
     sfh={"type": "const", "all_params": tengri.FIXED, "log_total_mass": -30.0},
-    dust_attenuation={
+    dust={
         "law": "power_law",
         "type": "two_component",
         "all_params": tengri.FIXED,

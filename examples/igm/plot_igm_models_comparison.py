@@ -89,7 +89,7 @@ ssp = tengri.load_ssp()
 model = tengri.SEDModel.build(
     ssp,
     sfh=SFH,
-    dust_attenuation=DUST,
+    dust=DUST,
     redshift=tengri.Fixed(Z_SOURCE),
 )
 

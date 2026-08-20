@@ -157,7 +157,7 @@ for shape_i, (_shape_name, sfh_dict) in enumerate(sfh_shapes):
             model = tengri.SEDModel.build(
                 ssp,
                 sfh=sfh,
-                dust_attenuation=dust,
+                dust=dust,
                 neb=neb,
                 redshift=tengri.Fixed(0.05),  # avoid numerical issues at z=0
             )

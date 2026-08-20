@@ -48,7 +48,7 @@ ssp = tengri.load_ssp()
 model = tengri.SEDModel.build(
     ssp,
     sfh=SFH,
-    dust_attenuation=DUST,
+    dust=DUST,
     agn={
         "all_params": tengri.FIXED,
         "log_lbol": 12.5,

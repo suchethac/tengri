@@ -64,7 +64,7 @@ def _model(ssp, obs, approx):
             ssp_data=ssp,
             observation=obs,
             sfh={"type": "dpl", "all_params": FREE},
-            dust_attenuation={
+            dust={
                 "type": "two_component",
                 "law": "calzetti",
                 "all_params": FIXED,

@@ -78,7 +78,7 @@ for scenario in scenarios:
     model = tengri.SEDModel.build(
         ssp,
         sfh=scenario["sfh"],
-        dust_attenuation={
+        dust={
             "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,

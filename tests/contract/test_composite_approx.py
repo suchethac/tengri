@@ -51,7 +51,7 @@ def _build(joint_obs, ssp, approx):
         ssp_data=ssp,
         observation=joint_obs,
         sfh={"type": "dpl", "*": FIXED, "log_total_mass": Uniform(8, 12)},
-        dust_attenuation={"type": "two_component", "law": "calzetti", "*": FIXED},
+        dust={"type": "two_component", "law": "calzetti", "*": FIXED},
         neb={"type": "none"},
         redshift=Fixed(0.3),
         approx=approx,

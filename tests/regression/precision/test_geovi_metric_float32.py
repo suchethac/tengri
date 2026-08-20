@@ -263,7 +263,7 @@ def _build_engine(ssp_wide, obs):
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "dpl", "all_params": FREE},
-        dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
+        dust={"law": "power_law", "type": "two_component", "all_params": FIXED},
         redshift=0.05,
         approx=None,
     )

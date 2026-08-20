@@ -108,7 +108,7 @@ def model(ssp_bare, observation):
             "start_gyr": 10.0,
             "end_gyr": 0.0,
         },
-        dust_attenuation={
+        dust={
             "type": "two_component",
             "law_bc": "calzetti",
             "law_diff": "calzetti",
@@ -360,7 +360,7 @@ def test_every_public_line_surface_shares_one_screen(ssp_bare, observation, law)
             "start_gyr": 10.0,
             "end_gyr": 0.0,
         },
-        dust_attenuation={
+        dust={
             "type": "two_component",
             "law_bc": law,
             "law_diff": law,

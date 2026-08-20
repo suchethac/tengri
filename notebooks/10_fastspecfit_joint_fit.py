@@ -138,7 +138,7 @@ def build(line_data, approx):
         # screen, and the gas conditions — the parameters a catalog fit solves for.
         sfh={"type": "dpl", "all_params": FREE},
         met={"logzsol": Uniform(-1.5, 0.3)},
-        dust_attenuation={
+        dust={
             "type": "two_component",
             "law": "calzetti",
             "all_params": FIXED,

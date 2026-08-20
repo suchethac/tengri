@@ -294,7 +294,7 @@ def _build_chain(ssp, with_cue):
             "tau_gyr": 1.5,
             "age_gyr": 5.0,
         },
-        dust_attenuation={
+        dust={
             "type": "two_component",
             "law": "calzetti",
             "all_params": FIXED,

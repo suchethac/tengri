@@ -53,7 +53,7 @@ for _i in range(50):
             "trunc": tengri.Uniform(1.5, 5.0),
             "logzsol": tengri.Uniform(-1.0, 0.1),
         },
-        dust_attenuation={
+        dust={
             "law": "power_law",
             "type": "two_component",
             "tau_bc": tengri.Uniform(0.0, 0.8),
@@ -87,7 +87,7 @@ for _i in range(50):
             "trunc": tengri.Uniform(1.5, 3.0),
             "logzsol": tengri.Uniform(-0.2, 0.3),
         },
-        dust_attenuation={
+        dust={
             "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
@@ -122,7 +122,7 @@ for _i in range(50):
             "trunc": tengri.Uniform(2.0, 6.0),
             "logzsol": tengri.Uniform(-0.5, 0.2),
         },
-        dust_attenuation={
+        dust={
             "law": "power_law",
             "type": "two_component",
             "tau_bc": tengri.Uniform(0.8, 2.0),

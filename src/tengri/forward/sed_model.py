@@ -60,6 +60,7 @@ import dataclasses
 import functools
 import inspect
 import types
+import pathlib
 import warnings
 from collections.abc import Mapping
 from typing import ClassVar
@@ -957,15 +958,14 @@ def _validate_fracagn_requires_dust(spec) -> None:
     # Check dust configuration: dust_model='off' means no dust
     dust_model = getattr(spec, "dust_model", "off")
 
-    # A model with dust_model='off' (dust_attenuation={'type': 'none'} or no dust) is unsafe
+    # A model with dust_model='off' (dust={'type': 'none'} or no dust) is unsafe
     if dust_model == "off":
         raise ConfigError(
             "fracAGN (agn_ir_frac) ties the AGN torus luminosity to the "
             "dust-absorbed stellar luminosity (CIGALE skirtor2016 convention). "
-            "With dust_attenuation={'type':'none'} or no dust component, the absorbed "
+            "With dust={'type':'none'} or no dust component, the absorbed "
             "stellar luminosity is ~zero and the torus would be silently zeroed. "
-            "Fix: either (1) add a dust component "
-            "(e.g. dust_attenuation={'type':'two_component'}), "
+            "Fix: either (1) add a dust component (e.g. dust={'type':'two_component'}), "
             "or (2) drop fracAGN and use agn_torus_frac for independent torus scaling. "
             "See issue #944."
         )
@@ -4006,6 +4006,20 @@ class SEDModel:
             else hash(tuple(map(float, ssp_lgmet_array)))
         )
 
+        # SSP flux grid CONTENT (not just shape/lgmet).
+        # The inference closure bakes the SSP grid, so two models with same
+        # shape/lgmet but different ssp_flux must have different signatures
+        # (#1973). Two SSP grids "of identical shape" is the scenario that
+        # _get_or_build_engine's docstring advertised as safe sharing; it is
+        # the scenario that produces +1 dex stellar mass errors when the second
+        # model silently runs the first model's physics.
+        # Content-hashed once per grid and cached on the SSPData instance;
+        # cost is 17-100 ms first call (depending on grid size), zero for
+        # subsequent calls on the same object.
+        from tengri.components.stellar.sps.dsps_wrapper import get_ssp_content_hash
+
+        ssp_flux_id = get_ssp_content_hash(self.ssp_data)
+
         # Alpha-Fe enhancement presence
         has_alpha_fe = hasattr(self.ssp_data, "ssp_alpha_fe")
 
@@ -4406,6 +4420,7 @@ class SEDModel:
             ssp_flux_shape,
             ssp_lgmet_shape,
             ssp_lgmet_id,
+            ssp_flux_id,
             has_alpha_fe,
             n_filters,
             filter_wave_shape,
@@ -8616,8 +8631,7 @@ class SEDModel:
         *,
         sfh=None,
         met=None,
-        dust_attenuation=None,
-        dust_emission=None,
+        dust=None,
         neb=None,
         shock=None,
         agn=None,
@@ -8646,7 +8660,7 @@ class SEDModel:
         ----------
         ssp_data : SSPData
             Pre-loaded SSP grid (from :func:`load_ssp_data`).
-        sfh, dust_attenuation, dust_emission, neb, agn, igm, radio, xray : dict, optional
+        sfh, dust, neb, agn, igm, radio, xray : dict, optional
             Per-component nested dicts. Each may carry ``'type'``,
             ``'all_params'`` (wildcard set to :data:`~tengri.FREE` or
             :data:`~tengri.FIXED`; the ``'*'`` synonym is also accepted),
@@ -8697,14 +8711,12 @@ class SEDModel:
         >>> model = SEDModel.build(
         ...     ssp_data=ssp,
         ...     sfh={"type": "dpl", "all_params": FREE, "beta": Uniform(1, 3)},
-        ...     dust_attenuation={
+        ...     dust={
         ...         "type": "two_component",
         ...         "law": "calzetti",  # Shared law for both BC and diffuse
         ...         "all_params": FIXED,
         ...         "tau_bc": 0.5,
-        ...         "tau_diff": 0.3,
         ...     },
-        ...     dust_emission={"type": "dale2014", "all_params": FIXED},
         ...     neb={"type": "cue", "all_params": FIXED},
         ...     redshift=Fixed(0.05),
         ...     filters=["sdss_u", "sdss_g", "sdss_r"],
@@ -8715,8 +8727,7 @@ class SEDModel:
             for k, v in dict(
                 sfh=sfh,
                 met=met,
-                dust_attenuation=dust_attenuation,
-                dust_emission=dust_emission,
+                dust=dust,
                 neb=neb,
                 shock=shock,
                 agn=agn,
@@ -8772,6 +8783,341 @@ class SEDModel:
             observation=observation,
             **model_kwargs,
         )
+
+    @classmethod
+    def from_dict(
+        cls,
+        config: dict,
+        ssp_data,
+        *,
+        filters=None,
+        observation=None,
+        **model_kwargs,
+    ) -> SEDModel:
+        """Build an SEDModel from a serialized config dict.
+
+        Convenience constructor that accepts a config dict (e.g., from
+        :func:`load_config_from_file`) and reconstructs the model. This is the
+        deserialization inverse of :attr:`config` and :meth:`to_yaml`.
+
+        Parameters
+        ----------
+        config : dict
+            Serialized configuration (from JSON/YAML with sentinels and
+            distributions deserialized). Must contain the nested-dict groups
+            (sfh, dust, neb, etc.).
+        ssp_data : SSPData
+            Pre-loaded SSP grid (from :func:`load_ssp_data`).
+        filters : list of str, optional
+            Filter names; forwarded to ``__init__``.
+        observation : Observation, optional
+            Observation object; forwarded to ``__init__``.
+        **model_kwargs
+            Additional keywords forwarded to :meth:`__init__` (e.g.
+            ``precompute``, ``approx``).
+
+        Returns
+        -------
+        SEDModel
+            Fully initialized model.
+
+        Raises
+        ------
+        ConfigError
+            If the config dict contains invalid groups or prior specifications.
+
+        See Also
+        --------
+        from_file : Load config from a JSON or YAML file.
+        from_yaml : Load config from a YAML string.
+        config : Serialize to a dict via the property.
+
+        Examples
+        --------
+        >>> from tengri import SEDModel, load_ssp_data
+        >>> ssp = load_ssp_data("data/ssp.h5")
+        >>> config = {
+        ...     "sfh": {"type": "dpl", "all_params": "FREE"},
+        ...     "dust": {"type": "two_component", "all_params": "FIXED"},
+        ...     "neb": {"type": "cue"},
+        ...     "redshift": {"__fixed__": 0.1},
+        ... }
+        >>> model = SEDModel.from_dict(config, ssp_data=ssp)
+        """
+        from tengri.config.serialize import deserialize_config
+
+        # Deserialize to restore sentinels and distributions
+        deserialized = deserialize_config(config, strict=True)
+        return cls.build(
+            ssp_data,
+            filters=filters,
+            observation=observation,
+            **deserialized,
+            **model_kwargs,
+        )
+
+    @classmethod
+    def from_file(
+        cls,
+        path: str | pathlib.Path,
+        ssp_data,
+        *,
+        filters=None,
+        observation=None,
+        **model_kwargs,
+    ) -> SEDModel:
+        """Build an SEDModel from a config file (JSON or YAML).
+
+        Parameters
+        ----------
+        path : str or Path
+            Path to config file (.json, .yaml, .yml).
+        ssp_data : SSPData
+            Pre-loaded SSP grid.
+        filters : list of str, optional
+            Filter names.
+        observation : Observation, optional
+            Observation object.
+        **model_kwargs
+            Additional keywords forwarded to ``__init__``.
+
+        Returns
+        -------
+        SEDModel
+            Fully initialized model.
+
+        Raises
+        ------
+        FileNotFoundError
+            If file does not exist.
+        ConfigError
+            If file format is unrecognized or config is invalid.
+
+        See Also
+        --------
+        from_dict : Load from a Python dict.
+        from_yaml : Load from a YAML string.
+
+        Examples
+        --------
+        >>> model = SEDModel.from_file("config.yaml", ssp_data=ssp)
+        """
+        from tengri.config.serialize import load_config_from_file
+
+        config = load_config_from_file(path)
+        return cls.from_dict(
+            config,
+            ssp_data,
+            filters=filters,
+            observation=observation,
+            **model_kwargs,
+        )
+
+    @classmethod
+    def from_yaml(
+        cls,
+        yaml_str: str,
+        ssp_data,
+        *,
+        filters=None,
+        observation=None,
+        **model_kwargs,
+    ) -> SEDModel:
+        """Build an SEDModel from a YAML string.
+
+        Parameters
+        ----------
+        yaml_str : str
+            YAML-formatted string containing the model config.
+        ssp_data : SSPData
+            Pre-loaded SSP grid.
+        filters : list of str, optional
+            Filter names.
+        observation : Observation, optional
+            Observation object.
+        **model_kwargs
+            Additional keywords forwarded to ``__init__``.
+
+        Returns
+        -------
+        SEDModel
+            Fully initialized model.
+
+        Raises
+        ------
+        ConfigError
+            If YAML parsing fails or config is invalid.
+
+        See Also
+        --------
+        from_dict : Load from a Python dict.
+        from_file : Load from a file.
+        to_yaml : Serialize to YAML string.
+
+        Examples
+        --------
+        >>> yaml_config = '''
+        ... sfh:
+        ...   type: dpl
+        ...   all_params: FREE
+        ... redshift: {__fixed__: 0.1}
+        ... '''
+        >>> model = SEDModel.from_yaml(yaml_config, ssp_data=ssp)
+        """
+        try:
+            import yaml
+        except ImportError:
+            raise ImportError(
+                "from_yaml requires pyyaml. Install with: pip install pyyaml"
+            )
+
+        from tengri.config.exceptions import ConfigError
+
+        try:
+            config = yaml.safe_load(yaml_str)
+        except yaml.YAMLError as e:
+            raise ConfigError(f"Invalid YAML: {e}")
+
+        if not isinstance(config, dict):
+            raise ConfigError(f"YAML must deserialize to a dict, got {type(config)}")
+
+        return cls.from_dict(
+            config,
+            ssp_data,
+            filters=filters,
+            observation=observation,
+            **model_kwargs,
+        )
+
+    @property
+    def config(self) -> dict:
+        """Return the model configuration as a nested-dict (fully resolved).
+
+        Returns the configuration that was passed to :meth:`build` (or
+        :meth:`from_dict`), but with all defaults resolved. The result is
+        suitable for round-trip serialization: ``from_dict(model.config, ...)``
+        produces an equivalent model.
+
+        Returns
+        -------
+        dict
+            Nested-dict configuration with groups (sfh, dust, neb, etc.).
+            Sentinels (FREE, FIXED) and Distribution objects are in their
+            Python form (not yet serialized).
+
+        See Also
+        --------
+        to_yaml : Serialize to a YAML string.
+        to_json : Serialize to a JSON string.
+
+        Notes
+        -----
+        **Non-portable values**: Some values resolved at build time (e.g.,
+        absolute file paths) may not be suitable for round-trip on a
+        different machine. The returned dict includes only the
+        parameters; refer to :meth:`to_yaml` for serialization guidance.
+
+        Examples
+        --------
+        >>> config = model.config
+        >>> config["sfh"]["type"]
+        'dpl'
+        """
+        from tengri.parameters.groups import parameters_to_groups
+
+        return parameters_to_groups(self.spec)
+
+    def to_yaml(self, path: str | pathlib.Path | None = None) -> str:
+        """Serialize the model configuration to YAML format.
+
+        Parameters
+        ----------
+        path : str or Path, optional
+            If provided, write the YAML to this file. If None, return as string.
+        path : str or Path, optional
+            File path to write to. If None, return the YAML string instead.
+
+        Returns
+        -------
+        str
+            YAML-formatted string (if path is None).
+
+        Raises
+        ------
+        ConfigError
+            If pyyaml is not installed.
+
+        See Also
+        --------
+        to_json : Serialize to JSON format.
+        from_yaml : Deserialize from YAML.
+        config : Get the configuration dict.
+
+        Examples
+        --------
+        >>> yaml_str = model.to_yaml()
+        >>> model.to_yaml("config.yaml")  # Write to file
+        """
+        try:
+            import yaml
+        except ImportError:
+            raise ImportError(
+                "to_yaml requires pyyaml. Install with: pip install pyyaml"
+            )
+
+        from tengri.config.serialize import serialize_config
+
+        config_dict = self.config
+        serialized = serialize_config(config_dict)
+
+        yaml_str = yaml.dump(serialized, default_flow_style=False, sort_keys=False)
+
+        if path is not None:
+            with open(path, "w") as f:
+                f.write(yaml_str)
+            return ""  # When writing to file, return empty string (side effect only)
+
+        return yaml_str
+
+    def to_json(self, path: str | pathlib.Path | None = None) -> str:
+        """Serialize the model configuration to JSON format.
+
+        Parameters
+        ----------
+        path : str or Path, optional
+            If provided, write the JSON to this file. If None, return as string.
+
+        Returns
+        -------
+        str
+            JSON-formatted string (if path is None).
+
+        See Also
+        --------
+        to_yaml : Serialize to YAML format.
+        from_dict : Deserialize from a dict.
+        config : Get the configuration dict.
+
+        Examples
+        --------
+        >>> json_str = model.to_json()
+        >>> model.to_json("config.json")  # Write to file
+        """
+        import json
+
+        from tengri.config.serialize import serialize_config
+
+        config_dict = self.config
+        serialized = serialize_config(config_dict)
+
+        json_str = json.dumps(serialized, indent=2)
+
+        if path is not None:
+            with open(path, "w") as f:
+                f.write(json_str)
+            return ""  # When writing to file, return empty string (side effect only)
+
+        return json_str
 
     def prior_predictive(self, n: int = 500, seed: int = 42) -> PriorPredictive:
         """Sample from the prior and evaluate forward model on each draw.

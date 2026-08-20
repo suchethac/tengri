@@ -47,7 +47,7 @@ def photometric_model(ssp, synthetic_tophat_obs):
         ssp_data=ssp,
         observation=synthetic_tophat_obs,
         sfh={"type": "dexp", "*": tengri.FIXED},
-        dust_attenuation={
+        dust={
             "law": "power_law",
             "type": "two_component",
             "*": tengri.FIXED,
@@ -113,7 +113,7 @@ class TestMetallicityBoundsValidation:
                 "*": tengri.FIXED,
                 "logzsol": met_dist,
             },
-            dust_attenuation={
+            dust={
                 "law": "power_law",
                 "type": "two_component",
                 "*": tengri.FIXED,

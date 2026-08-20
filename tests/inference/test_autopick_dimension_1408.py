@@ -88,7 +88,7 @@ def test_n_latent_exceeds_n_free_for_field_sfh(ssp_data_fsps):
             "psd_sigma": Fixed(1.0),
             "psd_tau_myr": Uniform(100, 500),
         },
-        dust_attenuation={
+        dust={
             "type": "two_component",
             "law": "calzetti",
             "all_params": FIXED,

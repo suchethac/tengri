@@ -53,7 +53,7 @@ for met in met_logzsol:
                 "start_gyr": age_myr / 1e3,
                 "end_gyr": 0.0,
             },
-            dust_attenuation={
+            dust={
                 "law": "power_law",
                 "type": "two_component",
                 "all_params": tengri.FIXED,

@@ -87,7 +87,7 @@ class PowerLawDisc(SEDModelComponent):
             ssp_data=ssp,
             observation=obs,
             sfh=builders.sfh.dpl(_=Fixed(1.5), beta=Fixed(1.0)),
-            dust_attenuation={"type": "two_component", "all_params": Fixed},
+            dust={"type": "two_component", "*": Fixed},
             agn=PowerLawDisc(),
         )
     """

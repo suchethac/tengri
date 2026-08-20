@@ -45,7 +45,7 @@ class TestFracAGNDustCoupling944:
                 ssp_data=synthetic_ssp_wide,
                 observation=synthetic_tophat_obs,
                 sfh={"type": "const"},
-                dust_attenuation={"type": "none"},
+                dust={"type": "none"},
                 agn={
                     "type": "composable",
                     "norm": "cigale_joint",
@@ -72,7 +72,7 @@ class TestFracAGNDustCoupling944:
                 ssp_data=synthetic_ssp_wide,
                 observation=synthetic_tophat_obs,
                 sfh={"type": "const"},
-                dust_attenuation={"type": "none"},
+                dust={"type": "none"},
                 agn={
                     "type": "composable",
                     "norm": "cigale_joint",
@@ -91,7 +91,7 @@ class TestFracAGNDustCoupling944:
             ssp_data=synthetic_ssp_wide,
             observation=synthetic_tophat_obs,
             sfh={"type": "const"},
-            dust_attenuation={"type": "none"},
+            dust={"type": "none"},
             agn={
                 "type": "composable",
                 "norm": "cigale_joint",
@@ -115,7 +115,7 @@ class TestFracAGNDustCoupling944:
             ssp_data=synthetic_ssp_wide,
             observation=synthetic_tophat_obs,
             sfh={"type": "const", "*": FIXED},
-            dust_attenuation={"type": "none"},
+            dust={"type": "none"},
             agn={
                 "type": "composable",
                 "norm": "independent",
@@ -144,11 +144,11 @@ class TestFracAGNDustCoupling944:
             ssp_data=synthetic_ssp_wide,
             observation=synthetic_tophat_obs,
             sfh={"type": "const"},
-            dust_attenuation={
+            dust={
                 "type": "two_component",
                 "law": "calzetti",
+                "emission": {"type": "dale2014"},
             },
-            dust_emission={"type": "dale2014"},
             agn={
                 "type": "composable",
                 "norm": "cigale_joint",
@@ -175,11 +175,11 @@ class TestFracAGNDustCoupling944:
             ssp_data=synthetic_ssp_wide,
             observation=synthetic_tophat_obs,
             sfh={"type": "const", "*": FIXED},
-            dust_attenuation={
+            dust={
                 "type": "two_component",
                 "law": "calzetti",
+                "emission": {"type": "dale2014"},
             },
-            dust_emission={"type": "dale2014"},
             agn={
                 "type": "composable",
                 "norm": "cigale_joint",
@@ -198,11 +198,11 @@ class TestFracAGNDustCoupling944:
             ssp_data=synthetic_ssp_wide,
             observation=synthetic_tophat_obs,
             sfh={"type": "const", "*": FIXED},
-            dust_attenuation={
+            dust={
                 "type": "two_component",
                 "law": "calzetti",
+                "emission": {"type": "dale2014"},
             },
-            dust_emission={"type": "dale2014"},
             agn={
                 "type": "composable",
                 "norm": "cigale_joint",
@@ -246,11 +246,11 @@ class TestFracAGNDustCoupling944:
                 ssp_data=synthetic_ssp_wide,
                 observation=synthetic_tophat_obs,
                 sfh={"type": "const"},
-                dust_attenuation={
+                dust={
                     "type": "two_component",
                     "law": "calzetti",
+                    "emission": {"type": "dale2014"},
                 },
-                dust_emission={"type": "dale2014"},
                 agn={
                     "type": "composable",
                     "norm": norm_mode,

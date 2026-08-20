@@ -233,7 +233,7 @@ def test_sedmodel_fit_emits_no_deprecation_warning(ssp_data_wne, simple_observat
         ssp_data=ssp_data_wne,
         observation=simple_observation,
         sfh={"type": "dpl", "*": FIXED},
-        dust_attenuation={"type": "two_component", "law": "calzetti", "*": FIXED},
+        dust={"type": "two_component", "law": "calzetti", "*": FIXED},
         neb={"type": "none"},
     )
     # Generate a trivial mock for fitting

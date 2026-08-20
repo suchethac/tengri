@@ -58,7 +58,7 @@ for i, beta in enumerate(betas):
                 "tau_gyr": baseline["tau_gyr"],
                 "log_total_mass": 10.0,
             },
-            dust_attenuation={
+            dust={
                 "law": "power_law",
                 "type": "two_component",
                 "all_params": tengri.FIXED,
@@ -130,7 +130,7 @@ model_alpha = tengri.SEDModel.build(
         "tau_gyr": 1.5,
         "log_total_mass": 10.0,
     },
-    dust_attenuation={
+    dust={
         "law": "power_law",
         "type": "two_component",
         "all_params": tengri.FIXED,
@@ -177,7 +177,7 @@ model_beta = tengri.SEDModel.build(
         "tau_gyr": 3.0,
         "log_total_mass": 10.0,
     },
-    dust_attenuation={
+    dust={
         "law": "power_law",
         "type": "two_component",
         "all_params": tengri.FIXED,

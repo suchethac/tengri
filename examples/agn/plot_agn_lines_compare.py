@@ -62,7 +62,7 @@ for (region, kind, label), color in zip(LINE_BACKBONES, COLORS):
     model = tengri.SEDModel.build(
         ssp,
         sfh=SFH,
-        dust_attenuation=DUST,
+        dust=DUST,
         agn={
             "disc": {"type": "multicolor", "all_params": tengri.FIXED},
             "torus": {"type": "skirtor", "all_params": tengri.FIXED},

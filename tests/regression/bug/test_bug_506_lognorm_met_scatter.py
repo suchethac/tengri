@@ -75,7 +75,7 @@ def _model(scatter_dist):
             "*": FIXED,
         },
         met={"logzsol": Fixed(0.0), "logzsol_scatter": scatter_dist, "*": FIXED},
-        dust_attenuation={
+        dust={
             "law": "power_law",
             "type": "two_component",
             "tau_bc": Fixed(0.0),
@@ -130,7 +130,7 @@ def test_fixed_default_is_byte_identical_to_historical():
             "*": FIXED,
         },
         met={"logzsol": Fixed(0.0), "*": FIXED},
-        dust_attenuation={
+        dust={
             "law": "power_law",
             "type": "two_component",
             "tau_bc": Fixed(0.0),

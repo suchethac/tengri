@@ -176,7 +176,7 @@ def test_model_level_f32_gradient_with_delayed_sfh_cue_dust():
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "delayed", "all_params": FREE},
-        dust_attenuation={
+        dust={
             "type": "two_component",
             "law": "calzetti",
             "all_params": FREE,

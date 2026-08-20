@@ -67,7 +67,7 @@ def _old_snorm_model(ssp):
             "*": FIXED,
         },
         met={"logzsol": Fixed(0.0), "*": FIXED},
-        dust_attenuation={
+        dust={
             "law": "power_law",
             "type": "two_component",
             "tau_bc": Fixed(0.0),

@@ -225,14 +225,14 @@ def _build(ssp, obs, emission_type, wildcard=FREE):
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "dpl", "*": FIXED},
-        dust_attenuation={
+        dust={
             "type": "two_component",
             "law": "calzetti",
             "*": FIXED,
             "tau_bc": _TAU_BC,
             "tau_diff": _TAU_DIFF,
+            "emission": {"type": emission_type, "*": wildcard},
         },
-        dust_emission={"type": emission_type, "*": wildcard},
         neb={"type": "none"},
         redshift=Fixed(0.5),
     )
@@ -404,14 +404,14 @@ def test_an_explicit_prior_reaches_the_parameter_the_wildcard_cannot(
         ssp_data=synthetic_ssp_wide,
         observation=panchromatic_obs,
         sfh={"type": "dpl", "*": FIXED},
-        dust_attenuation={
+        dust={
             "type": "two_component",
             "law": "calzetti",
             "*": FIXED,
             "tau_bc": _TAU_BC,
             "tau_diff": _TAU_DIFF,
+            "emission": {"type": "dale2014", "alpha_dale": Uniform(1.0625, 4.0)},
         },
-        dust_emission={"type": "dale2014", "alpha_dale": Uniform(1.0625, 4.0)},
         neb={"type": "none"},
         redshift=Fixed(0.5),
     )
@@ -434,7 +434,7 @@ def test_dust_emission_actually_contributes(synthetic_ssp_wide, panchromatic_obs
         ssp_data=synthetic_ssp_wide,
         observation=panchromatic_obs,
         sfh={"type": "dpl", "*": FIXED},
-        dust_attenuation={
+        dust={
             "type": "two_component",
             "law": "calzetti",
             "*": FIXED,

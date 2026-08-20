@@ -121,7 +121,7 @@ def build_model(variant: str):
         ssp_data=ssp,
         observation=obs,
         sfh=sfh,
-        dust_attenuation={
+        dust={
             "type": "two_component",
             "*": FIXED,
             "law": "calzetti",

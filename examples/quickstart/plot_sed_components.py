@@ -36,7 +36,7 @@ model = tengri.SEDModel.build(
         "skew": 0.5,
         "trunc": 3.0,
     },
-    dust_attenuation={
+    dust={
         "type": "two_component",
         "law": "calzetti",
         "all_params": tengri.FIXED,

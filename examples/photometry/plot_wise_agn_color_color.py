@@ -104,20 +104,19 @@ for i in range(n_sf):
         "tau_diff": tau_diff_samples[i],
         "tau_bc": tau_bc_samples[i],
         "slope": -0.7,
-    }
-    dust_emission = {
-        "type": "modified_blackbody",
-        "all_params": tengri.FIXED,
-        "T": 35.0,  # Fixed dust temperature (reasonable for star-forming)
-        "beta_ir": 1.8,  # Fixed emissivity index
+        "emission": {
+            "type": "modified_blackbody",
+            "all_params": tengri.FIXED,
+            "T": 35.0,  # Fixed dust temperature (reasonable for star-forming)
+            "beta_ir": 1.8,  # Fixed emissivity index
+        },
     }
 
     model = tengri.SEDModel.build(
         ssp_data=ssp,
         observation=observation,
         sfh=sfh_config,
-        dust_attenuation=dust_config,
-        dust_emission=dust_emission,
+        dust=dust_config,
         redshift=tengri.Fixed(z_gal),
     )
 
@@ -187,20 +186,19 @@ for i in range(n_agn):
         "tau_diff": 0.5 + 0.1 * i,  # Variable dust opacity (AGN-heated)
         "tau_bc": 0.3 + 0.05 * i,
         "slope": -0.7,
-    }
-    dust_emission = {
-        "type": "modified_blackbody",
-        "all_params": tengri.FIXED,
-        "T": 60.0 + 5.0 * i,  # Higher temperatures for AGN (60-100 K, hotter than SF)
-        "beta_ir": 1.8,
+        "emission": {
+            "type": "modified_blackbody",
+            "all_params": tengri.FIXED,
+            "T": 60.0 + 5.0 * i,  # Higher temperatures for AGN (60-100 K, hotter than SF)
+            "beta_ir": 1.8,
+        },
     }
 
     model = tengri.SEDModel.build(
         ssp_data=ssp,
         observation=observation,
         sfh=sfh_config,
-        dust_attenuation=dust_config,
-        dust_emission=dust_emission,
+        dust=dust_config,
         redshift=tengri.Fixed(z_gal),
     )
 

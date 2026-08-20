@@ -115,14 +115,14 @@ def _build(ssp: SSPData, obs: Observation) -> SEDModel:
             ssp_data=ssp,
             observation=obs,
             sfh={"type": "dpl", "*": FIXED},
-            dust_attenuation={
+            dust={
                 "type": "two_component",
                 "law": "calzetti",
                 "*": FIXED,
                 "tau_bc": 2.0,
                 "tau_diff": 1.5,
+                "emission": {"type": "energy_balance_split", "*": FREE},
             },
-            dust_emission={"type": "energy_balance_split", "*": FREE},
             neb={"type": "none"},
             redshift=Fixed(0.5),
         )
@@ -238,12 +238,12 @@ def test_narrowing_does_not_orphan_eta_balance(panchromatic_ssp, panchromatic_ob
             ssp_data=panchromatic_ssp,
             observation=panchromatic_obs,
             sfh={"type": "dpl", "*": FIXED},
-            dust_attenuation={
+            dust={
                 "type": "two_component",
                 "law": "calzetti",
                 "*": FREE,
+                "emission": {"type": "energy_balance_split", "*": FIXED},
             },
-            dust_emission={"type": "energy_balance_split", "*": FIXED},
             neb={"type": "none"},
             redshift=Fixed(0.5),
         )

@@ -359,7 +359,7 @@ _m_sfh = SEDModel.build(
         "log_total_mass": Fixed(0.0),
         "all_params": FIXED,
     },
-    dust_attenuation={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+    dust={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
 _state_sfh = _m_sfh.predict_state({})
@@ -447,7 +447,7 @@ _m_2exp = SEDModel.build(
         "log_total_mass": Fixed(0.0),
         "all_params": FIXED,
     },
-    dust_attenuation={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+    dust={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
 _st_2exp = _m_2exp.predict_state({})
@@ -517,7 +517,7 @@ m_stellar = SEDModel.build(
         "log_total_mass": Fixed(0.0),
         "all_params": FIXED,
     },
-    dust_attenuation={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+    dust={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
 s_stellar = m_stellar.predict_state({})
@@ -680,7 +680,7 @@ m_nd = SEDModel.build(
         "log_total_mass": Fixed(0.0),
         "all_params": FIXED,
     },
-    dust_attenuation={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+    dust={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
 s_nd = m_nd.predict_state({})
@@ -695,7 +695,7 @@ m_d = SEDModel.build(
         "log_total_mass": Fixed(0.0),
         "all_params": FIXED,
     },
-    dust_attenuation={
+    dust={
         "type": "two_component",
         "law_bc": "leitherer02",
         "law_diff": "leitherer02",
@@ -786,7 +786,7 @@ m_ir = SEDModel.build(
         "log_total_mass": Fixed(0.0),
         "all_params": FIXED,
     },
-    dust_attenuation={
+    dust={
         "type": "two_component",
         "law_bc": "leitherer02",
         "law_diff": "leitherer02",
@@ -797,7 +797,8 @@ m_ir = SEDModel.build(
         # this only changes the emergent FUV continuum, not the IR budget.
         "lyman_cutoff": True,
         "all_params": FIXED,
-    }, dust_emission={"type": "dale2014", "alpha_mir": Fixed(2.0), "all_params": FIXED},
+        "emission": {"type": "dale2014", "alpha_mir": Fixed(2.0), "all_params": FIXED},
+    },
     redshift=Fixed(0.0),
 )
 s_ir = m_ir.predict_state({})
@@ -917,14 +918,15 @@ def _knob_model(emission_type, **emkw):
         met=MET_FIDUCIAL,
         sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
              "log_total_mass": Fixed(11.0), "all_params": FIXED},
-        dust_attenuation={
+        dust={
             "type": "two_component",
             "law_bc": "calzetti",
             "law_diff": "calzetti",
             "tau_bc": Fixed(0.0),
             "tau_diff": Fixed(TAU_DIFF_FIDUCIAL),
             "all_params": FIXED,
-        }, dust_emission={"type": emission_type, "all_params": FIXED, **emkw},
+            "emission": {"type": emission_type, "all_params": FIXED, **emkw},
+        },
         redshift=Fixed(0.0),
     )
 
@@ -1128,7 +1130,7 @@ m_no_neb = SEDModel.build(
     ssp_data=ssp,
     met=MET_FIDUCIAL,
     sfh=_neb_sfh_kw,
-    dust_attenuation={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+    dust={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
 s_no_neb = m_no_neb.predict_state({})
@@ -1144,7 +1146,7 @@ m_neb = SEDModel.build(
         "neb_fesc": Fixed(0.0),
         "all_params": FIXED,
     },  # ionspec_* slopes stay at their SSP-derived Fixed values
-    dust_attenuation={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+    dust={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
 s_neb = m_neb.predict_state({})
@@ -1213,7 +1215,7 @@ _m_neb_dense = SEDModel.build(
         "neb_fesc": Fixed(0.0),
         "all_params": FIXED,
     },
-    dust_attenuation={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+    dust={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
 _s_neb_dense = _m_neb_dense.predict_state({})
@@ -1305,7 +1307,7 @@ m_agn_base = SEDModel.build(
         "log_total_mass": Fixed(0.0),
         "all_params": FIXED,
     },
-    dust_attenuation={
+    dust={
         "type": "two_component",
         "law_bc": "leitherer02",
         "law_diff": "leitherer02",
@@ -1363,7 +1365,7 @@ m_agn = SEDModel.build(
         "log_total_mass": Fixed(0.0),
         "all_params": FIXED,
     },
-    dust_attenuation={
+    dust={
         "type": "two_component",
         "law_bc": "leitherer02",
         "law_diff": "leitherer02",
@@ -1549,7 +1551,7 @@ m_agn_sk = SEDModel.build(
     met=MET_FIDUCIAL,
     sfh={"type": "delayed", "tau_gyr": Fixed(1.0), "age_gyr": Fixed(5.0),
          "log_total_mass": Fixed(0.0), "all_params": FIXED},
-    dust_attenuation={"type": "two_component", "law_bc": "leitherer02", "law_diff": "leitherer02",
+    dust={"type": "two_component", "law_bc": "leitherer02", "law_diff": "leitherer02",
           "tau_bc": Fixed(TAU_BC_FIDUCIAL), "tau_diff": Fixed(TAU_DIFF_FIDUCIAL), "all_params": FIXED},
     agn={"type": "composable",
          "disc": {"type": "skirtor", "all_params": FIXED},  # ← the SKIRTOR analytic disc
@@ -1683,7 +1685,7 @@ def _tengri_xray(log_lbol, cos_inc):
             "log_total_mass": Fixed(0.0),
             "all_params": FIXED,
         },
-        dust_attenuation={"law": "power_law", 
+        dust={"law": "power_law", 
             "type": "two_component",
             "tau_bc": Fixed(TAU_BC_FIDUCIAL),
             "tau_diff": Fixed(TAU_DIFF_FIDUCIAL),
@@ -1910,7 +1912,7 @@ m_r = SEDModel.build(
     # Same attenuation setup as §6 — the radio amplitude is anchored on
     # L_absorbed through q_IR, so a mismatched dust config here would leak
     # straight into the synchrotron normalization.
-    dust_attenuation={
+    dust={
         "type": "two_component",
         "law_bc": "leitherer02",
         "law_diff": "leitherer02",
@@ -1918,7 +1920,8 @@ m_r = SEDModel.build(
         "tau_diff": Fixed(TAU_DIFF_FIDUCIAL),
         "lyman_cutoff": True,
         "all_params": FIXED,
-    }, dust_emission={"type": "dale2014", "alpha_mir": Fixed(2.0), "all_params": FIXED},
+        "emission": {"type": "dale2014", "alpha_mir": Fixed(2.0), "all_params": FIXED},
+    },
     # q_IR pinned to CIGALE's qir_sf = 2.5 (tengri bucket default 2.64).
     radio={
         "type": "condon92",
@@ -2149,7 +2152,7 @@ m_full = SEDModel.build(
         "log_total_mass": Fixed(0.0),
         "all_params": FIXED,
     },
-    dust_attenuation={
+    dust={
         "type": "two_component",
         "law_bc": "leitherer02",
         "law_diff": "leitherer02",
@@ -2157,7 +2160,8 @@ m_full = SEDModel.build(
         "tau_diff": Fixed(TAU_DIFF_FIDUCIAL),
         "lyman_cutoff": True,
         "all_params": FIXED,
-    }, dust_emission={"type": "dale2014", "alpha_mir": Fixed(2.0), "all_params": FIXED},
+        "emission": {"type": "dale2014", "alpha_mir": Fixed(2.0), "all_params": FIXED},
+    },
     xray={"type": "yang20", "all_params": FIXED},
     radio={
         "type": "condon92",

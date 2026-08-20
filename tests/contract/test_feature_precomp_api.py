@@ -98,11 +98,9 @@ def _build(ssp, *, cue, approx, line_data=None, emission=True, dust=True):
             "tau_bc": Uniform(0.0, 4.0),
             "tau_diff": Uniform(0.0, 3.0),
         }
-        kw["dust_attenuation"] = d
         if emission:
-            kw["dust_emission"] = {"type": "dale2014", "*": FIXED}
-        else:
-            kw["dust_emission"] = {"type": "none"}
+            d["emission"] = {"type": "dale2014", "*": FIXED}
+        kw["dust"] = d
     return SEDModel.build(
         ssp_data=ssp,
         observation=Observation(

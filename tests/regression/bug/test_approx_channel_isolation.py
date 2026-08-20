@@ -67,8 +67,8 @@ _DUST = {
     "all_params": FIXED,
     "tau_diff": Uniform(0.0, 1.5),
     "tau_bc": 0.0,
+    "emission": {"type": "dale2014", "all_params": FIXED},
 }
-_DUST_EMISSION = {"type": "dale2014", "all_params": FIXED}
 
 _AGN = {
     "type": "composable",
@@ -84,23 +84,9 @@ _AGN = {
 #: identical (0.1104) across all four, which is what proved it was Cue itself
 #: rather than an interaction with shock or AGN.
 _MODELS = {
-    "cue": dict(
-        dust_attenuation=_DUST,
-        dust_emission=_DUST_EMISSION,
-        neb={"type": "cue", "all_params": FIXED},
-    ),
-    "cue_shock": dict(
-        dust_attenuation=_DUST,
-        dust_emission=_DUST_EMISSION,
-        neb={"type": "cue", "all_params": FIXED},
-        shock={"frac": 0.1},
-    ),
-    "cue_agn": dict(
-        dust_attenuation=_DUST,
-        dust_emission=_DUST_EMISSION,
-        neb={"type": "cue", "all_params": FIXED},
-        agn=_AGN,
-    ),
+    "cue": dict(dust=_DUST, neb={"type": "cue", "all_params": FIXED}),
+    "cue_shock": dict(dust=_DUST, neb={"type": "cue", "all_params": FIXED}, shock={"frac": 0.1}),
+    "cue_agn": dict(dust=_DUST, neb={"type": "cue", "all_params": FIXED}, agn=_AGN),
 }
 
 #: herschel_250 is load-bearing: the nebular light reaches 250 um only by being
@@ -187,7 +173,7 @@ def test_feature_precomp_keeps_the_nebular_term_in_the_energy_balance(ssp_data_f
     finiteness would have passed while the physics was gone.
     """
     cue = _MODELS["cue"]
-    no_neb = dict(dust_attenuation=_DUST, neb={"type": "none"})
+    no_neb = dict(dust=_DUST, neb={"type": "none"})
     with jax.enable_x64(True):
         _, eb_exact = _photometry_and_eb(ssp_data_fsps, obs, cue, None)
         _, eb_noneb = _photometry_and_eb(ssp_data_fsps, obs, no_neb, None)
@@ -223,7 +209,7 @@ def test_the_grid_still_serves_photometry_when_nothing_consumes_the_continuum(ss
     model = _build(
         ssp_data_fsps,
         obs,
-        dict(dust_attenuation={"type": "none"}, neb={"type": "cue", "all_params": FIXED}),
+        dict(dust={"type": "none"}, neb={"type": "cue", "all_params": FIXED}),
         (WavePrecomp(), FeaturePrecomp()),
     )
     neb = [c for c in model._cached_component_chain if isinstance(c, NebularSEDComponent)]
@@ -256,7 +242,7 @@ def test_every_dust_law_is_seen_as_a_nebular_consumer(ssp_data_fsps, obs, dust_t
         ssp_data_fsps,
         obs,
         dict(
-            dust_attenuation={"law": "power_law", "type": dust_type, "all_params": FIXED},
+            dust={"law": "power_law", "type": dust_type, "all_params": FIXED},
             neb={"type": "cue", "all_params": FIXED},
         ),
         None,

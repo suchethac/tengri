@@ -327,9 +327,9 @@ class TestRecipeStructure:
         """DPL SFH + two-component Calzetti dust + Dale2014 emission + fixed Cue."""
         r = recipes.star_forming_photometry()
         assert r["sfh"]["type"] == "dpl"
-        assert r["dust_attenuation"]["type"] == "two_component"
-        assert r["dust_attenuation"]["law"] == "calzetti"
-        assert r["dust_emission"]["type"] == "dale2014"
+        assert r["dust"]["type"] == "two_component"
+        assert r["dust"]["law"] == "calzetti"
+        assert r["dust"]["emission"]["type"] == "dale2014"
         assert r["neb"]["type"] == "cue"
         assert r.get("apply_igm", True) is True
 
@@ -376,7 +376,7 @@ class TestRecipeStructure:
         """Top-hat (tsnorm) SFH, Calzetti dust, nebular off, z pinned to 0.05."""
         r = recipes.mock_recovery_minimal()
         assert r["sfh"]["type"] == "tsnorm"
-        assert r["dust_attenuation"]["law"] == "calzetti"
+        assert r["dust"]["law"] == "calzetti"
         assert r["neb"]["type"] == "none"
         spec = parse_groups(**r)
         assert "redshift" in spec.fixed_params
@@ -389,8 +389,8 @@ class TestRecipeStructure:
         assert r["agn"]["torus"]["type"] == "simple"
         assert r["sfh"]["type"] == "delayed"
         assert r["sfh"]["all_params"] == recipes.FIXED
-        assert r["dust_attenuation"]["tau_bc"] == 0.0
-        assert r["dust_attenuation"]["tau_diff"] == 0.0
+        assert r["dust"]["tau_bc"] == 0.0
+        assert r["dust"]["tau_diff"] == 0.0
         assert r["redshift"] == recipes.Fixed(0.0)
 
     def test_unified_agn_synthesizer_line_regions(self):
@@ -435,7 +435,7 @@ class TestRecipeStructure:
         r = recipes.high_z()
         assert r["sfh"]["type"] == "tsnorm"
         assert r["apply_igm"] is True
-        assert "dust_emission" not in r
+        assert "emission" not in r["dust"]
         assert "approx" not in r
 
     def test_photoz_structure(self):

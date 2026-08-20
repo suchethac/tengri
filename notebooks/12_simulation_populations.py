@@ -100,7 +100,7 @@ def build_model(approx=PRECOMP, neb=None):
         redshift=Fixed(Z_OBS),
         sfh={"type": "table"},  # SFH arrives at runtime, as data
         met={"type": "table"},  # so does the stellar metallicity
-        dust_attenuation={"type": "two_component", "law": "calzetti", "*": FIXED},
+        dust={"type": "two_component", "law": "calzetti", "*": FIXED},
         neb=neb or {"type": "ssp"},  # baked into the SSP: zero per-galaxy cost
         approx=approx,  # SSP x filter LUT, or None for the exact path
     )
@@ -453,7 +453,7 @@ def build_cloudy():
         redshift=Fixed(Z_OBS),
         sfh={"type": "table"},
         met={"type": "table"},
-        dust_attenuation={"type": "two_component", "law": "calzetti", "*": FIXED},
+        dust={"type": "two_component", "law": "calzetti", "*": FIXED},
         neb={"type": "cloudy"},
         approx=WavePrecomp(),
     )
@@ -704,8 +704,7 @@ print(f"\n  agreement with float64: median {np.median(dmag):.0e} mag, worst {dma
 # fwd = ForwardModel.build(sed=SEDModel.build(
 #     ssp_data=ssp, observation=obs, redshift=Fixed(0.1),
 #     sfh={"type": "table"}, met={"type": "table"},
-#     dust_attenuation={"type": "two_component", "law": "calzetti",
-#                       "all_params": FIXED},
+#     dust={"type": "two_component", "law_bc": "calzetti", "all_params": FIXED},
 #     neb={"type": "ssp"}, approx=WavePrecomp(),
 # ))
 #

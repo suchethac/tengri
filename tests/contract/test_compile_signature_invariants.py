@@ -88,7 +88,18 @@ class TestCompileSignatureInvariants:
         sig = fitter.compile_signature()
 
         # sig is a tuple of (model_sig, fitter_sig)
-        _, fitter_sig = sig
+        model_sig, fitter_sig = sig
+
+        # model_sig is SEDModel.compile_signature()'s tuple; its per-field
+        # ledger lives in that method's own comments. Pinned here so a field
+        # cannot vanish silently — removing one is how #1973's collision
+        # shipped. Was 64 before #1973 added ssp_flux_id (grid CONTENT, not
+        # just shape/lgmet).
+        assert len(model_sig) == 65, (
+            f"model_sig field count changed from 65 to {len(model_sig)}. "
+            "If intentional, update this assertion and the ledger in "
+            "SEDModel.compile_signature."
+        )
 
         # fitter_sig should have exactly 10 fields:
         # 1. data_type
@@ -113,8 +124,23 @@ class TestCompileSignatureInvariants:
         # baked into the loss closure via fitter._fixed_values, so two fits
         # differing only by override must compile distinct losses — else fit #2
         # silently reuses fit #1's baked redshift. None when no override.
-        assert len(fitter_sig) == 15, (
-            f"fitter_sig field count changed from 15 to {len(fitter_sig)}. "
+        # 16. free-parameter prior identity: _primals_to_params calls
+        # dist.unstandardize(xi), which reads the distribution's Python floats
+        # at trace time, so the priors are baked constants. Without this entry
+        # two models differing only in a prior's bounds share one engine and
+        # fit #2's latent is decoded through fit #1's interval — a shift of
+        # order the prior width (measured 1.53 dex on log_total_mass). Free
+        # NAMES (field 5) do not cover it: changing Uniform(9.6, 11.1) to
+        # Uniform(7, 13) alters no name, shape, dtype or control flow. See
+        # tests/regression/bug/test_prior_bounds_key_the_engine_cache.py.
+        # 17. spec fixed VALUES (#1972 instance 2): _primals_to_params also
+        # bakes fitter._fixed_values, so two models differing only in a fixed
+        # scalar shared one engine — measured -0.18 dex on mass via dust_slope.
+        # 18. mirror map (#1972 instance 3): spec.resolve_mirrors bakes
+        # target -> source, so two specs sharing every name and prior but tying
+        # to different sources silently tied to the same one.
+        assert len(fitter_sig) == 18, (
+            f"fitter_sig field count changed from 18 to {len(fitter_sig)}. "
             "If intentional, update this assertion and the docstring."
         )
 

@@ -34,7 +34,7 @@ def _build_shock_dust_model():
             "tau_gyr": 1.0,
             "log_total_mass": 10.0,
         },
-        dust_attenuation={
+        dust={
             "law": "power_law",
             "type": "two_component",
             "all_params": FIXED,
@@ -84,7 +84,7 @@ class TestShockAttenuationPhysics:
                 "tau_gyr": 1.0,
                 "log_total_mass": 10.0,
             },
-            dust_attenuation={
+            dust={
                 "law": "power_law",
                 "type": "two_component",
                 "all_params": FIXED,
@@ -156,7 +156,7 @@ class TestShockAttenuationPhysics:
                 "tau_gyr": 1.0,
                 "log_total_mass": 10.0,
             },
-            dust_attenuation={
+            dust={
                 "law": "power_law",
                 "type": "two_component",
                 "all_params": FIXED,
@@ -179,7 +179,7 @@ class TestShockAttenuationPhysics:
                 "tau_gyr": 1.0,
                 "log_total_mass": 10.0,
             },
-            dust_attenuation={
+            dust={
                 "law": "power_law",
                 "type": "two_component",
                 "all_params": FIXED,
@@ -319,7 +319,7 @@ class TestShockAttenuationPhysics:
                 "tau_gyr": 1.0,
                 "log_total_mass": 10.0,
             },
-            dust_attenuation={
+            dust={
                 "law": "power_law",
                 "type": "single_component",
                 "all_params": FIXED,
@@ -342,7 +342,7 @@ class TestShockAttenuationPhysics:
                 "tau_gyr": 1.0,
                 "log_total_mass": 10.0,
             },
-            dust_attenuation={
+            dust={
                 "law": "power_law",
                 "type": "single_component",
                 "all_params": FIXED,

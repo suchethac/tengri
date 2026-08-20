@@ -98,7 +98,7 @@ def _build(ssp, approx, *, tau_diff, tau_bc, z, neb, shock, dust_type="two_compo
             "tau_gyr": 1.0,
             "age_gyr": 5.0,
         },
-        dust_attenuation=dust_group,
+        dust=dust_group,
         neb={"type": neb, "all_params": FIXED},
         shock=shock_group,
         redshift=Fixed(z),

@@ -227,7 +227,7 @@ _m_sfh = SEDModel.build(
         "log_total_mass": Fixed(0.0),
         "all_params": FIXED,
     },
-    dust_attenuation={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+    dust={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
 _state_sfh = _m_sfh.predict_state({})
@@ -290,7 +290,7 @@ m_stellar = SEDModel.build(
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
         "all_params": FIXED,
     },
-    dust_attenuation={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+    dust={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
 s_stellar = m_stellar.predict_state({})
@@ -403,7 +403,7 @@ m_d = SEDModel.build(
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
         "all_params": FIXED,
     },
-    dust_attenuation={
+    dust={
         "type": "two_component",
         "law_bc": "calzetti",
         "law_diff": "calzetti",
@@ -469,20 +469,21 @@ m_ir = SEDModel.build(
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
         "all_params": FIXED,
     },
-    dust_attenuation={
+    dust={
         "type": "two_component",
         "law_bc": "calzetti",
         "law_diff": "calzetti",
         "tau_bc": Fixed(0.0),
         "tau_diff": Fixed(AV_FIDUCIAL / 1.086),
-        "all_params": FIXED,
-    }, dust_emission={
+        "emission": {
             "type": "draine_li2007",
             "qpah": Fixed(2.5),
             "umin": Fixed(UMIN),
             "gamma_dl": Fixed(0.05),
             "all_params": FIXED,
         },
+        "all_params": FIXED,
+    },
     redshift=Fixed(0.0),
 )
 s_ir = m_ir.predict_state({})
@@ -537,20 +538,21 @@ m_full = SEDModel.build(
         "log_total_mass": Fixed(LOG_MASS_FIDUCIAL),
         "all_params": FIXED,
     },
-    dust_attenuation={
+    dust={
         "type": "two_component",
         "law_bc": "calzetti",
         "law_diff": "calzetti",
         "tau_bc": Fixed(0.0),
         "tau_diff": Fixed(AV_FIDUCIAL / 1.086),
-        "all_params": FIXED,
-    }, dust_emission={
+        "emission": {
             "type": "draine_li2007",
             "qpah": Fixed(2.5),
             "umin": Fixed(UMIN),
             "gamma_dl": Fixed(0.05),
             "all_params": FIXED,
         },
+        "all_params": FIXED,
+    },
     neb={"type": "cue", "neb_logU": Fixed(-2.0), "neb_logZ_gas": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
@@ -600,7 +602,7 @@ m_neb = SEDModel.build(
         "log_total_mass": Fixed(NEB_LOGMASS),
         "all_params": FIXED,
     },
-    dust_attenuation={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+    dust={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
     neb={"type": "cue", "neb_logU": Fixed(-2.0), "neb_logZ_gas": Fixed(0.0), "all_params": FIXED},
     redshift=Fixed(0.0),
 )
@@ -736,7 +738,7 @@ def _agn_grammar(disc="kubota_done", torus="simple", nlr="none", blr="none", cos
             "log_total_mass": Fixed(0.0),
             "all_params": FIXED,
         },
-        dust_attenuation={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+        dust={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
         agn={
             "type": "composable",
             "disc": {"type": disc},
@@ -790,7 +792,7 @@ for disc_type, _ in _disc_models:
             "log_total_mass": Fixed(0.0),
             "all_params": FIXED,
         },
-        dust_attenuation={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+        dust={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
         agn={
             "type": "composable",
             "disc": {"type": disc_type},
@@ -996,7 +998,7 @@ for torus_type in ("nenkova", "two_temperature"):
             "log_total_mass": Fixed(0.0),
             "all_params": FIXED,
         },
-        dust_attenuation={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+        dust={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
         agn={
             "type": "composable",
             "disc": {"type": "none"},
@@ -1163,7 +1165,7 @@ _m_vis = SEDModel.build(
         "log_total_mass": Fixed(0.0),
         "all_params": FIXED,
     },
-    dust_attenuation={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+    dust={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
     agn={
         "type": "composable",
         "disc": {"type": "kubota_done"},
@@ -1247,7 +1249,7 @@ def _unified_phot(approx):
             "log_total_mass": Fixed(0.0),
             "all_params": FIXED,
         },
-        dust_attenuation={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+        dust={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
         agn={
             "type": "composable",
             "disc": {"type": "kubota_done"},
@@ -1302,7 +1304,7 @@ _m_free = SEDModel.build(
         "log_total_mass": Fixed(0.0),
         "all_params": FIXED,
     },
-    dust_attenuation={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
+    dust={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "all_params": FIXED},
     agn={
         "type": "composable",
         "disc": {"type": "kubota_done"},

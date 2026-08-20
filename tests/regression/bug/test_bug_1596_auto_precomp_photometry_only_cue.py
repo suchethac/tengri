@@ -72,7 +72,7 @@ def _cue_model(ssp, obs, approx=None):
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "dpl", "all_params": FREE},
-        dust_attenuation={"type": "none"},
+        dust={"type": "none"},
         redshift=0.05,
         neb={"type": "cue", "all_params": FIXED},
         approx=approx,
@@ -135,7 +135,7 @@ class TestAutoPrecompForPhotometryOnlyCue:
             ssp_data=ssp_data_wne,
             observation=synthetic_tophat_obs,
             sfh={"type": "dpl", "all_params": FREE},
-            dust_attenuation={"type": "none"},
+            dust={"type": "none"},
             redshift=0.05,
             approx=None,
         )

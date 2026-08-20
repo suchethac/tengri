@@ -62,7 +62,7 @@ def test_misscaled_line_channel_raises():
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "delayed", "all_params": FREE},
-        dust_attenuation={
+        dust={
             "type": "two_component",
             "law": "calzetti",
             "all_params": FREE,
@@ -134,7 +134,7 @@ def test_healthy_multichannel_fit_constructs_silently():
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "delayed", "all_params": FREE},
-        dust_attenuation={
+        dust={
             "type": "two_component",
             "law": "calzetti",
             "all_params": FREE,

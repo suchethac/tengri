@@ -64,7 +64,7 @@ for z, color in zip(REDSHIFTS, COLORS):
     model = tengri.SEDModel.build(
         tengri.load_ssp(),
         sfh=SFH,
-        dust_attenuation=DUST,
+        dust=DUST,
         igm={"type": "inoue14"},
         redshift=tengri.Fixed(z),
     )

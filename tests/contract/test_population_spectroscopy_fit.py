@@ -51,7 +51,7 @@ def template(synthetic_ssp_wide, spec_obs):
         ssp_data=synthetic_ssp_wide,
         observation=spec_obs,
         sfh={"type": ["tsnorm", "field"], "*": FREE},
-        dust_attenuation={"type": "two_component", "law": "calzetti", "*": FIXED},
+        dust={"type": "two_component", "law": "calzetti", "*": FIXED},
         neb={"type": "none"},
         redshift=Fixed(_Z),
         n_grid=_N_GRID,

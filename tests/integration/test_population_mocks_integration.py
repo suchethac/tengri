@@ -48,7 +48,7 @@ def field_model(synthetic_ssp_wide, phot_obs):
         ssp_data=synthetic_ssp_wide,
         observation=phot_obs,
         sfh={"type": "dpl", "all_params": FREE, "age_gyr": 11.0, "field": {"all_params": FREE}},
-        dust_attenuation={
+        dust={
             "type": "two_component",
             "law": "calzetti",
             "all_params": FIXED,

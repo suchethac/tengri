@@ -45,7 +45,7 @@ def test_waveprecomp_error_bounded_at_high_n_z():
     )
     spec = dict(
         sfh={"type": "tsnorm", "*": tengri.FIXED},
-        dust_attenuation={
+        dust={
             "law": "power_law",
             "type": "two_component",
             "*": tengri.FIXED,

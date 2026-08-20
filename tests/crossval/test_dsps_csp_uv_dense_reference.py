@@ -68,7 +68,7 @@ def _build_state():
             "log_total_mass": Fixed(0.0),
             "*": FIXED,
         },
-        dust_attenuation={
+        dust={
             "law": "power_law",
             "type": "two_component",
             "tau_bc": Fixed(0.0),

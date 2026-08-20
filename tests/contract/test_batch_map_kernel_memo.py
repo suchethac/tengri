@@ -38,7 +38,7 @@ def fitter(synthetic_ssp_wide):
         ssp_data=synthetic_ssp_wide,
         observation=obs,
         sfh={"type": "dpl", "*": FIXED, "log_total_mass": Uniform(8, 12)},
-        dust_attenuation={"type": "two_component", "law": "calzetti", "*": FIXED},
+        dust={"type": "two_component", "law": "calzetti", "*": FIXED},
         neb={"type": "none"},
         redshift=Fixed(0.5),
     )

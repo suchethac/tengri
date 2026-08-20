@@ -30,7 +30,7 @@ class TestSFHWildcardMustNotFreeMet:
         """
         spec = parse_groups(
             sfh={"type": "dpl", "all_params": FREE},
-            dust_attenuation={"type": "none"},
+            dust={"type": "none"},
             neb={"type": "none"},
             agn={"type": "none"},
             redshift=0.1,
@@ -45,7 +45,7 @@ class TestSFHWildcardMustNotFreeMet:
         """sfh={'all_params': FIXED} should also fix met_* parameters."""
         spec = parse_groups(
             sfh={"type": "dpl", "all_params": FIXED},
-            dust_attenuation={"type": "none"},
+            dust={"type": "none"},
             neb={"type": "none"},
             agn={"type": "none"},
             redshift=0.1,
@@ -60,7 +60,7 @@ class TestSFHWildcardMustNotFreeMet:
         spec = parse_groups(
             sfh={"type": "dpl", "all_params": FREE},
             met={"type": "table"},  # Default behavior
-            dust_attenuation={"type": "none"},
+            dust={"type": "none"},
             neb={"type": "none"},
             agn={"type": "none"},
             redshift=0.1,
@@ -80,7 +80,7 @@ class TestSFHWildcardMustNotFreeMet:
                 "all_params": FREE,
                 "logzsol": Uniform(-1.0, 0.5),  # Explicit override
             },
-            dust_attenuation={"type": "none"},
+            dust={"type": "none"},
             neb={"type": "none"},
             agn={"type": "none"},
             redshift=0.1,
@@ -118,7 +118,7 @@ class TestSFHWildcardMustNotFreeMet:
         with pytest.warns(WildcardPartialFreeWarning, match="met_logzsol"):
             parse_groups(
                 sfh={"type": "dpl", "all_params": FREE},
-                dust_attenuation={"type": "none"},
+                dust={"type": "none"},
                 neb={"type": "none"},
                 agn={"type": "none"},
                 redshift=0.1,
@@ -131,7 +131,7 @@ class TestSFHWildcardMustNotFreeMet:
             # Should not raise because the warning should not fire
             parse_groups(
                 sfh={"type": "dpl", "all_params": FIXED},
-                dust_attenuation={"type": "none"},
+                dust={"type": "none"},
                 neb={"type": "none"},
                 agn={"type": "none"},
                 redshift=0.1,
@@ -145,7 +145,7 @@ class TestSFHWildcardMustNotFreeMet:
             parse_groups(
                 sfh={"type": "dpl", "all_params": FREE},
                 met={"type": "table"},
-                dust_attenuation={"type": "none"},
+                dust={"type": "none"},
                 neb={"type": "none"},
                 agn={"type": "none"},
                 redshift=0.1,

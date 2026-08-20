@@ -89,7 +89,7 @@ def population():
                 "psd_sigma": Fixed(float(psd_sigma)),
                 "psd_tau_myr": Fixed(float(psd_tau_myr)),
             },
-            dust_attenuation={
+            dust={
                 "type": "two_component",
                 "law": "calzetti",
                 "all_params": FIXED,
@@ -133,7 +133,7 @@ def spectroscopic_population():
                 "psd_sigma": Fixed(float(psd_sigma)),
                 "psd_tau_myr": Fixed(float(psd_tau_myr)),
             },
-            dust_attenuation={
+            dust={
                 "type": "two_component",
                 "law": "calzetti",
                 "all_params": FIXED,

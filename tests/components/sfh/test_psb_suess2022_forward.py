@@ -43,7 +43,7 @@ def _build_psb(ssp, log_total_mass=10.0):
             "ratio_old_2": Fixed(0.0),
             "*": FIXED,
         },
-        dust_attenuation=_DUST_OFF,
+        dust=_DUST_OFF,
         redshift=Fixed(0.0),
     )
 

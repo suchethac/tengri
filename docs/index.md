@@ -26,7 +26,7 @@ originates from; no religious claim or appropriation is intended.*
 
 One object manages everything: all components (stellar, dust, nebular, AGN, IGM, radio, X-ray) register into a single SED chain. Pure JAX means JIT, `vmap`, and autodiff work from SSP grid to log-likelihood. One code path serves both grid exploration and Bayesian inference.
 
-Build via recipe: `SEDModel.build(sfh={...}, dust_attenuation={...}, neb={...})`. The `tengri.recipes` module covers standard cases.
+Build via recipe: `SEDModel.build(sfh={...}, dust={...}, neb={...})`. The `tengri.recipes` module covers standard cases.
 
 ```python
 import jax

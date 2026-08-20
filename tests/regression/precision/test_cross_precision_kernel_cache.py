@@ -69,7 +69,7 @@ def _build(ssp, obs):
         # Pinned explicitly: a model with no ``dust`` group still declares
         # ``dust_tau_diff`` / ``dust_tau_bc`` free, which would leave the free set
         # out of step with the truth dict below.
-        dust_attenuation={
+        dust={
             "type": "two_component",
             "law": "calzetti",
             "all_params": FIXED,

@@ -40,7 +40,7 @@ def cue_model(synthetic_ssp_wide):
                 "log_total_mass": Fixed(0.0),
                 "*": FIXED,
             },
-            dust_attenuation={"law": "power_law", "type": "two_component", "*": FIXED},
+            dust={"law": "power_law", "type": "two_component", "*": FIXED},
             neb={"type": "cue", "*": FIXED},
             redshift=Fixed(0.0),
         )

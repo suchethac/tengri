@@ -605,7 +605,7 @@ def _gradients(label: str) -> tuple[dict[str, float], float]:
             ssp_data=_ssp(2.0, 7.0),
             observation=_observation(),
             sfh={"type": "const"},
-            dust_attenuation=_DUST_BUILDS[label],
+            dust=_DUST_BUILDS[label],
         )
         params = model.spec.sample(jax.random.PRNGKey(0))
         scale = float(jnp.sum(model.predict_photometry(params)))

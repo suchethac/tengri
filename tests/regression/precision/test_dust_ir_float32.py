@@ -105,15 +105,15 @@ def _model(ssp, emission_type):
             "log_total_mass": Fixed(10.0),
             "*": FIXED,
         },
-        dust_attenuation={
+        dust={
             "type": "two_component",
             "law_bc": "calzetti",
             "law_diff": "calzetti",
             "tau_bc": Fixed(1.0),
             "tau_diff": Fixed(0.7),
             "*": FIXED,
+            "emission": {"type": emission_type, "*": FIXED},
         },
-        dust_emission={"type": emission_type, "*": FIXED},
         redshift=Fixed(0.5),
     )
 

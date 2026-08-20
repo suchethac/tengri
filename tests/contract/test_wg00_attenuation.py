@@ -118,12 +118,12 @@ def test_wg00_attenuates_forward_sed(synthetic_ssp_wide):
 
     m_lo = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
-        dust_attenuation={"type": "wg00", "geometry": "shell", "tau_v": Fixed(0.25)},
+        dust={"type": "wg00", "geometry": "shell", "tau_v": Fixed(0.25)},
         redshift=Fixed(0.1),
     )
     m_hi = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
-        dust_attenuation={"type": "wg00", "geometry": "shell", "tau_v": Fixed(5.0)},
+        dust={"type": "wg00", "geometry": "shell", "tau_v": Fixed(5.0)},
         redshift=Fixed(0.1),
     )
     w, s_lo = _sed(m_lo)
@@ -140,7 +140,7 @@ def test_wg00_geometry_changes_forward_curve(synthetic_ssp_wide):
     def build(geom):
         return SEDModel.build(
             ssp_data=synthetic_ssp_wide,
-            dust_attenuation={"type": "wg00", "geometry": geom, "tau_v": Fixed(3.0)},
+            dust={"type": "wg00", "geometry": geom, "tau_v": Fixed(3.0)},
             redshift=Fixed(0.1),
         )
 
@@ -158,7 +158,7 @@ def test_wg00_tau_v_is_free_param_and_cited(synthetic_ssp_wide):
 
     model = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
-        dust_attenuation={
+        dust={
             "type": "wg00",
             "dust_curve": "smc",
             "geometry": "dusty",
@@ -180,7 +180,7 @@ def test_wg00_forward_gradient_in_tau_v(synthetic_ssp_wide):
 
     model = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
-        dust_attenuation={"type": "wg00", "tau_v": Uniform(0.25, 10.0)},
+        dust={"type": "wg00", "tau_v": Uniform(0.25, 10.0)},
         redshift=Fixed(0.1),
     )
     base = dict(model.spec.sample(jax.random.PRNGKey(1)))

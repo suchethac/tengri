@@ -77,7 +77,7 @@ def _model(ssp, obs, *, dust_type, approx):
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "dpl", "all_params": FIXED, "log_total_mass": 10.0},
-        dust_attenuation=dust,
+        dust=dust,
         neb={"type": "none"},
         redshift=Fixed(0.05),
         approx=approx,

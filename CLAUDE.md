@@ -174,9 +174,8 @@ model = SEDModel.build(ssp_data=ssp, observation=obs,
 model = SEDModel.build(
     ssp_data=ssp, observation=obs,
     sfh={'type': 'dpl', 'all_params': FREE, 'beta': Uniform(1, 3)},
-    dust_attenuation={'type': 'two_component', 'law': 'calzetti',
-                      'all_params': FIXED, 'tau_bc': 0.5, 'tau_diff': 0.3},
-    dust_emission={'type': 'dale2014', 'all_params': FIXED},
+    dust={'type': 'two_component', 'law_bc': 'calzetti', 'all_params': FIXED,
+          'tau_bc': 0.5, 'emission': {'type': 'dale2014', 'all_params': FIXED}},
     neb={'type': 'cue', 'all_params': FIXED},
     redshift=Fixed(0.05),
 )
@@ -188,7 +187,7 @@ from tengri import builders
 model = SEDModel.build(
     ssp_data=ssp, observation=obs,
     sfh=builders.sfh.dpl(_=FREE, beta=Uniform(1, 3)),  # ← IDE sees alpha, beta, tau_gyr, log_total_mass
-    dust_attenuation={'type': 'two_component', 'law': 'calzetti', 'all_params': FIXED},
+    dust={'type': 'two_component', 'law_bc': 'calzetti', 'all_params': FIXED},
     neb={'type': 'cue', 'all_params': FIXED},
 )
 ```
@@ -207,17 +206,7 @@ model = SEDModel.build(
   **The group census is derived**, not restated: `valid_groups` comes from
   `_GROUP_STRUCTURAL_KEYS`, and `SEDModel.build`'s signature is the one
   remaining hand-maintained copy — add a group to both.
-- **Dust is two peer groups, not one**: `dust_attenuation={...}` (type,
-  `law` — or `law_bc`+`law_diff` only to give the two screens *different* laws —
-  plus the `tau_*`/`Rv_*`/`delta_*`/`slope_*`/`bump_strength_*` params) and
-  `dust_emission={...}` (type, `eta_balance`, params). `dust={...}` is retired and
-  raises with a translation, as does a nested
-  `dust_attenuation={'emission': ...}`. On `two_component`, naming one half of a
-  per-screen pair without the other also raises — give both, or an `all_params`
-  wildcard to state the partner's disposition. Energy balance lives on the
-  emission group: `dust_eta_balance` (default `Fixed(1.0)` = strict balance,
-  `L_IR = eta * L_absorbed`).
-- Sub-blocks: the six AGN composable selectors —
+- Sub-blocks: `dust.emission`, plus the six AGN composable selectors —
   `agn.disc`, `agn.torus`, `agn.nlr`, `agn.blr`, `agn.feii`, `agn.atten`
   (the deprecated `agn.lines` alias expands to an nlr/blr pair). Each nests
   as a dict with its own `'type'`, `'all_params'`, and per-param keys.
@@ -356,7 +345,7 @@ class MyModel(SEDModelComponent):
 ```
 
 `__init_subclass__` auto-discovers class-level `Distribution` priors,
-registers `(name, cls)` so `SEDModel.build(dust_emission={'type': 'my_model'})`
+registers `(name, cls)` so `SEDModel.build(dust={'type': 'my_model'})`
 finds it, auto-fills `inputs()`/`outputs()` from the dicts, and provides
 sensible `apply()`/`precompute()`. Astronomer writes physics only.
 

@@ -61,7 +61,7 @@ def _cue_model(ssp, obs, **extra):
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "dpl", "all_params": FREE},
-        dust_attenuation={"type": "none"},
+        dust={"type": "none"},
         met={"logzsol": FREE},
         redshift=0.05,
         neb={"type": "cue", "all_params": FIXED, "logU": Uniform(-3.5, -1.5)},

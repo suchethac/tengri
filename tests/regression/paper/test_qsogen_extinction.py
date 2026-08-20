@@ -139,7 +139,7 @@ def test_end_to_end_through_build(ssp_data_bc03):
                 "log_total_mass": Fixed(10.0),
                 "*": FIXED,
             },
-            dust_attenuation={
+            dust={
                 "law": "power_law",
                 "type": "two_component",
                 "tau_bc": Fixed(0.0),

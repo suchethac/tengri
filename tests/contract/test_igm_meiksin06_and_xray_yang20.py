@@ -87,7 +87,7 @@ def test_meiksin06_builds_through_grammar(ssp):
     m = tengri.SEDModel.build(
         ssp,
         sfh={"type": "tsnorm", "*": tengri.FIXED},
-        dust_attenuation={
+        dust={
             "law": "power_law",
             "type": "two_component",
             "*": tengri.FIXED,
@@ -108,7 +108,7 @@ def test_yang20_alias_builds(ssp):
     m = tengri.SEDModel.build(
         ssp,
         sfh={"type": "tsnorm", "*": tengri.FIXED},
-        dust_attenuation={
+        dust={
             "law": "power_law",
             "type": "two_component",
             "*": tengri.FIXED,
