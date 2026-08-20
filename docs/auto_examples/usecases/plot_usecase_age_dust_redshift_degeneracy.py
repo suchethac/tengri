@@ -59,7 +59,7 @@ model_a = SEDModel.build(
         "tau_gyr": 0.3,
         "log_total_mass": 10.0,  # Will be tuned for magnitude match
     },
-    dust={
+    dust_attenuation={
         "type": "two_component",
         "law": "calzetti",
         "all_params": tengri.FIXED,
@@ -88,7 +88,7 @@ model_b = SEDModel.build(
         "tau_gyr": 8.0,
         "log_total_mass": 10.0,  # Will be tuned
     },
-    dust={
+    dust_attenuation={
         "type": "two_component",
         "law": "calzetti",
         "all_params": tengri.FIXED,
@@ -118,7 +118,7 @@ model_c = SEDModel.build(
         "width_gyr": 0.5,
         "log_total_mass": 10.0,  # Will be tuned
     },
-    dust={
+    dust_attenuation={
         "type": "two_component",
         "law": "calzetti",
         "all_params": tengri.FIXED,

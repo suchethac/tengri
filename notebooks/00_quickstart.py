@@ -106,7 +106,7 @@ sed_model = SEDModel.build(
     observation=obs,
     approx=WavePrecomp(),
     sfh=builders.sfh.tsnorm(defaults=FREE),
-    dust=builders.dust.two_component(
+    dust_attenuation=builders.dust.two_component(
         defaults=FIXED,
         law="calzetti",
         tau_bc=Uniform(0.0, 1.0),

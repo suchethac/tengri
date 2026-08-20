@@ -56,7 +56,7 @@ def _build(ssp, obs, approx):
         observation=obs,
         sfh={"type": ["dpl", "field"], "all_params": FREE},
         met={"logzsol": Fixed(-0.3)},
-        dust={
+        dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
             "all_params": FREE,

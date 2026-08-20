@@ -46,7 +46,7 @@ dust = {
 model_cue = tengri.SEDModel.build(
     ssp,
     sfh=sfh,
-    dust=dust,
+    dust_attenuation=dust,
     neb={
         "type": "cue",
         "all_params": tengri.FIXED,
@@ -61,7 +61,7 @@ model_cue = tengri.SEDModel.build(
 model_none = tengri.SEDModel.build(
     ssp,
     sfh=sfh,
-    dust=dust,
+    dust_attenuation=dust,
     neb={"type": "none", "all_params": tengri.FIXED},
     redshift=tengri.Fixed(0.01),
 )

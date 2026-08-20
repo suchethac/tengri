@@ -157,7 +157,7 @@ def tengri_stellar_dust(ssp, log_mass, *, collapse_screen=False):
             "log_total_mass": Fixed(log_mass),
             "*": FIXED,
         },
-        dust={
+        dust_attenuation={
             "type": "two_component",
             "law_bc": "power_law",
             "law_diff": "power_law",

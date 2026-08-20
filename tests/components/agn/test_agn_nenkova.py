@@ -263,7 +263,7 @@ def test_builder_exposes_agn_tau_as_free(synthetic_ssp) -> None:
     model = tengri.SEDModel.build(
         synthetic_ssp,
         sfh={"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0},
-        dust={
+        dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "*": tengri.FIXED,
@@ -314,7 +314,7 @@ def test_agn_tau_threads_through_model_layer() -> None:
     model = tengri.SEDModel.build(
         ssp,
         sfh={"type": "const", "*": tengri.FIXED, "log_total_mass": -10.0},
-        dust={
+        dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "*": tengri.FIXED,

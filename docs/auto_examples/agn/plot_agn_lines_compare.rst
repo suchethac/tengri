@@ -96,7 +96,7 @@ line normalization is under review, see the tracked issue).
         model = tengri.SEDModel.build(
             ssp,
             sfh=SFH,
-            dust=DUST,
+            dust_attenuation=DUST,
             agn={
                 "disc": {"type": "multicolor", "all_params": tengri.FIXED},
                 "torus": {"type": "skirtor", "all_params": tengri.FIXED},
@@ -141,7 +141,7 @@ line normalization is under review, see the tracked issue).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.224 seconds)
+   **Total running time of the script:** (0 minutes 3.491 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_lines_compare.py:

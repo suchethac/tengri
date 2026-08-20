@@ -102,7 +102,7 @@ def test_baseline_without_dust_emission_bakes_almost_nothing(ssp, obs):
             ssp_data=ssp,
             observation=obs,
             sfh={"type": "dpl", "all_params": FIXED},
-            dust={"law": "power_law", "type": "two_component", "all_params": FIXED},
+            dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
             redshift=Fixed(0.1),
         )
     baked = _traced_baked_mb(model)
@@ -119,12 +119,12 @@ def test_dust_emission_template_threads_as_argument(ssp, obs, emission):
                 ssp_data=ssp,
                 observation=obs,
                 sfh={"type": "dpl", "all_params": FIXED},
-                dust={
+                dust_attenuation={
                     "law": "power_law",
                     "type": "two_component",
                     "all_params": FIXED,
-                    "emission": {"type": emission},
                 },
+                dust_emission={"type": emission},
                 redshift=Fixed(0.1),
             )
         baked = _traced_baked_mb(model)

@@ -108,7 +108,7 @@ Schaerer 2003, A&A, 397, 527 (ionizing photon production in massive starburst po
             model = tengri.SEDModel.build(
                 ssp,
                 sfh=sfh_config_age,
-                dust=dust_config,
+                dust_attenuation=dust_config,
                 neb=neb_config,
                 redshift=tengri.Fixed(0.0),
             )
@@ -151,7 +151,7 @@ Schaerer 2003, A&A, 397, 527 (ionizing photon production in massive starburst po
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 17.510 seconds)
+   **Total running time of the script:** (0 minutes 19.519 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_lyalpha_ew_vs_age.py:

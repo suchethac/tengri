@@ -111,13 +111,13 @@ for i, tau_v in enumerate(tau_v_values):
             "tau_gyr": Fixed(2.0),  # turnover timescale
             "log_total_mass": 10.0,  # log10(10 Msun/yr) = 1.0
         },
-        "dust": {
+        "dust_attenuation": {
             "type": "two_component",
             "law": "calzetti",
             "tau_bc": Fixed(tau_bc),
             "tau_diff": Fixed(tau_diff),
-            "emission": {"type": "dale2014", "all_params": FIXED},
         },
+        "dust_emission": {"type": "dale2014", "all_params": FIXED},
         "neb": {"type": "cue", "all_params": FIXED},
         "redshift": Fixed(0.01),
         "apply_igm": False,

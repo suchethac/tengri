@@ -89,7 +89,7 @@ def _model(ssp):
         observation=obs,
         sfh={"type": "dpl", "all_params": FREE},
         met={"logzsol": Fixed(-0.3)},
-        dust={
+        dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
             "all_params": FREE,

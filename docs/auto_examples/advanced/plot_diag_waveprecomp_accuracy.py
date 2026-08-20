@@ -30,7 +30,7 @@ obs = tengri.Observation(
 
 baseline_spec = {
     "sfh": {"type": "tsnorm", "all_params": tengri.FIXED},
-    "dust": {
+    "dust_attenuation": {
         "law": "power_law",
         "type": "two_component",
         "all_params": tengri.FIXED,

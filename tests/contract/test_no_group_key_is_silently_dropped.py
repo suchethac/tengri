@@ -47,28 +47,31 @@ def obs():
     return Observation(photometry=Photometry.from_names(["sdss_u", "sdss_g", "wise_w4"]))
 
 
-def _build(ssp, obs, dust):
+def _build(ssp, obs, dust, dust_emission=None):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        return SEDModel.build(
-            ssp_data=ssp,
-            observation=obs,
-            sfh=_SFH,
-            dust=dust,
-            neb={"type": "none"},
-            redshift=Fixed(0.1),
-        )
+        kwargs = {
+            "ssp_data": ssp,
+            "observation": obs,
+            "sfh": _SFH,
+            "dust_attenuation": dust,
+            "neb": {"type": "none"},
+            "redshift": Fixed(0.1),
+        }
+        if dust_emission is not None:
+            kwargs["dust_emission"] = dust_emission
+        return SEDModel.build(**kwargs)
 
 
 def _emission_params(ssp, obs) -> list[str]:
-    """Parameters the dust.emission sub-block contributes, by difference.
+    """Parameters the dust_emission group contributes, by difference.
 
     Discovered rather than listed, so a new emission template is covered the
     day it registers.
     """
     base = {"type": "two_component", "law": "calzetti", "all_params": FIXED}
     without = set(_build(ssp, obs, dict(base)).spec.all_params)
-    with_em = _build(ssp, obs, {**base, "emission": _EMIS})
+    with_em = _build(ssp, obs, dict(base), dust_emission=_EMIS)
     return sorted(set(with_em.spec.all_params) - without)
 
 
@@ -87,21 +90,27 @@ class TestFlattenedKeysAreRefusedNotDropped:
             "type": "two_component",
             "law": "calzetti",
             "all_params": FIXED,
-            "emission": _EMIS,
         }
         accepted: list[str] = []
         for full in _emission_params(ssp_data_fsps, obs):
             short = full.removeprefix("dust_")
-            baseline = float(_build(ssp_data_fsps, obs, dict(base)).spec.get_fixed_values()[full])
+            baseline = float(
+                _build(
+                    ssp_data_fsps, obs, dict(base), dust_emission=_EMIS
+                ).spec.get_fixed_values()[full]
+            )
             try:
-                model = _build(ssp_data_fsps, obs, {**base, short: baseline + 0.5})
+                # Try to set emission param at dust_attenuation level (should be refused)
+                model = _build(
+                    ssp_data_fsps, obs, {**base, short: baseline + 0.5}, dust_emission=_EMIS
+                )
             except ValueError:
                 continue  # refused — the contract
             got = float(model.spec.get_fixed_values()[full])
             if got == baseline:
                 accepted.append(f"{short} (stayed {baseline})")
         assert not accepted, (
-            f"these keys were accepted at the dust level and silently discarded: "
+            f"these keys were accepted at the dust_attenuation level and silently discarded: "
             f"{accepted}. A key the grammar accepts must change something."
         )
 
@@ -113,10 +122,10 @@ class TestFlattenedKeysAreRefusedNotDropped:
             "all_params": FIXED,
             "emission": _EMIS,
         }
-        with pytest.raises(ValueError, match=r"dust\.emission") as excinfo:
+        with pytest.raises(ValueError, match=r"dust_emission") as excinfo:
             _build(ssp_data_fsps, obs, {**base, "alpha": 2.5})
         message = str(excinfo.value)
-        assert "'emission'" in message, message
+        assert "emission" in message, message
         assert "Did you mean: alpha?" not in message, (
             f"the message suggests the key it just refused: {message}"
         )
@@ -127,13 +136,13 @@ class TestFlattenedKeysAreRefusedNotDropped:
             "type": "two_component",
             "law": "calzetti",
             "all_params": FIXED,
-            "emission": _EMIS,
         }
         with pytest.raises(ValueError):
-            _build(ssp_data_fsps, obs, {**base, "alpha": Uniform(1.0, 3.0)})
+            # Try to set emission param at dust_attenuation level with a prior (should be refused)
+            _build(ssp_data_fsps, obs, {**base, "alpha": Uniform(1.0, 3.0)}, dust_emission=_EMIS)
 
-    def test_the_nested_form_still_works(self, ssp_data_fsps, obs):
-        """The refusal is only useful if the recommended spelling succeeds."""
+    def test_the_flat_form_works(self, ssp_data_fsps, obs):
+        """The refusal is only useful if the recommended flat spelling succeeds."""
         model = _build(
             ssp_data_fsps,
             obs,
@@ -141,8 +150,8 @@ class TestFlattenedKeysAreRefusedNotDropped:
                 "type": "two_component",
                 "law": "calzetti",
                 "all_params": FIXED,
-                "emission": {**_EMIS, "alpha": Uniform(1.0, 3.0)},
             },
+            dust_emission={**_EMIS, "alpha": Uniform(1.0, 3.0)},
         )
         assert "dust_alpha" in model.spec.free_params
 
@@ -168,7 +177,7 @@ class TestCrossLevelAcceptanceThatWorksIsKept:
                 ssp_data=ssp_data_fsps,
                 observation=obs,
                 sfh=_SFH,
-                dust={"type": "two_component", "law": "calzetti", "all_params": FIXED},
+                dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
                 neb={"type": "none"},
                 redshift=Fixed(0.1),
                 agn=agn,
@@ -180,7 +189,7 @@ class TestCrossLevelAcceptanceThatWorksIsKept:
                 ssp_data=ssp_data_fsps,
                 observation=obs,
                 sfh=_SFH,
-                dust={"type": "two_component", "law": "calzetti", "all_params": FIXED},
+                dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
                 neb={"type": "none"},
                 redshift=Fixed(0.1),
                 agn={**agn, "log_lbol": baseline + 0.25},

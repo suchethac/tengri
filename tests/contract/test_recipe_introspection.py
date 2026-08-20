@@ -110,7 +110,7 @@ class TestRecipeParametersManualRecipes:
         """Minimal recipe with FREE/FIXED sentinels works correctly."""
         recipe = {
             "sfh": {"type": "dpl", "*": FREE},
-            "dust": {"law": "power_law", "type": "two_component", "*": FIXED},
+            "dust_attenuation": {"law": "power_law", "type": "two_component", "*": FIXED},
             "neb": {"type": "none"},
             "redshift": Fixed(0.05),
         }
@@ -125,7 +125,7 @@ class TestRecipeParametersManualRecipes:
         """Recipe with explicit Uniform priors for free params."""
         recipe = {
             "sfh": {"type": "dpl", "*": FREE},
-            "dust": {
+            "dust_attenuation": {
                 "type": "two_component",
                 "law": "calzetti",
                 "*": FREE,
@@ -169,7 +169,7 @@ class TestRecipeParametersErrors:
         """Unknown dust type raises ValueError."""
         recipe = {
             "sfh": {"type": "dpl"},
-            "dust": {"type": "invalid_dust_type"},
+            "dust_attenuation": {"type": "invalid_dust_type"},
         }
-        with pytest.raises(ValueError, match="Unknown dust type"):
+        with pytest.raises(ValueError, match=r"Unknown.*dust.*type"):
             recipe_parameters(recipe)

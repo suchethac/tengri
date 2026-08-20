@@ -87,7 +87,7 @@ def surfaces(synthetic_ssp_wide, synthetic_tophat_obs):
         ssp_data=synthetic_ssp_wide,
         observation=synthetic_tophat_obs,
         sfh={"type": "dpl", "*": FIXED, "log_total_mass": Uniform(9.0, 11.0)},
-        dust={"type": "two_component", "law": "calzetti", "*": FIXED},
+        dust_attenuation={"type": "two_component", "law": "calzetti", "*": FIXED},
         neb={"type": "none"},
         redshift=Fixed(0.1),
     )

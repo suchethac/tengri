@@ -56,12 +56,18 @@ def _build_xray_model(ssp, obs, *, sfr_100myr=None, agn_model=None, xray_model="
     Returns
     -------
     SEDModel
+
+    Notes
+    -----
+    Currently unreferenced: every test below drives the component directly. Kept
+    working, and swept for the dust group split, rather than left as a helper
+    that would raise the moment someone used it.
     """
     config = {
         "ssp_data": ssp,
         "observation": obs,
         "sfh": {"type": "delayed", "all_params": FIXED},
-        "dust": {"law": "power_law", "all_params": FIXED},
+        "dust_attenuation": {"law": "power_law", "all_params": FIXED},
         "met": {"logzsol": Fixed(Z_SUN if Z_SUN > 0 else 0.0)},
         "xray": {"type": xray_model, "all_params": FIXED},
         "redshift": Fixed(0.05),

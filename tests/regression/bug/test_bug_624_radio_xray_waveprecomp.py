@@ -69,7 +69,7 @@ def test_radio_xray_in_waveprecomp(group, band_wave, fam):
     obs = Observation(photometry=Photometry(filters=filt))
     base = dict(
         sfh={"type": "dpl", "*": FIXED},
-        dust={"type": "two_component", "law": "calzetti", "*": FIXED},
+        dust_attenuation={"type": "two_component", "law": "calzetti", "*": FIXED},
         neb={"type": "none"},
     )
     # #1980: the radio menu's {'type': name} spelling is retired — resolve the

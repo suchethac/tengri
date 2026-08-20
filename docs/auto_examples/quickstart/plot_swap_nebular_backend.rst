@@ -80,7 +80,7 @@ Reference: Li+2025 (Cue emulator; arXiv:2405.04598).
     model_cue = tengri.SEDModel.build(
         ssp,
         sfh=sfh,
-        dust=dust,
+        dust_attenuation=dust,
         neb={
             "type": "cue",
             "all_params": tengri.FIXED,
@@ -95,7 +95,7 @@ Reference: Li+2025 (Cue emulator; arXiv:2405.04598).
     model_none = tengri.SEDModel.build(
         ssp,
         sfh=sfh,
-        dust=dust,
+        dust_attenuation=dust,
         neb={"type": "none", "all_params": tengri.FIXED},
         redshift=tengri.Fixed(0.01),
     )
@@ -135,7 +135,7 @@ Reference: Li+2025 (Cue emulator; arXiv:2405.04598).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 8.406 seconds)
+   **Total running time of the script:** (0 minutes 8.656 seconds)
 
 
 .. _sphx_glr_download_auto_examples_quickstart_plot_swap_nebular_backend.py:

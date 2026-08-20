@@ -89,7 +89,7 @@ def _build(uv_ssp, uv_obs, dust: dict):
             ssp_data=uv_ssp,
             observation=uv_obs,
             sfh={"type": "dpl", "all_params": FIXED},
-            dust=dust,
+            dust_attenuation=dust,
             redshift=Fixed(0.5),
         )
 

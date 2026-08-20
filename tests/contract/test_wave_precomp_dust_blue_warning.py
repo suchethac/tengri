@@ -63,7 +63,7 @@ def _build(ssp, obs, approx, tau, z: float = 1.0) -> SEDModel:
         observation=obs,
         approx=approx,
         sfh={"type": "tsnorm", "*": FIXED, "log_total_mass": Uniform(8.0, 12.0)},
-        dust=dust,
+        dust_attenuation=dust,
         neb={"type": "none"},
         redshift=Fixed(z),
     )

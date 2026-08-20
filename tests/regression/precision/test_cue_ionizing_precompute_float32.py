@@ -286,7 +286,7 @@ def test_cue_forward_is_finite_when_the_ssp_itself_is_float32():
                 "tau_gyr": 1.0,
                 "age_gyr": 5.0,
             },
-            dust={
+            dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
                 "all_params": FIXED,

@@ -49,7 +49,7 @@ model = tengri.SEDModel.build(
         "tau_gyr": 0.03,
         "log_total_mass": 8.48,
     },
-    dust={
+    dust_attenuation={
         "law": "power_law",
         "type": "two_component",
         "all_params": tengri.FIXED,

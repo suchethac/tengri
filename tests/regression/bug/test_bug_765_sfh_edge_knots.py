@@ -116,7 +116,7 @@ def test_edge_knot_sfh_conserves_mass_and_finite(synthetic_ssp_wide):
     model = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
         sfh=sfh,
-        dust={
+        dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "tau_bc": Fixed(0.0),
@@ -145,7 +145,7 @@ def test_edge_knot_sfh_is_jit_safe(synthetic_ssp_wide):
             "flex_1": Fixed(-0.3),
             "*": FIXED,
         },
-        dust={
+        dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "tau_bc": Fixed(0.0),

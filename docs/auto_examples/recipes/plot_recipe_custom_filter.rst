@@ -92,7 +92,7 @@ with the standard library.
             "skew": 0.2,
             "trunc": 5.0,
         },
-        dust={
+        dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
@@ -136,6 +136,11 @@ with the standard library.
     ax_filters.set_xlim(2e3, 2.5e4)
 
     plt.savefig("plot_recipe_custom_filter.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 4.403 seconds)
 
 
 .. _sphx_glr_download_auto_examples_recipes_plot_recipe_custom_filter.py:

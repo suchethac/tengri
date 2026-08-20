@@ -42,7 +42,7 @@ model = tengri.SEDModel.build(
         "all_params": tengri.FREE,
         "alpha": tengri.Fixed(0.5),  # Fix early slope; vary peak SFR, beta, tau
     },
-    dust={
+    dust_attenuation={
         "type": "two_component",
         "law": "calzetti",
         "all_params": tengri.FREE,  # Allow dust parameters to vary

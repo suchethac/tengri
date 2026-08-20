@@ -42,7 +42,7 @@ def _build(ssp, z: float, approx, *, tau_diff=0.5, tau_bc=1.0, bands=None) -> SE
         ssp_data=ssp,
         observation=Observation(photometry=Photometry.from_names(bands or BANDS)),
         sfh={"type": "tsnorm", "*": FIXED, "log_total_mass": Uniform(9.0, 11.0)},
-        dust={
+        dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "*": FIXED,
@@ -248,7 +248,7 @@ def test_the_rest_band_lut_carries_no_redshift_axis(synthetic_ssp_wide):
         ssp_data=synthetic_ssp_wide,
         observation=Observation(photometry=Photometry.from_names(BANDS)),
         sfh={"type": "tsnorm", "*": FIXED, "log_total_mass": Uniform(9.0, 11.0)},
-        dust={
+        dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "*": FIXED,

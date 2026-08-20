@@ -105,7 +105,7 @@ References:
             "tau_gyr": 0.3,
             "log_total_mass": 10.0,  # Will be tuned for magnitude match
         },
-        dust={
+        dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
             "all_params": tengri.FIXED,
@@ -134,7 +134,7 @@ References:
             "tau_gyr": 8.0,
             "log_total_mass": 10.0,  # Will be tuned
         },
-        dust={
+        dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
             "all_params": tengri.FIXED,
@@ -164,7 +164,7 @@ References:
             "width_gyr": 0.5,
             "log_total_mass": 10.0,  # Will be tuned
         },
-        dust={
+        dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
             "all_params": tengri.FIXED,
@@ -378,7 +378,7 @@ References:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.125 seconds)
+   **Total running time of the script:** (0 minutes 3.149 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_age_dust_redshift_degeneracy.py:

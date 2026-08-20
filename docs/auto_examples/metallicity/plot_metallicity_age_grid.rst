@@ -85,7 +85,7 @@ breaks (young stars are bluer).
                     "tau_gyr": age_gyr,
                     "log_total_mass": 10.0,
                 },
-                dust={
+                dust_attenuation={
                     "law": "power_law",
                     "type": "two_component",
                     "all_params": tengri.FIXED,
@@ -150,6 +150,11 @@ breaks (young stars are bluer).
 
     fig.tight_layout()
     plt.savefig("plot_metallicity_age_grid.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.141 seconds)
 
 
 .. _sphx_glr_download_auto_examples_metallicity_plot_metallicity_age_grid.py:

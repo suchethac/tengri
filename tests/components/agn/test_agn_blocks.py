@@ -453,7 +453,7 @@ def test_agn_ebv_disc_settable_via_sedbuild(synthetic_ssp_wide, synthetic_tophat
             "log_total_mass": Fixed(0.0),
             "*": FIXED,
         },
-        dust={"law": "power_law", "type": "two_component", "*": FIXED},
+        dust_attenuation={"law": "power_law", "type": "two_component", "*": FIXED},
         neb={"type": "none", "*": FIXED},
         redshift=Fixed(0.0),
         agn={
@@ -478,7 +478,7 @@ def test_agn_ebv_disc_settable_via_sedbuild(synthetic_ssp_wide, synthetic_tophat
             "log_total_mass": Fixed(0.0),
             "*": FIXED,
         },
-        dust={"law": "power_law", "type": "two_component", "*": FIXED},
+        dust_attenuation={"law": "power_law", "type": "two_component", "*": FIXED},
         neb={"type": "none", "*": FIXED},
         redshift=Fixed(0.0),
         agn={
@@ -538,7 +538,7 @@ def test_agn_attenuation_ebv_settable_via_sedbuild(synthetic_ssp_wide, synthetic
             "log_total_mass": Fixed(0.0),
             "*": FIXED,
         },
-        dust={"law": "power_law", "type": "two_component", "*": FIXED},
+        dust_attenuation={"law": "power_law", "type": "two_component", "*": FIXED},
         neb={"type": "none", "*": FIXED},
         redshift=Fixed(0.0),
         agn={
@@ -563,7 +563,7 @@ def test_agn_attenuation_ebv_settable_via_sedbuild(synthetic_ssp_wide, synthetic
             "log_total_mass": Fixed(0.0),
             "*": FIXED,
         },
-        dust={"law": "power_law", "type": "two_component", "*": FIXED},
+        dust_attenuation={"law": "power_law", "type": "two_component", "*": FIXED},
         neb={"type": "none", "*": FIXED},
         redshift=Fixed(0.0),
         agn={

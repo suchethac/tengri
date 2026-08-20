@@ -86,7 +86,7 @@ class DH02CE01IRSEDComponent(EmissionComponent):
     #: Stated, not inferred. The library's only grid axis is L_TIR, derived from
     #: L_absorbed by energy balance rather than set by the user, so this engine
     #: genuinely reads no parameter -- as the class docstring above says. Saying
-    #: so lets ``dust={'emission': {'type': 'dh02_ce01', 'all_params': FREE}}``
+    #: so lets ``dust_emission={'type': 'dh02_ce01', 'all_params': FREE}``
     #: narrow to nothing instead of freeing the whole static union, which is 19
     #: dimensions a sampler cannot move (#1482).
     declares_no_parameters: ClassVar[bool] = True

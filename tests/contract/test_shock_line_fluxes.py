@@ -65,7 +65,7 @@ class TestShockLineFluxes:
                 "tau_gyr": 1.0,
                 "log_total_mass": 10.0,
             },
-            dust={"law": "power_law", "type": "two_component", "all_params": FIXED},
+            dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
             neb={"type": "cue", "all_params": FIXED},  # Discrete line backend
             shock={"frac": 1.0, "all_params": FIXED},  # Start with max shock
             redshift=Fixed(0.1),
@@ -134,7 +134,7 @@ class TestShockLineFluxes:
             ssp_data=ssp,
             observation=Observation(photometry=Photometry.from_names(["sdss_g", "sdss_r"])),
             sfh={"type": "delayed", "all_params": FIXED, "tau_gyr": 1.0, "log_total_mass": 10.0},
-            dust={"law": "power_law", "type": "two_component", "all_params": FIXED},
+            dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
             neb={"type": "cue", "all_params": FIXED},
             shock={"frac": 0.5, "all_params": FIXED},
             redshift=Fixed(0.1),
@@ -174,7 +174,7 @@ class TestShockLineFluxes:
             ssp_data=ssp,
             observation=Observation(photometry=Photometry.from_names(["sdss_g", "sdss_r"])),
             sfh={"type": "delayed", "all_params": FIXED, "tau_gyr": 1.0, "log_total_mass": 10.0},
-            dust={"law": "power_law", "type": "two_component", "all_params": FIXED},
+            dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
             neb={"type": "cue", "all_params": FIXED},
             shock={"frac": 1.0, "all_params": FIXED},  # Shock is active (but frac can be varied)
             redshift=Fixed(0.1),
@@ -217,7 +217,7 @@ class TestShockLineFluxes:
             ssp_data=ssp,
             observation=Observation(photometry=Photometry.from_names(["sdss_g", "sdss_r"])),
             sfh={"type": "delayed", "all_params": FIXED, "tau_gyr": 1.0, "log_total_mass": 10.0},
-            dust={"law": "power_law", "type": "two_component", "all_params": FIXED},
+            dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
             neb={"type": "cue", "all_params": FIXED},
             shock={"type": "none"},  # Shock explicitly disabled
             redshift=Fixed(0.1),

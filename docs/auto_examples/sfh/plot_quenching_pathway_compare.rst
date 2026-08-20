@@ -112,7 +112,7 @@ how quenching timescale imprints on observable photometry and spectroscopy.
         model = tengri.SEDModel.build(
             ssp,
             sfh=scenario["sfh"],
-            dust={
+            dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
                 "all_params": tengri.FIXED,

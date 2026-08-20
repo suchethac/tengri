@@ -103,7 +103,7 @@ References
             "tau_gyr": 0.1,
             "log_total_mass": 10.0,
         },
-        dust={
+        dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
@@ -297,7 +297,7 @@ References
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.920 seconds)
+   **Total running time of the script:** (0 minutes 2.979 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_shock_frac_sweep.py:

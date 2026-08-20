@@ -71,7 +71,7 @@ for (torus, label), color in zip(TORI, COLORS):
     model = tengri.SEDModel.build(
         ssp,
         sfh=SFH,
-        dust=DUST,
+        dust_attenuation=DUST,
         agn={
             "disc": {"type": "multicolor", "all_params": tengri.FIXED},
             "torus": {"type": torus, "all_params": tengri.FIXED},

@@ -91,22 +91,22 @@ def assert_precompute_matches_exact(
     """
     from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, WavePrecomp
 
+    # Extract dust_attenuation and dust_emission from dust_config
     if dust_config is None:
-        dust_config = {
+        dust_attenuation = {
             "type": "two_component",
             "law": "calzetti",
             "*": FIXED,
             "tau_diff": 0.5,
-            "emission": {"type": emission_type, "*": FIXED},
         }
+        dust_emission = {"type": emission_type, "*": FIXED}
     else:
-        # Ensure emission is set in the provided config
-        if "emission" not in dust_config:
-            dust_config = {
-                "law": "power_law",
-                **dust_config,
-                "emission": {"type": emission_type, "*": FIXED},
-            }
+        # Split dust_config into attenuation and emission parts
+        dust_attenuation = {k: v for k, v in dust_config.items() if k != "emission"}
+        if "emission" in dust_config:
+            dust_emission = dust_config["emission"]
+        else:
+            dust_emission = {"type": emission_type, "*": FIXED}
 
     if redshift_dist is None:
         redshift_dist = Fixed(0.05)
@@ -120,7 +120,8 @@ def assert_precompute_matches_exact(
         observation=obs,
         redshift=redshift_dist,
         approx=None,
-        dust=dust_config,
+        dust_attenuation=dust_attenuation,
+        dust_emission=dust_emission,
         **groups,
     )
 
@@ -130,7 +131,8 @@ def assert_precompute_matches_exact(
         observation=obs,
         redshift=redshift_dist,
         approx=WavePrecomp(),
-        dust=dust_config,
+        dust_attenuation=dust_attenuation,
+        dust_emission=dust_emission,
         **groups,
     )
 
@@ -146,15 +148,17 @@ def assert_precompute_matches_exact(
     # Band dominance check: emission must contribute >5% to at least one band.
     # ──────────────────────────────────────────────────────────────────────────
     # Build a reference (no emission) to measure dominance against
-    dust_config_no_emission = {"law": "power_law", **dust_config}
-    dust_config_no_emission.pop("emission", None)
+    dust_attenuation_no_emission = {k: v for k, v in dust_attenuation.items() if k != "emission"}
+    if "law" not in dust_attenuation_no_emission:
+        dust_attenuation_no_emission["law"] = "power_law"
 
     ref_model = SEDModel.build(
         ssp_data=ssp_data,
         observation=obs,
         redshift=redshift_dist,
         approx=None,
-        dust=dust_config_no_emission,
+        dust_attenuation=dust_attenuation_no_emission,
+        dust_emission={"type": "none"},
         **groups,
     )
     pe_ref = np.asarray(ref_model.predict_photometry(params_dict))

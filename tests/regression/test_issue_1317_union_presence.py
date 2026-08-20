@@ -97,7 +97,11 @@ class TestIssue1317UnionPresence:
                 ssp_data=ssp,
                 observation=obs_2band,
                 sfh={"type": "dpl", "*": FIXED, "tau_gyr": Fixed(10.0)},
-                dust={"type": "single_component", "law": "calzetti", "tau_v": Fixed(0.3)},
+                dust_attenuation={
+                    "type": "single_component",
+                    "law": "calzetti",
+                    "tau_v": Fixed(0.3),
+                },
                 redshift=Fixed(0.1),
                 approx=WavePrecomp(catalog_z_range=(0.0, 1.0)),  # For catalog fits
             )
@@ -139,7 +143,11 @@ class TestIssue1317UnionPresence:
                 ssp_data=ssp,
                 observation=obs_3band,
                 sfh={"type": "dpl", "*": FIXED, "tau_gyr": Fixed(10.0)},
-                dust={"type": "single_component", "law": "calzetti", "tau_v": Fixed(0.3)},
+                dust_attenuation={
+                    "type": "single_component",
+                    "law": "calzetti",
+                    "tau_v": Fixed(0.3),
+                },
                 redshift=Fixed(0.1),
                 approx=WavePrecomp(catalog_z_range=(0.0, 1.0)),  # For catalog fits
             )
@@ -313,7 +321,12 @@ class TestIssue1317UnionPresence:
             ssp_data=ssp,
             observation=obs,
             sfh={"type": "dpl", "all_params": FREE},
-            dust={"law": "power_law", "type": "two_component", "all_params": FIXED, "tau_bc": 0.5},
+            dust_attenuation={
+                "law": "power_law",
+                "type": "two_component",
+                "all_params": FIXED,
+                "tau_bc": 0.5,
+            },
             neb={"type": "none"},
             redshift=Uniform(0.1, 1.0),
         )
