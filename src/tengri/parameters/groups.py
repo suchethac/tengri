@@ -1893,6 +1893,16 @@ def _translate_structural(groups: dict) -> dict:
         # loudly and point at the consistent dict grammar rather than guessing.
         if group_name in _GATE_SUGGESTED_TYPE and isinstance(group_dict, bool):
             suggested = _GATE_SUGGESTED_TYPE[group_name]
+            if group_name == "radio":
+                # Radio uses the composable form, not the legacy type form
+                sf_spec = "{'type': 'bell2003'}"
+                agn_spec = "{'type': 'powerlaw'}"
+                raise ValueError(
+                    f"{group_name}={group_dict!r} is not a valid declaration — declare "
+                    f"radio with the composable surface using 'sf' and 'agn' keys: "
+                    f"radio={{'sf': {sf_spec}, 'agn': {agn_spec}}} "
+                    f"to enable (add per-param priors), or omit to disable."
+                )
             raise ValueError(
                 f"{group_name}={group_dict!r} is not a valid declaration — declare "
                 f"{group_name} like every other component, with a dict selecting the "
@@ -2701,9 +2711,9 @@ def _translate_radio(radio_dict: dict, result: dict) -> None:
             )
         else:  # radio_type == 'none'
             raise ValueError(
-                f"radio legacy type form is retired. "
-                f"radio={{'type': 'none'}} → use the composable form with both 'none': "
-                f"radio={{'sf': {{'type': 'none'}}, 'agn': {{'type': 'none'}}}}"
+                "radio legacy type form is retired. "
+                "radio={'type': 'none'} → use the composable form with both 'none': "
+                "radio={'sf': {'type': 'none'}, 'agn': {'type': 'none'}}"
             )
 
     # New composable form: extract SF and AGN sub-blocks

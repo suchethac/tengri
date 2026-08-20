@@ -93,7 +93,7 @@ RUNS = [
     (
         "+ radio",
         "#3377cc",
-        dict(dust=DUST_ON, radio={"type": "condon92", "all_params": tengri.FIXED}),
+        dict(dust=DUST_ON, radio={"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}, "all_params": tengri.FIXED}),
     ),
     (
         "+ X-ray (XRBs)",

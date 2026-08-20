@@ -438,7 +438,7 @@ def test_agn_panchromatic_free_params_all_move_predict(real_ssp_only):
                 "*": FIXED,
             },
             agn=agn,
-            radio={"type": "condon92"},
+            radio={"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}},
             xray={"type": "simple"},
             redshift=Fixed(0.05),
         )

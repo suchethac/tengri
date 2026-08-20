@@ -68,7 +68,7 @@ model = tengri.SEDModel.build(
         "log_lbol": tengri.Uniform(8.0, 14.0),
         "lum_ratio": 1.0,
     },
-    radio={"type": "condon92", "all_params": tengri.FIXED},
+    radio={"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}, "all_params": tengri.FIXED},
     redshift=tengri.Fixed(0.05),
 )
 baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))

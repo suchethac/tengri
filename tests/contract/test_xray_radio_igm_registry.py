@@ -151,7 +151,10 @@ class TestRadioRegistry:
             _check_entry_shape(row, expected_kind="radio_model")
 
     def test_parse_groups_accepts_condon92(self):
-        params = parse_groups(radio={"type": "condon92"}, redshift=Fixed(0.1))
+        params = parse_groups(
+            radio={"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}},
+            redshift=Fixed(0.1),
+        )
         assert params.radio is True
 
     def test_parse_groups_rejects_unknown(self):

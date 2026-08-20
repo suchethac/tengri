@@ -5,11 +5,9 @@ An error message is the one piece of documentation a user is *guaranteed* to
 read, because they only see it when already stuck. When its suggested fix also
 raises, the user is bounced from one error to another with nothing to try next.
 
-That shipped: mixing the legacy ``radio={'type': ...}`` key with the ``sf`` /
-``agn`` sub-blocks raised a message recommending ``radio={'type': 'bell2003'}``,
-and the very next validator rejected it — ``bell2003`` is an ``sf`` variant,
-never a legacy ``type``. The only accepted legacy types are ``condon92`` and
-``none``.
+The legacy ``radio={'type': ...}`` form is now retired (PR6). Error messages
+for the legacy form suggest the composable ``radio={'sf': {...}, 'agn': {...}}``
+form, which must be accepted by the grammar.
 
 The guard is deliberately general: it pulls every ``group={...}`` snippet out of
 the raised message and feeds it back through :func:`parse_groups`. Anything the
@@ -87,10 +85,6 @@ def _dict_snippets(message: str) -> list[tuple[str, dict]]:
 
 # Each entry provokes a grammar error that offers recovery advice.
 TRIGGERS = [
-    pytest.param(
-        {"radio": {"type": "condon92", "sf": {"type": "bell2003"}}},
-        id="radio-mixes-legacy-type-with-subblocks",
-    ),
     pytest.param({"radio": True}, id="radio-bool-gate-form"),
     pytest.param({"xray": True}, id="xray-bool-gate-form"),
     pytest.param({"shock": True}, id="shock-bool-gate-form"),

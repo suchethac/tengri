@@ -42,7 +42,7 @@ class TestRadioGrammarParsing:
         """Legacy radio={'type': X} form is retired (PR6)."""
         # Legacy 'type' form predates the SF/AGN split and is no longer accepted.
         # Users must use the composable surface with sf/agn axes.
-        with pytest.raises(ValueError, match="legacy.*retired"):
+        with pytest.raises(ValueError, match=r"legacy.*retired"):
             parse_groups(
                 sfh={"type": "dpl", "*": FIXED},
                 radio={"type": "condon92"},
@@ -50,7 +50,7 @@ class TestRadioGrammarParsing:
 
     def test_legacy_type_none_form_retired(self):
         """Legacy radio={'type': 'none'} form is retired (PR6)."""
-        with pytest.raises(ValueError, match="legacy.*retired"):
+        with pytest.raises(ValueError, match=r"legacy.*retired"):
             parse_groups(
                 sfh={"type": "dpl", "*": FIXED},
                 radio={"type": "none"},
@@ -335,7 +335,7 @@ class TestRadioLegacyTypeRetirement:
 
     def test_legacy_condon92_type_raises_with_composable_equivalent(self):
         """radio={'type': 'condon92'} raises, showing composable form."""
-        with pytest.raises(ValueError, match="legacy.*retired"):
+        with pytest.raises(ValueError, match=r"legacy.*retired"):
             parse_groups(
                 sfh={"type": "dpl", "*": FIXED},
                 radio={"type": "condon92"},
@@ -343,7 +343,7 @@ class TestRadioLegacyTypeRetirement:
 
     def test_legacy_none_type_raises(self):
         """radio={'type': 'none'} raises (use radio={'sf': None} instead)."""
-        with pytest.raises(ValueError, match="legacy.*retired"):
+        with pytest.raises(ValueError, match=r"legacy.*retired"):
             parse_groups(
                 sfh={"type": "dpl", "*": FIXED},
                 radio={"type": "none"},
@@ -351,7 +351,7 @@ class TestRadioLegacyTypeRetirement:
 
     def test_legacy_radio_dpl_type_raises(self):
         """radio={'type': 'radio_dpl'} raises."""
-        with pytest.raises(ValueError, match="legacy.*retired"):
+        with pytest.raises(ValueError, match=r"legacy.*retired"):
             parse_groups(
                 sfh={"type": "dpl", "*": FIXED},
                 radio={"type": "radio_dpl"},

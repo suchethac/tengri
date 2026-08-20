@@ -418,7 +418,21 @@ def _usage_hint(name: str, kind: str) -> str:
     if kind == "xray_model":
         return f"SEDModel.build(..., xray={{'type': '{name}'}})"
     if kind == "radio_model":
-        return f"SEDModel.build(..., radio={{'type': '{name}'}})"
+        from tengri.parameters.groups import _legacy_radio_type_to_blocks
+
+        if name == "none":
+            spec = "{'sf': {'type': 'none'}, 'agn': {'type': 'none'}}"
+            return f"SEDModel.build(..., radio={spec})"
+        elif name == "condon92":
+            spec = "{'sf': {'type': 'bell2003'}, 'agn': {'type': 'powerlaw'}}"
+            return f"SEDModel.build(..., radio={spec})"
+        else:
+            sf_variant, agn_variant = _legacy_radio_type_to_blocks(name)
+            return (
+                f"SEDModel.build(..., radio={{"
+                f"'sf': {{'type': '{sf_variant}'}}, "
+                f"'agn': {{'type': '{agn_variant}'}}}})"
+            )
     if kind == "shock_model":
         return f"SEDModel.build(..., shock={{'type': '{name}'}})"
     if kind == "metallicity_mode":

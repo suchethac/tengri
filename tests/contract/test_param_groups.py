@@ -163,7 +163,7 @@ class TestEquivalence:
             },
             neb={"type": "cue", "*": FIXED},
             igm={"type": "madau"},
-            radio={"type": "condon92"},
+            radio={"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}},
             xray={"type": "simple"},
             redshift=Uniform(0.01, 10.0),
         )
@@ -342,9 +342,9 @@ class TestTypeMapping:
         assert "radio_q_ir" in params.all_params
 
     def test_radio_none_or_absent(self):
-        """radio={'type': 'none'} or absent radio should set radio=False."""
+        """Composable radio with both 'none' or absent should set radio=False."""
         params1 = parse_groups(
-            radio={"type": "none"},
+            radio={"sf": {"type": "none"}, "agn": {"type": "none"}},
             redshift=Fixed(0.1),
         )
         assert params1.radio is False

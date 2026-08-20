@@ -553,7 +553,10 @@ class TestUniversalKeyValidator:
             ),
             ("neb", {"type": "none", "phantom_neb_key": 3}),
             ("igm", {"type": "madau", "typo_igm_key": 1}),
-            ("radio", {"sf": {"type": "none"}, "synth_radio_key": 1}),  # composable form, not legacy
+            (
+                "radio",
+                {"sf": {"type": "none"}, "synth_radio_key": 1},
+            ),  # composable, not legacy
             ("xray", {"type": "none", "typo_xray_key": 1}),
         ],
     )

@@ -42,7 +42,13 @@ def _build(ssp, **extra):
     "extra, expected",
     [
         ({"neb": {"type": "cue", "*": FIXED}}, "cue"),
-        ({"neb": {"type": "none"}, "radio": {"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}}}, "condon1992"),
+        (
+            {
+                "neb": {"type": "none"},
+                "radio": {"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}},
+            },
+            "condon1992",
+        ),
         ({"neb": {"type": "none"}, "shock": {"type": "mappings"}}, "mappings"),
         (
             {
