@@ -298,8 +298,8 @@ fig.savefig(FIG_DIR / "02_anatomy_panchromatic.png", dpi=300, bbox_inches="tight
 base = recipes.star_forming_photometry()
 # Pin the model down to defaults, then sweep one parameter at a time.
 base["sfh"]["all_params"] = FIXED
-base["dust"]["all_params"] = FIXED
-base["dust"]["emission"]["all_params"] = FIXED
+base["dust_attenuation"]["all_params"] = FIXED
+base["dust_emission"]["all_params"] = FIXED
 base["redshift"] = Fixed(0.5)
 
 
@@ -339,7 +339,7 @@ ax = axes[0, 1]
 cmap = plt.colormaps["viridis"]
 tau_grid = [0.0, 0.5, 1.0, 2.0, 3.0]
 cfg = deepcopy(base)
-cfg["dust"]["tau_bc"] = Uniform(0.0, 3.0)  # tau_bc is now a free parameter
+cfg["dust_attenuation"]["tau_bc"] = Uniform(0.0, 3.0)  # tau_bc is now a free parameter
 m = SEDModel.build(ssp_data=ssp, observation=obs, **cfg)
 p = m.spec.sample(jax.random.PRNGKey(0))
 for tau, col in zip(tau_grid, cmap(np.linspace(0.15, 0.85, len(tau_grid)))):
@@ -411,7 +411,7 @@ fig.savefig(FIG_DIR / "02_anatomy_sweeps.png", dpi=300, bbox_inches="tight")
 
 # %%
 groups = model.spec.to_groups()
-groups["dust"]["tau_bc"] = Fixed(1.5)  # double the birth-cloud opacity
+groups["dust_attenuation"]["tau_bc"] = Fixed(1.5)  # double the birth-cloud opacity
 model_edited = SEDModel.build(ssp_data=ssp, observation=obs, **groups)
 print(model_edited.summary())
 

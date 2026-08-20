@@ -240,15 +240,15 @@ print()
 print("Dust Model Tour")
 print("─" * 70)
 
-# two_component with nested emission using a factory
+# Attenuation and IR emission are two peer groups, each with its own factory.
 groups_dust_tour = {
     "sfh": {"type": "tsnorm", "all_params": FIXED},
-    "dust": builders.dust.two_component(
+    "dust_attenuation": builders.dust.two_component(
         law="calzetti",
         defaults=FREE,
         tau_bc=Uniform(0.0, 2.0),
-        emission=builders.dust.emission.dale2014(defaults=FIXED),
     ),
+    "dust_emission": builders.dust.emission.dale2014(defaults=FIXED),
     "neb": {"type": "cue", "all_params": FIXED},
     "redshift": Fixed(0.05),
 }
