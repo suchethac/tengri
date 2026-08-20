@@ -88,7 +88,18 @@ class TestCompileSignatureInvariants:
         sig = fitter.compile_signature()
 
         # sig is a tuple of (model_sig, fitter_sig)
-        _, fitter_sig = sig
+        model_sig, fitter_sig = sig
+
+        # model_sig is SEDModel.compile_signature()'s tuple; its per-field
+        # ledger lives in that method's own comments. Pinned here so a field
+        # cannot vanish silently — removing one is how #1973's collision
+        # shipped. Was 64 before #1973 added ssp_flux_id (grid CONTENT, not
+        # just shape/lgmet).
+        assert len(model_sig) == 65, (
+            f"model_sig field count changed from 65 to {len(model_sig)}. "
+            "If intentional, update this assertion and the ledger in "
+            "SEDModel.compile_signature."
+        )
 
         # fitter_sig should have exactly 10 fields:
         # 1. data_type

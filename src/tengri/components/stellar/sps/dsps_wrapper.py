@@ -15,10 +15,13 @@ See 3-forward-model.tex, Eq. 3.1–3.5 for the mathematical formulation and
 Appendix A.1 for metallicity marginalization and precomputation schemes.
 """
 
+import hashlib
+import weakref
 from typing import NamedTuple
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 from jax import dtypes as jax_dtypes
 
 
@@ -200,6 +203,59 @@ def _sspdata_unflatten(aux, children):
 
 
 jax.tree_util.register_pytree_node(SSPData, _sspdata_flatten, _sspdata_unflatten)
+
+
+#: Content digests keyed by ``id(ssp_flux)``, each entry validated by a
+#: weakref to the array it was computed from. SSPData is a NamedTuple, so
+#: nothing can be cached on the instance (tuples reject ``__setattr__`` and
+#: weakrefs); jax/numpy arrays support weakrefs, so the flux array itself is
+#: the anchor. A recycled ``id`` after garbage collection fails the identity
+#: check and recomputes — it can never return another grid's digest.
+_SSP_CONTENT_HASH_CACHE: dict[int, tuple[object, int]] = {}
+
+
+def get_ssp_content_hash(ssp_data: SSPData) -> int:
+    """Return a content digest of ``ssp_flux`` for cache keying (#1973).
+
+    Two SSPData instances with identical shape and ``ssp_lgmet`` but
+    different flux must produce different values, so the compile signature
+    can distinguish SSP libraries — the collision this closes silently ran
+    one grid's physics for another (+0.9962 dex on ``log_total_mass`` by
+    fit order).
+
+    Returns
+    -------
+    int
+        blake2b digest (8 bytes, as int) of the flux buffer. Deterministic
+        across processes — unlike ``hash(bytes)``, which PYTHONHASHSEED
+        salts per process (the #1032 nondeterminism class).
+
+    Notes
+    -----
+    **Cost**: one digest per distinct flux array object — ~30 ms for the
+    default 66.9 MB grid — then O(1) via the module cache above. Two
+    SSPData objects sharing one flux array share the cache entry; two
+    objects loaded separately with identical content recompute but return
+    EQUAL digests (content-based), so catalog fits that reload an SSP file
+    never over-key.
+    """
+    arr = ssp_data.ssp_flux
+    key = id(arr)
+    hit = _SSP_CONTENT_HASH_CACHE.get(key)
+    if hit is not None:
+        ref, digest = hit
+        if ref() is arr:
+            return digest
+    # Drop entries whose arrays were garbage-collected so the cache stays
+    # bounded by the number of LIVE grids (typically one or two).
+    dead = [k for k, (ref, _) in _SSP_CONTENT_HASH_CACHE.items() if ref() is None]
+    for k in dead:
+        del _SSP_CONTENT_HASH_CACHE[k]
+
+    buf = np.asarray(arr)  # one device transfer, once per grid
+    digest = int.from_bytes(hashlib.blake2b(buf.tobytes(), digest_size=8).digest(), "big")
+    _SSP_CONTENT_HASH_CACHE[key] = (weakref.ref(arr), digest)
+    return digest
 
 
 _LOAD_SSP_PRESETS: dict[str, str] = {
