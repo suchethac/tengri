@@ -113,8 +113,17 @@ class TestCompileSignatureInvariants:
         # baked into the loss closure via fitter._fixed_values, so two fits
         # differing only by override must compile distinct losses — else fit #2
         # silently reuses fit #1's baked redshift. None when no override.
-        assert len(fitter_sig) == 15, (
-            f"fitter_sig field count changed from 15 to {len(fitter_sig)}. "
+        # 16. free-parameter prior identity: _primals_to_params calls
+        # dist.unstandardize(xi), which reads the distribution's Python floats
+        # at trace time, so the priors are baked constants. Without this entry
+        # two models differing only in a prior's bounds share one engine and
+        # fit #2's latent is decoded through fit #1's interval — a shift of
+        # order the prior width (measured 1.53 dex on log_total_mass). Free
+        # NAMES (field 5) do not cover it: changing Uniform(9.6, 11.1) to
+        # Uniform(7, 13) alters no name, shape, dtype or control flow. See
+        # tests/regression/bug/test_prior_bounds_key_the_engine_cache.py.
+        assert len(fitter_sig) == 16, (
+            f"fitter_sig field count changed from 16 to {len(fitter_sig)}. "
             "If intentional, update this assertion and the docstring."
         )
 
