@@ -23,6 +23,7 @@ import warnings
 import pytest
 
 import tengri
+from tengri import Fixed
 from tengri.components.stellar.sfh.registry import SFH_REGISTRY
 
 pytestmark = pytest.mark.contract
@@ -84,7 +85,7 @@ def test_every_sfh_type_has_describable_parameters():
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             try:
-                spec = tengri.parse_groups(sfh={"type": sfh_type})
+                spec = tengri.parse_groups(sfh={"type": sfh_type}, redshift=Fixed(0.1))
             except Exception:
                 # Some types need extra structural config to build standalone;
                 # they are covered via the recipe sweep above.

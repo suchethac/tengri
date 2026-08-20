@@ -32,7 +32,7 @@ proves the *next* key cannot be added without one.
 import numpy as np
 import pytest
 
-from tengri import FIXED
+from tengri import FIXED, Fixed
 from tengri.parameters.groups import (
     _GROUP_STRUCTURAL_KEYS,
     _STRUCTURAL_ROUNDTRIP,
@@ -172,6 +172,17 @@ CASES = [
 ]
 
 
+def _with_redshift(kwargs: dict) -> dict:
+    """Supply the now-required redshift without overriding a case that sets one.
+
+    ``redshift`` FIRST so a case carrying its own wins. The reverse order would
+    silently replace the value under test with 0.1 -- and a case whose subject
+    IS the redshift would then pass while testing nothing. Splat position is the
+    whole mechanism here, not a style choice.
+    """
+    return {"redshift": Fixed(0.1), **kwargs}
+
+
 def _same(a, b) -> bool:
     """Value equality that tolerates array-valued settings (bin_edges_gyr)."""
     if isinstance(a, (list, tuple)) or hasattr(a, "shape"):
@@ -187,14 +198,14 @@ class TestStructuralSettingsSurviveRoundtrip:
         If the grammar stops routing a key to this attribute, the round-trip
         test below would compare ``default == default`` and pass vacuously.
         """
-        spec = parse_groups(**kwargs)
+        spec = parse_groups(**_with_redshift(kwargs))
         assert _same(getattr(spec, attr, None), expected), (
             f"{case_id}: parse_groups did not store the value — the round-trip "
             f"assertion below would be vacuous"
         )
 
     def test_setting_survives_to_groups(self, case_id, kwargs, attr, expected):
-        spec = parse_groups(**kwargs)
+        spec = parse_groups(**_with_redshift(kwargs))
         rebuilt = parse_groups(**spec.to_groups())
         assert _same(getattr(rebuilt, attr, None), expected), (
             f"{case_id}: to_groups() dropped the setting — it silently reverted "
@@ -213,6 +224,7 @@ def test_patchy_igm_reparses_instead_of_raising():
     spec = parse_groups(
         sfh={"type": "dpl", "all_params": FIXED},
         igm={"type": "inoue", "patchy": True},
+        redshift=Fixed(0.1),
     )
     groups = spec.to_groups()
     assert groups["igm"].get("patchy") is True, (
@@ -227,7 +239,9 @@ def test_default_spec_grows_no_spurious_groups():
     An always-emit rule would force ``foreground={...}`` and ``met={...}``
     onto every spec, which breaks call sites that diff to_groups() output.
     """
-    groups = parse_groups(sfh={"type": "dpl", "all_params": FIXED}).to_groups()
+    groups = parse_groups(
+        sfh={"type": "dpl", "all_params": FIXED}, redshift=Fixed(0.1)
+    ).to_groups()
     assert "foreground" not in groups
     assert "age_kernel" not in groups.get("sfh", {})
     assert "met_mode" not in groups.get("stellar", {})
@@ -292,7 +306,7 @@ def test_roundtrip_table_targets_real_attributes():
     the default forever, so the key would silently never emit — the same
     failure the table exists to prevent, one layer down.
     """
-    spec = parse_groups(sfh={"type": "dpl", "all_params": FIXED})
+    spec = parse_groups(sfh={"type": "dpl", "all_params": FIXED}, redshift=Fixed(0.1))
     unknown = [
         f"{group}.{entry.key} -> {entry.attr}"
         for group, entries in _STRUCTURAL_ROUNDTRIP.items()

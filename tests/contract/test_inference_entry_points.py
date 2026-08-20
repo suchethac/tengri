@@ -22,6 +22,7 @@ import warnings
 
 import pytest
 
+from tengri import Fixed
 from tengri.forward.forward_model import ForwardModel
 from tengri.forward.sed_model import SEDModel
 from tengri.inference.fitter import _maybe_warn_legacy_sedmodel
@@ -148,6 +149,7 @@ def test_legacy_warn_fires_on_bare_sedmodel(synthetic_ssp, simple_observation) -
         sfh={"type": "dpl", "*": FIXED},
         dust={"type": "two_component", "law": "calzetti", "*": FIXED},
         neb={"type": "none"},
+        redshift=Fixed(0.1),
     )
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")

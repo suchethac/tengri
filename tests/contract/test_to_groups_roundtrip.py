@@ -400,8 +400,17 @@ class TestToGroupsStructuralSettings:
 
         assert result["neb"]["type"] == "cue"
 
-    def test_to_groups_preserves_apply_igm(self):
-        """apply_igm setting is preserved."""
+    def test_to_groups_preserves_igm_being_off(self):
+        """The off state survives the round-trip -- through the group, not a flag.
+
+        This used to assert ``result["apply_igm"] is False``. The emitter did
+        emit that key, and it is now the one key its own parser refuses, so
+        every round-trip raised on the way back in. Activation lives on the igm
+        group, so the durable assertion is that reparsing the emitted dict
+        gives back a model with IGM off -- which holds whether the group comes
+        back as ``type: "none"`` or is omitted entirely, those now meaning the
+        same thing.
+        """
         original = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
             redshift=Fixed(0.1),
@@ -409,7 +418,8 @@ class TestToGroupsStructuralSettings:
         )
         result = original.to_groups()
 
-        assert result["apply_igm"] is False
+        assert "apply_igm" not in result, "the retired switch must not be emitted"
+        assert parse_groups(**result).apply_igm is False
 
     def test_to_groups_preserves_sfh_composition(self):
         """SFH composition list is preserved."""

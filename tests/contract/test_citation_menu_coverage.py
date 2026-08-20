@@ -31,6 +31,7 @@ from __future__ import annotations
 import pytest
 
 import tengri
+from tengri import Fixed
 from tengri.parameters.groups import parse_groups
 from tengri.registry import _menu_listers, list_shock_models
 
@@ -64,6 +65,7 @@ def test_radio_slots_are_cited() -> None:
     spec = parse_groups(
         sfh={"type": "dpl"},
         radio={"sf": {"type": "bell2003"}, "agn": {"type": "dpl"}},
+        redshift=Fixed(0.1),
     )
     assert "Bell 2003" in (_citation_for(spec, "radio_sf") or ""), (
         "radio.sf=bell2003 was requested but Bell 2003 is not cited"
@@ -75,14 +77,14 @@ def test_radio_slots_are_cited() -> None:
 
 def test_shock_is_cited() -> None:
     """An enabled shock component must cite MAPPINGS V."""
-    spec = parse_groups(sfh={"type": "dpl"}, shock={"type": "mappings"})
+    spec = parse_groups(sfh={"type": "dpl"}, shock={"type": "mappings"}, redshift=Fixed(0.1))
     citation = _citation_for(spec, "shock") or ""
     assert "Allen" in citation, f"shock enabled but MAPPINGS V not cited (got {citation!r})"
 
 
 def test_igm_is_cited() -> None:
     """A requested IGM model must be cited."""
-    spec = parse_groups(sfh={"type": "dpl"}, igm={"type": "madau"})
+    spec = parse_groups(sfh={"type": "dpl"}, igm={"type": "madau"}, redshift=Fixed(0.1))
     citation = _citation_for(spec, "igm") or ""
     assert "Madau" in citation, f"igm=madau requested but not cited (got {citation!r})"
 
@@ -93,7 +95,7 @@ def test_igm_explicit_is_cited() -> None:
     After retiring apply_igm, IGM is OFF by default unless explicitly
     enabled via igm={'type': ...}. When enabled, citations are owed.
     """
-    spec = parse_groups(sfh={"type": "dpl"}, igm={"type": "inoue"})
+    spec = parse_groups(sfh={"type": "dpl"}, igm={"type": "inoue"}, redshift=Fixed(0.1))
     assert getattr(spec, "apply_igm", False), "igm={'type': 'inoue'} should enable IGM"
     citation = _citation_for(spec, "igm") or ""
     assert "Inoue" in citation, f"IGM enabled but not cited (got {citation!r})"
@@ -101,7 +103,7 @@ def test_igm_explicit_is_cited() -> None:
 
 def test_igm_disabled_not_cited() -> None:
     """When IGM is disabled, no IGM paper is cited."""
-    spec = parse_groups(sfh={"type": "dpl"})  # No igm dict -> IGM disabled
+    spec = parse_groups(sfh={"type": "dpl"}, redshift=Fixed(0.1))  # No igm dict -> IGM disabled
     assert not getattr(spec, "apply_igm", False), "default should have IGM disabled"
     citation = _citation_for(spec, "igm") or ""
     assert not citation or "Inoue" not in citation, (
@@ -111,7 +113,7 @@ def test_igm_disabled_not_cited() -> None:
 
 def test_xray_is_cited() -> None:
     """A requested X-ray model must be cited."""
-    spec = parse_groups(sfh={"type": "dpl"}, xray={"type": "yang20"})
+    spec = parse_groups(sfh={"type": "dpl"}, xray={"type": "yang20"}, redshift=Fixed(0.1))
     citation = _citation_for(spec, "xray") or ""
     assert "Yang" in citation, f"xray=yang20 requested but not cited (got {citation!r})"
 
@@ -126,6 +128,7 @@ def test_dust_model_is_cited() -> None:
     spec = parse_groups(
         sfh={"type": "dpl"},
         dust={"type": "two_component", "law": "calzetti"},
+        redshift=Fixed(0.1),
     )
     citation = _citation_for(spec, "dust") or ""
     assert "Charlot" in citation, (
@@ -145,7 +148,11 @@ def test_disabled_components_are_not_cited() -> None:
     defaults while their gate is ``False``, so a gate-blind walk would
     attach Bell 2003 and Yang+2020 to a plain stellar+dust fit.
     """
-    spec = parse_groups(sfh={"type": "dpl"}, dust={"law": "power_law", "type": "two_component"})
+    spec = parse_groups(
+        sfh={"type": "dpl"},
+        dust={"law": "power_law", "type": "two_component"},
+        redshift=Fixed(0.1),
+    )
     # Premise: the defaults really are non-None while the gates are off.
     assert spec.radio is False
     assert spec.shock is False

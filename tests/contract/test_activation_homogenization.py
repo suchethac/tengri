@@ -85,7 +85,7 @@ class TestRedshiftIsRequired:
 
     def test_introspection_mode_needs_no_redshift(self):
         """Registry introspection has no call site to require it of."""
-        spec = parse_groups(sfh={"type": "dpl"}, _allow_empty_wildcard=True)
+        spec = parse_groups(sfh={"type": "dpl"}, _allow_empty_wildcard=True, redshift=Fixed(0.1))
         assert "redshift" in spec.valid_param_names
 
     def test_a_group_wildcard_does_not_free_redshift(self):

@@ -45,6 +45,7 @@ class TestRadioGrammarParsing:
         params = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
             radio={"type": "condon92"},
+            redshift=Fixed(0.1),
         )
         assert params.radio is True
         assert params.radio_sfr_mode == "bell2003"
@@ -55,6 +56,7 @@ class TestRadioGrammarParsing:
         params = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
             radio={"type": "none"},
+            redshift=Fixed(0.1),
         )
         assert params.radio is False
 
@@ -63,6 +65,7 @@ class TestRadioGrammarParsing:
         params = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
             radio={"sf": {"type": "delvecchio2021"}},
+            redshift=Fixed(0.1),
         )
         assert params.radio is True
         assert params.radio_sfr_mode == "delvecchio2021"
@@ -73,6 +76,7 @@ class TestRadioGrammarParsing:
         params = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
             radio={"agn": {"type": "dpl"}},
+            redshift=Fixed(0.1),
         )
         assert params.radio is True
         assert params.radio_sfr_mode == "bell2003"  # default
@@ -86,6 +90,7 @@ class TestRadioGrammarParsing:
                 "sf": {"type": "mccheyne2022"},
                 "agn": {"type": "dpl"},
             },
+            redshift=Fixed(0.1),
         )
         assert params.radio is True
         assert params.radio_sfr_mode == "mccheyne2022"
@@ -99,6 +104,7 @@ class TestRadioGrammarParsing:
                 "sf": {"type": "none"},
                 "agn": {"type": "powerlaw"},
             },
+            redshift=Fixed(0.1),
         )
         assert params.radio is True  # AGN is enabled
         assert params.radio_sfr_mode == "none"
@@ -112,6 +118,7 @@ class TestRadioGrammarParsing:
                 "sf": {"type": "bell2003"},
                 "agn": {"type": "none"},
             },
+            redshift=Fixed(0.1),
         )
         assert params.radio is True  # SF is enabled
         assert params.radio_sfr_mode == "bell2003"
@@ -125,6 +132,7 @@ class TestRadioGrammarParsing:
                 "sf": {"type": "none"},
                 "agn": {"type": "none"},
             },
+            redshift=Fixed(0.1),
         )
         # Both sides 'none' → radio off (the sf/agn mode values are moot once off).
         assert params.radio is False
@@ -138,6 +146,7 @@ class TestRadioGrammarParsing:
                     "type": "bell2003",
                     "sf": {"type": "delvecchio2021"},
                 },
+                redshift=Fixed(0.1),
             )
 
     def test_invalid_sf_variant_raises(self):
@@ -146,6 +155,7 @@ class TestRadioGrammarParsing:
             parse_groups(
                 sfh={"type": "dpl", "*": FIXED},
                 radio={"sf": {"type": "invalid_sf"}},
+                redshift=Fixed(0.1),
             )
 
     def test_invalid_agn_variant_raises(self):
@@ -154,6 +164,7 @@ class TestRadioGrammarParsing:
             parse_groups(
                 sfh={"type": "dpl", "*": FIXED},
                 radio={"agn": {"type": "invalid_agn"}},
+                redshift=Fixed(0.1),
             )
 
     def test_sf_dict_not_dict_raises(self):
@@ -161,7 +172,8 @@ class TestRadioGrammarParsing:
         with pytest.raises(TypeError, match="radio\\['sf'\\] must be a dict"):
             parse_groups(
                 sfh={"type": "dpl", "*": FIXED},
-                radio={"sf": "bell2003"},  # string, not dict
+                radio={"sf": "bell2003"},
+                redshift=Fixed(0.1),  # string, not dict
             )
 
     def test_agn_dict_not_dict_raises(self):
@@ -169,7 +181,8 @@ class TestRadioGrammarParsing:
         with pytest.raises(TypeError, match="radio\\['agn'\\] must be a dict"):
             parse_groups(
                 sfh={"type": "dpl", "*": FIXED},
-                radio={"agn": "powerlaw"},  # string, not dict
+                radio={"agn": "powerlaw"},
+                redshift=Fixed(0.1),  # string, not dict
             )
 
 

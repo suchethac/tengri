@@ -35,7 +35,7 @@ from __future__ import annotations
 
 import pytest
 
-from tengri import FIXED, SEDModel
+from tengri import FIXED, Fixed, SEDModel
 from tengri.config.exceptions import ConfigError
 
 pytestmark = pytest.mark.regression_bug
@@ -66,6 +66,7 @@ class TestDale2014RadioDoubleCount1970:
                     "emission": {"type": "dale2014"},
                 },
                 radio={"sf": {"type": "bell2003"}},
+                redshift=Fixed(0.1),
             )
 
     def test_dale2014_sf_radio_delvecchio_raises_configerror(
@@ -89,6 +90,7 @@ class TestDale2014RadioDoubleCount1970:
                     "emission": {"type": "dale2014"},
                 },
                 radio={"sf": {"type": "delvecchio2021"}},
+                redshift=Fixed(0.1),
             )
 
     def test_dale2014_agn_radio_only_builds(self, synthetic_ssp_wide, synthetic_tophat_obs):
@@ -110,6 +112,7 @@ class TestDale2014RadioDoubleCount1970:
                 "sf": {"type": "none"},
                 "agn": {"type": "powerlaw"},
             },
+            redshift=Fixed(0.1),
         )
         assert model is not None
         assert model.spec is not None
@@ -128,6 +131,7 @@ class TestDale2014RadioDoubleCount1970:
                 "law": "calzetti",
                 "emission": {"type": "dale2014"},
             },
+            redshift=Fixed(0.1),
         )
         assert model is not None
         assert model.spec is not None
@@ -148,6 +152,7 @@ class TestDale2014RadioDoubleCount1970:
                 "emission": {"type": "dale2014_cigale"},
             },
             radio={"sf": {"type": "bell2003"}},
+            redshift=Fixed(0.1),
         )
         assert model is not None
         assert model.spec is not None
@@ -175,6 +180,7 @@ class TestDale2014RadioDoubleCount1970:
                 "emission": {"type": "dale2014_cigale"},
             },
             radio={"sf": {"type": "bell2003"}},
+            redshift=Fixed(0.1),
         )
 
         params = model.spec.sample(jax.random.PRNGKey(0))

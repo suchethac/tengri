@@ -92,6 +92,7 @@ class TestProvenanceAttribution:
                     "law": "calzetti",
                     "*": FREE,
                 },
+                redshift=Fixed(0.1),
             )
 
         provenance = spec._group_provenance
@@ -123,7 +124,7 @@ class TestProvenanceAttribution:
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            spec = parse_groups(sfh={"type": "dpl", "*": FREE})
+            spec = parse_groups(sfh={"type": "dpl", "*": FREE}, redshift=Fixed(0.1))
 
         groups = spec.to_groups()
         # When there's no met block, met_* params are implicitly FIXED.

@@ -25,6 +25,7 @@ from pathlib import Path
 import pytest
 
 import tengri
+from tengri import Fixed
 
 pytestmark = pytest.mark.regression_bug
 
@@ -75,6 +76,7 @@ class TestBug361A_cb19_dispatch:
                 ssp,
                 sfh={"type": "dpl", "*": tengri.FIXED},
                 neb={"type": "cb19", "*": tengri.FIXED},
+                redshift=Fixed(0.1),
             )
         assert isinstance(m._nebular_backend, CB19Backend), (
             f"#361 Bug A: cb19 fell through to "
@@ -88,6 +90,7 @@ class TestBug361A_cb19_dispatch:
                 ssp,
                 sfh={"type": "dpl", "*": tengri.FIXED},
                 neb={"type": "cb19", "*": tengri.FIXED},
+                redshift=Fixed(0.1),
             )
         assert m.spec.nebular_mode == "cb19"
 
@@ -98,7 +101,9 @@ class TestBug361A_cb19_dispatch:
         # 'none'-equivalent path lands in BakedIn (the default-fallback case)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            m = tengri.SEDModel.build(ssp, sfh={"type": "dpl", "*": tengri.FIXED})
+            m = tengri.SEDModel.build(
+                ssp, sfh={"type": "dpl", "*": tengri.FIXED}, redshift=Fixed(0.1)
+            )
         assert isinstance(m._nebular_backend, BakedInBackend)
 
 
@@ -197,6 +202,7 @@ class TestBug361B_silent_nan_warning:
                     "tau_diff": 0.1,
                     "slope": -0.7,
                 },
+                redshift=Fixed(0.1),
             )
         pred = m.predict({"redshift": 0.05})
 
@@ -221,6 +227,7 @@ class TestBug361B_silent_nan_warning:
                 ssp,
                 sfh={"type": "dpl", "*": tengri.FIXED},
                 dust={"law": "power_law", "type": "two_component", "*": tengri.FIXED},
+                redshift=Fixed(0.1),
             )
         pred = m.predict({"redshift": 0.05})
         with warnings.catch_warnings():

@@ -133,6 +133,7 @@ def whitaker2014_z2(log_m_star: np.ndarray) -> np.ndarray:
 # Load bare-stellar SSP (required for Cue nebular backend)
 # Use explicit path to avoid loading wNE by default
 from pathlib import Path
+from tengri import Fixed
 
 repo_root = next(
     p
@@ -153,7 +154,7 @@ model = tengri.SEDModel.build(
         "tau_diff": 0.0,
         "tau_bc": 0.0,
     },
-    neb={"type": "cue", "all_params": tengri.FIXED},
+    neb={"type": "cue", "all_params": tengri.FIXED}, redshift=Fixed(0.1),
 )
 
 # Sample baseline parameters (all fixed except log_total_mass)

@@ -47,7 +47,7 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from tengri import SEDModel
+from tengri import Fixed, SEDModel
 from tengri.registry import _RegistryTable
 
 pytestmark = pytest.mark.contract
@@ -230,6 +230,7 @@ class TestRegistryComponentsEmit:
                             "law": "calzetti",
                             "emission": {"type": name},
                         },
+                        redshift=Fixed(0.1),
                     )
 
                 params = model.spec.sample(jax.random.PRNGKey(0))
@@ -263,6 +264,7 @@ class TestRegistryComponentsEmit:
                             "type": "single_component",
                             "law": name,
                         },
+                        redshift=Fixed(0.1),
                     )
 
                 params = model.spec.sample(jax.random.PRNGKey(0))
@@ -278,6 +280,7 @@ class TestRegistryComponentsEmit:
                         ssp_data=synthetic_ssp_wide,
                         observation=synthetic_tophat_obs,
                         sfh={"type": name},
+                        redshift=Fixed(0.1),
                     )
 
                 params = model.spec.sample(jax.random.PRNGKey(0))
@@ -293,6 +296,7 @@ class TestRegistryComponentsEmit:
                         observation=synthetic_tophat_obs,
                         sfh={"type": "const"},
                         neb={"type": name},
+                        redshift=Fixed(0.1),
                     )
 
                 params = model.spec.sample(jax.random.PRNGKey(0))
@@ -308,6 +312,7 @@ class TestRegistryComponentsEmit:
                         observation=synthetic_tophat_obs,
                         sfh={"type": "const"},
                         agn={"type": name},
+                        redshift=Fixed(0.1),
                     )
 
                 params = model.spec.sample(jax.random.PRNGKey(0))
@@ -323,6 +328,7 @@ class TestRegistryComponentsEmit:
                         observation=synthetic_tophat_obs,
                         sfh={"type": "const"},
                         xray={"type": name},
+                        redshift=Fixed(0.1),
                     )
 
                 params = model.spec.sample(jax.random.PRNGKey(0))
@@ -338,6 +344,7 @@ class TestRegistryComponentsEmit:
                         observation=synthetic_tophat_obs,
                         sfh={"type": "const"},
                         radio={"type": name},
+                        redshift=Fixed(0.1),
                     )
 
                 params = model.spec.sample(jax.random.PRNGKey(0))
@@ -353,6 +360,7 @@ class TestRegistryComponentsEmit:
                         observation=synthetic_tophat_obs,
                         sfh={"type": "const"},
                         igm={"type": name},
+                        redshift=Fixed(0.1),
                     )
 
                 params = model.spec.sample(jax.random.PRNGKey(0))

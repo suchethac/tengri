@@ -4332,13 +4332,14 @@ def parameters_to_groups(spec: Parameters) -> dict:
         if len(pending) > n_before:
             result[group_name] = pending
 
-    # Handle top-level parameters (redshift, apply_igm)
+    # Handle top-level settings. No `apply_igm`: the igm group carries
+    # activation on its own (``type: "none"`` when off, omitted when off and
+    # nothing else is set, which now means the same thing), and emitting the
+    # retired keyword beside it made every round-trip raise on the way back in.
+    # A round-trip that emits a key its own parser refuses is the clearest sign
+    # the second switch was redundant.
     if "redshift" in spec.all_params:
         result["redshift"] = spec.get_distribution("redshift")
-
-    if spec.apply_igm is not True:
-        # Only include if non-default (default is True)
-        result["apply_igm"] = spec.apply_igm
 
     if spec.n_grid != 256:
         # Only include if non-default

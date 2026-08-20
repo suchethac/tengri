@@ -25,7 +25,7 @@ from pathlib import Path
 import pytest
 
 import tengri
-from tengri import SEDModel
+from tengri import Fixed, SEDModel
 from tengri.components.nebular import NEBULAR_MODELS
 from tengri.components.stellar.sfh.registry import SFH_REGISTRY, UNVALIDATED_SFH_TYPES
 from tengri.parameters.groups import _NEBULAR_TYPE_HINTS
@@ -233,7 +233,9 @@ def test_prediction_page_only_references_real_model_attributes(
         "with the page it protects"
     )
 
-    model = SEDModel.build(ssp_data=synthetic_ssp, observation=simple_observation)
+    model = SEDModel.build(
+        ssp_data=synthetic_ssp, observation=simple_observation, redshift=Fixed(0.1)
+    )
     missing = sorted(
         a for a in _model_attrs_referenced(path.read_text("utf-8")) if not hasattr(model, a)
     )

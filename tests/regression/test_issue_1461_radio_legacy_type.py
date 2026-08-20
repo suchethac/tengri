@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import pytest
 
+from tengri import Fixed
 from tengri.components.radio.component import AGN_RADIO_MODELS, SF_RADIO_MODELS
 from tengri.parameters.groups import _valid_radio_types, parse_groups
 
@@ -45,7 +46,10 @@ def test_legacy_type_names_are_not_all_identical() -> None:
     accepted and every one produced ``(True, 'bell2003', 'powerlaw')``.
     """
     enabled = sorted(_valid_radio_types() - {"none"})
-    states = {name: _radio_state(parse_groups(radio={"type": name})) for name in enabled}
+    states = {
+        name: _radio_state(parse_groups(radio={"type": name}, redshift=Fixed(0.1)))
+        for name in enabled
+    }
 
     assert len(set(states.values())) > 1, (
         "every accepted radio type produced identical spec state "
@@ -62,7 +66,7 @@ def test_radio_dpl_selects_the_double_power_law() -> None:
     aging cutoff. Substituting one for the other changes the radio SED
     shape with no warning.
     """
-    spec = parse_groups(radio={"type": "radio_dpl"})
+    spec = parse_groups(radio={"type": "radio_dpl"}, redshift=Fixed(0.1))
 
     assert spec.radio is True
     assert spec.radio_agn_model == "dpl", (
@@ -79,8 +83,8 @@ def test_legacy_type_agrees_with_the_composable_form() -> None:
     name the same component through the legacy and the composable
     surface; they must land on the same spec.
     """
-    legacy = _radio_state(parse_groups(radio={"type": "radio_dpl"}))
-    composable = _radio_state(parse_groups(radio={"agn": {"type": "dpl"}}))
+    legacy = _radio_state(parse_groups(radio={"type": "radio_dpl"}, redshift=Fixed(0.1)))
+    composable = _radio_state(parse_groups(radio={"agn": {"type": "dpl"}}, redshift=Fixed(0.1)))
 
     assert legacy == composable, (
         f"legacy form gave {legacy} but the composable form gave "
@@ -96,7 +100,7 @@ def test_every_accepted_type_lands_on_a_real_model(name: str) -> None:
     registers under a name that strips to something the component config
     would reject, this fails here rather than inside a forward pass.
     """
-    spec = parse_groups(radio={"type": name})
+    spec = parse_groups(radio={"type": name}, redshift=Fixed(0.1))
 
     assert spec.radio is True, f"radio={{'type': {name!r}}} did not enable radio"
     assert spec.radio_sfr_mode in SF_RADIO_MODELS, (
@@ -120,7 +124,7 @@ def test_legacy_type_is_attributed_to_the_model_it_runs() -> None:
     """
     import tengri
 
-    spec = parse_groups(radio={"type": "radio_dpl"})
+    spec = parse_groups(radio={"type": "radio_dpl"}, redshift=Fixed(0.1))
     rows = [r for r in tengri.cite_components(spec) if str(r.get("component", "")) == "radio_agn"]
 
     assert len(rows) == 1, f"expected exactly one radio_agn citation row, got {rows}"
@@ -133,7 +137,7 @@ def test_legacy_type_is_attributed_to_the_model_it_runs() -> None:
 
 def test_none_still_disables_radio() -> None:
     """The one name whose behavior must not change."""
-    spec = parse_groups(radio={"type": "none"})
+    spec = parse_groups(radio={"type": "none"}, redshift=Fixed(0.1))
 
     assert spec.radio is False
 
@@ -145,7 +149,7 @@ def test_condon92_remains_the_default_composite() -> None:
     two shipped recipes rely on that. Pinned so the fix for the other
     names does not quietly redefine this one.
     """
-    assert _radio_state(parse_groups(radio={"type": "condon92"})) == (
+    assert _radio_state(parse_groups(radio={"type": "condon92"}, redshift=Fixed(0.1))) == (
         True,
         "bell2003",
         "powerlaw",

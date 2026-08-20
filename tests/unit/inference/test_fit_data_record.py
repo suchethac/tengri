@@ -5,7 +5,7 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from tengri import FIXED, Data, ForwardModel, SEDModel
+from tengri import FIXED, Data, Fixed, ForwardModel, SEDModel
 from tengri.inference import fitter as fitter_mod
 
 
@@ -18,6 +18,7 @@ def mock_flux(synthetic_ssp_wide, synthetic_tophat_obs):
         sfh={"type": "dpl", "all_params": FIXED},
         dust={"law": "power_law", "type": "two_component", "all_params": FIXED},
         neb={"type": "none"},
+        redshift=Fixed(0.1),
     )
     # Get fixed parameters
     params = sed.spec.get_fixed_values()
@@ -34,6 +35,7 @@ def test_bare_arrays_and_data_record_agree(synthetic_ssp_wide, synthetic_tophat_
         sfh={"type": "dpl"},
         dust={"law": "power_law", "type": "two_component", "all_params": FIXED},
         neb={"type": "none"},
+        redshift=Fixed(0.1),
     )
     fwd = ForwardModel.build(sed=sed)
     flux, err = mock_flux
@@ -63,6 +65,7 @@ def test_data_censor_reaches_data_mask(
         sfh={"type": "dpl"},
         dust={"law": "power_law", "type": "two_component", "all_params": FIXED},
         neb={"type": "none"},
+        redshift=Fixed(0.1),
     )
     fwd = ForwardModel.build(sed=sed)
     flux, err = mock_flux
@@ -82,6 +85,7 @@ def test_data_plus_noise_kwarg_is_an_error(synthetic_ssp_wide, synthetic_tophat_
         sfh={"type": "dpl"},
         dust={"law": "power_law", "type": "two_component", "all_params": FIXED},
         neb={"type": "none"},
+        redshift=Fixed(0.1),
     )
     fwd = ForwardModel.build(sed=sed)
     flux, err = mock_flux

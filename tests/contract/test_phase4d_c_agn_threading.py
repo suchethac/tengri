@@ -57,7 +57,7 @@ def _no_agn_spec():
         redshift=Fixed(0.1),
         dust_tau_bc=Fixed(0.0),
         dust_tau_diff=Fixed(0.0),
-        igm={"type": "none"},
+        apply_igm=False,
     )
 
 
@@ -75,7 +75,7 @@ def _skirtor_spec():
         dust_tau_diff=Fixed(0.0),
         agn_log_lbol=Fixed(10.42),
         agn_torus_frac=Fixed(0.5),
-        igm={"type": "none"},
+        apply_igm=False,
     )
 
 

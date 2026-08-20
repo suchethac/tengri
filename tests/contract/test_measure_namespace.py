@@ -25,7 +25,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import FIXED, SEDModel
+from tengri import FIXED, Fixed, SEDModel
 from tengri.observation import Observation, Photometry
 from tengri.observation.line_measurement import DESI_LINES
 from tengri.observation.spectral_indices import STANDARD_INDICES
@@ -52,6 +52,7 @@ def _model(ssp, obs):
         sfh={"type": "dpl", "*": FIXED},
         dust={"type": "two_component", "law": "calzetti", "*": FIXED},
         neb={"type": "none"},
+        redshift=Fixed(0.1),
     )
 
 

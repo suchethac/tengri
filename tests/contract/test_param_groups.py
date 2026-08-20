@@ -404,7 +404,7 @@ class TestValidation:
     def test_unknown_group_key_raises_value_error(self):
         """Unknown group key should raise ValueError with suggestions."""
         with pytest.raises(ValueError, match=r"Unknown group key|foo"):
-            parse_groups(foo={})
+            parse_groups(foo={}, redshift=Fixed(0.1))
 
     def test_unknown_sfh_type_raises_value_error(self):
         """Unknown SFH type should raise ValueError."""

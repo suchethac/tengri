@@ -12,6 +12,7 @@ from __future__ import annotations
 import jax.numpy as jnp
 import pytest
 
+from tengri import Fixed
 from tengri.protocols import SubModel
 from tengri.protocols.component import ForwardState
 
@@ -28,6 +29,7 @@ def sed_model_minimal(synthetic_ssp, simple_observation):
         sfh={"type": "dpl", "*": FIXED},
         dust={"type": "two_component", "law": "calzetti", "*": FIXED},
         neb={"type": "none"},
+        redshift=Fixed(0.1),
     )
 
 

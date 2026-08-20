@@ -30,6 +30,8 @@ import jax
 import numpy as np
 import pytest
 
+from tengri import Fixed
+
 # Cosmic time [Gyr] for the tabulated histories, and the redshift they are
 # evaluated at. z=0.05 -> cosmic age ~13.11 Gyr, so the grid ends at 13.0.
 #
@@ -401,7 +403,7 @@ def test_the_met_advice_is_a_form_the_grammar_accepts(fwd_table_sfh):
     with pytest.raises(ValueError) as excinfo:
         Catalog.from_histories(fwd_table_sfh, t_gyr=t, sfr=sfr, met=np.zeros_like(sfr))
 
-    spec = parse_groups(met={"type": "table"})
+    spec = parse_groups(met={"type": "table"}, redshift=Fixed(0.1))
     assert spec.met_mode == "table"
     assert "met={'type': 'table'}" in str(excinfo.value)
 

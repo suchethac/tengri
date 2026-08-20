@@ -37,7 +37,7 @@ from tengri import (
 pytestmark = pytest.mark.contract
 
 
-def _build(ssp, obs, *, apply_igm, approx=None, model="inoue"):
+def _build(ssp, obs, *, igm_on, approx=None, model="inoue"):
     kwargs = dict(
         ssp_data=ssp,
         observation=obs,
@@ -47,7 +47,7 @@ def _build(ssp, obs, *, apply_igm, approx=None, model="inoue"):
         redshift=Fixed(3.0),
         approx=approx,
     )
-    if apply_igm:
+    if igm_on:
         kwargs["igm"] = {"type": model}
     else:
         kwargs["igm"] = {"type": "none"}
@@ -56,8 +56,8 @@ def _build(ssp, obs, *, apply_igm, approx=None, model="inoue"):
 
 def _blue_band_ratio(ssp, obs, *, approx, model="inoue"):
     """on/off ratio of the bluest band (3500 A obs -> rest ~875 A at z=3)."""
-    on = _build(ssp, obs, apply_igm=True, approx=approx, model=model)
-    off = _build(ssp, obs, igm={"type": "none"}, approx=approx)
+    on = _build(ssp, obs, igm_on=True, approx=approx, model=model)
+    off = _build(ssp, obs, igm_on=False, approx=approx)
     params = on.spec.sample(jax.random.PRNGKey(1))
     ph_on = np.asarray(on.predict_photometry(params))
     ph_off = np.asarray(off.predict_photometry(params))

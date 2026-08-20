@@ -24,6 +24,8 @@ import jax
 import jax.numpy as jnp
 import pytest
 
+from tengri import Fixed
+
 pytestmark = pytest.mark.regression_bug
 
 
@@ -74,6 +76,7 @@ def test_draine2021_pah_publishes_its_declared_output(synthetic_ssp_wide, synthe
                 "emission": {"type": "draine2021_pah"},
             },
             sfh={"type": "dpl"},
+            redshift=Fixed(0.1),
         )
 
     params = model.spec.sample(jax.random.PRNGKey(0))
@@ -121,6 +124,7 @@ def test_draine2021_pah_contributes_infrared_emission(synthetic_ssp_wide, synthe
                 "emission": {"type": "draine2021_pah"},
             },
             sfh={"type": "dpl"},
+            redshift=Fixed(0.1),
         )
 
     params = model.spec.sample(jax.random.PRNGKey(0))
@@ -171,6 +175,7 @@ def test_sibling_emission_models_publish(synthetic_ssp_wide, synthetic_tophat_ob
                 "emission": {"type": model_name},
             },
             sfh={"type": "dpl"},
+            redshift=Fixed(0.1),
         )
 
     params = model.spec.sample(jax.random.PRNGKey(0))

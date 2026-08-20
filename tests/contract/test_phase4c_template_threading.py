@@ -67,7 +67,7 @@ def _bakedin_spec():
         redshift=Fixed(0.1),
         dust_tau_bc=Fixed(0.0),
         dust_tau_diff=Fixed(0.0),
-        igm={"type": "none"},
+        apply_igm=False,
     )
 
 
@@ -86,7 +86,7 @@ def _cue_spec():
         nebular_backend="cue",
         neb_logU=Uniform(-4.0, -2.0),
         neb_xi_ion=Fixed(25.5),
-        igm={"type": "none"},
+        apply_igm=False,
     )
 
 

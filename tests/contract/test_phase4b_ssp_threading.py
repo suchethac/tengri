@@ -57,7 +57,7 @@ def minimal_spec():
         redshift=Fixed(0.1),
         dust_tau_bc=Fixed(0.0),
         dust_tau_diff=Fixed(0.0),
-        igm={"type": "none"},
+        apply_igm=False,
     )
 
 

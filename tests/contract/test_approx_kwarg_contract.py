@@ -61,7 +61,7 @@ def fixed_z_spec():
         redshift=Fixed(0.1),
         dust_tau_bc=Fixed(0.0),
         dust_tau_diff=Fixed(0.0),
-        igm={"type": "none"},
+        apply_igm=False,
     )
 
 
@@ -79,7 +79,7 @@ def free_z_spec():
         redshift=Uniform(0.5, 1.5),
         dust_tau_bc=Fixed(0.0),
         dust_tau_diff=Fixed(0.0),
-        igm={"type": "none"},
+        apply_igm=False,
     )
 
 
@@ -325,7 +325,7 @@ def _build_catalog_galaxy(ssp, obs, *, dust_tau_bc_fixed):
         redshift=Fixed(0.1),  # SAME for both galaxies — chain matches
         dust_tau_bc=Fixed(dust_tau_bc_fixed),  # ← per-galaxy
         dust_tau_diff=Fixed(0.0),
-        igm={"type": "none"},
+        apply_igm=False,
     )
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")

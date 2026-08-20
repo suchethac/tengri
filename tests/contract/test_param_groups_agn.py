@@ -221,6 +221,7 @@ class TestAGNValidation:
             parse_groups(
                 sfh={"type": "dpl", "*": FIXED},
                 agn={"disc": {"type": "banana_disc"}},
+                redshift=Fixed(0.1),
             )
 
     def test_agn_unknown_torus_type_raises(self):
@@ -229,6 +230,7 @@ class TestAGNValidation:
             parse_groups(
                 sfh={"type": "dpl", "*": FIXED},
                 agn={"torus": {"type": "donut_model"}},
+                redshift=Fixed(0.1),
             )
 
     def test_agn_unknown_lines_type_raises(self):
@@ -237,6 +239,7 @@ class TestAGNValidation:
             parse_groups(
                 sfh={"type": "dpl", "*": FIXED},
                 agn={"lines": {"type": "squiggly"}},
+                redshift=Fixed(0.1),
             )
 
     def test_agn_unknown_feii_type_raises(self):
@@ -245,6 +248,7 @@ class TestAGNValidation:
             parse_groups(
                 sfh={"type": "dpl", "*": FIXED},
                 agn={"feii": {"type": "iron_oxide"}},
+                redshift=Fixed(0.1),
             )
 
     def test_agn_unknown_atten_type_raises(self):
@@ -253,6 +257,7 @@ class TestAGNValidation:
             parse_groups(
                 sfh={"type": "dpl", "*": FIXED},
                 agn={"atten": {"type": "cloud_of_dust"}},
+                redshift=Fixed(0.1),
             )
 
 
@@ -952,6 +957,7 @@ class TestComposableAGNRuntimeWiring:
                     "type": "richards2006",
                     "disc": {"type": "multicolor"},
                 },
+                redshift=Fixed(0.1),
             )
 
 
