@@ -2654,16 +2654,11 @@ def _translate_radio(radio_dict: dict, result: dict) -> None:
             "agn": {"type": "dpl"},  # AGN variant
         }
 
-    **Legacy form (back-compat)**:
-
-    .. code-block:: python
-
-        radio = {"type": "condon92"}  # radio on with default sf/agn models
-        radio = {"type": "radio_dpl"}  # == radio={'agn': {'type': 'dpl'}}
-
-    The legacy name is resolved onto the two axes by
-    :func:`_legacy_radio_type_to_blocks` rather than assumed to be the
-    default pair — accepting a name and then ignoring it is #1461.
+    **Legacy form (RETIRED, #1980)** — ``radio={'type': 'condon92'}`` now
+    raises with the composable equivalent in the message.
+    :func:`_legacy_radio_type_to_blocks` survives only to compute that
+    equivalent for the error text (naming the mapping rather than a
+    generic default pair — accepting a name and then ignoring it is #1461).
 
     Raises if both 'type' and 'sf'/'agn' sub-blocks are present.
     """
@@ -2672,17 +2667,13 @@ def _translate_radio(radio_dict: dict, result: dict) -> None:
     has_agn_block = "agn" in radio_dict
 
     if has_legacy_type and (has_sf_block or has_agn_block):
-        # The legacy example is derived from the live vocabulary, not written
-        # by hand: this message used to recommend ``radio={'type': 'bell2003'}``,
-        # which the validator below rejects ("Unknown radio type 'bell2003'") —
-        # ``bell2003`` is an ``sf`` variant, never a legacy ``type``. A reader
-        # following the recovery advice landed on a second error.
-        legacy_example = sorted(_valid_radio_types() - {"none"})
-        legacy_hint = legacy_example[0] if legacy_example else "none"
+        # #1980: the legacy 'type' key is retired, so the recovery advice must
+        # not offer it as one of two valid spellings — drop it and keep the
+        # composable form only.
         raise ValueError(
-            "radio: cannot mix legacy 'type' key with 'sf'/'agn' sub-blocks. "
-            f"Use either: radio={{'type': '{legacy_hint}'}} (legacy) "
-            "or radio={'sf': {'type': 'bell2003'}, 'agn': {'type': 'powerlaw'}} (new)."
+            "radio: the legacy 'type' key is retired and cannot be mixed with "
+            "'sf'/'agn' sub-blocks. Remove 'type' and use the composable form: "
+            "radio={'sf': {'type': 'bell2003'}, 'agn': {'type': 'powerlaw'}}."
         )
 
     # Legacy form retired: radio={'type': 'X'} is no longer accepted.

@@ -3,7 +3,8 @@
 
 Tests the additive radio grammar:
 - radio={'sf':{'type':'delvecchio2021'}, 'agn':{'type':'dpl'}}
-- back-compat: radio={'type':'bell2003'}
+- the legacy radio={'type': X} spelling is RETIRED (#1980) and raises
+  with the composable equivalent in the message
 - 'none' mode disables individual sub-models
 - grid-based forward-model builds + predicts finite
 
@@ -128,8 +129,12 @@ class TestRadioGrammarParsing:
         assert params.radio is False
 
     def test_mixed_legacy_and_new_raises(self):
-        """Mixing legacy 'type' with 'sf'/'agn' raises ValueError."""
-        with pytest.raises(ValueError, match="cannot mix legacy"):
+        """Mixing legacy 'type' with 'sf'/'agn' raises, advising composable only.
+
+        #1980: the message must NOT offer the retired legacy spelling as a
+        valid alternative — the match pins the retirement wording.
+        """
+        with pytest.raises(ValueError, match=r"retired and cannot be mixed"):
             parse_groups(
                 sfh={"type": "dpl", "*": FIXED},
                 radio={
