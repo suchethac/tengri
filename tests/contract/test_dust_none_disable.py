@@ -33,18 +33,20 @@ def _phot(ssp, obs, **build):
 
 
 def test_dust_none_disables_dust(synthetic_ssp_wide, synthetic_tophat_obs):
-    model, phot = _phot(synthetic_ssp_wide, synthetic_tophat_obs, dust={"type": "none"})
+    model, phot = _phot(
+        synthetic_ssp_wide, synthetic_tophat_obs, dust_attenuation={"type": "none"}
+    )
     assert model._dust_model == "off"  # internal disable sentinel
     assert np.all(np.isfinite(phot))
 
 
 def test_dust_none_matches_omitting_dust(synthetic_ssp_wide, synthetic_tophat_obs):
     """A dust-free model built with 'none' is not attenuated."""
-    _, none = _phot(synthetic_ssp_wide, synthetic_tophat_obs, dust={"type": "none"})
+    _, none = _phot(synthetic_ssp_wide, synthetic_tophat_obs, dust_attenuation={"type": "none"})
     _, dusty = _phot(
         synthetic_ssp_wide,
         synthetic_tophat_obs,
-        dust={
+        dust_attenuation={
             "type": "two_component",
             "law_bc": "calzetti",
             "law_diff": "calzetti",
@@ -59,7 +61,7 @@ def test_dust_none_matches_omitting_dust(synthetic_ssp_wide, synthetic_tophat_ob
 
 def test_dust_none_with_wildcard_builds(synthetic_ssp_wide, synthetic_tophat_obs):
     model, phot = _phot(
-        synthetic_ssp_wide, synthetic_tophat_obs, dust={"type": "none", "*": FIXED}
+        synthetic_ssp_wide, synthetic_tophat_obs, dust_attenuation={"type": "none", "*": FIXED}
     )
     assert model._dust_model == "off"
     assert np.all(np.isfinite(phot))
@@ -69,12 +71,12 @@ def test_dust_emission_none_builds(synthetic_ssp_wide, synthetic_tophat_obs):
     _, phot = _phot(
         synthetic_ssp_wide,
         synthetic_tophat_obs,
-        dust={
+        dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "*": FIXED,
-            "emission": {"type": "none"},
         },
+        dust_emission={"type": "none"},
     )
     assert np.all(np.isfinite(phot))
 

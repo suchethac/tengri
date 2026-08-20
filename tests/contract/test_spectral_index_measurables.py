@@ -47,7 +47,7 @@ def _build(approx, wave_lo=3500.0):
             ssp_data=ssp,
             observation=obs,
             sfh={"type": "dpl", "*": FIXED},
-            dust={
+            dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
                 "*": FIXED,
@@ -130,7 +130,7 @@ class TestSpectralIndexAsData:
                 ssp_data=ssp,
                 observation=obs,
                 sfh={"type": "dpl", "*": FIXED},
-                dust={
+                dust_attenuation={
                     "type": "two_component",
                     "law": "calzetti",
                     "*": FIXED,

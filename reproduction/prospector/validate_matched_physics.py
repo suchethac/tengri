@@ -190,13 +190,14 @@ def tengri_stellar_dust(ssp, tau_bc, *, include_lyc=False):
         "tau_bc": Fixed(tau_bc),
         "tau_diff": Fixed(TAU_DIFF),
         "*": FIXED,
-        "emission": {
-            "type": "draine_li2007",
-            "qpah": Fixed(Q_PAH),
-            "umin": Fixed(U_MIN),
-            "gamma_dl": Fixed(GAMMA),
-            "*": FIXED,
-        },
+    }
+    # A peer group now, not a sub-block of the attenuation dict.
+    dust_emission = {
+        "type": "draine_li2007",
+        "qpah": Fixed(Q_PAH),
+        "umin": Fixed(U_MIN),
+        "gamma_dl": Fixed(GAMMA),
+        "*": FIXED,
     }
     if include_lyc:
         dust["eb_include_lyc"] = True
@@ -210,7 +211,8 @@ def tengri_stellar_dust(ssp, tau_bc, *, include_lyc=False):
             "log_total_mass": Fixed(0.0),
             "*": FIXED,
         },
-        dust=dust,
+        dust_attenuation=dust,
+        dust_emission=dust_emission,
         redshift=Fixed(0.0),
     )
     s = m.predict_state({})
@@ -281,7 +283,7 @@ def nebular_only():
             "log_total_mass": Fixed(NEB_LOGMASS),
             "*": FIXED,
         },
-        dust={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
+        dust_attenuation={"law": "power_law", "type": "two_component", "tau_bc": Fixed(0.0), "tau_diff": Fixed(0.0), "*": FIXED},
         neb={
             "type": "cue",
             "neb_logU": Fixed(NEB_LOGU),

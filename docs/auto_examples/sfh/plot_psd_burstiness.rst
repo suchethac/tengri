@@ -150,7 +150,7 @@ each parameter independently shapes the UV continuum and optical colors.
                 "psd_tau_myr": 100.0,
             },
         ],
-        dust={
+        dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
@@ -201,7 +201,7 @@ each parameter independently shapes the UV continuum and optical colors.
                 "psd_tau_myr": tengri.Uniform(30, 3000),
             },
         ],
-        dust={
+        dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
@@ -241,7 +241,7 @@ each parameter independently shapes the UV continuum and optical colors.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.474 seconds)
+   **Total running time of the script:** (0 minutes 4.559 seconds)
 
 
 .. _sphx_glr_download_auto_examples_sfh_plot_psd_burstiness.py:

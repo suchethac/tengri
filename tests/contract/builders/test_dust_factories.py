@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Tests for tengri.builders.dust — attenuation + nested IR emission."""
+"""Tests for tengri.builders.dust — attenuation, and IR emission as a peer group."""
 
 from __future__ import annotations
 
@@ -37,9 +37,12 @@ def test_two_component_signature_carries_settings_and_params() -> None:
     assert "law_diff" in params
     assert "tau_bc" in params  # short-form param
     assert "tau_diff" in params
-    assert "emission" in params
     # No tau_v for two_component
     assert "tau_v" not in params
+    # `emission` is a PEER group now, not a sub-block, so it is deliberately not
+    # a parameter of the attenuation factory. Its own factories live under
+    # builders.dust.emission and feed a separate `dust_emission=` keyword.
+    assert "emission" not in params
 
 
 def test_single_component_signature_uses_tau_v() -> None:
@@ -121,24 +124,12 @@ def test_every_dust_law_key_is_accepted() -> None:
         assert out["law"] == law
 
 
-# ── Composition with nested emission ──────────────────────────────
-
-
-def test_two_component_with_nested_emission() -> None:
-    out = builders.dust.two_component(
-        law="calzetti",
-        _=FREE,
-        tau_bc=Uniform(0.0, 2.0),
-        emission=builders.dust.emission.dale2014(_=FIXED),
-    )
-    assert out["emission"] == {"type": "dale2014", "all_params": FIXED}
-    assert out["tau_bc"] == Uniform(0.0, 2.0)
-    assert out["all_params"] is FREE
-
-
-def test_emission_kwarg_must_be_dict() -> None:
-    with pytest.raises(TypeError, match="emission"):
-        builders.dust.two_component(law="calzetti", emission="dale2014")  # forgot to call
+# ── Composition: emission is a peer group, not a nested block ──────
+#
+# The behavior lives in tests/contract/test_dust_split_builders.py, which owns
+# the refusal (test_attenuation_builder_raises_on_emission_kwarg), the emission
+# dict, and the dust_emission= build path. This file's own contribution is the
+# signature assertion above: `emission` is not a parameter of two_component.
 
 
 # ── Round-trip through parser ─────────────────────────────────────
@@ -149,7 +140,7 @@ def test_two_component_free_round_trips_tau_bc_tau_diff() -> None:
     pathway for dust (unlike radio/xray) flips the attenuation knobs."""
     spec = parse_groups(
         sfh={"type": "dpl"},
-        dust=builders.dust.two_component(law="calzetti", _=FREE),
+        dust_attenuation=builders.dust.two_component(law="calzetti", _=FREE),
         redshift=Fixed(0.1),
     )
     free_dust = {p for p in spec.free_params if p.startswith("dust_")}
@@ -160,7 +151,7 @@ def test_two_component_free_round_trips_tau_bc_tau_diff() -> None:
 def test_single_component_uses_tau_v_not_tau_bc() -> None:
     spec = parse_groups(
         sfh={"type": "dpl"},
-        dust=builders.dust.single_component(law="calzetti", _=FREE),
+        dust_attenuation=builders.dust.single_component(law="calzetti", _=FREE),
         redshift=Fixed(0.1),
     )
     free_dust = {p for p in spec.free_params if p.startswith("dust_")}
@@ -171,7 +162,7 @@ def test_single_component_uses_tau_v_not_tau_bc() -> None:
 def test_per_param_override_survives_round_trip() -> None:
     spec = parse_groups(
         sfh={"type": "dpl"},
-        dust=builders.dust.two_component(law="calzetti", tau_bc=Uniform(0.5, 3.0)),
+        dust_attenuation=builders.dust.two_component(law="calzetti", tau_bc=Uniform(0.5, 3.0)),
         redshift=Fixed(0.1),
     )
     assert "dust_tau_bc" in spec.free_params

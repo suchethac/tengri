@@ -274,7 +274,7 @@ class TestAGNNebularPrecomputeEquivalence:
             redshift=Fixed(Z),
             approx=None,
             sfh={"type": "tsnorm", "*": FIXED, "log_total_mass": 6.0},
-            dust={"type": "none"},
+            dust_attenuation={"type": "none"},
             agn={
                 "type": "composable",
                 "disc": {"type": "powerlaw", "*": FIXED},
@@ -292,7 +292,7 @@ class TestAGNNebularPrecomputeEquivalence:
             redshift=Fixed(Z),
             approx=WavePrecomp(),
             sfh={"type": "tsnorm", "*": FIXED, "log_total_mass": 6.0},
-            dust={"type": "none"},
+            dust_attenuation={"type": "none"},
             agn={
                 "type": "composable",
                 "disc": {"type": "powerlaw", "*": FIXED},
@@ -311,7 +311,7 @@ class TestAGNNebularPrecomputeEquivalence:
             redshift=Fixed(Z),
             approx=None,
             sfh={"type": "tsnorm", "*": FIXED, "log_total_mass": 6.0},
-            dust={"type": "none"},
+            dust_attenuation={"type": "none"},
             agn={
                 "type": "composable",
                 "disc": {"type": "powerlaw", "*": FIXED},
@@ -330,7 +330,7 @@ class TestAGNNebularPrecomputeEquivalence:
             redshift=Fixed(Z),
             approx=None,
             sfh={"type": "tsnorm", "*": FIXED, "log_total_mass": 6.0},
-            dust={"type": "none"},
+            dust_attenuation={"type": "none"},
             agn={
                 "type": "composable",
                 "disc": {"type": "powerlaw", "*": FIXED, "agn_log_lbol": 13.0},
@@ -348,7 +348,7 @@ class TestAGNNebularPrecomputeEquivalence:
             redshift=Fixed(Z),
             approx=None,
             sfh={"type": "tsnorm", "*": FIXED, "log_total_mass": 6.0},
-            dust={"type": "none"},
+            dust_attenuation={"type": "none"},
             agn={
                 "type": "composable",
                 "disc": {"type": "powerlaw", "*": FIXED, "agn_log_lbol": 11.0},
@@ -393,7 +393,7 @@ class TestAGNNebularPrecomputeEquivalence:
             redshift=Fixed(Z),
             approx=None,
             sfh={"type": "tsnorm", "*": FIXED, "log_total_mass": 6.0},
-            dust={"type": "none"},
+            dust_attenuation={"type": "none"},
             agn={
                 "type": "composable",
                 "disc": {"type": "powerlaw", "*": FIXED},
@@ -411,7 +411,7 @@ class TestAGNNebularPrecomputeEquivalence:
             redshift=Fixed(Z),
             approx=WavePrecomp(),
             sfh={"type": "tsnorm", "*": FIXED, "log_total_mass": 6.0},
-            dust={"type": "none"},
+            dust_attenuation={"type": "none"},
             agn={
                 "type": "composable",
                 "disc": {"type": "powerlaw", "*": FIXED},
@@ -430,7 +430,7 @@ class TestAGNNebularPrecomputeEquivalence:
             redshift=Fixed(Z),
             approx=None,
             sfh={"type": "tsnorm", "*": FIXED, "log_total_mass": 6.0},
-            dust={"type": "none"},
+            dust_attenuation={"type": "none"},
             agn={
                 "type": "composable",
                 "disc": {"type": "powerlaw", "*": FIXED},
@@ -449,7 +449,7 @@ class TestAGNNebularPrecomputeEquivalence:
             redshift=Fixed(Z),
             approx=None,
             sfh={"type": "tsnorm", "*": FIXED, "log_total_mass": 6.0},
-            dust={"type": "none"},
+            dust_attenuation={"type": "none"},
             agn={
                 "type": "composable",
                 "disc": {"type": "powerlaw", "*": FIXED, "agn_log_lbol": 12.5},
@@ -467,7 +467,7 @@ class TestAGNNebularPrecomputeEquivalence:
             redshift=Fixed(Z),
             approx=None,
             sfh={"type": "tsnorm", "*": FIXED, "log_total_mass": 6.0},
-            dust={"type": "none"},
+            dust_attenuation={"type": "none"},
             agn={
                 "type": "composable",
                 "disc": {"type": "powerlaw", "*": FIXED, "agn_log_lbol": 11.0},
@@ -514,7 +514,7 @@ class TestAGNNebularPrecomputeEquivalence:
             redshift=Fixed(Z),
             approx=None,
             sfh={"type": "tsnorm", "*": FIXED, "log_total_mass": 6.0},
-            dust={"type": "none"},
+            dust_attenuation={"type": "none"},
             agn={
                 "type": "composable",
                 "disc": {"type": "powerlaw", "*": FIXED},
@@ -532,7 +532,7 @@ class TestAGNNebularPrecomputeEquivalence:
             redshift=Fixed(Z),
             approx=WavePrecomp(),
             sfh={"type": "tsnorm", "*": FIXED, "log_total_mass": 6.0},
-            dust={"type": "none"},
+            dust_attenuation={"type": "none"},
             agn={
                 "type": "composable",
                 "disc": {"type": "powerlaw", "*": FIXED},

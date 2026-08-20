@@ -59,7 +59,7 @@ def _sed(ssp, torus: dict) -> np.ndarray:
     model = tengri.SEDModel.build(
         ssp,
         sfh=_SFH,
-        dust=_DUST,
+        dust_attenuation=_DUST,
         agn=dict(_DISC, torus=torus),
         redshift=tengri.Fixed(0.05),
     )
@@ -102,7 +102,7 @@ def test_skirtor_agnfitter_emits_physical_magnitude(ssp):
     base = tengri.SEDModel.build(
         ssp,
         sfh=_SFH,
-        dust=_DUST,
+        dust_attenuation=_DUST,
         agn={
             "disc": {"type": "multicolor", "*": tengri.FIXED},
             "*": tengri.FIXED,

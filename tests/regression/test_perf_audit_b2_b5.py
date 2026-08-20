@@ -81,12 +81,15 @@ def test_forward_predict_under_jit_with_dust_ir(emission_label):
         observation=obs,
         approx=WavePrecomp(),
         sfh=builders.sfh.tsnorm(defaults=FREE),
-        dust=builders.dust.two_component(
+        dust_attenuation=builders.dust.two_component(
             defaults=FIXED,
             law="calzetti",
             tau_bc=Uniform(0, 1),
-            emission=emission,
         ),
+        # Still a dust-IR model: this test's subject is a tracer leak through the
+        # dust-IR precompute under jit, so the emission block has to stay in the
+        # graph -- as a peer group now rather than a nested one.
+        dust_emission=emission,
         neb=builders.neb.none(),
         redshift=Fixed(0.05),
     )

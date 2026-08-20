@@ -62,11 +62,24 @@ def test_newly_reachable_components_build_with_fixed_defaults(
     from tengri import FIXED, SEDModel
 
     for comp_name, _ in expected:
+        # #1980: the radio menu's {'type': name} spelling is retired — a menu
+        # name is reachable through its composable resolution instead.
+        if axis == "radio":
+            from tengri.parameters.groups import _legacy_radio_type_to_blocks
+
+            sf_variant, agn_variant = _legacy_radio_type_to_blocks(comp_name)
+            cfg = {
+                "sf": {"type": sf_variant},
+                "agn": {"type": agn_variant},
+                "all_params": FIXED,
+            }
+        else:
+            cfg = {"type": comp_name, "all_params": FIXED}
         try:
             model = SEDModel.build(
                 ssp_data=synthetic_ssp_wide,
                 observation=synthetic_tophat_obs,
-                **{axis: {"type": comp_name, "all_params": FIXED}},
+                **{axis: cfg},
             )
             # If we reach here, the model built successfully.
             assert model is not None

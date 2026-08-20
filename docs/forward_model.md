@@ -58,7 +58,7 @@ sed = SEDModel.build(
     ssp_data=ssp,
     observation=obs,
     sfh={"type": "dpl", "all_params": FIXED, "log_total_mass": 10.0},
-    dust={"type": "two_component", "law": "calzetti", "all_params": FIXED},
+    dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
     neb={"type": "none"},
     redshift=tengri.Fixed(0.05),
 )

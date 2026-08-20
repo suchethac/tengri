@@ -32,7 +32,7 @@ def grouped_spec():
             "beta": Uniform(1, 3),  # user_prior
             "alpha": Fixed(2.0),  # user_fixed
         },
-        dust={
+        dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
             "*": FIXED,
@@ -87,7 +87,7 @@ class TestProvenanceAttribution:
             warnings.simplefilter("ignore")
             spec = parse_groups(
                 sfh={"type": "dpl", "*": FREE},
-                dust={
+                dust_attenuation={
                     "type": "two_component",
                     "law": "calzetti",
                     "*": FREE,

@@ -99,7 +99,7 @@ def _sed_agn(ssp, disc, dtype):
             "tau_gyr": 1.0,
             "age_gyr": 5.0,
         },
-        dust={
+        dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
             "all_params": FIXED,

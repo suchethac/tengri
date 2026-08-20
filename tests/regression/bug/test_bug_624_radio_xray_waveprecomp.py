@@ -69,10 +69,20 @@ def test_radio_xray_in_waveprecomp(group, band_wave, fam):
     obs = Observation(photometry=Photometry(filters=filt))
     base = dict(
         sfh={"type": "dpl", "*": FIXED},
-        dust={"type": "two_component", "law": "calzetti", "*": FIXED},
+        dust_attenuation={"type": "two_component", "law": "calzetti", "*": FIXED},
         neb={"type": "none"},
     )
-    groups = dict(base, **{group: {"type": gtype, "*": FIXED}})
+    # #1980: the radio menu's {'type': name} spelling is retired — resolve the
+    # preferred name onto the composable sf/agn axes (condon92 -> bell2003 +
+    # powerlaw); other groups keep the type key.
+    if group == "radio":
+        from tengri.parameters.groups import _legacy_radio_type_to_blocks
+
+        sf_variant, agn_variant = _legacy_radio_type_to_blocks(gtype)
+        radio_cfg = {"sf": {"type": sf_variant}, "agn": {"type": agn_variant}, "*": FIXED}
+        groups = dict(base, radio=radio_cfg)
+    else:
+        groups = dict(base, **{group: {"type": gtype, "*": FIXED}})
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         m_exact = SEDModel.build(

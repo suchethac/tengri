@@ -50,7 +50,7 @@ common_config = {
         "tau_gyr": 0.5,
         "log_total_mass": 10.0,
     },
-    "dust": {
+    "dust_attenuation": {
         "law": "power_law",
         "type": "two_component",
         "all_params": tengri.FIXED,

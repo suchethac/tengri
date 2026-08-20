@@ -106,7 +106,7 @@ blocks consume. Before the registry fix this set was empty.
 
     agn_free = {"all_params": tengri.FREE, "log_lbol": 12.0, "lum_ratio": 1.0, **BLOCKS}
     model_free = tengri.SEDModel.build(
-        ssp, sfh=SFH, dust=DUST, agn=agn_free, redshift=tengri.Fixed(0.0)
+        ssp, sfh=SFH, dust_attenuation=DUST, agn=agn_free, redshift=tengri.Fixed(0.0)
     )
     free_agn = [p for p in model_free.spec.free_params if p.startswith("agn_")]
     print(f"AGN parameters freed by agn={{'all_params': FREE}} (block-scoped): {sorted(free_agn)}")
@@ -130,12 +130,14 @@ Sweep three consumed parameters across their priors. We build the model once
 with the AGN sector held fixed at its defaults, then override one parameter at
 a time in the prediction dict — a clean, deterministic parameter sweep.
 
-.. GENERATED FROM PYTHON SOURCE LINES 82-118
+.. GENERATED FROM PYTHON SOURCE LINES 82-120
 
 .. code-block:: Python
 
     agn_fixed = {"all_params": tengri.FIXED, "log_lbol": 12.0, "lum_ratio": 1.0, **BLOCKS}
-    model = tengri.SEDModel.build(ssp, sfh=SFH, dust=DUST, agn=agn_fixed, redshift=tengri.Fixed(0.0))
+    model = tengri.SEDModel.build(
+        ssp, sfh=SFH, dust_attenuation=DUST, agn=agn_fixed, redshift=tengri.Fixed(0.0)
+    )
     base = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
     SWEEPS = [

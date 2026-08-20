@@ -16,7 +16,7 @@ def mock_flux(synthetic_ssp_wide, synthetic_tophat_obs):
         ssp_data=synthetic_ssp_wide,
         observation=synthetic_tophat_obs,
         sfh={"type": "dpl", "all_params": FIXED},
-        dust={"law": "power_law", "type": "two_component", "all_params": FIXED},
+        dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
         neb={"type": "none"},
         redshift=Fixed(0.1),
     )
@@ -33,7 +33,7 @@ def test_bare_arrays_and_data_record_agree(synthetic_ssp_wide, synthetic_tophat_
         ssp_data=synthetic_ssp_wide,
         observation=synthetic_tophat_obs,
         sfh={"type": "dpl"},
-        dust={"law": "power_law", "type": "two_component", "all_params": FIXED},
+        dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
         neb={"type": "none"},
         redshift=Fixed(0.1),
     )
@@ -63,7 +63,7 @@ def test_data_censor_reaches_data_mask(
         ssp_data=synthetic_ssp_wide,
         observation=synthetic_tophat_obs,
         sfh={"type": "dpl"},
-        dust={"law": "power_law", "type": "two_component", "all_params": FIXED},
+        dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
         neb={"type": "none"},
         redshift=Fixed(0.1),
     )
@@ -83,7 +83,7 @@ def test_data_plus_noise_kwarg_is_an_error(synthetic_ssp_wide, synthetic_tophat_
         ssp_data=synthetic_ssp_wide,
         observation=synthetic_tophat_obs,
         sfh={"type": "dpl"},
-        dust={"law": "power_law", "type": "two_component", "all_params": FIXED},
+        dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
         neb={"type": "none"},
         redshift=Fixed(0.1),
     )

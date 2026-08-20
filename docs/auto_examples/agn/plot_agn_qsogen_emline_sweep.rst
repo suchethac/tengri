@@ -91,7 +91,7 @@ References
         model = tengri.SEDModel.build(
             ssp,
             sfh=SFH,
-            dust=DUST,
+            dust_attenuation=DUST,
             agn={
                 "disc": {"type": "qsogen", "all_params": tengri.FIXED},
                 "nlr": {"type": "none", "all_params": tengri.FIXED},

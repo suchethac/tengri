@@ -248,7 +248,10 @@ DIR_SFH = {
     "log_total_mass": Uniform(8.0, 12.5),
     **{f"z_{i}": FREE for i in range(6)},  # Leja+2017 Dirichlet bin variables
 }
-DUST = {"law": "power_law", "tau_bc": Uniform(0.0, 3.0), "tau_diff": Uniform(0.0, 2.0)}
+# NO `law` here, deliberately: this fragment is splatted into each model's dict
+# AFTER that dict names its own law, so a `law` in here would silently override
+# all four and collapse the comparison to one curve (#1989 did exactly that).
+DUST = {"tau_bc": Uniform(0.0, 3.0), "tau_diff": Uniform(0.0, 2.0)}
 
 # Display metadata (colors/labels match the published proposal figure)
 CONFIG_ORDER = ["A", "B", "C", "D"]
@@ -279,7 +282,7 @@ def build_configs(z, obs):
             "met_logzsol": Uniform(-2.0, 0.3),
             **CONT_SFH,
         },
-        dust={"type": "two_component", "law": "salim_sbl18", "all_params": FIXED, **DUST},
+        dust_attenuation={"type": "two_component", "law": "salim_sbl18", "all_params": FIXED, **DUST},
         neb={"type": "ssp"},
         **common,
     )
@@ -291,7 +294,7 @@ def build_configs(z, obs):
             "met_logzsol": Uniform(-2.0, 0.3),
             **DIR_SFH,
         },
-        dust={"type": "two_component", "law": "calzetti", "all_params": FIXED, **DUST},
+        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED, **DUST},
         neb={"type": "ssp"},
         **common,
     )
@@ -307,7 +310,7 @@ def build_configs(z, obs):
             "skew": Uniform(-1.0, 1.0),
             "trunc": Uniform(1.0, 10.0),
         },
-        dust={"type": "two_component", "law": "kriek_conroy", "all_params": FIXED, **DUST},
+        dust_attenuation={"type": "two_component", "law": "kriek_conroy", "all_params": FIXED, **DUST},
         neb={"type": "ssp"},
         **common,
     )
@@ -322,7 +325,7 @@ def build_configs(z, obs):
             "tau_gyr": Uniform(0.5, 13.0),
             "log_total_mass": Uniform(8.0, 12.0),
         },
-        dust={"type": "two_component", "law": "power_law", "all_params": FIXED, **DUST},
+        dust_attenuation={"type": "two_component", "law": "power_law", "all_params": FIXED, **DUST},
         neb={"type": "ssp"},
         **common,
     )

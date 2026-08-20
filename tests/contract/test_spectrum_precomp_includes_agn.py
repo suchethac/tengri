@@ -34,7 +34,7 @@ def _build(ssp, approx):
         redshift=Fixed(0.5),
         igm={"type": "none"},
         sfh={"type": "tsnorm", "*": FIXED, "log_total_mass": Fixed(10.0)},
-        dust={"type": "two_component", "law": "calzetti", "*": FIXED},
+        dust_attenuation={"type": "two_component", "law": "calzetti", "*": FIXED},
         neb={"type": "none"},
         agn={
             "type": "composable",

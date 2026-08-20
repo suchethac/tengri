@@ -59,14 +59,15 @@ dust_config = {
     "tau_diff": 0.3,  # Diffuse attenuation
     "tau_bc": 0.5,  # Dust clouds
     "law": "calzetti",  # Starburst attenuation law
-    "emission": {"type": "dale2014", "all_params": tengri.FIXED},
 }
+dust_emission = {"type": "dale2014", "all_params": tengri.FIXED}
 
 # Build the model using bare-stellar SSP with Cue nebular backend
 model = tengri.SEDModel.build(
     ssp_data=tengri.load_ssp("fsps_prsc_miles_chabrier"),
     sfh=sfh_config,
-    dust=dust_config,
+    dust_attenuation=dust_config,
+    dust_emission=dust_emission,
     neb={"type": "cue", "all_params": tengri.FIXED, "logZ_gas": -0.5, "logU": -2.0},
     redshift=tengri.Fixed(z),
 )

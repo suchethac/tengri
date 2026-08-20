@@ -84,16 +84,16 @@ def test_guard_accepts_an_outcome_that_freed_even_one():
 def test_guard_is_per_nesting_level():
     """A sub-block that frees nothing is caught even when its parent frees.
 
-    ``dust`` frees ``tau_bc``/``tau_diff`` while ``dust.emission`` may free
+    ``dust_attenuation`` frees ``tau_bc``/``tau_diff`` while ``dust_emission`` may free
     nothing, so the check cannot be per-top-level-group.
     """
     from tengri.parameters.groups import _check_wildcard_freed_something
 
-    with pytest.raises(ParameterError, match=r"'dust\.emission'"):
+    with pytest.raises(ParameterError, match=r"'dust_emission'"):
         _check_wildcard_freed_something(
             {
-                "dust": [("dust_tau_bc", True)],
-                "dust.emission": [("dust_qpah", False)],
+                "dust_attenuation": [("dust_tau_bc", True)],
+                "dust_emission": [("dust_qpah", False)],
             }
         )
 

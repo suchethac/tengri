@@ -147,7 +147,7 @@ def _mass_model(ssp_real, mass_prior):
             "skew": 0.3,
             "trunc": 3.0,
         },
-        dust={
+        dust_attenuation={
             "type": "two_component",
             # #1989: attenuation laws are explicit — 'law' applies one curve
             # to both screens, matching this test's pre-#1989 implicit default.

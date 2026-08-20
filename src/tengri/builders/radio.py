@@ -179,13 +179,26 @@ def axes() -> dict[str, list[str]]:
 # ── Legacy flat factories (back-compat) ────────────────────────────────────
 # The pre-composable surface exposed ``builders.radio.<type>`` (e.g.
 # ``radio.condon92``) returning a flat ``{'type': X, ...}`` dict — still used by
-# the CIGALE reproduction notebook and existing tests. The legacy ``type`` form
-# remains accepted by ``parse_groups`` (radio on with default sf/agn models), so
-# these factories coexist with the new ``sf``/``agn`` axes.
+# the CIGALE reproduction notebook and existing tests. #1980 retired that
+# spelling from ``parse_groups``, so the factories now EMIT the composable
+# form: the legacy name resolves through ``_legacy_radio_type_to_blocks`` onto
+# the ``sf``/``agn`` axes, and per-param overrides (``q_ir``, ``alpha_sf``, …)
+# stay at the radio top level, where the composable grammar accepts them.
 def _discover_legacy_params(variant: str) -> list[str]:
     if variant == "none":
         return []
-    recipe = {"sfh": {"type": "dpl"}, "radio": {"type": variant, WILDCARD_ALIAS: FREE}}
+    # Use the composable form to discover parameters for legacy variant
+    # (legacy flat form is retired from the public API)
+    from tengri.parameters.groups import _legacy_radio_type_to_blocks
+
+    sf_variant, agn_variant = _legacy_radio_type_to_blocks(variant)
+    recipe = {
+        "sfh": {"type": "dpl"},
+        "radio": {
+            "sf": {"type": sf_variant, WILDCARD_ALIAS: FREE},
+            "agn": {"type": agn_variant, WILDCARD_ALIAS: FREE},
+        },
+    }
     records = recipe_parameters(recipe, free_only=False)
     return [
         short_form(rec.name, prefixes=("radio_",))
@@ -194,17 +207,45 @@ def _discover_legacy_params(variant: str) -> list[str]:
     ]
 
 
+def _composable_output(variant: str, flat_factory: Callable[..., dict]) -> Callable[..., dict]:
+    """Rewrite a flat factory's ``{'type': variant, ...}`` into the composable form.
+
+    ``make_factory`` is shared with igm/xray and emits the ``type`` key; for
+    radio that spelling is retired (#1980), so the legacy NAME survives as a
+    preset that expands to its documented sf/agn resolution.
+    """
+    from functools import wraps
+
+    from tengri.parameters.groups import _legacy_radio_type_to_blocks
+
+    if variant == "none":
+        sf_variant, agn_variant = "none", "none"
+    else:
+        sf_variant, agn_variant = _legacy_radio_type_to_blocks(variant)
+
+    @wraps(flat_factory)
+    def factory(**kwargs) -> dict:
+        out = flat_factory(**kwargs)
+        out.pop("type", None)
+        return {"sf": {"type": sf_variant}, "agn": {"type": agn_variant}, **out}
+
+    return factory
+
+
 def _populate_legacy_factories() -> dict[str, Callable[..., dict]]:
     from tengri.parameters.groups import _valid_radio_types
 
     factories: dict[str, Callable[..., dict]] = {}
     for variant in sorted(_valid_radio_types()):
-        factories[variant] = make_factory(
-            variant=variant,
-            short_params=_discover_legacy_params(variant),
-            qualname_prefix="tengri.builders.radio",
-            module_name="tengri.builders.radio",
-            short_doc=f"Radio model (legacy flat form): {variant!r}.",
+        factories[variant] = _composable_output(
+            variant,
+            make_factory(
+                variant=variant,
+                short_params=_discover_legacy_params(variant),
+                qualname_prefix="tengri.builders.radio",
+                module_name="tengri.builders.radio",
+                short_doc=(f"Radio preset {variant!r} (legacy name, composable output)."),
+            ),
         )
     return factories
 

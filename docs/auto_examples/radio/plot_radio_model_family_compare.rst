@@ -42,7 +42,7 @@ the 2.0 used here is a radio-loud source; its prior runs to 4. Passing 100
 
 Reference: Bell+2003; Delvecchio+2021; McCheyne+2022 (q_IR calibrations).
 
-.. GENERATED FROM PYTHON SOURCE LINES 26-122
+.. GENERATED FROM PYTHON SOURCE LINES 26-126
 
 
 
@@ -83,8 +83,11 @@ Reference: Bell+2003; Delvecchio+2021; McCheyne+2022 (q_IR calibrations).
         "all_params": tengri.FIXED,
         "tau_diff": 1.0,
         "tau_bc": 1.5,
-        "emission": {"type": "dale2014_cigale", "all_params": tengri.FIXED},
     }
+    # dale2014_cigale: this example enables the radio component, and plain
+    # dale2014 embeds its own SF radio continuum — the pair is refused at
+    # build as a double-count (#1970).
+    DUST_EMISSION = {"type": "dale2014_cigale", "all_params": tengri.FIXED}
     AGN = {
         "type": "composable",
         "all_params": tengri.FIXED,
@@ -101,7 +104,8 @@ Reference: Bell+2003; Delvecchio+2021; McCheyne+2022 (q_IR calibrations).
         model = tengri.SEDModel.build(
             ssp_data=ssp,
             sfh=SFH,
-            dust=DUST,
+            dust_attenuation=DUST,
+            dust_emission=DUST_EMISSION,
             radio=radio,
             redshift=tengri.Fixed(0.05),
             **({"agn": AGN} if with_agn else {}),
@@ -157,7 +161,7 @@ Reference: Bell+2003; Delvecchio+2021; McCheyne+2022 (q_IR calibrations).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.821 seconds)
+   **Total running time of the script:** (0 minutes 8.458 seconds)
 
 
 .. _sphx_glr_download_auto_examples_radio_plot_radio_model_family_compare.py:

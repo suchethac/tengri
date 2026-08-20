@@ -66,7 +66,7 @@ def _model(av, rv):
     return tengri.SEDModel.build(
         ssp,
         sfh=SFH,
-        dust={
+        dust_attenuation={
             "type": "two_component",
             "all_params": tengri.FIXED,
             "tau_bc": 0.0,

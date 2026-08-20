@@ -114,7 +114,7 @@ def _build_sfh(sfh_factory):
         ssp_data=ssp,
         observation=obs,
         sfh=sfh_factory(defaults=FIXED),
-        dust={"type": "two_component", "law": "calzetti", "all_params": FIXED},
+        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
         neb={"type": "none"},
         redshift=0.05,
     )
@@ -214,7 +214,7 @@ recipes.star_forming_photometry()
 tengri.list_inference_methods()
 
 # %% [markdown]
-
+#
 # ## All registries at a glance
 #
 # `list_all()` returns the master catalog of every registry in tengri.
@@ -320,7 +320,7 @@ tengri.list_plots()
 tengri.list_recipes()
 
 # %% [markdown]
-
+#
 # ## Parameter and physics provenance
 #
 # Two introspection surfaces close the loop:

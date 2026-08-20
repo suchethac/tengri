@@ -102,7 +102,7 @@ def test_window_lut_reproduces_wne_reconstruction_bitexact():
             observation=obs,
             sfh={"type": "dpl", "*": FREE},
             # explicit zero taus — NOT dust=None (which auto-fills FREE taus)
-            dust={
+            dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
                 "*": FIXED,
@@ -168,7 +168,7 @@ def test_bakedin_has_no_direct_line_fluxes():
             ssp_data=ssp,
             observation=obs,
             sfh={"type": "dpl", "*": FREE},
-            dust=None,
+            dust_attenuation=None,
             neb={"type": "none"},
             redshift=Fixed(0.05),
         )
@@ -191,7 +191,7 @@ def _dust_model():
             ssp_data=ssp,
             observation=obs,
             sfh={"type": "dpl", "*": FREE},
-            dust={
+            dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
                 "*": FIXED,
@@ -405,7 +405,7 @@ def test_compute_joint_weights_supports_field_sfh():
             ssp_data=ssp,
             observation=obs,
             sfh={"type": ["dpl", "field"], "*": FREE},  # stochastic GP field → unsupported
-            dust=None,
+            dust_attenuation=None,
             neb={"type": "none"},
             redshift=Fixed(0.05),
         )
@@ -526,7 +526,7 @@ def test_predict_spectral_indices_fast_matches_exact_field_sfh():
             ssp_data=ssp,
             observation=obs,
             sfh={"type": ["dpl", "field"], "*": FREE},
-            dust=None,
+            dust_attenuation=None,
             neb={"type": "none"},
             redshift=Fixed(0.05),
         )
@@ -558,7 +558,7 @@ def test_predict_spectral_indices_fast_raises_on_additive_nebular():
             ssp_data=ssp,
             observation=obs,
             sfh={"type": "dpl", "*": FREE},
-            dust=None,
+            dust_attenuation=None,
             neb={"type": "cue", "*": FIXED},
             redshift=Fixed(0.05),
         )

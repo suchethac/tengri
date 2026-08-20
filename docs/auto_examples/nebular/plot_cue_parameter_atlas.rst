@@ -97,7 +97,7 @@ References:
             "alpha": 3.0,
             "beta": 2.0,
         },
-        dust={
+        dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
@@ -181,7 +181,7 @@ References:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (1 minutes 6.716 seconds)
+   **Total running time of the script:** (1 minutes 19.448 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_cue_parameter_atlas.py:

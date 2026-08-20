@@ -26,7 +26,7 @@ def _build_sed(ssp, obs, approx=None):
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "dpl", "all_params": FIXED, "log_total_mass": Uniform(9.0, 11.0)},
-        dust={
+        dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
             "all_params": FIXED,

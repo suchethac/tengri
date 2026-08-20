@@ -55,7 +55,7 @@ def _model():
             ssp_data=ssp,
             observation=obs,
             sfh={"type": "dpl", "*": FREE},
-            dust=None,
+            dust_attenuation=None,
             neb={"type": "cue", "*": FIXED},
             redshift=Fixed(0.15),
         )

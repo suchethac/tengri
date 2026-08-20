@@ -49,7 +49,7 @@ def _sed_response_grad(model, params, param_name):
 def _base_kwargs():
     return dict(
         sfh={"type": "dpl", "*": FREE},
-        dust={"type": "two_component", "law": "calzetti", "*": FIXED},
+        dust_attenuation={"type": "two_component", "law": "calzetti", "*": FIXED},
         neb={"type": "none"},
         redshift=Fixed(0.05),
     )
@@ -60,7 +60,13 @@ def test_radio_q_ir_is_wired(synthetic_ssp_wide, synthetic_tophat_obs):
     model = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
         observation=synthetic_tophat_obs,
-        radio={"type": "condon92", "q_ir": Uniform(2.0, 3.0)},
+        # #1980: radio params live at the radio top level — the sf sub-block
+        # takes only type/*.
+        radio={
+            "sf": {"type": "bell2003"},
+            "agn": {"type": "powerlaw"},
+            "q_ir": Uniform(2.0, 3.0),
+        },
         **_base_kwargs(),
     )
     assert "radio_q_ir" in model.spec.free_params
@@ -117,7 +123,7 @@ def test_igm_gate_attenuates_rest_uv_at_high_z(synthetic_ssp_wide, synthetic_top
         ssp_data=synthetic_ssp_wide,
         observation=synthetic_tophat_obs,
         sfh={"type": "dpl", "*": FREE},
-        dust={"type": "two_component", "law": "calzetti", "*": FIXED},
+        dust_attenuation={"type": "two_component", "law": "calzetti", "*": FIXED},
         neb={"type": "none"},
         redshift=Fixed(3.0),
     )

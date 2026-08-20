@@ -42,7 +42,7 @@ References: Bradbury+2018 (JAX); Hearin+2023 (DSPS).
 
  .. code-block:: none
 
-    /tengri/src/tengri/forward/sed_model.py:8679: WildcardPartialFreeWarning: sfh={'all_params': FREE} no longer frees metallicity parameters when there is no explicit met block. Before this change, met_logzsol (and other met_* params) were freed by the sfh wildcard.
+    /tengri/src/tengri/forward/sed_model.py:8763: WildcardPartialFreeWarning: sfh={'all_params': FREE} no longer frees metallicity parameters when there is no explicit met block. Before this change, met_logzsol (and other met_* params) were freed by the sfh wildcard.
 
     To free metallicity parameters explicitly, pass either:
       met={'all_params': FREE}
@@ -51,9 +51,9 @@ References: Bradbury+2018 (JAX); Hearin+2023 (DSPS).
 
     Issue #1796
       spec = parse_groups(**groups)
-    /tengri/src/tengri/forward/sed_model.py:8679: WildcardPartialFreeWarning: 'all_params: FREE' freed 2 of 3 parameters in group 'dust'. These have no declared prior, only Fixed defaults, so they stay pinned:
+    /tengri/src/tengri/forward/sed_model.py:8763: WildcardPartialFreeWarning: 'all_params: FREE' freed 2 of 3 parameters in group 'dust_attenuation'. These have no declared prior, only Fixed defaults, so they stay pinned:
       dust_f_obscuration
-    The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. dust={'f_obscuration': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
+    The fit will run with that physics held constant. Pass explicit priors for the ones you meant to vary, e.g. dust_attenuation={'dust_f_obscuration': Uniform(lo, hi)}, or filter WildcardPartialFreeWarning if this is deliberate.
       spec = parse_groups(**groups)
 
 
@@ -98,7 +98,7 @@ References: Bradbury+2018 (JAX); Hearin+2023 (DSPS).
             "all_params": tengri.FREE,
             "alpha": tengri.Fixed(0.5),  # Fix early slope; vary peak SFR, beta, tau
         },
-        dust={
+        dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
             "all_params": tengri.FREE,  # Allow dust parameters to vary
@@ -221,11 +221,6 @@ References: Bradbury+2018 (JAX); Hearin+2023 (DSPS).
 
     fig.tight_layout()
     plt.savefig("plot_jax_gradient_sensitivity.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 2.667 seconds)
 
 
 .. _sphx_glr_download_auto_examples_showcase_plot_jax_gradient_sensitivity.py:

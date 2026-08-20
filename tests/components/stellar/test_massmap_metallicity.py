@@ -367,7 +367,7 @@ def test_massmap_box_builds_via_group_dict_grammar(synthetic_ssp):
             "*": FIXED,
         },
         sfh={"type": "const", "log_total_mass": Fixed(10.0), "*": FIXED},
-        dust={
+        dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "tau_bc": Fixed(0.0),

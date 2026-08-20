@@ -102,7 +102,7 @@ Allen et al. 2008, ApJS, 178, 20 (MAPPINGS V shocks).
                     "tau_gyr": 0.1,
                     "log_total_mass": 10.0,
                 },
-                dust={
+                dust_attenuation={
                     "law": "power_law",
                     "type": "two_component",
                     "all_params": tengri.FIXED,
@@ -163,7 +163,7 @@ Allen et al. 2008, ApJS, 178, 20 (MAPPINGS V shocks).
                 "tau_gyr": 0.15,
                 "log_total_mass": 10.0,
             },
-            dust={
+            dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
                 "all_params": tengri.FIXED,
@@ -308,7 +308,7 @@ Allen et al. 2008, ApJS, 178, 20 (MAPPINGS V shocks).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 8.140 seconds)
+   **Total running time of the script:** (0 minutes 16.771 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_bpt_diagram_population.py:

@@ -87,7 +87,7 @@ toward older ages.
                     "start_gyr": age_myr / 1e3,
                     "end_gyr": 0.0,
                 },
-                dust={
+                dust_attenuation={
                     "law": "power_law",
                     "type": "two_component",
                     "all_params": tengri.FIXED,
@@ -122,7 +122,7 @@ toward older ages.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.783 seconds)
+   **Total running time of the script:** (0 minutes 3.923 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_halpha_sfr_calibration_age.py:

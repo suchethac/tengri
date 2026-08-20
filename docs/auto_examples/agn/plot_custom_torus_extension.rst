@@ -137,7 +137,7 @@ References
     model_skirtor = tengri.SEDModel.build(
         ssp,
         sfh=SFH,
-        dust=DUST,
+        dust_attenuation=DUST,
         agn={
             "all_params": tengri.FIXED,
             "log_lbol": LOG_LBOL,
@@ -178,11 +178,6 @@ References
     ax.legend(frameon=False, fontsize=9, loc="lower center")
     fig.tight_layout()
     plt.savefig("plot_custom_torus_extension.png", dpi=150, bbox_inches="tight")
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (0 minutes 7.971 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_custom_torus_extension.py:

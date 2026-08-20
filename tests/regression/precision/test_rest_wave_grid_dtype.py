@@ -62,7 +62,7 @@ def _params(dtype):
 
 def _model(ssp, agn=None):
     obs = Observation(photometry=Photometry.from_names(["sdss_r", "wise_w1"]))
-    groups = dict(sfh=_SFH, dust=_DUST)
+    groups = dict(sfh=_SFH, dust_attenuation=_DUST)
     if agn is not None:
         groups["agn"] = agn
     return SEDModel.build(ssp_data=ssp, observation=obs, redshift=Fixed(0.1), **groups)

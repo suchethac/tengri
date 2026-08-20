@@ -30,7 +30,7 @@ def test_bakedin_predict_emission_lines_raises():
         model = tengri.SEDModel.build(
             ssp,
             sfh={"type": "const", "*": tengri.FIXED},
-            dust={
+            dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
                 "*": tengri.FIXED,

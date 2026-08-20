@@ -186,7 +186,7 @@ def test_grid_backed_lines_selectable_via_builder(monkeypatch):
             "log_total_mass": Fixed(10.0),
             "*": FIXED,
         },
-        dust={
+        dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "tau_bc": Fixed(0.0),
@@ -264,7 +264,7 @@ def test_synth_lines_photometry_under_jit_and_precompute(
                 "log_total_mass": Fixed(0.0),
                 "*": FIXED,
             },
-            dust={
+            dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
                 "tau_bc": Fixed(0.0),

@@ -75,7 +75,7 @@ Reference: Thomas et al. 2003, MNRAS, 339, 897 (alpha-element effects).
             "tau_gyr": 8.0,
             "log_total_mass": 10.0,
         },
-        dust={
+        dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
@@ -117,7 +117,7 @@ Reference: Thomas et al. 2003, MNRAS, 339, 897 (alpha-element effects).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 4.721 seconds)
+   **Total running time of the script:** (0 minutes 5.296 seconds)
 
 
 .. _sphx_glr_download_auto_examples_metallicity_plot_alpha_fe_sweep.py:

@@ -28,14 +28,14 @@ def _build(ssp, obs, **dust_extra):
         "*": tengri.FIXED,
         "tau_bc": 1.0,
         "tau_diff": 0.0,
-        "emission": None,
     }
     dust.update(dust_extra)
     return tengri.SEDModel.build(
         ssp,
         observation=obs,
         sfh={"type": "tsnorm", "*": tengri.FIXED},
-        dust=dust,
+        dust_attenuation=dust,
+        dust_emission={"type": "none"},
         neb={"type": "none"},
         redshift=tengri.Fixed(0.05),
     )
@@ -97,7 +97,6 @@ class TestLawInheritance:
             "*": tengri.FIXED,
             "tau_bc": 1.0,
             "tau_diff": 0.0,
-            "emission": None,
         }
         dust.update(extra)
         return dust
@@ -109,7 +108,7 @@ class TestLawInheritance:
                 synthetic_ssp_wide,
                 observation=synthetic_tophat_obs,
                 sfh={"type": "tsnorm", "*": tengri.FIXED},
-                dust=self._dust_no_law(law_diff="calzetti"),
+                dust_attenuation=self._dust_no_law(law_diff="calzetti"),
                 neb={"type": "none"},
                 redshift=tengri.Fixed(0.05),
             )
@@ -121,7 +120,7 @@ class TestLawInheritance:
                 synthetic_ssp_wide,
                 observation=synthetic_tophat_obs,
                 sfh={"type": "tsnorm", "*": tengri.FIXED},
-                dust=self._dust_no_law(law_bc="calzetti"),
+                dust_attenuation=self._dust_no_law(law_bc="calzetti"),
                 neb={"type": "none"},
                 redshift=tengri.Fixed(0.05),
             )
@@ -133,7 +132,7 @@ class TestLawInheritance:
                 synthetic_ssp_wide,
                 observation=synthetic_tophat_obs,
                 sfh={"type": "tsnorm", "*": tengri.FIXED},
-                dust=self._dust_no_law(),
+                dust_attenuation=self._dust_no_law(),
                 neb={"type": "none"},
                 redshift=tengri.Fixed(0.05),
             )
@@ -155,5 +154,5 @@ class TestRoundTrip:
             delta_diff=0.1,
         )
         groups = model.spec.to_groups()
-        assert groups["dust"]["slope_bc"] == -1.0
-        assert groups["dust"]["delta_diff"] == 0.1
+        assert groups["dust_attenuation"]["slope_bc"] == -1.0
+        assert groups["dust_attenuation"]["delta_diff"] == 0.1

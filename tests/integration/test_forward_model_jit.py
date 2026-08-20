@@ -25,7 +25,7 @@ def sed_model_minimal(synthetic_ssp, simple_observation):
         ssp_data=synthetic_ssp,
         observation=simple_observation,
         sfh={"type": "dpl", "*": FIXED},
-        dust={"type": "two_component", "law": "calzetti", "*": FIXED},
+        dust_attenuation={"type": "two_component", "law": "calzetti", "*": FIXED},
         neb={"type": "none"},
         redshift=Fixed(0.1),
     )

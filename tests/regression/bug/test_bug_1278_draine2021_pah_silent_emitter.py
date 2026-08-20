@@ -69,12 +69,12 @@ def test_draine2021_pah_publishes_its_declared_output(synthetic_ssp_wide, synthe
         model = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
             observation=synthetic_tophat_obs,
-            dust={
+            dust_attenuation={
                 "law": "calzetti",
                 "tau_bc": 1.0,
                 "tau_diff": 1.0,
-                "emission": {"type": "draine2021_pah"},
             },
+            dust_emission={"type": "draine2021_pah"},
             sfh={"type": "dpl"},
             redshift=Fixed(0.1),
         )
@@ -117,12 +117,12 @@ def test_draine2021_pah_contributes_infrared_emission(synthetic_ssp_wide, synthe
         model = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
             observation=synthetic_tophat_obs,
-            dust={
+            dust_attenuation={
                 "law": "calzetti",
                 "tau_bc": 1.0,
                 "tau_diff": 1.0,
-                "emission": {"type": "draine2021_pah"},
             },
+            dust_emission={"type": "draine2021_pah"},
             sfh={"type": "dpl"},
             redshift=Fixed(0.1),
         )
@@ -168,12 +168,12 @@ def test_sibling_emission_models_publish(synthetic_ssp_wide, synthetic_tophat_ob
         model = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
             observation=synthetic_tophat_obs,
-            dust={
+            dust_attenuation={
                 "law": "calzetti",
                 "tau_bc": 1.0,
                 "tau_diff": 1.0,
-                "emission": {"type": model_name},
             },
+            dust_emission={"type": model_name},
             sfh={"type": "dpl"},
             redshift=Fixed(0.1),
         )

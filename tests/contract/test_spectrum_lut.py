@@ -56,12 +56,12 @@ class TestSpectrumPrecompDataclass:
         assert (sp.n_z, sp.z_min, sp.z_max) == (200, 0.0, 3.0)
 
 
-def _build(ssp, obs, approx, redshift, dust=None):
+def _build(ssp, obs, approx, redshift, dust_attenuation=None):
     import warnings
 
     from tengri import FIXED, SEDModel
 
-    dust = dust or {
+    dust_attenuation = dust_attenuation or {
         "type": "two_component",
         "law": "calzetti",
         "*": FIXED,
@@ -72,7 +72,7 @@ def _build(ssp, obs, approx, redshift, dust=None):
             ssp_data=ssp,
             observation=obs,
             sfh={"type": "dpl", "*": FIXED},
-            dust=dust,
+            dust_attenuation=dust_attenuation,
             neb={"type": "none"},
             redshift=redshift,
             approx=approx,
@@ -118,8 +118,8 @@ class TestSpectrumLUTAccuracy:
             "*": _FIXED,
             "tau_bc": 0.0,
         }
-        m_exact = _build(ssp, obs, None, Fixed(0.05), dust=diffuse_dust)
-        m_lut = _build(ssp, obs, SpectrumPrecomp(), Fixed(0.05), dust=diffuse_dust)
+        m_exact = _build(ssp, obs, None, Fixed(0.05), dust_attenuation=diffuse_dust)
+        m_lut = _build(ssp, obs, SpectrumPrecomp(), Fixed(0.05), dust_attenuation=diffuse_dust)
         # The LUT path must actually engage (not silently fall through).
         assert m_lut._approx.get("spectrum_precomp") is True
 
@@ -153,9 +153,15 @@ class TestSpectrumLUTAccuracy:
             "*": _FIXED,
             "tau_bc": 0.0,
         }
-        m_exact = _build(ssp, obs, None, Uniform(0.01, 0.5, "redshift"), dust=diffuse_dust)
+        m_exact = _build(
+            ssp, obs, None, Uniform(0.01, 0.5, "redshift"), dust_attenuation=diffuse_dust
+        )
         m_lut = _build(
-            ssp, obs, SpectrumPrecomp(), Uniform(0.01, 0.5, "redshift"), dust=diffuse_dust
+            ssp,
+            obs,
+            SpectrumPrecomp(),
+            Uniform(0.01, 0.5, "redshift"),
+            dust_attenuation=diffuse_dust,
         )
         for z in (0.05, 0.2, 0.4):
             se = m_exact.predict_observables({"redshift": z}).spec_fnu
@@ -204,7 +210,7 @@ class TestSpectrumLUTGuards:
                 ssp_data=ssp,
                 observation=obs,
                 sfh={"type": "dpl", "*": FIXED},
-                dust={
+                dust_attenuation={
                     "type": "two_component",
                     "law": "calzetti",
                     "*": FIXED,
@@ -236,7 +242,7 @@ class TestSpectrumLUTGuards:
                 ssp_data=ssp,
                 observation=obs,
                 sfh={"type": "dpl", "alpha": Uniform(0.1, 5.0, "sfh_dpl_alpha"), "*": FIXED},
-                dust={
+                dust_attenuation={
                     "type": "two_component",
                     "law": "calzetti",
                     "*": FIXED,
@@ -273,7 +279,7 @@ class TestSpectrumLUTLines:
                 ssp_data=ssp,
                 observation=obs,
                 sfh={"type": "dpl", "*": FIXED},
-                dust={
+                dust_attenuation={
                     "type": "two_component",
                     "law": "calzetti",
                     "*": FIXED,
@@ -373,7 +379,7 @@ class TestJointPrecomp:
                 ssp_data=ssp,
                 observation=obs,
                 sfh={"type": "dpl", "*": FIXED},
-                dust=dust,
+                dust_attenuation=dust,
                 neb={"type": "none"},
                 redshift=redshift,
                 approx=approx,

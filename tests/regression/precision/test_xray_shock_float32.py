@@ -42,7 +42,7 @@ _DUST = {
     "tau_diff": 0.5,
     "tau_bc": 0.3,
 }
-_DUST_IR = {"law": "power_law", **_DUST, "emission": {"type": "dale2014", "all_params": FIXED}}
+_DUST_EMISSION = {"type": "dale2014", "all_params": FIXED}
 
 
 def _rest_sed(ssp, dtype, **groups):
@@ -79,7 +79,13 @@ def _f32_vs_f64(ssp, tol, **groups):
 @pytest.mark.parametrize("xray_type", ["simple", "lopez24"])
 def test_xray_finite_and_matches_f64_in_float32(ssp_bare, xray_type):
     """X-ray emission is finite and float64-accurate in pure float32."""
-    _f32_vs_f64(ssp_bare, 1e-4, dust=_DUST_IR, xray={"type": xray_type})
+    _f32_vs_f64(
+        ssp_bare,
+        1e-4,
+        dust_attenuation=_DUST,
+        dust_emission=_DUST_EMISSION,
+        xray={"type": xray_type},
+    )
 
 
 @pytest.mark.parametrize(
@@ -95,7 +101,7 @@ def test_xray_finite_and_matches_f64_in_float32(ssp_bare, xray_type):
 )
 def test_shock_finite_and_matches_f64_in_float32(ssp_bare, shock_group, tol):
     """Shock emission is finite and float64-accurate in pure float32."""
-    _f32_vs_f64(ssp_bare, tol, dust=_DUST, shock=shock_group)
+    _f32_vs_f64(ssp_bare, tol, dust_attenuation=_DUST, shock=shock_group)
 
 
 def test_xray_hotgas_kernel_is_finite_in_float32():

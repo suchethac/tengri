@@ -31,7 +31,7 @@ def _build(ssp, **extra):
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "dpl", "*": FREE},
-        dust={"type": "two_component", "law": "calzetti", "*": FIXED},
+        dust_attenuation={"type": "two_component", "law": "calzetti", "*": FIXED},
         redshift=Fixed(0.1),
     )
     kwargs.update(extra)
@@ -42,7 +42,13 @@ def _build(ssp, **extra):
     "extra, expected",
     [
         ({"neb": {"type": "cue", "*": FIXED}}, "cue"),
-        ({"neb": {"type": "none"}, "radio": {"type": "condon92"}}, "condon1992"),
+        (
+            {
+                "neb": {"type": "none"},
+                "radio": {"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}},
+            },
+            "condon1992",
+        ),
         ({"neb": {"type": "none"}, "shock": {"type": "mappings"}}, "mappings"),
         (
             {

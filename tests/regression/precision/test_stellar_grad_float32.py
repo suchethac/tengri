@@ -51,7 +51,7 @@ def _model(ssp):
             "log_total_mass": FREE,
             "*": FIXED,
         },
-        dust={
+        dust_attenuation={
             "type": "two_component",
             "law_bc": "calzetti",
             "law_diff": "calzetti",

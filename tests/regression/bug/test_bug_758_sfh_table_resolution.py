@@ -65,7 +65,7 @@ def test_nonparametric_sfh_conserves_formed_mass(synthetic_ssp_wide, sfh):
     model = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
         sfh=sfh,
-        dust={
+        dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "tau_bc": Fixed(0.0),
@@ -90,7 +90,7 @@ def test_nonparametric_sfh_is_jit_safe(synthetic_ssp_wide):
     model = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
         sfh={"type": "continuity", "log_total_mass": Fixed(10.0), "*": FIXED},
-        dust={
+        dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "tau_bc": Fixed(0.0),

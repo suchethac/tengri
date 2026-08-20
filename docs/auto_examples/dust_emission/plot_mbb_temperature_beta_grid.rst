@@ -31,7 +31,7 @@ power-law index per Δβ = 1.
 Useful when interpreting FIR fits as the ``(T, β)`` degeneracy
 projected onto a single sub-mm photometric point.
 
-.. GENERATED FROM PYTHON SOURCE LINES 15-113
+.. GENERATED FROM PYTHON SOURCE LINES 15-114
 
 
 
@@ -77,12 +77,13 @@ projected onto a single sub-mm photometric point.
             "all_params": tengri.FIXED,
             "tau_diff": 0.5,
             "tau_bc": 1.0,
-            "emission": {"type": "modified_blackbody", "all_params": tengri.FIXED},
         }
+        dust_emission = {"type": "modified_blackbody", "all_params": tengri.FIXED}
         model = tengri.SEDModel.build(
             ssp,
             sfh={"type": "const", "all_params": tengri.FIXED, "log_total_mass": 11.13},
-            dust=dust,
+            dust_attenuation=dust,
+            dust_emission=dust_emission,
             redshift=tengri.Fixed(0.05),
         )
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))

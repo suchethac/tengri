@@ -708,7 +708,7 @@ class TestSEDModelInitNebularDispatch:
                 "trunc": 3.0,
                 "logzsol": -0.1,
             },
-            dust={
+            dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
                 "*": tengri.FIXED,

@@ -147,10 +147,15 @@ model = SEDModel.build(
     # remaining metallicity parameters are nuisance knobs this page does not
     # vary, and saying so is what keeps them out of the rendered output.
     met={"logzsol": Uniform(-1.5, 0.3), "all_params": FIXED},
-    dust={
+    dust_attenuation={
         "type": "two_component",
         "law": "calzetti",
         "all_params": FIXED,
+        # Diffuse screen only, stated rather than inherited. Leaving tau_bc out
+        # gave it its declared default of 1.0 -- a frozen magnitude of extra
+        # attenuation on every young population, which trades against recent SFR
+        # and so is not a neutral nuisance pin in an SFH-recovery fit.
+        "tau_bc": 0.0,
         "tau_diff": Uniform(0.0, 2.0),
     },
     neb={"type": "ssp"},

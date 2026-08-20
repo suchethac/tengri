@@ -38,7 +38,7 @@ The SED uses a starburst history (τ = 100 Myr) with two-component dust and
 sfr-scaled nebular emission, rendered in the observer frame at z=1 with complete
 IGM attenuation.
 
-.. GENERATED FROM PYTHON SOURCE LINES 22-162
+.. GENERATED FROM PYTHON SOURCE LINES 22-163
 
 
 
@@ -52,7 +52,7 @@ IGM attenuation.
 
  .. code-block:: none
 
-    /tengri/examples/photometry/plot_filter_throughput_overlay.py:160: UserWarning: This figure includes Axes that are not compatible with tight_layout, so results might be incorrect.
+    /tengri/examples/photometry/plot_filter_throughput_overlay.py:161: UserWarning: This figure includes Axes that are not compatible with tight_layout, so results might be incorrect.
       fig.tight_layout()
 
 
@@ -104,14 +104,15 @@ IGM attenuation.
         "tau_diff": 0.3,  # Diffuse attenuation
         "tau_bc": 0.5,  # Dust clouds
         "law": "calzetti",  # Starburst attenuation law
-        "emission": {"type": "dale2014", "all_params": tengri.FIXED},
     }
+    dust_emission = {"type": "dale2014", "all_params": tengri.FIXED}
 
     # Build the model using bare-stellar SSP with Cue nebular backend
     model = tengri.SEDModel.build(
         ssp_data=tengri.load_ssp("fsps_prsc_miles_chabrier"),
         sfh=sfh_config,
-        dust=dust_config,
+        dust_attenuation=dust_config,
+        dust_emission=dust_emission,
         neb={"type": "cue", "all_params": tengri.FIXED, "logZ_gas": -0.5, "logU": -2.0},
         redshift=tengri.Fixed(z),
     )
@@ -208,7 +209,7 @@ IGM attenuation.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.474 seconds)
+   **Total running time of the script:** (0 minutes 2.708 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_filter_throughput_overlay.py:

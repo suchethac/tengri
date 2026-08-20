@@ -60,11 +60,11 @@ class TestDale2014RadioDoubleCount1970:
                 ssp_data=synthetic_ssp_wide,
                 observation=synthetic_tophat_obs,
                 sfh={"type": "const"},
-                dust={
+                dust_attenuation={
                     "type": "two_component",
                     "law": "calzetti",
-                    "emission": {"type": "dale2014"},
                 },
+                dust_emission={"type": "dale2014"},
                 radio={"sf": {"type": "bell2003"}},
                 redshift=Fixed(0.1),
             )
@@ -84,11 +84,11 @@ class TestDale2014RadioDoubleCount1970:
                 ssp_data=synthetic_ssp_wide,
                 observation=synthetic_tophat_obs,
                 sfh={"type": "const"},
-                dust={
+                dust_attenuation={
                     "type": "two_component",
                     "law": "calzetti",
-                    "emission": {"type": "dale2014"},
                 },
+                dust_emission={"type": "dale2014"},
                 radio={"sf": {"type": "delvecchio2021"}},
                 redshift=Fixed(0.1),
             )
@@ -103,11 +103,11 @@ class TestDale2014RadioDoubleCount1970:
             ssp_data=synthetic_ssp_wide,
             observation=synthetic_tophat_obs,
             sfh={"type": "const"},
-            dust={
+            dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "emission": {"type": "dale2014"},
             },
+            dust_emission={"type": "dale2014"},
             radio={
                 "sf": {"type": "none"},
                 "agn": {"type": "powerlaw"},
@@ -126,11 +126,11 @@ class TestDale2014RadioDoubleCount1970:
             ssp_data=synthetic_ssp_wide,
             observation=synthetic_tophat_obs,
             sfh={"type": "const"},
-            dust={
+            dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "emission": {"type": "dale2014"},
             },
+            dust_emission={"type": "dale2014"},
             redshift=Fixed(0.1),
         )
         assert model is not None
@@ -146,11 +146,11 @@ class TestDale2014RadioDoubleCount1970:
             ssp_data=synthetic_ssp_wide,
             observation=synthetic_tophat_obs,
             sfh={"type": "const"},
-            dust={
+            dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "emission": {"type": "dale2014_cigale"},
             },
+            dust_emission={"type": "dale2014_cigale"},
             radio={"sf": {"type": "bell2003"}},
             redshift=Fixed(0.1),
         )
@@ -174,11 +174,11 @@ class TestDale2014RadioDoubleCount1970:
             ssp_data=synthetic_ssp_wide,
             observation=synthetic_tophat_obs,
             sfh={"type": "const", "*": FIXED},
-            dust={
+            dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "emission": {"type": "dale2014_cigale"},
             },
+            dust_emission={"type": "dale2014_cigale"},
             radio={"sf": {"type": "bell2003"}},
             redshift=Fixed(0.1),
         )
