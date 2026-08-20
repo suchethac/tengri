@@ -1504,9 +1504,31 @@ def _warn_silently_fixed_parameters(
         value = dist.default
         default_fixed_by_group.setdefault(group, []).append((param_name, value))
 
+    # A group that yielded at least one free parameter cannot have hit the
+    # failure this warning exists to catch -- "I configured a group and got
+    # nothing free out of it" (#1995). Counting free parameters per group is
+    # the test; engagement deliberately is not, because a group can be engaged
+    # and still yield nothing free, which is the footgun itself:
+    #
+    #     sfh={"type": "dpl", "alpha": Fixed(1.5)}   # engaged, n_free == 0
+    #
+    # Before this, the condition was "did the group state a disposition", a
+    # proxy that misfires on the standard ``met={"logzsol": Uniform(...)}``
+    # spelling and put 115 warnings into 9 published renders.
+    free_by_group: dict[str, int] = {}
+    for param_name, dist in final_params._distributions.items():
+        if dist.is_fixed:
+            continue
+        owning_group = param_partition.get(param_name)
+        if owning_group is None:
+            continue
+        free_by_group[owning_group] = free_by_group.get(owning_group, 0) + 1
+
     # For each group with silently-fixed parameters, check if the user
     # explicitly stated a disposition. Only warn if they didn't.
     for group, params_and_values in default_fixed_by_group.items():
+        if free_by_group.get(group, 0):
+            continue
         # Determine if the user actually provided this group in kwargs
         if group.startswith("dust."):
             # Sub-group like dust.emission
