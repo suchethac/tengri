@@ -143,6 +143,37 @@ print("dtype  :", jnp.zeros(1).dtype)
 # still on stays float64, and thirteen downstream gates key on `wave.dtype` —
 # so the fast paths silently never engage and a float32 run quietly measures
 # something else.
+#
+# ### If you use float32 on CUDA, turn TF32 off
+#
+# This one is not tengri's doing and it is easy to miss. On Ampere and later,
+# XLA lowers float32 matmuls to **TF32** by default: 19 bits, with a 10-bit
+# mantissa, against float32's 24. Numerics calibrated on a CPU do not survive
+# that. tengri's own float32 Fisher-matrix test fails on CUDA out of the box —
+#
+# ```text
+# AssertionError: float32 FIM differs from float64 by 3.922e-03 relative
+# AssertionError: float32 error bars differ from float64 by 4.494e-02
+# ```
+#
+# — a 4% error on parameter error bars, and it passes on the CPU. Ask for real
+# float32:
+#
+# ```bash
+# export JAX_DEFAULT_MATMUL_PRECISION=highest
+# ```
+#
+# or `jax.config.update("jax_default_matmul_precision", "highest")`. Both those
+# tests then pass. Two things worth knowing:
+#
+# **`NVIDIA_TF32_OVERRIDE=0` does not fix it.** Measured: with that alone the
+# two tests still fail. XLA selects its own algorithm, so the JAX-level knob is
+# the one that binds.
+#
+# **It costs no speed here.** The batch numbers in §3 are unchanged to within
+# noise with TF32 disabled — 4.42 against 4.45 us per galaxy at batch 2048.
+# float32's advantage in tengri comes from moving half as many bytes, not from
+# tensor cores, so there is nothing to trade away. Set it and forget it.
 
 # %% [markdown]
 # ## 3. Prediction
@@ -171,7 +202,9 @@ model = SEDModel.build(ssp_data=ssp, observation=obs, **recipe)
 # key at float32 and float64, so a sampled fixture compares two different
 # galaxies across the precision arms and calls the difference precision error.
 params = {
-    name: round(float(np.asarray(model.spec.get_distribution(name).unstandardize(jnp.zeros(())))), 6)
+    name: round(
+        float(np.asarray(model.spec.get_distribution(name).unstandardize(jnp.zeros(())))), 6
+    )
     for name in model.spec.free_params
 }
 flux = model.predict_photometry(params)
@@ -360,7 +393,10 @@ print("resolved approx:", fitter.model.approx)
 
 t0 = time.perf_counter()
 post = fitter.run("map", n_steps=300, verbose=False)
-print(f"MAP, 300 steps (includes compile): {time.perf_counter() - t0:.2f} s")
+# Lower than the cold figure in the table below if tengri's persistent compile
+# cache (~/.cache/tengri_jax_cache) already holds this graph — it is keyed on the
+# GPU model, so the first run on a new card pays in full.
+print(f"MAP, 300 steps (first call here): {time.perf_counter() - t0:.2f} s")
 print("moved off the initial point:", {k: round(post.params[k] - params[k], 4) for k in params})
 
 # %% [markdown]
@@ -449,20 +485,32 @@ print("moved off the initial point:", {k: round(post.params[k] - params[k], 4) f
 # the difference — a factor of 152, in the first version of this notebook —
 # reads as precision error. Use a fixed parameter vector.
 #
-# ### The photometry gradient is identically zero
+# ### The photometry gradient is identically zero in float32
 #
 # This is the finding to know about before running anything important in
-# float32.
+# float32. The cell below prints the gradient at whatever width the session is
+# in — float64 as this notebook is configured, so expect **nonzero** values of
+# order 1e-26 to 1e-28.
 
 # %%
 grad = jax.grad(lambda q: jnp.sum(model.predict_photometry(q)))(params)
+print("x64:", jax.config.jax_enable_x64)
 print("grad(sum photometry):", {k: float(v) for k, v in grad.items()})
 
 # %% [markdown]
-# In float64 those seven derivatives are ~1e-26 to 1e-28 and all nonzero. In
-# float32, **every one of them is exactly zero** — on the CPU and on the GPU,
-# on the exact path and under `WavePrecomp`, with the signs preserved as `-0.0`
-# and `+0.0`. Nothing raises and nothing warns.
+# Now restart with `JAX_ENABLE_X64=0` and run the same cell. **Every one of the
+# seven becomes exactly zero** — on the CPU and on the GPU, on the exact path
+# and under `WavePrecomp`, with the signs preserved as `-0.0` and `+0.0`:
+#
+# ```text
+# x64: False
+# grad(sum photometry): {'dust_tau_bc': -0.0, 'met_logzsol': 0.0,
+#   'sfh_tsnorm_log_total_mass': 0.0, 'sfh_tsnorm_peak_lbt_gyr': -0.0,
+#   'sfh_tsnorm_skew': 0.0, 'sfh_tsnorm_trunc': -0.0,
+#   'sfh_tsnorm_width_gyr': -0.0}
+# ```
+#
+# Nothing raises and nothing warns.
 #
 # The magnitudes are not the explanation: 1e-26 is comfortably inside float32,
 # whose smallest normal is 1.2e-38. The reverse pass forms an intermediate the
@@ -500,13 +548,64 @@ print(f"matmul 2048^3 (f32): {mm:.2f} ms  ->  {2 * 2048**3 / (mm * 1e-3) / 1e9:.
 # workload is the problem — 0.12 FLOP/byte never reaches those ALUs.
 
 # %% [markdown]
-# ## 7. Limits, honestly
+# ## 7. What breaks on CUDA
+#
+# The float32 regression tree — 57 files, the part of the suite most exposed to a
+# device change — run on CUDA against the same run on CPU:
+#
+# | | CUDA | CUDA, `matmul_precision=highest` | CPU |
+# |---|---:|---:|---:|
+# | passed | 547 | 550 | **552** |
+# | failed | **5** | **2** | 0 |
+# | skipped / xfailed | 3 / 4 | 3 / 4 | 3 / 4 |
+#
+# Nothing else in the tree cares which device it is on. The failures are three
+# distinct things, and only one of them is a tolerance:
+#
+# **Two are TF32** — the Fisher tests of §2. Fixed by
+# `JAX_DEFAULT_MATMUL_PRECISION=highest`, and they are the reason that section
+# exists.
+#
+# **Two are a hard cuBLAS error**, in the geoVI metric's emission-line
+# marginalization:
+#
+# ```text
+# jax.errors.JaxRuntimeError: INTERNAL: GEMM is not supported by cublasLt
+# and legacy cublas fallback is removed.
+# ```
+#
+# Not a precision issue — the GEMM it wants is one cuBLASLt will not take, and
+# JAX 0.11 has dropped the legacy fallback that used to absorb this. It is loud,
+# which is the good kind of failure, and it means **float32 geoVI with
+# marginalized emission lines does not currently run on CUDA.** The matmul knob
+# does not help.
+#
+# **One is the cross-precision kernel cache guard** (#1392): the float32
+# gradient differs depending on whether a float64 gradient ran earlier in the
+# same process. Before reading that as the old bug returning, look at the size —
+# 9.9e-07 relative, about 8 ulp in float32, where #1392 was a wrong-precision
+# kernel producing NaNs. The test asserts exact array equality, so on a device
+# whose reduction order and autotuning need not repeat, ~8 ulp is enough to trip
+# it. **And it is intermittent**: it failed the first CUDA run of this tree and
+# passed the second, which is what nondeterminism looks like and what a
+# wrong-kernel bug does not. Worth a GPU tolerance rather than exact equality.
+#
+# The practical reading: run float64 on CUDA and nothing in this tree fails at
+# all. In float32, set the matmul precision and avoid marginalized emission
+# lines in geoVI.
+
+# %% [markdown]
+# ## 8. Limits, honestly
 #
 # * **The float64 penalty is consumer-specific.** 1/64 rate on GeForce, about
 #   1/2 on A100/H100. Re-measure before assuming this transfers.
 # * **This card was driving a desktop.** Absolute numbers would improve on an
 #   idle card; the direction and the crossover scale are what to carry away.
 # * **float32 gradients of raw observables are zero.** §5. Fits are fine.
+# * **float32 on CUDA needs `JAX_DEFAULT_MATMUL_PRECISION=highest`**, or XLA
+#   quietly gives you TF32's 10-bit mantissa. §2.
+# * **float32 geoVI with marginalized emission lines does not run on CUDA** —
+#   cuBLASLt refuses the GEMM. §7.
 # * **NIFTy `vi*` backends are not measured here.** `optimize_kl` is a
 #   Python-level outer loop with per-iteration host syncs and ~20 GB of *host*
 #   RSS; there is little for a device to win and it would dominate the run.

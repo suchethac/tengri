@@ -204,6 +204,65 @@ obvious in advance: float32 coverage pins the *objective gradient* finite, and a
 converging fit with NaN posterior draws is a documented float32 geoVI failure mode.
 Catalog NUTS in float32 is not asserted anywhere in the suite; here it worked.
 
+## Finding 7 — float32 on CUDA silently becomes TF32, and it costs accuracy but not speed
+
+On Ampere and later, XLA lowers float32 matmuls to TF32 (19 bits, 10-bit mantissa)
+by default. tengri's own float32 Fisher test fails on CUDA out of the box and passes
+on the CPU:
+
+```text
+AssertionError: float32 FIM differs from float64 by 3.922e-03 relative
+AssertionError: float32 error bars differ from float64 by 4.494e-02
+```
+
+A 4.5% error on parameter error bars. Both pass with
+
+```bash
+export JAX_DEFAULT_MATMUL_PRECISION=highest
+```
+
+Two measured details that make this actionable:
+
+- **`NVIDIA_TF32_OVERRIDE=0` alone does not fix it** — 2 of 6 still fail. XLA picks
+  its own algorithm, so the JAX-level knob is the one that binds. Setting both is
+  the same as setting the JAX one.
+- **It costs no measurable speed.** Re-running Finding 2's GPU f32 batch arm with
+  the knob on: 4.42 vs 4.45 us/galaxy forward and 5.51 vs 5.49 gradient at 2048,
+  i.e. inside the A/A floor. float32's advantage in tengri is halved memory
+  traffic, not tensor cores, so there is nothing to trade. **Set it
+  unconditionally for float32 work on CUDA.**
+
+## Finding 8 — the capability sweep: 5 of 559 float32 tests fail on CUDA, 2 after the knob
+
+`tests/regression/precision/` (57 files) is the part of the suite most exposed to a
+device change, and `tests/conftest.py` pins no platform, so it already runs on
+whatever JAX picks.
+
+| | CUDA | CUDA + `matmul_precision=highest` | CPU |
+|---|---:|---:|---:|
+| passed | 547 | 550 | **552** |
+| failed | **5** | **2** | 0 |
+| skipped / xfailed | 3 / 4 | 3 / 4 | 3 / 4 |
+
+Three distinct causes:
+
+1. **Two are TF32** (Finding 7). Fixed by the knob.
+2. **Two are a hard cuBLAS error** in the geoVI metric's emission-line
+   marginalization, and the knob does not help:
+   `INTERNAL: GEMM is not supported by cublasLt and legacy cublas fallback is
+   removed.` Not precision — the GEMM shape is one cuBLASLt refuses and JAX 0.11
+   has dropped the fallback that used to absorb it. **float32 geoVI with
+   marginalized emission lines does not run on CUDA.** It fails loudly, which is
+   the right failure mode.
+3. **One is the #1392 cross-precision kernel-cache guard**, and it is
+   **intermittent** — it failed the first CUDA run of the tree and passed the
+   second. The discrepancy is 9.9e-07 relative, about 8 ulp in float32, where
+   #1392 itself was a wrong-precision kernel producing NaNs. `assert_array_equal`
+   is exact, and GPU reduction order and autotuning need not repeat run to run.
+   That points at nondeterminism, not at the cache serving the wrong kernel.
+
+In **float64** — the default — nothing in this tree fails on CUDA at all.
+
 ## Interpretation
 
 The GPU question is a shape question. tengri's forward model is memory- and
@@ -218,9 +277,13 @@ work that is wide by construction.
 
 ## Verdict
 
-**Capability: PASS.** No tengri-side change is needed; the forward model,
-gradients, MAP and the catalog sampler all run on CUDA, in both precisions, and
-float64 results are bit-comparable with the CPU.
+**Capability: PASS in float64, PASS with two caveats in float32.** No
+tengri-side change is needed; the forward model, gradients, MAP and the catalog
+sampler all run on CUDA in both precisions, and float64 results are bit-comparable
+with the CPU — 552/552 of the float32 regression tree passes on CPU and, in float64,
+nothing in it fails on CUDA either. In float32 on CUDA, set
+`JAX_DEFAULT_MATMUL_PRECISION=highest` (Finding 7) and avoid marginalized emission
+lines in geoVI (Finding 8).
 
 **Speedup: conditional, and shape-dependent.** 0.03x–0.08x (a large loss) at one
 galaxy; 4.3x–14.7x for a batched forward or gradient at 2048; only 1.22x for
@@ -285,6 +348,18 @@ Not filed from this session (no `gh` available). Ready to open:
    that select the platform from the environment.
 4. **`bench/README.md`'s script table is missing entries**, including
    `benchmark_catalog_throughput.py` — `area:tests`, `documentation`.
+5. **float32 geoVI emission-line marginalization dies on cuBLASLt** —
+   `area:inference`, `area:nebular`, `bug`. `INTERNAL: GEMM is not supported by
+   cublasLt and legacy cublas fallback is removed`, two tests in
+   `test_geovi_metric_float32.py`, CUDA only, not precision-related.
+6. **`test_float64_gradient_does_not_poison_a_later_float32_gradient` is
+   GPU-intermittent** — `area:tests`, `area:perf`. Exact `assert_array_equal` at
+   ~8 ulp on a device that need not reproduce its reduction order; wants a GPU
+   tolerance.
+7. **tengri should consider defaulting `jax_default_matmul_precision` to
+   `highest` on GPU** when x64 is off — `area:api`, `area:perf`,
+   `silent-failure`. It costs nothing measurable (Finding 7) and its absence
+   silently degrades every float32 matmul on Ampere+.
 
 ## Reproduce
 
@@ -302,6 +377,30 @@ JAX_PLATFORMS=cpu .venv/bin/python bench/scripts/benchmark_device_matrix.py --al
 # the accuracy table, from the shape-G dumps
 .venv/bin/python bench/scripts/benchmark_device_matrix.py --compare
 ```
+
+## Not done
+
+`notebooks/nvidia_cuda.py` is **not registered in the published docs spine.**
+Publishing it requires an executed render carrying `image/png` outputs —
+`tools/check_notebook_renders.py` enforces that, correctly — and this environment
+has no kernel stack to produce one (`ipykernel`, `jupyter_client`, `nbclient` and
+`nbconvert` are all absent from the venv). The notebook itself runs end to end on
+CUDA; only the render is missing. To publish:
+
+```bash
+pip install nbclient ipykernel                       # not installed here
+python scripts/execute_notebooks.py nvidia_cuda      # never set MPLBACKEND
+```
+
+then add `"nvidia_cuda"` to `EXPERIMENTAL_SLUGS` in
+`scripts/sync_spine_notebooks_for_docs.py` and a bullet plus toctree entry in
+`docs/spine/experimental/index.md`.
+
+One warning learned by doing it: `scripts/sync_spine_notebooks_for_docs.py`
+rewrites *every* published render, not just the one you added. Two unrelated
+notebooks (`08_emission_lines`, `09_parameter_sweeps`) picked up 1226 lines of
+diff from source drift that predates this work. Check `git status` after running
+it and restore anything you did not mean to touch.
 
 ## See also
 
