@@ -51,7 +51,13 @@ def test_module_surface_and_default_dict(
     assert "none" in mod.available()
     assert representative_variant in mod.available()
     out = getattr(mod, representative_variant)()
-    assert out["type"] == representative_variant
+    if module_name == "radio":
+        # #1980: radio's {'type': name} spelling is retired — the legacy-name
+        # factory emits the composable sf/agn resolution instead.
+        assert "type" not in out
+        assert out["sf"]["type"] and out["agn"]["type"]
+    else:
+        assert out["type"] == representative_variant
     assert out["all_params"] is FIXED
     if sample_short_param is not None:
         sig = inspect.signature(getattr(mod, representative_variant))
@@ -151,10 +157,19 @@ def test_module_in_builders_namespace(mod_name: str) -> None:
 
 
 def test_all_three_factories_emit_type_key() -> None:
-    """Sanity check across every variant in all three modules."""
-    for mod_name in ("igm", "radio", "xray"):
+    """Sanity check across every variant in all three modules.
+
+    #1980: radio's {'type': name} spelling is retired, so its legacy-name
+    factories emit the composable sf/agn axes; igm and xray keep the type key.
+    """
+    for mod_name in ("igm", "xray"):
         mod = getattr(builders, mod_name)
         for variant in mod.available():
             out = getattr(mod, variant)()
             assert out["type"] == variant
             assert out["all_params"] is FIXED
+    for variant in builders.radio.available():
+        out = getattr(builders.radio, variant)()
+        assert "type" not in out, f"radio.{variant} still emits the retired type key"
+        assert out["sf"]["type"] and out["agn"]["type"]
+        assert out["all_params"] is FIXED

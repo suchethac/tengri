@@ -101,7 +101,11 @@ RUNS = [
         dict(
             dust_attenuation=DUST_ON,
             dust_emission=DUST_EMISSION,
-            radio={"type": "condon92", "all_params": tengri.FIXED},
+            radio={
+                "sf": {"type": "bell2003"},
+                "agn": {"type": "powerlaw"},
+                "all_params": tengri.FIXED,
+            },
         ),
     ),
     (

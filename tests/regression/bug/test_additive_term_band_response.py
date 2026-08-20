@@ -103,7 +103,14 @@ AGN = {
 #: physics: the exact per-call filter integral the emitter falls back to).
 EMITTERS = {
     "radio": {
-        "group": {"type": "condon92", "*": FIXED, "alpha_sf": Fixed(0.9)},
+        # #1980: condon92's retired spelling, composable; the alpha_sf knob
+        # stays at radio level, where the composable grammar accepts params.
+        "group": {
+            "sf": {"type": "bell2003"},
+            "agn": {"type": "powerlaw"},
+            "*": FIXED,
+            "alpha_sf": Fixed(0.9),
+        },
         "free": ("radio_alpha_sf", Uniform(0.6, 1.0)),
         "band": RADIO_BAND,
     },

@@ -105,7 +105,7 @@ near 9.7 and 18 μm.
         model = tengri.SEDModel.build(
             ssp,
             sfh=SFH,
-            dust=DUST,
+            dust_attenuation=DUST,
             agn={
                 "disc": {"type": "multicolor", "all_params": tengri.FIXED},
                 "torus": {"type": torus, "all_params": tengri.FIXED},
@@ -138,7 +138,7 @@ near 9.7 and 18 μm.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 6.598 seconds)
+   **Total running time of the script:** (0 minutes 18.761 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_torus_compare.py:

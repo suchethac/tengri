@@ -4006,6 +4006,20 @@ class SEDModel:
             else hash(tuple(map(float, ssp_lgmet_array)))
         )
 
+        # SSP flux grid CONTENT (not just shape/lgmet).
+        # The inference closure bakes the SSP grid, so two models with same
+        # shape/lgmet but different ssp_flux must have different signatures
+        # (#1973). Two SSP grids "of identical shape" is the scenario that
+        # _get_or_build_engine's docstring advertised as safe sharing; it is
+        # the scenario that produces +1 dex stellar mass errors when the second
+        # model silently runs the first model's physics.
+        # Content-hashed once per grid and cached on the SSPData instance;
+        # cost is 17-100 ms first call (depending on grid size), zero for
+        # subsequent calls on the same object.
+        from tengri.components.stellar.sps.dsps_wrapper import get_ssp_content_hash
+
+        ssp_flux_id = get_ssp_content_hash(self.ssp_data)
+
         # Alpha-Fe enhancement presence
         has_alpha_fe = hasattr(self.ssp_data, "ssp_alpha_fe")
 
@@ -4406,6 +4420,7 @@ class SEDModel:
             ssp_flux_shape,
             ssp_lgmet_shape,
             ssp_lgmet_id,
+            ssp_flux_id,
             has_alpha_fe,
             n_filters,
             filter_wave_shape,

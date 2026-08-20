@@ -48,6 +48,7 @@ import jax.numpy as jnp
 import pytest
 
 from tengri import SEDModel
+from tengri.parameters.groups import _legacy_radio_type_to_blocks
 from tengri.registry import _RegistryTable
 
 pytestmark = pytest.mark.contract
@@ -333,11 +334,16 @@ class TestRegistryComponentsEmit:
                 # Radio: build model with radio config
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore")
+                    if name == "none":
+                        radio_spec = {"sf": {"type": "none"}, "agn": {"type": "none"}}
+                    else:
+                        sf_variant, agn_variant = _legacy_radio_type_to_blocks(name)
+                        radio_spec = {"sf": {"type": sf_variant}, "agn": {"type": agn_variant}}
                     model = SEDModel.build(
                         ssp_data=synthetic_ssp_wide,
                         observation=synthetic_tophat_obs,
                         sfh={"type": "const"},
-                        radio={"type": name},
+                        radio=radio_spec,
                     )
 
                 params = model.spec.sample(jax.random.PRNGKey(0))

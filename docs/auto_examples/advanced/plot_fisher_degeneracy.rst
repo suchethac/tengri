@@ -33,7 +33,7 @@ predictions w.r.t. parameters and C^{-1} is the inverse noise covariance.
 Reference: Fisher Information Matrix in parameter estimation; see
 Conroy 2013 (ARA&A, 51, 393) for SED fitting context.
 
-.. GENERATED FROM PYTHON SOURCE LINES 17-171
+.. GENERATED FROM PYTHON SOURCE LINES 17-175
 
 
 
@@ -127,7 +127,11 @@ Conroy 2013 (ARA&A, 51, 393) for SED fitting context.
                 ssp,
                 observation=obs,
                 sfh={"type": "tsnorm", "all_params": tengri.FIXED},
-                dust={"law": "power_law", "type": "two_component", "all_params": tengri.FIXED},
+                dust_attenuation={
+                    "law": "power_law",
+                    "type": "two_component",
+                    "all_params": tengri.FIXED,
+                },
                 redshift=tengri.Fixed(0.1),
             )
             phot = jnp.abs(mdl.predict_photometry(true_params))
@@ -206,7 +210,7 @@ Conroy 2013 (ARA&A, 51, 393) for SED fitting context.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.974 seconds)
+   **Total running time of the script:** (0 minutes 2.918 seconds)
 
 
 .. _sphx_glr_download_auto_examples_advanced_plot_fisher_degeneracy.py:

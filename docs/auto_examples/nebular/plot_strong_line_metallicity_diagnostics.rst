@@ -84,7 +84,7 @@ References:
             "alpha": 4.0,
             "beta": 2.0,
         },
-        dust={
+        dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
@@ -162,7 +162,7 @@ References:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 2.361 seconds)
+   **Total running time of the script:** (0 minutes 2.374 seconds)
 
 
 .. _sphx_glr_download_auto_examples_nebular_plot_strong_line_metallicity_diagnostics.py:

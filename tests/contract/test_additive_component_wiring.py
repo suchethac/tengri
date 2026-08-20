@@ -60,7 +60,13 @@ def test_radio_q_ir_is_wired(synthetic_ssp_wide, synthetic_tophat_obs):
     model = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
         observation=synthetic_tophat_obs,
-        radio={"type": "condon92", "q_ir": Uniform(2.0, 3.0)},
+        # #1980: radio params live at the radio top level — the sf sub-block
+        # takes only type/*.
+        radio={
+            "sf": {"type": "bell2003"},
+            "agn": {"type": "powerlaw"},
+            "q_ir": Uniform(2.0, 3.0),
+        },
         **_base_kwargs(),
     )
     assert "radio_q_ir" in model.spec.free_params

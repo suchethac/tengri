@@ -82,7 +82,7 @@ formulation).
     model = tengri.SEDModel.build(
         ssp,
         sfh=SFH,
-        dust=DUST,
+        dust_attenuation=DUST,
         agn={
             "all_params": tengri.FIXED,
             "log_lbol": 12.5,
@@ -135,7 +135,7 @@ formulation).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.595 seconds)
+   **Total running time of the script:** (0 minutes 3.217 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_relagn_spin.py:

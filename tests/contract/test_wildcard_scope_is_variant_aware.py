@@ -347,7 +347,7 @@ def _simple_group_cases():
         {
             "neb": {"type": "none"},
             "dust_attenuation": {"law": "power_law", "type": "two_component", "*": FIXED},
-            "radio": {"type": "condon92", "*": FREE},
+            "radio": {"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}, "*": FREE},
         },
     )
 

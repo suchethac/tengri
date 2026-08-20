@@ -94,16 +94,16 @@ References:
             "start_gyr": 0.3,
             "end_gyr": 0.0,
         },
-        dust={
+        dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
             "tau_diff": 0.5,  # diffuse dust: moderate optical depth
             "tau_bc": 1.2,  # birth cloud opacity: birth clouds
-            "emission": {
-                "type": "dale2014",  # Dale et al. 2014 dust SED
-                "all_params": tengri.FIXED,
-            },
+        },
+        dust_emission={
+            "type": "dale2014",  # Dale et al. 2014 dust SED
+            "all_params": tengri.FIXED,
         },
         agn={
             "torus": {"type": "none"},  # No AGN torus
@@ -131,16 +131,16 @@ References:
             "start_gyr": 10.0,
             "end_gyr": 1.0,
         },
-        dust={
+        dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
             "tau_diff": 1.5,  # warm dust around AGN
             "tau_bc": 0.0,  # no birth clouds
-            "emission": {
-                "type": "draine_li2007",  # Draine & Li 2007 dust SED (warmer)
-                "all_params": tengri.FIXED,
-            },
+        },
+        dust_emission={
+            "type": "draine_li2007",  # Draine & Li 2007 dust SED (warmer)
+            "all_params": tengri.FIXED,
         },
         agn={
             "disc": {
@@ -176,16 +176,16 @@ References:
             "start_gyr": 1.0,
             "end_gyr": 0.0,
         },
-        dust={
+        dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
             "tau_diff": 1.0,
             "tau_bc": 0.8,
-            "emission": {
-                "type": "dale2014",
-                "all_params": tengri.FIXED,
-            },
+        },
+        dust_emission={
+            "type": "dale2014",
+            "all_params": tengri.FIXED,
         },
         agn={
             "disc": {
@@ -321,7 +321,7 @@ References:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 11.301 seconds)
+   **Total running time of the script:** (0 minutes 10.771 seconds)
 
 
 .. _sphx_glr_download_auto_examples_dust_emission_plot_mid_ir_pah_features.py:

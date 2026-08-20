@@ -160,7 +160,7 @@ kitchen_sink = dict(
         "nlr": {"type": "analytic", "all_params": FIXED},
         "blr": {"type": "none", "all_params": FIXED},
     },
-    radio={"type": "condon92", "*": FIXED},
+    radio={"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}, "*": FIXED},
     xray={"type": "simple", "*": FIXED},
     redshift=Fixed(2.0),
     apply_igm=True,
@@ -482,7 +482,7 @@ money_shot = dict(
         "nlr": {"type": "analytic", "all_params": FIXED},
         "blr": {"type": "none", "all_params": FIXED},
     },
-    radio={"type": "condon92", "all_params": FIXED},
+    radio={"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}, "all_params": FIXED},
     xray={"type": "simple", "all_params": FIXED},
     redshift=Fixed(0.1),
 )

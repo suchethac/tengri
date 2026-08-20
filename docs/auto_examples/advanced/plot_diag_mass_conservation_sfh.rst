@@ -68,7 +68,7 @@ Reference: Mass conservation identity: M_formed = ∫ SFR(t) dt.
     model = tengri.SEDModel.build(
         ssp,
         sfh={"type": "dpl", "all_params": tengri.FIXED},
-        dust={"law": "power_law", "type": "two_component", "all_params": tengri.FIXED},
+        dust_attenuation={"law": "power_law", "type": "two_component", "all_params": tengri.FIXED},
         redshift=tengri.Fixed(0.0),
     )
 

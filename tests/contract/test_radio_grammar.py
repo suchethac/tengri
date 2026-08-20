@@ -3,7 +3,8 @@
 
 Tests the additive radio grammar:
 - radio={'sf':{'type':'delvecchio2021'}, 'agn':{'type':'dpl'}}
-- back-compat: radio={'type':'bell2003'}
+- the legacy radio={'type': X} spelling is RETIRED (#1980) and raises
+  with the composable equivalent in the message
 - 'none' mode disables individual sub-models
 - grid-based forward-model builds + predicts finite
 
@@ -38,25 +39,23 @@ _DUST0 = {
 class TestRadioGrammarParsing:
     """Test radio grammar parsing and parameter routing."""
 
-    def test_legacy_type_form_back_compat(self):
-        """Legacy radio={'type': X} should work (back-compat)."""
-        # Legacy 'type' (a RADIO_MODEL like condon92) predates the SF/AGN split;
-        # it turns radio on with the default sf=bell2003 + agn=powerlaw models.
-        params = parse_groups(
-            sfh={"type": "dpl", "*": FIXED},
-            radio={"type": "condon92"},
-        )
-        assert params.radio is True
-        assert params.radio_sfr_mode == "bell2003"
-        assert params.radio_agn_model == "powerlaw"  # default
+    def test_legacy_type_form_retired(self):
+        """Legacy radio={'type': X} form is retired (PR6)."""
+        # Legacy 'type' form predates the SF/AGN split and is no longer accepted.
+        # Users must use the composable surface with sf/agn axes.
+        with pytest.raises(ValueError, match=r"legacy.*retired"):
+            parse_groups(
+                sfh={"type": "dpl", "*": FIXED},
+                radio={"type": "condon92"},
+            )
 
-    def test_legacy_type_none_disables(self):
-        """Legacy radio={'type': 'none'} disables radio."""
-        params = parse_groups(
-            sfh={"type": "dpl", "*": FIXED},
-            radio={"type": "none"},
-        )
-        assert params.radio is False
+    def test_legacy_type_none_form_retired(self):
+        """Legacy radio={'type': 'none'} form is retired (PR6)."""
+        with pytest.raises(ValueError, match=r"legacy.*retired"):
+            parse_groups(
+                sfh={"type": "dpl", "*": FIXED},
+                radio={"type": "none"},
+            )
 
     def test_composable_sf_only(self):
         """radio={'sf': {'type': 'delvecchio2021'}} enables SF only."""
@@ -130,8 +129,12 @@ class TestRadioGrammarParsing:
         assert params.radio is False
 
     def test_mixed_legacy_and_new_raises(self):
-        """Mixing legacy 'type' with 'sf'/'agn' raises ValueError."""
-        with pytest.raises(ValueError, match="cannot mix legacy"):
+        """Mixing legacy 'type' with 'sf'/'agn' raises, advising composable only.
+
+        #1980: the message must NOT offer the retired legacy spelling as a
+        valid alternative — the match pins the retirement wording.
+        """
+        with pytest.raises(ValueError, match=r"retired and cannot be mixed"):
             parse_groups(
                 sfh={"type": "dpl", "*": FIXED},
                 radio={
@@ -325,3 +328,80 @@ class TestRadioComponentPhysics:
             redshift=Fixed(0.1),
         )
         assert jnp.all(jnp.isfinite(model.predict_state({}).sed_intrinsic))
+
+
+@pytest.mark.contract
+class TestRadioLegacyTypeRetirement:
+    """PR6: Legacy radio={'type': X} form is retired.
+
+    Users who relied on the flat legacy form must use the composable surface.
+    The error message preserves the mapping so they can mechanically convert.
+    """
+
+    def test_legacy_condon92_type_raises_with_composable_equivalent(self):
+        """radio={'type': 'condon92'} raises, showing composable form."""
+        with pytest.raises(ValueError, match=r"legacy.*retired"):
+            parse_groups(
+                sfh={"type": "dpl", "*": FIXED},
+                radio={"type": "condon92"},
+            )
+
+    def test_legacy_none_type_raises(self):
+        """radio={'type': 'none'} raises (use radio={'sf': None} instead)."""
+        with pytest.raises(ValueError, match=r"legacy.*retired"):
+            parse_groups(
+                sfh={"type": "dpl", "*": FIXED},
+                radio={"type": "none"},
+            )
+
+    def test_legacy_radio_dpl_type_raises(self):
+        """radio={'type': 'radio_dpl'} raises."""
+        with pytest.raises(ValueError, match=r"legacy.*retired"):
+            parse_groups(
+                sfh={"type": "dpl", "*": FIXED},
+                radio={"type": "radio_dpl"},
+            )
+
+    def test_legacy_error_message_shows_mapping_for_condon92(self):
+        """Error message for condon92 includes the composable equivalent."""
+        with pytest.raises(ValueError) as excinfo:
+            parse_groups(
+                sfh={"type": "dpl", "*": FIXED},
+                radio={"type": "condon92"},
+            )
+        message = str(excinfo.value)
+        # Should show the mapping: condon92 -> sf=bell2003, agn=powerlaw
+        assert "radio=" in message
+        assert "sf" in message
+        assert "agn" in message or "bell2003" in message
+
+    def test_composable_radio_sf_still_works(self):
+        """radio={'sf': {'type': 'bell2003'}} still works (non-legacy form)."""
+        params = parse_groups(
+            sfh={"type": "dpl", "*": FIXED},
+            radio={"sf": {"type": "bell2003"}},
+        )
+        assert params.radio is True
+        assert params.radio_sfr_mode == "bell2003"
+
+    def test_composable_radio_agn_still_works(self):
+        """radio={'agn': {'type': 'powerlaw'}} still works (non-legacy form)."""
+        params = parse_groups(
+            sfh={"type": "dpl", "*": FIXED},
+            radio={"agn": {"type": "powerlaw"}},
+        )
+        assert params.radio is True
+        assert params.radio_agn_model == "powerlaw"
+
+    def test_composable_radio_both_axes_still_works(self):
+        """radio={'sf': {...}, 'agn': {...}} still works (non-legacy form)."""
+        params = parse_groups(
+            sfh={"type": "dpl", "*": FIXED},
+            radio={
+                "sf": {"type": "bell2003"},
+                "agn": {"type": "powerlaw"},
+            },
+        )
+        assert params.radio is True
+        assert params.radio_sfr_mode == "bell2003"
+        assert params.radio_agn_model == "powerlaw"

@@ -98,7 +98,7 @@ References
     model = tengri.SEDModel.build(
         ssp,
         sfh=SFH,
-        dust=DUST,
+        dust_attenuation=DUST,
         agn={
             "type": "composable",
             "disc": {"type": "multicolor", "all_params": tengri.FIXED},
@@ -175,6 +175,11 @@ References
 
     fig.tight_layout()
     plt.show()
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 2.311 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_feii_sweep.py:

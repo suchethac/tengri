@@ -83,7 +83,7 @@ km/s — above that the two lines merge into the wing of Hα.
             "tau_gyr": 0.03,
             "log_total_mass": 8.48,
         },
-        dust={
+        dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
@@ -138,7 +138,7 @@ km/s — above that the two lines merge into the wing of Hα.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 6.082 seconds)
+   **Total running time of the script:** (0 minutes 5.653 seconds)
 
 
 .. _sphx_glr_download_auto_examples_spectroscopy_plot_velocity_offset_lines.py:

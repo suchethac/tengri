@@ -54,7 +54,7 @@ def build_model(z: float) -> tengri.SEDModel:
             "trunc": tengri.Uniform(2.0, 8.0),
             "logzsol": tengri.Fixed(-0.1),
         },
-        dust={
+        dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,

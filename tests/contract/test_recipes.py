@@ -359,7 +359,8 @@ class TestRecipeStructure:
         real thing: radio / X-ray params exist after ``parse_groups``.
         """
         recipe_dict = recipes.agn_panchromatic()
-        assert recipe_dict["radio"] == {"type": "condon92"}
+        # #1980: the recipe declares radio composably (condon92's resolution).
+        assert recipe_dict["radio"] == {"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}}
         assert recipe_dict["xray"] == {"type": "simple"}
         spec = parse_groups(**recipe_dict)
         allp = set(spec.free_params) | set(spec.get_fixed_values())
@@ -419,7 +420,8 @@ class TestRecipeStructure:
         """Recipe declares radio/xray via the dict grammar and the built spec
         carries their params (see agn_panchromatic counterpart for context)."""
         recipe_dict = recipes.composable_agn()
-        assert recipe_dict["radio"] == {"type": "condon92"}
+        # #1980: the recipe declares radio composably (condon92's resolution).
+        assert recipe_dict["radio"] == {"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}}
         assert recipe_dict["xray"] == {"type": "simple"}
         spec = parse_groups(**recipe_dict)
         allp = set(spec.free_params) | set(spec.get_fixed_values())
@@ -460,7 +462,7 @@ class TestGateGroupBoolRejected:
     @pytest.mark.parametrize(
         "group,decl,extra",
         [
-            ("radio", {"type": "condon92"}, {}),
+            ("radio", {"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}}, {}),
             ("xray", {"type": "simple"}, {}),
             ("shock", {"type": "mappings"}, {"neb": {"type": "cue"}}),
         ],

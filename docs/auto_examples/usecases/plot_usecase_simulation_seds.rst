@@ -28,7 +28,7 @@ and old metal-poor stars do not average.
 
 Reference: Conroy+2013.
 
-.. GENERATED FROM PYTHON SOURCE LINES 12-173
+.. GENERATED FROM PYTHON SOURCE LINES 12-183
 
 
 
@@ -38,8 +38,33 @@ Reference: Conroy+2013.
    :class: sphx-glr-single-img
 
 
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    /tengri/examples/usecases/plot_usecase_simulation_seds.py:62: DefaultFixedParametersWarning: Group 'met' states no 'all_params' disposition, so its remaining parameter was fixed at declared defaults:
+      met_alpha_fe=0
+
+    To fit them, pass 'all_params': FREE:
+      met={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      met={'all_params': FIXED, ...}
+      model_zt = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_simulation_seds.py:87: DefaultFixedParametersWarning: Group 'met' states no 'all_params' disposition, so its remaining 2 parameters were fixed at declared defaults:
+      met_alpha_fe=0, met_logzsol_scatter=0.1
+
+    To fit them, pass 'all_params': FREE:
+      met={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      met={'all_params': FIXED, ...}
+      model_mean = tengri.SEDModel.build(
 
 
+
+
+
+
+|
 
 .. code-block:: Python
 
@@ -98,7 +123,12 @@ Reference: Conroy+2013.
         observation=obs,
         sfh={"type": "table"},
         met={"type": "table"},
-        dust={"law": "power_law", "type": "two_component", "all_params": tengri.FIXED, "tau_bc": 0.4},
+        dust_attenuation={
+            "law": "power_law",
+            "type": "two_component",
+            "all_params": tengri.FIXED,
+            "tau_bc": 0.4,
+        },
         redshift=tengri.Fixed(Z_OBS),
     )
     fwd_zt = tengri.ForwardModel.build(sed=model_zt, observation=obs)
@@ -118,7 +148,12 @@ Reference: Conroy+2013.
         observation=obs,
         sfh={"type": "table"},
         met={"logzsol": tengri.Uniform(grid_lo, grid_hi)},
-        dust={"law": "power_law", "type": "two_component", "all_params": tengri.FIXED, "tau_bc": 0.4},
+        dust_attenuation={
+            "law": "power_law",
+            "type": "two_component",
+            "all_params": tengri.FIXED,
+            "tau_bc": 0.4,
+        },
         redshift=tengri.Fixed(Z_OBS),
     )
     fwd_mean = tengri.ForwardModel.build(sed=model_mean, observation=obs)
@@ -208,7 +243,7 @@ Reference: Conroy+2013.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.375 seconds)
+   **Total running time of the script:** (0 minutes 3.341 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_simulation_seds.py:

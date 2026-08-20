@@ -77,7 +77,7 @@ for i_mbh, log_mbh in enumerate(log_mbh_values):
         model = tengri.SEDModel.build(
             ssp,
             sfh=SFH,
-            dust=DUST,
+            dust_attenuation=DUST,
             agn={
                 "disc": {"type": "kubota_done", "all_params": tengri.FIXED},
                 "all_params": tengri.FIXED,

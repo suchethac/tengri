@@ -33,7 +33,7 @@ Reference: Kubota & Done 2018, MNRAS, 480, 1247 (multicolor disc);
 Stalevski et al. 2016, MNRAS, 458, 2288 (SKIRTOR);
 Temple, Hewett & Banerji 2021, MNRAS, 508, 737 (QSOgen).
 
-.. GENERATED FROM PYTHON SOURCE LINES 17-94
+.. GENERATED FROM PYTHON SOURCE LINES 17-96
 
 
 
@@ -109,7 +109,9 @@ Temple, Hewett & Banerji 2021, MNRAS, 508, 737 (QSOgen).
     fig, ax = plt.subplots(figsize=(7.5, 4.8))
     for (label, blocks), color in zip(TIERS, colors):
         agn = {"all_params": tengri.FIXED, "log_lbol": LOG_LBOL, "lum_ratio": 1.0, **blocks}
-        model = tengri.SEDModel.build(ssp, sfh=SFH, dust=DUST, agn=agn, redshift=tengri.Fixed(0.0))
+        model = tengri.SEDModel.build(
+            ssp, sfh=SFH, dust_attenuation=DUST, agn=agn, redshift=tengri.Fixed(0.0)
+        )
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
         out = model.predict(p)
         wave = np.asarray(model.wavelengths)
@@ -129,7 +131,7 @@ Temple, Hewett & Banerji 2021, MNRAS, 508, 737 (QSOgen).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 6.538 seconds)
+   **Total running time of the script:** (0 minutes 7.428 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_agn_hierarchy.py:

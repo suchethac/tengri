@@ -116,7 +116,7 @@ surface brightness; Sandage (1988) on K-corrections as pedagogical tools.
             "skew": 0.0,
             "trunc": 13.0,  # extend to cosmic age
         },
-        dust={
+        dust_attenuation={
             "law": "power_law",
             "type": "two_component",  # Adopted dust attenuation
             "all_params": tengri.FIXED,
@@ -153,7 +153,7 @@ surface brightness; Sandage (1988) on K-corrections as pedagogical tools.
                 "skew": 0.0,
                 "trunc": 13.0,
             },
-            dust={
+            dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
                 "all_params": tengri.FIXED,
@@ -208,7 +208,7 @@ surface brightness; Sandage (1988) on K-corrections as pedagogical tools.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 5.603 seconds)
+   **Total running time of the script:** (0 minutes 4.974 seconds)
 
 
 .. _sphx_glr_download_auto_examples_photometry_plot_cosmic_dimming_observed_flux.py:

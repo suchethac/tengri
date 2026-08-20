@@ -102,7 +102,8 @@ def test_radio_sed_gradient_is_accurate_in_float32(ssp_bare, obs):
     photometry version of this check is vacuous, because no filter reaches cm
     wavelengths.
     """
-    groups = dict(sfh=_SFH, dust_attenuation=_DUST, radio={"type": "condon92"})
+    radio_spec = {"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}}
+    groups = dict(sfh=_SFH, dust_attenuation=_DUST, radio=radio_spec)
     kw = dict(lo=1e7, hi=1e12)
 
     _, n_in, v64, g64 = _band_gradient(ssp_bare, obs, groups, x64=True, dtype=jnp.float64, **kw)

@@ -33,12 +33,19 @@ def _discover_sub_block_params(axis: str, representative_variant: str) -> list[s
     those are the parameters the parser routes into the sub-block dict.
     """
     target_path = f"agn.{axis}"
+
+    # Special handling for atten: smc_prevot uses 'law' key, not 'type'
+    if axis == "atten" and representative_variant == "smc_prevot":
+        sub_block_spec = {"law": "prevot_smc", WILDCARD_ALIAS: FREE}
+    else:
+        sub_block_spec = {"type": representative_variant, WILDCARD_ALIAS: FREE}
+
     recipe = {
         "sfh": {"type": "dpl"},
         "agn": {
             "type": "composable",
             WILDCARD_ALIAS: FREE,
-            axis: {"type": representative_variant, WILDCARD_ALIAS: FREE},
+            axis: sub_block_spec,
         },
     }
     import warnings

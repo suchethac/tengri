@@ -111,7 +111,8 @@ def _build(
     if emission is not None:
         groups["dust_emission"] = {"type": emission, "*": FIXED}
     if with_radio:
-        groups["radio"] = {"type": "condon92", "*": FIXED}
+        # #1980: condon92's retired spelling, in its composable resolution.
+        groups["radio"] = {"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}, "*": FIXED}
     if with_xray:
         groups["xray"] = {"type": "simple", "*": FIXED}
     with warnings.catch_warnings():
