@@ -66,8 +66,11 @@ _DUST_EMIT = {
     "all_params": FIXED,
     "tau_diff": Uniform(0.0, 1.5),
     "tau_bc": 0.0,
-    "emission": {"type": "dale2014", "all_params": FIXED},
 }
+
+#: A peer group now. Only the ``dust_emitting`` row gets it -- the ``dust_free_*``
+#: rows must stay emission-free, since that is what enables the shortcut they test.
+_DUST_EMISSION = {"type": "dale2014", "all_params": FIXED}
 
 #: ``dust_free_*`` are the exposed rows: with nothing declaring ``sed_nebular``
 #: the shortcut is (correctly) enabled, which is what makes the state wrong.
@@ -77,7 +80,7 @@ _DUST_EMIT = {
 _MODELS = {
     "dust_free_cue": dict(dust_attenuation={"type": "none"}, neb=_CUE),
     "dust_free_cue_shock": dict(dust_attenuation={"type": "none"}, neb=_CUE, shock={"frac": 0.1}),
-    "dust_emitting_cue": dict(dust_attenuation=_DUST_EMIT, neb=_CUE),
+    "dust_emitting_cue": dict(dust_attenuation=_DUST_EMIT, dust_emission=_DUST_EMISSION, neb=_CUE),
 }
 
 _BANDS = ["sdss_g", "sdss_r", "wise_w1", "herschel_250"]

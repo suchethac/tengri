@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Tests for tengri.builders.dust — attenuation + nested IR emission."""
+"""Tests for tengri.builders.dust — attenuation, and IR emission as a peer group."""
 
 from __future__ import annotations
 
@@ -37,9 +37,12 @@ def test_two_component_signature_carries_settings_and_params() -> None:
     assert "law_diff" in params
     assert "tau_bc" in params  # short-form param
     assert "tau_diff" in params
-    assert "emission" in params
     # No tau_v for two_component
     assert "tau_v" not in params
+    # `emission` is a PEER group now, not a sub-block, so it is deliberately not
+    # a parameter of the attenuation factory. Its own factories live under
+    # builders.dust.emission and feed a separate `dust_emission=` keyword.
+    assert "emission" not in params
 
 
 def test_single_component_signature_uses_tau_v() -> None:
@@ -121,24 +124,37 @@ def test_every_dust_law_key_is_accepted() -> None:
         assert out["law"] == law
 
 
-# ── Composition with nested emission ──────────────────────────────
+# ── Composition: emission is a peer group, not a nested block ──────
 
 
-def test_two_component_with_nested_emission() -> None:
-    out = builders.dust.two_component(
-        law="calzetti",
-        _=FREE,
-        tau_bc=Uniform(0.0, 2.0),
-        emission=builders.dust.emission.dale2014(_=FIXED),
-    )
-    assert out["emission"] == {"type": "dale2014", "all_params": FIXED}
-    assert out["tau_bc"] == Uniform(0.0, 2.0)
-    assert out["all_params"] is FREE
+def test_two_component_refuses_a_nested_emission_block() -> None:
+    """The retired spelling raises and names where emission went.
 
-
-def test_emission_kwarg_must_be_dict() -> None:
+    It used to return the block under an ``emission`` key, which the parser then
+    accepted as a sub-block. Both halves are gone, so the factory refusing here
+    is what keeps a caller from building a dict the parser would reject later,
+    further from the mistake.
+    """
     with pytest.raises(TypeError, match="emission"):
-        builders.dust.two_component(law="calzetti", emission="dale2014")  # forgot to call
+        builders.dust.two_component(
+            law="calzetti",
+            _=FREE,
+            tau_bc=Uniform(0.0, 2.0),
+            emission=builders.dust.emission.dale2014(_=FIXED),
+        )
+
+
+def test_the_two_factories_produce_two_independent_group_dicts() -> None:
+    """Each factory yields exactly its own group, ready for its own keyword."""
+    atten = builders.dust.two_component(
+        law="calzetti", tau_bc=Uniform(0.0, 2.0), tau_diff=Uniform(0.0, 1.0)
+    )
+    emis = builders.dust.emission.dale2014(_=FIXED)
+
+    assert atten["type"] == "two_component"
+    assert atten["law"] == "calzetti"
+    assert "emission" not in atten
+    assert emis == {"type": "dale2014", "all_params": FIXED}
 
 
 # ── Round-trip through parser ─────────────────────────────────────
