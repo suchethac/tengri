@@ -957,14 +957,15 @@ def _validate_fracagn_requires_dust(spec) -> None:
     # Check dust configuration: dust_model='off' means no dust
     dust_model = getattr(spec, "dust_model", "off")
 
-    # A model with dust_model='off' (dust={'type': 'none'} or no dust) is unsafe
+    # A model with dust_model='off' (dust_attenuation={'type': 'none'} or no dust) is unsafe
     if dust_model == "off":
         raise ConfigError(
             "fracAGN (agn_ir_frac) ties the AGN torus luminosity to the "
             "dust-absorbed stellar luminosity (CIGALE skirtor2016 convention). "
-            "With dust={'type':'none'} or no dust component, the absorbed "
+            "With dust_attenuation={'type':'none'} or no dust component, the absorbed "
             "stellar luminosity is ~zero and the torus would be silently zeroed. "
-            "Fix: either (1) add a dust component (e.g. dust={'type':'two_component'}), "
+            "Fix: either (1) add a dust component "
+            "(e.g. dust_attenuation={'type':'two_component'}), "
             "or (2) drop fracAGN and use agn_torus_frac for independent torus scaling. "
             "See issue #944."
         )
@@ -8598,7 +8599,7 @@ class SEDModel:
             cls,
             ssp,
             sfh=_r(sfh),
-            dust_attenuation=_r(dust),
+            dust=_r(dust),
             nebular=_r(nebular),
             agn=_r(agn),
             redshift=_r(redshift),

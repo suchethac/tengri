@@ -235,12 +235,41 @@ class TestGoldenValues:
         the LUT contraction with the exact LyC-masked integral for the
         UV-bright case specifically.
         """
-        dust = dict(
-            TWO_COMPONENT,
-            emission={"type": "modified_blackbody", "*": FIXED},
+        dust_attenuation = dict(TWO_COMPONENT)
+        dust_emission = {"type": "modified_blackbody", "*": FIXED}
+        m_exact = SEDModel.build(
+            ssp_data=synthetic_ssp_wide,
+            observation=_obs(),
+            sfh=builders.sfh.tsnorm(
+                defaults=FIXED,
+                log_total_mass=9.75,
+                peak_lbt_gyr=6.25,
+                width_gyr=2.6,
+                skew=0.0,
+                trunc=5.5,
+            ),
+            dust_attenuation=dust_attenuation,
+            dust_emission=dust_emission,
+            neb={"type": "none"},
+            redshift=Fixed(0.05),
         )
-        m_exact = _build(synthetic_ssp_wide, dict(dust))
-        m_lut = _build(synthetic_ssp_wide, dict(dust), approx=WavePrecomp())
+        m_lut = SEDModel.build(
+            ssp_data=synthetic_ssp_wide,
+            observation=_obs(),
+            approx=WavePrecomp(),
+            sfh=builders.sfh.tsnorm(
+                defaults=FIXED,
+                log_total_mass=9.75,
+                peak_lbt_gyr=6.25,
+                width_gyr=2.6,
+                skew=0.0,
+                trunc=5.5,
+            ),
+            dust_attenuation=dust_attenuation,
+            dust_emission=dust_emission,
+            neb={"type": "none"},
+            redshift=Fixed(0.05),
+        )
         phot_exact = np.asarray(m_exact.predict_photometry(_params(m_exact)))
         phot_lut = np.asarray(m_lut.predict_photometry(_params(m_lut)))
         far_ir_rel = abs(phot_lut[-1] - phot_exact[-1]) / abs(phot_exact[-1])

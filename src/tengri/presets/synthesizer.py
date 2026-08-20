@@ -150,7 +150,7 @@ def synthesizer_default(
 
     config = SEDModelConfig(
         sfh=sfh_config,
-        dust_attenuation=dust_config,
+        dust=dust_config,
         nebular=nebular_config,
         multiwavelength=multiwavelength_config,
         agn_model="unified_nlr_blr",  # The unified AGN factory

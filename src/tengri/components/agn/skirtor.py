@@ -604,7 +604,7 @@ def create_skirtor_components_from_grid(grid_path: str) -> Callable:
         total = _interpolate_and_normalize(
             total_jax, wave_grid, axes, edges, wavelength, point, l_scale
         )
-        return SKIRTORComponents(disk=disk, dust_attenuation=dust, total=total)
+        return SKIRTORComponents(disk=disk, dust=dust, total=total)
 
     return skirtor_components
 

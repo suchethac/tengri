@@ -850,13 +850,13 @@ class Parameters:
             raise ValueError(f"dust_approx must be 'fast' or 'exact', got '{self.dust_approx}'")
 
         # Pop the law keys without defaults so we can distinguish between:
-        # - Grammar: laws already validated and set by _translate_dust
+        # - Grammar: laws already validated and set by _translate_dust_attenuation
         # - Flat-kwarg: laws unset, apply power_law defaults
         law_bc_explicit = kwargs.pop("dust_law_bc", None)
         law_diff_explicit = kwargs.pop("dust_law_diff", None)
         law_neb_explicit = kwargs.pop("dust_law_neb", None)
 
-        # Grammar builds: dust_law_bc/dust_law_diff are already set by _translate_dust
+        # Grammar builds: dust_law_bc/dust_law_diff are already set by _translate_dust_attenuation
         # (after validation). Flat-kwarg: both None, apply power_law defaults.
         if self.dust_model == "single_component":
             # Single-component: law_bc is the only law, law_diff is inherited from it.

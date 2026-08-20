@@ -67,7 +67,7 @@ def ssp():
     return load_ssp_data(path)
 
 
-def _build(ssp, approx, obs, *, dust: bool):
+def _build(ssp, approx, obs, *, dust_attenuation: bool):
     """A dusty (or not) Cue model over ``obs``."""
     from tengri import FIXED, FREE, Fixed, SEDModel
 
@@ -77,7 +77,7 @@ def _build(ssp, approx, obs, *, dust: bool):
             "law": "calzetti",
             "all_params": FIXED,
         }
-        if dust
+        if dust_attenuation
         else {"type": "none"}
     )
     with warnings.catch_warnings():
@@ -132,11 +132,11 @@ def fixtures(ssp):
     return out
 
 
-def _lut_model(ssp, obs, *, dust: bool):
+def _lut_model(ssp, obs, *, dust_attenuation: bool):
     """The model a line fit resolves to under the default ``approx='auto'``."""
     from tengri import FeaturePrecomp
 
-    return _build(ssp, FeaturePrecomp(), obs, dust_attenuation=dust)
+    return _build(ssp, FeaturePrecomp(), obs, dust_attenuation=dust_attenuation)
 
 
 def _fluxes(model, params, *, state):

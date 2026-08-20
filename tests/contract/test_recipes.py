@@ -97,10 +97,6 @@ def _recipe_functions() -> set[str]:
 #   sorted(parse_groups(**recipes.<name>()).free_params)
 RECIPE_FREE_PARAMS = {
     "star_forming_photometry": [
-        "dust_Rv",
-        "dust_bump_strength",
-        "dust_delta",
-        "dust_slope",
         "dust_tau_bc",
         "dust_tau_diff",
         "met_logzsol",

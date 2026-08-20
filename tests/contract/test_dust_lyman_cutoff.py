@@ -42,7 +42,6 @@ def _build(ssp, obs, **dust_extra):
         "*": tengri.FIXED,
         "tau_bc": 0.0,
         "tau_diff": 0.5,
-        "emission": None,
     }
     dust.update(dust_extra)
     return tengri.SEDModel.build(
@@ -50,6 +49,7 @@ def _build(ssp, obs, **dust_extra):
         observation=obs,
         sfh={"type": "tsnorm", "*": tengri.FIXED},
         dust_attenuation=dust,
+        dust_emission={"type": "none"},
         neb={"type": "none"},
         redshift=tengri.Fixed(0.0),
     )
@@ -131,22 +131,22 @@ class TestForwardWiring:
 
 class TestGrammar:
     def test_single_component_guard(self):
-        from tengri.parameters.groups import _translate_dust
+        from tengri.parameters.groups import _translate_dust_attenuation
 
         with pytest.raises(ValueError, match="two_component"):
-            _translate_dust({"type": "single_component", "lyman_cutoff": True}, {})
+            _translate_dust_attenuation({"type": "single_component", "lyman_cutoff": True}, {})
 
     def test_wg00_guard(self):
-        from tengri.parameters.groups import _translate_dust
+        from tengri.parameters.groups import _translate_dust_attenuation
 
         with pytest.raises(ValueError, match="two_component"):
-            _translate_dust({"type": "wg00", "lyman_cutoff": True}, {})
+            _translate_dust_attenuation({"type": "wg00", "lyman_cutoff": True}, {})
 
     def test_translate_sets_cutoff(self):
-        from tengri.parameters.groups import _translate_dust
+        from tengri.parameters.groups import _translate_dust_attenuation
 
         result: dict = {}
-        _translate_dust(
+        _translate_dust_attenuation(
             {
                 "type": "two_component",
                 "law": "calzetti",
@@ -159,4 +159,4 @@ class TestGrammar:
     def test_round_trip(self, synthetic_ssp_wide, synthetic_tophat_obs):
         model = _build(synthetic_ssp_wide, synthetic_tophat_obs, lyman_cutoff=True)
         groups = model.spec.to_groups()
-        assert groups["dust"].get("lyman_cutoff") is True
+        assert groups["dust_attenuation"].get("lyman_cutoff") is True

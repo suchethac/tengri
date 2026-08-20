@@ -80,7 +80,7 @@ def phot_obs():
     return Observation(photometry=Photometry(filters=tuple(curves)))
 
 
-def _model(ssp, obs, approx, *, dust: bool):
+def _model(ssp, obs, approx, *, dust_attenuation: bool):
     dust_block = (
         {
             "type": "two_component",
@@ -88,7 +88,7 @@ def _model(ssp, obs, approx, *, dust: bool):
             "all_params": FIXED,
             "tau_diff": Uniform(0.0, 2.0),
         }
-        if dust
+        if dust_attenuation
         else {"type": "none"}
     )
     with warnings.catch_warnings():
@@ -104,9 +104,9 @@ def _model(ssp, obs, approx, *, dust: bool):
         )
 
 
-def _line_flux_setup(ssp, phot_obs, *, dust: bool):
+def _line_flux_setup(ssp, phot_obs, *, dust_attenuation: bool):
     """A photometry + 3-line-flux observation with data at truth."""
-    base = _model(ssp, phot_obs, WavePrecomp(), dust_attenuation=dust)
+    base = _model(ssp, phot_obs, WavePrecomp(), dust_attenuation=dust_attenuation)
     truth = base.spec.sample(jax.random.PRNGKey(0))
     phot = np.asarray(base.predict_photometry(truth))
     lf = np.asarray(base.measure_line_fluxes(truth, approx=False))[:3]

@@ -122,7 +122,8 @@ def build_ulirg_qso_model(tau_v, agn_lum_ratio):
             "all_params": tengri.FIXED,
             "tau_bc": tau_bc,
             "tau_diff": tau_diff,
-        }, dust_emission={"type": "dale2014", "all_params": tengri.FIXED},
+        },
+        dust_emission={"type": "dale2014", "all_params": tengri.FIXED},
         agn=agn_dict,
         redshift=tengri.Fixed(0.0),
     )

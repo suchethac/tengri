@@ -746,7 +746,7 @@ class TestAllParamsAlias:
             sfh={"type": "dpl", "*": FREE, "beta": Fixed(1.5)},
             **{
                 **common,
-                "dust": {"law": "power_law", **common["dust"], "*": FIXED},
+                "dust_attenuation": {"law": "power_law", **common["dust_attenuation"], "*": FIXED},
                 "neb": {**common["neb"], "*": FIXED},
             },
         )
@@ -754,7 +754,11 @@ class TestAllParamsAlias:
             sfh={"type": "dpl", "all_params": FREE, "beta": Fixed(1.5)},
             **{
                 **common,
-                "dust": {"law": "power_law", **common["dust"], "all_params": FIXED},
+                "dust_attenuation": {
+                    "law": "power_law",
+                    **common["dust_attenuation"],
+                    "all_params": FIXED,
+                },
                 "neb": {**common["neb"], "all_params": FIXED},
             },
         )

@@ -80,7 +80,9 @@ print(f"AGN parameters freed by agn={{'all_params': FREE}} (block-scoped): {sort
 # with the AGN sector held fixed at its defaults, then override one parameter at
 # a time in the prediction dict — a clean, deterministic parameter sweep.
 agn_fixed = {"all_params": tengri.FIXED, "log_lbol": 12.0, "lum_ratio": 1.0, **BLOCKS}
-model = tengri.SEDModel.build(ssp, sfh=SFH, dust_attenuation=DUST, agn=agn_fixed, redshift=tengri.Fixed(0.0))
+model = tengri.SEDModel.build(
+    ssp, sfh=SFH, dust_attenuation=DUST, agn=agn_fixed, redshift=tengri.Fixed(0.0)
+)
 base = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
 SWEEPS = [

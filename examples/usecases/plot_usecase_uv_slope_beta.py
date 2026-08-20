@@ -113,7 +113,8 @@ model_dust_sweep = tengri.SEDModel.build(
         "tau_diff": tengri.Uniform(0.0, 4.0),
         "tau_bc": 0.5,
         "slope": -0.7,
-    }, dust_emission={"type": "dale2014", "all_params": tengri.FIXED},
+    },
+    dust_emission={"type": "dale2014", "all_params": tengri.FIXED},
     redshift=tengri.Fixed(0.0),
 )
 baseline_dust_sweep = dict(model_dust_sweep.spec.sample(jax.random.PRNGKey(0)))

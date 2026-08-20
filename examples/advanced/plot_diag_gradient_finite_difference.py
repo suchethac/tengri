@@ -40,7 +40,8 @@ model = tengri.SEDModel.build(
         "law_bc": "calzetti",
         "law_diff": "calzetti",
         "all_params": tengri.FREE,
-    }, dust_emission={"type": "dale2014", "all_params": tengri.FIXED},
+    },
+    dust_emission={"type": "dale2014", "all_params": tengri.FIXED},
     neb={"type": "cue", "all_params": tengri.FIXED},
     redshift=tengri.FREE,
 )

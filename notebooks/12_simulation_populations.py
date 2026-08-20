@@ -704,7 +704,8 @@ print(f"\n  agreement with float64: median {np.median(dmag):.0e} mag, worst {dma
 # fwd = ForwardModel.build(sed=SEDModel.build(
 #     ssp_data=ssp, observation=obs, redshift=Fixed(0.1),
 #     sfh={"type": "table"}, met={"type": "table"},
-#     dust={"type": "two_component", "law_bc": "calzetti", "all_params": FIXED},
+#     dust_attenuation={"type": "two_component", "law": "calzetti",
+#                       "all_params": FIXED},
 #     neb={"type": "ssp"}, approx=WavePrecomp(),
 # ))
 #

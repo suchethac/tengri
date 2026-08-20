@@ -165,7 +165,7 @@ def test_from_config_calzetti_two_component():
     from tengri.config.settings import DustConfig, SEDModelConfig
 
     mc = SEDModelConfig(
-        dust_attenuation=DustConfig(model="two_component", law_bc="calzetti", law_diff="power_law")
+        dust=DustConfig(model="two_component", law_bc="calzetti", law_diff="power_law")
     )
     bib = Bibliography.from_config(mc)
     assert "charlot_fall2000" in bib.keys  # from two_component
@@ -236,7 +236,7 @@ def test_from_object_falls_back_to_model_config():
     from tengri.config.settings import DustConfig, ModelConfig
 
     class Fake:
-        model_config = ModelConfig(dust_attenuation=DustConfig(law_bc="calzetti"))
+        model_config = ModelConfig(dust=DustConfig(law_bc="calzetti"))
         _last_backend = None
         preset_name = "starforming"
 

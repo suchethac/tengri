@@ -47,12 +47,13 @@ model = tengri.SEDModel.build(
         "all_params": tengri.FIXED,
         "tau_bc": 1.0,
         "tau_diff": 0.5,
-    }, dust_emission={
-            "type": "modified_blackbody",
-            "all_params": tengri.FIXED,
-            "T": 30.0,
-            "beta_ir": 1.8,
-        },
+    },
+    dust_emission={
+        "type": "modified_blackbody",
+        "all_params": tengri.FIXED,
+        "T": 30.0,
+        "beta_ir": 1.8,
+    },
     redshift=tengri.Fixed(0.2),
 )
 baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))

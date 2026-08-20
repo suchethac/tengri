@@ -342,8 +342,8 @@ class TestRoundTrip:
             redshift=Fixed(0.1),
         )
         groups = parameters_to_groups(params)
-        assert groups["dust"]["law"] == "calzetti"
-        assert "law_bc" not in groups["dust"]
+        assert groups["dust_attenuation"]["law"] == "calzetti"
+        assert "law_bc" not in groups["dust_attenuation"]
 
     def test_two_component_law_roundtrip(self):
         """two_component with a shared law should round-trip to 'law'."""
@@ -360,9 +360,9 @@ class TestRoundTrip:
             redshift=Fixed(0.1),
         )
         groups = parameters_to_groups(params)
-        assert groups["dust"]["law"] == "calzetti"
-        assert "law_bc" not in groups["dust"]
-        assert "law_diff" not in groups["dust"]
+        assert groups["dust_attenuation"]["law"] == "calzetti"
+        assert "law_bc" not in groups["dust_attenuation"]
+        assert "law_diff" not in groups["dust_attenuation"]
 
     def test_two_component_pair_roundtrip(self):
         """two_component with differing screen laws should round-trip to the pair."""
@@ -380,9 +380,9 @@ class TestRoundTrip:
             redshift=Fixed(0.1),
         )
         groups = parameters_to_groups(params)
-        assert groups["dust"]["law_bc"] == "calzetti"
-        assert groups["dust"]["law_diff"] == "power_law"
-        assert "law" not in groups["dust"]
+        assert groups["dust_attenuation"]["law_bc"] == "calzetti"
+        assert groups["dust_attenuation"]["law_diff"] == "power_law"
+        assert "law" not in groups["dust_attenuation"]
 
     def test_roundtrip_reparses_identically(self):
         """The emitted groups dict must re-parse to an identical spec."""

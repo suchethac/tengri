@@ -90,18 +90,19 @@ def _build_model(u_min: float) -> tuple:
         "all_params": tengri.FIXED,
         "tau_diff": 1.0,
         "tau_bc": 0.3,
-        "emission": {
-            "type": "draine_li2007",
-            "all_params": tengri.FIXED,
-            "qpah": 2.5,  # Fixed PAH mass fraction
-            "umin": tengri.Uniform(0.5, 8.0),  # Promote to FREE: varies across regimes
-        },
+    }
+    dust_emission = {
+        "type": "draine_li2007",
+        "all_params": tengri.FIXED,
+        "qpah": 2.5,  # Fixed PAH mass fraction
+        "umin": tengri.Uniform(0.5, 8.0),  # Promote to FREE: varies across regimes
     }
 
     model = tengri.SEDModel.build(
         ssp,
         sfh={"type": "const", "all_params": tengri.FIXED, "log_total_mass": 11.0},
         dust_attenuation=dust_config,
+        dust_emission=dust_emission,
         redshift=tengri.Fixed(0.05),
     )
 

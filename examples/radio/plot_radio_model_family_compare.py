@@ -49,8 +49,11 @@ DUST = {
     "all_params": tengri.FIXED,
     "tau_diff": 1.0,
     "tau_bc": 1.5,
-    "emission": {"type": "dale2014_cigale", "all_params": tengri.FIXED},
 }
+# dale2014_cigale: this example enables the radio component, and plain
+# dale2014 embeds its own SF radio continuum — the pair is refused at
+# build as a double-count (#1970).
+DUST_EMISSION = {"type": "dale2014_cigale", "all_params": tengri.FIXED}
 AGN = {
     "type": "composable",
     "all_params": tengri.FIXED,
@@ -68,6 +71,7 @@ def spectrum(radio, *, with_agn):
         ssp_data=ssp,
         sfh=SFH,
         dust_attenuation=DUST,
+        dust_emission=DUST_EMISSION,
         radio=radio,
         redshift=tengri.Fixed(0.05),
         **({"agn": AGN} if with_agn else {}),

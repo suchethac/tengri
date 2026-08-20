@@ -543,7 +543,7 @@ class TestUniversalKeyValidator:
         [
             ("sfh", {"type": "dpl", "*": FIXED, "pretend_param": 5}),
             (
-                "dust",
+                "dust_attenuation",
                 {
                     "law": "power_law",
                     "type": "two_component",
@@ -562,7 +562,7 @@ class TestUniversalKeyValidator:
             parse_groups(**{group_name: group_dict, "redshift": Fixed(0.1)})
 
     def test_unknown_key_in_dust_emission_subblock_raises(self):
-        with pytest.raises(ValueError, match=r"Unknown key '[^']+' in group 'dust.emission'"):
+        with pytest.raises(ValueError, match=r"Unknown key '[^']+' in group 'dust_emission'"):
             parse_groups(
                 sfh={"type": "dpl", "*": FIXED},
                 dust_attenuation={

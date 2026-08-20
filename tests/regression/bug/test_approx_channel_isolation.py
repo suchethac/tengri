@@ -67,8 +67,8 @@ _DUST = {
     "all_params": FIXED,
     "tau_diff": Uniform(0.0, 1.5),
     "tau_bc": 0.0,
-    "emission": {"type": "dale2014", "all_params": FIXED},
 }
+_DUST_EMISSION = {"type": "dale2014", "all_params": FIXED}
 
 _AGN = {
     "type": "composable",
@@ -84,11 +84,23 @@ _AGN = {
 #: identical (0.1104) across all four, which is what proved it was Cue itself
 #: rather than an interaction with shock or AGN.
 _MODELS = {
-    "cue": dict(dust_attenuation=_DUST, neb={"type": "cue", "all_params": FIXED}),
-    "cue_shock": dict(
-        dust_attenuation=_DUST, neb={"type": "cue", "all_params": FIXED}, shock={"frac": 0.1}
+    "cue": dict(
+        dust_attenuation=_DUST,
+        dust_emission=_DUST_EMISSION,
+        neb={"type": "cue", "all_params": FIXED},
     ),
-    "cue_agn": dict(dust_attenuation=_DUST, neb={"type": "cue", "all_params": FIXED}, agn=_AGN),
+    "cue_shock": dict(
+        dust_attenuation=_DUST,
+        dust_emission=_DUST_EMISSION,
+        neb={"type": "cue", "all_params": FIXED},
+        shock={"frac": 0.1},
+    ),
+    "cue_agn": dict(
+        dust_attenuation=_DUST,
+        dust_emission=_DUST_EMISSION,
+        neb={"type": "cue", "all_params": FIXED},
+        agn=_AGN,
+    ),
 }
 
 #: herschel_250 is load-bearing: the nebular light reaches 250 um only by being

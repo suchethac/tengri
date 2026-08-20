@@ -33,7 +33,7 @@ pytestmark = pytest.mark.regression_bug
 _PARAMS_BASE = {"sfh_delayed_log_total_mass": 10.0}
 
 
-def _build(ssp, approx, *, dust: bool):
+def _build(ssp, approx, *, dust_attenuation: bool):
     from tengri import FIXED, Fixed, Observation, Photometry, SEDModel, Uniform
 
     dust_group = (
@@ -44,8 +44,8 @@ def _build(ssp, approx, *, dust: bool):
             "tau_diff": Uniform(0.0, 1.5),
             "tau_bc": 0.0,
         }
-        if dust
-        # Omitting `dust=` still builds a DustSEDComponent, which would make the
+        if dust_attenuation
+        # Omitting `dust_attenuation=` still builds a DustSEDComponent, which would make the
         # control identical to the treatment in the one respect under test.
         else {"type": "none"}
     )

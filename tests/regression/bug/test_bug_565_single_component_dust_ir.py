@@ -41,12 +41,20 @@ def _far_ir_sum(state):
 
 
 def _build(dust):
-    return tengri.SEDModel.build(
-        ssp_data=tengri.load_ssp(),
-        sfh={"type": "delayed", "*": tengri.FIXED, "log_total_mass": 10.0},
-        dust_attenuation=dust,
-        redshift=tengri.Fixed(0.05),
-    )
+    # Hoist nested 'emission' to separate dust_emission top-level group
+    dust_attenuation_config = dict(dust)
+    dust_emission_config = dust_attenuation_config.pop("emission", None)
+
+    kwargs = {
+        "ssp_data": tengri.load_ssp(),
+        "sfh": {"type": "delayed", "*": tengri.FIXED, "log_total_mass": 10.0},
+        "dust_attenuation": dust_attenuation_config,
+        "redshift": tengri.Fixed(0.05),
+    }
+    if dust_emission_config is not None:
+        kwargs["dust_emission"] = dust_emission_config
+
+    return tengri.SEDModel.build(**kwargs)
 
 
 @pytest.mark.skipif(tengri is None, reason="tengri not installed")

@@ -51,7 +51,7 @@ from tengri.inference.fitter import fast_nebular_can_engage
 pytestmark = pytest.mark.regression_bug
 
 
-def _sed(ssp, obs, *, dust: bool):
+def _sed(ssp, obs, *, dust_attenuation: bool):
     dust_group = (
         {
             "type": "two_component",
@@ -59,7 +59,7 @@ def _sed(ssp, obs, *, dust: bool):
             "all_params": FIXED,
             "tau_diff": Uniform(0.0, 2.0),
         }
-        if dust
+        if dust_attenuation
         else {"type": "none"}
     )
     with warnings.catch_warnings():

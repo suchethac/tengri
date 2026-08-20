@@ -27,7 +27,7 @@ def _build(ssp, obs, **dust_extra):
             "*": tengri.FIXED,
             **dust_extra,
         },
-        dust_emission=None,
+        dust_emission={"type": "none"},
         neb={"type": "none"},
         redshift=tengri.Fixed(0.05),
     )
@@ -42,12 +42,12 @@ def test_lyc_absorb_all_lands_on_spec(synthetic_ssp_wide, synthetic_tophat_obs):
 def test_lyc_absorb_all_round_trips(synthetic_ssp_wide, synthetic_tophat_obs):
     m = _build(synthetic_ssp_wide, synthetic_tophat_obs, lyc_absorb_all=True)
     groups = m.spec.to_groups()
-    assert groups["dust"]["lyc_absorb_all"] is True
+    assert groups["dust_attenuation"]["lyc_absorb_all"] is True
     m2 = tengri.SEDModel.build(synthetic_ssp_wide, observation=synthetic_tophat_obs, **groups)
     assert m2.spec.dust_lyc_absorb_all is True
     # Default doesn't emit the key.
     base = _build(synthetic_ssp_wide, synthetic_tophat_obs)
-    assert "lyc_absorb_all" not in base.spec.to_groups().get("dust", {})
+    assert "lyc_absorb_all" not in base.spec.to_groups().get("dust_attenuation", {})
 
 
 def test_lyc_absorb_all_changes_compile_signature(synthetic_ssp_wide, synthetic_tophat_obs):

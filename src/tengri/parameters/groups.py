@@ -460,7 +460,7 @@ def _valid_xray_types() -> frozenset[str]:
 
 
 def _valid_dust_laws() -> frozenset[str]:
-    """Return accepted ``dust.law_bc`` / ``dust.law_diff`` values from the registry.
+    """Return accepted ``dust_attenuation.law`` values from the registry.
 
     Mirrors ``DUST_LAWS.keys()``, which the ``@register_dust_law`` decorator
     populates eagerly at import time of ``components.dust.attenuation``.
@@ -1771,8 +1771,8 @@ def _wildcard_scopes(
         structural_kwargs.get("radio_agn_model"), frozenset()
     )
 
-    # ── dust.emission: the selected IR engine's own declarations ──
-    scopes["dust.emission"] = (
+    # ── dust_emission: the selected IR engine's own declarations ──
+    scopes["dust_emission"] = (
         _declared_param_names(structural_params.dust_emission)
         if structural_params.dust_emission is not None
         else None
@@ -2251,18 +2251,18 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
     if dust_type not in _VALID_DUST_TYPES:
         # A common mistake (#664): passing an attenuation *law* name as the dust
         # ``type``. Laws (calzetti, smc, salim_sbl18, …) are not standalone dust
-        # models — they are selected via ``law_bc`` / ``law_diff`` inside a
-        # ``two_component`` (or ``single_component``) block. Point there instead
-        # of emitting a bare "unknown type" so the request is not lost.
+        # models — they are selected with the ``law`` key inside a
+        # ``single_component`` or ``two_component`` block. Point there instead of
+        # emitting a bare "unknown type" so the request is not lost.
         if dust_type in _valid_dust_laws():
             raise ValueError(
                 f"'{dust_type}' is a dust attenuation *law*, not a dust model type. "
-                f"Select it via 'law_bc'/'law_diff' on a dust_attenuation model, e.g. a single "
-                f"screen dust_attenuation={{'type': 'single_component', 'law_bc': '{dust_type}', "
+                f"Select it with the 'law' key on a dust_attenuation model, e.g. a single "
+                f"screen dust_attenuation={{'type': 'single_component', 'law': '{dust_type}', "
                 f"'tau_v': ...}}, or birth-cloud + ISM "
-                f"dust_attenuation={{'type': 'two_component', "
-                f"'law_bc': '{dust_type}', 'law_diff': '{dust_type}', 'tau_bc': ..., "
-                f"'tau_diff': ...}}. Valid dust types are: "
+                f"dust_attenuation={{'type': 'two_component', 'law': '{dust_type}', "
+                f"'tau_bc': ..., 'tau_diff': ...}} -- use 'law_bc' and 'law_diff' instead only "
+                f"to give the two screens different laws. Valid dust types are: "
                 f"{', '.join(sorted(_VALID_DUST_TYPES))}."
             )
         suggestions = difflib.get_close_matches(dust_type, _VALID_DUST_TYPES, n=2, cutoff=0.6)
@@ -2306,6 +2306,30 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
     dust_law_bc = dust_atten_dict.get("law_bc")
     dust_law_diff = dust_atten_dict.get("law_diff")
     dust_law_neb = dust_atten_dict.get("law_neb")
+
+    # Paired per-screen keys follow the same rule as the laws: on a two-screen
+    # model, naming one screen and leaving the other implicit is an incomplete
+    # specification. A lone `tau_bc` used to leave `tau_diff` pinned at its
+    # declared 0.3 while the birth cloud was fitted -- and the diffuse screen
+    # usually dominates the total attenuation, so that is rarely what anyone
+    # means. A wildcard is still an accepted way to say "free the partner too".
+    if dust_type == "two_component" and not ({"all_params", "*"} & set(dust_atten_dict)):
+        for stem in ("tau", "Rv", "delta", "slope", "bump_strength"):
+            bc, diff = f"{stem}_bc", f"{stem}_diff"
+            has_bc = dust_atten_dict.get(bc) is not None
+            has_diff = dust_atten_dict.get(diff) is not None
+            if has_bc == has_diff:
+                continue
+            named, missing = (bc, diff) if has_bc else (diff, bc)
+            raise ValueError(
+                f"dust_attenuation type='two_component' names {named!r} but not "
+                f"{missing!r}. A two-screen model needs both, or a wildcard to free "
+                f"them together -- otherwise {missing!r} silently keeps its declared "
+                f"default while {named!r} is fitted. Give {missing!r} explicitly, or "
+                f"pass 'all_params': FREE. Accepted: "
+                f"{{'{bc}': ..., '{diff}': ...}}, or "
+                f"{{'{named}': ..., 'all_params': FREE}}, or neither."
+            )
 
     # For single_component: require 'law', reject law_bc/law_diff
     if dust_type == "single_component":
@@ -4487,9 +4511,12 @@ def _add_structural_settings(group_name: str, group_output: dict, spec: Paramete
     Notes
     -----
     Plain settings come from the declarative ``_STRUCTURAL_ROUNDTRIP`` table.
-    Only the dust attenuation laws stay hand-written below: they carry
-    inheritance rules (``law_diff`` defaults to ``law_bc``), a flattened
-    override dict, and two booleans stored as a float cutoff.
+    The dust attenuation block stays hand-written below, because three of its
+    settings do not survive a straight attribute read: ``law_neb`` falls back to
+    the birth-cloud law when unset and so is emitted only when it was given, the
+    per-screen law-parameter overrides are stored in one flattened dict, and
+    ``lyman_cutoff`` persists as a float wavelength rather than the boolean the
+    grammar takes.
     """
     _emit_declared_structural(group_name, group_output, spec)
 

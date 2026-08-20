@@ -80,7 +80,9 @@ def _cases() -> list[tuple[str, str, dict]]:
         (
             "dust law",
             tengri.list_dust_laws,
-            lambda n: {"dust": {"type": "two_component", "law": n, "all_params": FIXED}},
+            lambda n: {
+                "dust_attenuation": {"type": "two_component", "law": n, "all_params": FIXED}
+            },
         ),
         (
             "dust model",
@@ -97,12 +99,12 @@ def _cases() -> list[tuple[str, str, dict]]:
             "dust emission",
             tengri.list_dust_emission_models,
             lambda n: {
-                "dust": {
+                "dust_attenuation": {
                     "law": "calzetti",
                     "type": "two_component",
                     "all_params": FIXED,
-                    "emission": {"type": n, "all_params": FIXED},
-                }
+                },
+                "dust_emission": {"type": n, "all_params": FIXED},
             },
         ),
         ("sfh model", tengri.list_sfh_models, lambda n: {"sfh": {"type": n, "all_params": FIXED}}),

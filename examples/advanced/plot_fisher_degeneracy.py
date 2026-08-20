@@ -93,7 +93,11 @@ for fname, filters in FILTER_SETS.items():
             ssp,
             observation=obs,
             sfh={"type": "tsnorm", "all_params": tengri.FIXED},
-            dust_attenuation={"law": "power_law", "type": "two_component", "all_params": tengri.FIXED},
+            dust_attenuation={
+                "law": "power_law",
+                "type": "two_component",
+                "all_params": tengri.FIXED,
+            },
             redshift=tengri.Fixed(0.1),
         )
         phot = jnp.abs(mdl.predict_photometry(true_params))

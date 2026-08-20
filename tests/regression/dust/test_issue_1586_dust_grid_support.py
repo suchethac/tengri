@@ -263,15 +263,17 @@ def test_an_explicit_user_prior_is_warned_about_not_overridden():
     """
     if not grid_support("dust.emission", "astrodust"):
         pytest.skip("astrodust grid not installed")
-    group = {
+    dust_attenuation_group = {
         "law": "power_law",
         "type": "two_component",
-        "emission": {"type": "astrodust", "lgU": Uniform(0.0, 7.0)},
     }
-    spec = _spec(dust_attenuation=group)
+    dust_emission_group = {"type": "astrodust", "lgU": Uniform(0.0, 7.0)}
+    spec = _spec(dust_attenuation=dust_attenuation_group, dust_emission=dust_emission_group)
     assert spec._distributions["dust_lgU"].bounds == pytest.approx((0.0, 7.0))
 
-    messages = _grid_warnings(dust_attenuation=group)
+    messages = _grid_warnings(
+        dust_attenuation=dust_attenuation_group, dust_emission=dust_emission_group
+    )
     assert len(messages) == 1, messages
     assert "dust_lgU" in messages[0]
     assert "[-3, 6]" in messages[0]  # the extent to narrow to
@@ -295,7 +297,8 @@ def test_a_narrowed_prior_still_round_trips_through_to_groups():
         },
         dust_emission={"type": "astrodust", "all_params": FREE},
     )
-    emitted = spec.to_groups()["dust"]["emission"]
+    # After the split, dust_emission is now a separate top-level group
+    emitted = spec.to_groups()["dust_emission"]
     assert emitted["all_params"] is FREE
     assert "lgU" not in emitted, "narrowed param must collapse into the wildcard"
 
