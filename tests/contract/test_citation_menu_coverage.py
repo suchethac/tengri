@@ -87,17 +87,23 @@ def test_igm_is_cited() -> None:
     assert "Madau" in citation, f"igm=madau requested but not cited (got {citation!r})"
 
 
-def test_igm_default_is_cited() -> None:
-    """IGM attenuation is on by default, so its paper is owed by default.
+def test_igm_explicit_is_cited() -> None:
+    """When IGM is explicitly enabled, its paper is cited.
 
-    This is the widest instance of the bug: ``apply_igm`` defaults to
-    ``True`` with ``igm_model='inoue'``, so nearly every fit tengri has
-    ever produced applied Inoue+2014 and cited nobody for it.
+    After retiring apply_igm, IGM is OFF by default unless explicitly
+    enabled via igm={'type': ...}. When enabled, citations are owed.
     """
-    spec = parse_groups(sfh={"type": "dpl"})
-    assert getattr(spec, "apply_igm", False), "premise changed: IGM is no longer on by default"
+    spec = parse_groups(sfh={"type": "dpl"}, igm={"type": "inoue"})
+    assert getattr(spec, "apply_igm", False), "igm={'type': 'inoue'} should enable IGM"
     citation = _citation_for(spec, "igm") or ""
-    assert "Inoue" in citation, f"default IGM ran but was not cited (got {citation!r})"
+    assert "Inoue" in citation, f"IGM enabled but not cited (got {citation!r})"
+
+def test_igm_disabled_not_cited() -> None:
+    """When IGM is disabled, no IGM paper is cited."""
+    spec = parse_groups(sfh={"type": "dpl"})  # No igm dict -> IGM disabled
+    assert not getattr(spec, "apply_igm", False), "default should have IGM disabled"
+    citation = _citation_for(spec, "igm") or ""
+    assert not citation or "Inoue" not in citation, f"IGM disabled but cited anyway (got {citation!r})"
 
 
 def test_xray_is_cited() -> None:

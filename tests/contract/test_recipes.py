@@ -331,7 +331,7 @@ class TestRecipeStructure:
         assert r["dust"]["law"] == "calzetti"
         assert r["dust"]["emission"]["type"] == "dale2014"
         assert r["neb"]["type"] == "cue"
-        assert r.get("apply_igm", True) is True
+        assert r.get("igm", {}).get("type") == "inoue"
 
     def test_quiescent_z0_structure(self):
         """Delayed-exponential SFH, redshift pinned to z=0.05."""
@@ -370,7 +370,7 @@ class TestRecipeStructure:
         """DPL + field SFH composition with IGM on (high-z target)."""
         r = recipes.stochastic_sfh_jwst()
         assert r["sfh"]["type"] == ["dpl", "field"]
-        assert r.get("apply_igm", True) is True
+        assert r.get("igm", {}).get("type") == "inoue"
 
     def test_mock_recovery_minimal_structure(self):
         """Top-hat (tsnorm) SFH, Calzetti dust, nebular off, z pinned to 0.05."""
@@ -434,7 +434,7 @@ class TestRecipeStructure:
         """
         r = recipes.high_z()
         assert r["sfh"]["type"] == "tsnorm"
-        assert r["apply_igm"] is True
+        assert r["igm"]["type"] == "inoue"
         assert "emission" not in r["dust"]
         assert "approx" not in r
 
@@ -443,7 +443,7 @@ class TestRecipeStructure:
         r = recipes.photoz()
         assert r["sfh"]["type"] == "dpl"
         assert r["neb"]["type"] == "none"
-        assert r["apply_igm"] is True
+        assert r["igm"]["type"] == "inoue"
         assert "approx" not in r
 
 

@@ -121,8 +121,8 @@ def test_igm_gate_attenuates_rest_uv_at_high_z(synthetic_ssp_wide, synthetic_top
         neb={"type": "none"},
         redshift=Fixed(3.0),
     )
-    m_on = SEDModel.build(apply_igm=True, igm={"type": "inoue"}, **common)
-    m_off = SEDModel.build(apply_igm=False, **common)
+    m_on = SEDModel.build(igm={"type": "inoue"}, **common)
+    m_off = SEDModel.build(igm={"type": "none"}, **common)
     params = m_on.spec.sample(jax.random.PRNGKey(1))
     sed_on = m_on.predict_obs_sed(params)
     sed_off = m_off.predict_obs_sed(params)

@@ -49,7 +49,7 @@ def _model(ssp, obs, csp):
         sfh={"type": "dpl", "all_params": FREE},
         met={"logzsol": Fixed(-0.3)},
         redshift=Fixed(0.1),
-        apply_igm=False,
+        igm={"type": "none"},
         csp_integration=csp,
     )
 

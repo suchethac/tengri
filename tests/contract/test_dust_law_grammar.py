@@ -241,7 +241,7 @@ class TestParametersFlatKwargs:
             dust_model="single_component",
             dust_law_bc="calzetti",
             dust_tau_v=Fixed(0.3),
-            apply_igm=False,
+            igm={"type": "none"},
         )
         assert spec.dust_law_bc == "calzetti"
         assert spec.dust_law_diff == "calzetti"
@@ -253,7 +253,7 @@ class TestParametersFlatKwargs:
             dust_law_diff="power_law",
             dust_tau_bc=Fixed(0.3),
             dust_tau_diff=Fixed(0.2),
-            apply_igm=False,
+            igm={"type": "none"},
         )
         assert spec.dust_law_bc == "calzetti"
         assert spec.dust_law_diff == "power_law"
@@ -262,7 +262,7 @@ class TestParametersFlatKwargs:
         """dust_model='off' (no dust) must not demand a law."""
         spec = Parameters(
             dust_model="off",
-            apply_igm=False,
+            igm={"type": "none"},
         )
         assert spec.dust_model == "off"
 
@@ -273,7 +273,7 @@ class TestParametersFlatKwargs:
             dust_wg00_geometry="shell",
             dust_wg00_structure="homogeneous",
             dust_tau_v=Fixed(0.3),
-            apply_igm=False,
+            igm={"type": "none"},
         )
         assert spec.dust_model == "wg00"
 

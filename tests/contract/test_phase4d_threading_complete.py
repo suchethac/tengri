@@ -73,7 +73,7 @@ def _base_spec(**kwargs):
         redshift=Fixed(0.1),
         dust_tau_bc=Fixed(0.0),
         dust_tau_diff=Fixed(0.0),
-        apply_igm=False,
+        igm={"type": "none"},
     )
     defaults.update(kwargs)
     return Parameters(**defaults)

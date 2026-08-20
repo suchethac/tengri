@@ -38,7 +38,7 @@ def stellar_only_model(ssp, synthetic_tophat_obs):
         redshift=Fixed(0.05),
         dust_tau_bc=Fixed(0.0),
         dust_tau_diff=Fixed(0.0),
-        apply_igm=False,
+        igm={"type": "none"},
     )
     obs = synthetic_tophat_obs
     with warnings.catch_warnings():
@@ -60,7 +60,7 @@ def stellar_only_free_z_model(ssp, synthetic_tophat_obs):
         redshift=Uniform(0.0, 2.0),  # FREE
         dust_tau_bc=Fixed(0.0),
         dust_tau_diff=Fixed(0.0),
-        apply_igm=False,
+        igm={"type": "none"},
     )
     obs = synthetic_tophat_obs
     with warnings.catch_warnings():
@@ -93,7 +93,7 @@ def test_lut_only_published_when_wave_precomp_on(ssp, synthetic_tophat_obs):
         redshift=Fixed(0.05),
         dust_tau_bc=Fixed(0.0),
         dust_tau_diff=Fixed(0.0),
-        apply_igm=False,
+        igm={"type": "none"},
     )
     obs = synthetic_tophat_obs
     with warnings.catch_warnings():
@@ -131,7 +131,7 @@ def test_dust_attenuation_precomps_published(ssp, synthetic_tophat_obs):
         dust_tau_v=Fixed(0.3),
         dust_model="single_component",
         dust_law_bc="calzetti",
-        apply_igm=False,
+        igm={"type": "none"},
     )
     obs = synthetic_tophat_obs
     with warnings.catch_warnings():
@@ -167,7 +167,7 @@ def test_two_component_dust_publishes_bc_diff_precomp(ssp, synthetic_tophat_obs)
         redshift=Fixed(0.05),
         dust_tau_bc=Fixed(0.5),
         dust_tau_diff=Fixed(0.3),
-        apply_igm=False,
+        igm={"type": "none"},
     )
     obs = synthetic_tophat_obs
     with warnings.catch_warnings():
@@ -209,7 +209,7 @@ def test_agn_phot_lnu_precomp_published(ssp, synthetic_tophat_obs):
         redshift=Fixed(0.05),
         dust_tau_bc=Fixed(0.0),
         dust_tau_diff=Fixed(0.0),
-        apply_igm=False,
+        igm={"type": "none"},
         agn_model="qsogen",
         agn_log_lbol=Fixed(11.42),
         agn_lum_ratio=Fixed(0.5),
@@ -237,7 +237,7 @@ def test_dust_luts_absent_without_wave_precomp(ssp, synthetic_tophat_obs):
         dust_tau_v=Fixed(0.3),
         dust_model="single_component",
         dust_law_bc="power_law",
-        apply_igm=False,
+        igm={"type": "none"},
     )
     obs = synthetic_tophat_obs
     with warnings.catch_warnings():

@@ -474,7 +474,7 @@ class TestTopLevel:
         # Note: This tests that top-level can override group-derived settings
         params = parse_groups(
             igm={"type": "madau"},
-            apply_igm=False,  # explicit override
+            igm={"type": "none"},  # explicit override
             redshift=Fixed(0.1),
         )
         # apply_igm from top-level should win

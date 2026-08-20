@@ -57,7 +57,7 @@ def _build(ssp, obs, *, apply_igm, approx=None, model="inoue"):
 def _blue_band_ratio(ssp, obs, *, approx, model="inoue"):
     """on/off ratio of the bluest band (3500 A obs -> rest ~875 A at z=3)."""
     on = _build(ssp, obs, apply_igm=True, approx=approx, model=model)
-    off = _build(ssp, obs, apply_igm=False, approx=approx)
+    off = _build(ssp, obs, igm={"type": "none"}, approx=approx)
     params = on.spec.sample(jax.random.PRNGKey(1))
     ph_on = np.asarray(on.predict_photometry(params))
     ph_off = np.asarray(off.predict_photometry(params))
@@ -102,9 +102,7 @@ def test_predict_obs_sed_runs_with_igm_and_dla(synthetic_ssp_wide, synthetic_top
         sfh={"type": "dpl", "*": FREE},
         dust={"type": "two_component", "law": "calzetti", "*": FIXED},
         neb={"type": "none"},
-        redshift=Fixed(3.0),
-        apply_igm=True,
-        igm={"type": "inoue", "dla": {"log_n_hi": Fixed(21.0)}},
+        redshift=Fixed(3.0),igm={"type": "inoue", "dla": {"log_n_hi": Fixed(21.0)}},
     )
     params = model.spec.sample(jax.random.PRNGKey(1))
     sed = np.asarray(model.predict_obs_sed(params).sed)
@@ -126,8 +124,8 @@ def test_igm_attenuates_spectrum_precomp_path(synthetic_ssp_wide):
         redshift=Fixed(3.0),
         approx=SpectrumPrecomp(),
     )
-    on = SEDModel.build(apply_igm=True, igm={"type": "inoue"}, **common)
-    off = SEDModel.build(apply_igm=False, **common)
+    on = SEDModel.build(igm={"type": "inoue"}, **common)
+    off = SEDModel.build(igm={"type": "none"}, **common)
     params = on.spec.sample(jax.random.PRNGKey(1))
     s_on = np.asarray(on.predict_spectrum(params))
     s_off = np.asarray(off.predict_spectrum(params))
@@ -154,9 +152,7 @@ def _igm_parity_ratios(ssp, obs, *, redshift_spec, params=None, approx=None):
             "tau_diff": 0.0,
         },
         neb={"type": "none"},
-        redshift=redshift_spec,
-        apply_igm=True,
-        igm={"type": "inoue"},
+        redshift=redshift_spec,igm={"type": "inoue"},
     )
     exact = SEDModel.build(**common)
     lut = SEDModel.build(approx=approx or WavePrecomp(), **common)

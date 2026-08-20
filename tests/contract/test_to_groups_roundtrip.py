@@ -405,7 +405,7 @@ class TestToGroupsStructuralSettings:
         original = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
             redshift=Fixed(0.1),
-            apply_igm=False,
+            igm={"type": "none"},
         )
         result = original.to_groups()
 

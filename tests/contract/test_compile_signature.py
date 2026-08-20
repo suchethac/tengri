@@ -134,13 +134,13 @@ class TestSEDModelCompileSignature:
             redshift=0.1,
             sfh_dpl_alpha=Uniform(0.5, 4.0),
             sfh_dpl_beta=Uniform(0.3, 3.0),
-            apply_igm=True,
+            igm_model="inoue",
         )
         spec2 = Parameters(
             redshift=0.1,
             sfh_dpl_alpha=Uniform(0.5, 4.0),
             sfh_dpl_beta=Uniform(0.3, 3.0),
-            apply_igm=False,
+            igm_model="none",
         )
 
         model1 = SEDModel(spec1, mock_ssp_data, observation=photometry)
