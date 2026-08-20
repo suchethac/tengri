@@ -40,7 +40,7 @@ References
    MNRAS, 491, 740 (2020). arXiv:1909.09632.
    https://doi.org/10.1093/mnras/stz3001
 
-.. GENERATED FROM PYTHON SOURCE LINES 24-137
+.. GENERATED FROM PYTHON SOURCE LINES 24-146
 
 
 
@@ -55,7 +55,7 @@ References
  .. code-block:: none
 
     Building shared AGN model (polar_ebv and cos_inc FREE)...
-    /tengri/examples/agn/plot_polar_dust_ebv_type12_sweep.py:134: UserWarning: This figure includes Axes that are not compatible with tight_layout, so results might be incorrect.
+    /tengri/examples/agn/plot_polar_dust_ebv_type12_sweep.py:143: UserWarning: This figure includes Axes that are not compatible with tight_layout, so results might be incorrect.
       fig.tight_layout()
     Saved: plot_polar_dust_ebv_type12_sweep.png
 
@@ -107,17 +107,26 @@ References
     # Make agn_polar_ebv and agn_cos_inc FREE so we can sweep them at predict time.
     AGN = {
         "disc": {"type": "multicolor", "all_params": tengri.FIXED},
-        "torus": {"type": "skirtor", "all_params": tengri.FIXED, "tau_skirtor": 7.0},
+        "torus": {
+            "type": "skirtor",
+            "all_params": tengri.FIXED,
+            "tau_skirtor": 7.0,
+            # A Distribution at per-param level overrides the wildcard and makes
+            # the parameter FREE (a bare FREE sentinel is swallowed by '*: FIXED').
+            # #1980: sub-block params nest under their owner — cos_inc is a torus
+            # parameter, polar_ebv an atten one; writing them flat now raises.
+            "cos_inc": tengri.Uniform(0.0, 1.0),
+        },
         "nlr": {"type": "none", "all_params": tengri.FIXED},
         "blr": {"type": "none", "all_params": tengri.FIXED},
-        "atten": {"type": "polar_dust", "all_params": tengri.FIXED},
+        "atten": {
+            "type": "polar_dust",
+            "all_params": tengri.FIXED,
+            "polar_ebv": tengri.Uniform(0.0, 0.5),
+        },
         "all_params": tengri.FIXED,
         "log_lbol": 12.0,
         "lum_ratio": 1.0,  # without this the AGN is multiplied by 0 (default)
-        # A Distribution at per-param level overrides the wildcard and makes the
-        # parameter FREE (a bare FREE sentinel here is swallowed by '*: FIXED').
-        "polar_ebv": tengri.Uniform(0.0, 0.5),
-        "cos_inc": tengri.Uniform(0.0, 1.0),
     }
 
     print("Building shared AGN model (polar_ebv and cos_inc FREE)...")
@@ -185,7 +194,7 @@ References
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 5.165 seconds)
+   **Total running time of the script:** (0 minutes 11.567 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_polar_dust_ebv_type12_sweep.py:
