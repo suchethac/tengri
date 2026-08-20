@@ -149,10 +149,13 @@ class TestFlattenedKeysAreRefusedNotDropped:
 
 class TestCrossLevelAcceptanceThatWorksIsKept:
     def test_agn_still_accepts_and_applies_its_cross_level_names(self, ssp_data_fsps, obs):
-        """agn resolves what it accepts (14/14 measured); do not break it.
+        """agn shared params stay accepted cross-level since #1980.
 
-        A blanket "no cross-level keys anywhere" rule would have removed a
-        working affordance to fix a broken one.
+        Owned params moved under their sub-block; shared params
+        (agn_log_lbol, agn_lum_ratio) remain accepted flat at agn level.
+        A blanket "no cross-level keys" rule would have removed a working
+        affordance. Owned params raising with nesting guidance is covered by
+        test_param_groups_agn.py::TestAGNGroupStrictness::test_subblock_owned_param_at_agn_level_raises_with_guidance.
         """
         agn = {
             "type": "composable",
@@ -170,10 +173,7 @@ class TestCrossLevelAcceptanceThatWorksIsKept:
                 redshift=Fixed(0.1),
                 agn=agn,
             )
-        name = next((p for p in sorted(base.spec.all_params) if p.startswith("agn_")), None)
-        assert name, "no agn params declared — fixture cannot test this"
-        baseline = float(base.spec.get_fixed_values()[name])
-        short = name.removeprefix("agn_")
+        baseline = float(base.spec.get_fixed_values()["agn_log_lbol"])
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             model = SEDModel.build(
@@ -183,8 +183,8 @@ class TestCrossLevelAcceptanceThatWorksIsKept:
                 dust={"type": "two_component", "law": "calzetti", "all_params": FIXED},
                 neb={"type": "none"},
                 redshift=Fixed(0.1),
-                agn={**agn, short: baseline + 0.25},
+                agn={**agn, "log_lbol": baseline + 0.25},
             )
-        assert float(model.spec.get_fixed_values()[name]) != baseline, (
-            f"agn cross-level key {short!r} stopped taking effect"
+        assert float(model.spec.get_fixed_values()["agn_log_lbol"]) != baseline, (
+            "agn cross-level key 'log_lbol' (shared param) stopped taking effect"
         )
