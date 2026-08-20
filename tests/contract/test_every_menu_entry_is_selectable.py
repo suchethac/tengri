@@ -88,7 +88,7 @@ def _cases() -> list[tuple[str, str, dict]]:
             "dust model",
             tengri.list_dust_models,
             lambda n: {
-                "dust": (
+                "dust_attenuation": (
                     {"type": n, "law": "calzetti", "all_params": FIXED}
                     if n in ("two_component", "single_component")
                     else {"type": n, "all_params": FIXED}
