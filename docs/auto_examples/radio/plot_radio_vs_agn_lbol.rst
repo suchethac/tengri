@@ -102,7 +102,7 @@ AGN-driven radio in unresolved sources (Best+2005, Pracy+2016).
             "log_lbol": tengri.Uniform(8.0, 14.0),
             "lum_ratio": 1.0,
         },
-        radio={"type": "condon92", "all_params": tengri.FIXED},
+        radio={"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}, "all_params": tengri.FIXED},
         redshift=tengri.Fixed(0.05),
     )
     baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))
@@ -140,6 +140,11 @@ AGN-driven radio in unresolved sources (Best+2005, Pracy+2016).
 
     fig.tight_layout()
     plt.savefig("plot_radio_vs_agn_lbol.png", dpi=150, bbox_inches="tight")
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (0 minutes 4.474 seconds)
 
 
 .. _sphx_glr_download_auto_examples_radio_plot_radio_vs_agn_lbol.py:

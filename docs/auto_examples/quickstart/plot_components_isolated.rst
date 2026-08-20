@@ -127,7 +127,7 @@ The color at each wavelength tells you which block matters most.
         (
             "+ radio",
             "#3377cc",
-            dict(dust=DUST_ON, radio={"type": "condon92", "all_params": tengri.FIXED}),
+            dict(dust=DUST_ON, radio={"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}, "all_params": tengri.FIXED}),
         ),
         (
             "+ X-ray (XRBs)",
@@ -158,7 +158,7 @@ The color at each wavelength tells you which block matters most.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 20.246 seconds)
+   **Total running time of the script:** (0 minutes 21.314 seconds)
 
 
 .. _sphx_glr_download_auto_examples_quickstart_plot_components_isolated.py:

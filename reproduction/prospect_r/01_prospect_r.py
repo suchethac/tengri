@@ -1070,7 +1070,7 @@ m_radio = SEDModel.build(
         "emission": {"type": "dale2014", "alpha_dale": Fixed(3.0), "all_params": FIXED},
         "all_params": FIXED,
     },
-    radio={"type": "condon92", "all_params": FIXED},
+    radio={"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}, "all_params": FIXED},
     redshift=Fixed(0.0),
 )
 s_radio = m_radio.predict_state({})

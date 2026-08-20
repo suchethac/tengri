@@ -107,7 +107,8 @@ def _build(
         dust["emission"] = {"type": emission, "*": FIXED}
     groups = dict(sfh={"type": "dpl", "*": FIXED}, dust=dust, neb={"type": "none"})
     if with_radio:
-        groups["radio"] = {"type": "condon92", "*": FIXED}
+        # #1980: condon92's retired spelling, in its composable resolution.
+        groups["radio"] = {"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}, "*": FIXED}
     if with_xray:
         groups["xray"] = {"type": "simple", "*": FIXED}
     with warnings.catch_warnings():

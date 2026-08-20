@@ -114,7 +114,7 @@ def bibtex_text(ssp_data_fsps):
         },
         neb={"type": "none"},
         xray={"type": "simple"},
-        radio={"type": "condon92"},
+        radio={"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}},
         redshift=Fixed(0.1),
     )
     buffer = io.StringIO()

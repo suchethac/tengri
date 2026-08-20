@@ -290,7 +290,7 @@ def test_nebular_e2e(bare_ssp, obs, neb_type):
 
 # Radio is built through the composable SF/AGN sub-block grammar
 # (``radio={'agn': {'type': ...}}``; ADR-0018 §8a), the canonical surface — the
-# legacy ``radio={'type': 'radio_dpl'}`` spelling was retired in #725. The AGN
+# legacy ``radio={'type': 'radio_dpl'}`` spelling was retired in PR6 (#1980). The AGN
 # radio variants reproduce AGNfitter-rX (powerlaw loudness / double-power-law).
 @pytest.mark.parametrize("radio_agn", ["powerlaw", "dpl"])
 def test_radio_e2e(ssp, obs, radio_agn):

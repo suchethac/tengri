@@ -121,7 +121,7 @@ _SEAM_MODELS = {
             "log_lbol": Uniform(9.0, 12.0),
             "fracAGN": 0.1,
         },
-        radio={"type": "condon92"},
+        radio={"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}},
         xray={"type": "simple"},
         shock={"frac": 0.1},
     ),
