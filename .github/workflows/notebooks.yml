@@ -159,3 +159,16 @@ jobs:
         with:
           path: ~/.cache/tengri_jax_cache
           key: ${{ steps.jax_cache.outputs.cache-primary-key }}
+      # On failure, upload the executed notebook so its traceback is accessible.
+      # When a cell fails, execute_notebooks.py still writes notebooks/<slug>.ipynb
+      # (allow_errors=True captures the error in the cell's output), and
+      # strip_local_paths scrubs machine paths. The job log carries only the summary
+      # line "FAILED (1 cell errors)", not the traceback — this artifact is the only
+      # place a CI-only error exists (e.g. 12_simulation_populations passed locally
+      # but failed on CI). Uploading makes every red diagnosable from the Actions UI.
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: failed-render-${{ matrix.slug }}
+          path: notebooks/${{ matrix.slug }}.ipynb
+          retention-days: 14
