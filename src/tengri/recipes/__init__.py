@@ -94,14 +94,14 @@ def star_forming_photometry() -> dict:
     >>> assert "redshift" in model.spec.free_params
     """
     return dict(
-        sfh=builders.sfh.dpl(defaults=FREE),
+        sfh=builders.sfh.dpl(all_params=FREE),
         dust_attenuation=builders.dust.two_component(
-            defaults=FREE,
+            all_params=FREE,
             law="calzetti",
         ),
-        dust_emission=builders.dust.emission.dale2014(defaults=FIXED),
+        dust_emission=builders.dust.emission.dale2014(all_params=FIXED),
         met={"logzsol": FREE},
-        neb=builders.neb.cue(defaults=FIXED),
+        neb=builders.neb.cue(all_params=FIXED),
         redshift=Uniform(0.01, 6.0),
         apply_igm=True,
         approx=WavePrecomp(),
@@ -153,20 +153,20 @@ def quiescent_z0() -> dict:
     >>> assert params["redshift"] == Fixed(0.05)
     """
     return dict(
-        sfh=builders.sfh.dexp(defaults=FREE),
-        # ``defaults=FIXED``: only tau_bc / tau_diff are fitted here. The
+        sfh=builders.sfh.dexp(all_params=FREE),
+        # ``all_params=FIXED``: only tau_bc / tau_diff are fitted here. The
         # remaining attenuation params (slope, Rv, delta, bump_strength,
         # f_obscuration) carry Fixed registry defaults, so the FREE this
         # previously requested never freed any of them — the recipe now says
         # what it has always actually done.
         dust_attenuation=builders.dust.two_component(
-            defaults=FIXED,
+            all_params=FIXED,
             law="calzetti",
             tau_bc=Uniform(0, 0.5),
             tau_diff=Uniform(0, 0.3),
         ),
         met={"logzsol": FREE},
-        neb=builders.neb.cue(defaults=FIXED),
+        neb=builders.neb.cue(all_params=FIXED),
         redshift=Fixed(0.05),
         approx=WavePrecomp(),
     )
@@ -352,24 +352,24 @@ def agn_panchromatic() -> dict:
     >>> assert "disc" in params["agn"]
     """
     return dict(
-        sfh=builders.sfh.dpl(defaults=FREE),
+        sfh=builders.sfh.dpl(all_params=FREE),
         dust_attenuation=builders.dust.two_component(
-            defaults=FREE,
+            all_params=FREE,
             law="calzetti",
         ),
-        # ``defaults=FIXED``: the Dale+2014 knobs are a template-family
+        # ``all_params=FIXED``: the Dale+2014 knobs are a template-family
         # choice, not something a wildcard should open by default.
         # ``dale2014_cigale``: this recipe enables the radio component, and
         # plain dale2014 embeds its own SF radio continuum — the pair
         # double-counts the synchrotron and is refused at build (#1970).
-        dust_emission=builders.dust.emission.dale2014_cigale(defaults=FIXED),
+        dust_emission=builders.dust.emission.dale2014_cigale(all_params=FIXED),
         met={"logzsol": FREE},
-        neb=builders.neb.cue(defaults=FIXED),
+        neb=builders.neb.cue(all_params=FIXED),
         agn=builders.agn.composable(
-            defaults=FREE,
-            disc=builders.agn.disc.multicolor(defaults=FREE),
-            torus=builders.agn.torus.skirtor(defaults=FREE),
-            nlr=builders.agn.nlr.analytic(defaults=FREE),
+            all_params=FREE,
+            disc=builders.agn.disc.multicolor(all_params=FREE),
+            torus=builders.agn.torus.skirtor(all_params=FREE),
+            nlr=builders.agn.nlr.analytic(all_params=FREE),
         ),
         # ``all_params``: FIXED restates the default. It is written out
         # because omitting it warns, and the warning would be about a
@@ -445,19 +445,19 @@ def composable_agn() -> dict:
     >>> assert "feii" in params["agn"]
     """
     return dict(
-        sfh=builders.sfh.dpl(defaults=FREE),
+        sfh=builders.sfh.dpl(all_params=FREE),
         dust_attenuation=builders.dust.two_component(
-            defaults=FREE,
+            all_params=FREE,
             law="calzetti",
         ),
-        # ``defaults=FIXED``: the Dale+2014 knobs are a template-family
+        # ``all_params=FIXED``: the Dale+2014 knobs are a template-family
         # choice, not something a wildcard should open by default.
         # ``dale2014_cigale``: this recipe enables the radio component, and
         # plain dale2014 embeds its own SF radio continuum — the pair
         # double-counts the synchrotron and is refused at build (#1970).
-        dust_emission=builders.dust.emission.dale2014_cigale(defaults=FIXED),
+        dust_emission=builders.dust.emission.dale2014_cigale(all_params=FIXED),
         met={"logzsol": FREE},
-        neb=builders.neb.cue(defaults=FIXED),
+        neb=builders.neb.cue(all_params=FIXED),
         agn={
             "type": "composable",
             "disc": {"type": "multicolor"},
@@ -536,12 +536,12 @@ def stochastic_sfh_jwst() -> dict:
     return dict(
         sfh={"type": ["dpl", "field"], WILDCARD_ALIAS: FREE},
         dust_attenuation=builders.dust.two_component(
-            defaults=FREE,
+            all_params=FREE,
             law="calzetti",
         ),
-        dust_emission=builders.dust.emission.dale2014(defaults=FIXED),
+        dust_emission=builders.dust.emission.dale2014(all_params=FIXED),
         met={"logzsol": FREE},
-        neb=builders.neb.cue(defaults=FIXED),
+        neb=builders.neb.cue(all_params=FIXED),
         redshift=Uniform(0.5, 12.0),
         apply_igm=True,
         approx=WavePrecomp(),
@@ -586,9 +586,9 @@ def mock_recovery_minimal() -> dict:
     >>> assert "redshift" in spec.fixed_params
     """
     return dict(
-        sfh=builders.sfh.tsnorm(defaults=FREE),
+        sfh=builders.sfh.tsnorm(all_params=FREE),
         dust_attenuation=builders.dust.two_component(
-            defaults=FIXED,
+            all_params=FIXED,
             law="calzetti",
             tau_bc=Uniform(0, 1),
         ),
@@ -646,7 +646,7 @@ def dust_demo() -> dict:
     # uses the prior median (= -0.3) for every iteration anyway.
     return dict(
         sfh=builders.sfh.tsnorm(
-            defaults=FIXED,
+            all_params=FIXED,
             log_total_mass=10.0,
             peak_lbt_gyr=2.0,
             width_gyr=1.5,
@@ -654,7 +654,7 @@ def dust_demo() -> dict:
             trunc=3.0,
         ),
         dust_attenuation=builders.dust.two_component(
-            defaults=FIXED,
+            all_params=FIXED,
             law="calzetti",
             tau_bc=0.5,
             tau_diff=0.3,

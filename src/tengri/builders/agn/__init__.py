@@ -23,14 +23,14 @@ The factory mirror:
 
 >>> from tengri import builders, FREE, FIXED, Uniform
 >>> agn = builders.agn.composable(
-...     defaults=FREE,
+...     all_params=FREE,
 ...     log_lbol=Uniform(9.42, 13.42),
-...     disc=builders.agn.disc.multicolor(defaults=FREE),
-...     torus=builders.agn.torus.skirtor(defaults=FIXED),
+...     disc=builders.agn.disc.multicolor(all_params=FREE),
+...     torus=builders.agn.torus.skirtor(all_params=FIXED),
 ...     nlr=builders.agn.nlr.analytic(),
 ...     blr=builders.agn.blr.analytic(),
 ...     feii=builders.agn.feii.none(),
-...     atten=builders.agn.atten.smc_prevot(defaults=FIXED),
+...     atten=builders.agn.atten.smc_prevot(all_params=FIXED),
 ... )
 
 All 14 top-level AGN models are exposed as factories:
@@ -53,7 +53,7 @@ All 14 top-level AGN models are exposed as factories:
 Examples
 --------
 >>> from tengri import builders, FREE, Uniform
->>> agn = builders.agn.skirtor(defaults=FREE, log_lbol=Uniform(9.42, 13.42))
+>>> agn = builders.agn.skirtor(all_params=FREE, log_lbol=Uniform(9.42, 13.42))
 >>> agn = builders.agn.simple(log_mbh=Uniform(6, 9))
 """
 

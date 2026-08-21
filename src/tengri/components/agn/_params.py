@@ -15,7 +15,7 @@ range is the documented physical or library-grid extent, and a
 * ``'all_params': FIXED`` (and the grammar's implicit default) collapses each
   param to ``Fixed(default)`` — i.e. the exact pre-existing value, so behavior
   is unchanged for any model that did not opt a parameter free.
-* ``'all_params': FREE`` / ``defaults=FREE`` / a bare per-param ``FREE`` now expands
+* ``'all_params': FREE`` (dict grammar) or ``all_params=FREE`` (builders) now expands
   to the prior instead of silently resolving to a fixed scalar. Before this
   change every AGN parameter declared a ``Fixed(...)`` default, so the FREE
   grammar (and therefore ``recipes.agn_panchromatic()``) produced **zero**

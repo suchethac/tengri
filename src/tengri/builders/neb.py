@@ -25,7 +25,7 @@ identical set for both backends).
 Examples
 --------
 >>> from tengri import builders, FREE, Uniform
->>> builders.neb.cue(defaults=FREE, fesc=Uniform(0.0, 0.5))  # doctest: +SKIP
+>>> builders.neb.cue(all_params=FREE, fesc=Uniform(0.0, 0.5))  # doctest: +SKIP
 {'type': 'cue', 'all_params': FREE, 'fesc': Uniform(...)}
 """
 

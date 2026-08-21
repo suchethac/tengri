@@ -70,7 +70,7 @@ def make_factory(
         wildcard = _pop_wildcard(variant, kwargs)
         if wildcard not in (FREE, FIXED):
             raise ValueError(
-                f"{variant}(defaults=...): expected FREE or FIXED, got "
+                f"{variant}(all_params=...): expected FREE or FIXED, got "
                 f"{wildcard!r}. Use tengri.FREE or tengri.FIXED."
             )
         flag_values: dict[str, bool] = {f: bool(kwargs.pop(f, False)) for f in bool_flags}
@@ -80,7 +80,7 @@ def make_factory(
             raise TypeError(
                 f"{variant}() got unexpected keyword arguments: {unknown}. "
                 f"Valid: {valid_kwargs}. "
-                f"(Pass ``defaults=FREE`` or ``defaults=FIXED`` to set the policy.)"
+                f"(Pass ``all_params=FREE`` or ``all_params=FIXED`` to set the policy.)"
             )
 
         # Auto-enable flag when a flag-conditional param was given.
@@ -99,7 +99,7 @@ def make_factory(
 
     sig_params = [
         inspect.Parameter(
-            "defaults",
+            "all_params",
             inspect.Parameter.KEYWORD_ONLY,
             default=FIXED,
             annotation=Any,
@@ -136,11 +136,11 @@ def make_factory(
         lines.append("")
     lines.append("Parameters")
     lines.append("----------")
-    lines.append("defaults : sentinel, optional")
+    lines.append("all_params : sentinel, optional")
     lines.append(
         "    Wildcard policy for parameters not explicitly named. ``FREE`` "
         "makes them fit; ``FIXED`` (default) pins them to their registry "
-        "center. Mirrors the ``'all_params'`` key in the dict grammar."
+        "center. Matches the ``'all_params'`` key in the dict grammar."
     )
     for flag in bool_flags:
         lines.append(f"{flag} : bool, optional")
@@ -167,31 +167,55 @@ def make_factory(
 
 
 def _pop_wildcard(variant: str, kwargs: dict[str, Any]) -> Any:
-    """Pop the wildcard kwarg, supporting both ``defaults=`` and legacy ``_=``.
+    """Pop the wildcard kwarg, supporting ``all_params=``, ``defaults=``, and ``_=``.
 
-    The original builder grammar exposed the wildcard via ``_=FREE``. That
-    name is ungreppable, conflicts with the throwaway-identifier convention,
-    and confuses IDE autocomplete. The new canonical name is ``defaults=``.
-    ``_=`` still works for one minor-version cycle and emits a
-    :class:`DeprecationWarning`.
+    The canonical builder name for the wildcard policy is ``all_params=``,
+    mirroring the dict grammar's ``'all_params'`` key. For backward
+    compatibility, ``defaults=`` (deprecated) and ``_=`` (legacy) are
+    accepted and emit :class:`DeprecationWarning`.
 
-    Raises ``TypeError`` if both are passed in the same call.
+    Raises ``TypeError`` if multiple are passed in the same call.
     """
-    has_new = "defaults" in kwargs
-    has_old = "_" in kwargs
-    if has_new and has_old:
-        raise TypeError(
-            f"{variant}(): pass `defaults=` (preferred) or `_=` (deprecated), not both."
-        )
-    if has_old:
+    has_canonical = "all_params" in kwargs
+    has_deprecated = "defaults" in kwargs
+    has_legacy = "_" in kwargs
+
+    # Check for conflicting calls
+    if sum([has_canonical, has_deprecated, has_legacy]) > 1:
+        if has_canonical and has_deprecated:
+            raise TypeError(
+                f"{variant}(): pass `all_params=` (preferred) or `defaults=` "
+                f"(deprecated), not both."
+            )
+        elif has_canonical and has_legacy:
+            raise TypeError(
+                f"{variant}(): pass `all_params=` (preferred) or `_=` (legacy), not both."
+            )
+        else:  # has_deprecated and has_legacy
+            raise TypeError(
+                f"{variant}(): pass `defaults=` (deprecated) or `_=` (legacy), not both."
+            )
+
+    # Pop in priority order: canonical first, then deprecated, then legacy
+    if has_canonical:
+        return kwargs.pop("all_params")
+    if has_deprecated:
         warnings.warn(
-            f"{variant}(_=...) is deprecated; use `defaults=` instead. "
+            f"{variant}(defaults=...) is deprecated; use `all_params=` instead. "
+            "The `defaults=` alias will be removed in a future release.",
+            DeprecationWarning,
+            stacklevel=3,
+        )
+        return kwargs.pop("defaults")
+    if has_legacy:
+        warnings.warn(
+            f"{variant}(_=...) is deprecated; use `all_params=` instead. "
             "The `_=` alias will be removed in a future release.",
             DeprecationWarning,
             stacklevel=3,
         )
         return kwargs.pop("_")
-    return kwargs.pop("defaults", FIXED)
+    return FIXED
 
 
 def short_form(full_name: str, *, prefixes: tuple[str, ...]) -> str:

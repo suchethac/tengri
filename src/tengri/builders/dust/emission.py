@@ -22,7 +22,7 @@ signature; the variant string selects the physics.
 Examples
 --------
 >>> from tengri import builders, FIXED, Fixed
->>> builders.dust.emission.dale2014(defaults=FIXED, alpha_dale=Fixed(2.0))  # doctest: +SKIP
+>>> builders.dust.emission.dale2014(all_params=FIXED, alpha_dale=Fixed(2.0))  # doctest: +SKIP
 {'type': 'dale2014', 'all_params': FIXED, 'alpha_dale': Fixed(2.0)}
 """
 

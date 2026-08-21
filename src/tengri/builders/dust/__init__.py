@@ -33,7 +33,7 @@ The factory mirror (single-component):
 >>> from tengri import builders, FREE, Uniform, FIXED
 >>> dust_attenuation = builders.dust.single_component(
 ...     law="calzetti",  # Required
-...     defaults=FREE,
+...     all_params=FREE,
 ...     tau_v=Uniform(0, 4),
 ... )
 
@@ -41,11 +41,11 @@ The factory mirror (two-component):
 
 >>> dust_attenuation = builders.dust.two_component(
 ...     law="calzetti",  # Shared law, or use law_bc/law_diff
-...     defaults=FREE,
+...     all_params=FREE,
 ...     tau_bc=Uniform(0, 2),
 ...     tau_diff=Uniform(0, 4),
 ... )
->>> dust_emission = builders.dust.emission.dale2014(defaults=FIXED)
+>>> dust_emission = builders.dust.emission.dale2014(all_params=FIXED)
 
 The ``law`` / ``law_bc`` / ``law_diff`` kwargs accept any key registered in
 :data:`tengri.components.dust.attenuation.DUST_LAWS`. Single-component requires
