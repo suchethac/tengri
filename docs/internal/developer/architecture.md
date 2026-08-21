@@ -252,12 +252,12 @@ balance (e.g. high-z sources) — analogous to AGNfitter's *optional* energy-
 balance prior. Free it under a soft prior to allow controlled deviation:
 
 ```python
-dust={'type': 'two_component', 'all_params': 'fixed',
-      'emission': {'type': 'dale2014',
-                   'eta_balance': LogNormal(mu=0.0, sigma=0.2)}}   # median η=1
+dust_attenuation={'type': 'two_component', 'law': 'calzetti', 'all_params': 'fixed'},
+dust_emission={'type': 'dale2014',
+               'eta_balance': LogNormal(mu=0.0, sigma=0.2)}  # median η=1
 # or, equivalently:
-dust={'type': 'two_component', 'all_params': 'fixed',
-      'emission': builders.dust.emission.relaxed_energy_balance('dale2014')}
+dust_attenuation={'type': 'two_component', 'law': 'calzetti', 'all_params': 'fixed'},
+dust_emission=builders.dust.emission.relaxed_energy_balance('dale2014')
 ```
 
 The two-temperature `energy_balance_split` model additionally exposes a

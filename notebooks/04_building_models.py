@@ -340,6 +340,11 @@ print()
 # - `[all_params FREE]` — matched by wildcard directive
 # - `[all_params FIXED]` — matched by wildcard directive
 # - `[default]` — registry default (usually fixed at median)
+#
+# The `neb` group below deliberately states no disposition so the summary can
+# show `[default]` tags — and the `DefaultFixedParametersWarning` it triggers
+# is the grammar flagging exactly that: a group you engaged that yielded
+# nothing free. Stating `all_params: FIXED` is how you say it was intentional.
 
 # %%
 # Build a model with mixed provenance
@@ -431,11 +436,12 @@ base_groups_sfh = {
     "dust_attenuation": {
         "type": "two_component",
         "law": "calzetti",
+        "all_params": FIXED,  # deliberately all-fixed for this demo (#1995)
         "tau_bc": Fixed(0.5),
         "tau_diff": Fixed(0.3),
         "slope": Fixed(-0.7),
     },
-    "dust_emission": {"type": "dale2014"},
+    "dust_emission": {"type": "dale2014", "all_params": FIXED},
     "neb": {"type": "cue", "all_params": FIXED},
     "redshift": Fixed(0.05),
     "igm": {"type": "none"},
@@ -476,11 +482,12 @@ for sfh_name, truth_sfh in sfh_families:
         "dust_attenuation": {
             "type": "two_component",
             "law": "calzetti",
+            "all_params": FIXED,  # deliberately all-fixed for this figure (#1995)
             "tau_bc": Fixed(0.5),
             "tau_diff": Fixed(0.3),
             "slope": Fixed(-0.7),
         },
-        "dust_emission": {"type": "dale2014"},
+        "dust_emission": {"type": "dale2014", "all_params": FIXED},
         "neb": {"type": "cue", "all_params": FIXED},
         "redshift": Fixed(z),
         "igm": {"type": "none"},
@@ -586,11 +593,12 @@ base_groups_dust = {
     "dust_attenuation": {
         "law": "power_law",
         "type": "two_component",
+        "all_params": FIXED,  # deliberately all-fixed for this demo (#1995)
         "tau_bc": Fixed(0.5),
         "tau_diff": Fixed(0.3),
         "slope": Fixed(-0.7),
     },
-    "dust_emission": {"type": "dale2014"},
+    "dust_emission": {"type": "dale2014", "all_params": FIXED},
     "neb": {"type": "cue", "all_params": FIXED},
     "redshift": Fixed(0.05),
     "igm": {"type": "none"},
@@ -643,11 +651,12 @@ groups_nodust = {
     "dust_attenuation": {
         "type": "two_component",
         "law": "calzetti",
+        "all_params": FIXED,  # dust-free comparison: everything pinned, taus at zero (#1995)
         "tau_bc": Fixed(0.0),
         "tau_diff": Fixed(0.0),
         "slope": Fixed(-0.7),
     },
-    "dust_emission": {"type": "dale2014"},
+    "dust_emission": {"type": "dale2014", "all_params": FIXED},
     "neb": {"type": "cue", "all_params": FIXED},
     "redshift": Fixed(z),
     "igm": {"type": "none"},
@@ -711,11 +720,12 @@ for idx, dust_law in enumerate(dust_laws):
         "dust_attenuation": {
             "type": "two_component",
             "law": dust_law,
+            "all_params": FIXED,  # deliberately all-fixed for this figure (#1995)
             "tau_bc": Fixed(0.5),
             "tau_diff": Fixed(0.3),
             "slope": Fixed(-0.7),
         },
-        "dust_emission": {"type": "dale2014"},
+        "dust_emission": {"type": "dale2014", "all_params": FIXED},
         "neb": {"type": "cue", "all_params": FIXED},
         "redshift": Fixed(z),
         "igm": {"type": "none"},
@@ -794,6 +804,7 @@ base_groups_emission = {
     "dust_attenuation": {
         "type": "two_component",
         "law": "calzetti",
+        "all_params": FIXED,  # deliberately all-fixed for this demo (#1995)
         "tau_bc": Fixed(0.5),
         "tau_diff": Fixed(0.3),
         "slope": Fixed(-0.7),
@@ -807,7 +818,7 @@ for emission in dust_emissions:
     try:
         # Swap emission type: one-line edit
         groups_emission_var = base_groups_emission.copy()
-        groups_emission_var["dust_emission"] = {"type": emission}
+        groups_emission_var["dust_emission"] = {"type": emission, "all_params": FIXED}
 
         spec = parse_groups(**groups_emission_var)
         emission_params = [p for p in spec.free_params if p.startswith("dust_")]
@@ -856,11 +867,12 @@ for idx, emission in enumerate(dust_emissions):
         "dust_attenuation": {
             "type": "two_component",
             "law": "calzetti",
+            "all_params": FIXED,  # deliberately all-fixed for this figure (#1995)
             "tau_bc": Fixed(0.5),
             "tau_diff": Fixed(0.3),
             "slope": Fixed(-0.7),
         },
-        "dust_emission": {"type": emission},
+        "dust_emission": {"type": emission, "all_params": FIXED},
         "neb": {"type": "cue", "all_params": FIXED},
         "redshift": Fixed(z),
         "igm": {"type": "none"},
@@ -912,11 +924,12 @@ for emission in dust_emissions:
         "dust_attenuation": {
             "type": "two_component",
             "law": "calzetti",
+            "all_params": FIXED,  # deliberately all-fixed for this figure (#1995)
             "tau_bc": Fixed(0.5),
             "tau_diff": Fixed(0.3),
             "slope": Fixed(-0.7),
         },
-        "dust_emission": {"type": emission},
+        "dust_emission": {"type": emission, "all_params": FIXED},
         "neb": {"type": "cue", "all_params": FIXED},
         "redshift": Fixed(z),
         "igm": {"type": "none"},
@@ -1049,11 +1062,12 @@ groups_perf = {
     "dust_attenuation": {
         "type": "two_component",
         "law": "calzetti",
+        "all_params": FIXED,  # deliberately all-fixed for this demo (#1995)
         "tau_bc": Fixed(0.5),
         "tau_diff": Fixed(0.3),
         "slope": Fixed(-0.7),
     },
-    "dust_emission": {"type": "dale2014"},
+    "dust_emission": {"type": "dale2014", "all_params": FIXED},
     "redshift": Fixed(0.05),
     "igm": {"type": "none"},
 }

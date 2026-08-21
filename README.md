@@ -169,7 +169,7 @@ from tengri import FREE, FIXED, Uniform
 sed = SEDModel.build(
     ssp_data=ssp, observation=obs,
     sfh={'type': 'dpl', 'all_params': FREE, 'beta': Uniform(1, 3)},
-    dust={'type': 'two_component', 'all_params': FIXED},
+    dust_attenuation={'type': 'two_component', 'law': 'calzetti', 'all_params': FIXED},
     neb={'type': 'cue', 'all_params': FIXED},
 )
 ```

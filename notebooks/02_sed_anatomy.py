@@ -155,6 +155,7 @@ kitchen_sink = dict(
     }, dust_emission={"type": "dale2014_cigale", "all_params": FIXED, "alpha_dale": 2.2},
     neb={"type": "cue", "all_params": FIXED},
     agn={
+        "all_params": FIXED,  # every AGN block here is deliberately fixed (#1995)
         "disc": {"type": "multicolor", "all_params": FIXED, "log_lbol": 10.5},
         "torus": {"type": "skirtor", "all_params": FIXED, "tau_skirtor": 5.0, "torus_frac": 0.5},
         "nlr": {"type": "analytic", "all_params": FIXED},
@@ -362,6 +363,7 @@ log_lbol_grid = [9.5, 10.0, 10.5, 11.0, 11.5]
 cmap = plt.colormaps["plasma"]
 cfg = deepcopy(base)
 cfg["agn"] = {
+    "all_params": FIXED,  # unprovided sub-blocks (nlr/blr/feii/atten) stay fixed by intent
     "disc": {"type": "multicolor", "all_params": FIXED, "log_lbol": Uniform(9.0, 12.0)},
     "torus": {"type": "nenkova", "all_params": FIXED},
 }
@@ -477,6 +479,7 @@ money_shot = dict(
     }, dust_emission={"type": "dale2014_cigale", "all_params": FIXED, "alpha_dale": 2.2},
     neb={"type": "cue", "all_params": FIXED},
     agn={
+        "all_params": FIXED,  # every AGN block here is deliberately fixed (#1995)
         "disc": {"type": "multicolor", "all_params": FIXED, "log_lbol": 10.5},
         "torus": {"type": "skirtor", "all_params": FIXED, "tau_skirtor": 5.0, "torus_frac": 0.5},
         "nlr": {"type": "analytic", "all_params": FIXED},
