@@ -3975,8 +3975,8 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
                         f"The block applies the Prevot SMC curve unconditionally, so "
                         f"accepting another name would silently substitute this one. "
                         f"For a different AGN attenuation curve, use "
-                        f"agn={{'atten': {{'type': 'polar_dust'}}}} which applies polar "
-                        f"dust extinction (using Pei 1992 SMC curve by default)."
+                        f"agn={{'atten': {{'type': 'polar_dust', 'polar_ebv': 0.1}}}} "
+                        f"to apply polar dust extinction (using Pei 1992 SMC curve)."
                     )
                 block_type = "smc_prevot"
             else:
