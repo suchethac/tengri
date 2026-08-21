@@ -1426,7 +1426,7 @@ class _CatalogFitterOriginal:
 
         ``dense_mass_matrix=None`` (the default) resolves through the same
         auto-policy as the single-galaxy samplers — dense below D = 8, diagonal
-        at or above it (#319). Until #2028 this path hardcoded ``False`` and
+        at or above it (#319). Until PR #2031 this path hardcoded ``False`` and
         read it as ``bool(dense_mass_matrix)``, so a D=7 catalog silently got a
         diagonal mass where a single fit of the same model got a dense one, and
         passing the documented ``None`` default selected diagonal rather than
@@ -1436,7 +1436,7 @@ class _CatalogFitterOriginal:
         :func:`~tengri.inference._sample_utils._maybe_map_init`:
 
         * ``None`` (default) — each galaxy gets its own ADAM MAP warm start,
-          which is what a single fit has always done. Before #2028 this path had
+          which is what a single fit has always done. Before PR #2031 this path had
           no MAP step and every galaxy started at ``0.1 * N(0, 1)`` about the
           prior centre.
         * ``"prior"`` — that former behaviour, kept for reproducing older runs.
@@ -1492,7 +1492,7 @@ class _CatalogFitterOriginal:
 
         # Resolve dense-vs-diagonal through the same policy the single-galaxy
         # samplers use, so a catalog fit of a model does not silently get a
-        # different mass matrix from a single fit of it (#2028).
+        # different mass matrix from a single fit of it (PR #2031, #1999).
         _dummy_flat = ravel_pytree(fitter._initialize_unbounded(jax.random.PRNGKey(0)))[0]
         user_set_dense = dense_mass_matrix is not None
         use_dense = _resolve_dense_mass_matrix(dense_mass_matrix, int(_dummy_flat.shape[0]))

@@ -309,7 +309,7 @@ def test_catalog_hmc_draws_actually_move(synthetic_ssp, simple_observation):
     ``test_hierarchical_backends_actually_run.py`` already applies to
     ``PopulationFitter``; #2026 is that no catalog test applied it.
 
-    Scope, so this is not over-read: on this synthetic D=3 model the pre-#2028
+    Scope, so this is not over-read: on this synthetic D=3 model the pre-PR-#2031
     configuration (prior-centre init, forced diagonal mass) also passes -- the
     smallest range across parameters is 0.0070 against 0.0145 with the MAP warm
     start. This is the standing guard the convention asks for, not a reproducer
@@ -340,7 +340,7 @@ def test_catalog_hmc_draws_actually_move(synthetic_ssp, simple_observation):
 
 
 def test_catalog_mass_matrix_follows_the_single_fit_policy():
-    """``dense_mass_matrix=None`` resolves through the shared auto-policy (#2028).
+    """``dense_mass_matrix=None`` resolves through the shared auto-policy (PR #2031).
 
     The catalog path hardcoded ``False`` and consumed it as
     ``bool(dense_mass_matrix)``, so a D<8 catalog silently got a diagonal mass
