@@ -119,7 +119,7 @@ class TestEquivalence:
                 "beta": Fixed(1.0),
                 "*": FREE,
             },
-            dust={
+            dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
                 "*": FIXED,
@@ -151,19 +151,19 @@ class TestEquivalence:
                 "*": FREE,
                 "beta": Fixed(1.5),
             },
-            dust={
+            dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
                 "*": FIXED,
                 "tau_bc": 0.5,
-                "emission": {
-                    "type": "dale2014",
-                    "*": FIXED,
-                },
+            },
+            dust_emission={
+                "type": "dale2014",
+                "*": FIXED,
             },
             neb={"type": "cue", "*": FIXED},
             igm={"type": "madau"},
-            radio={"type": "condon92"},
+            radio={"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}},
             xray={"type": "simple"},
             redshift=Uniform(0.01, 10.0),
         )
@@ -193,18 +193,18 @@ class TestNesting:
         """dust.emission nested sub-block should activate dust IR params."""
         params = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
-            dust={
+            dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
                 "*": FIXED,
                 # FIXED, not FREE: every Dale+2014 param has a Fixed registry
                 # default, so FREE here frees nothing and is now refused. This
                 # test is about sub-block *declaration*, not freeing.
-                "emission": {
-                    "type": "dale2014",
-                    "*": FIXED,
-                    "alpha_dale": Uniform(0.5, 4.0),
-                },
+            },
+            dust_emission={
+                "type": "dale2014",
+                "*": FIXED,
+                "alpha_dale": Uniform(0.5, 4.0),
             },
             redshift=Fixed(0.1),
         )
@@ -218,7 +218,7 @@ class TestNesting:
         """Absence of dust.emission key should not activate IR params."""
         params = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
-            dust={
+            dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
                 "*": FIXED,
@@ -333,18 +333,18 @@ class TestTypeMapping:
         assert params.apply_igm is False
 
     def test_radio_condon92(self):
-        """radio={'type': 'condon92'} should set radio=True."""
+        """Composable radio form should set radio=True."""
         params = parse_groups(
-            radio={"type": "condon92"},
+            radio={"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}},
             redshift=Fixed(0.1),
         )
         assert params.radio is True
         assert "radio_q_ir" in params.all_params
 
     def test_radio_none_or_absent(self):
-        """radio={'type': 'none'} or absent radio should set radio=False."""
+        """Composable radio with both 'none' or absent should set radio=False."""
         params1 = parse_groups(
-            radio={"type": "none"},
+            radio={"sf": {"type": "none"}, "agn": {"type": "none"}},
             redshift=Fixed(0.1),
         )
         assert params1.radio is False
@@ -375,7 +375,7 @@ class TestTypeMapping:
     def test_dust_law_mapping(self):
         """dust={'type': ..., 'law_bc': ...} should set dust_law_bc."""
         params = parse_groups(
-            dust={
+            dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
                 "*": FIXED,
@@ -387,7 +387,7 @@ class TestTypeMapping:
     def test_dust_single_component(self):
         """dust={'type': 'single_component'} should set dust_model."""
         params = parse_groups(
-            dust={
+            dust_attenuation={
                 "law": "power_law",
                 "type": "single_component",
                 "*": FIXED,
@@ -418,7 +418,7 @@ class TestValidation:
         """Unknown dust type should raise ValueError."""
         with pytest.raises(ValueError, match=r"dust|magic"):
             parse_groups(
-                dust={"type": "magic"},
+                dust_attenuation={"type": "magic"},
                 redshift=Fixed(0.1),
             )
 
@@ -492,13 +492,13 @@ class TestCanonicalExample:
                 "*": FREE,
                 "beta": Uniform(0.3, 2.0),  # Must be positive
             },
-            dust={
+            dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
                 "*": FIXED,
                 "tau_bc": 0.5,
-                "emission": {"type": "dale2014", "*": FIXED},
             },
+            dust_emission={"type": "dale2014", "*": FIXED},
             neb={"type": "cue", "*": FIXED},
             redshift=Uniform(0.01, 5.0),
         )
@@ -593,7 +593,7 @@ class TestEdgeCases:
     def test_multiple_dust_law_params(self):
         """dust with both law_bc and law_diff should work."""
         params = parse_groups(
-            dust={
+            dust_attenuation={
                 "type": "two_component",
                 "law_bc": "calzetti",
                 "law_diff": "smc",
@@ -738,7 +738,7 @@ class TestAllParamsAlias:
     def test_alias_equivalent_to_star(self):
         """``all_params`` and ``'*'`` produce bit-identical free/fixed partitions."""
         common = dict(
-            dust={"type": "two_component", "law": "calzetti"},
+            dust_attenuation={"type": "two_component", "law": "calzetti"},
             neb={"type": "cue"},
             redshift=Uniform(0.01, 5.0),
         )
@@ -746,7 +746,7 @@ class TestAllParamsAlias:
             sfh={"type": "dpl", "*": FREE, "beta": Fixed(1.5)},
             **{
                 **common,
-                "dust": {"law": "power_law", **common["dust"], "*": FIXED},
+                "dust_attenuation": {"law": "power_law", **common["dust_attenuation"], "*": FIXED},
                 "neb": {**common["neb"], "*": FIXED},
             },
         )
@@ -754,7 +754,11 @@ class TestAllParamsAlias:
             sfh={"type": "dpl", "all_params": FREE, "beta": Fixed(1.5)},
             **{
                 **common,
-                "dust": {"law": "power_law", **common["dust"], "all_params": FIXED},
+                "dust_attenuation": {
+                    "law": "power_law",
+                    **common["dust_attenuation"],
+                    "all_params": FIXED,
+                },
                 "neb": {**common["neb"], "all_params": FIXED},
             },
         )
@@ -778,17 +782,17 @@ class TestAllParamsAlias:
         def build(wk):
             return parse_groups(
                 sfh={"type": "dpl", wk: FIXED},
-                dust={
+                dust_attenuation={
                     "law": "power_law",
                     "type": "two_component",
                     wk: FIXED,
                     # FIXED, not FREE: this test is about the alias resolving
                     # identically to '*', not about what the wildcard frees.
-                    "emission": {
-                        "type": "dale2014",
-                        wk: FIXED,
-                        "alpha_dale": Uniform(0.5, 4.0),
-                    },
+                },
+                dust_emission={
+                    "type": "dale2014",
+                    wk: FIXED,
+                    "alpha_dale": Uniform(0.5, 4.0),
                 },
                 redshift=Fixed(0.1),
             )
@@ -848,10 +852,10 @@ class TestAllParamsAlias:
         with pytest.raises(ValueError, match="wildcard once"):
             parse_groups(
                 sfh={"type": "dpl", "all_params": FIXED},
-                dust={
+                dust_attenuation={
                     "type": "two_component",
-                    "emission": {"type": "dale2014", "*": FREE, "all_params": FIXED},
                 },
+                dust_emission={"type": "dale2014", "*": FREE, "all_params": FIXED},
                 redshift=Fixed(0.1),
             )
 
@@ -882,11 +886,13 @@ class TestRoundTripGroupTypes:
         return spec, groups, parse_groups(**groups)
 
     def test_radio_types_ride_on_the_sub_blocks(self):
-        _, groups, rebuilt = self._roundtrip(radio={"type": "condon92"})
+        _, groups, rebuilt = self._roundtrip(
+            radio={"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}}
+        )
         radio = groups["radio"]
         assert radio["sf"]["type"] == "bell2003"
         assert radio["agn"]["type"] == "powerlaw"
-        # parse_groups raises on a top-level 'type' mixed with sub-blocks
+        # Composable form never has a top-level 'type' key
         assert "type" not in radio
         assert rebuilt.radio is True
 

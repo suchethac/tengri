@@ -12,7 +12,8 @@ users can organize parameters into semantic groups::
 
     params = parse_groups(
         sfh={"type": "dpl", "all_params": FREE, "beta": 0.5},
-        dust={"type": "two_component", "law": "calzetti", "all_params": FIXED},
+        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
+        dust_emission={"type": "dale2014"},
         neb={"type": "cue"},
         redshift=FREE,
     )
@@ -55,8 +56,9 @@ marker lines to jump. In order:
 - ``Constants``
 - ``Main API``: ``parse_groups()``
 - ``Internal helpers``: one ``_translate_<group>()`` per group (sfh,
-  stellar, dust, neb, shock, igm, radio, foreground, xray, agn), then
-  key validation and per-parameter resolution
+  dust_attenuation, dust_emission, neb, shock, igm, radio, foreground, xray, agn),
+  plus _translate_dust_retired for the old dust= form, then key validation and
+  per-parameter resolution
 - ``Inverse: Parameters to nested-dict form``: ``parameters_to_groups()``
 
 Notes
@@ -458,7 +460,7 @@ def _valid_xray_types() -> frozenset[str]:
 
 
 def _valid_dust_laws() -> frozenset[str]:
-    """Return accepted ``dust.law_bc`` / ``dust.law_diff`` values from the registry.
+    """Return accepted ``dust_attenuation.law`` values from the registry.
 
     Mirrors ``DUST_LAWS.keys()``, which the ``@register_dust_law`` decorator
     populates eagerly at import time of ``components.dust.attenuation``.
@@ -526,7 +528,7 @@ _VALID_AGN_ATTEN_TYPES = _agn_block_types("attenuation")
 #: :func:`parameters_to_groups`) so the contract test's census is *derived* from
 #: the emitter instead of retyped beside it.
 _TOP_LEVEL_TYPED_GROUPS: frozenset[str] = frozenset(
-    {"sfh", "dust", "neb", "shock", "igm", "radio", "xray", "agn"}
+    {"sfh", "dust_attenuation", "dust_emission", "neb", "shock", "igm", "radio", "xray", "agn"}
 )
 
 #: AGN sub-block name -> the ``Parameters`` attribute holding its selected type.
@@ -599,6 +601,8 @@ _AGN_PARTITION = {
     # Attenuation
     "agn_polar_ebv": "agn.atten",
     "agn_polar_oa": "agn.atten",
+    "agn_polar_T": "agn.atten",
+    "agn_polar_beta": "agn.atten",
     "agn_attenuation_ebv": "agn.atten",  # smc_prevot block E(B-V)
     # Radiation physics (shared disc normalization)
     "agn_f_hard": "agn",
@@ -693,8 +697,9 @@ def parse_groups(**kwargs) -> Parameters:
     Parameters
     ----------
     **kwargs : keyword arguments
-        Model configuration. Keys are group names (sfh, dust, neb, igm,
-        radio, xray, agn) or top-level settings (redshift, apply_igm, n_grid).
+        Model configuration. Keys are group names (sfh, dust_attenuation,
+        dust_emission, neb, igm, radio, xray, agn) or top-level settings
+        (redshift, apply_igm, n_grid).
     _allow_empty_wildcard : bool, optional
         Private. When True, an ``all_params: FREE`` that frees nothing is
         permitted instead of raising :class:`~tengri.config.exceptions.ParameterError`.
@@ -837,16 +842,7 @@ def parse_groups(**kwargs) -> Parameters:
             continue
 
         # Get the group dict from the input for group-based parameters
-        if group.startswith("dust."):
-            # Sub-group (e.g., "dust.emission")
-            parent_group = "dust"
-            group_dict = kwargs.get(parent_group, {})
-            subkey = group.replace("dust.", "")
-            if isinstance(group_dict, dict) and subkey in group_dict:
-                group_dict = group_dict[subkey]
-            else:
-                group_dict = {}
-        elif group == "igm.dla":
+        if group == "igm.dla":
             # DLA sub-block: prefer the new nested-dict form
             # ``igm={'dla': {'log_n_hi': ..., ...}}`` (closes #507), but
             # fall back to the flat form where the builder factories emit
@@ -1211,7 +1207,7 @@ def _narrow_free_priors_to_grid(
 #: component selected for it. Only groups listed here are narrowed; add an
 #: entry when another sub-block's parameter partition is wider than any one
 #: component's declarations.
-_SUBBLOCK_COMPONENT_ATTR: dict[str, str] = {"dust.emission": "dust_emission"}
+_SUBBLOCK_COMPONENT_ATTR: dict[str, str] = {"dust_emission": "dust_emission"}
 
 
 def _declared_param_names(component_type: str) -> frozenset[str] | None:
@@ -1510,9 +1506,31 @@ def _warn_silently_fixed_parameters(
         value = dist.default
         default_fixed_by_group.setdefault(group, []).append((param_name, value))
 
+    # A group that yielded at least one free parameter cannot have hit the
+    # failure this warning exists to catch -- "I configured a group and got
+    # nothing free out of it" (#1995). Counting free parameters per group is
+    # the test; engagement deliberately is not, because a group can be engaged
+    # and still yield nothing free, which is the footgun itself:
+    #
+    #     sfh={"type": "dpl", "alpha": Fixed(1.5)}   # engaged, n_free == 0
+    #
+    # Before this, the condition was "did the group state a disposition", a
+    # proxy that misfires on the standard ``met={"logzsol": Uniform(...)}``
+    # spelling and put 115 warnings into 9 published renders.
+    free_by_group: dict[str, int] = {}
+    for param_name, dist in final_params._distributions.items():
+        if dist.is_fixed:
+            continue
+        owning_group = param_partition.get(param_name)
+        if owning_group is None:
+            continue
+        free_by_group[owning_group] = free_by_group.get(owning_group, 0) + 1
+
     # For each group with silently-fixed parameters, check if the user
     # explicitly stated a disposition. Only warn if they didn't.
     for group, params_and_values in default_fixed_by_group.items():
+        if free_by_group.get(group, 0):
+            continue
         # Determine if the user actually provided this group in kwargs
         if group.startswith("dust."):
             # Sub-group like dust.emission
@@ -1777,8 +1795,8 @@ def _wildcard_scopes(
         structural_kwargs.get("radio_agn_model"), frozenset()
     )
 
-    # ── dust.emission: the selected IR engine's own declarations ──
-    scopes["dust.emission"] = (
+    # ── dust_emission: the selected IR engine's own declarations ──
+    scopes["dust_emission"] = (
         _declared_param_names(structural_params.dust_emission)
         if structural_params.dust_emission is not None
         else None
@@ -1789,7 +1807,9 @@ def _wildcard_scopes(
     # the Charlot & Fall geometry, not as a curve-shape argument) and the four
     # curve-shape modifiers, which only some laws read. Narrow by removing the
     # shape parameters no selected law names, leaving everything else free.
-    dust_group_params = {name for name, grp in param_partition.items() if grp == "dust"}
+    dust_group_params = {
+        name for name, grp in param_partition.items() if grp == "dust_attenuation"
+    }
     if dust_group_params:
         # Read the slots off ``structural_params``, not ``structural_kwargs``:
         # a slot the user did not name is absent from the kwargs but still
@@ -1805,7 +1825,9 @@ def _wildcard_scopes(
             ),
             frozenset(),
         )
-        scopes["dust"] = frozenset(dust_group_params - (_all_law_shape_params() - active_shape))
+        scopes["dust_attenuation"] = frozenset(
+            dust_group_params - (_all_law_shape_params() - active_shape)
+        )
 
     # ── xray: the selected corona model ──
     # Read the model off ``structural_params`` for the same reason the dust
@@ -1849,7 +1871,24 @@ def _translate_structural(groups: dict) -> dict:
     # Dotted entries are sub-blocks (``dust.emission``, ``igm.dla``), reached
     # through their parent rather than named at top level.
     valid_groups = {k for k in _GROUP_STRUCTURAL_KEYS if "." not in k}
+    # Add "dust" to valid_groups so old dust= syntax can be caught and given a helpful error
+    valid_groups.add("dust")
     result = {}
+
+    # Check for ambiguity: both old dust= and new dust_attenuation=/dust_emission=
+    has_dust_old = "dust" in groups and isinstance(groups.get("dust"), dict)
+    has_dust_atten = "dust_attenuation" in groups and isinstance(
+        groups.get("dust_attenuation"), dict
+    )
+    has_dust_emis = "dust_emission" in groups and isinstance(groups.get("dust_emission"), dict)
+    if has_dust_old and (has_dust_atten or has_dust_emis):
+        raise ValueError(
+            "Ambiguous dust specification: both old `dust=` and new `dust_attenuation=` / "
+            "`dust_emission=` groups are present. Choose one style:\n"
+            "Old (retired): dust={...} with optional dust={'emission': {...}} nested\n"
+            "New: dust_attenuation={...}, dust_emission={...} as separate top-level entries.\n"
+            "Remove the old `dust=` form."
+        )
 
     # Suggested model when someone tries the (unsupported) bool form for an
     # additive gate group — used only to make the error message actionable.
@@ -1893,6 +1932,16 @@ def _translate_structural(groups: dict) -> dict:
         # loudly and point at the consistent dict grammar rather than guessing.
         if group_name in _GATE_SUGGESTED_TYPE and isinstance(group_dict, bool):
             suggested = _GATE_SUGGESTED_TYPE[group_name]
+            if group_name == "radio":
+                # Radio uses the composable form, not the legacy type form
+                sf_spec = "{'type': 'bell2003'}"
+                agn_spec = "{'type': 'powerlaw'}"
+                raise ValueError(
+                    f"{group_name}={group_dict!r} is not a valid declaration — declare "
+                    f"radio with the composable surface using 'sf' and 'agn' keys: "
+                    f"radio={{'sf': {sf_spec}, 'agn': {agn_spec}}} "
+                    f"to enable (add per-param priors), or omit to disable."
+                )
             raise ValueError(
                 f"{group_name}={group_dict!r} is not a valid declaration — declare "
                 f"{group_name} like every other component, with a dict selecting the "
@@ -1908,7 +1957,12 @@ def _translate_structural(groups: dict) -> dict:
         elif group_name == "met":
             _translate_met(group_dict, result)
         elif group_name == "dust":
-            _translate_dust(group_dict, result)
+            # Old dust= form is retired; handle with loud error
+            _translate_dust_retired(group_dict, result)
+        elif group_name == "dust_attenuation":
+            _translate_dust_attenuation(group_dict, result)
+        elif group_name == "dust_emission":
+            _translate_dust_emission(group_dict, result)
         elif group_name == "neb":
             _translate_neb(group_dict, result)
         elif group_name == "shock":
@@ -2197,20 +2251,22 @@ def _set_met_mode(met_mode, result: dict, *, key: str) -> None:
     result["met_mode"] = met_mode
 
 
-def _translate_dust(dust_dict: dict, result: dict) -> None:
-    """Translate dust group to dust_model, dust_law_bc, dust_emission.
+def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
+    """Translate dust_attenuation group to dust_model and law settings.
 
     Resolves dust type against the set of supported dust models
     (two_component, single_component, wg00) and extracts structural
-    configuration and law selections.
+    configuration and law selections. Preserves the law validation rules
+    from PR #1984: law XOR (law_bc AND law_diff); single_component takes
+    only law; wg00 takes none.
     """
-    dust_type = dust_dict.get("type", "two_component")
+    dust_type = dust_atten_dict.get("type", "two_component")
 
     # 'none'/'off' disable the dust block entirely — parity with neb/agn/radio/
     # xray/igm/shock, all of which accept type='none' (and the generic grammar
     # error even promises it). The forward model reads dust_model=='off' as
     # use_dust=False, so normalize both spellings onto that sentinel and skip
-    # law/emission parsing (there is nothing to attenuate or re-emit).
+    # law parsing (there is nothing to attenuate).
     if dust_type in ("none", "off"):
         result["dust_model"] = "off"
         return
@@ -2218,10 +2274,10 @@ def _translate_dust(dust_dict: dict, result: dict) -> None:
     # Lyman-limit clip is wired only through the two-component screen. Flag any
     # other type rather than silently dropping the request (single-component,
     # WG00, and SEDModelComponents do not route through it yet).
-    if dust_dict.get("lyman_cutoff") and dust_type != "two_component":
+    if dust_atten_dict.get("lyman_cutoff") and dust_type != "two_component":
         raise ValueError(
-            f"dust 'lyman_cutoff' is only supported for type='two_component' "
-            f"(got type={dust_type!r}). Use a two-component dust block, or drop "
+            f"dust_attenuation 'lyman_cutoff' is only supported for type='two_component' "
+            f"(got type={dust_type!r}). Use a two-component dust_attenuation block, or drop "
             f"'lyman_cutoff'."
         )
 
@@ -2229,24 +2285,33 @@ def _translate_dust(dust_dict: dict, result: dict) -> None:
     if dust_type not in _VALID_DUST_TYPES:
         # A common mistake (#664): passing an attenuation *law* name as the dust
         # ``type``. Laws (calzetti, smc, salim_sbl18, …) are not standalone dust
-        # models — they are selected via ``law_bc`` / ``law_diff`` inside a
-        # ``two_component`` (or ``single_component``) block. Point there instead
-        # of emitting a bare "unknown type" so the request is not lost.
+        # models — they are selected with the ``law`` key inside a
+        # ``single_component`` or ``two_component`` block. Point there instead of
+        # emitting a bare "unknown type" so the request is not lost.
         if dust_type in _valid_dust_laws():
             raise ValueError(
                 f"'{dust_type}' is a dust attenuation *law*, not a dust model type. "
-                f"Select it via 'law_bc'/'law_diff' on a dust model, e.g. a single "
-                f"screen dust={{'type': 'single_component', 'law_bc': '{dust_type}', "
-                f"'tau_v': ...}}, or birth-cloud + ISM dust={{'type': 'two_component', "
-                f"'law_bc': '{dust_type}', 'law_diff': '{dust_type}', 'tau_bc': ..., "
-                f"'tau_diff': ...}}. Valid dust types are: "
+                f"Select it with the 'law' key on a dust_attenuation model, e.g. a single "
+                f"screen dust_attenuation={{'type': 'single_component', 'law': '{dust_type}', "
+                f"'tau_v': ...}}, or birth-cloud + ISM "
+                f"dust_attenuation={{'type': 'two_component', 'law': '{dust_type}', "
+                f"'tau_bc': ..., 'tau_diff': ...}} -- use 'law_bc' and 'law_diff' instead only "
+                f"to give the two screens different laws. Valid dust types are: "
                 f"{', '.join(sorted(_VALID_DUST_TYPES))}."
             )
         suggestions = difflib.get_close_matches(dust_type, _VALID_DUST_TYPES, n=2, cutoff=0.6)
         suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-        raise ValueError(f"Unknown dust type '{dust_type}'.{suggest_str}")
+        raise ValueError(f"Unknown dust_attenuation type '{dust_type}'.{suggest_str}")
 
     result["dust_model"] = dust_type
+
+    # Reject nested dust_attenuation={'emission': ...} — emission is now a top-level group
+    if "emission" in dust_atten_dict:
+        raise ValueError(
+            "dust_attenuation={'emission': ...} is retired; "
+            "IR emission is now a separate top-level group. "
+            "Rewrite dust_attenuation={...}, dust_emission={...} as separate top-level entries."
+        )
 
     # Witt & Gordon (2000) screen (FSPS dust_type=3): capture and validate the
     # three structural selectors. They are static structural choices (not free
@@ -2259,8 +2324,8 @@ def _translate_dust(dust_dict: dict, result: dict) -> None:
             "structure": ("dust_wg00_structure", _WG00_STRUCTURES),
         }
         for key, (result_key, allowed) in _wg00_axes.items():
-            if key in dust_dict:
-                val = dust_dict[key]
+            if key in dust_atten_dict:
+                val = dust_atten_dict[key]
                 if val not in allowed:
                     raise ValueError(f"Invalid WG00 {key} {val!r}; choose one of {allowed}.")
                 result[result_key] = val
@@ -2271,25 +2336,50 @@ def _translate_dust(dust_dict: dict, result: dict) -> None:
     # For two_component: either 'law' (shared by both screens) XOR both 'law_bc' AND 'law_diff'.
     valid_laws = _valid_dust_laws()
 
-    dust_law = dust_dict.get("law")
-    dust_law_bc = dust_dict.get("law_bc")
-    dust_law_diff = dust_dict.get("law_diff")
-    dust_law_neb = dust_dict.get("law_neb")
+    dust_law = dust_atten_dict.get("law")
+    dust_law_bc = dust_atten_dict.get("law_bc")
+    dust_law_diff = dust_atten_dict.get("law_diff")
+    dust_law_neb = dust_atten_dict.get("law_neb")
+
+    # Paired per-screen keys follow the same rule as the laws: on a two-screen
+    # model, naming one screen and leaving the other implicit is an incomplete
+    # specification. A lone `tau_bc` used to leave `tau_diff` pinned at its
+    # declared 0.3 while the birth cloud was fitted -- and the diffuse screen
+    # usually dominates the total attenuation, so that is rarely what anyone
+    # means. A wildcard is still an accepted way to say "free the partner too".
+    if dust_type == "two_component" and not ({"all_params", "*"} & set(dust_atten_dict)):
+        for stem in ("tau", "Rv", "delta", "slope", "bump_strength"):
+            bc, diff = f"{stem}_bc", f"{stem}_diff"
+            has_bc = dust_atten_dict.get(bc) is not None
+            has_diff = dust_atten_dict.get(diff) is not None
+            if has_bc == has_diff:
+                continue
+            named, missing = (bc, diff) if has_bc else (diff, bc)
+            raise ValueError(
+                f"dust_attenuation type='two_component' names {named!r} but not "
+                f"{missing!r}. A two-screen model needs both, or a wildcard to free "
+                f"them together -- otherwise {missing!r} silently keeps its declared "
+                f"default while {named!r} is fitted. Give {missing!r} explicitly, or "
+                f"pass 'all_params': FREE. Accepted: "
+                f"{{'{bc}': ..., '{diff}': ...}}, or "
+                f"{{'{named}': ..., 'all_params': FREE}}, or neither."
+            )
 
     # For single_component: require 'law', reject law_bc/law_diff
     if dust_type == "single_component":
         if dust_law_bc is not None or dust_law_diff is not None:
             raise ValueError(
-                "dust type='single_component' has a single attenuation screen. "
+                "dust_attenuation type='single_component' has a single attenuation screen. "
                 "Use 'law' to set the attenuation law, not 'law_bc' or 'law_diff'. "
-                "Example: dust={'type': 'single_component', 'law': 'calzetti', ...}"
+                "Example: dust_attenuation={'type': 'single_component', 'law': 'calzetti', ...}"
             )
         if dust_law is None:
             laws_list = ", ".join(sorted(valid_laws))
             raise ValueError(
-                f"dust type='single_component' requires 'law' to be specified. "
+                f"dust_attenuation type='single_component' requires 'law' to be specified. "
                 f"Valid laws: {laws_list}. "
-                f"Example: dust={{'type': 'single_component', 'law': 'calzetti', 'tau_v': ...}}"
+                f"Example: dust_attenuation={{'type': 'single_component', "
+                f"'law': 'calzetti', 'tau_v': ...}}"
             )
         if dust_law not in valid_laws:
             suggestions = difflib.get_close_matches(dust_law, valid_laws, n=2, cutoff=0.6)
@@ -2308,35 +2398,38 @@ def _translate_dust(dust_dict: dict, result: dict) -> None:
         # Check for invalid combinations
         if has_law and (has_law_bc or has_law_diff):
             raise ValueError(
-                "dust type='two_component' grammar is ambiguous: "
+                "dust_attenuation type='two_component' grammar is ambiguous: "
                 "cannot specify both 'law' and 'law_bc'/'law_diff'. "
                 "Use EITHER 'law' (shared by both screens) "
                 "OR both 'law_bc' and 'law_diff' (per-screen). "
-                "Example 1: dust={'type': 'two_component', 'law': 'calzetti', ...} "
-                "Example 2: dust={'type': 'two_component', 'law_bc': 'calzetti', "
+                "Example 1: dust_attenuation={'type': 'two_component', 'law': 'calzetti', ...} "
+                "Example 2: dust_attenuation={'type': 'two_component', 'law_bc': 'calzetti', "
                 "'law_diff': 'power_law', ...}"
             )
 
         if not has_law and not (has_law_bc and has_law_diff):
             if has_law_bc or has_law_diff:
+                given = [k for k in ("law_bc", "law_diff") if dust_atten_dict.get(k) is not None]
                 raise ValueError(
-                    f"dust type='two_component' requires BOTH 'law_bc' and 'law_diff' "
+                    f"dust_attenuation type='two_component' requires BOTH 'law_bc' and 'law_diff' "
                     f"for per-screen specification, or use 'law' for a shared law. "
-                    f"You gave: "
-                    f"{[k for k in ['law_bc', 'law_diff'] if dust_dict.get(k) is not None]}. "
-                    f"Example 1: dust={{'type': 'two_component', 'law': 'calzetti', ...}} "
-                    f"Example 2: dust={{'type': 'two_component', 'law_bc': 'calzetti', "
+                    f"You gave: {given}. "
+                    f"Example 1: dust_attenuation={{'type': 'two_component', "
+                    f"'law': 'calzetti', ...}} "
+                    f"Example 2: dust_attenuation={{'type': 'two_component', "
+                    f"'law_bc': 'calzetti', "
                     f"'law_diff': 'power_law', ...}}"
                 )
             # Neither form given
             laws_list = ", ".join(sorted(valid_laws))
             raise ValueError(
-                f"dust type='two_component' requires either 'law' (applied to both screens) "
+                f"dust_attenuation type='two_component' requires either 'law' "
+                f"(applied to both screens) "
                 f"or both 'law_bc' and 'law_diff' (per-screen). "
                 f"Valid laws: {laws_list}. "
-                f"Example 1: dust={{'type': 'two_component', 'law': 'calzetti', "
+                f"Example 1: dust_attenuation={{'type': 'two_component', 'law': 'calzetti', "
                 f"'tau_bc': ..., 'tau_diff': ...}} "
-                f"Example 2: dust={{'type': 'two_component', 'law_bc': 'calzetti', "
+                f"Example 2: dust_attenuation={{'type': 'two_component', 'law_bc': 'calzetti', "
                 f"'law_diff': 'power_law', 'tau_bc': ..., 'tau_diff': ...}}"
             )
 
@@ -2380,58 +2473,113 @@ def _translate_dust(dust_dict: dict, result: dict) -> None:
     for short, law_kw in TWO_COMPONENT_OVERRIDE_KEYS.items():
         for comp in ("bc", "diff", "neb"):
             key = f"{short}_{comp}"
-            if key in dust_dict:
-                overrides.setdefault(comp, {})[law_kw] = float(dust_dict[key])
+            if key in dust_atten_dict:
+                overrides.setdefault(comp, {})[law_kw] = float(dust_atten_dict[key])
     if overrides:
         result["dust_law_overrides"] = overrides
 
     # Lyman-limit clip (912 Å). Boolean in the grammar; stored as the cutoff
     # wavelength so the forward model and compile_signature carry a single float.
-    if dust_dict.get("lyman_cutoff"):
+    if dust_atten_dict.get("lyman_cutoff"):
         result["dust_lyman_cutoff_aa"] = 912.0
 
     # Whether ALL stellar LyC is absorbed by neb_fesc (FSPS/CIGALE) or only the
     # young/birth-cloud population (default; bagpipes). See DustSEDComponent.
-    if "lyc_absorb_all" in dust_dict:
-        result["dust_lyc_absorb_all"] = bool(dust_dict["lyc_absorb_all"])
+    if "lyc_absorb_all" in dust_atten_dict:
+        result["dust_lyc_absorb_all"] = bool(dust_atten_dict["lyc_absorb_all"])
 
     # Include the LyC in the dust energy-balance integral (FSPS/Prospector
     # parity) vs the canonical LyC-masked L_absorbed (default; #922/#961).
-    if "eb_include_lyc" in dust_dict:
-        result["dust_eb_include_lyc"] = bool(dust_dict["eb_include_lyc"])
+    if "eb_include_lyc" in dust_atten_dict:
+        result["dust_eb_include_lyc"] = bool(dust_atten_dict["eb_include_lyc"])
 
-    # Extract dust emission sub-block
-    if "emission" in dust_dict:
+
+def _translate_dust_retired(dust_dict: dict, result: dict) -> None:
+    """Handle retired dust= syntax with loud error and translation.
+
+    The dust group has been split into dust_attenuation and dust_emission
+    as separate top-level groups. This function rejects the old form and
+    provides a helpful error message showing the translation.
+    """
+    # Passing both the old and the new form is caught in _translate_structural,
+    # which sees every group; this function only ever runs for `dust=` and its
+    # job is to translate the caller's own dict into the two replacements.
+    has_emission = "emission" in dust_dict
+
+    atten_dict = {k: v for k, v in dust_dict.items() if k != "emission"}
+    atten_str = (
+        "dust_attenuation={"
+        + ", ".join(f"'{k}': {v!r}" for k, v in sorted(atten_dict.items()))
+        + "}"
+    )
+
+    emission_str = ""
+    if has_emission:
         emission_dict = dust_dict["emission"]
         if isinstance(emission_dict, dict):
-            emission_type = emission_dict.get("type", None)
-            if emission_type in ("none", "off"):
-                # Explicitly disable IR re-emission — parity with the group-level
-                # 'none'. Leave result['dust_emission'] unset (its off default).
-                emission_type = None
-            if emission_type is not None:
-                # Dust IR emission types are engine names (modified_blackbody, dale2014,
-                # dl07, dl14, astrodust, etc.) resolved by the DUST_EMISSION_MODELS loader cache.
-                valid_emission_types = _valid_dust_emission_types()
-                if emission_type not in valid_emission_types:
-                    suggestions = difflib.get_close_matches(
-                        emission_type, valid_emission_types, n=3, cutoff=0.6
-                    )
-                    suggest_str = (
-                        f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-                    )
-                    raise ValueError(f"Unknown dust emission type '{emission_type}'.{suggest_str}")
-                result["dust_emission"] = emission_type
+            emis_str_parts = []
+            for k, v in sorted(emission_dict.items()):
+                if isinstance(v, str):
+                    emis_str_parts.append(f"'{k}': {v!r}")
+                else:
+                    emis_str_parts.append(f"'{k}': {v!r}")
+            emission_str = "dust_emission={" + ", ".join(emis_str_parts) + "}"
 
-                # Astrodust+PAH (HD23) optional configuration: spinning dust (AME)
-                # and cold-neutral-medium filling fraction. These are structural
-                # configuration (not free parameters), stored with astrodust_ prefix
-                # to distinguish from parameter registry.
-                if emission_type == "astrodust":
-                    if "spinning_dust" in emission_dict:
-                        result["astrodust_spinning_dust"] = bool(emission_dict["spinning_dust"])
-                    if "f_cnm" in emission_dict:
-                        result["astrodust_f_cnm"] = float(emission_dict["f_cnm"])
+    dust_str_parts = []
+    for k, v in sorted(dust_dict.items()):
+        if isinstance(v, str):
+            dust_str_parts.append(f"'{k}': {v!r}")
+        else:
+            dust_str_parts.append(f"'{k}': {v!r}")
+    dust_str = "dust={" + ", ".join(dust_str_parts) + "}"
+
+    message = (
+        "`dust=` is retired; attenuation and IR emission are now separate groups. "
+        "Replace\n"
+        f"    {dust_str}\n"
+        "with\n"
+        f"    {atten_str}"
+    )
+    if emission_str:
+        message += f",\n    {emission_str}"
+    else:
+        message += "."
+
+    raise ValueError(message)
+
+
+def _translate_dust_emission(dust_emis_dict: dict, result: dict) -> None:
+    """Translate dust_emission group to dust_emission type and settings.
+
+    Handles IR re-emission model selection and associated structural
+    configuration (e.g., astrodust spinning dust and f_cnm).
+    """
+    emission_type = dust_emis_dict.get("type")
+    if emission_type in ("none", "off"):
+        # Explicitly disable IR re-emission — parity with the group-level
+        # 'none'. Leave result['dust_emission'] unset (its off default).
+        emission_type = None
+    if emission_type is not None:
+        # Dust IR emission types are engine names (modified_blackbody, dale2014,
+        # dl07, dl14, astrodust, etc.) resolved by the DUST_EMISSION_MODELS loader cache.
+        valid_emission_types = _valid_dust_emission_types()
+        if emission_type not in valid_emission_types:
+            suggestions = difflib.get_close_matches(
+                emission_type, valid_emission_types, n=3, cutoff=0.6
+            )
+            suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+            raise ValueError(f"Unknown dust_emission type '{emission_type}'.{suggest_str}")
+        result["dust_emission"] = emission_type
+
+        # Astrodust+PAH (HD23) optional configuration: spinning dust (AME)
+        # and cold-neutral-medium filling fraction. These are structural
+        # configuration (not free parameters), stored with astrodust_ prefix
+        # to distinguish from parameter registry.
+        if emission_type == "astrodust":
+            if "spinning_dust" in dust_emis_dict:
+                result["astrodust_spinning_dust"] = bool(dust_emis_dict["spinning_dust"])
+            if "f_cnm" in dust_emis_dict:
+                result["astrodust_f_cnm"] = float(dust_emis_dict["f_cnm"])
 
 
 # Backend *implementations* are named after their physics (BakedInBackend,
@@ -2644,16 +2792,11 @@ def _translate_radio(radio_dict: dict, result: dict) -> None:
             "agn": {"type": "dpl"},  # AGN variant
         }
 
-    **Legacy form (back-compat)**:
-
-    .. code-block:: python
-
-        radio = {"type": "condon92"}  # radio on with default sf/agn models
-        radio = {"type": "radio_dpl"}  # == radio={'agn': {'type': 'dpl'}}
-
-    The legacy name is resolved onto the two axes by
-    :func:`_legacy_radio_type_to_blocks` rather than assumed to be the
-    default pair — accepting a name and then ignoring it is #1461.
+    **Legacy form (RETIRED, #1980)** — ``radio={'type': 'condon92'}`` now
+    raises with the composable equivalent in the message.
+    :func:`_legacy_radio_type_to_blocks` survives only to compute that
+    equivalent for the error text (naming the mapping rather than a
+    generic default pair — accepting a name and then ignoring it is #1461).
 
     Raises if both 'type' and 'sf'/'agn' sub-blocks are present.
     """
@@ -2662,33 +2805,45 @@ def _translate_radio(radio_dict: dict, result: dict) -> None:
     has_agn_block = "agn" in radio_dict
 
     if has_legacy_type and (has_sf_block or has_agn_block):
-        # The legacy example is derived from the live vocabulary, not written
-        # by hand: this message used to recommend ``radio={'type': 'bell2003'}``,
-        # which the validator below rejects ("Unknown radio type 'bell2003'") —
-        # ``bell2003`` is an ``sf`` variant, never a legacy ``type``. A reader
-        # following the recovery advice landed on a second error.
-        legacy_example = sorted(_valid_radio_types() - {"none"})
-        legacy_hint = legacy_example[0] if legacy_example else "none"
+        # #1980: the legacy 'type' key is retired, so the recovery advice must
+        # not offer it as one of two valid spellings — drop it and keep the
+        # composable form only.
         raise ValueError(
-            "radio: cannot mix legacy 'type' key with 'sf'/'agn' sub-blocks. "
-            f"Use either: radio={{'type': '{legacy_hint}'}} (legacy) "
-            "or radio={'sf': {'type': 'bell2003'}, 'agn': {'type': 'powerlaw'}} (new)."
+            "radio: the legacy 'type' key is retired and cannot be mixed with "
+            "'sf'/'agn' sub-blocks. Remove 'type' and use the composable form: "
+            "radio={'sf': {'type': 'bell2003'}, 'agn': {'type': 'powerlaw'}}."
         )
 
-    # Legacy form: radio={'type': 'X'} → resolve X onto the sf/agn axes
-    if has_legacy_type and not has_sf_block and not has_agn_block:
+    # Legacy form retired: radio={'type': 'X'} is no longer accepted.
+    # Users must use the composable surface: radio={'sf': {...}, 'agn': {...}}
+    if has_legacy_type:
         radio_type = radio_dict["type"]
-        valid_radio = _valid_radio_types()
-        if radio_type not in valid_radio:
-            suggestions = difflib.get_close_matches(radio_type, valid_radio, n=2, cutoff=0.6)
-            suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
-            raise ValueError(f"Unknown radio type '{radio_type}'.{suggest_str}")
-        result["radio"] = radio_type != "none"
-        if radio_type != "none":
-            sf_variant, agn_variant = _legacy_radio_type_to_blocks(radio_type)
-            result["radio_sfr_mode"] = sf_variant
-            result["radio_agn_model"] = agn_variant
-        return
+        # Provide helpful guidance: show what the legacy type maps to
+        sf_variant, agn_variant = "bell2003", "powerlaw"  # defaults
+        if radio_type == "condon92":
+            # condon92 used both defaults
+            raise ValueError(
+                f"radio legacy type form is retired. "
+                f"radio={{'type': '{radio_type}'}} → use the composable form: "
+                f"radio={{'sf': {{'type': '{sf_variant}'}}, 'agn': {{'type': '{agn_variant}'}}}}"
+            )
+        elif radio_type != "none":
+            # Try to find what this maps to for a better error message
+            try:
+                sf_variant, agn_variant = _legacy_radio_type_to_blocks(radio_type)
+            except ValueError:
+                sf_variant, agn_variant = "bell2003", "powerlaw"
+            raise ValueError(
+                f"radio legacy type form is retired. "
+                f"radio={{'type': '{radio_type}'}} → use the composable form: "
+                f"radio={{'sf': {{'type': '{sf_variant}'}}, 'agn': {{'type': '{agn_variant}'}}}}"
+            )
+        else:  # radio_type == 'none'
+            raise ValueError(
+                "radio legacy type form is retired. "
+                "radio={'type': 'none'} → use the composable form with both 'none': "
+                "radio={'sf': {'type': 'none'}, 'agn': {'type': 'none'}}"
+            )
 
     # New composable form: extract SF and AGN sub-blocks
     sf_variant = "bell2003"  # default
@@ -2853,6 +3008,25 @@ _RADIO_AGN_PARAM_NAMES: frozenset[str] = frozenset().union(*_RADIO_AGN_PARAMS_BY
 #: collide with the host ``dust`` block's parameter prefix.
 _VALID_FOREGROUND_LAWS = frozenset({"cardelli"})
 
+#: Laws the AGN attenuation-stage block actually implements. One entry, and that
+#: is the honest count: ``components/agn/reddening.py`` imports ``prevot_smc``
+#: and applies it unconditionally, so the block is single-curve by construction
+#: -- its own name (``smc_prevot``) and its E(B-V) parameter's description say so.
+#:
+#: This was validated against ``DUST_LAWS`` (22 entries) with every accepted
+#: name mapped to the same block, so ``agn={'atten': {'law': 'calzetti'}}`` was
+#: validated, accepted, and silently given the Prevot SMC curve. Measured: five
+#: distinct law names produced bit-identical SEDs at E(B-V)=0.4, while the same
+#: comparison saw E(B-V) itself change the SED. Validating against a menu the
+#: physics does not honor is worse than not offering the choice -- the careful
+#: "did you mean" error taught users the choice was real (#2012).
+#:
+#: ``smc`` is deliberately NOT here: it is a different curve from ``prevot_smc``
+#: (20% apart over 1000-20000 A), so accepting it would be the same silent
+#: substitution at smaller magnitude. Wiring more laws into the block widens
+#: this set; until then it describes what the block does.
+_VALID_AGN_ATTEN_LAWS = frozenset({"prevot_smc"})
+
 
 def _translate_foreground(fg_dict: dict, result: dict) -> None:
     """Translate the ``foreground`` group (MW screen) — see #297.
@@ -2861,6 +3035,12 @@ def _translate_foreground(fg_dict: dict, result: dict) -> None:
     Surfaces three top-level kwargs on ``Parameters`` so the SEDModel can
     apply the screen in the observed-frame SED path, after IGM and
     redshifting, independently from the host-galaxy ``dust`` block.
+
+    **Intentional design**: ``foreground`` is deliberately settings-only
+    (no ``type`` key, no free parameters). Milky Way dust extinction is not a
+    fittable model choice — it is observational / astronomical data — so it
+    remains a bare configuration dictionary. Unlike other groups (dust, AGN,
+    radio, etc.), foreground carries no sub-blocks and no structural type.
     """
     ebmv = fg_dict.get("ebmv_mw", 0.0)
     law = fg_dict.get("law", "cardelli")
@@ -2915,7 +3095,7 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     # (#1720). It replaces ``met={'type': ...}`` (#311) outright — two
     # spellings of one setting is the maintenance cost this removes.
     "met": frozenset({"type", "*"}),
-    "dust": frozenset(
+    "dust_attenuation": frozenset(
         {
             "type",
             "*",
@@ -2923,7 +3103,6 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
             "law_bc",
             "law_diff",
             "law_neb",
-            "emission",
             # WG00 screen structural selectors (FSPS dust_type=3).
             "dust_curve",
             "geometry",
@@ -2954,7 +3133,7 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
             "eb_include_lyc",
         }
     ),
-    "dust.emission": frozenset({"type", "*", "spinning_dust", "f_cnm"}),
+    "dust_emission": frozenset({"type", "*", "spinning_dust", "f_cnm", "eta_balance"}),
     "neb": frozenset({"type", "*", "full_catalog", "grid"}),
     "shock": frozenset({"type", "*", "norm", "abundance", "component"}),
     "igm": frozenset({"type", "*", "patchy", "dla"}),
@@ -3037,7 +3216,7 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
     ),
     # No 'stellar' entry: that group is gone (#1720). Its one setting was the
     # metallicity mode, and it is emitted above as met={'type': ...}.
-    "dust": (
+    "dust_attenuation": (
         # The two law attributes are emitted by hand in
         # _emit_declared_structural (one 'law' when both screens agree, the
         # pair when they differ), which then skips these entries. They stay
@@ -3049,18 +3228,28 @@ _STRUCTURAL_ROUNDTRIP: dict[str, tuple[_Structural, ...]] = {
         _Structural(
             "law_diff", "dust_law_diff", None, only_types=("single_component", "two_component")
         ),
+        _Structural("law_neb", "dust_law_neb", None),
         # Witt & Gordon (2000) screen selectors (FSPS dust_type=3). Only read
         # by the parser when the dust type is wg00, so a non-WG00 spec always
         # holds the defaults and never emits them.
         _Structural("dust_curve", "dust_wg00_curve", "mw", only_types=("wg00",)),
         _Structural("geometry", "dust_wg00_geometry", "shell", only_types=("wg00",)),
         _Structural("structure", "dust_wg00_structure", "homogeneous", only_types=("wg00",)),
+        # Per-component law-parameter overrides (slope/bump_strength/delta/Rv x
+        # bc/diff/neb), the Lyman flags and the law keys are emitted by
+        # _add_structural_settings / _emit_declared_structural, not by this table.
+        # They are covered by the `hand_written` allowlist in
+        # test_structural_settings_roundtrip, which is where a hand-emitted key
+        # belongs: an entry here must name a real attribute on Parameters.
     ),
-    "dust.emission": (
+    "dust_emission": (
         # Astrodust+PAH (HD23): spinning dust (AME) enable + cold-neutral-medium
         # fraction. Structural config, forwarded to component_factory (#1093).
         _Structural("spinning_dust", "astrodust_spinning_dust", False, only_types=("astrodust",)),
         _Structural("f_cnm", "astrodust_f_cnm", 0.28, only_types=("astrodust",)),
+        # eta_balance is a PARAMETER (dust_eta_balance), not a settings attribute,
+        # so it has no attribute for this table to target — it is covered by the
+        # test's hand_written allowlist instead.
     ),
     "neb": (
         _Structural("full_catalog", "cue_full_catalog", False, only_types=("cue",)),
@@ -3142,7 +3331,7 @@ def _emit_declared_structural(group_name: str, group_output: dict, spec: Paramet
 
     # Special handling for dust laws: emit 'law' when both screens share,
     # or 'law_bc'/'law_diff' otherwise
-    if group_name == "dust" and group_type in ("single_component", "two_component"):
+    if group_name == "dust_attenuation" and group_type in ("single_component", "two_component"):
         law_bc = getattr(spec, "dust_law_bc", None)
         law_diff = getattr(spec, "dust_law_diff", None)
         if law_bc is not None or law_diff is not None:
@@ -3250,7 +3439,18 @@ def _validate_user_keys(
     "AI slop" failure mode of the nested-dict API before this validator
     was added (issue tracked in the forward-model cleanup arc).
     """
-    valid_top_groups = {"sfh", "met", "dust", "neb", "shock", "igm", "radio", "xray", "agn"}
+    valid_top_groups = {
+        "sfh",
+        "met",
+        "dust_attenuation",
+        "dust_emission",
+        "neb",
+        "shock",
+        "igm",
+        "radio",
+        "xray",
+        "agn",
+    }
 
     # Build the AGN cross-level acceptance set (shared params land in any sub-block).
     agn_shared_names = _short_names_for_group("agn", param_partition)
@@ -3275,15 +3475,13 @@ def _validate_user_keys(
         group_allowed = _GROUP_STRUCTURAL_KEYS.get(top_key, frozenset({"type", "*"}))
         param_names = _short_names_for_group(top_key, param_partition)
         if top_key == "agn":
-            # AGN top-level also accepts shared param short/full names
-            # *and* names from every sub-block (cross-level acceptance —
-            # see :func:`_build_agn_search_view`). Sub-block dicts are
-            # still tagged separately below.
+            # AGN top-level accepts only the shared param short/full names
+            # (agn_log_lbol, agn_lum_ratio), not sub-block-owned params.
+            # Sub-block params written at the top level raise with guidance
+            # on correct nesting (e.g., agn={'torus': {'tau_skirtor': ...}}).
+            # This matches dust.emission strictness: parameters must be nested
+            # under their owning sub-block.
             param_names = param_names | agn_shared_names
-            for sub_name in _AGN_SUBBLOCK_KEYS:
-                param_names = param_names | _short_names_for_group(
-                    f"agn.{sub_name}", param_partition
-                )
         # NOTE: the dust top level deliberately does NOT accept dust.emission
         # short names. It used to, "for legacy code that flattens emission
         # params at the dust level ... still resolved via the dust.emission
@@ -3322,14 +3520,15 @@ def _validate_user_keys(
             sub_allowed = frozenset({"type", "*"})
             sub_params = _short_names_for_group("igm.dla", param_partition)
             _check_dict_keys("igm.dla", top_val["dla"], sub_allowed | sub_params, param_partition)
-        if top_key == "dust" and isinstance(top_val.get("emission"), dict):
-            sub_allowed = _GROUP_STRUCTURAL_KEYS["dust.emission"]
-            sub_params = _short_names_for_group("dust.emission", param_partition)
-            sub_params = sub_params | _short_names_for_registered_type(
-                top_val["emission"].get("type") if isinstance(top_val["emission"], dict) else None
-            )
-            _check_dict_keys(
-                "dust.emission", top_val["emission"], sub_allowed | sub_params, param_partition
+        if top_key == "dust_attenuation" and isinstance(top_val.get("emission"), dict):
+            # The nested dust_attenuation={'emission': ...} form is retired; dust_emission
+            # is now a top-level group. _translate_dust_attenuation already raises
+            # but we validate it here for completeness in case validation runs before translation.
+            raise ValueError(
+                "dust_attenuation={'emission': ...} is retired; "
+                "IR emission is now a separate top-level group. "
+                "Rewrite dust_attenuation={...}, dust_emission={...} as separate top-level "
+                "entries."
             )
         elif top_key == "agn":
             for sub_name in _AGN_SUBBLOCK_KEYS:
@@ -3432,11 +3631,16 @@ def _build_agn_search_view(param_name: str, agn_dict: dict, group: str) -> dict:
 
     AGN parameters live in a two-level nest: the top-level ``agn`` dict
     plus up to six sub-block dicts (``disc``/``torus``/``nlr``/``blr``/
-    ``feii``/``atten``). To keep the API friendly, a parameter can be supplied
-    at *either* level — the partition table records the canonical location,
-    but a user who writes ``agn={'disc': {'agn_log_lbol': Uniform(...)}}``
-    expects the value to take effect even though ``agn_log_lbol`` is
-    nominally a shared (top-level) param.
+    ``feii``/``atten``). To keep the API friendly, a shared parameter can be
+    supplied at *either* level — the partition table records the canonical
+    location, but a user who writes ``agn={'disc': {'agn_log_lbol': Uniform(...)}}``
+    expects the value to take effect even though ``agn_log_lbol`` is nominally
+    a shared (top-level) param.
+
+    A SUB-BLOCK parameter, however, must be nested under its OWNING sub-block
+    per the partition table. Writing a sub-block-owned parameter under a
+    non-owning sub-block (one that consumes but does not own it) raises
+    with guidance.
 
     This helper assembles a single dict the caller can pass to
     :func:`_resolve_value`:
@@ -3444,7 +3648,7 @@ def _build_agn_search_view(param_name: str, agn_dict: dict, group: str) -> dict:
     1. The canonical location for ``param_name`` (top level if
        ``group == "agn"``; the matching sub-block if ``group.startswith("agn.")``).
     2. Every sibling location that also carries an override for the same
-       short name.
+       short name (with validation that the parameter is allowed there).
 
     If a parameter appears in more than one location with conflicting
     values, raise :class:`ValueError` to flag the ambiguity instead of
@@ -3465,6 +3669,11 @@ def _build_agn_search_view(param_name: str, agn_dict: dict, group: str) -> dict:
     dict
         Search dict for :func:`_resolve_value`. The wildcard ``'*'``
         from the canonical location is preserved when present.
+
+    Raises
+    ------
+    ValueError
+        If a parameter is written under a non-owning sub-block.
     """
     if not isinstance(agn_dict, dict):
         return {}
@@ -3490,8 +3699,16 @@ def _build_agn_search_view(param_name: str, agn_dict: dict, group: str) -> dict:
             if isinstance(sub, dict):
                 siblings.append((k, sub))
     else:
-        # Sub-block param: also accept it at the top level.
+        # Sub-block param: also check the top level and OTHER sub-blocks for
+        # stray overrides. The top level is allowed (shared params can land there);
+        # other sub-blocks are not allowed (a sub-block param belongs only in its owner).
         siblings.append(("<top>", agn_dict))
+        # Check other sub-blocks for stray overrides (will be rejected if found)
+        for k in _AGN_SUBBLOCK_KEYS:
+            if k != canonical_subkey:
+                sub = agn_dict.get(k)
+                if isinstance(sub, dict):
+                    siblings.append((k, sub))
 
     # Collect (location, value) for every place this param appears.
     hits = []
@@ -3502,6 +3719,23 @@ def _build_agn_search_view(param_name: str, agn_dict: dict, group: str) -> dict:
     for location, sub in siblings:
         for key in (short_name, param_name):
             if key in sub and key not in ("type", "*"):
+                # VALIDATION: Check if this parameter is allowed in this sibling location.
+                # RULE: Sub-block-owned parameters must be in their owner sub-block.
+                # Shared parameters can go anywhere (top level or any sub-block).
+                param_owner = _AGN_PARTITION.get(param_name, "agn")
+                if location != "<top>" and location != "none":
+                    # location is a sub-block name (e.g., "torus", "disc", "atten")
+                    sibling_group = f"agn.{location}"
+                    # Only reject if this is a sub-block-owned parameter in the wrong sub-block
+                    if param_owner != "agn" and param_owner != sibling_group:
+                        # Sub-block parameter in wrong sub-block
+                        owner_subblock = param_owner.replace("agn.", "")
+                        raise ValueError(
+                            f"{key!r} is a {param_owner!r} parameter, not a "
+                            f"{sibling_group!r} one. Nest it: "
+                            f"agn={{{owner_subblock!r}: {{{key!r}: ...}}}}."
+                        )
+                    # Otherwise: shared param in sub-block (OK) or right sub-block (OK)
                 hits.append((location, sub[key]))
                 break
 
@@ -3709,24 +3943,40 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
                     "agn['atten'] type='smc_prevot' is no longer supported. "
                     "Use the new form with law key instead:\n"
                     "  agn={'atten': {'law': 'prevot_smc', 'ebv': Uniform(...)}}\n"
-                    "Valid DUST_LAWS names: smc, prevot_smc, calzetti, power_law, cardelli, etc."
+                    "'prevot_smc' is the only law this block implements -- it applies "
+                    "that curve unconditionally, so the rename is a spelling change, "
+                    "not a new choice."
                 )
 
             if law_key is not None:
-                # Validate law name against DUST_LAWS
-                from tengri.components.dust.laws._registry import DUST_LAWS
+                # Validate against the laws the block IMPLEMENTS, not against
+                # every name in DUST_LAWS. The old check accepted all 22 and
+                # mapped them to the same single-curve block, so a user who
+                # selected Calzetti silently got Prevot SMC (#2012). Same policy
+                # as `foreground`, which has the same single-curve limitation
+                # and has always refused the laws it does not wire.
+                if law_key not in _VALID_AGN_ATTEN_LAWS:
+                    from tengri.components.dust.laws._registry import DUST_LAWS
 
-                if law_key not in DUST_LAWS:
-                    available = sorted(DUST_LAWS.keys())
-                    suggestions = difflib.get_close_matches(law_key, available, n=2, cutoff=0.6)
+                    valid = sorted(_VALID_AGN_ATTEN_LAWS)
+                    detail = (
+                        f"'{law_key}' is a real attenuation law, but the AGN "
+                        f"attenuation stage does not implement it"
+                        if law_key in DUST_LAWS
+                        else f"Unknown dust law '{law_key}'"
+                    )
+                    suggestions = difflib.get_close_matches(law_key, valid, n=2, cutoff=0.6)
                     suggest_str = (
                         f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
                     )
                     raise ValueError(
-                        f"Unknown dust law '{law_key}'.{suggest_str}\n"
-                        f"Valid DUST_LAWS: {', '.join(available)}"
+                        f"{detail}.{suggest_str}\n"
+                        f"Valid agn['atten'] laws: {valid}.\n"
+                        f"The block applies the Prevot SMC curve unconditionally, so "
+                        f"accepting another name would silently substitute this one. "
+                        f"For a different AGN attenuation curve see agn['polar'], "
+                        f"which selects among smc / calzetti / gaskell."
                     )
-                # Map law name to smc_prevot block (currently the only law-based wrapper)
                 block_type = "smc_prevot"
             else:
                 block_type = type_key
@@ -3826,9 +4076,9 @@ def _partition_by_group(
         elif name.startswith("shock_"):
             partition[name] = "shock"
         elif dust_emission_active and name in _DUST_EMISSION_PARAM_NAMES:
-            partition[name] = "dust.emission"
+            partition[name] = "dust_emission"
         elif name.startswith("dust_"):
-            partition[name] = "dust"
+            partition[name] = "dust_attenuation"
         elif name.startswith("met_"):
             partition[name] = met_group
         elif name.startswith("sfh_"):
@@ -4346,7 +4596,7 @@ def _extract_group_type(group_name: str, spec: Parameters) -> str | list[str] | 
     Parameters
     ----------
     group_name : str
-        Group name (e.g., 'sfh', 'dust', 'neb', 'dust.emission', 'agn.disc').
+        Group name (e.g., 'sfh', 'dust_attenuation', 'neb', 'dust_emission', 'agn.disc').
     spec : Parameters
         The Parameters object.
 
@@ -4361,9 +4611,9 @@ def _extract_group_type(group_name: str, spec: Parameters) -> str | list[str] | 
         if isinstance(sfh_type, list):
             return sfh_type[0] if len(sfh_type) == 1 else sfh_type
         return sfh_type
-    elif group_name == "dust":
+    elif group_name == "dust_attenuation":
         return spec.dust_model
-    elif group_name == "dust.emission":
+    elif group_name == "dust_emission":
         return spec.dust_emission
     elif group_name == "neb":
         # ``Parameters`` stores ``nebular_mode == "off"`` to mean "no nebular
@@ -4426,13 +4676,16 @@ def _add_structural_settings(group_name: str, group_output: dict, spec: Paramete
     Notes
     -----
     Plain settings come from the declarative ``_STRUCTURAL_ROUNDTRIP`` table.
-    Only the dust attenuation laws stay hand-written below: they carry
-    inheritance rules (``law_diff`` defaults to ``law_bc``), a flattened
-    override dict, and two booleans stored as a float cutoff.
+    The dust attenuation block stays hand-written below, because three of its
+    settings do not survive a straight attribute read: ``law_neb`` falls back to
+    the birth-cloud law when unset and so is emitted only when it was given, the
+    per-screen law-parameter overrides are stored in one flattened dict, and
+    ``lyman_cutoff`` persists as a float wavelength rather than the boolean the
+    grammar takes.
     """
     _emit_declared_structural(group_name, group_output, spec)
 
-    if group_name == "dust":
+    if group_name == "dust_attenuation":
         # Dust laws are now handled in _emit_declared_structural with the new 'law' key.
         # Nebular birth-cloud law (None -> inherits bc; only emit when set).
         if getattr(spec, "dust_law_neb", None) is not None:

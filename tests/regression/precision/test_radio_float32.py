@@ -52,14 +52,14 @@ def _model(ssp, radio):
             "tau_gyr": 1.0,
             "age_gyr": 5.0,
         },
-        dust={
+        dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
             "all_params": FIXED,
             "tau_diff": 0.5,
             "tau_bc": 0.0,
-            "emission": {"type": "dale2014_cigale", "all_params": FIXED},
         },
+        dust_emission={"type": "dale2014_cigale", "all_params": FIXED},
         agn={
             "type": "composable",
             "all_params": FIXED,
@@ -86,7 +86,13 @@ def _sed_radio(ssp, radio, x64):
 @pytest.mark.parametrize(
     "radio",
     [
-        pytest.param({"type": "condon92"}, id="sf+ff+agn_powerlaw"),
+        # #1980: condon92's retired {'type': ...} spelling, spelled composably
+        # (its documented resolution) so the float32 census still covers the
+        # sf+ff+agn arm.
+        pytest.param(
+            {"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}},
+            id="sf+ff+agn_powerlaw",
+        ),
         pytest.param({"sf": {"type": "bell2003"}, "agn": {"type": "none"}}, id="sf+ff_only"),
     ],
 )

@@ -126,7 +126,7 @@ def _sed(ssp_data, sfh_type, tau_gyr=2.0, age_gyr=5.0):
         ssp_data=ssp_data,
         observation=obs,
         sfh={"type": sfh_type, "all_params": FREE},
-        dust={"type": "none"},
+        dust_attenuation={"type": "none"},
         redshift=Fixed(0.1),
     )
     params = dict(model.spec.sample(jax.random.PRNGKey(0)))
@@ -193,7 +193,7 @@ def test_every_declared_parameter_moves_the_photometry(ssp_data_wne):
         ssp_data=ssp_data_wne,
         observation=obs,
         sfh={"type": _TYPE, "all_params": FREE},
-        dust={"type": "none"},
+        dust_attenuation={"type": "none"},
         redshift=Fixed(0.1),
     )
     params = model.spec.sample(jax.random.PRNGKey(0))

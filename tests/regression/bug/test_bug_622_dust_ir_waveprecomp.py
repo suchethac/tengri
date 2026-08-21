@@ -62,13 +62,13 @@ def test_dust_ir_in_waveprecomp_photometry(emission):
     obs = _ir_obs()
     groups = dict(
         sfh={"type": "dpl", "*": FIXED},
-        dust={
+        dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
             "*": FIXED,
             "tau_diff": 0.5,  # real attenuation → real L_ir to re-emit
-            "emission": {"type": emission, "*": FIXED},
         },
+        dust_emission={"type": emission, "*": FIXED},
         neb={"type": "none"},
     )
     with warnings.catch_warnings():
@@ -131,13 +131,13 @@ def test_dust_ir_optical_reddest_band_not_inflated(filters):
     obs = Observation(photometry=Photometry.from_names(filters))
     groups = dict(
         sfh={"type": "dpl", "*": FIXED},
-        dust={
+        dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
             "*": FIXED,
             "tau_diff": 0.5,  # real attenuation → real L_ir to (not) re-emit in the optical
-            "emission": {"type": "modified_blackbody", "*": FIXED},
         },
+        dust_emission={"type": "modified_blackbody", "*": FIXED},
         neb={"type": "none"},
     )
     with warnings.catch_warnings():

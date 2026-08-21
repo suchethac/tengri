@@ -35,7 +35,7 @@ def _build_feltre(synthetic_ssp_wide, logU):
             "log_total_mass": Fixed(0.0),
             "*": FIXED,
         },
-        dust={
+        dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "tau_bc": Fixed(0.0),

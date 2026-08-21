@@ -41,7 +41,7 @@ Reference: Williams et al. 2009, ApJ, 691, 1879; Wuyts et al. 2007, ApJ, 655.
 
  .. code-block:: none
 
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
 
 
@@ -113,7 +113,7 @@ Reference: Williams et al. 2009, ApJ, 691, 1879; Wuyts et al. 2007, ApJ, 655.
             "trunc": tengri.Uniform(2.0, 6.0),
             "logzsol": tengri.Uniform(-0.5, 0.2),
         },
-        dust={
+        dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
@@ -138,7 +138,7 @@ Reference: Williams et al. 2009, ApJ, 691, 1879; Wuyts et al. 2007, ApJ, 655.
             "trunc": tengri.Uniform(1.5, 3.0),
             "logzsol": tengri.Uniform(-0.2, 0.3),
         },
-        dust={
+        dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,

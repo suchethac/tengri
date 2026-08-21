@@ -50,17 +50,18 @@ DUST = {
     "all_params": tengri.FIXED,
     "tau_diff": 0.3,
     "tau_bc": 0.5,
-    # dale2014_cigale: this example enables the radio component, and plain
-    # dale2014 embeds its own SF radio continuum — the pair is refused at
-    # build as a double-count (#1970).
-    "emission": {"type": "dale2014_cigale", "all_params": tengri.FIXED},
 }
+# dale2014_cigale: this example enables the radio component, and plain
+# dale2014 embeds its own SF radio continuum — the pair is refused at
+# build as a double-count (#1970).
+DUST_EMISSION = {"type": "dale2014_cigale", "all_params": tengri.FIXED}
 
 ssp = tengri.load_ssp()
 model = tengri.SEDModel.build(
     ssp,
     sfh=SFH,
-    dust=DUST,
+    dust_attenuation=DUST,
+    dust_emission=DUST_EMISSION,
     agn={
         "disc": {"type": "qsogen", "all_params": tengri.FIXED},
         "torus": {"type": "skirtor", "all_params": tengri.FIXED},
@@ -68,7 +69,7 @@ model = tengri.SEDModel.build(
         "log_lbol": tengri.Uniform(8.0, 14.0),
         "lum_ratio": 1.0,
     },
-    radio={"type": "condon92", "all_params": tengri.FIXED},
+    radio={"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}, "all_params": tengri.FIXED},
     redshift=tengri.Fixed(0.05),
 )
 baseline = dict(model.spec.sample(jax.random.PRNGKey(0)))

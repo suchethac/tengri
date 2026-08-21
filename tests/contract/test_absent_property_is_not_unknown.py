@@ -43,7 +43,7 @@ def stellar_only_model(ssp_data_fsps):
         ssp_data=ssp_data_fsps,
         observation=obs,
         sfh={"type": "dpl", "all_params": FIXED},
-        dust={
+        dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
             "all_params": FIXED,

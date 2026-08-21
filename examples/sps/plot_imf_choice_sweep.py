@@ -52,7 +52,7 @@ for (ssp_name, imf_label), color in zip(IMFS, colors):
             "skew": 0.0,
             "trunc": 13.0,
         },
-        dust={
+        dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,

@@ -30,7 +30,7 @@ def base_model(synthetic_ssp_wide):
     spec = SEDModel.build(
         ssp_data=ssp,
         sfh={"type": "dpl", "*": FREE},
-        dust={
+        dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
             "*": FIXED,
@@ -516,7 +516,7 @@ class TestSEDGroupBitEquality:
         spec = SEDModel.build(
             ssp_data=ssp,
             sfh={"type": "dpl", "*": FREE},
-            dust={
+            dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
                 "*": FIXED,
@@ -582,7 +582,7 @@ class TestLuminosityWeightedSFHBitEquality:
         spec = SEDModel.build(
             ssp_data=ssp,
             sfh={"type": "dpl", "*": FREE},
-            dust={
+            dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
                 "*": FIXED,
@@ -638,7 +638,7 @@ class TestIonizingGroupBitEquality:
         spec = SEDModel.build(
             ssp_data=ssp,
             sfh={"type": "dpl", "*": FREE},
-            dust={
+            dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
                 "*": FIXED,
@@ -682,14 +682,14 @@ class TestRadioGroupBitEquality:
         spec = SEDModel.build(
             ssp_data=ssp,
             sfh={"type": "dpl", "*": FREE},
-            dust={
+            dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
                 "*": FIXED,
                 "tau_bc": 0.5,
             },
             neb={"type": "none"},
-            radio={"type": "condon92", "*": FIXED},
+            radio={"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}, "*": FIXED},
             redshift=Fixed(0.1),
         )
         return spec
@@ -729,7 +729,7 @@ class TestXRayGroupBitEquality:
         spec = SEDModel.build(
             ssp_data=ssp,
             sfh={"type": "dpl", "*": FREE},
-            dust={
+            dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
                 "*": FIXED,
@@ -774,7 +774,7 @@ class TestLinesGroupNaNBehavior:
         spec = SEDModel.build(
             ssp_data=ssp,
             sfh={"type": "dpl", "*": FREE},
-            dust={
+            dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
                 "*": FIXED,

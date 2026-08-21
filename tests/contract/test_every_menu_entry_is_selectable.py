@@ -74,19 +74,46 @@ def _names(menu) -> list[str]:
     return sorted({(m.get("name") if isinstance(m, dict) else str(m)) for m in menu})
 
 
+def _radio_model_to_composable(n: str) -> dict:
+    """Convert legacy radio model name to composable form."""
+    from tengri.parameters.groups import _legacy_radio_type_to_blocks
+
+    if n == "none":
+        return {"radio": {"sf": {"type": "none"}, "agn": {"type": "none"}, "*": FIXED}}
+    elif n == "condon92":
+        return {
+            "radio": {
+                "sf": {"type": "bell2003"},
+                "agn": {"type": "powerlaw"},
+                "*": FIXED,
+            }
+        }
+    else:
+        sf_variant, agn_variant = _legacy_radio_type_to_blocks(n)
+        return {
+            "radio": {
+                "sf": {"type": sf_variant},
+                "agn": {"type": agn_variant},
+                "*": FIXED,
+            }
+        }
+
+
 def _cases() -> list[tuple[str, str, dict]]:
     """``(menu, entry, build kwargs)`` for every entry in every live menu."""
     specs = [
         (
             "dust law",
             tengri.list_dust_laws,
-            lambda n: {"dust": {"type": "two_component", "law": n, "all_params": FIXED}},
+            lambda n: {
+                "dust_attenuation": {"type": "two_component", "law": n, "all_params": FIXED}
+            },
         ),
         (
             "dust model",
             tengri.list_dust_models,
             lambda n: {
-                "dust": (
+                "dust_attenuation": (
                     {"type": n, "law": "calzetti", "all_params": FIXED}
                     if n in ("two_component", "single_component")
                     else {"type": n, "all_params": FIXED}
@@ -97,12 +124,12 @@ def _cases() -> list[tuple[str, str, dict]]:
             "dust emission",
             tengri.list_dust_emission_models,
             lambda n: {
-                "dust": {
+                "dust_attenuation": {
                     "law": "calzetti",
                     "type": "two_component",
                     "all_params": FIXED,
-                    "emission": {"type": n, "all_params": FIXED},
-                }
+                },
+                "dust_emission": {"type": n, "all_params": FIXED},
             },
         ),
         ("sfh model", tengri.list_sfh_models, lambda n: {"sfh": {"type": n, "all_params": FIXED}}),
@@ -120,7 +147,7 @@ def _cases() -> list[tuple[str, str, dict]]:
         (
             "radio model",
             tengri.list_radio_models,
-            lambda n: {"radio": {"type": n, "all_params": FIXED}},
+            lambda n: _radio_model_to_composable(n),
         ),
         (
             "xray model",

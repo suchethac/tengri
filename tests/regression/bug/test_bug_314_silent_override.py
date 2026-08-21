@@ -44,7 +44,7 @@ def model_with_filters():
         ssp,
         observation=obs,
         sfh={"type": "dpl", "*": tengri.FIXED},
-        dust={
+        dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "*": tengri.FIXED,

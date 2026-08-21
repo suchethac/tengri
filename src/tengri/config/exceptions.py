@@ -210,6 +210,27 @@ class DeadGradientParameterWarning(UserWarning):
     """
 
 
+class DeadFitWarning(UserWarning):
+    """An MCMC fit returned a dead posterior — frozen or 100% divergent (#1999).
+
+    Two unambiguous signatures trigger this at :class:`Posterior` construction:
+    every transition diverged (``n_divergent == n_samples``), or a free
+    parameter shows a single unique draw across 100+ kept samples. Both mean
+    the sampler rejected essentially every proposal — typically an adapted
+    step size past the model's stability limit (#1999 isolated the dense
+    mass-matrix adaptation as one trigger).
+
+    R-hat cannot detect this state: a chain that never moves has zero variance
+    within and between chains, so the ratio reads ~1.0. ``Posterior.rhat()``
+    raises on it, but only if called — this warning is the fit-time announcement
+    for scripts that never read diagnostics.
+
+    Warns rather than raises: the dead object remains inspectable (diagnostics,
+    samples, the MAP init). Filter this category only in tests that construct
+    dead posteriors deliberately.
+    """
+
+
 class CorruptEnergyBalanceWarning(UserWarning):
     """The dust energy-balance integrand was non-finite (#1527).
 
@@ -356,13 +377,13 @@ class NUTSTreeDepthWarning(UserWarning):
 
     After that, trajectory length is the lever, and the length is judged by the
     worst seed rather than the average. ``mcmc_hmc`` with
-    ``n_leapfrog_steps=150`` measured a median min-ESS of 219 per 400 draws
-    over six seeds on that fit against 179 for NUTS, and never fell below 155;
-    60 steps has the better median cost per effective sample but returned 19 on
-    one seed in six. ``dense_mass_matrix=True`` is *not* a safe default here: it
-    is quicker (44 s against 75 s) but measured 12 divergences per run
-    against 2 for the diagonal, and 77 per 400 draws before the bin edges were
-    corrected, so read ``n_divergent`` before believing the speed. Lowering
+    ``n_leapfrog_steps=150`` measured a median min-ESS of 118 per 400 draws
+    over six seeds on that fit against 119 for NUTS, and never fell below 64;
+    80 steps has the better cost per effective sample (0.32 s against 0.53)
+    but its worst seed returned 31, and 60 steps 23. ``dense_mass_matrix=True``
+    is *not* a safe default here: it is quicker (49 s against 85 s) but
+    measured 8.8 divergences per run against 3.3 for the diagonal, so read
+    ``n_divergent`` before believing the speed. Lowering
     ``max_num_doublings`` bounds the worst-case wall but collapses sampling
     quality — cap 6 measured min-ESS 5 on the same posterior, an 11x wall win
     that evaporates the moment cost is counted per effective sample. Bound the

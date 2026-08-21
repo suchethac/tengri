@@ -46,7 +46,7 @@ def build(f_burst):
             "age_gyr": 10.0,
             "burst_age_gyr": 0.3,
         },
-        dust={
+        dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,

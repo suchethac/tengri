@@ -94,7 +94,7 @@ def _model(ssp):
             "tau_gyr": Uniform(0.5, 3.0),
             "age_gyr": Fixed(5.0),
         },
-        dust={"law": "power_law", "type": "two_component", "all_params": FIXED},
+        dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
         neb={"type": "cue", "all_params": FIXED},
     )
 

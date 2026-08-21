@@ -238,7 +238,7 @@ class _RegistryTable(list):
 
         List-table is chosen over grid-table because cell values contain
         commas, pipes, and backticks (e.g. ``use`` holds code like
-        ``SEDModel.build(..., dust={'type': 'calzetti'})``), which cannot
+        ``SEDModel.build(..., dust_attenuation={'type': 'calzetti'})``), which cannot
         be escaped safely in a grid-table markup.
         """
         if not self:
@@ -401,14 +401,20 @@ def _usage_hint(name: str, kind: str) -> str:
         if name in ("two_component", "single_component"):
             # Attenuation law is required (no silent default); show the
             # smallest valid spelling for this structural type.
-            return f"SEDModel.build(..., dust={{'type': '{name}', 'law': 'calzetti'}})"
-        return f"SEDModel.build(..., dust={{'type': '{name}'}})"
+            return f"SEDModel.build(..., dust_attenuation={{'type': '{name}', 'law': 'calzetti'}})"
+        return f"SEDModel.build(..., dust_attenuation={{'type': '{name}'}})"
     if kind == "dust_attenuation":
-        return f"SEDModel.build(..., dust={{'type': 'single_component', 'law': '{name}'}})"
+        return (
+            f"SEDModel.build(..., dust_attenuation={{'type': 'single_component', "
+            f"'law': '{name}'}})"
+        )
     if kind == "dust_emission":
-        # The dust dict's own 'type' defaults to two_component, which needs
-        # an explicit law; show it alongside the emission sub-block.
-        return f"SEDModel.build(..., dust={{'law': 'calzetti', 'emission': {{'type': '{name}'}}}})"
+        # dust_emission requires a dust_attenuation block for energy balance;
+        # show both groups together with the minimal attenuation spelling.
+        return (
+            f"SEDModel.build(..., dust_attenuation={{'law': 'calzetti'}}, "
+            f"dust_emission={{'type': '{name}'}})"
+        )
     if kind == "sfh_model":
         return f"SEDModel.build(..., sfh={{'type': '{name}'}})"
     if kind == "nebular_backend":
@@ -418,7 +424,21 @@ def _usage_hint(name: str, kind: str) -> str:
     if kind == "xray_model":
         return f"SEDModel.build(..., xray={{'type': '{name}'}})"
     if kind == "radio_model":
-        return f"SEDModel.build(..., radio={{'type': '{name}'}})"
+        from tengri.parameters.groups import _legacy_radio_type_to_blocks
+
+        if name == "none":
+            spec = "{'sf': {'type': 'none'}, 'agn': {'type': 'none'}}"
+            return f"SEDModel.build(..., radio={spec})"
+        elif name == "condon92":
+            spec = "{'sf': {'type': 'bell2003'}, 'agn': {'type': 'powerlaw'}}"
+            return f"SEDModel.build(..., radio={spec})"
+        else:
+            sf_variant, agn_variant = _legacy_radio_type_to_blocks(name)
+            return (
+                f"SEDModel.build(..., radio={{"
+                f"'sf': {{'type': '{sf_variant}'}}, "
+                f"'agn': {{'type': '{agn_variant}'}}}})"
+            )
     if kind == "shock_model":
         return f"SEDModel.build(..., shock={{'type': '{name}'}})"
     if kind == "metallicity_mode":
@@ -759,7 +779,7 @@ def list_agn_blocks(*, category: str | None = None, status: str | None = None) -
     return _RegistryTable(sorted(out, key=lambda m: (m["category"], m["name"])))
 
 
-# Dust *structural* models — the ``dust={'type': ...}`` axis. Keyed by the
+# Dust *structural* models — the ``dust_attenuation={'type': ...}`` axis. Keyed by the
 # names in ``_VALID_DUST_TYPES``, which is what the build validator accepts;
 # the listing derives its names from that same set (see
 # :func:`list_dust_models`) so the menu and the validator cannot drift.
@@ -783,14 +803,14 @@ _DUST_MODEL_METADATA: dict[str, dict[str, str]] = {
 
 
 def list_dust_models(*, status: str | None = None) -> _RegistryTable:
-    """List the dust **structural** models — the ``dust={'type': ...}`` choice.
+    """List the dust **structural** models — the ``dust_attenuation={'type': ...}`` choice.
 
     Dust is selected along three independent axes, and this is the first one:
     how the dust is *arranged* relative to the stars. The attenuation
     **curve** is a separate choice (:func:`list_dust_laws`, via ``law`` for
     single_component or ``law_bc`` / ``law_diff`` for two_component), and the IR
     **emission** template a third
-    (:func:`list_dust_emission_models`, via ``dust={'emission': ...}``).
+    (:func:`list_dust_emission_models`, via ``dust_emission={'type': ...}``).
 
     The other two axes had menus; this one did not, so the structural
     names — including ``two_component``, the type the recipes themselves
@@ -1106,9 +1126,9 @@ def list_radio_models(*, status: str | None = None) -> _RegistryTable:
     (``tengri.parameters.groups._valid_radio_types``), which accepts the
     union of :data:`RADIO_MODELS` and the ``SEDModelComponent`` radio variants
     in ``_REGISTRY`` — so ``radio_powerlaw`` and ``radio_dpl`` are listed here
-    rather than being builder-only. This is the ``radio={'type': ...}`` axis;
-    the ``radio={'sf'/'agn': ...}`` sub-blocks live in
-    :func:`list_radio_blocks`.
+    rather than being builder-only. The legacy ``radio={'type': ...}`` form is
+    retired (PR6); use ``radio={'sf'/'agn': ...}`` instead. This menu lists the
+    retired names for reference; the composable form is the only accepted surface.
 
     See also: :func:`list_xray_models`, :func:`list_igm_models`,
     :mod:`tengri.builders.radio`.
@@ -1170,8 +1190,9 @@ def list_radio_blocks(*, category: str | None = None, status: str | None = None)
     run the other alone.
 
     This is a different axis from :func:`list_radio_models`, which lists the
-    **legacy** ``radio={'type': ...}`` key. That key predates the SF/AGN split
-    and cannot be combined with these sub-blocks; mixing the two raises.
+    **retired** ``radio={'type': ...}`` key. That key predates the SF/AGN split
+    and is no longer accepted; use the composable ``radio={'sf': {...}, 'agn': {...}}``
+    form instead. The two forms cannot be combined.
 
     Parameters
     ----------
@@ -1502,7 +1523,7 @@ def _plot_call_hint(name: str) -> str:
     column plus an ellipsis. Of the twenty menus that carry a ``use:`` column,
     this was the only one whose hint contained no arguments at all — the others
     give something runnable (``Photometry.from_names(["sdss_u"])``,
-    ``fitter.run("laplace")``, ``SEDModel.build(..., dust={'type': ...})``).
+    ``fitter.run("laplace")``, ``SEDModel.build(..., dust_attenuation={'type': ...})``).
 
     Derived rather than written down, so a helper that gains or loses a
     required argument cannot leave a stale hint behind.
@@ -3309,7 +3330,7 @@ tengri — differentiable galaxy SED fitting in JAX
     `tengri.list_recipes()` lists the {n_recipes} starting points. To hand-roll a
     model instead, pass group dicts to SEDModel.build:
       sfh={{'type': 'dpl', 'all_params': tengri.FREE}},
-      dust={{'type': 'two_component', 'law': 'calzetti'}}, …
+      dust_attenuation={{'type': 'two_component', 'law': 'calzetti'}}, …
       tengri.describe_recipe("star_forming_photometry")   # see what one sets
 
     Pick a method:

@@ -60,7 +60,7 @@ def _model(ssp_path, neb, tau=0.0):
             ssp_data=ssp,
             observation=obs,
             sfh={"type": "dpl", "*": FREE},
-            dust={
+            dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
                 "*": FIXED,

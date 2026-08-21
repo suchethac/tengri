@@ -33,8 +33,8 @@
 #    `self.data`.
 # 4. `predict(p, sed_in, wave, **inputs)` — the physics.
 #
-# The model auto-registers; `SEDModel.build(dust={'emission':
-# {'type': 'my_model'}})` finds it; class-level priors flow through to
+# The model auto-registers; `SEDModel.build(dust_emission={'type':
+# 'my_model'})` finds it; class-level priors flow through to
 # inference; WavePrecomp picks it up automatically.
 #
 # > **Subclass the right base.** `build()` accepts a `type` only if that
@@ -254,12 +254,11 @@ if ssp is not None:
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "dpl", "all_params": FIXED},
-        dust={
+        dust_attenuation={
             "type": "single_component",
             "law": "calzetti",
             "tau_v": Fixed(0.4),
-            "emission": {"type": "my_modified_blackbody", "T": Fixed(35.0), "beta_ir": Fixed(1.8)},
-        },
+        }, dust_emission={"type": "my_modified_blackbody", "T": Fixed(35.0), "beta_ir": Fixed(1.8)},
         redshift=Fixed(0.05),
     )
     model.spec.summary()
@@ -297,8 +296,8 @@ else:
 #   use the moment $\Psi$ that stellar publishes to get a first-order
 #   accuracy bump — still no extra code from you.
 #
-# - **Reachable by name.** `SEDModel.build(dust={'emission': {'type':
-#   'my_modified_blackbody'}})` finds the class — `__init_subclass__`
+# - **Reachable by name.** `SEDModel.build(dust_emission={'type':
+#   'my_modified_blackbody'})` finds the class — `__init_subclass__`
 #   registered `(name, cls)` automatically.
 
 # %% [markdown]

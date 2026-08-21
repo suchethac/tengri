@@ -82,7 +82,7 @@ def main():
         ssp_data=ssp,
         observation=obs,
         sfh={"type": ["dpl", "field"], "*": FREE, "age_gyr": 11.0},
-        dust={"type": "two_component", "law": "calzetti", "*": FIXED},
+        dust_attenuation={"type": "two_component", "law": "calzetti", "*": FIXED},
         neb={"type": "none"},
         redshift=Fixed(0.1),
         n_grid=N_GRID,

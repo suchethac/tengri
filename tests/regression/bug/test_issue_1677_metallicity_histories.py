@@ -104,7 +104,7 @@ def _build(ssp, obs, *, met_mode=None, met_logzsol=None, approx=None, neb="none"
             ssp_data=ssp,
             observation=obs,
             sfh={"type": "table"},
-            dust={
+            dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
                 "all_params": FIXED,

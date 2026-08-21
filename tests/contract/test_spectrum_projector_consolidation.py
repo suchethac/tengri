@@ -208,7 +208,7 @@ class TestPublicSurfaceAgreement:
             ssp_data=synthetic_ssp_wide,
             observation=obs,
             sfh={"type": "dpl"},
-            dust={
+            dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
                 "tau_bc": 0.3,
@@ -265,7 +265,7 @@ class TestIntegrationViaForwardModel:
             ssp_data=synthetic_ssp_wide,
             observation=obs,
             sfh={"type": "dpl"},
-            dust={
+            dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
                 "tau_bc": 0.3,

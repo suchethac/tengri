@@ -81,7 +81,7 @@ at R~5000 (JWST-like).
             "alpha": 2.5,
             "beta": 1.8,
         },
-        dust={
+        dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,
@@ -116,7 +116,7 @@ at R~5000 (JWST-like).
                 "alpha": 2.5,
                 "beta": 1.8,
             },
-            dust={
+            dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
                 "all_params": tengri.FIXED,
@@ -150,7 +150,7 @@ at R~5000 (JWST-like).
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 6.135 seconds)
+   **Total running time of the script:** (0 minutes 6.174 seconds)
 
 
 .. _sphx_glr_download_auto_examples_spectroscopy_plot_resolution_sweep.py:

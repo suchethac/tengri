@@ -34,12 +34,193 @@ from __future__ import annotations
 
 import contextlib
 import functools
+import importlib.metadata
 
 import jax
 import jax.numpy as jnp
 from jax.flatten_util import ravel_pytree
+from packaging.requirements import Requirement
 
+from tengri.config.exceptions import BackendError
 from tengri.inference._model_cache import _default_owner as _model_cache_owner
+
+# ---------------------------------------------------------------------------
+# BlackJAX version floor validation
+# ---------------------------------------------------------------------------
+
+#: Memoization flag to ensure _check_blackjax_floor() runs only once.
+_blackjax_floor_checked = False
+
+
+def _get_blackjax_floor_from_source():
+    """Parse blackjax floor from source tree's pyproject.toml, if available.
+
+    Resolves the source root through ``tengri._data_setup.package_data_dirs()``
+    (#1431: no component anchors on parent-directory counting itself) and reads
+    the pyproject.toml declaration. Returns the floor version string
+    (e.g. "1.6") or None if no source pyproject found.
+
+    Returns
+    -------
+    str or None
+        The floor version extracted from pyproject.toml, or None if source
+        is not available or blackjax is not declared.
+    """
+    try:
+        # Locate the source root through the sanctioned seam (#1431: components
+        # must not anchor on parent-directory counting themselves).
+        from tengri._data_setup import package_data_dirs
+
+        pyproject_path = None
+        for candidate in package_data_dirs():
+            if (candidate / "pyproject.toml").exists():
+                pyproject_path = candidate / "pyproject.toml"
+                break
+        if pyproject_path is None:
+            return None
+
+        # Parse the pyproject.toml
+        try:
+            import tomllib
+        except ImportError:
+            try:
+                import tomli as tomllib
+            except ImportError:
+                # tomli not available; fall back to metadata
+                return None
+
+        with open(pyproject_path, "rb") as f:
+            try:
+                pyproject = tomllib.load(f)
+            except Exception:
+                # Unparseable pyproject; fall back to metadata
+                return None
+
+        # Check [project.optional-dependencies] nuts for blackjax
+        optional_deps = pyproject.get("project", {}).get("optional-dependencies", {})
+        nuts_deps = optional_deps.get("nuts", [])
+
+        for dep_str in nuts_deps:
+            req = Requirement(dep_str)
+            if req.name == "blackjax":
+                # Extract >= constraint
+                for spec in req.specifier:
+                    if spec.operator == ">=":
+                        return spec.version
+                break
+
+        # Also check [project.dependencies] in case blackjax moved there
+        deps = pyproject.get("project", {}).get("dependencies", [])
+        for dep_str in deps:
+            req = Requirement(dep_str)
+            if req.name == "blackjax":
+                for spec in req.specifier:
+                    if spec.operator == ">=":
+                        return spec.version
+                break
+
+        return None
+
+    except Exception:
+        # Any exception reading source: fall back to metadata
+        return None
+
+
+def _get_blackjax_floor_from_metadata():
+    """Parse blackjax floor from dist metadata.
+
+    Reads from importlib.metadata.requires("tengri") and extracts the
+    blackjax>=X.Y constraint. Returns the floor version string or None
+    if not found.
+
+    Returns
+    -------
+    str or None
+        The floor version extracted from metadata, or None if not found
+        or metadata unavailable.
+    """
+    try:
+        requires = importlib.metadata.requires("tengri")
+        if requires is None:
+            return None
+
+        for req_str in requires:
+            req = Requirement(req_str)
+            if req.name == "blackjax":
+                for spec in req.specifier:
+                    if spec.operator == ">=":
+                        return spec.version
+                break
+
+        return None
+
+    except importlib.metadata.PackageNotFoundError:
+        return None
+
+
+def _check_blackjax_floor():
+    """Validate blackjax version against the declared floor in pyproject.
+
+    Derives the floor by checking (in order):
+    1. The source tree's pyproject.toml (for editable installs)
+    2. The dist metadata (for wheel installs)
+
+    Compares against the installed version and raises with context on violation:
+    the installed version, the declared floor, the consequence (frozen chains
+    from silent blackjax API changes), and the exact remedy (pip install -U).
+
+    Skips silently if the floor cannot be resolved: a floor you cannot read
+    is not a floor you can enforce.
+
+    Raises
+    ------
+    BackendError
+        When installed blackjax version is below the declared floor.
+    """
+    global _blackjax_floor_checked
+    if _blackjax_floor_checked:
+        return
+    _blackjax_floor_checked = True
+
+    # Try to get floor from source tree first, then metadata
+    floor_version = _get_blackjax_floor_from_source()
+    if floor_version is None:
+        floor_version = _get_blackjax_floor_from_metadata()
+
+    if floor_version is None:
+        # No floor found; skip silently
+        return
+
+    # Get the installed blackjax version
+    try:
+        installed_version_str = importlib.metadata.version("blackjax")
+    except importlib.metadata.PackageNotFoundError:
+        # blackjax not installed; let the normal import error surface
+        return
+
+    # Parse both as tuples of integers for comparison
+    def parse_version(v_str):
+        """Parse X.Y.Z string to tuple of ints for comparison."""
+        try:
+            return tuple(int(x) for x in v_str.split(".")[:3])
+        except (ValueError, AttributeError):
+            return None
+
+    installed = parse_version(installed_version_str)
+    floor = parse_version(floor_version)
+
+    if installed is None or floor is None:
+        # Unparseable version; let it slide
+        return
+
+    if installed < floor:
+        raise BackendError(
+            f"blackjax {installed_version_str} does not satisfy "
+            f"blackjax>={floor_version}. Samplers on an unsupported blackjax can fail "
+            f"silently — a frozen chain, not an error (issue #1999). "
+            f"Remedy: pip install -U 'blackjax>={floor_version}'"
+        )
+
 
 # ---------------------------------------------------------------------------
 # Kernel getters (cached in Python so we don't rebuild on every JIT call)
@@ -49,6 +230,7 @@ from tengri.inference._model_cache import _default_owner as _model_cache_owner
 @functools.cache
 def _get_nuts_kernel():
     """Build and cache the BlackJAX NUTS kernel."""
+    _check_blackjax_floor()
     import blackjax.mcmc.nuts
 
     return blackjax.mcmc.nuts.build_kernel()
@@ -57,6 +239,7 @@ def _get_nuts_kernel():
 @functools.cache
 def _get_hmc_kernel():
     """Build and cache the BlackJAX HMC kernel."""
+    _check_blackjax_floor()
     import blackjax.mcmc.hmc
 
     return blackjax.mcmc.hmc.build_kernel()
@@ -65,6 +248,7 @@ def _get_hmc_kernel():
 @functools.cache
 def _get_dynamic_hmc_kernel():
     """Build and cache the BlackJAX dynamic HMC kernel."""
+    _check_blackjax_floor()
     import blackjax.mcmc.dynamic_hmc
 
     return blackjax.mcmc.dynamic_hmc.build_kernel()
@@ -73,6 +257,7 @@ def _get_dynamic_hmc_kernel():
 @functools.cache
 def _get_ghmc_kernel():
     """Build and cache the BlackJAX GHMC kernel."""
+    _check_blackjax_floor()
     import blackjax.mcmc.ghmc
 
     return blackjax.mcmc.ghmc.build_kernel()
@@ -149,7 +334,7 @@ def _bounded_pathfinder_elbo_draws(n_draws: int | None = None):
 #: 118 s → 11 s but collapsed min-ESS 93 → 5 — per *effective* sample it is
 #: strictly worse (1.99 vs 1.27 s/ESS). ``dense_mass_matrix=True`` was the
 #: recommendation here and no longer is: re-measured it buys wall time at the
-#: cost of 12 divergences per run against 2 for the diagonal. On that
+#: cost of 8.8 divergences per run against 3.3 for the diagonal. On that
 #: geometry the genuine fixes are bin edges that stop at the age of the
 #: universe (#1975) and a longer fixed-length trajectory
 #: (``mcmc_hmc``, ``n_leapfrog_steps=150``). Saturation of a deep cap

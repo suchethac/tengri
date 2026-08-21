@@ -123,7 +123,7 @@ def _build(ssp, obs, *, met_mode, approx):
                 "logU": Uniform(-4.0, -1.0),
                 "logZ_gas": Uniform(-1.5, 0.3),
             },
-            dust={"law": "power_law", "type": "two_component", "all_params": FIXED},
+            dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
             redshift=Fixed(0.1),
             approx=approx,
         )

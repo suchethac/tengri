@@ -52,7 +52,7 @@ References
 .. [3] M. Boquien et al., "CIGALE: a python Code Investigating GALaxy Emission,"
    A&A 622, A103 (2019). arXiv:1811.03094.
 
-.. GENERATED FROM PYTHON SOURCE LINES 36-148
+.. GENERATED FROM PYTHON SOURCE LINES 36-150
 
 
 
@@ -117,7 +117,9 @@ References
         agn = dict(BASE_AGN)
         if torus is not None:
             agn["torus"] = torus
-        model = tengri.SEDModel.build(ssp, sfh=SFH, dust=DUST, agn=agn, redshift=tengri.Fixed(0.05))
+        model = tengri.SEDModel.build(
+            ssp, sfh=SFH, dust_attenuation=DUST, agn=agn, redshift=tengri.Fixed(0.05)
+        )
         p = dict(model.spec.sample(jax.random.PRNGKey(0)))
         out = model.predict(p)
         return np.asarray(model.wavelengths), np.asarray(out.rest_sed())
@@ -183,7 +185,7 @@ References
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 10.247 seconds)
+   **Total running time of the script:** (0 minutes 10.033 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_skirtor_xcigale_sweep.py:

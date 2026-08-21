@@ -1,15 +1,16 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # Copyright (c) 2025 Suchetha Cooray
 
-"""Callable factories for the dust group (attenuation + emission).
+"""Callable factories for dust attenuation groups.
 
 Two top-level factories — ``single_component`` and ``two_component`` —
-plus a nested :mod:`~tengri.builders.dust.emission` submodule for the IR
-emission sub-block.
+for building ``dust_attenuation`` groups. IR emission is now a separate
+top-level ``dust_emission`` group; use :mod:`~tengri.builders.dust.emission`
+for that surface.
 
 The grammar (single-component example):
 
->>> dust = {
+>>> dust_attenuation = {
 ...     "type": "single_component",
 ...     "law": "calzetti",  # Required: no defaults in grammar
 ...     "all_params": FREE,
@@ -18,19 +19,19 @@ The grammar (single-component example):
 
 The grammar (two-component example):
 
->>> dust = {
+>>> dust_attenuation = {
 ...     "type": "two_component",
 ...     "law": "calzetti",  # Shared law, or use law_bc/law_diff separately
 ...     "all_params": FREE,
 ...     "tau_bc": Uniform(0, 2),
 ...     "tau_diff": Uniform(0, 4),
-...     "emission": {"type": "dale2014", "all_params": FIXED},
 ... }
+>>> dust_emission = {"type": "dale2014", "all_params": FIXED}
 
 The factory mirror (single-component):
 
 >>> from tengri import builders, FREE, Uniform, FIXED
->>> dust = builders.dust.single_component(
+>>> dust_attenuation = builders.dust.single_component(
 ...     law="calzetti",  # Required
 ...     defaults=FREE,
 ...     tau_v=Uniform(0, 4),
@@ -38,13 +39,13 @@ The factory mirror (single-component):
 
 The factory mirror (two-component):
 
->>> dust = builders.dust.two_component(
+>>> dust_attenuation = builders.dust.two_component(
 ...     law="calzetti",  # Shared law, or use law_bc/law_diff
 ...     defaults=FREE,
 ...     tau_bc=Uniform(0, 2),
 ...     tau_diff=Uniform(0, 4),
-...     emission=builders.dust.emission.dale2014(defaults=FIXED),
 ... )
+>>> dust_emission = builders.dust.emission.dale2014(defaults=FIXED)
 
 The ``law`` / ``law_bc`` / ``law_diff`` kwargs accept any key registered in
 :data:`tengri.components.dust.attenuation.DUST_LAWS`. Single-component requires
@@ -91,7 +92,7 @@ def _discover_attenuation_params(dust_model: str) -> list[str]:
     """
     recipe = {
         "sfh": {"type": "dpl"},
-        "dust": {
+        "dust_attenuation": {
             "type": dust_model,
             "law": "calzetti",  # Shared law for discovery; grammar validates this later
             WILDCARD_ALIAS: FREE,
@@ -116,12 +117,11 @@ def _make_dust_factory(
     setting_names: tuple[str, ...],
     setting_defaults: dict[str, str],
 ) -> Callable[..., dict]:
-    """Build a top-level dust factory (single_component or two_component).
+    """Build a top-level dust_attenuation factory (single_component or two_component).
 
     Differs from the generic :func:`make_factory` in that it accepts
-    string-valued settings (``law_bc``, ``law_diff``) and a nested
-    ``emission`` sub-block kwarg. The output dict matches what the
-    grammar parser expects.
+    string-valued settings (``law_bc``, ``law_diff``). The output dict matches
+    what the grammar parser expects for dust_attenuation groups.
     """
 
     def factory(**kwargs: Any) -> dict:
@@ -208,8 +208,15 @@ def _make_dust_factory(
                     f"dust.{dust_model}() missing required argument: {s!r}. "
                     f"Example: dust.{dust_model}({s}='calzetti', ...)."
                 )
-        emission_block = kwargs.pop("emission", None)
-        valid_kwargs = ["defaults", *setting_names, "emission", *short_params]
+        # Check for deprecated 'emission' parameter
+        if "emission" in kwargs:
+            raise TypeError(
+                f"dust.{dust_model}(emission=...): the 'emission' parameter is "
+                f"no longer nested inside dust_attenuation. Dust attenuation and "
+                f"IR emission are now separate top-level groups. Use "
+                f"dust_emission=builders.dust.emission.<variant>(...) instead."
+            )
+        valid_kwargs = ["defaults", *setting_names, *short_params]
         unknown = [k for k in kwargs if k not in short_params]
         if unknown:
             raise TypeError(
@@ -221,14 +228,6 @@ def _make_dust_factory(
         for short in short_params:
             if short in kwargs and kwargs[short] is not UNSET:
                 out[short] = kwargs[short]
-        if emission_block is not None:
-            if not isinstance(emission_block, dict):
-                raise TypeError(
-                    f"dust.{dust_model}(emission=...): expected a dict (e.g. "
-                    "from builders.dust.emission.<variant>(...)), got "
-                    f"{type(emission_block).__name__}."
-                )
-            out["emission"] = emission_block
         return out
 
     sig_params = [
@@ -260,14 +259,6 @@ def _make_dust_factory(
         sig_params.append(
             inspect.Parameter(short, inspect.Parameter.KEYWORD_ONLY, default=UNSET, annotation=Any)
         )
-    sig_params.append(
-        inspect.Parameter(
-            "emission",
-            inspect.Parameter.KEYWORD_ONLY,
-            default=None,
-            annotation=dict,
-        )
-    )
     factory.__signature__ = inspect.Signature(sig_params, return_annotation=dict)
     factory.__name__ = dust_model
     factory.__qualname__ = f"tengri.builders.dust.{dust_model}"
@@ -315,11 +306,6 @@ def _make_dust_factory(
             )
         else:
             doc_lines.append("    Attenuation law name from DUST_LAWS. Required (no default).")
-    doc_lines.append("emission : dict, optional")
-    doc_lines.append(
-        "    Nested config from ``builders.dust.emission.<variant>(...)`` "
-        "selecting the IR re-emission model."
-    )
     for short in short_params:
         doc_lines.append(f"{short} : Distribution, sentinel, or scalar, optional")
         doc_lines.append("    Override the registry-default prior.")
@@ -327,7 +313,12 @@ def _make_dust_factory(
     doc_lines.append("Returns")
     doc_lines.append("-------")
     doc_lines.append("dict")
-    doc_lines.append("    Config dict matching the :meth:`SEDModel.build` grammar.")
+    doc_lines.append(
+        "    Config dict for the ``dust_attenuation`` kwarg of :meth:`SEDModel.build`."
+    )
+    doc_lines.append(
+        "    For IR emission, use ``dust_emission=builders.dust.emission.<variant>(...)``."
+    )
     factory.__doc__ = "\n".join(doc_lines)
     return factory
 

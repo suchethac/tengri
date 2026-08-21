@@ -64,7 +64,7 @@ fe2_strength_values = np.linspace(0.0, 1.5, 6)
 model = tengri.SEDModel.build(
     ssp,
     sfh=SFH,
-    dust=DUST,
+    dust_attenuation=DUST,
     agn={
         "type": "composable",
         "disc": {"type": "multicolor", "all_params": tengri.FIXED},

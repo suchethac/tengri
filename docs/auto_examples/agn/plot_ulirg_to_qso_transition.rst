@@ -149,14 +149,14 @@ the FIR dust-emission bump shrinks while the UV continuum brightens.
         model = tengri.SEDModel.build(
             ssp,
             sfh={"type": "const", "all_params": tengri.FIXED, "log_total_mass": log_total_mass},
-            dust={
+            dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
                 "all_params": tengri.FIXED,
                 "tau_bc": tau_bc,
                 "tau_diff": tau_diff,
-                "emission": {"type": "dale2014", "all_params": tengri.FIXED},
             },
+            dust_emission={"type": "dale2014", "all_params": tengri.FIXED},
             agn=agn_dict,
             redshift=tengri.Fixed(0.0),
         )
@@ -210,7 +210,7 @@ the FIR dust-emission bump shrinks while the UV continuum brightens.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.880 seconds)
+   **Total running time of the script:** (0 minutes 4.233 seconds)
 
 
 .. _sphx_glr_download_auto_examples_agn_plot_ulirg_to_qso_transition.py:

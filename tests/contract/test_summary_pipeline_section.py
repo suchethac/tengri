@@ -145,13 +145,42 @@ def test_summary_includes_pipeline_section_with_chain():
     assert "Pipeline (2 components):" in out
     assert "1. stellar" in out
     assert "2. dust" in out
-    # Bracketed config snippet
+    # Bracketed config snippet. Agreeing screens read back as the single `law`
+    # the grammar accepts, so the summary must not name a key the user did not
+    # write -- and must not spend two of its three displayed slots saying
+    # calzetti twice.
     assert "sfh_model=dpl" in out
-    assert "law_bc=calzetti" in out
+    assert "law=calzetti" in out
+    assert "law_bc=" not in out
+    assert "law_diff=" not in out
     # Publishes / requires lines
     assert "publishes: lnu_age, sfr" in out
     assert "publishes: L_ir" in out
     assert "reads:     lnu_age" in out
+
+
+def test_summary_keeps_both_screens_when_the_laws_differ():
+    """Differing screens must still print both -- the collapse is not a rename.
+
+    This is the case that makes collapsing the agreeing pair safe. A summary
+    that printed only one law here would hide a two-component model whose
+    birth-cloud and diffuse screens use different attenuation curves, which is
+    a physically distinct model and not a display detail.
+    """
+    dust = SimpleNamespace(
+        name="dust",
+        config=SimpleNamespace(law_bc="calzetti", law_diff="cardelli89"),
+        publishes=lambda: [SimpleNamespace(name="L_ir")],
+        requires=lambda: [],
+        requires_optional=lambda: [],
+    )
+
+    out = summary(_minimal_model(chain=[dust]))
+
+    assert "law_bc=calzetti" in out
+    assert "law_diff=cardelli89" in out
+    # Never the collapsed spelling: there is no single law to name.
+    assert "law=calzetti" not in out
 
 
 def test_summary_pipeline_section_defensive_when_chain_raises():

@@ -65,19 +65,19 @@ _SEAM_MODELS = {
     # balance peak-factors the absorbed bolometric integral: forward/energy_balance.py
     # and utils/sed_quantities.py.
     "dust_ir": dict(
-        dust={
+        dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
             "all_params": FIXED,
             "tau_diff": Uniform(0.0, 1.5),
             "tau_bc": 0.0,
-            "emission": {"type": "dale2014", "all_params": FIXED},
         },
+        dust_emission={"type": "dale2014", "all_params": FIXED},
     ),
     # The CIGALE-joint AGN renormalization forms trapz(L_disc) ~ L_bol (~1e44), peak
     # factored in components/agn/disc.py.
     "agn": dict(
-        dust={
+        dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
             "all_params": FIXED,
@@ -103,14 +103,14 @@ _SEAM_MODELS = {
     # model under test (stellar + dust) was the only one with no large positive scale
     # seam, so it measured 7.3e-05 and passed while dust IR and AGN were 30% wrong.
     "panchromatic": dict(
-        dust={
+        dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
             "all_params": FIXED,
             "tau_diff": Uniform(0.0, 1.5),
             "tau_bc": 0.0,
-            "emission": {"type": "dale2014_cigale", "all_params": FIXED},
         },
+        dust_emission={"type": "dale2014_cigale", "all_params": FIXED},
         neb={"type": "cue", "all_params": FIXED},
         agn={
             "type": "composable",
@@ -121,7 +121,7 @@ _SEAM_MODELS = {
             "log_lbol": Uniform(9.0, 12.0),
             "fracAGN": 0.1,
         },
-        radio={"type": "condon92"},
+        radio={"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}},
         xray={"type": "simple"},
         shock={"frac": 0.1},
     ),

@@ -373,13 +373,33 @@ _KNOWN_SSPS = {
     "bc03_pdva_stelib_chabrier": "bc03_pdva_stelib_chabrier.h5",
     "bpss_stars_c3k_a_chabrier": "bpss_stars_c3k_a_chabrier.h5",
     "pgny_mist_c3k_chabrier": "pgny_mist_c3k_chabrier.h5",
-    # Alternative IMFs
+    # Alternative IMFs. The catalog carries a Kroupa and a Salpeter variant for
+    # every isochrone x spectral-library pair it ships in Chabrier; this list is
+    # the full set, checked against the live index by
+    # tests/contract/test_ssp_catalog_registry.py.
+    "fsps_bsti_basel_kroupa": "fsps_bsti_basel_kroupa.h5",
+    "fsps_bsti_basel_salpeter": "fsps_bsti_basel_salpeter.h5",
+    "fsps_bsti_c3k_a_kroupa": "fsps_bsti_c3k_a_kroupa.h5",
+    "fsps_bsti_c3k_a_salpeter": "fsps_bsti_c3k_a_salpeter.h5",
+    "fsps_bsti_miles_kroupa": "fsps_bsti_miles_kroupa.h5",
+    "fsps_bsti_miles_salpeter": "fsps_bsti_miles_salpeter.h5",
+    "fsps_mist_basel_kroupa": "fsps_mist_basel_kroupa.h5",
+    "fsps_mist_basel_salpeter": "fsps_mist_basel_salpeter.h5",
     "fsps_mist_c3k_a_kroupa": "fsps_mist_c3k_a_kroupa.h5",
     "fsps_mist_c3k_a_salpeter": "fsps_mist_c3k_a_salpeter.h5",
-    "fsps_prsc_miles_kroupa": "fsps_prsc_miles_kroupa.h5",
-    "fsps_prsc_miles_salpeter": "fsps_prsc_miles_salpeter.h5",
+    "fsps_mist_miles_kroupa": "fsps_mist_miles_kroupa.h5",
+    "fsps_mist_miles_salpeter": "fsps_mist_miles_salpeter.h5",
+    "fsps_pdva_basel_kroupa": "fsps_pdva_basel_kroupa.h5",
+    "fsps_pdva_basel_salpeter": "fsps_pdva_basel_salpeter.h5",
+    "fsps_pdva_c3k_a_kroupa": "fsps_pdva_c3k_a_kroupa.h5",
+    "fsps_pdva_miles_kroupa": "fsps_pdva_miles_kroupa.h5",
+    "fsps_pdva_miles_salpeter": "fsps_pdva_miles_salpeter.h5",
+    "fsps_prsc_basel_kroupa": "fsps_prsc_basel_kroupa.h5",
+    "fsps_prsc_basel_salpeter": "fsps_prsc_basel_salpeter.h5",
     "fsps_prsc_c3k_a_kroupa": "fsps_prsc_c3k_a_kroupa.h5",
     "fsps_prsc_c3k_a_salpeter": "fsps_prsc_c3k_a_salpeter.h5",
+    "fsps_prsc_miles_kroupa": "fsps_prsc_miles_kroupa.h5",
+    "fsps_prsc_miles_salpeter": "fsps_prsc_miles_salpeter.h5",
 }
 
 # Reverse lookup used by ``load_ssp_data`` to fetch a missing local file when

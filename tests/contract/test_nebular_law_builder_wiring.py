@@ -25,13 +25,13 @@ def _build(ssp, obs, **dust_extra):
         ssp,
         observation=obs,
         sfh={"type": "delayed", "*": tengri.FIXED},
-        dust={
+        dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "*": tengri.FIXED,
-            "emission": None,
             **dust_extra,
         },
+        dust_emission=None,
         neb={"type": "none"},
         redshift=tengri.Fixed(0.05),
     )
@@ -48,8 +48,8 @@ def test_law_neb_lands_on_spec(synthetic_ssp_wide, synthetic_tophat_obs):
 def test_law_neb_round_trips_through_to_groups(synthetic_ssp_wide, synthetic_tophat_obs):
     m = _build(synthetic_ssp_wide, synthetic_tophat_obs, law_neb="smc", slope_neb=-1.3)
     groups = m.spec.to_groups()
-    assert groups["dust"]["law_neb"] == "smc"
-    assert groups["dust"]["slope_neb"] == pytest.approx(-1.3)
+    assert groups["dust_attenuation"]["law_neb"] == "smc"
+    assert groups["dust_attenuation"]["slope_neb"] == pytest.approx(-1.3)
     # Re-build from the round-tripped groups: the nebular law survives.
     m2 = tengri.SEDModel.build(synthetic_ssp_wide, observation=synthetic_tophat_obs, **groups)
     assert m2.spec.dust_law_neb == "smc"

@@ -48,6 +48,7 @@ import jax.numpy as jnp
 import pytest
 
 from tengri import SEDModel
+from tengri.parameters.groups import _legacy_radio_type_to_blocks
 from tengri.registry import _RegistryTable
 
 pytestmark = pytest.mark.contract
@@ -225,11 +226,11 @@ class TestRegistryComponentsEmit:
                         ssp_data=synthetic_ssp_wide,
                         observation=synthetic_tophat_obs,
                         sfh={"type": "const"},
-                        dust={
+                        dust_attenuation={
                             "type": "two_component",
                             "law": "calzetti",
-                            "emission": {"type": name},
                         },
+                        dust_emission={"type": name},
                     )
 
                 params = model.spec.sample(jax.random.PRNGKey(0))
@@ -259,7 +260,7 @@ class TestRegistryComponentsEmit:
                         ssp_data=synthetic_ssp_wide,
                         observation=synthetic_tophat_obs,
                         sfh={"type": "const"},
-                        dust={
+                        dust_attenuation={
                             "type": "single_component",
                             "law": name,
                         },
@@ -333,11 +334,16 @@ class TestRegistryComponentsEmit:
                 # Radio: build model with radio config
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore")
+                    if name == "none":
+                        radio_spec = {"sf": {"type": "none"}, "agn": {"type": "none"}}
+                    else:
+                        sf_variant, agn_variant = _legacy_radio_type_to_blocks(name)
+                        radio_spec = {"sf": {"type": sf_variant}, "agn": {"type": agn_variant}}
                     model = SEDModel.build(
                         ssp_data=synthetic_ssp_wide,
                         observation=synthetic_tophat_obs,
                         sfh={"type": "const"},
-                        radio={"type": name},
+                        radio=radio_spec,
                     )
 
                 params = model.spec.sample(jax.random.PRNGKey(0))
@@ -512,7 +518,7 @@ def _agn_census_context():
             redshift=Fixed(0.1),
             approx=None,
             sfh={"type": "tsnorm", "*": FIXED, "log_total_mass": 6.0},
-            dust={"type": "none"},
+            dust_attenuation={"type": "none"},
             agn=agn,
         )
 

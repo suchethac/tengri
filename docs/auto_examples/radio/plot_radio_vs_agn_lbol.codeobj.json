@@ -17,6 +17,15 @@
    "name": "dict"
   }
  ],
+ "DUST_EMISSION": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "dict"
+  }
+ ],
  "SFH": [
   {
    "is_class": false,

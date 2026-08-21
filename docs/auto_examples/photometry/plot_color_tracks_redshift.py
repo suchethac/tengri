@@ -60,7 +60,7 @@ def _build_population(peak_lbt, width, tau_diff):
             "skew": 0.0,
             "trunc": 13.0,
         },
-        dust={
+        dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "all_params": tengri.FIXED,

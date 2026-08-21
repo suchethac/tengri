@@ -32,7 +32,7 @@ def _build(ssp, sfh_dict):
         redshift=Fixed(_Z),
         sfh=sfh_dict,
         met={"logzsol": Uniform(-1.5, 0.3)},
-        dust={
+        dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "all_params": FIXED,

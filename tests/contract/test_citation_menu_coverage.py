@@ -116,7 +116,7 @@ def test_dust_model_is_cited() -> None:
     """
     spec = parse_groups(
         sfh={"type": "dpl"},
-        dust={"type": "two_component", "law": "calzetti"},
+        dust_attenuation={"type": "two_component", "law": "calzetti"},
     )
     citation = _citation_for(spec, "dust") or ""
     assert "Charlot" in citation, (
@@ -136,7 +136,9 @@ def test_disabled_components_are_not_cited() -> None:
     defaults while their gate is ``False``, so a gate-blind walk would
     attach Bell 2003 and Yang+2020 to a plain stellar+dust fit.
     """
-    spec = parse_groups(sfh={"type": "dpl"}, dust={"law": "power_law", "type": "two_component"})
+    spec = parse_groups(
+        sfh={"type": "dpl"}, dust_attenuation={"law": "power_law", "type": "two_component"}
+    )
     # Premise: the defaults really are non-None while the gates are off.
     assert spec.radio is False
     assert spec.shock is False
@@ -177,13 +179,14 @@ _NOT_WALKED = {
     # Cited from ``Posterior.method`` instead -- inference backend is not a
     # structural field of the spec.
     "list_inference_methods": "cited from Posterior.method, not from the spec",
-    # Walking it would double-count. ``radio={'type': X}`` *is* a live
-    # surface -- two shipped recipes use ``{'type': 'condon92'}`` -- but it
-    # is resolved onto ``radio_sfr_mode`` / ``radio_agn_model`` at parse
-    # time (``_legacy_radio_type_to_blocks``), and those two attributes are
+    # Walking it would double-count. ``radio={'type': X}`` was retired (PR6).
+    # The composable form ``radio={'sf': {...}, 'agn': {...}}`` is now the
+    # only accepted surface. The SF/AGN selector names are resolved onto
+    # ``radio_sfr_mode`` / ``radio_agn_model`` at parse time
+    # (``_legacy_radio_type_to_blocks``), and those two attributes are
     # already walked through ``list_radio_blocks``. There is no surviving
-    # ``radio_model`` attribute to read, and nothing is lost: selecting
-    # ``radio_dpl`` cites Martinez-Ramirez+2024 via the ``radio_agn`` row.
+    # ``radio_model`` attribute to read: selecting ``radio_dpl`` cites
+    # Martinez-Ramirez+2024 via the ``radio_agn`` row.
     #
     # The earlier reason recorded here -- "condon92 is unreachable from any
     # spec" -- was true when #1447 landed and went stale when the legacy

@@ -474,7 +474,7 @@ def _make_lazy_loader(
                         f"Template file '{path}' has an incompatible schema "
                         f"for the legacy {name!r} registry path: {exc!r}. "
                         f"Use the modern emission-component dispatch "
-                        f"(dust={{'emission': {{'type': {name!r}}}}}) or the "
+                        f"(dust_emission={{'type': {name!r}}}) or the "
                         f"model-specific loader "
                         f"(load_astrodust_hd23_or_raise / load_bosa_*) "
                         f"instead."
@@ -662,7 +662,7 @@ DUST_EMISSION_MODELS["dh02_ce01"] = _make_lazy_loader(
 # ── Friendly aliases ─────────────────────────────────────────────
 # Short names commonly used in the literature and surfaced by
 # ``tengri.list_dust_emission_models()``. Without these entries the
-# ``SEDModel.build(..., dust={"emission": {"type": "dl07"}})`` validator
+# ``SEDModel.build(..., dust_emission={"type": "dl07"})`` validator
 # (which derives accepted types from this dict) rejected the names that
 # the public introspection helper advertised. Closes #495.
 DUST_EMISSION_MODELS["dl07"] = DUST_EMISSION_MODELS["draine_li2007"]

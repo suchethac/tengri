@@ -35,182 +35,978 @@ JWST NIRCam color-color diagnostics for high-z galaxy classification
 
  .. code-block:: none
 
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:44: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:44: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:44: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:44: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:44: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:44: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:44: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:44: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:44: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:44: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:44: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:44: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:44: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:44: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:44: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:44: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:44: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:44: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:44: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:44: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:44: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:44: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:44: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:44: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:44: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:44: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:44: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:44: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:44: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:44: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:44: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:44: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:44: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:44: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:44: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:44: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:44: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:44: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:44: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:44: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:44: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:44: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:44: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:44: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:44: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:44: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:44: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:44: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:44: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:44: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
     /tengri/examples/usecases/plot_usecase_jwst_color_color.py:105: RuntimeWarning: invalid value encountered in scalar divide
       color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
     /tengri/examples/usecases/plot_usecase_jwst_color_color.py:106: RuntimeWarning: invalid value encountered in scalar divide
       color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
     /tengri/examples/usecases/plot_usecase_jwst_color_color.py:105: RuntimeWarning: invalid value encountered in scalar divide
       color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
     /tengri/examples/usecases/plot_usecase_jwst_color_color.py:106: RuntimeWarning: invalid value encountered in scalar divide
       color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
-    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:105: RuntimeWarning: invalid value encountered in scalar divide
-      color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
-    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:106: RuntimeWarning: invalid value encountered in scalar divide
-      color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
     /tengri/examples/usecases/plot_usecase_jwst_color_color.py:105: RuntimeWarning: invalid value encountered in scalar divide
       color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
     /tengri/examples/usecases/plot_usecase_jwst_color_color.py:106: RuntimeWarning: invalid value encountered in scalar divide
       color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
-      param_map_deltas.append(self._init_sfh(spec))
-    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:105: RuntimeWarning: invalid value encountered in scalar divide
-      color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
-    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:106: RuntimeWarning: invalid value encountered in scalar divide
-      color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
-      param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
     /tengri/examples/usecases/plot_usecase_jwst_color_color.py:105: RuntimeWarning: invalid value encountered in scalar divide
       color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
     /tengri/examples/usecases/plot_usecase_jwst_color_color.py:106: RuntimeWarning: invalid value encountered in scalar divide
       color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
-      param_map_deltas.append(self._init_sfh(spec))
-    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:105: RuntimeWarning: invalid value encountered in scalar divide
-      color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
-    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:106: RuntimeWarning: invalid value encountered in scalar divide
-      color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
     /tengri/examples/usecases/plot_usecase_jwst_color_color.py:105: RuntimeWarning: invalid value encountered in scalar divide
       color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
     /tengri/examples/usecases/plot_usecase_jwst_color_color.py:106: RuntimeWarning: invalid value encountered in scalar divide
       color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
-      param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
-      param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
-      param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
-      param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
-      param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
-      param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
-      param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
-      param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
-      param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
-      param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
-      param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
-      param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
-      param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
     /tengri/examples/usecases/plot_usecase_jwst_color_color.py:105: RuntimeWarning: invalid value encountered in scalar divide
       color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
     /tengri/examples/usecases/plot_usecase_jwst_color_color.py:106: RuntimeWarning: invalid value encountered in scalar divide
       color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
     /tengri/examples/usecases/plot_usecase_jwst_color_color.py:105: RuntimeWarning: invalid value encountered in scalar divide
       color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
     /tengri/examples/usecases/plot_usecase_jwst_color_color.py:106: RuntimeWarning: invalid value encountered in scalar divide
       color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
-    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:105: RuntimeWarning: invalid value encountered in scalar divide
-      color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
-    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:106: RuntimeWarning: invalid value encountered in scalar divide
-      color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
-    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:105: RuntimeWarning: invalid value encountered in scalar divide
-      color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
-    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:106: RuntimeWarning: invalid value encountered in scalar divide
-      color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
-    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:105: RuntimeWarning: invalid value encountered in scalar divide
-      color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
-    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:106: RuntimeWarning: invalid value encountered in scalar divide
-      color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
-    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:105: RuntimeWarning: invalid value encountered in scalar divide
-      color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
-    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:106: RuntimeWarning: invalid value encountered in scalar divide
-      color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
-    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:105: RuntimeWarning: invalid value encountered in scalar divide
-      color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
-    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:106: RuntimeWarning: invalid value encountered in scalar divide
-      color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
     /tengri/examples/usecases/plot_usecase_jwst_color_color.py:105: RuntimeWarning: invalid value encountered in scalar divide
       color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
     /tengri/examples/usecases/plot_usecase_jwst_color_color.py:106: RuntimeWarning: invalid value encountered in scalar divide
       color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
-      param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
-      param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
     /tengri/examples/usecases/plot_usecase_jwst_color_color.py:105: RuntimeWarning: invalid value encountered in scalar divide
       color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
     /tengri/examples/usecases/plot_usecase_jwst_color_color.py:106: RuntimeWarning: invalid value encountered in scalar divide
       color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
-      param_map_deltas.append(self._init_sfh(spec))
-    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:105: RuntimeWarning: invalid value encountered in scalar divide
-      color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
-    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:106: RuntimeWarning: invalid value encountered in scalar divide
-      color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
     /tengri/examples/usecases/plot_usecase_jwst_color_color.py:105: RuntimeWarning: invalid value encountered in scalar divide
       color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
     /tengri/examples/usecases/plot_usecase_jwst_color_color.py:106: RuntimeWarning: invalid value encountered in scalar divide
       color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
-    /tengri/src/tengri/forward/sed_model.py:1647: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
       param_map_deltas.append(self._init_sfh(spec))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:105: RuntimeWarning: invalid value encountered in scalar divide
+      color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:106: RuntimeWarning: invalid value encountered in scalar divide
+      color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:105: RuntimeWarning: invalid value encountered in scalar divide
+      color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:106: RuntimeWarning: invalid value encountered in scalar divide
+      color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:105: RuntimeWarning: invalid value encountered in scalar divide
+      color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:106: RuntimeWarning: invalid value encountered in scalar divide
+      color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:105: RuntimeWarning: invalid value encountered in scalar divide
+      color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:106: RuntimeWarning: invalid value encountered in scalar divide
+      color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:105: RuntimeWarning: invalid value encountered in scalar divide
+      color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:106: RuntimeWarning: invalid value encountered in scalar divide
+      color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:105: RuntimeWarning: invalid value encountered in scalar divide
+      color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:106: RuntimeWarning: invalid value encountered in scalar divide
+      color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:105: RuntimeWarning: invalid value encountered in scalar divide
+      color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:106: RuntimeWarning: invalid value encountered in scalar divide
+      color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:105: RuntimeWarning: invalid value encountered in scalar divide
+      color1 = -2.5 * np.log10(max(f0 / f1, 1e-3))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:106: RuntimeWarning: invalid value encountered in scalar divide
+      color2 = -2.5 * np.log10(max(f1 / f2, 1e-3))
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/src/tengri/forward/sed_model.py:1714: SFHBurstAliasingWarning: SFH burst width sfh_tsnorm_width_gyr=1 Gyr is narrower than the SSP grid spacing 1.22 Gyr at peak sfh_tsnorm_peak_lbt_gyr=9 Gyr. Predictions will show a non-physical staircase as the burst peak crosses SSP grid boundaries (#299). Widen the burst to at least width_gyr ≳ 1.22 for smooth behavior.
+      param_map_deltas.append(self._init_sfh(spec))
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
+    /tengri/examples/usecases/plot_usecase_jwst_color_color.py:113: DefaultFixedParametersWarning: Group 'dust_attenuation' states no 'all_params' disposition, so its remaining 4 parameters were fixed at declared defaults:
+      dust_Rv=3.1, dust_bump_strength=0, dust_delta=0, dust_f_obscuration=0
+
+    To fit them, pass 'all_params': FREE:
+      dust_attenuation={'all_params': FREE, ...}
+    To keep them fixed and silence this warning, say so explicitly:
+      dust_attenuation={'all_params': FIXED, ...}
+      model = tengri.SEDModel.build(
 
 
 
@@ -272,7 +1068,7 @@ JWST NIRCam color-color diagnostics for high-z galaxy classification
                 "trunc": tengri.Uniform(1.5, 5.0),
                 "logzsol": tengri.Uniform(-1.0, 0.1),
             },
-            dust={
+            dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
                 "tau_bc": tengri.Uniform(0.0, 0.8),
@@ -306,7 +1102,7 @@ JWST NIRCam color-color diagnostics for high-z galaxy classification
                 "trunc": tengri.Uniform(1.5, 3.0),
                 "logzsol": tengri.Uniform(-0.2, 0.3),
             },
-            dust={
+            dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
                 "all_params": tengri.FIXED,
@@ -341,7 +1137,7 @@ JWST NIRCam color-color diagnostics for high-z galaxy classification
                 "trunc": tengri.Uniform(2.0, 6.0),
                 "logzsol": tengri.Uniform(-0.5, 0.2),
             },
-            dust={
+            dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
                 "tau_bc": tengri.Uniform(0.8, 2.0),
@@ -395,7 +1191,7 @@ JWST NIRCam color-color diagnostics for high-z galaxy classification
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 20.534 seconds)
+   **Total running time of the script:** (0 minutes 20.868 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_jwst_color_color.py:

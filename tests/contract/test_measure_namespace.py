@@ -50,7 +50,7 @@ def _model(ssp, obs):
         ssp_data=ssp,
         observation=obs,
         sfh={"type": "dpl", "*": FIXED},
-        dust={"type": "two_component", "law": "calzetti", "*": FIXED},
+        dust_attenuation={"type": "two_component", "law": "calzetti", "*": FIXED},
         neb={"type": "none"},
     )
 

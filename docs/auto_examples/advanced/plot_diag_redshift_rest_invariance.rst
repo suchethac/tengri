@@ -30,7 +30,7 @@ parameters. Age-of-the-Universe constraints at high-z may truncate the SFH
 legitimately, producing smooth variation; any non-smooth jump signals a
 coupling bug.
 
-.. GENERATED FROM PYTHON SOURCE LINES 14-88
+.. GENERATED FROM PYTHON SOURCE LINES 14-93
 
 
 
@@ -85,7 +85,12 @@ coupling bug.
         ssp,
         observation=obs,
         sfh={"type": "dpl", "all_params": tengri.FIXED, "alpha": 2.0, "beta": 1.5, "tau_gyr": 5.0},
-        dust={"law": "power_law", "type": "two_component", "all_params": tengri.FIXED, "tau_bc": 0.3},
+        dust_attenuation={
+            "law": "power_law",
+            "type": "two_component",
+            "all_params": tengri.FIXED,
+            "tau_bc": 0.3,
+        },
         neb={"type": "cue", "all_params": tengri.FIXED},
         redshift=tengri.Uniform(0.0, 5.0),
     )

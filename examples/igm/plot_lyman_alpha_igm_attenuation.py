@@ -86,7 +86,7 @@ ssp = tengri.load_ssp()
 model = tengri.SEDModel.build(
     ssp,
     sfh=SFH,
-    dust=DUST,
+    dust_attenuation=DUST,
     igm={"type": "inoue14"},  # Inoue et al. 2014 IGM model
     redshift=tengri.Uniform(1.5, 8.0),
 )
