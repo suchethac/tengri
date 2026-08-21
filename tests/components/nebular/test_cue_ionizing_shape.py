@@ -54,9 +54,9 @@ def _model():
         m = SEDModel.build(
             ssp_data=ssp,
             observation=obs,
-            sfh={"type": "dpl", "*": FREE},
+            sfh={"type": "dpl", "all_params": FREE},
             dust_attenuation=None,
-            neb={"type": "cue", "*": FIXED},
+            neb={"type": "cue", "all_params": FIXED},
             redshift=Fixed(0.15),
         )
     return m, ld.wavelengths, ssp

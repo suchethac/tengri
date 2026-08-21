@@ -50,13 +50,13 @@ def _sfh_dust_neb():
     return dict(
         sfh={
             "type": "tsnorm",
-            "*": FIXED,
+            "all_params": FIXED,
             "log_total_mass": Fixed(10.0),
             "peak_lbt_gyr": Fixed(0.1),
             "width_gyr": Fixed(0.3),
         },
-        dust_attenuation={"type": "two_component", "law": "calzetti", "*": FIXED},
-        neb={"type": "cue", "*": FIXED},
+        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
+        neb={"type": "cue", "all_params": FIXED},
     )
 
 

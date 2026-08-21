@@ -62,16 +62,16 @@ class TestCoronaSeesInclination:
         def _build(cos_inc: float):
             model = SEDModel.build(
                 ssp_data=synthetic_ssp_wide,
-                sfh={"type": "delayed", "*": FIXED},
-                dust_attenuation={"law": "power_law", "type": "two_component", "*": FIXED},
+                sfh={"type": "delayed", "all_params": FIXED},
+                dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
                 agn={
                     "type": "composable",
-                    "disc": {"type": "schartmann2005", "*": FIXED},
+                    "disc": {"type": "schartmann2005", "all_params": FIXED},
                     "agn_log_lbol": Fixed(11.5),
                     "agn_cos_inc": Fixed(cos_inc),
-                    "*": FIXED,
+                    "all_params": FIXED,
                 },
-                xray={"type": "yang20", "*": FIXED},
+                xray={"type": "yang20", "all_params": FIXED},
                 redshift=Fixed(0.0),
             )
             return model.predict_state({})

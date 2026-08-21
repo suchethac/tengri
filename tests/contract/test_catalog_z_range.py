@@ -91,7 +91,7 @@ def test_catalog_range_distinct_compile_signature_from_no_range():
             return SEDModel.build(
                 ssp_data=ssp,
                 observation=obs,
-                sfh={"type": "dpl", "*": FIXED},
+                sfh={"type": "dpl", "all_params": FIXED},
                 dust_attenuation={
                     "type": "single_component",
                     "law": "calzetti",
@@ -136,7 +136,7 @@ def test_catalog_range_shared_signature_across_fixed_z_values():
             return SEDModel.build(
                 ssp_data=ssp,
                 observation=obs,
-                sfh={"type": "dpl", "*": FIXED},
+                sfh={"type": "dpl", "all_params": FIXED},
                 dust_attenuation={
                     "type": "single_component",
                     "law": "calzetti",

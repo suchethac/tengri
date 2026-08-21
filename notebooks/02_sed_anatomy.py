@@ -161,8 +161,8 @@ kitchen_sink = dict(
         "nlr": {"type": "analytic", "all_params": FIXED},
         "blr": {"type": "none", "all_params": FIXED},
     },
-    radio={"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}, "*": FIXED},
-    xray={"type": "simple", "*": FIXED},
+    radio={"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}, "all_params": FIXED},
+    xray={"type": "simple", "all_params": FIXED},
     redshift=Fixed(2.0),
     igm={"type": "inoue"},
 )

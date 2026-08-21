@@ -46,11 +46,11 @@ def photometric_model(ssp, synthetic_tophat_obs):
     return tengri.SEDModel.build(
         ssp_data=ssp,
         observation=synthetic_tophat_obs,
-        sfh={"type": "dexp", "*": tengri.FIXED},
+        sfh={"type": "dexp", "all_params": tengri.FIXED},
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_diff": tengri.Fixed(0.3),
             "tau_bc": tengri.Fixed(0.2),
         },
@@ -110,13 +110,13 @@ class TestMetallicityBoundsValidation:
             ssp_data=ssp,
             sfh={
                 "type": "dexp",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "logzsol": met_dist,
             },
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "tau_diff": tengri.Fixed(0.1),
                 "tau_bc": tengri.Fixed(0.2),
             },

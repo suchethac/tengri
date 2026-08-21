@@ -96,7 +96,7 @@ class TestIssue1317UnionPresence:
             sed_2band = SEDModel.build(
                 ssp_data=ssp,
                 observation=obs_2band,
-                sfh={"type": "dpl", "*": FIXED, "tau_gyr": Fixed(10.0)},
+                sfh={"type": "dpl", "all_params": FIXED, "tau_gyr": Fixed(10.0)},
                 dust_attenuation={
                     "type": "single_component",
                     "law": "calzetti",
@@ -142,7 +142,7 @@ class TestIssue1317UnionPresence:
             sed_3band = SEDModel.build(
                 ssp_data=ssp,
                 observation=obs_3band,
-                sfh={"type": "dpl", "*": FIXED, "tau_gyr": Fixed(10.0)},
+                sfh={"type": "dpl", "all_params": FIXED, "tau_gyr": Fixed(10.0)},
                 dust_attenuation={
                     "type": "single_component",
                     "law": "calzetti",

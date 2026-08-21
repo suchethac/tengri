@@ -54,7 +54,7 @@ def model_and_external_mock():
         sfh=builders.sfh.dpl(defaults=FREE),
         dust_attenuation={
             "type": "two_component",
-            "*": FIXED,
+            "all_params": FIXED,
             "law": "calzetti",
             "tau_bc": Uniform(0.0, 1.0),
         },
@@ -90,7 +90,7 @@ def _fresh_model() -> SEDModel:
         sfh=builders.sfh.dpl(defaults=FREE),
         dust_attenuation={
             "type": "two_component",
-            "*": FIXED,
+            "all_params": FIXED,
             "law": "calzetti",
             "tau_bc": Uniform(0.0, 1.0),
         },

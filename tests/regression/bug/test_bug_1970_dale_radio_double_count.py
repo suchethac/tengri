@@ -173,7 +173,7 @@ class TestDale2014RadioDoubleCount1970:
         model = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
             observation=synthetic_tophat_obs,
-            sfh={"type": "const", "*": FIXED},
+            sfh={"type": "const", "all_params": FIXED},
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",

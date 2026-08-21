@@ -86,20 +86,20 @@ def f32_bc03(tmp_path_factory):
 def _build(ssp, **neb):
     return SEDModel.build(
         ssp_data=ssp,
-        met={"logzsol": Fixed(0.0), "*": FIXED},
+        met={"logzsol": Fixed(0.0), "all_params": FIXED},
         sfh={
             "type": "const",
             "start_gyr": Fixed(0.01),
             "end_gyr": Fixed(0.0),
             "log_total_mass": Fixed(9.0),
-            "*": FIXED,
+            "all_params": FIXED,
         },
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "tau_bc": Fixed(0.0),
             "tau_diff": Fixed(0.0),
-            "*": FIXED,
+            "all_params": FIXED,
         },
         redshift=Fixed(0.0),
         **neb,
@@ -160,7 +160,7 @@ def test_cue_balmer_decrement_on_float32_grid(f32_bc03):
     """
     state = _build(
         load_ssp_data(f32_bc03),
-        neb={"type": "cue", "neb_logU": Fixed(-2.0), "neb_logZ_gas": Fixed(0.0), "*": FIXED},
+        neb={"type": "cue", "neb_logU": Fixed(-2.0), "neb_logZ_gas": Fixed(0.0), "all_params": FIXED},
     ).predict_state({})
 
     wave = np.asarray(state.wave)

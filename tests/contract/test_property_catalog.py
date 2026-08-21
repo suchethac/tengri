@@ -29,11 +29,11 @@ def base_model(synthetic_ssp_wide):
     ssp = synthetic_ssp_wide
     spec = SEDModel.build(
         ssp_data=ssp,
-        sfh={"type": "dpl", "*": FREE},
+        sfh={"type": "dpl", "all_params": FREE},
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
-            "*": FIXED,
+            "all_params": FIXED,
             "tau_bc": 0.5,
         },
         neb={"type": "none"},
@@ -515,11 +515,11 @@ class TestSEDGroupBitEquality:
         ssp = synthetic_ssp_wide
         spec = SEDModel.build(
             ssp_data=ssp,
-            sfh={"type": "dpl", "*": FREE},
+            sfh={"type": "dpl", "all_params": FREE},
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "*": FIXED,
+                "all_params": FIXED,
                 "tau_bc": 0.5,
             },
             neb={"type": "none"},
@@ -581,11 +581,11 @@ class TestLuminosityWeightedSFHBitEquality:
         ssp = synthetic_ssp_wide
         spec = SEDModel.build(
             ssp_data=ssp,
-            sfh={"type": "dpl", "*": FREE},
+            sfh={"type": "dpl", "all_params": FREE},
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "*": FIXED,
+                "all_params": FIXED,
                 "tau_bc": 0.5,
             },
             neb={"type": "none"},
@@ -637,11 +637,11 @@ class TestIonizingGroupBitEquality:
         ssp = synthetic_ssp_wide
         spec = SEDModel.build(
             ssp_data=ssp,
-            sfh={"type": "dpl", "*": FREE},
+            sfh={"type": "dpl", "all_params": FREE},
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "*": FIXED,
+                "all_params": FIXED,
                 "tau_bc": 0.5,
             },
             neb={"type": "none"},
@@ -681,15 +681,15 @@ class TestRadioGroupBitEquality:
         ssp = synthetic_ssp_wide
         spec = SEDModel.build(
             ssp_data=ssp,
-            sfh={"type": "dpl", "*": FREE},
+            sfh={"type": "dpl", "all_params": FREE},
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "*": FIXED,
+                "all_params": FIXED,
                 "tau_bc": 0.5,
             },
             neb={"type": "none"},
-            radio={"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}, "*": FIXED},
+            radio={"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}, "all_params": FIXED},
             redshift=Fixed(0.1),
         )
         return spec
@@ -728,15 +728,15 @@ class TestXRayGroupBitEquality:
         ssp = synthetic_ssp_wide
         spec = SEDModel.build(
             ssp_data=ssp,
-            sfh={"type": "dpl", "*": FREE},
+            sfh={"type": "dpl", "all_params": FREE},
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "*": FIXED,
+                "all_params": FIXED,
                 "tau_bc": 0.5,
             },
             neb={"type": "none"},
-            xray={"type": "simple", "*": FIXED},
+            xray={"type": "simple", "all_params": FIXED},
             redshift=Fixed(0.1),
         )
         return spec
@@ -773,11 +773,11 @@ class TestLinesGroupNaNBehavior:
         ssp = synthetic_ssp_wide
         spec = SEDModel.build(
             ssp_data=ssp,
-            sfh={"type": "dpl", "*": FREE},
+            sfh={"type": "dpl", "all_params": FREE},
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "*": FIXED,
+                "all_params": FIXED,
                 "tau_bc": 0.5,
             },
             neb={"type": "none"},  # No nebular → no line catalog

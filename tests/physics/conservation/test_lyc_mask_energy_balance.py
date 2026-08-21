@@ -41,12 +41,12 @@ _WG00_GRID = Path(__file__).resolve().parents[3] / "data" / "wg00_attenuation_gr
 TWO_COMPONENT = {
     "type": "two_component",
     "law": "calzetti",
-    "*": FIXED,
+    "all_params": FIXED,
     "tau_bc": 0.5,
     "tau_diff": 0.3,
 }
-SINGLE_SCREEN = {"law": "power_law", "type": "single_component", "*": FIXED, "tau_v": 0.5}
-WG00 = {"type": "wg00", "*": FIXED, "tau_v": 0.5}
+SINGLE_SCREEN = {"law": "power_law", "type": "single_component", "all_params": FIXED, "tau_v": 0.5}
+WG00 = {"type": "wg00", "all_params": FIXED, "tau_v": 0.5}
 
 _DUST_CASES = [
     pytest.param(TWO_COMPONENT, id="two_component"),
@@ -131,7 +131,7 @@ class TestLycMaskedLAbsorbed:
         transparent = {
             "type": "two_component",
             "law": "calzetti",
-            "*": FIXED,
+            "all_params": FIXED,
             "tau_bc": 0.0,
             "tau_diff": 0.0,
         }
@@ -236,7 +236,7 @@ class TestGoldenValues:
         UV-bright case specifically.
         """
         dust_attenuation = dict(TWO_COMPONENT)
-        dust_emission = {"type": "modified_blackbody", "*": FIXED}
+        dust_emission = {"type": "modified_blackbody", "all_params": FIXED}
         m_exact = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
             observation=_obs(),

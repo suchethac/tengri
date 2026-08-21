@@ -93,13 +93,13 @@ def _build(ssp, obs, approx, *, tau_diff=1.5, z=0.05):
         return SEDModel.build(
             ssp_data=ssp,
             observation=obs,
-            sfh={"type": "dpl", "*": FIXED},
+            sfh={"type": "dpl", "all_params": FIXED},
             # Diffuse-only: isolates the screen quadrature from the birth-cloud
             # LUT residual (#617).
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "*": FIXED,
+                "all_params": FIXED,
                 "tau_bc": 0.0,
                 "tau_diff": tau_diff,
             },

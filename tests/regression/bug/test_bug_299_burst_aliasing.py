@@ -52,7 +52,7 @@ def _build_with_burst(ssp, *, width_gyr: float, peak_lbt_gyr: float):
                 ssp,
                 sfh={
                     "type": "tsnorm",
-                    "*": tengri.FIXED,
+                    "all_params": tengri.FIXED,
                     "log_total_mass": 8.0,
                     "peak_lbt_gyr": peak_lbt_gyr,
                     "width_gyr": width_gyr,
@@ -60,7 +60,7 @@ def _build_with_burst(ssp, *, width_gyr: float, peak_lbt_gyr: float):
                     "trunc": 5.0,
                     "logzsol": -0.1,
                 },
-                dust_attenuation={"law": "power_law", "type": "two_component", "*": tengri.FIXED},
+                dust_attenuation={"law": "power_law", "type": "two_component", "all_params": tengri.FIXED},
                 redshift=Fixed(0.1),
             )
             return [x for x in w if issubclass(x.category, SFHBurstAliasingWarning)]

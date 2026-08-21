@@ -156,7 +156,7 @@ class TestAGNParameterRouting:
             )
 
     def test_agn_wildcard_at_agn_level_frees_shared(self):
-        """agn={'*': FREE, 'disc': {...}} frees shared agn params."""
+        """agn={'all_params': FREE, 'disc': {...}} frees shared agn params."""
         params = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
             agn={
@@ -783,7 +783,7 @@ class TestComposableAGNRuntimeWiring:
         )
 
     def test_composable_agn_wildcard_fixed_emits_nonzero_sed(self, synthetic_ssp_wide):
-        """Wildcard ``'*': FIXED`` with no explicit ``frac`` must still
+        """Wildcard ``'all_params': FIXED`` with no explicit ``frac`` must still
         produce a non-zero AGN SED (regression for #417).
 
         Before the fix, ``agn_lum_ratio`` defaulted to ``Fixed(0.0)`` in the

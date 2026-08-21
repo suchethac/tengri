@@ -186,8 +186,8 @@ def test_gradient_identity_with_total_mass():
     model = SEDModel.build(
         ssp_data=ssp,
         observation=obs,
-        sfh={"type": "dpl", "*": FIXED},
-        neb={"type": "cue", "*": FIXED},
+        sfh={"type": "dpl", "all_params": FIXED},
+        neb={"type": "cue", "all_params": FIXED},
         redshift=Fixed(1.0),
         approx=None,
         forward_dtype="float64",
@@ -225,8 +225,8 @@ def test_published_keys_in_derived():
     model = SEDModel.build(
         ssp_data=ssp,
         observation=obs,
-        sfh={"type": "dpl", "*": FIXED},
-        neb={"type": "cue", "*": FIXED},
+        sfh={"type": "dpl", "all_params": FIXED},
+        neb={"type": "cue", "all_params": FIXED},
         redshift=Fixed(1.0),
         approx=None,
         forward_dtype="float64",

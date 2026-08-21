@@ -181,7 +181,7 @@ def test_tab_completion_includes_grammar_essentials():
     completable = set(dir(tengri))
     essentials = {
         "FREE",
-        "FIXED",  # nested-dict grammar sentinels (sfh={'*': FREE})
+        "FIXED",  # nested-dict grammar sentinels (sfh={'all_params': FREE})
         "recipes",
         "builders",  # recommended build entry points
         "load_ssp_data",
@@ -584,7 +584,7 @@ def test_property_catalog_get(synthetic_ssp_wide, synthetic_tophat_obs):
     model = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
         observation=synthetic_tophat_obs,
-        sfh={"type": "dpl", "*": FIXED},
+        sfh={"type": "dpl", "all_params": FIXED},
         redshift=Fixed(0.1),
     )
     pred = model.predict(model.spec.sample(jax.random.PRNGKey(0)))

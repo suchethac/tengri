@@ -69,8 +69,8 @@ def build_two_galaxy_catalog(
     model = SEDModel.build(
         ssp_data=ssp,
         observation=obs_base,
-        sfh={"type": "dpl", "*": FREE},
-        dust_attenuation={"type": "two_component", "law": "calzetti", "*": FIXED},
+        sfh={"type": "dpl", "all_params": FREE},
+        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
         neb={"type": "none"},
         redshift=Fixed(z),
     )
@@ -134,8 +134,8 @@ def build_two_galaxy_catalog(
     model = SEDModel.build(
         ssp_data=ssp,
         observation=obs,
-        sfh={"type": "dpl", "*": FREE},
-        dust_attenuation={"type": "two_component", "law": "calzetti", "*": FIXED},
+        sfh={"type": "dpl", "all_params": FREE},
+        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
         neb={"type": "none"},
         redshift=Fixed(z),
     )

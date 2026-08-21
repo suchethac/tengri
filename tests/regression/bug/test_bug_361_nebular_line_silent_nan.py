@@ -74,8 +74,8 @@ class TestBug361A_cb19_dispatch:
             warnings.simplefilter("ignore")
             m = tengri.SEDModel.build(
                 ssp,
-                sfh={"type": "dpl", "*": tengri.FIXED},
-                neb={"type": "cb19", "*": tengri.FIXED},
+                sfh={"type": "dpl", "all_params": tengri.FIXED},
+                neb={"type": "cb19", "all_params": tengri.FIXED},
                 redshift=Fixed(0.1),
             )
         assert isinstance(m._nebular_backend, CB19Backend), (
@@ -88,8 +88,8 @@ class TestBug361A_cb19_dispatch:
             warnings.simplefilter("ignore")
             m = tengri.SEDModel.build(
                 ssp,
-                sfh={"type": "dpl", "*": tengri.FIXED},
-                neb={"type": "cb19", "*": tengri.FIXED},
+                sfh={"type": "dpl", "all_params": tengri.FIXED},
+                neb={"type": "cb19", "all_params": tengri.FIXED},
                 redshift=Fixed(0.1),
             )
         assert m.spec.nebular_mode == "cb19"
@@ -102,7 +102,7 @@ class TestBug361A_cb19_dispatch:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             m = tengri.SEDModel.build(
-                ssp, sfh={"type": "dpl", "*": tengri.FIXED}, redshift=Fixed(0.1)
+                ssp, sfh={"type": "dpl", "all_params": tengri.FIXED}, redshift=Fixed(0.1)
             )
         assert isinstance(m._nebular_backend, BakedInBackend)
 
@@ -186,7 +186,7 @@ class TestBug361B_silent_nan_warning:
                 ssp,
                 sfh={
                     "type": "tsnorm",
-                    "*": tengri.FIXED,
+                    "all_params": tengri.FIXED,
                     "log_total_mass": 8.0,
                     "peak_lbt_gyr": 2.0,
                     "width_gyr": 1.0,
@@ -197,7 +197,7 @@ class TestBug361B_silent_nan_warning:
                 dust_attenuation={
                     "law": "power_law",
                     "type": "two_component",
-                    "*": tengri.FIXED,
+                    "all_params": tengri.FIXED,
                     "tau_bc": 0.2,
                     "tau_diff": 0.1,
                     "slope": -0.7,
@@ -225,8 +225,8 @@ class TestBug361B_silent_nan_warning:
             warnings.simplefilter("ignore")
             m = tengri.SEDModel.build(
                 ssp,
-                sfh={"type": "dpl", "*": tengri.FIXED},
-                dust_attenuation={"law": "power_law", "type": "two_component", "*": tengri.FIXED},
+                sfh={"type": "dpl", "all_params": tengri.FIXED},
+                dust_attenuation={"law": "power_law", "type": "two_component", "all_params": tengri.FIXED},
                 redshift=Fixed(0.1),
             )
         pred = m.predict({"redshift": 0.05})

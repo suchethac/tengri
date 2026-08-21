@@ -12,7 +12,7 @@ message:
   pointer to non-exported ``list_available_filters()``).
 - Non-string SFH ``type`` → ``TypeError`` with an example (was:
   ``unhashable type: 'dict'``).
-- ``'*': FIXED`` on the delayed SFH → silent (was: three internal-sounding
+- ``'all_params': FIXED`` on the delayed SFH → silent (was: three internal-sounding
   midpoint warnings; registry-wide sweep tracked in #1007).
 - Missing SSP file → points at ``tengri.download_ssp()`` (was: raw h5py
   OSError).
@@ -41,7 +41,7 @@ def dustless_model(synthetic_ssp_wide, synthetic_tophat_obs):
         return SEDModel.build(
             ssp_data=synthetic_ssp_wide,
             observation=synthetic_tophat_obs,
-            sfh={"type": "delayed", "*": FIXED},
+            sfh={"type": "delayed", "all_params": FIXED},
             redshift=Fixed(0.1),
         )
 
@@ -119,7 +119,7 @@ def test_no_observation_model_accessors_name_the_fix(synthetic_ssp_wide):
         warnings.simplefilter("ignore")
         model = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
-            sfh={"type": "delayed", "*": FIXED},
+            sfh={"type": "delayed", "all_params": FIXED},
             neb={"type": "none"},
             redshift=Fixed(0.1),
         )
@@ -156,7 +156,7 @@ def test_delayed_wildcard_is_warning_free(synthetic_ssp_wide, synthetic_tophat_o
 
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
-        parse_groups(sfh={"type": "delayed", "*": FIXED}, redshift=Fixed(0.1))
+        parse_groups(sfh={"type": "delayed", "all_params": FIXED}, redshift=Fixed(0.1))
     midpoint_warnings = [w for w in caught if "no curated default" in str(w.message)]
     assert not midpoint_warnings, [str(w.message) for w in midpoint_warnings]
 
@@ -255,7 +255,7 @@ def test_observation_accepts_bare_photometry(synthetic_ssp_wide, synthetic_topha
         model = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
             observation=photometry,
-            sfh={"type": "delayed", "*": FIXED},
+            sfh={"type": "delayed", "all_params": FIXED},
             redshift=Fixed(0.1),
         )
     assert model.observation.photometry is photometry
@@ -267,7 +267,7 @@ def test_observation_wrong_type_names_the_fix(synthetic_ssp_wide):
         SEDModel.build(
             ssp_data=synthetic_ssp_wide,
             observation=42,
-            sfh={"type": "delayed", "*": FIXED},
+            sfh={"type": "delayed", "all_params": FIXED},
             redshift=Fixed(0.1),
         )
 
@@ -325,7 +325,7 @@ def test_list_agn_blocks_use_strings_name_valid_grammar_keys(
         model = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
             observation=synthetic_tophat_obs,
-            sfh={"type": "delayed", "*": FIXED},
+            sfh={"type": "delayed", "all_params": FIXED},
             neb={"type": "none"},
             agn={"disc": {"type": "powerlaw"}, "atten": {"type": "qsogen"}},
             redshift=Fixed(0.1),
@@ -485,7 +485,7 @@ def test_sfh_mixture_modulator_use_strings_build(synthetic_ssp_wide, synthetic_t
             model = SEDModel.build(
                 ssp_data=synthetic_ssp_wide,
                 observation=synthetic_tophat_obs,
-                sfh={"type": ["const", name], "*": FIXED},
+                sfh={"type": ["const", name], "all_params": FIXED},
                 neb={"type": "none"},
                 redshift=Fixed(0.1),
             )

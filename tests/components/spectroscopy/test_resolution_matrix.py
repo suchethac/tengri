@@ -93,7 +93,7 @@ def _spec_model(ssp, wave, *, matrix):
         kw["resolution_matrix"] = matrix
     obs = Observation(spectroscopy=Spectroscopy(**kw))
     return SEDModel.build(
-        ssp_data=ssp, observation=obs, sfh={"type": "dpl", "*": FIXED}, redshift=Fixed(0.05)
+        ssp_data=ssp, observation=obs, sfh={"type": "dpl", "all_params": FIXED}, redshift=Fixed(0.05)
     )
 
 

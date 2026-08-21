@@ -79,13 +79,13 @@ def _radio_model_to_composable(n: str) -> dict:
     from tengri.parameters.groups import _legacy_radio_type_to_blocks
 
     if n == "none":
-        return {"radio": {"sf": {"type": "none"}, "agn": {"type": "none"}, "*": FIXED}}
+        return {"radio": {"sf": {"type": "none"}, "agn": {"type": "none"}, "all_params": FIXED}}
     elif n == "condon92":
         return {
             "radio": {
                 "sf": {"type": "bell2003"},
                 "agn": {"type": "powerlaw"},
-                "*": FIXED,
+                "all_params": FIXED,
             }
         }
     else:
@@ -94,7 +94,7 @@ def _radio_model_to_composable(n: str) -> dict:
             "radio": {
                 "sf": {"type": sf_variant},
                 "agn": {"type": agn_variant},
-                "*": FIXED,
+                "all_params": FIXED,
             }
         }
 

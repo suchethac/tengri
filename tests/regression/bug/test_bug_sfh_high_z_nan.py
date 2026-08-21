@@ -49,7 +49,7 @@ def test_enforce_increasing_fixes_non_monotone_table():
 def _high_z_model(ssp, redshift, age_gyr=3.0, free_mass=False):
     sfh = {
         "type": "dpl",
-        "*": FIXED,
+        "all_params": FIXED,
         "age_gyr": age_gyr,
         "tau_gyr": 5.0,
         "alpha": 2.0,
@@ -62,7 +62,7 @@ def _high_z_model(ssp, redshift, age_gyr=3.0, free_mass=False):
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "*": FIXED,
+            "all_params": FIXED,
             "tau_diff": 0.0,
             "tau_bc": 0.0,
         },

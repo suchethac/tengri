@@ -63,15 +63,15 @@ def _build(ssp, obs, emission_type):
     return SEDModel.build(
         ssp_data=ssp,
         observation=obs,
-        sfh={"type": "dpl", "*": FIXED},
+        sfh={"type": "dpl", "all_params": FIXED},
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
-            "*": FIXED,
+            "all_params": FIXED,
             "tau_bc": _TAU_BC,
             "tau_diff": _TAU_DIFF,
         },
-        dust_emission={"type": emission_type, "*": FIXED},
+        dust_emission={"type": emission_type, "all_params": FIXED},
         neb={"type": "none"},
         redshift=Fixed(0.5),
     )

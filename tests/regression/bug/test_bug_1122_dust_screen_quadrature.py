@@ -33,11 +33,11 @@ def _build(ssp, approx, tau_diff=0.5, tau_bc=1.0, z=0.2):
     return SEDModel.build(
         ssp_data=ssp,
         observation=Observation(photometry=Photometry.from_names(BANDS)),
-        sfh={"type": "dpl", "*": FREE},
+        sfh={"type": "dpl", "all_params": FREE},
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "*": FIXED,
+            "all_params": FIXED,
             "tau_diff": tau_diff,
             "tau_bc": tau_bc,
         },
@@ -175,14 +175,14 @@ def test_single_component_screen_is_also_quadratured(ssp):
     kw = {"ssp_data": ssp, "observation": Observation(photometry=Photometry.from_names(BANDS))}
     m_exact = SEDModel.build(
         **kw,
-        sfh={"type": "dpl", "*": FREE},
+        sfh={"type": "dpl", "all_params": FREE},
         dust_attenuation={"type": "single_component", "law": "calzetti", "tau_v": Fixed(0.4)},
         redshift=Fixed(0.1),
         approx=None,
     )
     m_lut = SEDModel.build(
         **kw,
-        sfh={"type": "dpl", "*": FREE},
+        sfh={"type": "dpl", "all_params": FREE},
         dust_attenuation={"type": "single_component", "law": "calzetti", "tau_v": Fixed(0.4)},
         redshift=Fixed(0.1),
         approx=WavePrecomp(),
@@ -207,11 +207,11 @@ def test_free_z_path_publishes_the_subband_tensors(ssp):
     m = SEDModel.build(
         ssp_data=ssp,
         observation=Observation(photometry=Photometry.from_names(BANDS)),
-        sfh={"type": "dpl", "*": FREE},
+        sfh={"type": "dpl", "all_params": FREE},
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "*": FIXED,
+            "all_params": FIXED,
             "tau_diff": 0.5,
             "tau_bc": 1.0,
         },

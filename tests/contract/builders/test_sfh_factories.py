@@ -139,7 +139,7 @@ def test_factory_output_round_trips_through_parse_groups() -> None:
         sfh=builders.sfh.dpl(_=FREE, beta=Uniform(1.0, 3.0)), redshift=Fixed(0.1)
     )
     via_dict = parse_groups(
-        sfh={"type": "dpl", "*": FREE, "beta": Uniform(1.0, 3.0)}, redshift=Fixed(0.1)
+        sfh={"type": "dpl", "all_params": FREE, "beta": Uniform(1.0, 3.0)}, redshift=Fixed(0.1)
     )
     assert sorted(via_factory.free_params) == sorted(via_dict.free_params)
     # Spot-check that the user-overridden prior survived.

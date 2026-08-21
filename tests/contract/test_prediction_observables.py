@@ -46,8 +46,8 @@ _EXTRA = "jwst_f356w"
 # (3562 A) sits inside the forest and is heavily absorbed. The JWST bands above do
 # NOT: they sample rest-frame >3700 A, where IGM transmission is ~1.
 _FOREST_FILTERS = ["sdss_u", "sdss_g"]
-_SFH = {"type": "dpl", "*": FIXED}
-_DUST = {"type": "single_component", "law": "calzetti", "*": FIXED}
+_SFH = {"type": "dpl", "all_params": FIXED}
+_DUST = {"type": "single_component", "law": "calzetti", "all_params": FIXED}
 # z=3 keeps the IGM transmission live: at low z it is ~1 and would mask a
 # projection path that drops it entirely.
 _Z = 3.0

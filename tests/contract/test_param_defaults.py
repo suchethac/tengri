@@ -105,7 +105,7 @@ def test_every_sfh_registry_param_has_in_bounds_default():
     The SEDModelComponent guard above never reached the SFH registry
     (``components/stellar/sfh/registry.py`` declares priors via its own
     ``ParamDef`` NamedTuple, not ``declared_parameters()``), so 102 of its
-    110 priors shipped without ``default=`` — and every ``'*': FIXED``
+    110 priors shipped without ``default=`` — and every ``'all_params': FIXED``
     build of a non-dpl SFH type greeted a new user with a wall of
     midpoint-fallback warnings. Same contract, same failure mode, second
     declaration surface.
@@ -140,6 +140,6 @@ def test_every_sfh_registry_param_has_in_bounds_default():
             f"{len(offenders)} SFH registry parameter(s) missing in-bounds defaults:\n"
             + "\n".join(offenders)
             + "\n\nEvery ``ParamDef`` prior must either be ``Fixed(value)`` or carry "
-            "``default=<physical_value>`` so ``'*': FIXED`` builds never fall back "
+            "``default=<physical_value>`` so ``'all_params': FIXED`` builds never fall back "
             "to the prior midpoint (#1007)."
         )

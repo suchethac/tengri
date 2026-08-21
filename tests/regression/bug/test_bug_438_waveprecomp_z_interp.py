@@ -44,11 +44,11 @@ def test_waveprecomp_error_bounded_at_high_n_z():
         photometry=tengri.Photometry.from_names(["sdss_u", "sdss_g", "sdss_r", "sdss_i"])
     )
     spec = dict(
-        sfh={"type": "tsnorm", "*": tengri.FIXED},
+        sfh={"type": "tsnorm", "all_params": tengri.FIXED},
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_diff": 0.3,
             "tau_bc": 0.2,
         },
@@ -87,7 +87,7 @@ def test_waveprecomp_on_grid_is_near_exact():
 
     obs = tengri.Observation(photometry=tengri.Photometry.from_names(["sdss_g", "sdss_r"]))
     spec = dict(
-        sfh={"type": "tsnorm", "*": tengri.FIXED},
+        sfh={"type": "tsnorm", "all_params": tengri.FIXED},
         redshift=tengri.Uniform(0.0, 3.0),
     )
     model_exact = tengri.SEDModel.build(ssp, observation=obs, approx=None, **spec)

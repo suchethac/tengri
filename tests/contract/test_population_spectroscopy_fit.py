@@ -50,8 +50,8 @@ def template(synthetic_ssp_wide, spec_obs):
     return SEDModel.build(
         ssp_data=synthetic_ssp_wide,
         observation=spec_obs,
-        sfh={"type": ["tsnorm", "field"], "*": FREE},
-        dust_attenuation={"type": "two_component", "law": "calzetti", "*": FIXED},
+        sfh={"type": ["tsnorm", "field"], "all_params": FREE},
+        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
         neb={"type": "none"},
         redshift=Fixed(_Z),
         n_grid=_N_GRID,

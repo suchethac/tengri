@@ -86,8 +86,8 @@ class TestForwardPassScreen:
             warnings.simplefilter("ignore")
             return tengri.SEDModel.build(
                 ssp,
-                sfh={"type": "tsnorm", "*": tengri.FIXED},
-                dust_attenuation={"law": "power_law", "type": "two_component", "*": tengri.FIXED},
+                sfh={"type": "tsnorm", "all_params": tengri.FIXED},
+                dust_attenuation={"law": "power_law", "type": "two_component", "all_params": tengri.FIXED},
                 redshift=tengri.Fixed(0.05),
             )
 
@@ -99,8 +99,8 @@ class TestForwardPassScreen:
             warnings.simplefilter("ignore")
             return tengri.SEDModel.build(
                 ssp,
-                sfh={"type": "tsnorm", "*": tengri.FIXED},
-                dust_attenuation={"law": "power_law", "type": "two_component", "*": tengri.FIXED},
+                sfh={"type": "tsnorm", "all_params": tengri.FIXED},
+                dust_attenuation={"law": "power_law", "type": "two_component", "all_params": tengri.FIXED},
                 foreground={"ebmv_mw": 0.1, "law": "cardelli", "rv": 3.1},
                 redshift=tengri.Fixed(0.05),
             )
@@ -117,8 +117,8 @@ class TestForwardPassScreen:
             warnings.simplefilter("ignore")
             zero_model = tengri.SEDModel.build(
                 ssp,
-                sfh={"type": "tsnorm", "*": tengri.FIXED},
-                dust_attenuation={"law": "power_law", "type": "two_component", "*": tengri.FIXED},
+                sfh={"type": "tsnorm", "all_params": tengri.FIXED},
+                dust_attenuation={"law": "power_law", "type": "two_component", "all_params": tengri.FIXED},
                 foreground={"ebmv_mw": 0.0},
                 redshift=tengri.Fixed(0.05),
             )
@@ -169,11 +169,11 @@ class TestComposabilityWithHostDust:
             warnings.simplefilter("ignore")
             model = tengri.SEDModel.build(
                 ssp,
-                sfh={"type": "tsnorm", "*": tengri.FIXED},
+                sfh={"type": "tsnorm", "all_params": tengri.FIXED},
                 dust_attenuation={
                     "law": "power_law",
                     "type": "two_component",
-                    "*": tengri.FIXED,
+                    "all_params": tengri.FIXED,
                     "tau_bc": tengri.Fixed(0.5),
                     "tau_diff": tengri.Fixed(0.3),
                 },

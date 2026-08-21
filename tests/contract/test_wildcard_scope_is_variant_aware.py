@@ -213,9 +213,9 @@ def _dust_law_cases():
                     "type": "two_component",
                     "law_bc": law,
                     "law_diff": law,
-                    "*": FREE,
+                    "all_params": FREE,
                 },
-                "dust_emission": {"type": "themis", "*": FIXED},
+                "dust_emission": {"type": "themis", "all_params": FIXED},
                 "neb": {"type": "none"},
             },
             overrides=_DEEP_ATTENUATION,
@@ -233,10 +233,10 @@ def _shock_cases():
                 "dust_attenuation": {
                     "type": "two_component",
                     "law": "calzetti",
-                    "*": FIXED,
+                    "all_params": FIXED,
                 },
                 "neb": {"type": "none"},
-                "shock": {"norm": norm, "*": FREE},
+                "shock": {"norm": norm, "all_params": FREE},
             },
             overrides=_LUMINOUS_SHOCK,
             log_total_mass=_FAINT_GALAXY,
@@ -291,10 +291,10 @@ def _xray_cases():
                 "dust_attenuation": {
                     "type": "two_component",
                     "law": "calzetti",
-                    "*": FIXED,
+                    "all_params": FIXED,
                 },
                 "neb": {"type": "none"},
-                "xray": {"type": model, "*": FREE},
+                "xray": {"type": model, "all_params": FREE},
                 # The AGN needs a DISC, not just a luminosity. The corona
                 # models anchor to the disc's L_2500 through alpha_ox, and a
                 # bare ``composable`` AGN with no disc block publishes no
@@ -308,7 +308,7 @@ def _xray_cases():
                 # scope.
                 "agn": {
                     "type": "composable",
-                    "*": FIXED,
+                    "all_params": FIXED,
                     "log_lbol": Fixed(13.0),
                     "disc": {"type": "multicolor"},
                     "torus": {"type": "skirtor"},
@@ -325,9 +325,9 @@ def _simple_group_cases():
         "sfh",
         "sfh_",
         {
-            "sfh": {"type": "dpl", "*": FREE},
+            "sfh": {"type": "dpl", "all_params": FREE},
             "neb": {"type": "none"},
-            "dust_attenuation": {"law": "power_law", "type": "two_component", "*": FIXED},
+            "dust_attenuation": {"law": "power_law", "type": "two_component", "all_params": FIXED},
         },
     )
     yield Case(
@@ -336,8 +336,8 @@ def _simple_group_cases():
         "met_",
         {
             "neb": {"type": "none"},
-            "dust_attenuation": {"law": "power_law", "type": "two_component", "*": FIXED},
-            "met": {"*": FREE},
+            "dust_attenuation": {"law": "power_law", "type": "two_component", "all_params": FIXED},
+            "met": {"all_params": FREE},
         },
     )
     yield Case(
@@ -346,8 +346,8 @@ def _simple_group_cases():
         "radio_",
         {
             "neb": {"type": "none"},
-            "dust_attenuation": {"law": "power_law", "type": "two_component", "*": FIXED},
-            "radio": {"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}, "*": FREE},
+            "dust_attenuation": {"law": "power_law", "type": "two_component", "all_params": FIXED},
+            "radio": {"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}, "all_params": FREE},
         },
     )
 
@@ -413,7 +413,7 @@ def _build(ssp, obs, case):
     # A case may carry its own sfh group (the sfh case frees it); otherwise the
     # sfh is pinned so it contributes no free params to the prefix under test.
     groups = dict(case["groups"])
-    sfh = dict(groups.pop("sfh", None) or {"type": "dpl", "*": FIXED})
+    sfh = dict(groups.pop("sfh", None) or {"type": "dpl", "all_params": FIXED})
     if case["log_total_mass"] is not None:
         sfh["log_total_mass"] = case["log_total_mass"]
     with warnings.catch_warnings():
@@ -499,9 +499,9 @@ def test_the_dust_freed_set_depends_on_the_selected_law(synthetic_ssp_wide, panc
                     "type": "two_component",
                     "law_bc": law,
                     "law_diff": law,
-                    "*": FREE,
+                    "all_params": FREE,
                 },
-                "dust_emission": {"type": "themis", "*": FIXED},
+                "dust_emission": {"type": "themis", "all_params": FIXED},
                 "neb": {"type": "none"},
             },
         )
@@ -544,16 +544,16 @@ def test_an_omitted_law_scopes_as_its_resolved_default():
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             spec = tengri.parse_groups(
-                sfh={"type": "dpl", "*": FIXED},
+                sfh={"type": "dpl", "all_params": FIXED},
                 dust_attenuation=dust,
                 neb={"type": "none"},
                 redshift=Fixed(0.1),
             )
         return {p for p in spec.free_params if p.startswith("dust_")}
 
-    omitted = freed({"law": "power_law", "type": "two_component", "*": FREE})
+    omitted = freed({"law": "power_law", "type": "two_component", "all_params": FREE})
     explicit = freed(
-        {"type": "two_component", "law_bc": "power_law", "law_diff": "power_law", "*": FREE}
+        {"type": "two_component", "law_bc": "power_law", "law_diff": "power_law", "all_params": FREE}
     )
     assert omitted == explicit, (
         f"omitting the law scopes differently from naming its default: "
@@ -617,13 +617,13 @@ def test_the_threaded_values_actually_reach_the_backend(synthetic_ssp_wide, panc
         model = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
             observation=panchromatic_obs,
-            sfh={"type": "dpl", "*": FIXED},
+            sfh={"type": "dpl", "all_params": FIXED},
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "*": FIXED,
+                "all_params": FIXED,
             },
-            neb={"type": "cb19", "*": FREE},
+            neb={"type": "cb19", "all_params": FREE},
             redshift=Fixed(0.5),
         )
 

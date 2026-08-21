@@ -92,11 +92,11 @@ def test_phot_plus_dn4000_objective_is_jit_and_nonsilent(ssp_data_wne):
         model = SEDModel.build(
             ssp_data=ssp_data_wne,
             observation=obs,
-            sfh={"type": "dpl", "*": FREE},
+            sfh={"type": "dpl", "all_params": FREE},
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "*": FIXED,
+                "all_params": FIXED,
                 "tau_diff": Uniform(0.0, 2.0),
             },
             neb={"type": "none"},
@@ -116,11 +116,11 @@ def test_phot_plus_dn4000_objective_is_jit_and_nonsilent(ssp_data_wne):
         model = SEDModel.build(
             ssp_data=ssp_data_wne,
             observation=obs,
-            sfh={"type": "dpl", "*": FREE},
+            sfh={"type": "dpl", "all_params": FREE},
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "*": FIXED,
+                "all_params": FIXED,
                 "tau_diff": Uniform(0.0, 2.0),
             },
             neb={"type": "none"},
@@ -151,11 +151,11 @@ def test_phot_plus_dn4000_objective_is_jit_and_nonsilent(ssp_data_wne):
         model_bad = SEDModel.build(
             ssp_data=ssp_data_wne,
             observation=obs_bad,
-            sfh={"type": "dpl", "*": FREE},
+            sfh={"type": "dpl", "all_params": FREE},
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "*": FIXED,
+                "all_params": FIXED,
                 "tau_diff": Uniform(0.0, 2.0),
             },
             neb={"type": "none"},
@@ -180,14 +180,14 @@ def test_desi_joint_phot_lines_dn4000_objective(ssp_data_fsps):
             return SEDModel.build(
                 ssp_data=ssp_data_fsps,
                 observation=obs,
-                sfh={"type": "dpl", "*": FREE},
+                sfh={"type": "dpl", "all_params": FREE},
                 dust_attenuation={
                     "type": "two_component",
                     "law": "calzetti",
-                    "*": FIXED,
+                    "all_params": FIXED,
                     "tau_diff": Uniform(0.0, 2.0),
                 },
-                neb={"type": "cue", "*": FIXED},
+                neb={"type": "cue", "all_params": FIXED},
                 redshift=Fixed(0.1),
                 approx=WavePrecomp(),
             )

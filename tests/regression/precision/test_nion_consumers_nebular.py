@@ -64,7 +64,7 @@ def _model(neb, sfh_wild=FREE):
         return SEDModel.build(
             ssp_data=ssp,
             observation=obs,
-            sfh={"type": "dpl", "*": sfh_wild},
+            sfh={"type": "dpl", "all_params": sfh_wild},
             dust_attenuation=None,
             neb=neb,
             redshift=Fixed(Z),
@@ -83,11 +83,11 @@ def _wave_model(neb, sfh_wild=FREE):
         return SEDModel.build(
             ssp_data=ssp,
             observation=obs,
-            sfh={"type": "dpl", "*": sfh_wild},
+            sfh={"type": "dpl", "all_params": sfh_wild},
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "*": FIXED,
+                "all_params": FIXED,
                 "tau_diff": Fixed(0.0),
                 "tau_bc": Fixed(0.0),
             },
@@ -120,7 +120,7 @@ def test_reconstruct_nebular_phot_f64_parity_log_vs_linear():
     reconstruct_nebular_phot(log_nion, p, table) equals the reference
     pow10(log_nion) * (10.0**log_ppq) at rtol=1e-12.
     """
-    m = _wave_model({"type": "cue", "*": FIXED, "logU": Uniform(-4.0, -1.0)}, sfh_wild=FIXED)
+    m = _wave_model({"type": "cue", "all_params": FIXED, "logU": Uniform(-4.0, -1.0)}, sfh_wild=FIXED)
     table = precompute_nebular_grid(m, _LW, n_grid=14)
     assert table.log_phot_per_qh is not None, "photometry channel missing"
 
@@ -163,7 +163,7 @@ def test_reconstruct_nebular_phot_pure_f32_finiteness():
       and has L_nu-scale magnitude (1e20 < max < 1e35)
     - The linear reference pow10(f32 56) * (10**log_ppq) is inf
     """
-    m = _wave_model({"type": "cue", "*": FIXED, "logU": Uniform(-4.0, -1.0)}, sfh_wild=FIXED)
+    m = _wave_model({"type": "cue", "all_params": FIXED, "logU": Uniform(-4.0, -1.0)}, sfh_wild=FIXED)
 
     # Build table at f64
     table_f64 = precompute_nebular_grid(m, _LW, n_grid=14)

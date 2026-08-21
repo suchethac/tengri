@@ -86,7 +86,7 @@ def _build(ssp, *, cue, approx, line_data=None, emission=True, dust=True):
     if cue:
         kw["neb"] = {
             "type": "cue",
-            "*": FIXED,
+            "all_params": FIXED,
             "logU": Uniform(-4.0, -1.0),
             "logZ_gas": Uniform(-1.5, 0.3),
         }
@@ -94,13 +94,13 @@ def _build(ssp, *, cue, approx, line_data=None, emission=True, dust=True):
         d = {
             "type": "two_component",
             "law": "calzetti",
-            "*": FIXED,
+            "all_params": FIXED,
             "tau_bc": Uniform(0.0, 4.0),
             "tau_diff": Uniform(0.0, 3.0),
         }
         kw["dust_attenuation"] = d
         if emission:
-            kw["dust_emission"] = {"type": "dale2014", "*": FIXED}
+            kw["dust_emission"] = {"type": "dale2014", "all_params": FIXED}
         else:
             kw["dust_emission"] = {"type": "none"}
     return SEDModel.build(
@@ -110,7 +110,7 @@ def _build(ssp, *, cue, approx, line_data=None, emission=True, dust=True):
             line_fluxes=_line_data() if line_data is None else line_data,
         ),
         redshift=Fixed(Z),
-        sfh={"type": "dpl", "*": FREE},
+        sfh={"type": "dpl", "all_params": FREE},
         met={"logzsol": Uniform(-1.5, 0.3)},
         approx=approx,
         **kw,
@@ -210,7 +210,7 @@ def test_feature_precomp_without_lines_names_the_problem(synthetic_ssp_wide):
             ssp_data=synthetic_ssp_wide,
             observation=Observation(photometry=Photometry.from_names(BANDS)),
             redshift=Fixed(Z),
-            sfh={"type": "dpl", "*": FREE},
+            sfh={"type": "dpl", "all_params": FREE},
             approx=FeaturePrecomp(),
         )
 

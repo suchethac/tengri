@@ -60,20 +60,20 @@ def _build_state():
     ssp = load_ssp_data(str(_BC03))
     model = SEDModel.build(
         ssp_data=ssp,
-        met={"logzsol": Fixed(_MET_002), "*": FIXED},
+        met={"logzsol": Fixed(_MET_002), "all_params": FIXED},
         sfh={
             "type": "delayed",
             "tau_gyr": Fixed(1.0),
             "age_gyr": Fixed(5.0),
             "log_total_mass": Fixed(0.0),
-            "*": FIXED,
+            "all_params": FIXED,
         },
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "tau_bc": Fixed(0.0),
             "tau_diff": Fixed(0.0),
-            "*": FIXED,
+            "all_params": FIXED,
         },
         redshift=Fixed(0.0),
     )

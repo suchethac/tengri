@@ -64,14 +64,14 @@ def _build(ssp, obs, approx, redshift, dust_attenuation=None):
     dust_attenuation = dust_attenuation or {
         "type": "two_component",
         "law": "calzetti",
-        "*": FIXED,
+        "all_params": FIXED,
     }
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         return SEDModel.build(
             ssp_data=ssp,
             observation=obs,
-            sfh={"type": "dpl", "*": FIXED},
+            sfh={"type": "dpl", "all_params": FIXED},
             dust_attenuation=dust_attenuation,
             neb={"type": "none"},
             redshift=redshift,
@@ -115,7 +115,7 @@ class TestSpectrumLUTAccuracy:
         diffuse_dust = {
             "type": "two_component",
             "law": "calzetti",
-            "*": _FIXED,
+            "all_params": _FIXED,
             "tau_bc": 0.0,
         }
         m_exact = _build(ssp, obs, None, Fixed(0.05), dust_attenuation=diffuse_dust)
@@ -150,7 +150,7 @@ class TestSpectrumLUTAccuracy:
         diffuse_dust = {
             "type": "two_component",
             "law": "calzetti",
-            "*": _FIXED,
+            "all_params": _FIXED,
             "tau_bc": 0.0,
         }
         m_exact = _build(
@@ -209,11 +209,11 @@ class TestSpectrumLUTGuards:
             m = SEDModel.build(
                 ssp_data=ssp,
                 observation=obs,
-                sfh={"type": "dpl", "*": FIXED},
+                sfh={"type": "dpl", "all_params": FIXED},
                 dust_attenuation={
                     "type": "two_component",
                     "law": "calzetti",
-                    "*": FIXED,
+                    "all_params": FIXED,
                 },
                 neb={"type": "none"},
                 redshift=Fixed(0.05),
@@ -241,11 +241,11 @@ class TestSpectrumLUTGuards:
             m = SEDModel.build(
                 ssp_data=ssp,
                 observation=obs,
-                sfh={"type": "dpl", "alpha": Uniform(0.1, 5.0, "sfh_dpl_alpha"), "*": FIXED},
+                sfh={"type": "dpl", "alpha": Uniform(0.1, 5.0, "sfh_dpl_alpha"), "all_params": FIXED},
                 dust_attenuation={
                     "type": "two_component",
                     "law": "calzetti",
-                    "*": FIXED,
+                    "all_params": FIXED,
                 },
                 neb={"type": "none"},
                 redshift=Fixed(0.05),
@@ -278,13 +278,13 @@ class TestSpectrumLUTLines:
             return SEDModel.build(
                 ssp_data=ssp,
                 observation=obs,
-                sfh={"type": "dpl", "*": FIXED},
+                sfh={"type": "dpl", "all_params": FIXED},
                 dust_attenuation={
                     "type": "two_component",
                     "law": "calzetti",
-                    "*": FIXED,
+                    "all_params": FIXED,
                 },
-                neb={"type": "cue", "*": FIXED},
+                neb={"type": "cue", "all_params": FIXED},
                 redshift=Fixed(0.05),
                 approx=approx,
             )
@@ -370,7 +370,7 @@ class TestJointPrecomp:
         dust = {
             "type": "two_component",
             "law": "calzetti",
-            "*": FIXED,
+            "all_params": FIXED,
             "tau_bc": 0.0,
         }
         with warnings.catch_warnings():
@@ -378,7 +378,7 @@ class TestJointPrecomp:
             return SEDModel.build(
                 ssp_data=ssp,
                 observation=obs,
-                sfh={"type": "dpl", "*": FIXED},
+                sfh={"type": "dpl", "all_params": FIXED},
                 dust_attenuation=dust,
                 neb={"type": "none"},
                 redshift=redshift,

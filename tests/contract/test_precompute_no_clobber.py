@@ -89,12 +89,12 @@ def _build_with_wave_precomp(ssp_data, filters):
         observation=Observation(photometry=Photometry(filters=tuple(filters))),
         redshift=Fixed(0.05),
         approx=WavePrecomp(),
-        sfh={"type": "dpl", "*": FIXED},
+        sfh={"type": "dpl", "all_params": FIXED},
         neb={"type": "none"},
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
-            "*": FIXED,
+            "all_params": FIXED,
             "tau_diff": 0.5,
         },
     )
@@ -141,12 +141,12 @@ def test_unconditional_pass_still_resolves_without_approx(synthetic_ssp, tophat_
         observation=Observation(photometry=Photometry(filters=tuple(tophat_filters))),
         redshift=Fixed(0.05),
         approx=None,
-        sfh={"type": "dpl", "*": FIXED},
+        sfh={"type": "dpl", "all_params": FIXED},
         neb={"type": "none"},
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
-            "*": FIXED,
+            "all_params": FIXED,
             "tau_diff": 0.5,
         },
     )

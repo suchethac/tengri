@@ -46,11 +46,11 @@ def _build(ssp, approx, *, z=0.8, tau_diff=0.0, tau_bc=0.0, igm=True, **kw):
     return SEDModel.build(
         ssp_data=ssp,
         observation=Observation(photometry=Photometry.from_names(BANDS)),
-        sfh={"type": "dpl", "*": FREE},
+        sfh={"type": "dpl", "all_params": FREE},
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "*": FIXED,
+            "all_params": FIXED,
             "tau_diff": tau_diff,
             "tau_bc": tau_bc,
         },
@@ -279,11 +279,11 @@ def test_free_redshift_folds_on_the_ztable_grid(ssp):
     m = SEDModel.build(
         ssp_data=ssp,
         observation=Observation(photometry=Photometry.from_names(BANDS)),
-        sfh={"type": "dpl", "*": FREE},
+        sfh={"type": "dpl", "all_params": FREE},
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "*": FIXED,
+            "all_params": FIXED,
             "tau_diff": 0.7,
             "tau_bc": 1.0,
         },
@@ -300,11 +300,11 @@ def test_free_redshift_folds_on_the_ztable_grid(ssp):
     m_exact = SEDModel.build(
         ssp_data=ssp,
         observation=Observation(photometry=Photometry.from_names(BANDS)),
-        sfh={"type": "dpl", "*": FREE},
+        sfh={"type": "dpl", "all_params": FREE},
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "*": FIXED,
+            "all_params": FIXED,
             "tau_diff": 0.7,
             "tau_bc": 1.0,
         },

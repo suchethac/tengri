@@ -41,8 +41,8 @@ def _build(ssp, obs, *, igm_on, approx=None, model="inoue"):
     kwargs = dict(
         ssp_data=ssp,
         observation=obs,
-        sfh={"type": "dpl", "*": FREE},
-        dust_attenuation={"type": "two_component", "law": "calzetti", "*": FIXED},
+        sfh={"type": "dpl", "all_params": FREE},
+        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
         neb={"type": "none"},
         redshift=Fixed(3.0),
         approx=approx,
@@ -99,8 +99,8 @@ def test_predict_obs_sed_runs_with_igm_and_dla(synthetic_ssp_wide, synthetic_top
     model = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
         observation=synthetic_tophat_obs,
-        sfh={"type": "dpl", "*": FREE},
-        dust_attenuation={"type": "two_component", "law": "calzetti", "*": FIXED},
+        sfh={"type": "dpl", "all_params": FREE},
+        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
         neb={"type": "none"},
         redshift=Fixed(3.0),
         igm={"type": "inoue", "dla": {"log_n_hi": Fixed(21.0)}},
@@ -119,8 +119,8 @@ def test_igm_attenuates_spectrum_precomp_path(synthetic_ssp_wide):
     common = dict(
         ssp_data=synthetic_ssp_wide,
         observation=obs,
-        sfh={"type": "dpl", "*": FREE},
-        dust_attenuation={"type": "two_component", "law": "calzetti", "*": FIXED},
+        sfh={"type": "dpl", "all_params": FREE},
+        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
         neb={"type": "none"},
         redshift=Fixed(3.0),
         approx=SpectrumPrecomp(),
@@ -144,11 +144,11 @@ def _igm_parity_ratios(ssp, obs, *, redshift_spec, params=None, approx=None):
     common = dict(
         ssp_data=ssp,
         observation=obs,
-        sfh={"type": "dpl", "*": FIXED},
+        sfh={"type": "dpl", "all_params": FIXED},
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "*": FIXED,
+            "all_params": FIXED,
             "tau_bc": 0.0,
             "tau_diff": 0.0,
         },

@@ -38,10 +38,10 @@ def cue_model(synthetic_ssp_wide):
                 "tau_gyr": Fixed(1.0),
                 "age_gyr": Fixed(5.0),
                 "log_total_mass": Fixed(0.0),
-                "*": FIXED,
+                "all_params": FIXED,
             },
-            dust_attenuation={"law": "power_law", "type": "two_component", "*": FIXED},
-            neb={"type": "cue", "*": FIXED},
+            dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
+            neb={"type": "cue", "all_params": FIXED},
             redshift=Fixed(0.0),
         )
 

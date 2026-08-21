@@ -104,15 +104,15 @@ def test_young_knot_preserves_mass_conservation():
                 "tau_gyr": Fixed(0.5),
                 "age_gyr": Fixed(1.0),
                 "log_total_mass": Fixed(log_mass),
-                "*": FIXED,
+                "all_params": FIXED,
             },
-            met={"logzsol": Fixed(0.0), "*": FIXED},
+            met={"logzsol": Fixed(0.0), "all_params": FIXED},
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
                 "tau_bc": Fixed(0.0),
                 "tau_diff": Fixed(0.0),
-                "*": FIXED,
+                "all_params": FIXED,
             },
             redshift=Fixed(0.05),
         )

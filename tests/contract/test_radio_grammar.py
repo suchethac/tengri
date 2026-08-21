@@ -31,7 +31,7 @@ _DUST0 = {
     "law": "power_law",
     "tau_bc": Fixed(0.0),
     "tau_diff": Fixed(0.0),
-    "*": FIXED,
+    "all_params": FIXED,
 }
 
 
@@ -45,7 +45,7 @@ class TestRadioGrammarParsing:
         # Users must use the composable surface with sf/agn axes.
         with pytest.raises(ValueError, match=r"legacy.*retired"):
             parse_groups(
-                sfh={"type": "dpl", "*": FIXED},
+                sfh={"type": "dpl", "all_params": FIXED},
                 radio={"type": "condon92"},
                 redshift=Fixed(0.1),
             )
@@ -54,7 +54,7 @@ class TestRadioGrammarParsing:
         """Legacy radio={'type': 'none'} form is retired (PR6)."""
         with pytest.raises(ValueError, match=r"legacy.*retired"):
             parse_groups(
-                sfh={"type": "dpl", "*": FIXED},
+                sfh={"type": "dpl", "all_params": FIXED},
                 radio={"type": "none"},
                 redshift=Fixed(0.1),
             )
@@ -62,7 +62,7 @@ class TestRadioGrammarParsing:
     def test_composable_sf_only(self):
         """radio={'sf': {'type': 'delvecchio2021'}} enables SF only."""
         params = parse_groups(
-            sfh={"type": "dpl", "*": FIXED},
+            sfh={"type": "dpl", "all_params": FIXED},
             radio={"sf": {"type": "delvecchio2021"}},
             redshift=Fixed(0.1),
         )
@@ -73,7 +73,7 @@ class TestRadioGrammarParsing:
     def test_composable_agn_only(self):
         """radio={'agn': {'type': 'dpl'}} enables AGN only."""
         params = parse_groups(
-            sfh={"type": "dpl", "*": FIXED},
+            sfh={"type": "dpl", "all_params": FIXED},
             radio={"agn": {"type": "dpl"}},
             redshift=Fixed(0.1),
         )
@@ -84,7 +84,7 @@ class TestRadioGrammarParsing:
     def test_composable_both_axes(self):
         """radio={'sf':{...}, 'agn':{...}} specifies both axes."""
         params = parse_groups(
-            sfh={"type": "dpl", "*": FIXED},
+            sfh={"type": "dpl", "all_params": FIXED},
             radio={
                 "sf": {"type": "mccheyne2022"},
                 "agn": {"type": "dpl"},
@@ -98,7 +98,7 @@ class TestRadioGrammarParsing:
     def test_sf_none_disables_sf_only(self):
         """radio={'sf': {'type': 'none'}} disables SF, keeps AGN."""
         params = parse_groups(
-            sfh={"type": "dpl", "*": FIXED},
+            sfh={"type": "dpl", "all_params": FIXED},
             radio={
                 "sf": {"type": "none"},
                 "agn": {"type": "powerlaw"},
@@ -112,7 +112,7 @@ class TestRadioGrammarParsing:
     def test_agn_none_disables_agn_only(self):
         """radio={'agn': {'type': 'none'}} disables AGN, keeps SF."""
         params = parse_groups(
-            sfh={"type": "dpl", "*": FIXED},
+            sfh={"type": "dpl", "all_params": FIXED},
             radio={
                 "sf": {"type": "bell2003"},
                 "agn": {"type": "none"},
@@ -126,7 +126,7 @@ class TestRadioGrammarParsing:
     def test_both_none_disables_radio(self):
         """radio={'sf': {'type': 'none'}, 'agn': {'type': 'none'}} disables radio."""
         params = parse_groups(
-            sfh={"type": "dpl", "*": FIXED},
+            sfh={"type": "dpl", "all_params": FIXED},
             radio={
                 "sf": {"type": "none"},
                 "agn": {"type": "none"},
@@ -144,7 +144,7 @@ class TestRadioGrammarParsing:
         """
         with pytest.raises(ValueError, match=r"retired and cannot be mixed"):
             parse_groups(
-                sfh={"type": "dpl", "*": FIXED},
+                sfh={"type": "dpl", "all_params": FIXED},
                 radio={
                     "type": "bell2003",
                     "sf": {"type": "delvecchio2021"},
@@ -156,7 +156,7 @@ class TestRadioGrammarParsing:
         """Invalid SF variant raises with helpful error."""
         with pytest.raises(ValueError, match="Unknown radio sf type"):
             parse_groups(
-                sfh={"type": "dpl", "*": FIXED},
+                sfh={"type": "dpl", "all_params": FIXED},
                 radio={"sf": {"type": "invalid_sf"}},
                 redshift=Fixed(0.1),
             )
@@ -165,7 +165,7 @@ class TestRadioGrammarParsing:
         """Invalid AGN variant raises with helpful error."""
         with pytest.raises(ValueError, match="Unknown radio agn type"):
             parse_groups(
-                sfh={"type": "dpl", "*": FIXED},
+                sfh={"type": "dpl", "all_params": FIXED},
                 radio={"agn": {"type": "invalid_agn"}},
                 redshift=Fixed(0.1),
             )
@@ -174,7 +174,7 @@ class TestRadioGrammarParsing:
         """radio['sf'] must be a dict."""
         with pytest.raises(TypeError, match="radio\\['sf'\\] must be a dict"):
             parse_groups(
-                sfh={"type": "dpl", "*": FIXED},
+                sfh={"type": "dpl", "all_params": FIXED},
                 radio={"sf": "bell2003"},
                 redshift=Fixed(0.1),  # string, not dict
             )
@@ -183,7 +183,7 @@ class TestRadioGrammarParsing:
         """radio['agn'] must be a dict."""
         with pytest.raises(TypeError, match="radio\\['agn'\\] must be a dict"):
             parse_groups(
-                sfh={"type": "dpl", "*": FIXED},
+                sfh={"type": "dpl", "all_params": FIXED},
                 radio={"agn": "powerlaw"},
                 redshift=Fixed(0.1),  # string, not dict
             )
@@ -271,7 +271,7 @@ class TestRadioComponentPhysics:
         """SEDModel.build with radio SF only — selectors reach the spec."""
         model = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
-            sfh={"type": "dpl", "*": FIXED},
+            sfh={"type": "dpl", "all_params": FIXED},
             radio={"sf": {"type": "bell2003"}, "agn": {"type": "none"}},
             redshift=Fixed(0.1),
         )
@@ -283,7 +283,7 @@ class TestRadioComponentPhysics:
         """SEDModel.build with radio AGN only — dpl now reachable via grammar."""
         model = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
-            sfh={"type": "dpl", "*": FIXED},
+            sfh={"type": "dpl", "all_params": FIXED},
             radio={"sf": {"type": "none"}, "agn": {"type": "dpl"}},
             redshift=Fixed(0.1),
         )
@@ -295,7 +295,7 @@ class TestRadioComponentPhysics:
         """SEDModel.build with both SF and AGN radio."""
         model = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
-            sfh={"type": "dpl", "*": FIXED},
+            sfh={"type": "dpl", "all_params": FIXED},
             radio={"sf": {"type": "delvecchio2021"}, "agn": {"type": "dpl"}},
             redshift=Fixed(0.1),
         )
@@ -309,7 +309,7 @@ class TestRadioComponentPhysics:
 
         model = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
-            sfh={"type": "delayed", "*": FIXED},
+            sfh={"type": "delayed", "all_params": FIXED},
             dust_attenuation=_DUST0,
             radio={"sf": {"type": "none"}, "agn": {"type": "powerlaw"}},
             redshift=Fixed(0.1),
@@ -322,7 +322,7 @@ class TestRadioComponentPhysics:
 
         model = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
-            sfh={"type": "delayed", "*": FIXED},
+            sfh={"type": "delayed", "all_params": FIXED},
             dust_attenuation=_DUST0,
             radio={"sf": {"type": "bell2003"}, "agn": {"type": "none"}},
             redshift=Fixed(0.1),
@@ -335,7 +335,7 @@ class TestRadioComponentPhysics:
 
         model = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
-            sfh={"type": "delayed", "*": FIXED},
+            sfh={"type": "delayed", "all_params": FIXED},
             dust_attenuation=_DUST0,
             radio={"sf": {"type": "mccheyne2022"}, "agn": {"type": "dpl"}},
             redshift=Fixed(0.1),
@@ -355,7 +355,7 @@ class TestRadioLegacyTypeRetirement:
         """radio={'type': 'condon92'} raises, showing composable form."""
         with pytest.raises(ValueError, match=r"legacy.*retired"):
             parse_groups(
-                sfh={"type": "dpl", "*": FIXED},
+                sfh={"type": "dpl", "all_params": FIXED},
                 radio={"type": "condon92"},
                 redshift=Fixed(0.1),
             )
@@ -364,7 +364,7 @@ class TestRadioLegacyTypeRetirement:
         """radio={'type': 'none'} raises (use radio={'sf': None} instead)."""
         with pytest.raises(ValueError, match=r"legacy.*retired"):
             parse_groups(
-                sfh={"type": "dpl", "*": FIXED},
+                sfh={"type": "dpl", "all_params": FIXED},
                 radio={"type": "none"},
                 redshift=Fixed(0.1),
             )
@@ -373,7 +373,7 @@ class TestRadioLegacyTypeRetirement:
         """radio={'type': 'radio_dpl'} raises."""
         with pytest.raises(ValueError, match=r"legacy.*retired"):
             parse_groups(
-                sfh={"type": "dpl", "*": FIXED},
+                sfh={"type": "dpl", "all_params": FIXED},
                 radio={"type": "radio_dpl"},
                 redshift=Fixed(0.1),
             )
@@ -382,7 +382,7 @@ class TestRadioLegacyTypeRetirement:
         """Error message for condon92 includes the composable equivalent."""
         with pytest.raises(ValueError) as excinfo:
             parse_groups(
-                sfh={"type": "dpl", "*": FIXED},
+                sfh={"type": "dpl", "all_params": FIXED},
                 radio={"type": "condon92"},
                 redshift=Fixed(0.1),
             )
@@ -395,7 +395,7 @@ class TestRadioLegacyTypeRetirement:
     def test_composable_radio_sf_still_works(self):
         """radio={'sf': {'type': 'bell2003'}} still works (non-legacy form)."""
         params = parse_groups(
-            sfh={"type": "dpl", "*": FIXED},
+            sfh={"type": "dpl", "all_params": FIXED},
             radio={"sf": {"type": "bell2003"}},
             redshift=Fixed(0.1),
         )
@@ -405,7 +405,7 @@ class TestRadioLegacyTypeRetirement:
     def test_composable_radio_agn_still_works(self):
         """radio={'agn': {'type': 'powerlaw'}} still works (non-legacy form)."""
         params = parse_groups(
-            sfh={"type": "dpl", "*": FIXED},
+            sfh={"type": "dpl", "all_params": FIXED},
             radio={"agn": {"type": "powerlaw"}},
             redshift=Fixed(0.1),
         )
@@ -415,7 +415,7 @@ class TestRadioLegacyTypeRetirement:
     def test_composable_radio_both_axes_still_works(self):
         """radio={'sf': {...}, 'agn': {...}} still works (non-legacy form)."""
         params = parse_groups(
-            sfh={"type": "dpl", "*": FIXED},
+            sfh={"type": "dpl", "all_params": FIXED},
             radio={
                 "sf": {"type": "bell2003"},
                 "agn": {"type": "powerlaw"},

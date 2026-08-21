@@ -41,7 +41,7 @@ _DUST0 = {
     "law": "power_law",
     "tau_bc": Fixed(0.0),
     "tau_diff": Fixed(0.0),
-    "*": FIXED,
+    "all_params": FIXED,
 }
 
 
@@ -77,7 +77,7 @@ class TestFirrcGrammar:
 
     def test_delv_per_param_free(self):
         params = parse_groups(
-            sfh={"type": "dpl", "*": FIXED},
+            sfh={"type": "dpl", "all_params": FIXED},
             radio={"sf": {"type": "delvecchio2021", "delv_q0": Uniform(2.4, 3.1)}},
             redshift=Fixed(0.1),
         )
@@ -85,7 +85,7 @@ class TestFirrcGrammar:
 
     def test_mcch_per_param_free(self):
         params = parse_groups(
-            sfh={"type": "dpl", "*": FIXED},
+            sfh={"type": "dpl", "all_params": FIXED},
             radio={"sf": {"type": "mccheyne2022", "mcch_q0": Uniform(1.5, 2.5)}},
             redshift=Fixed(0.1),
         )
@@ -93,7 +93,7 @@ class TestFirrcGrammar:
 
     def test_full_name_also_accepted(self):
         params = parse_groups(
-            sfh={"type": "dpl", "*": FIXED},
+            sfh={"type": "dpl", "all_params": FIXED},
             radio={"sf": {"type": "delvecchio2021", "radio_delv_q0": Uniform(2.4, 3.1)}},
             redshift=Fixed(0.1),
         )
@@ -102,7 +102,7 @@ class TestFirrcGrammar:
     def test_dpl_agn_per_param_free(self):
         """The symmetric radio={'agn': {...}} sub-block frees DPL knobs."""
         params = parse_groups(
-            sfh={"type": "dpl", "*": FIXED},
+            sfh={"type": "dpl", "all_params": FIXED},
             radio={"agn": {"type": "dpl", "alpha_thin": Uniform(-1.5, 0.0)}},
             redshift=Fixed(0.1),
         )
@@ -111,7 +111,7 @@ class TestFirrcGrammar:
     def test_typo_in_sf_block_raises(self):
         with pytest.raises(ValueError, match="Unknown key 'delv_q00'"):
             parse_groups(
-                sfh={"type": "dpl", "*": FIXED},
+                sfh={"type": "dpl", "all_params": FIXED},
                 radio={"sf": {"type": "delvecchio2021", "delv_q00": Uniform(2.0, 3.0)}},
                 redshift=Fixed(0.1),
             )
@@ -119,7 +119,7 @@ class TestFirrcGrammar:
     def test_cross_model_param_not_freed_by_default(self):
         """Freeing a delv coeff leaves the mcch coeffs fixed (and vice versa)."""
         params = parse_groups(
-            sfh={"type": "dpl", "*": FIXED},
+            sfh={"type": "dpl", "all_params": FIXED},
             radio={"sf": {"type": "delvecchio2021", "delv_q0": Uniform(2.4, 3.1)}},
             redshift=Fixed(0.1),
         )
@@ -150,7 +150,7 @@ class TestFirrcSlopeDegeneracyGuard:
 
         with pytest.warns(RadioFIRRCDegeneracyWarning, match="degenerate"):
             parse_groups(
-                sfh={"type": "dpl", "*": FIXED}, radio={"sf": radio_sf}, redshift=Fixed(0.1)
+                sfh={"type": "dpl", "all_params": FIXED}, radio={"sf": radio_sf}, redshift=Fixed(0.1)
             )
 
     def test_free_q0_does_not_warn(self):
@@ -162,7 +162,7 @@ class TestFirrcSlopeDegeneracyGuard:
         with warnings.catch_warnings():
             warnings.simplefilter("error", RadioFIRRCDegeneracyWarning)
             parse_groups(
-                sfh={"type": "dpl", "*": FIXED},
+                sfh={"type": "dpl", "all_params": FIXED},
                 radio={"sf": {"type": "delvecchio2021", "delv_q0": Uniform(2.4, 3.1)}},
                 redshift=Fixed(0.1),
             )
@@ -175,7 +175,7 @@ class TestFirrcSlopeDegeneracyGuard:
         with warnings.catch_warnings():
             warnings.simplefilter("error", RadioFIRRCDegeneracyWarning)
             parse_groups(
-                sfh={"type": "dpl", "*": FIXED},
+                sfh={"type": "dpl", "all_params": FIXED},
                 radio={"sf": {"type": "delvecchio2021"}},
                 redshift=Fixed(0.1),
             )
@@ -189,7 +189,7 @@ class TestFirrcSlopeDegeneracyGuard:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", RadioFIRRCDegeneracyWarning)
             params = parse_groups(
-                sfh={"type": "dpl", "*": FIXED},
+                sfh={"type": "dpl", "all_params": FIXED},
                 radio={"sf": {"type": "mccheyne2022", "mcch_mass_slope": Uniform(-0.5, 0.0)}},
                 redshift=Fixed(0.1),
             )
@@ -212,7 +212,7 @@ class TestFirrcBuilderGrammar:
         sf = builders.radio.sf.delvecchio2021(delv_q0=Uniform(2.4, 3.1))
         assert sf["type"] == "delvecchio2021"
         params = parse_groups(
-            sfh={"type": "dpl", "*": FIXED}, radio={"sf": sf}, redshift=Fixed(0.1)
+            sfh={"type": "dpl", "all_params": FIXED}, radio={"sf": sf}, redshift=Fixed(0.1)
         )
         assert "radio_delv_q0" in params.free_params
 
@@ -222,7 +222,7 @@ class TestFirrcBuilderGrammar:
         agn = builders.radio.agn.dpl(alpha_thin=Uniform(-1.5, 0.0))
         assert agn["type"] == "dpl"
         params = parse_groups(
-            sfh={"type": "dpl", "*": FIXED}, radio={"agn": agn}, redshift=Fixed(0.1)
+            sfh={"type": "dpl", "all_params": FIXED}, radio={"agn": agn}, redshift=Fixed(0.1)
         )
         assert "radio_alpha_thin" in params.free_params
 
@@ -232,13 +232,13 @@ class TestFirrcBuilderGrammar:
 
         model = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
-            sfh={"type": "delayed", "*": FIXED},
+            sfh={"type": "delayed", "all_params": FIXED},
             dust_attenuation={
                 "type": "two_component",
                 "law": "power_law",
                 "tau_bc": Fixed(0.0),
                 "tau_diff": Fixed(0.0),
-                "*": FIXED,
+                "all_params": FIXED,
             },
             radio={"sf": builders.radio.sf.mccheyne2022(mcch_q0=Uniform(1.5, 2.5))},
             redshift=Fixed(0.3),
@@ -330,7 +330,7 @@ class TestFirrcEndToEnd:
         through ``predict_state({})`` — exercises the component threading."""
         model = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
-            sfh={"type": "delayed", "*": FIXED},
+            sfh={"type": "delayed", "all_params": FIXED},
             dust_attenuation=_DUST0,
             radio={"sf": {"type": "delvecchio2021"}},
             redshift=Fixed(0.5),
@@ -343,7 +343,7 @@ class TestFirrcEndToEnd:
         supplied value is finite (``predict_state({})`` would omit free params)."""
         model = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
-            sfh={"type": "delayed", "*": FIXED},
+            sfh={"type": "delayed", "all_params": FIXED},
             dust_attenuation=_DUST0,
             radio={"sf": {"type": "delvecchio2021", "delv_q0": Uniform(2.4, 3.1)}},
             redshift=Fixed(0.5),

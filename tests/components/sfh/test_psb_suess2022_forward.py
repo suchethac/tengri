@@ -23,7 +23,7 @@ _DUST_OFF = {
     "type": "two_component",
     "tau_bc": Fixed(0.0),
     "tau_diff": Fixed(0.0),
-    "*": FIXED,
+    "all_params": FIXED,
 }
 
 
@@ -31,7 +31,7 @@ def _build_psb(ssp, log_total_mass=10.0):
     """A dust-free, solar-metallicity psb_suess2022 model at z = 0."""
     return SEDModel.build(
         ssp_data=ssp,
-        met={"logzsol": Fixed(0.0), "*": FIXED},
+        met={"logzsol": Fixed(0.0), "all_params": FIXED},
         sfh={
             "type": "psb_suess2022",
             "log_total_mass": Fixed(log_total_mass),
@@ -41,7 +41,7 @@ def _build_psb(ssp, log_total_mass=10.0):
             "ratio_old_0": Fixed(0.2),
             "ratio_old_1": Fixed(-0.3),
             "ratio_old_2": Fixed(0.0),
-            "*": FIXED,
+            "all_params": FIXED,
         },
         dust_attenuation=_DUST_OFF,
         redshift=Fixed(0.0),

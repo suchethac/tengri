@@ -38,7 +38,7 @@ class TestWildcard:
     """Test wildcard ('*') semantics for per-group parameter selection."""
 
     def test_star_free_frees_all_declared_params(self):
-        """With '*': FREE, all params in the group should be free."""
+        """With 'all_params': FREE, all params in the group should be free."""
         params = parse_groups(
             sfh={"type": "dpl", "*": FREE},
             redshift=Fixed(0.1),
@@ -51,7 +51,7 @@ class TestWildcard:
         assert "sfh_dpl_log_total_mass" in params.free_params
 
     def test_star_fixed_fixes_all_declared_params(self):
-        """With '*': FIXED, all params in the group should be fixed."""
+        """With 'all_params': FIXED, all params in the group should be fixed."""
         params = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
             redshift=Fixed(0.1),
@@ -570,7 +570,7 @@ class TestEdgeCases:
         assert "redshift" in params.all_params
 
     def test_full_prefix_override_under_star_fixed(self):
-        """Issue #424: per-param override under '*': FIXED must accept the
+        """Issue #424: per-param override under 'all_params': FIXED must accept the
         full-prefixed key (``neb_logU``) as well as the short form
         (``logU``). Previously the full-prefix form was silently dropped,
         leaving the default in place — a silent footgun for new users.
@@ -727,7 +727,7 @@ class TestAllParamsAlias:
 
     @pytest.mark.parametrize("wildcard_key", ["*", "all_params"])
     def test_free_frees_all_params(self, wildcard_key):
-        """``all_params: FREE`` frees every declared param, same as ``'*': FREE``."""
+        """``all_params: FREE`` frees every declared param, same as ``'all_params': FREE``."""
         params = parse_groups(
             sfh={"type": "dpl", wildcard_key: FREE},
             redshift=Fixed(0.1),
@@ -737,7 +737,7 @@ class TestAllParamsAlias:
 
     @pytest.mark.parametrize("wildcard_key", ["*", "all_params"])
     def test_fixed_fixes_all_params(self, wildcard_key):
-        """``all_params: FIXED`` fixes every declared param, same as ``'*': FIXED``."""
+        """``all_params: FIXED`` fixes every declared param, same as ``'all_params': FIXED``."""
         params = parse_groups(
             sfh={"type": "dpl", wildcard_key: FIXED},
             redshift=Fixed(0.1),

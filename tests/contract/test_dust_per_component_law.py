@@ -25,7 +25,7 @@ def _build(ssp, obs, **dust_extra):
     dust = {
         "law": "power_law",
         "type": "two_component",
-        "*": tengri.FIXED,
+        "all_params": tengri.FIXED,
         "tau_bc": 1.0,
         "tau_diff": 0.0,
     }
@@ -33,7 +33,7 @@ def _build(ssp, obs, **dust_extra):
     return tengri.SEDModel.build(
         ssp,
         observation=obs,
-        sfh={"type": "tsnorm", "*": tengri.FIXED},
+        sfh={"type": "tsnorm", "all_params": tengri.FIXED},
         dust_attenuation=dust,
         dust_emission={"type": "none"},
         neb={"type": "none"},
@@ -94,7 +94,7 @@ class TestLawInheritance:
     def _dust_no_law(self, **extra):
         dust = {
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_bc": 1.0,
             "tau_diff": 0.0,
         }
@@ -107,7 +107,7 @@ class TestLawInheritance:
             tengri.SEDModel.build(
                 synthetic_ssp_wide,
                 observation=synthetic_tophat_obs,
-                sfh={"type": "tsnorm", "*": tengri.FIXED},
+                sfh={"type": "tsnorm", "all_params": tengri.FIXED},
                 dust_attenuation=self._dust_no_law(law_diff="calzetti"),
                 neb={"type": "none"},
                 redshift=tengri.Fixed(0.05),
@@ -119,7 +119,7 @@ class TestLawInheritance:
             tengri.SEDModel.build(
                 synthetic_ssp_wide,
                 observation=synthetic_tophat_obs,
-                sfh={"type": "tsnorm", "*": tengri.FIXED},
+                sfh={"type": "tsnorm", "all_params": tengri.FIXED},
                 dust_attenuation=self._dust_no_law(law_bc="calzetti"),
                 neb={"type": "none"},
                 redshift=tengri.Fixed(0.05),
@@ -131,7 +131,7 @@ class TestLawInheritance:
             tengri.SEDModel.build(
                 synthetic_ssp_wide,
                 observation=synthetic_tophat_obs,
-                sfh={"type": "tsnorm", "*": tengri.FIXED},
+                sfh={"type": "tsnorm", "all_params": tengri.FIXED},
                 dust_attenuation=self._dust_no_law(),
                 neb={"type": "none"},
                 redshift=tengri.Fixed(0.05),

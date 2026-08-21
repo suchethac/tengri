@@ -364,15 +364,15 @@ def test_massmap_box_builds_via_group_dict_grammar(synthetic_ssp):
             "logzsol_start": Fixed(-2.15),
             "logzsol_final": Fixed(0.15),
             "yield": Fixed(0.03),
-            "*": FIXED,
+            "all_params": FIXED,
         },
-        sfh={"type": "const", "log_total_mass": Fixed(10.0), "*": FIXED},
+        sfh={"type": "const", "log_total_mass": Fixed(10.0), "all_params": FIXED},
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "tau_bc": Fixed(0.0),
             "tau_diff": Fixed(0.0),
-            "*": FIXED,
+            "all_params": FIXED,
         },
         redshift=Fixed(0.0),
     )

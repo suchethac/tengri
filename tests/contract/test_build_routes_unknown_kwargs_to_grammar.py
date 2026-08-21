@@ -44,7 +44,7 @@ def _build(ssp, obs, **kw):
     return SEDModel.build(
         ssp_data=ssp,
         observation=obs,
-        sfh={"type": "const", "*": FIXED},
+        sfh={"type": "const", "all_params": FIXED},
         redshift=Fixed(0.1),
         **kw,
     )

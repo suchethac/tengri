@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""``dust.emission {'*': FREE}`` freed 14 parameters ``energy_balance_split`` never reads.
+"""``dust.emission {'all_params': FREE}`` freed 14 parameters ``energy_balance_split`` never reads.
 
 The last surviving instance of #1482, and the one its own fix could not reach.
 
@@ -114,15 +114,15 @@ def _build(ssp: SSPData, obs: Observation) -> SEDModel:
         return SEDModel.build(
             ssp_data=ssp,
             observation=obs,
-            sfh={"type": "dpl", "*": FIXED},
+            sfh={"type": "dpl", "all_params": FIXED},
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "*": FIXED,
+                "all_params": FIXED,
                 "tau_bc": 2.0,
                 "tau_diff": 1.5,
             },
-            dust_emission={"type": "energy_balance_split", "*": FREE},
+            dust_emission={"type": "energy_balance_split", "all_params": FREE},
             neb={"type": "none"},
             redshift=Fixed(0.5),
         )
@@ -159,7 +159,7 @@ def test_wildcard_frees_no_foreign_engine_parameter(panchromatic_ssp, panchromat
 
     leaked = sorted(f for f in _FOREIGN if f in freed)
     assert not leaked, (
-        f"dust.emission {{'type': 'energy_balance_split', '*': FREE}} freed {leaked}, "
+        f"dust.emission {{'type': 'energy_balance_split', 'all_params': FREE}} freed {leaked}, "
         "which belong to the Draine & Li / Dale / MBB engines this model never "
         "builds. The sub-block fell back to the static union of every IR engine's "
         "parameters because an empty class-level _priors could not be told from "
@@ -190,7 +190,7 @@ def test_the_engines_own_knobs_are_still_freed(panchromatic_ssp, panchromatic_ob
     The opposite failure to the one above, and the reason ``_declared_param_names``
     returned ``None`` rather than an empty frozenset in the first place: answering
     "declares nothing" for an engine that declares elsewhere would pin every knob
-    it reads, silently making ``'*': FREE`` a no-op.
+    it reads, silently making ``'all_params': FREE`` a no-op.
     """
     freed = set(_freed_and_live(_build(panchromatic_ssp, panchromatic_obs))[0])
 
@@ -199,7 +199,7 @@ def test_the_engines_own_knobs_are_still_freed(panchromatic_ssp, panchromatic_ob
     expected = _ENGINE_KNOBS - {"dust_L_agn_ir"}
     missing = sorted(expected - freed)
     assert not missing, (
-        f"'*': FREE no longer frees {missing}, which energy_balance_split's predict "
+        f"'all_params': FREE no longer frees {missing}, which energy_balance_split's predict "
         "reads. The narrowing has overshot from 'scoped' into 'pinned'."
     )
 
@@ -220,15 +220,15 @@ def test_narrowing_does_not_orphan_eta_balance(panchromatic_ssp, panchromatic_ob
         one, so writing it here would be silently ignored.
 
     So excluding it from the sub-block's declared set left it freed by nothing:
-    ``dust={'*': FREE}`` does not reach it either (measured: that wildcard frees
+    ``dust={'all_params': FREE}`` does not reach it either (measured: that wildcard frees
     ``dust_tau_bc`` and ``dust_tau_diff``, and no eta_balance). Orphaning a live
     parameter is the mirror image of the bug being fixed -- inertness tests stay
     green, because a parameter that is never freed is never inert.
     """
     freed = set(_freed_and_live(_build(panchromatic_ssp, panchromatic_obs))[0])
     assert "dust_eta_balance" in freed, (
-        "dust.emission {'*': FREE} no longer frees dust_eta_balance. The grammar "
-        "assigns it to dust.emission, and dust={'*': FREE} does not reach it, so "
+        "dust.emission {'all_params': FREE} no longer frees dust_eta_balance. The grammar "
+        "assigns it to dust.emission, and dust={'all_params': FREE} does not reach it, so "
         "it is now freed by no wildcard at all despite moving the prediction."
     )
 
@@ -237,13 +237,13 @@ def test_narrowing_does_not_orphan_eta_balance(panchromatic_ssp, panchromatic_ob
         group_wildcard = SEDModel.build(
             ssp_data=panchromatic_ssp,
             observation=panchromatic_obs,
-            sfh={"type": "dpl", "*": FIXED},
+            sfh={"type": "dpl", "all_params": FIXED},
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "*": FREE,
+                "all_params": FREE,
             },
-            dust_emission={"type": "energy_balance_split", "*": FIXED},
+            dust_emission={"type": "energy_balance_split", "all_params": FIXED},
             neb={"type": "none"},
             redshift=Fixed(0.5),
         )
@@ -252,6 +252,6 @@ def test_narrowing_does_not_orphan_eta_balance(panchromatic_ssp, panchromatic_ob
     # it. If that ever changes, this assertion should be revisited rather than
     # the one above deleted.
     assert "dust_eta_balance" not in set(group_wildcard.spec.free_params), (
-        "dust {'*': FREE} now reaches dust_eta_balance, so it is no longer "
+        "dust {'all_params': FREE} now reaches dust_eta_balance, so it is no longer "
         "exclusively a dust.emission parameter -- re-derive which wildcard owns it."
     )

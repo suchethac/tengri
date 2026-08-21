@@ -46,18 +46,18 @@ MAX_LUT_FLOPS = 1_000_000
 
 
 def _model(approx, *, emission=True):
-    dust = {"type": "two_component", "law": "calzetti", "*": FIXED}
+    dust = {"type": "two_component", "law": "calzetti", "all_params": FIXED}
     groups = {}
     if emission:
         # A peer group now, not a sub-block. The emission=False arm omits it
         # entirely, which is what "a model with the dust emission removed" means
         # and what the vacuous-equality test below depends on.
-        groups["dust_emission"] = {"type": "dale2014", "*": FIXED}
+        groups["dust_emission"] = {"type": "dale2014", "all_params": FIXED}
     return SEDModel.build(
         ssp_data=pytest.importorskip("tengri").load_ssp(),
         observation=Observation(photometry=Photometry.from_names(BANDS)),
         redshift=Fixed(0.1),
-        sfh={"type": "dpl", "*": FIXED},
+        sfh={"type": "dpl", "all_params": FIXED},
         dust_attenuation=dust,
         approx=approx,
         **groups,

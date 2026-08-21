@@ -49,8 +49,8 @@ def _build(ssp_data, wave_obs, order, approx=None):
     return SEDModel.build(
         ssp_data=ssp_data,
         observation=obs,
-        sfh={"type": "dexp", "*": FIXED, "log_total_mass": 10.0, "tau_gyr": 1.0},
-        dust_attenuation={"type": "two_component", "law": "calzetti", "*": FIXED},
+        sfh={"type": "dexp", "all_params": FIXED, "log_total_mass": 10.0, "tau_gyr": 1.0},
+        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
         neb={"type": "none"},
         redshift=Fixed(0.1),
         approx=approx,

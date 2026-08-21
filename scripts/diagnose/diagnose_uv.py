@@ -49,8 +49,8 @@ model_intrinsic = SEDModel.build(
     ssp_data=ssp,
     observation=obs,
     redshift=Fixed(z),
-    sfh={"type": "tsnorm", "*": FIXED, "peak_lbt_gyr": 0.3},
-    neb={"type": "cue", "*": FIXED},
+    sfh={"type": "tsnorm", "all_params": FIXED, "peak_lbt_gyr": 0.3},
+    neb={"type": "cue", "all_params": FIXED},
 )
 print(f"Intrinsic model free params: {model_intrinsic.spec.free_params}")
 
@@ -80,14 +80,14 @@ model_dust = SEDModel.build(
     ssp_data=ssp,
     observation=obs,
     redshift=Fixed(z),
-    sfh={"type": "tsnorm", "*": FIXED, "peak_lbt_gyr": 0.3},
+    sfh={"type": "tsnorm", "all_params": FIXED, "peak_lbt_gyr": 0.3},
     dust_attenuation={
         "type": "two_component",
         "law": "calzetti",
-        "*": FIXED,
+        "all_params": FIXED,
         "tau_bc": 0.5,
-    }, dust_emission={"type": "dale2014", "*": FIXED},
-    neb={"type": "cue", "*": FIXED},
+    }, dust_emission={"type": "dale2014", "all_params": FIXED},
+    neb={"type": "cue", "all_params": FIXED},
 )
 print(f"Dust model free params: {model_dust.spec.free_params}")
 

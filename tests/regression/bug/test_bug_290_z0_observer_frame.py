@@ -39,11 +39,11 @@ def test_predict_photometry_z0_returns_finite_fluxes():
         model = tengri.SEDModel.build(
             ssp,
             observation=obs,
-            sfh={"type": "const", "*": tengri.FIXED},
+            sfh={"type": "const", "all_params": tengri.FIXED},
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "tau_diff": 0.0,
                 "tau_bc": 0.0,
             },

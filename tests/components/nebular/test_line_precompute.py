@@ -140,7 +140,7 @@ def test_free_ionization_is_rejected_at_build(ssp_data_fsps):
     """
     from tengri import FIXED, Uniform
 
-    m, lw = _model(ssp_data_fsps, neb={"type": "cue", "logU": Uniform(-3.5, -1.5), "*": FIXED})
+    m, lw = _model(ssp_data_fsps, neb={"type": "cue", "logU": Uniform(-3.5, -1.5), "all_params": FIXED})
     assert "neb_logU" in set(m.spec.free_params)
     with pytest.raises(ValueError, match="requires FIXED nebular ionization"):
         precompute_line_per_qh(m, lw, n_met=5)

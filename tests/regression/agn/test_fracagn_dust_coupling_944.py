@@ -117,13 +117,13 @@ class TestFracAGNDustCoupling944:
         model_torus = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
             observation=synthetic_tophat_obs,
-            sfh={"type": "const", "*": FIXED},
+            sfh={"type": "const", "all_params": FIXED},
             dust_attenuation={"type": "none"},
             agn={
                 "type": "composable",
                 "norm": "independent",
                 "torus": {"type": "skirtor"},
-                "disc": {"type": "powerlaw", "*": FIXED},
+                "disc": {"type": "powerlaw", "all_params": FIXED},
                 "nlr": {"type": "none"},
                 "blr": {"type": "none"},
                 "feii": {"type": "none"},
@@ -179,7 +179,7 @@ class TestFracAGNDustCoupling944:
         model_torus = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
             observation=synthetic_tophat_obs,
-            sfh={"type": "const", "*": FIXED},
+            sfh={"type": "const", "all_params": FIXED},
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
@@ -189,7 +189,7 @@ class TestFracAGNDustCoupling944:
                 "type": "composable",
                 "norm": "cigale_joint",
                 "torus": {"type": "skirtor"},
-                "disc": {"type": "multicolor", "*": FIXED},
+                "disc": {"type": "multicolor", "all_params": FIXED},
                 "nlr": {"type": "none"},
                 "blr": {"type": "none"},
                 "feii": {"type": "none"},
@@ -203,7 +203,7 @@ class TestFracAGNDustCoupling944:
         model_notorus = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
             observation=synthetic_tophat_obs,
-            sfh={"type": "const", "*": FIXED},
+            sfh={"type": "const", "all_params": FIXED},
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
@@ -213,7 +213,7 @@ class TestFracAGNDustCoupling944:
                 "type": "composable",
                 "norm": "cigale_joint",
                 "torus": {"type": "none"},
-                "disc": {"type": "multicolor", "*": FIXED},
+                "disc": {"type": "multicolor", "all_params": FIXED},
                 "nlr": {"type": "none"},
                 "blr": {"type": "none"},
                 "feii": {"type": "none"},

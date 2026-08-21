@@ -28,14 +28,14 @@ def grouped_spec():
     return parse_groups(
         sfh={
             "type": "dpl",
-            "*": FREE,
+            "all_params": FREE,
             "beta": Uniform(1, 3),  # user_prior
             "alpha": Fixed(2.0),  # user_fixed
         },
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
-            "*": FIXED,
+            "all_params": FIXED,
             "tau_bc": 0.5,  # user_fixed (bare value)
         },
         redshift=Fixed(0.05),  # user_fixed (top-level)
@@ -61,14 +61,14 @@ class TestProvenanceAttribution:
         assert grouped_spec._group_provenance["redshift"] == "user_fixed"
 
     def test_wildcard_free_tagged_correctly(self, grouped_spec):
-        """Wildcard '*': FREE expansions get 'wildcard_free'."""
-        # sfh has '*': FREE; sfh_dpl_log_total_mass/tau_gyr weren't overridden
+        """Wildcard 'all_params': FREE expansions get 'wildcard_free'."""
+        # sfh has 'all_params': FREE; sfh_dpl_log_total_mass/tau_gyr weren't overridden
         assert grouped_spec._group_provenance["sfh_dpl_log_total_mass"] == "wildcard_free"
         assert grouped_spec._group_provenance["sfh_dpl_tau_gyr"] == "wildcard_free"
 
     def test_wildcard_fixed_tagged_correctly(self, grouped_spec):
-        """Wildcard '*': FIXED expansions get 'wildcard_fixed'."""
-        # dust has '*': FIXED; dust_tau_diff wasn't overridden
+        """Wildcard 'all_params': FIXED expansions get 'wildcard_fixed'."""
+        # dust has 'all_params': FIXED; dust_tau_diff wasn't overridden
         assert grouped_spec._group_provenance["dust_tau_diff"] == "wildcard_fixed"
         assert grouped_spec._group_provenance["dust_slope"] == "wildcard_fixed"
 
@@ -86,11 +86,11 @@ class TestProvenanceAttribution:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             spec = parse_groups(
-                sfh={"type": "dpl", "*": FREE},
+                sfh={"type": "dpl", "all_params": FREE},
                 dust_attenuation={
                     "type": "two_component",
                     "law": "calzetti",
-                    "*": FREE,
+                    "all_params": FREE,
                 },
                 redshift=Fixed(0.1),
             )
@@ -124,7 +124,7 @@ class TestProvenanceAttribution:
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            spec = parse_groups(sfh={"type": "dpl", "*": FREE}, redshift=Fixed(0.1))
+            spec = parse_groups(sfh={"type": "dpl", "all_params": FREE}, redshift=Fixed(0.1))
 
         groups = spec.to_groups()
         # When there's no met block, met_* params are implicitly FIXED.

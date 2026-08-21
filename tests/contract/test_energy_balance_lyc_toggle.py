@@ -33,19 +33,19 @@ def _build(ssp, include_lyc: bool, *, tau_diff: float = 1.0):
         "law_diff": "calzetti",
         "tau_bc": Fixed(0.0),
         "tau_diff": Fixed(tau_diff),
-        "*": FIXED,
+        "all_params": FIXED,
     }
     if include_lyc:
         dust["eb_include_lyc"] = True
     return SEDModel.build(
         ssp_data=ssp,
-        met={"logzsol": Fixed(0.0), "*": FIXED},
+        met={"logzsol": Fixed(0.0), "all_params": FIXED},
         sfh={
             "type": "delayed",
             "tau_gyr": Fixed(1.0),
             "age_gyr": Fixed(5.0),
             "log_total_mass": Fixed(10.0),
-            "*": FIXED,
+            "all_params": FIXED,
         },
         dust_attenuation=dust,
         redshift=Fixed(0.0),
@@ -119,7 +119,7 @@ def _build_emitting(ssp, include_lyc: bool, approx):
         "law_diff": "calzetti",
         "tau_bc": Uniform(0.0, 1.0),
         "tau_diff": Fixed(0.3),
-        "*": FIXED,
+        "all_params": FIXED,
     }
     if include_lyc:
         dust["eb_include_lyc"] = True
@@ -129,16 +129,16 @@ def _build_emitting(ssp, include_lyc: bool, approx):
         ssp_data=ssp,
         observation=obs,
         approx=approx,
-        met={"logzsol": Fixed(0.0), "*": FIXED},
+        met={"logzsol": Fixed(0.0), "all_params": FIXED},
         sfh={
             "type": "delayed",
             "tau_gyr": Fixed(1.0),
             "age_gyr": Fixed(5.0),
             "log_total_mass": Fixed(10.0),
-            "*": FIXED,
+            "all_params": FIXED,
         },
         dust_attenuation=dust,
-        dust_emission={"type": "modified_blackbody", "*": FIXED},
+        dust_emission={"type": "modified_blackbody", "all_params": FIXED},
         neb={"type": "none"},
         redshift=Fixed(0.05),
     )
