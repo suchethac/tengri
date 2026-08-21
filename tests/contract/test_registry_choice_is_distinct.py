@@ -608,9 +608,11 @@ def _sed_for_selector(
     lo, hi = 2.0, 7.0
     groups: dict = {"sfh": {"type": "const"}}
 
-    # For foreground, add redshift (it's an observed-frame effect, so we need z > 0 to see it)
+    # Add redshift: required for all models, and observed-frame effects need z > 0 to see them
     if selector_group == "foreground":
-        groups["redshift"] = Fixed(1.0)
+        groups["redshift"] = Fixed(1.0)  # High z to see foreground attenuation
+    elif selector_group == "agn_atten":
+        groups["redshift"] = Fixed(0.1)  # Low z for AGN attenuation measurement
 
     if cfg is not None:
         groups[actual_group] = cfg

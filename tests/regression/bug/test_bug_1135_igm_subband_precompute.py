@@ -288,6 +288,7 @@ def test_free_redshift_folds_on_the_ztable_grid(ssp):
             "tau_bc": 1.0,
         },
         redshift=Uniform(0.05, 1.6),
+        igm={"type": "inoue"},
         approx=WavePrecomp(n_z=120),
     )
     zt = m._cached_component_chain[0]._state.ssp_phot_ztable
@@ -308,6 +309,7 @@ def test_free_redshift_folds_on_the_ztable_grid(ssp):
             "tau_bc": 1.0,
         },
         redshift=Uniform(0.05, 1.6),
+        igm={"type": "inoue"},
         approx=None,
     )
     p = dict(m_exact.spec.sample(KEY))

@@ -171,6 +171,8 @@ def test_spectrum_lut_does_not_evaluate_the_igm_on_the_full_grid():
     )
 
     def build(**extra):
+        if "igm" not in extra:
+            extra["igm"] = {"type": "inoue"}
         return SEDModel.build(
             ssp_data=ssp,
             observation=obs,
@@ -209,6 +211,8 @@ def test_the_igm_is_still_applied_to_the_lut_spectrum():
     )
 
     def build(**extra):
+        if "igm" not in extra:
+            extra["igm"] = {"type": "inoue"}
         return SEDModel.build(
             ssp_data=ssp,
             observation=obs,
@@ -259,6 +263,7 @@ def test_free_redshift_band_factor_interpolation_stays_bounded():
             redshift=Uniform(0.0, 4.0),
             sfh={"type": "dpl", "*": FIXED},
             dust_attenuation={"type": "single_component", "law": "calzetti", "*": FIXED},
+            igm={"type": "inoue"},
             approx=approx,
         )
 
