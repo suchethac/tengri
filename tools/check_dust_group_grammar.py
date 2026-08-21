@@ -53,8 +53,9 @@ warnings.filterwarnings("ignore", category=SyntaxWarning)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
-# Dust attenuation laws (copied from src/tengri/components/dust/laws/_registry.py
-# to keep this tool stdlib-only and CI-runnable without tengri imports).
+# Dust attenuation laws — a snapshot of src/tengri/components/dust/laws/_registry.py,
+# kept here as literals so this tool stays stdlib-only and CI-runnable without
+# tengri imports.
 DUST_LAWS = frozenset(
     {
         "calzetti",
