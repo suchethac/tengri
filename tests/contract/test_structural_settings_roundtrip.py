@@ -257,7 +257,9 @@ def test_every_structural_key_has_a_roundtrip_rule():
     accounted for by exactly one mechanism.
     """
     # Handled by _extract_group_type and the wildcard analyzer, not the table.
-    meta_keys = {"type", "*"}
+    # ``all_params`` is the canonical wildcard spelling and ``*`` its legacy
+    # synonym; both reach the analyzer, so neither needs a round-trip rule.
+    meta_keys = {"type", "*", "all_params"}
     # Dust attenuation laws stay hand-written in _add_structural_settings:
     # law/law_bc/law_diff are an explicit XOR (never a default comparison:
     # the emit collapses to shared 'law' when both screens agree, else the

@@ -60,7 +60,6 @@ from tengri import (
     SEDModel,
     Uniform,
     WavePrecomp,
-    builders,
     citations,
     cosmology,
     generate_mock,
@@ -122,15 +121,16 @@ sed_model = SEDModel.build(
     ssp_data=ssp,
     observation=obs,
     approx=WavePrecomp(),
-    sfh=builders.sfh.tsnorm(defaults=FREE),
-    dust_attenuation=builders.dust.two_component(
-        defaults=FIXED,
-        law="calzetti",
-        tau_bc=Fixed(0.0),
-        tau_diff=Uniform(0.0, 3.0),
-    ),
-    neb=builders.neb.ssp(),
-    met={'logzsol': Uniform(-2.0, 0.2)},
+    sfh={"type": "tsnorm", "all_params": FREE},
+    dust_attenuation={
+        "type": "two_component",
+        "all_params": FIXED,
+        "law": "calzetti",
+        "tau_bc": Fixed(0.0),
+        "tau_diff": Uniform(0.0, 3.0),
+    },
+    neb={"type": "ssp"},
+    met={"logzsol": Uniform(-2.0, 0.2)},
     redshift=Fixed(0.05),
 )
 

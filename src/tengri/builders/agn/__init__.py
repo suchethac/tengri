@@ -23,14 +23,14 @@ The factory mirror:
 
 >>> from tengri import builders, FREE, FIXED, Uniform
 >>> agn = builders.agn.composable(
-...     defaults=FREE,
+...     all_params=FREE,
 ...     log_lbol=Uniform(9.42, 13.42),
-...     disc=builders.agn.disc.multicolor(defaults=FREE),
-...     torus=builders.agn.torus.skirtor(defaults=FIXED),
+...     disc=builders.agn.disc.multicolor(all_params=FREE),
+...     torus=builders.agn.torus.skirtor(all_params=FIXED),
 ...     nlr=builders.agn.nlr.analytic(),
 ...     blr=builders.agn.blr.analytic(),
 ...     feii=builders.agn.feii.none(),
-...     atten=builders.agn.atten.smc_prevot(defaults=FIXED),
+...     atten=builders.agn.atten.smc_prevot(all_params=FIXED),
 ... )
 
 All 14 top-level AGN models are exposed as factories:
@@ -53,7 +53,7 @@ All 14 top-level AGN models are exposed as factories:
 Examples
 --------
 >>> from tengri import builders, FREE, Uniform
->>> agn = builders.agn.skirtor(defaults=FREE, log_lbol=Uniform(9.42, 13.42))
+>>> agn = builders.agn.skirtor(all_params=FREE, log_lbol=Uniform(9.42, 13.42))
 >>> agn = builders.agn.simple(log_mbh=Uniform(6, 9))
 """
 
@@ -118,7 +118,7 @@ def composable(**kwargs: Any) -> dict:
     wildcard = _pop_wildcard("agn.composable", kwargs)
     if wildcard not in (FREE, FIXED):
         raise ValueError(
-            f"agn.composable(defaults=...): expected FREE or FIXED, got "
+            f"agn.composable(all_params=...): expected FREE or FIXED, got "
             f"{wildcard!r}. Use tengri.FREE or tengri.FIXED."
         )
     sub_blocks = {axis: kwargs.pop(axis, None) for axis in _AXIS_MODULES}
@@ -150,7 +150,7 @@ def composable(**kwargs: Any) -> dict:
 
 # Attach a real signature so IDEs see the sub-block + shared-param kwargs.
 _sig_params = [
-    inspect.Parameter("defaults", inspect.Parameter.KEYWORD_ONLY, default=FIXED, annotation=Any),
+    inspect.Parameter("all_params", inspect.Parameter.KEYWORD_ONLY, default=FIXED, annotation=Any),
 ]
 for axis in _AXIS_MODULES:
     _sig_params.append(

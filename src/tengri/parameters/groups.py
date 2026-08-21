@@ -3311,16 +3311,19 @@ _AGN_SUBBLOCK_KEYS = frozenset({"disc", "torus", "nlr", "blr", "feii", "atten", 
 #: Per-group structural keys the grammar accepts on top of declared params.
 #: Keys nested in a sub-block (e.g. ``dust.emission``) appear separately.
 _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
-    "sfh": frozenset({"type", "*", "bin_edges_gyr", "age_kernel", "field_centering"}),
+    "sfh": frozenset(
+        {"type", "*", "all_params", "bin_edges_gyr", "age_kernel", "field_centering"}
+    ),
     # ``met`` is the parallel of ``sfh``: both describe the stellar population's
     # history, and both select a model with ``type`` like every other group
     # (#1720). It replaces ``met={'type': ...}`` (#311) outright — two
     # spellings of one setting is the maintenance cost this removes.
-    "met": frozenset({"type", "*"}),
+    "met": frozenset({"type", "*", "all_params"}),
     "dust_attenuation": frozenset(
         {
             "type",
             "*",
+            "all_params",
             "law",
             "law_bc",
             "law_diff",
@@ -3355,24 +3358,26 @@ _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
             "eb_include_lyc",
         }
     ),
-    "dust_emission": frozenset({"type", "*", "spinning_dust", "f_cnm", "eta_balance"}),
-    "neb": frozenset({"type", "*", "full_catalog", "grid"}),
-    "shock": frozenset({"type", "*", "norm", "abundance", "component"}),
-    "igm": frozenset({"type", "*", "patchy", "dla"}),
-    "igm.dla": frozenset({"type", "*"}),
-    "radio": frozenset({"type", "*", "sf", "agn"}),
-    "radio.sf": frozenset({"type", "*"}),
-    "radio.agn": frozenset({"type", "*"}),
-    "xray": frozenset({"type", "*"}),
-    "agn": frozenset({"type", "*", "norm"}) | _AGN_SUBBLOCK_KEYS,
-    "agn.disc": frozenset({"type", "*"}),
-    "agn.torus": frozenset({"type", "*"}),
-    "agn.nlr": frozenset({"type", "*"}),
-    "agn.blr": frozenset({"type", "*"}),
-    "agn.feii": frozenset({"type", "*"}),
-    "agn.atten": frozenset({"type", "*", "law"}),
+    "dust_emission": frozenset(
+        {"type", "*", "all_params", "spinning_dust", "f_cnm", "eta_balance"}
+    ),
+    "neb": frozenset({"type", "*", "all_params", "full_catalog", "grid"}),
+    "shock": frozenset({"type", "*", "all_params", "norm", "abundance", "component"}),
+    "igm": frozenset({"type", "*", "all_params", "patchy", "dla"}),
+    "igm.dla": frozenset({"type", "*", "all_params"}),
+    "radio": frozenset({"type", "*", "all_params", "sf", "agn"}),
+    "radio.sf": frozenset({"type", "*", "all_params"}),
+    "radio.agn": frozenset({"type", "*", "all_params"}),
+    "xray": frozenset({"type", "*", "all_params"}),
+    "agn": frozenset({"type", "*", "all_params", "norm"}) | _AGN_SUBBLOCK_KEYS,
+    "agn.disc": frozenset({"type", "*", "all_params"}),
+    "agn.torus": frozenset({"type", "*", "all_params"}),
+    "agn.nlr": frozenset({"type", "*", "all_params"}),
+    "agn.blr": frozenset({"type", "*", "all_params"}),
+    "agn.feii": frozenset({"type", "*", "all_params"}),
+    "agn.atten": frozenset({"type", "*", "all_params", "law"}),
     # Deprecated: agn.lines is expanded to (agn.nlr, agn.blr) via expand_lines_alias
-    "agn.lines": frozenset({"type", "*"}),
+    "agn.lines": frozenset({"type", "*", "all_params"}),
     "foreground": frozenset({"ebmv_mw", "law", "rv"}),
 }
 
@@ -3793,6 +3798,15 @@ def _check_dict_keys(
     for key in user_dict:
         if key in allowed:
             continue
+
+        # Special case: user wrote 'defaults' instead of 'all_params'
+        if key == "defaults":
+            raise ValueError(
+                f"Unknown key 'defaults' in group {group!r}. Did you mean 'all_params'? "
+                f"The nested-dict grammar uses ``'all_params': FREE`` / ``FIXED`` to set the "
+                f"wildcard policy (matching the builder factories' ``all_params=`` parameter)."
+            )
+
         # Suggestion pool: same group's allowed keys + every short name
         # across all groups (helps the "wrong group, right name" case).
         suggestion_pool = set(allowed)

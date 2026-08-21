@@ -33,7 +33,7 @@ The factory mirror (single-component):
 >>> from tengri import builders, FREE, Uniform, FIXED
 >>> dust_attenuation = builders.dust.single_component(
 ...     law="calzetti",  # Required
-...     defaults=FREE,
+...     all_params=FREE,
 ...     tau_v=Uniform(0, 4),
 ... )
 
@@ -41,11 +41,11 @@ The factory mirror (two-component):
 
 >>> dust_attenuation = builders.dust.two_component(
 ...     law="calzetti",  # Shared law, or use law_bc/law_diff
-...     defaults=FREE,
+...     all_params=FREE,
 ...     tau_bc=Uniform(0, 2),
 ...     tau_diff=Uniform(0, 4),
 ... )
->>> dust_emission = builders.dust.emission.dale2014(defaults=FIXED)
+>>> dust_emission = builders.dust.emission.dale2014(all_params=FIXED)
 
 The ``law`` / ``law_bc`` / ``law_diff`` kwargs accept any key registered in
 :data:`tengri.components.dust.attenuation.DUST_LAWS`. Single-component requires
@@ -128,7 +128,7 @@ def _make_dust_factory(
         wildcard = _pop_wildcard(f"dust.{dust_model}", kwargs)
         if wildcard not in (FREE, FIXED):
             raise ValueError(
-                f"dust.{dust_model}(defaults=...): expected FREE or FIXED, got "
+                f"dust.{dust_model}(all_params=...): expected FREE or FIXED, got "
                 f"{wildcard!r}. Use tengri.FREE or tengri.FIXED."
             )
         # String settings (e.g. law, law_bc, law_diff). No defaults are applied;
@@ -216,7 +216,7 @@ def _make_dust_factory(
                 f"IR emission are now separate top-level groups. Use "
                 f"dust_emission=builders.dust.emission.<variant>(...) instead."
             )
-        valid_kwargs = ["defaults", *setting_names, *short_params]
+        valid_kwargs = ["all_params", *setting_names, *short_params]
         unknown = [k for k in kwargs if k not in short_params]
         if unknown:
             raise TypeError(
@@ -232,7 +232,7 @@ def _make_dust_factory(
 
     sig_params = [
         inspect.Parameter(
-            "defaults", inspect.Parameter.KEYWORD_ONLY, default=FIXED, annotation=Any
+            "all_params", inspect.Parameter.KEYWORD_ONLY, default=FIXED, annotation=Any
         ),
     ]
     for s in setting_names:
@@ -284,7 +284,7 @@ def _make_dust_factory(
     doc_lines.append("")
     doc_lines.append("Parameters")
     doc_lines.append("----------")
-    doc_lines.append("defaults : sentinel, optional")
+    doc_lines.append("all_params : sentinel, optional")
     doc_lines.append(
         "    Wildcard policy. ``FREE`` makes unspecified attenuation params "
         "fit; ``FIXED`` (default) pins them to registry defaults."

@@ -30,13 +30,13 @@ Examples
 >>> # Equivalent to {'type': 'dpl', 'all_params': FIXED, 'beta': Uniform(1, 3)}
 >>> sfh_config = builders.sfh.dpl(beta=Uniform(1, 3))
 >>> # All params free unless overridden:
->>> sfh_config = builders.sfh.dpl(defaults=FREE)
+>>> sfh_config = builders.sfh.dpl(all_params=FREE)
 >>> # Mix wildcard policy with explicit overrides:
->>> sfh_config = builders.sfh.dpl(defaults=FREE, log_total_mass=Fixed(10.0))
+>>> sfh_config = builders.sfh.dpl(all_params=FREE, log_total_mass=Fixed(10.0))
 
 The output is interchangeable with the dict form:
 
->>> model = SEDModel.build(ssp_data=ssp, sfh=builders.sfh.dpl(defaults=FREE))
+>>> model = SEDModel.build(ssp_data=ssp, sfh=builders.sfh.dpl(all_params=FREE))
 """
 
 from __future__ import annotations
@@ -87,11 +87,11 @@ def _build_docstring(variant: str, spec, param_records: list[tuple[str, Any]]) -
         lines.append("")
     lines.append("Parameters")
     lines.append("----------")
-    lines.append("defaults : sentinel, optional")
+    lines.append("all_params : sentinel, optional")
     lines.append(
         "    Wildcard policy for parameters not explicitly named in this call. "
         "``FREE`` makes them fit; ``FIXED`` (default) pins them to their "
-        "registry-default center. Mirrors the ``'all_params'`` key in the dict grammar."
+        "registry-default center. Matches the ``'all_params'`` key in the dict grammar."
     )
     for short, pdef in param_records:
         default_repr = repr(pdef.default) if pdef.default is not None else "registry default"
@@ -134,7 +134,7 @@ def _make_factory(variant: str, spec) -> Callable[..., dict]:
         wildcard = _pop_wildcard(variant, kwargs)
         if wildcard not in (FREE, FIXED):
             raise ValueError(
-                f"{variant}(defaults=...): expected FREE or FIXED, got "
+                f"{variant}(all_params=...): expected FREE or FIXED, got "
                 f"{wildcard!r}. Use tengri.FREE or tengri.FIXED."
             )
         out: dict[str, Any] = {"type": variant, WILDCARD_ALIAS: wildcard}
@@ -143,7 +143,7 @@ def _make_factory(variant: str, spec) -> Callable[..., dict]:
             raise TypeError(
                 f"{variant}() got unexpected keyword arguments: {unknown}. "
                 f"Valid parameter names for {variant!r}: {short_names}. "
-                f"(Pass ``defaults=FREE`` or ``defaults=FIXED`` to set the policy.)"
+                f"(Pass ``all_params=FREE`` or ``all_params=FIXED`` to set the policy.)"
             )
         for short in short_names:
             if short in kwargs and kwargs[short] is not _UNSET:
@@ -153,7 +153,7 @@ def _make_factory(variant: str, spec) -> Callable[..., dict]:
     # Real signature so IDEs see per-parameter kwargs.
     sig_params = [
         inspect.Parameter(
-            "defaults",
+            "all_params",
             inspect.Parameter.KEYWORD_ONLY,
             default=FIXED,
             annotation=Any,
