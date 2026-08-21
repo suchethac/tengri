@@ -601,6 +601,8 @@ _AGN_PARTITION = {
     # Attenuation
     "agn_polar_ebv": "agn.atten",
     "agn_polar_oa": "agn.atten",
+    "agn_polar_T": "agn.atten",
+    "agn_polar_beta": "agn.atten",
     "agn_attenuation_ebv": "agn.atten",  # smc_prevot block E(B-V)
     # Radiation physics (shared disc normalization)
     "agn_f_hard": "agn",
@@ -1534,9 +1536,31 @@ def _warn_silently_fixed_parameters(
         value = dist.default
         default_fixed_by_group.setdefault(group, []).append((param_name, value))
 
+    # A group that yielded at least one free parameter cannot have hit the
+    # failure this warning exists to catch -- "I configured a group and got
+    # nothing free out of it" (#1995). Counting free parameters per group is
+    # the test; engagement deliberately is not, because a group can be engaged
+    # and still yield nothing free, which is the footgun itself:
+    #
+    #     sfh={"type": "dpl", "alpha": Fixed(1.5)}   # engaged, n_free == 0
+    #
+    # Before this, the condition was "did the group state a disposition", a
+    # proxy that misfires on the standard ``met={"logzsol": Uniform(...)}``
+    # spelling and put 115 warnings into 9 published renders.
+    free_by_group: dict[str, int] = {}
+    for param_name, dist in final_params._distributions.items():
+        if dist.is_fixed:
+            continue
+        owning_group = param_partition.get(param_name)
+        if owning_group is None:
+            continue
+        free_by_group[owning_group] = free_by_group.get(owning_group, 0) + 1
+
     # For each group with silently-fixed parameters, check if the user
     # explicitly stated a disposition. Only warn if they didn't.
     for group, params_and_values in default_fixed_by_group.items():
+        if free_by_group.get(group, 0):
+            continue
         # Determine if the user actually provided this group in kwargs
         if group.startswith("dust."):
             # Sub-group like dust.emission
@@ -3040,6 +3064,25 @@ _RADIO_AGN_PARAM_NAMES: frozenset[str] = frozenset().union(*_RADIO_AGN_PARAMS_BY
 #: collide with the host ``dust`` block's parameter prefix.
 _VALID_FOREGROUND_LAWS = frozenset({"cardelli"})
 
+#: Laws the AGN attenuation-stage block actually implements. One entry, and that
+#: is the honest count: ``components/agn/reddening.py`` imports ``prevot_smc``
+#: and applies it unconditionally, so the block is single-curve by construction
+#: -- its own name (``smc_prevot``) and its E(B-V) parameter's description say so.
+#:
+#: This was validated against ``DUST_LAWS`` (22 entries) with every accepted
+#: name mapped to the same block, so ``agn={'atten': {'law': 'calzetti'}}`` was
+#: validated, accepted, and silently given the Prevot SMC curve. Measured: five
+#: distinct law names produced bit-identical SEDs at E(B-V)=0.4, while the same
+#: comparison saw E(B-V) itself change the SED. Validating against a menu the
+#: physics does not honor is worse than not offering the choice -- the careful
+#: "did you mean" error taught users the choice was real (#2012).
+#:
+#: ``smc`` is deliberately NOT here: it is a different curve from ``prevot_smc``
+#: (20% apart over 1000-20000 A), so accepting it would be the same silent
+#: substitution at smaller magnitude. Wiring more laws into the block widens
+#: this set; until then it describes what the block does.
+_VALID_AGN_ATTEN_LAWS = frozenset({"prevot_smc"})
+
 
 def _translate_foreground(fg_dict: dict, result: dict) -> None:
     """Translate the ``foreground`` group (MW screen) — see #297.
@@ -3644,11 +3687,16 @@ def _build_agn_search_view(param_name: str, agn_dict: dict, group: str) -> dict:
 
     AGN parameters live in a two-level nest: the top-level ``agn`` dict
     plus up to six sub-block dicts (``disc``/``torus``/``nlr``/``blr``/
-    ``feii``/``atten``). To keep the API friendly, a parameter can be supplied
-    at *either* level — the partition table records the canonical location,
-    but a user who writes ``agn={'disc': {'agn_log_lbol': Uniform(...)}}``
-    expects the value to take effect even though ``agn_log_lbol`` is
-    nominally a shared (top-level) param.
+    ``feii``/``atten``). To keep the API friendly, a shared parameter can be
+    supplied at *either* level — the partition table records the canonical
+    location, but a user who writes ``agn={'disc': {'agn_log_lbol': Uniform(...)}}``
+    expects the value to take effect even though ``agn_log_lbol`` is nominally
+    a shared (top-level) param.
+
+    A SUB-BLOCK parameter, however, must be nested under its OWNING sub-block
+    per the partition table. Writing a sub-block-owned parameter under a
+    non-owning sub-block (one that consumes but does not own it) raises
+    with guidance.
 
     This helper assembles a single dict the caller can pass to
     :func:`_resolve_value`:
@@ -3656,7 +3704,7 @@ def _build_agn_search_view(param_name: str, agn_dict: dict, group: str) -> dict:
     1. The canonical location for ``param_name`` (top level if
        ``group == "agn"``; the matching sub-block if ``group.startswith("agn.")``).
     2. Every sibling location that also carries an override for the same
-       short name.
+       short name (with validation that the parameter is allowed there).
 
     If a parameter appears in more than one location with conflicting
     values, raise :class:`ValueError` to flag the ambiguity instead of
@@ -3677,6 +3725,11 @@ def _build_agn_search_view(param_name: str, agn_dict: dict, group: str) -> dict:
     dict
         Search dict for :func:`_resolve_value`. The wildcard ``'*'``
         from the canonical location is preserved when present.
+
+    Raises
+    ------
+    ValueError
+        If a parameter is written under a non-owning sub-block.
     """
     if not isinstance(agn_dict, dict):
         return {}
@@ -3702,8 +3755,16 @@ def _build_agn_search_view(param_name: str, agn_dict: dict, group: str) -> dict:
             if isinstance(sub, dict):
                 siblings.append((k, sub))
     else:
-        # Sub-block param: also accept it at the top level.
+        # Sub-block param: also check the top level and OTHER sub-blocks for
+        # stray overrides. The top level is allowed (shared params can land there);
+        # other sub-blocks are not allowed (a sub-block param belongs only in its owner).
         siblings.append(("<top>", agn_dict))
+        # Check other sub-blocks for stray overrides (will be rejected if found)
+        for k in _AGN_SUBBLOCK_KEYS:
+            if k != canonical_subkey:
+                sub = agn_dict.get(k)
+                if isinstance(sub, dict):
+                    siblings.append((k, sub))
 
     # Collect (location, value) for every place this param appears.
     hits = []
@@ -3714,6 +3775,23 @@ def _build_agn_search_view(param_name: str, agn_dict: dict, group: str) -> dict:
     for location, sub in siblings:
         for key in (short_name, param_name):
             if key in sub and key not in ("type", "*"):
+                # VALIDATION: Check if this parameter is allowed in this sibling location.
+                # RULE: Sub-block-owned parameters must be in their owner sub-block.
+                # Shared parameters can go anywhere (top level or any sub-block).
+                param_owner = _AGN_PARTITION.get(param_name, "agn")
+                if location != "<top>" and location != "none":
+                    # location is a sub-block name (e.g., "torus", "disc", "atten")
+                    sibling_group = f"agn.{location}"
+                    # Only reject if this is a sub-block-owned parameter in the wrong sub-block
+                    if param_owner != "agn" and param_owner != sibling_group:
+                        # Sub-block parameter in wrong sub-block
+                        owner_subblock = param_owner.replace("agn.", "")
+                        raise ValueError(
+                            f"{key!r} is a {param_owner!r} parameter, not a "
+                            f"{sibling_group!r} one. Nest it: "
+                            f"agn={{{owner_subblock!r}: {{{key!r}: ...}}}}."
+                        )
+                    # Otherwise: shared param in sub-block (OK) or right sub-block (OK)
                 hits.append((location, sub[key]))
                 break
 
@@ -3921,24 +3999,40 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
                     "agn['atten'] type='smc_prevot' is no longer supported. "
                     "Use the new form with law key instead:\n"
                     "  agn={'atten': {'law': 'prevot_smc', 'ebv': Uniform(...)}}\n"
-                    "Valid DUST_LAWS names: smc, prevot_smc, calzetti, power_law, cardelli, etc."
+                    "'prevot_smc' is the only law this block implements -- it applies "
+                    "that curve unconditionally, so the rename is a spelling change, "
+                    "not a new choice."
                 )
 
             if law_key is not None:
-                # Validate law name against DUST_LAWS
-                from tengri.components.dust.laws._registry import DUST_LAWS
+                # Validate against the laws the block IMPLEMENTS, not against
+                # every name in DUST_LAWS. The old check accepted all 22 and
+                # mapped them to the same single-curve block, so a user who
+                # selected Calzetti silently got Prevot SMC (#2012). Same policy
+                # as `foreground`, which has the same single-curve limitation
+                # and has always refused the laws it does not wire.
+                if law_key not in _VALID_AGN_ATTEN_LAWS:
+                    from tengri.components.dust.laws._registry import DUST_LAWS
 
-                if law_key not in DUST_LAWS:
-                    available = sorted(DUST_LAWS.keys())
-                    suggestions = difflib.get_close_matches(law_key, available, n=2, cutoff=0.6)
+                    valid = sorted(_VALID_AGN_ATTEN_LAWS)
+                    detail = (
+                        f"'{law_key}' is a real attenuation law, but the AGN "
+                        f"attenuation stage does not implement it"
+                        if law_key in DUST_LAWS
+                        else f"Unknown dust law '{law_key}'"
+                    )
+                    suggestions = difflib.get_close_matches(law_key, valid, n=2, cutoff=0.6)
                     suggest_str = (
                         f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
                     )
                     raise ValueError(
-                        f"Unknown dust law '{law_key}'.{suggest_str}\n"
-                        f"Valid DUST_LAWS: {', '.join(available)}"
+                        f"{detail}.{suggest_str}\n"
+                        f"Valid agn['atten'] laws: {valid}.\n"
+                        f"The block applies the Prevot SMC curve unconditionally, so "
+                        f"accepting another name would silently substitute this one. "
+                        f"For a different AGN attenuation curve see agn['polar'], "
+                        f"which selects among smc / calzetti / gaskell."
                     )
-                # Map law name to smc_prevot block (currently the only law-based wrapper)
                 block_type = "smc_prevot"
             else:
                 block_type = type_key

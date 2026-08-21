@@ -557,7 +557,7 @@ fig.savefig(FIG_DIR / "04_sfh_family_grid.pdf", bbox_inches="tight")
 #
 # SFH fixed at tsnorm, sweep the attenuation law. Both the amount of
 # attenuation and the shape of the curve move the UV-to-optical ratio and the
-# overall tilt. Only the `law_bc` value changes between models here — swapping
+# overall tilt. Only the `law` value changes between models here — swapping
 # it re-declares the relevant dust parameters automatically.
 
 # %%
@@ -697,7 +697,7 @@ ax_ref.text(
 # RIGHT: SEDs with each dust law
 ax_sed = fig.add_subplot(gs[1])
 
-# Reuse base and swap law_bc
+# Reuse base and swap the attenuation law
 for idx, dust_law in enumerate(dust_laws):
     groups_dustlaw_fig = {
         "sfh": {

@@ -2007,7 +2007,12 @@ class Parameters:
             dust_bc = getattr(self, "dust_law_bc", "power_law")
             dust_diff = getattr(self, "dust_law_diff", None) or dust_bc
             if dust_bc != "power_law" or dust_diff != "power_law":
-                modules.append(f"dust_law={dust_bc}/{dust_diff}")
+                # Collapse agreeing screens to one law, matching what the
+                # grammar accepts and what to_groups() emits. Printing
+                # "calzetti/calzetti" for a config written as law='calzetti'
+                # shows the reader a key they did not write.
+                shown = dust_bc if dust_bc == dust_diff else f"{dust_bc}/{dust_diff}"
+                modules.append(f"dust_attenuation_law={shown}")
         met_mode = getattr(self, "met_mode", "delta")
         if met_mode != "delta":
             modules.append(f"met={met_mode}")
