@@ -27,6 +27,7 @@ pytestmark = pytest.mark.contract
 def _spec(dust_frac_agn, agn_fracagn, *, emission="dale2014", with_agn=True):
     """Build a spec with a chosen dust emission + (optional) composable AGN."""
     groups = dict(
+        redshift=Fixed(0.1),
         sfh={"type": "dpl", "*": FIXED},
         dust_attenuation={
             "law": "power_law",

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import pytest
 
+from tengri import Fixed
 from tengri.components.radio.component import AGN_RADIO_MODELS, SF_RADIO_MODELS
 from tengri.parameters.groups import _valid_radio_types, parse_groups
 
@@ -41,11 +42,11 @@ def test_composable_radio_selectors_are_distinct() -> None:
     for name in enabled:
         if name == "condon92":
             spec = {"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}}
-            states[name] = _radio_state(parse_groups(radio=spec))
+            states[name] = _radio_state(parse_groups(radio=spec, redshift=Fixed(0.1)))
         else:
             sf_variant, agn_variant = _legacy_radio_type_to_blocks(name)
             spec = {"sf": {"type": sf_variant}, "agn": {"type": agn_variant}}
-            states[name] = _radio_state(parse_groups(radio=spec))
+            states[name] = _radio_state(parse_groups(radio=spec, redshift=Fixed(0.1)))
 
     assert len(set(states.values())) > 1, (
         "all radio selectors produced identical spec state "
@@ -60,7 +61,7 @@ def test_radio_dpl_selects_the_double_power_law() -> None:
     single power-law -- a broken double power-law with an exponential
     aging cutoff. The composable form explicitly selects it.
     """
-    spec = parse_groups(radio={"agn": {"type": "dpl"}})
+    spec = parse_groups(radio={"agn": {"type": "dpl"}}, redshift=Fixed(0.1))
 
     assert spec.radio is True
     assert spec.radio_agn_model == "dpl", (
@@ -77,11 +78,11 @@ def test_composable_radio_mapping_consistency() -> None:
     the same underlying model when selected through different paths.
     """
     # Test that dpl is consistently selected
-    dpl_direct = _radio_state(parse_groups(radio={"agn": {"type": "dpl"}}))
+    dpl_direct = _radio_state(parse_groups(radio={"agn": {"type": "dpl"}}, redshift=Fixed(0.1)))
     # dpl_from_legacy would use _legacy_radio_type_to_blocks("radio_dpl")
     # which gives sf=bell2003, agn=dpl, same as above
     spec = {"sf": {"type": "bell2003"}, "agn": {"type": "dpl"}}
-    dpl_explicit = _radio_state(parse_groups(radio=spec))
+    dpl_explicit = _radio_state(parse_groups(radio=spec, redshift=Fixed(0.1)))
 
     assert dpl_direct == dpl_explicit, (
         f"direct dpl form gave {dpl_direct} but explicit form gave "
@@ -100,10 +101,14 @@ def test_every_accepted_type_lands_on_a_real_model(name: str) -> None:
     from tengri.parameters.groups import _legacy_radio_type_to_blocks
 
     if name == "condon92":
-        spec = parse_groups(radio={"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}})
+        spec = parse_groups(
+            radio={"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}}, redshift=Fixed(0.1)
+        )
     else:
         sf_variant, agn_variant = _legacy_radio_type_to_blocks(name)
-        spec = parse_groups(radio={"sf": {"type": sf_variant}, "agn": {"type": agn_variant}})
+        spec = parse_groups(
+            radio={"sf": {"type": sf_variant}, "agn": {"type": agn_variant}}, redshift=Fixed(0.1)
+        )
 
     assert spec.radio is True, f"radio selection {name!r} did not enable radio"
     assert spec.radio_sfr_mode in SF_RADIO_MODELS, (
@@ -125,7 +130,7 @@ def test_composable_radio_is_properly_attributed() -> None:
     """
     import tengri
 
-    spec = parse_groups(radio={"agn": {"type": "dpl"}})
+    spec = parse_groups(radio={"agn": {"type": "dpl"}}, redshift=Fixed(0.1))
     rows = [r for r in tengri.cite_components(spec) if str(r.get("component", "")) == "radio_agn"]
 
     assert len(rows) == 1, f"expected exactly one radio_agn citation row, got {rows}"
@@ -138,7 +143,9 @@ def test_composable_radio_is_properly_attributed() -> None:
 
 def test_none_still_disables_radio() -> None:
     """Both sf and agn set to 'none' must disable radio."""
-    spec = parse_groups(radio={"sf": {"type": "none"}, "agn": {"type": "none"}})
+    spec = parse_groups(
+        radio={"sf": {"type": "none"}, "agn": {"type": "none"}}, redshift=Fixed(0.1)
+    )
 
     assert spec.radio is False
 
@@ -150,7 +157,7 @@ def test_condon92_means_default_sf_agn_models() -> None:
     that the default sf/agn models produce the expected state.
     """
     spec = {"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}}
-    assert _radio_state(parse_groups(radio=spec)) == (
+    assert _radio_state(parse_groups(radio=spec, redshift=Fixed(0.1))) == (
         True,
         "bell2003",
         "powerlaw",
@@ -165,11 +172,11 @@ def test_legacy_radio_type_form_is_retired() -> None:
     mapping to the equivalent composable form for mechanical conversion.
     """
     with pytest.raises(ValueError, match=r"legacy.*retired"):
-        parse_groups(radio={"type": "condon92"})
+        parse_groups(radio={"type": "condon92"}, redshift=Fixed(0.1))
 
     # Verify the error message includes the composable mapping
     with pytest.raises(ValueError) as excinfo:
-        parse_groups(radio={"type": "radio_dpl"})
+        parse_groups(radio={"type": "radio_dpl"}, redshift=Fixed(0.1))
     message = str(excinfo.value)
     assert "radio=" in message
     assert "sf" in message

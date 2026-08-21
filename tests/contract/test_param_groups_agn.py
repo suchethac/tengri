@@ -221,6 +221,7 @@ class TestAGNValidation:
             parse_groups(
                 sfh={"type": "dpl", "*": FIXED},
                 agn={"disc": {"type": "banana_disc"}},
+                redshift=Fixed(0.1),
             )
 
     def test_agn_unknown_torus_type_raises(self):
@@ -229,6 +230,7 @@ class TestAGNValidation:
             parse_groups(
                 sfh={"type": "dpl", "*": FIXED},
                 agn={"torus": {"type": "donut_model"}},
+                redshift=Fixed(0.1),
             )
 
     def test_agn_unknown_lines_type_raises(self):
@@ -237,6 +239,7 @@ class TestAGNValidation:
             parse_groups(
                 sfh={"type": "dpl", "*": FIXED},
                 agn={"lines": {"type": "squiggly"}},
+                redshift=Fixed(0.1),
             )
 
     def test_agn_unknown_feii_type_raises(self):
@@ -245,6 +248,7 @@ class TestAGNValidation:
             parse_groups(
                 sfh={"type": "dpl", "*": FIXED},
                 agn={"feii": {"type": "iron_oxide"}},
+                redshift=Fixed(0.1),
             )
 
     def test_agn_unknown_atten_type_raises(self):
@@ -253,6 +257,7 @@ class TestAGNValidation:
             parse_groups(
                 sfh={"type": "dpl", "*": FIXED},
                 agn={"atten": {"type": "cloud_of_dust"}},
+                redshift=Fixed(0.1),
             )
 
 
@@ -955,6 +960,7 @@ class TestComposableAGNRuntimeWiring:
                     "type": "richards2006",
                     "disc": {"type": "multicolor"},
                 },
+                redshift=Fixed(0.1),
             )
 
 
@@ -1031,6 +1037,7 @@ class TestAGNSubblockStrictness:
                     "disc": {"type": "powerlaw", "*": FIXED},
                     "tau_skirtor": Uniform(3, 11),  # Wrong level!
                 },
+                redshift=Fixed(0.1),
             )
 
     def test_subblock_owned_param_error_names_correct_nesting(self):
@@ -1042,6 +1049,7 @@ class TestAGNSubblockStrictness:
                     "disc": {"type": "powerlaw", "*": FIXED},
                     "tau_skirtor": Uniform(3, 11),
                 },
+                redshift=Fixed(0.1),
             )
         message = str(excinfo.value)
         # The error should name the correct nesting path
@@ -1071,6 +1079,7 @@ class TestAGNSubblockStrictness:
                     "disc": {"type": "powerlaw", "*": FIXED},
                     "nlr_cf": Uniform(0.01, 0.5),  # nlr param at wrong level
                 },
+                redshift=Fixed(0.1),
             )
 
     def test_shared_agn_params_still_work_at_agn_level(self):
@@ -1097,4 +1106,5 @@ class TestAGNSubblockStrictness:
                     "tau_skirtor": Uniform(3, 11),  # torus param
                     "nlr_cf": Uniform(0.01, 0.5),  # nlr param
                 },
+                redshift=Fixed(0.1),
             )

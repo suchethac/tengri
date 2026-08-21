@@ -164,7 +164,7 @@ kitchen_sink = dict(
     radio={"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}, "*": FIXED},
     xray={"type": "simple", "*": FIXED},
     redshift=Fixed(2.0),
-    apply_igm=True,
+    igm={"type": "inoue"},
 )
 
 model = SEDModel.build(ssp_data=ssp, observation=obs, **kitchen_sink)
@@ -389,7 +389,7 @@ cmap = plt.colormaps["cividis"]
 for z, col in zip(z_grid, cmap(np.linspace(0.15, 0.85, len(z_grid)))):
     cfg = deepcopy(base)
     cfg["redshift"] = Fixed(z)
-    cfg["apply_igm"] = z > 0
+    cfg["igm"] = {"type": "inoue"} if z > 0 else {"type": "none"}
     m = SEDModel.build(ssp_data=ssp, observation=obs, **cfg)
     p = m.spec.sample(jax.random.PRNGKey(0))
     pred = m.predict(p)

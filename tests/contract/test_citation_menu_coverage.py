@@ -31,6 +31,7 @@ from __future__ import annotations
 import pytest
 
 import tengri
+from tengri import Fixed
 from tengri.parameters.groups import parse_groups
 from tengri.registry import _menu_listers, list_shock_models
 
@@ -64,6 +65,7 @@ def test_radio_slots_are_cited() -> None:
     spec = parse_groups(
         sfh={"type": "dpl"},
         radio={"sf": {"type": "bell2003"}, "agn": {"type": "dpl"}},
+        redshift=Fixed(0.1),
     )
     assert "Bell 2003" in (_citation_for(spec, "radio_sf") or ""), (
         "radio.sf=bell2003 was requested but Bell 2003 is not cited"
@@ -75,34 +77,55 @@ def test_radio_slots_are_cited() -> None:
 
 def test_shock_is_cited() -> None:
     """An enabled shock component must cite MAPPINGS V."""
-    spec = parse_groups(sfh={"type": "dpl"}, shock={"type": "mappings"})
+    spec = parse_groups(sfh={"type": "dpl"}, shock={"type": "mappings"}, redshift=Fixed(0.1))
     citation = _citation_for(spec, "shock") or ""
     assert "Allen" in citation, f"shock enabled but MAPPINGS V not cited (got {citation!r})"
 
 
 def test_igm_is_cited() -> None:
     """A requested IGM model must be cited."""
-    spec = parse_groups(sfh={"type": "dpl"}, igm={"type": "madau"})
+    spec = parse_groups(sfh={"type": "dpl"}, igm={"type": "madau"}, redshift=Fixed(0.1))
     citation = _citation_for(spec, "igm") or ""
     assert "Madau" in citation, f"igm=madau requested but not cited (got {citation!r})"
 
 
-def test_igm_default_is_cited() -> None:
-    """IGM attenuation is on by default, so its paper is owed by default.
+def test_igm_typeless_group_is_cited() -> None:
+    """An igm group with no ``type`` still runs a model, so it still owes a paper.
 
-    This is the widest instance of the bug: ``apply_igm`` defaults to
-    ``True`` with ``igm_model='inoue'``, so nearly every fit tengri has
-    ever produced applied Inoue+2014 and cited nobody for it.
+    This was the widest instance of the citation bug: ``apply_igm`` defaulted
+    to ``True``, so nearly every fit tengri ever produced applied Inoue+2014
+    and cited nobody for it. Activation is now derived from the group, so an
+    omitted group runs nothing and the "on by default" premise is retired --
+    but the typeless group is the shape that still gets a model chosen for it,
+    which is where an uncited default can still hide.
     """
-    spec = parse_groups(sfh={"type": "dpl"})
-    assert getattr(spec, "apply_igm", False), "premise changed: IGM is no longer on by default"
+    spec = parse_groups(sfh={"type": "dpl"}, igm={}, redshift=Fixed(0.1))
+    assert getattr(spec, "apply_igm", False), (
+        "premise changed: a typeless igm group no longer activates IGM"
+    )
     citation = _citation_for(spec, "igm") or ""
     assert "Inoue" in citation, f"default IGM ran but was not cited (got {citation!r})"
 
 
+def test_no_igm_group_owes_no_igm_citation() -> None:
+    """The mirror of the bug above, and now the reachable one.
+
+    Citing a model that never ran is the same class of error as running one
+    uncited: both make the bibliography a poor description of the fit. With
+    activation derived from the group, an omitted group must leave the IGM
+    slot empty rather than crediting Inoue for an attenuation nobody applied.
+    """
+    spec = parse_groups(sfh={"type": "dpl"}, redshift=Fixed(0.1))
+    assert not getattr(spec, "apply_igm", False), (
+        "premise changed: an omitted igm group is activating IGM again"
+    )
+    citation = _citation_for(spec, "igm") or ""
+    assert "Inoue" not in citation, f"IGM never ran but was cited anyway (got {citation!r})"
+
+
 def test_xray_is_cited() -> None:
     """A requested X-ray model must be cited."""
-    spec = parse_groups(sfh={"type": "dpl"}, xray={"type": "yang20"})
+    spec = parse_groups(sfh={"type": "dpl"}, xray={"type": "yang20"}, redshift=Fixed(0.1))
     citation = _citation_for(spec, "xray") or ""
     assert "Yang" in citation, f"xray=yang20 requested but not cited (got {citation!r})"
 
@@ -117,6 +140,7 @@ def test_dust_model_is_cited() -> None:
     spec = parse_groups(
         sfh={"type": "dpl"},
         dust_attenuation={"type": "two_component", "law": "calzetti"},
+        redshift=Fixed(0.1),
     )
     citation = _citation_for(spec, "dust") or ""
     assert "Charlot" in citation, (
@@ -137,7 +161,9 @@ def test_disabled_components_are_not_cited() -> None:
     attach Bell 2003 and Yang+2020 to a plain stellar+dust fit.
     """
     spec = parse_groups(
-        sfh={"type": "dpl"}, dust_attenuation={"law": "power_law", "type": "two_component"}
+        sfh={"type": "dpl"},
+        dust_attenuation={"law": "power_law", "type": "two_component"},
+        redshift=Fixed(0.1),
     )
     # Premise: the defaults really are non-None while the gates are off.
     assert spec.radio is False

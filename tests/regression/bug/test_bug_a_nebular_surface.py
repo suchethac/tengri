@@ -235,6 +235,7 @@ def test_bakedin_predict_lines_still_raises(ssp_bare):
             "end_gyr": 0.0,
         },
         dust_attenuation={"law": "power_law", "type": "two_component", "*": FIXED},
+        redshift=Fixed(0.1),
     )
     p = dict(m.spec.sample(jax.random.PRNGKey(0)))
     with pytest.raises(NotImplementedError, match="BakedIn"):

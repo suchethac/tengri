@@ -69,7 +69,7 @@ def _model(ssp):
         },
         neb={"type": "none"},
         redshift=Fixed(0.1),
-        apply_igm=False,
+        igm={"type": "none"},
     )
 
 

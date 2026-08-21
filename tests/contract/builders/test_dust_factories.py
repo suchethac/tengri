@@ -9,7 +9,7 @@ import pytest
 
 pytestmark = pytest.mark.contract
 
-from tengri import FIXED, FREE, Uniform, builders, parse_groups
+from tengri import FIXED, FREE, Fixed, Uniform, builders, parse_groups
 from tengri.components.dust.attenuation import DUST_LAWS
 from tengri.parameters.groups import _valid_dust_emission_types
 
@@ -141,6 +141,7 @@ def test_two_component_free_round_trips_tau_bc_tau_diff() -> None:
     spec = parse_groups(
         sfh={"type": "dpl"},
         dust_attenuation=builders.dust.two_component(law="calzetti", _=FREE),
+        redshift=Fixed(0.1),
     )
     free_dust = {p for p in spec.free_params if p.startswith("dust_")}
     assert "dust_tau_bc" in free_dust
@@ -151,6 +152,7 @@ def test_single_component_uses_tau_v_not_tau_bc() -> None:
     spec = parse_groups(
         sfh={"type": "dpl"},
         dust_attenuation=builders.dust.single_component(law="calzetti", _=FREE),
+        redshift=Fixed(0.1),
     )
     free_dust = {p for p in spec.free_params if p.startswith("dust_")}
     assert "dust_tau_v" in free_dust
@@ -161,6 +163,7 @@ def test_per_param_override_survives_round_trip() -> None:
     spec = parse_groups(
         sfh={"type": "dpl"},
         dust_attenuation=builders.dust.two_component(law="calzetti", tau_bc=Uniform(0.5, 3.0)),
+        redshift=Fixed(0.1),
     )
     assert "dust_tau_bc" in spec.free_params
 

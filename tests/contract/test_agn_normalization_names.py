@@ -148,14 +148,18 @@ def test_the_legacy_short_form_key_still_works(legacy, current):
     _aliases._WARNED_ALIASES.discard(legacy)
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
-        legacy_spec = parse_groups(agn={"type": "composable", legacy: Fixed(0.37)})
+        legacy_spec = parse_groups(
+            agn={"type": "composable", legacy: Fixed(0.37)}, redshift=Fixed(0.1)
+        )
     assert any(issubclass(w.category, DeprecationWarning) for w in caught), (
         f"agn={{'{legacy}': ...}} must warn, not be silently accepted"
     )
 
     with warnings.catch_warnings():
         warnings.simplefilter("error", DeprecationWarning)
-        current_spec = parse_groups(agn={"type": "composable", current: Fixed(0.37)})
+        current_spec = parse_groups(
+            agn={"type": "composable", current: Fixed(0.37)}, redshift=Fixed(0.1)
+        )
 
     assert legacy_spec.get_fixed_values() == current_spec.get_fixed_values(), (
         f"agn={{'{legacy}'}} and agn={{'{current}'}} resolve differently — the "
@@ -168,8 +172,8 @@ def test_the_short_form_probe_can_detect_a_difference():
     from tengri import Fixed
     from tengri.parameters.groups import parse_groups
 
-    a = parse_groups(agn={"type": "composable", "lum_ratio": Fixed(0.37)})
-    b = parse_groups(agn={"type": "composable", "lum_ratio": Fixed(0.99)})
+    a = parse_groups(agn={"type": "composable", "lum_ratio": Fixed(0.37)}, redshift=Fixed(0.1))
+    b = parse_groups(agn={"type": "composable", "lum_ratio": Fixed(0.99)}, redshift=Fixed(0.1))
     assert a.get_fixed_values() != b.get_fixed_values(), (
         "get_fixed_values() cannot distinguish two different values, so the "
         "equivalence test above proves nothing"

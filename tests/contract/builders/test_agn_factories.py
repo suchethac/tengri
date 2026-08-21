@@ -9,7 +9,7 @@ import pytest
 
 pytestmark = pytest.mark.contract
 
-from tengri import FIXED, FREE, Uniform, builders, parse_groups
+from tengri import FIXED, FREE, Fixed, Uniform, builders, parse_groups
 from tengri.parameters.groups import (
     _VALID_AGN_ATTEN_TYPES,
     _VALID_AGN_BLR_TYPES,
@@ -177,6 +177,7 @@ def test_composable_round_trips_to_free_log_lbol() -> None:
             feii=builders.agn.feii.none(),
             atten=builders.agn.atten.smc_prevot(),
         ),
+        redshift=Fixed(0.1),
     )
     assert "agn_log_lbol" in spec.free_params
 
@@ -297,5 +298,6 @@ def test_top_level_round_trip_makes_log_lbol_free() -> None:
     spec = parse_groups(
         sfh={"type": "dpl"},
         agn=builders.agn.simple(log_lbol=Uniform(9.42, 13.42)),
+        redshift=Fixed(0.1),
     )
     assert "agn_log_lbol" in spec.free_params

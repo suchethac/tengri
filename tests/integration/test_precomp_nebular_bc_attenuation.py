@@ -69,7 +69,7 @@ def test_spectrum_precomp_nebular_line_matches_exact(ssp, tau):
         ssp_data=ssp,
         observation=obs,
         redshift=Fixed(0.0),
-        apply_igm=False,
+        igm={"type": "none"},
         approx=approx,
         **_sfh_dust_neb(),
     )
@@ -97,7 +97,7 @@ def test_wave_precomp_nebular_band_matches_exact(ssp, tau):
         ssp_data=ssp,
         observation=obs,
         redshift=Fixed(0.0),
-        apply_igm=False,
+        igm={"type": "none"},
         approx=approx,
         **_sfh_dust_neb(),
     )

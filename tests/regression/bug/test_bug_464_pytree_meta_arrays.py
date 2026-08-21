@@ -47,7 +47,7 @@ def test_two_cue_models_predict_photometry_does_not_crash():
             },
             neb={"type": "cue", "*": tengri.FIXED},
             redshift=Fixed(0.5),
-            apply_igm=True,
+            igm={"type": "inoue"},
         )
         mB = SEDModel.build(
             ssp,
@@ -63,7 +63,7 @@ def test_two_cue_models_predict_photometry_does_not_crash():
             },
             neb={"type": "cue", "*": tengri.FIXED},
             redshift=Fixed(1.0),
-            apply_igm=True,
+            igm={"type": "inoue"},
         )
     except (FileNotFoundError, OSError):
         pytest.skip("required data files (e.g. cue_weights.npz) not available")

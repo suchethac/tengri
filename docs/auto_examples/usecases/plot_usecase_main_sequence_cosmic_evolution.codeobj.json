@@ -1,4 +1,55 @@
 {
+ "Fixed": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tengri.parameters.priors",
+   "module_short": "tengri",
+   "name": "Fixed"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tengri.parameters",
+   "module_short": "tengri",
+   "name": "Fixed"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "Fixed"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tengri.parameters.priors",
+   "module_short": "tengri.parameters.priors",
+   "name": "Distribution"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tengri.parameters",
+   "module_short": "tengri.parameters",
+   "name": "Distribution"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "Distribution"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "tengri",
+   "module_short": "tengri",
+   "name": "Fixed"
+  }
+ ],
  "Path.cwd": [
   {
    "is_class": true,

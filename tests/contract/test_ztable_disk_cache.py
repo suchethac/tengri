@@ -72,6 +72,9 @@ def test_changed_inputs_miss(
 
     pc.precompute_photometry_ztable(synthetic_ssp_wide, fw, ft, n_z=7, z_max=2.0)
     pc.precompute_photometry_ztable(synthetic_ssp_wide, fw, ft, n_z=9, z_max=2.0)
+    # `apply_igm` is this function's OWN parameter, not the retired grammar key
+    # -- precompute_photometry_ztable has no `igm` argument. The retirement is
+    # about parse_groups; internal flags that happen to share the name stay.
     pc.precompute_photometry_ztable(synthetic_ssp_wide, fw, ft, n_z=7, z_max=2.0, apply_igm=True)
     pc.precompute_photometry_ztable(synthetic_ssp_wide, fw[:1], ft[:1], n_z=7, z_max=2.0)
 

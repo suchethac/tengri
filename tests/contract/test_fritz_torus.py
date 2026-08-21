@@ -21,6 +21,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri import Fixed
 from tests._bounds import assert_non_negative
 from tests._grad_parity import assert_grad_matches_fd
 from tests._jit_parity import assert_jit_matches_eager
@@ -441,6 +442,7 @@ def test_fritz_in_seds_model_build(
         ssp_data=synthetic_ssp_wide,
         observation=synthetic_tophat_obs,
         agn={"disc": {"type": "skirtor"}, "torus": {"type": "fritz"}},
+        redshift=Fixed(0.1),
     )
     assert model is not None
     assert "fritz" in str(model.spec.to_groups()["agn"])

@@ -42,7 +42,7 @@ def ssp():
 
 
 def _build(ssp, approx, *, z=0.8, tau_diff=0.0, tau_bc=0.0, igm=True, **kw):
-    extra = {} if igm else {"igm": {"type": "none"}}
+    extra = {"igm": {"type": "inoue"}} if igm else {"igm": {"type": "none"}}
     return SEDModel.build(
         ssp_data=ssp,
         observation=Observation(photometry=Photometry.from_names(BANDS)),
@@ -288,6 +288,7 @@ def test_free_redshift_folds_on_the_ztable_grid(ssp):
             "tau_bc": 1.0,
         },
         redshift=Uniform(0.05, 1.6),
+        igm={"type": "inoue"},
         approx=WavePrecomp(n_z=120),
     )
     zt = m._cached_component_chain[0]._state.ssp_phot_ztable
@@ -308,6 +309,7 @@ def test_free_redshift_folds_on_the_ztable_grid(ssp):
             "tau_bc": 1.0,
         },
         redshift=Uniform(0.05, 1.6),
+        igm={"type": "inoue"},
         approx=None,
     )
     p = dict(m_exact.spec.sample(KEY))

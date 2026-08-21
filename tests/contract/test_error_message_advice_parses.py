@@ -38,8 +38,29 @@ from pathlib import Path
 import pytest
 
 from tengri.parameters.groups import parse_groups
+from tengri.parameters.priors import Fixed
 
 pytestmark = [pytest.mark.contract, pytest.mark.regression_bug]
+
+
+def _parse_snippet(name: str, value) -> None:
+    """Parse one advice fragment with the minimum scaffolding a model needs.
+
+    The fragments under test are *group spellings* -- ``agn={'type':
+    'composable'}`` -- not complete build calls, so the guard has always fed
+    them to ``parse_groups`` on their own. That worked while every top-level
+    argument had a default. `redshift` is now required, so the scaffolding has
+    to be supplied here rather than restated in every menu row and every error
+    message: what is under test is whether the advice is grammatical, not
+    whether it repeats an argument it is not about.
+
+    ``redshift`` goes first so a fragment that IS about redshift still wins.
+
+    Returns the parsed spec: callers additionally assert that a suggested
+    block kept the law it named, which needs the result, not just the
+    absence of an exception.
+    """
+    return parse_groups(**{"redshift": Fixed(0.1), name: value})
 
 
 def _literal_eval_with_sentinels(expr: str) -> dict:
@@ -219,7 +240,7 @@ def test_error_message_advice_is_itself_valid(kwargs) -> None:
             continue
 
         try:
-            result = parse_groups(**{name: value})
+            result = _parse_snippet(name, value)
         except Exception as exc:
             pytest.fail(
                 f"the error message for {kwargs!r} recommends {name}={value!r}, "
@@ -314,7 +335,7 @@ def test_every_menu_usage_hint_is_accepted_by_the_grammar() -> None:
                     continue
                 checked += 1
                 try:
-                    parse_groups(**{name: value})
+                    _parse_snippet(name, value)
                 except Exception as exc:
                     failures.append(
                         f"{lister.__name__} row {row['name']!r} advertises "
@@ -360,7 +381,7 @@ def test_ambiguity_note_advice_is_accepted_by_the_grammar() -> None:
             if _skip_reason(owner, value, ""):
                 continue
             try:
-                parse_groups(**{name: value})
+                _parse_snippet(name, value)
             except Exception as exc:
                 pytest.fail(
                     f"describe({owner!r})'s ambiguity note recommends {name}={value!r}, "
@@ -556,7 +577,7 @@ def test_every_literal_advice_snippet_in_src_is_accepted_by_the_grammar() -> Non
             failures.extend(_bad_group_name(relpath, lineno, name, value))
             continue
         try:
-            parse_groups(**{name: value})
+            _parse_snippet(name, value)
         except Exception as exc:
             failures.append(
                 f"  {relpath}:{lineno} advises {name}={value!r}\n"

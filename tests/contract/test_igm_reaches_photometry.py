@@ -37,7 +37,7 @@ from tengri import (
 pytestmark = pytest.mark.contract
 
 
-def _build(ssp, obs, *, apply_igm, approx=None, model="inoue"):
+def _build(ssp, obs, *, igm_on, approx=None, model="inoue"):
     kwargs = dict(
         ssp_data=ssp,
         observation=obs,
@@ -47,18 +47,17 @@ def _build(ssp, obs, *, apply_igm, approx=None, model="inoue"):
         redshift=Fixed(3.0),
         approx=approx,
     )
-    if apply_igm:
-        kwargs["apply_igm"] = True
+    if igm_on:
         kwargs["igm"] = {"type": model}
     else:
-        kwargs["apply_igm"] = False
+        kwargs["igm"] = {"type": "none"}
     return SEDModel.build(**kwargs)
 
 
 def _blue_band_ratio(ssp, obs, *, approx, model="inoue"):
     """on/off ratio of the bluest band (3500 A obs -> rest ~875 A at z=3)."""
-    on = _build(ssp, obs, apply_igm=True, approx=approx, model=model)
-    off = _build(ssp, obs, apply_igm=False, approx=approx)
+    on = _build(ssp, obs, igm_on=True, approx=approx, model=model)
+    off = _build(ssp, obs, igm_on=False, approx=approx)
     params = on.spec.sample(jax.random.PRNGKey(1))
     ph_on = np.asarray(on.predict_photometry(params))
     ph_off = np.asarray(off.predict_photometry(params))
@@ -104,7 +103,6 @@ def test_predict_obs_sed_runs_with_igm_and_dla(synthetic_ssp_wide, synthetic_top
         dust_attenuation={"type": "two_component", "law": "calzetti", "*": FIXED},
         neb={"type": "none"},
         redshift=Fixed(3.0),
-        apply_igm=True,
         igm={"type": "inoue", "dla": {"log_n_hi": Fixed(21.0)}},
     )
     params = model.spec.sample(jax.random.PRNGKey(1))
@@ -127,8 +125,8 @@ def test_igm_attenuates_spectrum_precomp_path(synthetic_ssp_wide):
         redshift=Fixed(3.0),
         approx=SpectrumPrecomp(),
     )
-    on = SEDModel.build(apply_igm=True, igm={"type": "inoue"}, **common)
-    off = SEDModel.build(apply_igm=False, **common)
+    on = SEDModel.build(igm={"type": "inoue"}, **common)
+    off = SEDModel.build(igm={"type": "none"}, **common)
     params = on.spec.sample(jax.random.PRNGKey(1))
     s_on = np.asarray(on.predict_spectrum(params))
     s_off = np.asarray(off.predict_spectrum(params))
@@ -156,7 +154,6 @@ def _igm_parity_ratios(ssp, obs, *, redshift_spec, params=None, approx=None):
         },
         neb={"type": "none"},
         redshift=redshift_spec,
-        apply_igm=True,
         igm={"type": "inoue"},
     )
     exact = SEDModel.build(**common)

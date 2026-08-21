@@ -40,14 +40,16 @@ import warnings
 import pytest
 
 import tengri
-from tengri import FIXED, FREE, Uniform
+from tengri import FIXED, FREE, Fixed, Uniform
 from tengri.config.exceptions import ParameterError, WildcardPartialFreeWarning
 
 pytestmark = pytest.mark.contract
 
 
 def _free(**groups) -> set[str]:
-    return set(tengri.parse_groups(**groups).free_params)
+    # redshift FIRST so a caller passing its own wins; the reverse order would
+    # silently overwrite the value under test.
+    return set(tengri.parse_groups(**{"redshift": tengri.Fixed(0.1), **groups}).free_params)
 
 
 # ── Groups whose wildcard frees nothing must raise ────────────────────
@@ -109,7 +111,11 @@ def test_a_group_with_no_declared_ranges_still_raises_end_to_end():
     ]
     for group, spec in candidates:
         try:
-            tengri.parse_groups(sfh={"type": "dpl"}, **{group: {**spec, "all_params": FREE}})
+            tengri.parse_groups(
+                sfh={"type": "dpl"},
+                redshift=tengri.Fixed(0.1),
+                **{group: {**spec, "all_params": FREE}},
+            )
         except ParameterError as exc:
             assert "freed 0 of" in str(exc)
             return
@@ -246,7 +252,9 @@ def test_partial_warning_is_filterable_by_category():
 def test_partial_free_warns_end_to_end_through_parse_groups():
     """Not just the decision function — the real user-facing path."""
     with pytest.warns(WildcardPartialFreeWarning, match=r"group 'xray'"):
-        tengri.parse_groups(sfh={"type": "dpl"}, xray={"type": "simple", "all_params": FREE})
+        tengri.parse_groups(
+            sfh={"type": "dpl"}, xray={"type": "simple", "all_params": FREE}, redshift=Fixed(0.1)
+        )
 
 
 @pytest.mark.parametrize(
@@ -269,7 +277,7 @@ def test_the_advice_the_partial_warning_gives_actually_works(groups):
     under test. Parse it back out and run it.
     """
     with pytest.warns(WildcardPartialFreeWarning) as rec:
-        tengri.parse_groups(**groups)
+        tengri.parse_groups(**{"redshift": Fixed(0.1), **groups})
 
     match = re.search(r"e\.g\. (\w+)=\{'([^']+)': Uniform", str(rec[0].message))
     assert match, f"the warning no longer prints a runnable example: {rec[0].message}"
@@ -288,7 +296,7 @@ def test_the_advice_the_partial_warning_gives_actually_works(groups):
     patched.setdefault(group_kwarg, {})[param_key] = Uniform(lo, hi)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", WildcardPartialFreeWarning)
-        freed = set(tengri.parse_groups(**patched).free_params)
+        freed = set(tengri.parse_groups(**{"redshift": Fixed(0.1), **patched}).free_params)
 
     assert any(param_key in name for name in freed), (
         f"the advice {group_kwarg}={{{param_key!r}: ...}} did not free anything"
@@ -369,7 +377,9 @@ def test_wildcard_free_now_frees_declared_params(group, spec, prefix):
 
 
 def test_free_uses_the_declared_range_not_the_fixed_default():
-    freed = tengri.parse_groups(sfh={"type": "dpl"}, neb={"type": "cue", "all_params": FREE})
+    freed = tengri.parse_groups(
+        sfh={"type": "dpl"}, neb={"type": "cue", "all_params": FREE}, redshift=Fixed(0.1)
+    )
     logu = freed.get_distribution("neb_logU")
     assert not logu.is_fixed
     assert logu.bounds == (-5.0, 0.0)  # the range neb_logU's bound_check enforces

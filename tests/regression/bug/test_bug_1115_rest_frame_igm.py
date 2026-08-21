@@ -70,7 +70,7 @@ def _obs() -> Observation:
 
 
 def _build(ssp, z: float, approx, *, igm: bool = True, obs=None) -> SEDModel:
-    extra = {} if igm else {"igm": {"type": "none"}}
+    extra = {"igm": {"type": "inoue"}} if igm else {"igm": {"type": "none"}}
     return SEDModel.build(
         ssp_data=ssp,
         observation=obs if obs is not None else _obs(),

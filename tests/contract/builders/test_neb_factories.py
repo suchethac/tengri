@@ -9,7 +9,7 @@ import pytest
 
 pytestmark = pytest.mark.contract
 
-from tengri import FIXED, Uniform, builders, parse_groups
+from tengri import FIXED, Fixed, Uniform, builders, parse_groups
 from tengri.parameters.groups import _valid_nebular_types
 
 
@@ -59,6 +59,7 @@ def test_per_param_override_round_trips_to_free() -> None:
     spec = parse_groups(
         sfh={"type": "dpl"},
         neb=builders.neb.cue(fesc=Uniform(0.0, 0.5)),
+        redshift=Fixed(0.1),
     )
     assert "neb_fesc" in spec.free_params
 
@@ -72,6 +73,6 @@ def test_typo_rejection_lists_valid_names() -> None:
 
 
 def test_ssp_neb_round_trips_without_activating_params() -> None:
-    spec = parse_groups(sfh={"type": "dpl"}, neb=builders.neb.ssp())
+    spec = parse_groups(sfh={"type": "dpl"}, neb=builders.neb.ssp(), redshift=Fixed(0.1))
     neb_free = [p for p in spec.free_params if p.startswith("neb_")]
     assert neb_free == []

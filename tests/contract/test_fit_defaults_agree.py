@@ -32,6 +32,7 @@ import warnings
 import pytest
 
 import tengri
+from tengri import Fixed
 from tengri.inference._backend_registry import DEFAULT_METHOD, get_backend
 
 pytestmark = pytest.mark.contract
@@ -235,6 +236,7 @@ def test_sedmodel_fit_emits_no_deprecation_warning(ssp_data_wne, simple_observat
         sfh={"type": "dpl", "*": FIXED},
         dust_attenuation={"type": "two_component", "law": "calzetti", "*": FIXED},
         neb={"type": "none"},
+        redshift=Fixed(0.1),
     )
     # Generate a trivial mock for fitting
     params = {

@@ -58,7 +58,7 @@ def test_field_fast_line_matches_exact():
         dust_attenuation=builders.dust.two_component(defaults=FREE, law="calzetti"),
         neb=builders.neb.ssp(),
         redshift=Fixed(0.1),
-        apply_igm=False,
+        igm={"type": "none"},
         n_grid=8,
         approx=FeaturePrecomp(),
     )

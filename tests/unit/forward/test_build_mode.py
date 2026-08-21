@@ -4,12 +4,17 @@ explicitly, and validated with ONE mode-aware error."""
 
 import pytest
 
+from tengri import Fixed
+
 
 def _sed(synthetic_ssp, simple_observation):
     from tengri import SEDModel
 
     return SEDModel.build(
-        ssp_data=synthetic_ssp, observation=simple_observation, sfh={"type": "dpl"}
+        ssp_data=synthetic_ssp,
+        observation=simple_observation,
+        sfh={"type": "dpl"},
+        redshift=Fixed(0.1),
     )
 
 

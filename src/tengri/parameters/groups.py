@@ -616,7 +616,6 @@ _AGN_PARTITION = {
 #: Top-level kwargs that are not groups (passed through to Parameters).
 _TOP_LEVEL_SETTINGS = {
     "redshift",
-    "apply_igm",
     "n_grid",
     # Emission-line velocity mode. Activating it (``"fixed"``/``"marginalized"``/
     # ``"fitted"``) registers the line-velocity params (``eline_sigma_kms``,
@@ -740,6 +739,20 @@ def parse_groups(**kwargs) -> Parameters:
     # Private introspection escape hatch — popped before group parsing so it is
     # never mistaken for a group name.
     allow_empty_wildcard = bool(kwargs.pop("_allow_empty_wildcard", False))
+
+    # Redshift is required, and the question asked here is whether the caller
+    # PASSED it -- not what its value is. A value-based sentinel cannot answer
+    # that: any object standing in for "absent" is also a legal prior. The one
+    # tried first was ``Uniform(0.0, 10.0)``, which is the most natural photo-z
+    # prior in this package's target science and compares equal to a user's own
+    # ``Uniform(0, 10)`` with an identical repr. That left two silent failures,
+    # one on each side of the identity check: compare with ``is`` and any path
+    # that REBUILDS the default (a copy, a serializer, a to_groups round-trip)
+    # yields a free z in [0, 10] fit where no redshift was given; tighten it to
+    # ``==`` and every genuine photo-z fit over that range is refused as
+    # missing. Presence has neither failure mode. Introspection callers pass
+    # ``_allow_empty_wildcard`` and legitimately have no redshift.
+    redshift_was_given = "redshift" in kwargs
 
     # ── Pass 0a: Normalize the preferred ``all_params`` wildcard alias ──
     # Rewrite ``all_params`` -> ``'*'`` in every group dict (and nested
@@ -1008,6 +1021,23 @@ def parse_groups(**kwargs) -> Parameters:
     for name in list(final_params._distributions.keys()):
         provenance.setdefault(name, "registry_default")
     object.__setattr__(final_params, "_group_provenance", provenance)
+
+    # Raised HERE, after the groups have been translated and validated, not at
+    # the top. A caller with a malformed group AND no redshift should hear about
+    # the group: it is the more specific of the two complaints, and the one they
+    # can act on. Checking first made `parse_groups(radio=True)` answer with
+    # "redshift is required" instead of the bool-gate advice that explains what
+    # `radio=True` should have been.
+    if not redshift_was_given and not allow_empty_wildcard:
+        raise ValueError(
+            "redshift is required. Specify one of:\n"
+            "  - redshift=Fixed(z)             a known redshift\n"
+            "  - redshift=Uniform(lo, hi)      a photo-z fit\n"
+            "  - redshift=<any Distribution>   any other prior\n"
+            "\n"
+            "It used to default to Fixed(0.1), which put every model that "
+            "omitted it at z=0.1 without saying so."
+        )
 
     _warn_silently_fixed_parameters(final_params, param_partition, kwargs)
     _warn_firrc_slope_degeneracy(final_params)
@@ -1914,6 +1944,13 @@ def _translate_structural(groups: dict) -> dict:
                 "met={'logzsol': ...}. "
                 "Two spellings of one setting was the maintenance cost this "
                 "removes; tengri.list_metallicity_modes() shows the current form."
+            )
+
+        if group_name == "apply_igm":
+            raise ValueError(
+                "apply_igm is retired. IGM activation is now derived from the igm dict: "
+                "pass igm={'type': 'inoue'} (or 'madau', 'meiksin06') to enable IGM, or "
+                "omit the igm dict (or pass igm={'type': 'none'}) to disable it."
             )
 
         if group_name not in valid_groups:
@@ -2850,8 +2887,26 @@ def _translate_shock(shock_dict: dict, result: dict) -> None:
 
 
 def _translate_igm(igm_dict: dict, result: dict) -> None:
-    """Translate igm group to apply_igm and related settings."""
-    igm_type = igm_dict.get("type", "madau")
+    """Translate igm group to igm_model and related settings.
+
+    IGM activation is derived from the igm group presence: if igm={'type': ...}
+    is provided, IGM is activated. If igm={'type': 'none'} is provided, IGM is
+    deactivated. The apply_igm secondary switch is retired.
+
+    The typeless default is ``inoue14``, changed here from ``madau``. Those are
+    different transmission curves, not two names for one -- but the two entry
+    points disagreed about which the grammar meant. ``Parameters.__init__``
+    defaults ``igm_model="inoue"`` (an alias of ``inoue14``), so the same model
+    written flat and written as a group got different IGM physics, and
+    ``components/igm/igm.py`` documents the intent as "the dict-grammar API
+    consistently used ``inoue14``" -- which this function contradicted. The
+    comment described the design; the code had drifted from it.
+
+    Measured: no call site in the tree omits ``type``, so this moves nothing
+    today. That is also why it survived -- a latent default is invisible until
+    someone relies on it.
+    """
+    igm_type = igm_dict.get("type", "inoue14")
 
     # Validate type
     valid_igm = _valid_igm_types()
@@ -2860,7 +2915,8 @@ def _translate_igm(igm_dict: dict, result: dict) -> None:
         suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
         raise ValueError(f"Unknown IGM type '{igm_type}'.{suggest_str}")
 
-    # Map type to apply_igm + igm_model
+    # IGM is activated by the presence of the igm dict.
+    # If type='none', it is explicitly deactivated.
     if igm_type == "none":
         result["apply_igm"] = False
     else:
@@ -4701,13 +4757,14 @@ def parameters_to_groups(spec: Parameters) -> dict:
         if len(pending) > n_before:
             result[group_name] = pending
 
-    # Handle top-level parameters (redshift, apply_igm)
+    # Handle top-level settings. No `apply_igm`: the igm group carries
+    # activation on its own (``type: "none"`` when off, omitted when off and
+    # nothing else is set, which now means the same thing), and emitting the
+    # retired keyword beside it made every round-trip raise on the way back in.
+    # A round-trip that emits a key its own parser refuses is the clearest sign
+    # the second switch was redundant.
     if "redshift" in spec.all_params:
         result["redshift"] = spec.get_distribution("redshift")
-
-    if spec.apply_igm is not True:
-        # Only include if non-default (default is True)
-        result["apply_igm"] = spec.apply_igm
 
     if spec.n_grid != 256:
         # Only include if non-default

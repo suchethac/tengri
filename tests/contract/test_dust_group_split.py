@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import pytest
 
-from tengri.parameters import Uniform, parse_groups
+from tengri.parameters import Fixed, Uniform, parse_groups
 
 pytestmark = pytest.mark.contract
 
@@ -36,6 +36,7 @@ class TestNewDustAttenuationEmission:
                 "tau_diff": 1.0,
             },
             ssp_data=None,
+            redshift=Fixed(0.1),
         )
         assert params.dust_model == "two_component"
         assert params.dust_law_bc == "calzetti"
@@ -52,6 +53,7 @@ class TestNewDustAttenuationEmission:
                 "tau_diff": 1.0,
             },
             ssp_data=None,
+            redshift=Fixed(0.1),
         )
         assert params.dust_model == "two_component"
         assert params.dust_law_bc == "calzetti"
@@ -62,6 +64,7 @@ class TestNewDustAttenuationEmission:
         params = parse_groups(
             dust_attenuation={"type": "single_component", "law": "calzetti", "tau_v": 0.5},
             ssp_data=None,
+            redshift=Fixed(0.1),
         )
         assert params.dust_model == "single_component"
         assert params.dust_law_bc == "calzetti"
@@ -72,6 +75,7 @@ class TestNewDustAttenuationEmission:
         params = parse_groups(
             dust_attenuation={"type": "none"},
             ssp_data=None,
+            redshift=Fixed(0.1),
         )
         assert params.dust_model == "off"
 
@@ -86,6 +90,7 @@ class TestNewDustAttenuationEmission:
             },
             dust_emission={"type": "dale2014"},
             ssp_data=None,
+            redshift=Fixed(0.1),
         )
         assert params.dust_emission == "dale2014"
 
@@ -100,6 +105,7 @@ class TestNewDustAttenuationEmission:
             },
             dust_emission={"type": "astrodust", "spinning_dust": True, "f_cnm": 0.5},
             ssp_data=None,
+            redshift=Fixed(0.1),
         )
         assert params.dust_emission == "astrodust"
         assert params.astrodust_spinning_dust is True
@@ -116,6 +122,7 @@ class TestNewDustAttenuationEmission:
             },
             dust_emission={"type": "none"},
             ssp_data=None,
+            redshift=Fixed(0.1),
         )
         # dust_emission=None means IR emission is off
         assert params.dust_emission is None
@@ -131,6 +138,7 @@ class TestNewDustAttenuationEmission:
             },
             dust_emission={"type": "dale2014", "eta_balance": Uniform(0.8, 1.2)},
             ssp_data=None,
+            redshift=Fixed(0.1),
         )
         # eta_balance should be free with the given prior
         assert "dust_eta_balance" in params.free_params
@@ -153,6 +161,7 @@ class TestNewDustAttenuationEmission:
             },
             dust_emission={"type": "dale2014"},
             ssp_data=None,
+            redshift=Fixed(0.1),
         )
         assert "dust_eta_balance" not in params.free_params
         assert params.get_fixed_values()["dust_eta_balance"] == 1.0
@@ -167,6 +176,7 @@ class TestOldDustRetirement:
             parse_groups(
                 dust={"type": "two_component", "law": "calzetti", "tau_bc": 0.5, "tau_diff": 1.0},
                 ssp_data=None,
+                redshift=Fixed(0.1),
             )
 
     def test_old_dust_raises_with_emission_nested(self):
@@ -181,6 +191,7 @@ class TestOldDustRetirement:
                     "emission": {"type": "dale2014"},
                 },
                 ssp_data=None,
+                redshift=Fixed(0.1),
             )
 
     def test_old_dust_raises_through_sed_model_build(self):
@@ -231,6 +242,7 @@ class TestOldDustRetirement:
                 dust={"type": "two_component", "law": "calzetti", "tau_bc": 0.5, "tau_diff": 1.0},
                 dust_attenuation={"type": "single_component", "law": "power_law", "tau_v": 0.3},
                 ssp_data=None,
+                redshift=Fixed(0.1),
             )
 
     def test_ambiguity_dust_and_dust_emission(self):
@@ -240,6 +252,7 @@ class TestOldDustRetirement:
                 dust={"type": "two_component", "law": "calzetti", "tau_bc": 0.5, "tau_diff": 1.0},
                 dust_emission={"type": "dale2014"},
                 ssp_data=None,
+                redshift=Fixed(0.1),
             )
 
     def test_nested_dust_attenuation_emission_raises(self):
@@ -254,6 +267,7 @@ class TestOldDustRetirement:
                     "emission": {"type": "dale2014"},
                 },
                 ssp_data=None,
+                redshift=Fixed(0.1),
             )
 
 
@@ -270,6 +284,7 @@ class TestOmissionEquivalence:
                 "tau_diff": 1.0,
             },
             ssp_data=None,
+            redshift=Fixed(0.1),
         )
         # Omitting dust_emission declares no emission parameter at all, including
         # dust_eta_balance. Verified identical to omitting `dust={'emission':...}`
@@ -288,6 +303,7 @@ class TestOmissionEquivalence:
                 "tau_diff": 1.0,
             },
             ssp_data=None,
+            redshift=Fixed(0.1),
         )
         assert params.dust_emission is None
 
@@ -306,6 +322,7 @@ class TestPR1984LawValidation:
                 "tau_diff": 1.0,
             },
             ssp_data=None,
+            redshift=Fixed(0.1),
         )
         assert params1.dust_law_bc == "calzetti"
         assert params1.dust_law_diff == "calzetti"
@@ -320,6 +337,7 @@ class TestPR1984LawValidation:
                 "tau_diff": 1.0,
             },
             ssp_data=None,
+            redshift=Fixed(0.1),
         )
         assert params2.dust_law_bc == "calzetti"
         assert params2.dust_law_diff == "power_law"
@@ -335,6 +353,7 @@ class TestPR1984LawValidation:
                     "tau_diff": 1.0,
                 },
                 ssp_data=None,
+                redshift=Fixed(0.1),
             )
 
         # law_bc alone (no law_diff): raises
@@ -347,6 +366,7 @@ class TestPR1984LawValidation:
                     "tau_diff": 1.0,
                 },
                 ssp_data=None,
+                redshift=Fixed(0.1),
             )
 
         # No law at all: raises
@@ -354,6 +374,7 @@ class TestPR1984LawValidation:
             parse_groups(
                 dust_attenuation={"type": "two_component", "tau_bc": 0.5, "tau_diff": 1.0},
                 ssp_data=None,
+                redshift=Fixed(0.1),
             )
 
     def test_single_component_law_required(self):
@@ -362,6 +383,7 @@ class TestPR1984LawValidation:
         params = parse_groups(
             dust_attenuation={"type": "single_component", "law": "calzetti", "tau_v": 0.5},
             ssp_data=None,
+            redshift=Fixed(0.1),
         )
         assert params.dust_law_bc == "calzetti"
         assert params.dust_law_diff == "calzetti"
@@ -371,6 +393,7 @@ class TestPR1984LawValidation:
             parse_groups(
                 dust_attenuation={"type": "single_component", "law_bc": "calzetti", "tau_v": 0.5},
                 ssp_data=None,
+                redshift=Fixed(0.1),
             )
 
         # law required
@@ -378,6 +401,7 @@ class TestPR1984LawValidation:
             parse_groups(
                 dust_attenuation={"type": "single_component", "tau_v": 0.5},
                 ssp_data=None,
+                redshift=Fixed(0.1),
             )
 
     def test_wg00_no_laws(self):
@@ -386,6 +410,7 @@ class TestPR1984LawValidation:
         params = parse_groups(
             dust_attenuation={"type": "wg00", "tau_v": 0.5},
             ssp_data=None,
+            redshift=Fixed(0.1),
         )
         assert params.dust_model == "wg00"
 
@@ -406,6 +431,7 @@ class TestRoundTrip:
                 "tau_diff": 1.0,
             },
             ssp_data=None,
+            redshift=Fixed(0.1),
         )
         groups = original.to_groups()
         roundtripped = parse_groups(**groups, ssp_data=None)
@@ -425,6 +451,7 @@ class TestRoundTrip:
             },
             dust_emission={"type": "dale2014"},
             ssp_data=None,
+            redshift=Fixed(0.1),
         )
         groups = original.to_groups()
         roundtripped = parse_groups(**groups, ssp_data=None)
@@ -448,6 +475,7 @@ class TestRoundTrip:
                 "eta_balance": Uniform(0.9, 1.1),
             },
             ssp_data=None,
+            redshift=Fixed(0.1),
         )
         groups = original.to_groups()
         roundtripped = parse_groups(**groups, ssp_data=None)

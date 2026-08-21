@@ -154,7 +154,7 @@ groups_dict = {
     "dust_emission": {"type": "dale2014", "all_params": FIXED},
     "neb": {"type": "cue", "all_params": FIXED},
     "redshift": Uniform(0.01, 6.0),
-    "apply_igm": True,
+    "igm": {"type": "inoue"},
 }
 model2 = SEDModel.build(ssp_data=ssp, observation=observation, **groups_dict)
 print(f"  Model: {model2.spec.n_free} free params from direct dict")
@@ -181,7 +181,7 @@ factory_groups = {
     "dust_emission": {"type": "dale2014", "all_params": FIXED},
     "neb": {"type": "cue", "all_params": FIXED},
     "redshift": Uniform(0.01, 6.0),
-    "apply_igm": True,
+    "igm": {"type": "inoue"},
 }
 model_factory = SEDModel.build(ssp_data=ssp, observation=observation, **factory_groups)
 print(f"  Model: {model_factory.spec.n_free} free params from factory + dict mix")
@@ -362,7 +362,7 @@ base_groups = {
     },
     "neb": {"type": "cue"},  # No wildcard → all use [default]
     "redshift": Fixed(0.05),
-    "apply_igm": False,
+    "igm": {"type": "none"},
 }
 spec = parse_groups(**base_groups)
 print("Parameter Summary with Provenance Tags:")
@@ -444,7 +444,7 @@ base_groups_sfh = {
     "dust_emission": {"type": "dale2014", "all_params": FIXED},
     "neb": {"type": "cue", "all_params": FIXED},
     "redshift": Fixed(0.05),
-    "apply_igm": False,
+    "igm": {"type": "none"},
 }
 
 for sfh_name, _ in sfh_families:
@@ -490,7 +490,7 @@ for sfh_name, truth_sfh in sfh_families:
         "dust_emission": {"type": "dale2014", "all_params": FIXED},
         "neb": {"type": "cue", "all_params": FIXED},
         "redshift": Fixed(z),
-        "apply_igm": False,
+        "igm": {"type": "none"},
     }
     spec = parse_groups(**groups_sfh_fig)
     model = SEDModel(spec, ssp, observation=observation)
@@ -601,7 +601,7 @@ base_groups_dust = {
     "dust_emission": {"type": "dale2014", "all_params": FIXED},
     "neb": {"type": "cue", "all_params": FIXED},
     "redshift": Fixed(0.05),
-    "apply_igm": False,
+    "igm": {"type": "none"},
 }
 
 for dust_law in dust_laws:
@@ -659,7 +659,7 @@ groups_nodust = {
     "dust_emission": {"type": "dale2014", "all_params": FIXED},
     "neb": {"type": "cue", "all_params": FIXED},
     "redshift": Fixed(z),
-    "apply_igm": False,
+    "igm": {"type": "none"},
 }
 spec_nodust = parse_groups(**groups_nodust)
 model_nodust = SEDModel(spec_nodust, ssp, observation=observation)
@@ -728,7 +728,7 @@ for idx, dust_law in enumerate(dust_laws):
         "dust_emission": {"type": "dale2014", "all_params": FIXED},
         "neb": {"type": "cue", "all_params": FIXED},
         "redshift": Fixed(z),
-        "apply_igm": False,
+        "igm": {"type": "none"},
     }
     spec = parse_groups(**groups_dustlaw_fig)
     model = SEDModel(spec, ssp, observation=observation)
@@ -811,7 +811,7 @@ base_groups_emission = {
     },
     "neb": {"type": "cue", "all_params": FIXED},
     "redshift": Fixed(0.05),
-    "apply_igm": False,
+    "igm": {"type": "none"},
 }
 
 for emission in dust_emissions:
@@ -875,7 +875,7 @@ for idx, emission in enumerate(dust_emissions):
         "dust_emission": {"type": emission, "all_params": FIXED},
         "neb": {"type": "cue", "all_params": FIXED},
         "redshift": Fixed(z),
-        "apply_igm": False,
+        "igm": {"type": "none"},
     }
     spec = parse_groups(**groups_emission_fig)
     model = SEDModel(spec, ssp, observation=observation)
@@ -932,7 +932,7 @@ for emission in dust_emissions:
         "dust_emission": {"type": emission, "all_params": FIXED},
         "neb": {"type": "cue", "all_params": FIXED},
         "redshift": Fixed(z),
-        "apply_igm": False,
+        "igm": {"type": "none"},
     }
     spec = parse_groups(**groups_energy_fig)
     model = SEDModel(spec, ssp, observation=observation)
@@ -995,7 +995,7 @@ groups_ref = {
     },
     "dust_emission": {"type": "dale2014", "all_params": FIXED},
     "redshift": Uniform(0.01, 0.1),
-    "apply_igm": False,
+    "igm": {"type": "none"},
 }
 spec_ref = parse_groups(**groups_ref)
 print("\nModel Summary (using Parameters.summary_str()):")
@@ -1012,7 +1012,7 @@ groups_free_z = {
     },
     "dust_emission": {"type": "dale2014", "all_params": FIXED},
     "redshift": Uniform(0.01, 0.1),  # FREE
-    "apply_igm": False,
+    "igm": {"type": "none"},
 }
 spec_free_z = parse_groups(**groups_free_z)
 
@@ -1027,7 +1027,7 @@ groups_fixed_z = {
     },
     "dust_emission": {"type": "dale2014", "all_params": FIXED},
     "redshift": Fixed(0.05),  # FIXED
-    "apply_igm": False,
+    "igm": {"type": "none"},
 }
 spec_fixed_z = parse_groups(**groups_fixed_z)
 
@@ -1069,7 +1069,7 @@ groups_perf = {
     },
     "dust_emission": {"type": "dale2014", "all_params": FIXED},
     "redshift": Fixed(0.05),
-    "apply_igm": False,
+    "igm": {"type": "none"},
 }
 spec_perf = parse_groups(**groups_perf)
 model_perf = SEDModel(spec_perf, ssp, observation=observation)

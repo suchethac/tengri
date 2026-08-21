@@ -17,6 +17,7 @@ class TestAgNAttenLawKey:
             ssp_data=synthetic_ssp_wide,
             observation=simple_observation,
             agn={"atten": {"law": "prevot_smc", "attenuation_ebv": Uniform(0.0, 0.5)}},
+            redshift=Fixed(0.1),
         )
         assert model.spec.agn_attenuation_block == "smc_prevot"
         assert "agn_attenuation_ebv" in model.spec.free_params
@@ -28,6 +29,7 @@ class TestAgNAttenLawKey:
                 ssp_data=synthetic_ssp_wide,
                 observation=simple_observation,
                 agn={"atten": {"law": "nonexistent_law"}},
+                redshift=Fixed(0.1),
             )
         error_msg = str(exc_info.value)
         assert "law" in error_msg
@@ -39,6 +41,7 @@ class TestAgNAttenLawKey:
             ssp_data=synthetic_ssp_wide,
             observation=simple_observation,
             agn={"atten": {"type": "polar_dust", "polar_ebv": 0.1}},
+            redshift=Fixed(0.1),
         )
         assert model.spec.agn_attenuation_block == "polar_dust"
 
@@ -48,6 +51,7 @@ class TestAgNAttenLawKey:
             ssp_data=synthetic_ssp_wide,
             observation=simple_observation,
             agn={"atten": {"type": "qsogen", "attenuation_ebv": 0.1}},
+            redshift=Fixed(0.1),
         )
         assert model.spec.agn_attenuation_block == "qsogen"
 
@@ -57,6 +61,7 @@ class TestAgNAttenLawKey:
             ssp_data=synthetic_ssp_wide,
             observation=simple_observation,
             agn={"atten": {"type": "qsogen_smc"}},
+            redshift=Fixed(0.1),
         )
         assert model.spec.agn_attenuation_block == "qsogen_smc"
 
@@ -66,6 +71,7 @@ class TestAgNAttenLawKey:
             ssp_data=synthetic_ssp_wide,
             observation=simple_observation,
             agn={"atten": {"type": "grahsp_biatten"}},
+            redshift=Fixed(0.1),
         )
         assert model.spec.agn_attenuation_block == "grahsp_biatten"
 
@@ -75,6 +81,7 @@ class TestAgNAttenLawKey:
             ssp_data=synthetic_ssp_wide,
             observation=simple_observation,
             agn={"atten": {"type": "none"}},
+            redshift=Fixed(0.1),
         )
         assert model.spec.agn_attenuation_block == "none"
 
@@ -85,6 +92,7 @@ class TestAgNAttenLawKey:
                 ssp_data=synthetic_ssp_wide,
                 observation=simple_observation,
                 agn={"atten": {"type": "smc_prevot"}},
+                redshift=Fixed(0.1),
             )
         error_msg = str(exc_info.value)
         # Error should mention the new form with law key
@@ -104,6 +112,7 @@ class TestAgNAttenLawKey:
                     "attenuation_ebv": FREE,
                 }
             },
+            redshift=Fixed(0.1),
         )
         assert model.spec.agn_attenuation_block == "smc_prevot"
         assert "agn_attenuation_ebv" in model.spec.free_params
@@ -119,6 +128,7 @@ class TestAgNAttenLawKey:
                     "attenuation_ebv": Fixed(0.2),
                 }
             },
+            redshift=Fixed(0.1),
         )
         assert model.spec.agn_attenuation_block == "smc_prevot"
         # Fixed params should not be in free_params
@@ -130,6 +140,7 @@ class TestAgNAttenLawKey:
             ssp_data=synthetic_ssp_wide,
             observation=simple_observation,
             agn={"atten": {"law": "prevot_smc", "attenuation_ebv": 0.1}},
+            redshift=Fixed(0.1),
         )
         groups = model.spec.to_groups()
         # Should emit law key, not type
@@ -145,6 +156,7 @@ class TestAgNAttenLawKey:
             ssp_data=synthetic_ssp_wide,
             observation=simple_observation,
             agn={"atten": {"type": "polar_dust", "polar_ebv": 0.1}},
+            redshift=Fixed(0.1),
         )
         groups = model.spec.to_groups()
         assert "atten" in groups["agn"]
@@ -155,7 +167,10 @@ class TestAgNAttenLawKey:
 
     def test_roundtrip_preserves_params(self, synthetic_ssp_wide, simple_observation):
         """Test that roundtrip preserves parameters through grammar."""
-        original_groups = {"agn": {"atten": {"law": "prevot_smc", "attenuation_ebv": 0.15}}}
+        original_groups = {
+            "redshift": Fixed(0.1),
+            "agn": {"atten": {"law": "prevot_smc", "attenuation_ebv": 0.15}},
+        }
         model = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
             observation=simple_observation,
@@ -189,6 +204,7 @@ class TestAgNAttenLawKey:
                 ssp_data=synthetic_ssp_wide,
                 observation=simple_observation,
                 agn={"atten": {"law": "prevot_smc", "type": "polar_dust"}},
+                redshift=Fixed(0.1),
             )
         error_msg = str(exc_info.value)
         # Error must name both conflicting keys

@@ -9,7 +9,7 @@ Regression test for:
 
 import pytest
 
-from tengri import ForwardModel, Observation, Photometry, SEDModel, WavePrecomp
+from tengri import Fixed, ForwardModel, Observation, Photometry, SEDModel, WavePrecomp
 
 pytestmark = pytest.mark.regression_bug
 
@@ -37,14 +37,18 @@ def obs_b(synthetic_ssp):
 
 def test_omitted_observation_inherits(synthetic_ssp, obs_a):
     """ForwardModel.build with no observation kwarg inherits from sed."""
-    sed = SEDModel.build(ssp_data=synthetic_ssp, observation=obs_a, sfh={"type": "dpl"})
+    sed = SEDModel.build(
+        ssp_data=synthetic_ssp, observation=obs_a, sfh={"type": "dpl"}, redshift=Fixed(0.1)
+    )
     fwd = ForwardModel.build(sed=sed)  # no observation kwarg
     assert _fingerprint(fwd.observation) == _fingerprint(obs_a)
 
 
 def test_different_filters_no_lut_allowed(synthetic_ssp, obs_a, obs_b):
     """ForwardModel.build can accept different observation if sed has no LUT."""
-    sed = SEDModel.build(ssp_data=synthetic_ssp, observation=obs_a, sfh={"type": "dpl"})
+    sed = SEDModel.build(
+        ssp_data=synthetic_ssp, observation=obs_a, sfh={"type": "dpl"}, redshift=Fixed(0.1)
+    )
     fwd = ForwardModel.build(sed=sed, observation=obs_b)  # explicit obs_b: fine
     assert _fingerprint(fwd.observation) == _fingerprint(obs_b)
 
@@ -52,7 +56,11 @@ def test_different_filters_no_lut_allowed(synthetic_ssp, obs_a, obs_b):
 def test_different_filters_with_lut_raises(synthetic_ssp, obs_a, obs_b):
     """ForwardModel.build raises when filters differ and sed has baked LUT."""
     sed = SEDModel.build(
-        ssp_data=synthetic_ssp, observation=obs_a, sfh={"type": "dpl"}, approx=WavePrecomp()
+        ssp_data=synthetic_ssp,
+        observation=obs_a,
+        sfh={"type": "dpl"},
+        approx=WavePrecomp(),
+        redshift=Fixed(0.1),
     )
     with pytest.raises(ValueError, match="LUT"):
         ForwardModel.build(sed=sed, observation=obs_b)

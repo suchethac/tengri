@@ -51,6 +51,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri import Fixed
+
 pytestmark = pytest.mark.regression_bug
 
 
@@ -102,6 +104,7 @@ def test_every_advertised_dust_emission_type_runs_on_both_channels(
             "all_params": FIXED,
         },
         dust_emission={"type": name, "all_params": FIXED},
+        redshift=Fixed(0.1),
     )
     params = {k: jnp.array(0.0) for k in model.spec.free_params}
 
@@ -147,6 +150,7 @@ def test_predict_alone_would_compute_nothing(synthetic_ssp, infrared_observation
             "all_params": FIXED,
         },
         dust_emission={"type": "dale2014", "all_params": FIXED},
+        redshift=Fixed(0.1),
     )
     params = {k: jnp.array(0.0) for k in model.spec.free_params}
     handle = model.predict(params)

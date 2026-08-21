@@ -115,7 +115,7 @@ def make_builder(ssp_data, phot, noise_model, line_template, n_grid):
             dust_attenuation=builders.dust.two_component(defaults=FREE, law="calzetti"),
             neb=builders.neb.ssp(),
             redshift=Fixed(Z_SPEC),
-            apply_igm=False,
+            igm={"type": "none"},
             n_grid=n_grid,
             approx=WavePrecomp(),
         )

@@ -115,7 +115,7 @@ References:
         },
         neb={"type": "cue", "all_params": tengri.FIXED},
         redshift=tengri.Fixed(0.5),
-        apply_igm=True,
+        igm={"type": "inoue"},
     )
 
     baseline_a = dict(model_a.spec.sample(jax.random.PRNGKey(0)))
@@ -144,7 +144,7 @@ References:
         },
         neb={"type": "cue", "all_params": tengri.FIXED},
         redshift=tengri.Fixed(1.0),
-        apply_igm=True,
+        igm={"type": "inoue"},
     )
 
     baseline_b = dict(model_b.spec.sample(jax.random.PRNGKey(1)))
@@ -174,7 +174,7 @@ References:
         },
         neb={"type": "cue", "all_params": tengri.FIXED},
         redshift=tengri.Fixed(1.5),
-        apply_igm=True,
+        igm={"type": "inoue"},
     )
 
     baseline_c = dict(model_c.spec.sample(jax.random.PRNGKey(2)))
@@ -378,7 +378,7 @@ References:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 3.149 seconds)
+   **Total running time of the script:** (0 minutes 11.656 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_age_dust_redshift_degeneracy.py:

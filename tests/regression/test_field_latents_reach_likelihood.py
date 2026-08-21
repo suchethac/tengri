@@ -59,7 +59,7 @@ def _model(ssp_data, observation):
         dust_attenuation=builders.dust.two_component(defaults=FREE, law="calzetti"),
         neb=builders.neb.ssp(),
         redshift=Fixed(0.1),
-        apply_igm=False,
+        igm={"type": "none"},
         n_grid=16,
         approx=None,
     )

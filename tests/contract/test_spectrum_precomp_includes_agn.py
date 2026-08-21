@@ -32,7 +32,7 @@ def _build(ssp, approx):
         observation=Observation(spectroscopy=Spectroscopy(wave_obs=_WAVE)),
         approx=approx,
         redshift=Fixed(0.5),
-        apply_igm=False,
+        igm={"type": "none"},
         sfh={"type": "tsnorm", "*": FIXED, "log_total_mass": Fixed(10.0)},
         dust_attenuation={"type": "two_component", "law": "calzetti", "*": FIXED},
         neb={"type": "none"},
