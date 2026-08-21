@@ -810,26 +810,30 @@ def test_selector_surface_control_is_load_bearing(group: str) -> None:
 
 # ── Drift-proof census: ensure new selector surfaces are caught ───────────────
 # This test discovers selector-ish frozensets from the grammar (_VALID_* constants)
-# and verifies they're all covered by _SELECTOR_SURFACES. If a new selector surface
-# is added without updating _SELECTOR_SURFACES, this test fails loudly rather than
-# silently under-covering.
+# and verifies they're all covered by the appropriate census. If a new selector
+# surface is added without updating the relevant coverage mechanism, this test
+# fails loudly. Coverage is by three mechanisms:
+# 1. _VALID_*_TYPES constants → group in _TOP_LEVEL_TYPED_GROUPS or AGN block
+# 2. _VALID_*_LAWS constants → entry in _SELECTOR_SURFACES (law-style selectors)
 
 
 def test_selector_surfaces_are_covered() -> None:
     """Discover all _VALID_* frozensets and fail if any are uncovered.
 
-    The `_SELECTOR_SURFACES` dict is hand-written, so it can fall behind if a new
-    selector surface is added to the grammar. This test guards the most critical
-    case: an unrecognized `_VALID_*` constant in groups.py must fail the test,
-    not be silently skipped.
+    The grammar has two kinds of selector-discoverable constants:
+    - Type-style (_VALID_*_TYPES): covered by _TOP_LEVEL_TYPED_GROUPS or _AGN_BLOCK_TO_KWARG
+    - Law-style (_VALID_*_LAWS): covered by _SELECTOR_SURFACES
 
-    This inverts the usual pattern: any discovered selector that is NOT in
-    `_SELECTOR_SURFACES` must be added and explicitly documented, not hidden
-    behind a `continue` branch.
+    This test ensures all discovered constants are covered by the right mechanism.
+    If a new selector surface is added without registering it, this test fails loudly.
     """
     import tengri.parameters.groups as groups_module
+    from tengri.parameters.groups import (
+        _AGN_BLOCK_TO_KWARG,
+        _TOP_LEVEL_TYPED_GROUPS,
+    )
 
-    # Discover ALL _VALID_* frozensets in the grammar (every selector surface)
+    # Discover ALL _VALID_* frozensets in the grammar
     discovered_constants: dict[str, frozenset] = {}
     for attr_name in dir(groups_module):
         if not attr_name.startswith("_VALID_"):
@@ -839,32 +843,51 @@ def test_selector_surfaces_are_covered() -> None:
             continue
         discovered_constants[attr_name] = attr
 
-    # Map each discovered constant to the (group, selector_key) it represents.
-    # Convention: _VALID_<GROUP_LABEL>_LAWS maps to a known (group, selector_key).
-    # Unrecognized constants are NOT skipped — they fail loudly.
     uncovered = []
-    for const_name, const_value in discovered_constants.items():
+    for const_name in discovered_constants:
         found_coverage = False
 
-        # Check every entry in _SELECTOR_SURFACES to find a match
-        for _, (source, _) in _SELECTOR_SURFACES.items():
-            # source is an import path like 'tengri.parameters.groups._VALID_AGN_ATTEN_LAWS'
-            if source.endswith(const_name):
+        # Check type-style selectors: _VALID_<GROUP>_TYPES
+        if const_name.endswith("_TYPES"):
+            # Extract group name from constant: _VALID_AGN_DISC_TYPES -> "agn_disc"
+            # or _VALID_AGN_ATTEN_TYPES -> "agn_atten" or _VALID_XRAY_TYPES -> "xray"
+            group_part = const_name.replace("_VALID_", "").replace("_TYPES", "").lower()
+
+            # Check if it's a top-level group type selector
+            if group_part in _TOP_LEVEL_TYPED_GROUPS:
                 found_coverage = True
-                break
+            else:
+                # Check if it's an AGN sub-block (e.g., "agn_disc" -> "disc")
+                for agn_block_name in _AGN_BLOCK_TO_KWARG:
+                    expected = f"_agn_{agn_block_name}" if "_agn" in group_part else agn_block_name
+                    if group_part.endswith(expected):
+                        found_coverage = True
+                        break
+                # Simpler check: agn_disc, agn_torus, etc.
+                if not found_coverage and group_part.startswith("agn_"):
+                    agn_sub = group_part.replace("agn_", "")
+                    if agn_sub in _AGN_BLOCK_TO_KWARG:
+                        found_coverage = True
+
+        # Check law-style selectors: _VALID_*_LAWS
+        elif const_name.endswith("_LAWS"):
+            # Check against _SELECTOR_SURFACES
+            for _, (source, _) in _SELECTOR_SURFACES.items():
+                if source.endswith(const_name):
+                    found_coverage = True
+                    break
 
         if not found_coverage:
             uncovered.append(
-                f"Discovered constant {const_name!r} (value: {sorted(const_value)}) "
-                f"in groups.py, but it is not covered by _SELECTOR_SURFACES. "
-                f"Add an entry to _SELECTOR_SURFACES with the correct import path and "
-                f"control parameter."
+                f"Discovered constant {const_name!r} in groups.py but found no coverage. "
+                f"Register it in the appropriate mechanism: _SELECTOR_SURFACES for law "
+                f"constants (_*_LAWS), or ensure the group/AGN-block exists in "
+                f"_TOP_LEVEL_TYPED_GROUPS/_AGN_BLOCK_TO_KWARG for type constants (_*_TYPES)."
             )
 
     assert not uncovered, (
         "Uncovered selector surface(s) found. Every _VALID_* frozenset in the "
-        "grammar MUST be registered in _SELECTOR_SURFACES, or new selectors will "
-        "ship without being tested for distinctness:\n  " + "\n  ".join(uncovered)
+        "grammar MUST be covered by the appropriate census mechanism:\n  " + "\n  ".join(uncovered)
     )
 
 
