@@ -371,8 +371,15 @@ def agn_panchromatic() -> dict:
             torus=builders.agn.torus.skirtor(defaults=FREE),
             nlr=builders.agn.nlr.analytic(defaults=FREE),
         ),
-        radio={"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}},
-        xray={"type": "simple"},
+        # ``all_params``: FIXED restates the default. It is written out
+        # because omitting it warns, and the warning would be about a
+        # disposition this recipe chose rather than one its user did.
+        radio={
+            "sf": {"type": "bell2003"},
+            "agn": {"type": "powerlaw"},
+            "all_params": FIXED,
+        },
+        xray={"type": "simple", "all_params": FIXED},
         redshift=Uniform(0.01, 6.0),
         approx=WavePrecomp(),
     )
@@ -464,8 +471,15 @@ def composable_agn() -> dict:
             "ir_frac": Uniform(0.01, 0.99),
             WILDCARD_ALIAS: FREE,
         },
-        radio={"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}},
-        xray={"type": "simple"},
+        # ``all_params``: FIXED restates the default. It is written out
+        # because omitting it warns, and the warning would be about a
+        # disposition this recipe chose rather than one its user did.
+        radio={
+            "sf": {"type": "bell2003"},
+            "agn": {"type": "powerlaw"},
+            "all_params": FIXED,
+        },
+        xray={"type": "simple", "all_params": FIXED},
         redshift=Uniform(0.01, 6.0),
         approx=WavePrecomp(),
     )

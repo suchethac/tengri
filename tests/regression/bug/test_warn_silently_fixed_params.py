@@ -304,3 +304,58 @@ class TestShippedRecipesNoWarning:
                     f"recipe {recipe_name!r} emitted {len(dfp_warnings)} "
                     f"DefaultFixedParametersWarning: {[str(x.message)[:80] for x in dfp_warnings]}"
                 )
+
+    def test_every_buildable_recipe_is_quiet(self, ssp_data_wne, ssp_data_fsps):
+        """No shipped recipe may warn its own users.
+
+        The three names above were the ones fixed in #1982; enumerating the
+        registry instead catches the next one. A recipe that warns is telling
+        the user about a disposition the *recipe author* chose, which they
+        cannot act on without editing the recipe.
+
+        Each recipe declares its own SSP requirement, so the library comes from
+        the registry rather than being hardcoded: pairing a Cue-backend recipe
+        with a wNE grid raises ``CueWNESSPError`` and would look like a failure
+        of this test. Recipes needing data files that are not tracked in git are
+        skipped by name, so a missing grid cannot masquerade as a clean recipe.
+        """
+        import tengri
+        from tengri import Observation, Photometry, SEDModel
+        from tengri.config.exceptions import TengriIOError
+
+        obs = Observation(photometry=Photometry.from_names(["jwst_f150w", "jwst_f356w"]))
+        offenders = {}
+        checked = []
+
+        for row in tengri.list_recipes():
+            name = row["name"]
+            ssp = (
+                ssp_data_fsps
+                if str(row["ssp_requirement"]).startswith("bare-stellar")
+                else ssp_data_wne
+            )
+            with warnings.catch_warnings(record=True) as w:
+                warnings.simplefilter("always")
+                try:
+                    SEDModel.build(
+                        ssp_data=ssp, observation=obs, **getattr(tengri.recipes, name)()
+                    )
+                except TengriIOError:
+                    # An untracked template grid, not a recipe defect.
+                    continue
+            checked.append(name)
+            groups = sorted(
+                {
+                    str(x.message).split("'")[1]
+                    for x in w
+                    if issubclass(x.category, DefaultFixedParametersWarning)
+                }
+            )
+            if groups:
+                offenders[name] = groups
+
+        assert checked, "no recipe was actually built; the test proved nothing"
+        assert not offenders, (
+            f"{len(offenders)} shipped recipe(s) warn their own users about a "
+            f"disposition the recipe author chose: {offenders}"
+        )

@@ -360,8 +360,13 @@ class TestRecipeStructure:
         """
         recipe_dict = recipes.agn_panchromatic()
         # #1980: the recipe declares radio composably (condon92's resolution).
-        assert recipe_dict["radio"] == {"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}}
-        assert recipe_dict["xray"] == {"type": "simple"}
+        # Structural rather than whole-dict: the bug this guards is the bool
+        # form (``radio=True``), which raises TypeError on these subscripts,
+        # while whole-dict equality would also reject an additive key such as
+        # a stated ``all_params`` disposition.
+        assert recipe_dict["radio"]["sf"]["type"] == "bell2003"
+        assert recipe_dict["radio"]["agn"]["type"] == "powerlaw"
+        assert recipe_dict["xray"]["type"] == "simple"
         spec = parse_groups(**recipe_dict)
         allp = set(spec.free_params) | set(spec.get_fixed_values())
         assert any("radio" in k for k in allp), "radio params absent from built spec"
@@ -421,8 +426,13 @@ class TestRecipeStructure:
         carries their params (see agn_panchromatic counterpart for context)."""
         recipe_dict = recipes.composable_agn()
         # #1980: the recipe declares radio composably (condon92's resolution).
-        assert recipe_dict["radio"] == {"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}}
-        assert recipe_dict["xray"] == {"type": "simple"}
+        # Structural rather than whole-dict: the bug this guards is the bool
+        # form (``radio=True``), which raises TypeError on these subscripts,
+        # while whole-dict equality would also reject an additive key such as
+        # a stated ``all_params`` disposition.
+        assert recipe_dict["radio"]["sf"]["type"] == "bell2003"
+        assert recipe_dict["radio"]["agn"]["type"] == "powerlaw"
+        assert recipe_dict["xray"]["type"] == "simple"
         spec = parse_groups(**recipe_dict)
         allp = set(spec.free_params) | set(spec.get_fixed_values())
         assert any("radio" in k for k in allp), "radio params absent from built spec"
