@@ -25,7 +25,7 @@ import warnings
 
 import pytest
 
-from tengri import FREE
+from tengri import FREE, Fixed
 from tengri.parameters.groups import _GROUP_STRUCTURAL_KEYS, parse_groups
 from tengri.parameters.priors import Uniform
 
@@ -35,6 +35,8 @@ pytestmark = pytest.mark.contract
 def _parse(**kwargs):
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
+        if "redshift" not in kwargs:
+            kwargs["redshift"] = Fixed(0.1)
         return parse_groups(**kwargs)
 
 

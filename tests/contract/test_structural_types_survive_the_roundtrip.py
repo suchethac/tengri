@@ -38,7 +38,7 @@ from __future__ import annotations
 
 import pytest
 
-from tengri import FIXED, Parameters
+from tengri import FIXED, Fixed, Parameters
 from tengri.parameters.groups import (
     _AGN_BLOCK_TO_KWARG,
     _TOP_LEVEL_TYPED_GROUPS,
@@ -75,7 +75,7 @@ _AGN_CASES = sorted(
     (block, t) for block, types in _AGN_TYPES.items() for t in types if t != "none"
 )
 
-_BASE = dict(sfh={"type": "dpl", "all_params": FIXED})
+_BASE = dict(sfh={"type": "dpl", "all_params": FIXED}, redshift=Fixed(0.1))
 
 #: Groups that are legitimately absent from a default spec, so ``None`` there is
 #: the correct answer rather than a gap in ``_extract_group_type``. Measured:
@@ -245,7 +245,7 @@ class TestTheCensusIsComplete:
         demonstrate it reports a type when something IS selected.
         """
         selection = _OFF_BY_DEFAULT_SELECTIONS[group]
-        spec = parse_groups(**_BASE, redshift=0.1, **{group: selection})
+        spec = parse_groups(**_BASE, **{group: selection})
         assert _extract_group_type(group, spec) == selection["type"], (
             f"{group} is excused from the census as off-by-default, but it does "
             f"not report its type when selected either — that is the unreadable "

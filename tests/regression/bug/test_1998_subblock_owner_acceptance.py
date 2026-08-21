@@ -46,7 +46,7 @@ class TestAGNSubblockOwnerAcceptance:
                 r"not a 'agn\.torus' one"
             ),
         ):
-            tengri.parse_groups(agn=agn_bad)
+            tengri.parse_groups(redshift=tengri.Fixed(0.1), agn=agn_bad)
 
     def test_polar_ebv_under_atten_works(self):
         """Atten-nested polar_ebv should work and land in get_fixed_values()."""
@@ -55,7 +55,7 @@ class TestAGNSubblockOwnerAcceptance:
             "torus": {"type": "skirtor"},
             "atten": {"type": "polar_dust", "polar_ebv": tengri.Fixed(0.35)},
         }
-        params = tengri.parse_groups(agn=agn_good)
+        params = tengri.parse_groups(redshift=tengri.Fixed(0.1), agn=agn_good)
         assert params.get_fixed_values()["agn_polar_ebv"] == 0.35
 
     def test_polar_beta_under_torus_raises(self):
@@ -66,7 +66,7 @@ class TestAGNSubblockOwnerAcceptance:
             "atten": {"type": "none"},
         }
         with pytest.raises(ValueError, match=r"'polar_beta' is a 'agn\.atten' parameter"):
-            tengri.parse_groups(agn=agn_bad)
+            tengri.parse_groups(redshift=tengri.Fixed(0.1), agn=agn_bad)
 
     def test_cos_inc_under_torus_works(self):
         """Torus-nested cos_inc should work (it's shared, can go anywhere)."""
@@ -76,7 +76,7 @@ class TestAGNSubblockOwnerAcceptance:
             "atten": {"type": "none"},
         }
         # cos_inc is shared (agn level), can be placed in any sub-block
-        params = tengri.parse_groups(agn=agn_good)
+        params = tengri.parse_groups(redshift=tengri.Fixed(0.1), agn=agn_good)
         assert params.get_fixed_values()["agn_cos_inc"] == 0.5
 
     def test_torus_owned_param_under_torus_works(self):
@@ -86,5 +86,5 @@ class TestAGNSubblockOwnerAcceptance:
             "torus": {"type": "skirtor", "tau_skirtor": tengri.Fixed(50.0)},
             "atten": {"type": "none"},
         }
-        params = tengri.parse_groups(agn=agn_good)
+        params = tengri.parse_groups(redshift=tengri.Fixed(0.1), agn=agn_good)
         assert params.get_fixed_values()["agn_tau_skirtor"] == 50.0
