@@ -78,6 +78,12 @@ CI_UNEXECUTABLE = {
         "ssp_bsti_miles_chabrier_wNE_logGasU-2.0_logGasZ0.0); "
         "neither tracked in git nor in the download registry"
     ),
+    "12_simulation_populations": (
+        "Benchmarks a model with a live CLOUDY nebular backend (gas=True); "
+        "requires locally generated cloudy_grid_*.h5 files (scripts/convert_fsps_cloudy_grid.py); "
+        "no cloudy_grid_*.h5 is tracked in git, so a fresh checkout cannot run it. "
+        "If a grid is later committed (13 MB), this entry can be dropped"
+    ),
 }
 
 # Assert that every key in CI_UNEXECUTABLE is in ALL_SLUGS.

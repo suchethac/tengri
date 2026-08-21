@@ -33,7 +33,7 @@ class TestCIUnexecutableDict:
 
     def test_all_exclusions_documented(self):
         """All CI_UNEXECUTABLE entries have non-empty reasons."""
-        assert len(CI_UNEXECUTABLE) == 2, "Expected 2 excluded notebooks"
+        assert len(CI_UNEXECUTABLE) == 3, "Expected 3 excluded notebooks"
         for slug, reason in CI_UNEXECUTABLE.items():
             assert reason, f"{slug!r} has empty reason"
             assert isinstance(reason, str), f"{slug!r} reason is not a string"
@@ -99,11 +99,12 @@ class TestListWithCI:
             assert excluded_slug not in slugs
 
     def test_list_ci_count(self):
-        """--list --ci returns 15 slugs (17 total minus 2 exclusions)."""
+        """--list --ci returns 14 slugs (17 total minus 3 exclusions)."""
         slugs = self._run_list_ci()
-        assert len(slugs) == 15
+        assert len(slugs) == 14
         assert "apple_mps" not in slugs
         assert "multimodel_bma_candels" not in slugs
+        assert "12_simulation_populations" not in slugs
 
 
 class TestListCIJSON:
@@ -152,11 +153,12 @@ class TestListCIJSON:
         assert json_slugs == list_slugs
 
     def test_json_excludes_both(self):
-        """JSON array excludes both apple_mps and multimodel_bma_candels."""
+        """JSON array excludes all three CI_UNEXECUTABLE notebooks."""
         slugs = self._run_list_ci_json()
         assert "apple_mps" not in slugs
         assert "multimodel_bma_candels" not in slugs
-        assert len(slugs) == 15
+        assert "12_simulation_populations" not in slugs
+        assert len(slugs) == 14
 
 
 class TestMutationValidation:
@@ -184,12 +186,13 @@ class TestMutationValidation:
         if proc.returncode != 0:
             pytest.skip(f"Script failed to run: {proc.stderr}")
         # The broken version would return 17 slugs (all of them)
-        # instead of 15, so the test would catch it
+        # instead of 14, so the test would catch it
         lines = [l for l in proc.stdout.strip().split("\n") if l]
         msg = f"Mutation test: --ci should filter but doesn't. Got {len(lines)} lines"
         assert len(lines) == 17, msg
         assert "apple_mps" in lines
         assert "multimodel_bma_candels" in lines
+        assert "12_simulation_populations" in lines
 
     def test_mutation_json_not_json(self, tmp_path):
         """Mutation: --json prints repr instead of JSON. Test must fail."""
