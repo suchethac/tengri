@@ -134,7 +134,19 @@ tracks which scripts are due for a re-run.
 
 ## Hardware notes
 
-- All numbers above are **single CPU core** on Apple M-series. Tengri runs on JAX, so GPU/TPU work without modification but are not benchmarked. See [JAX installation](https://docs.jax.dev/en/latest/installation.html) for setup.
+- All numbers above are **single CPU core** on Apple M-series. See
+  [JAX installation](https://docs.jax.dev/en/latest/installation.html) for setup.
+- **CUDA GPUs are benchmarked** as of 2026-08-20, on an RTX 3060 against a Ryzen 9
+  5900X: see
+  [`bench/reports/2026-08-20_cuda_device_matrix.md`](https://github.com/suchethac/tengri/blob/main/bench/reports/2026-08-20_cuda_device_matrix.md)
+  and `notebooks/nvidia_cuda.py`. Nothing needs changing to run on CUDA, and
+  float64 results are bit-comparable with the CPU — but the GPU is a *width*
+  instrument. One galaxy: the CPU wins by 33x (forward) and 13x (gradient), and a
+  single MAP fit by 8.8x. The crossover is between 128 and 512 galaxies; at 2048 the
+  GPU leads by 4.3x (forward) to 14.7x (gradient, float32). tengri's forward model
+  runs at ~0.12 FLOP/byte, so the card is waiting on memory and dispatch, not
+  arithmetic. Note also that consumer GeForce cards run float64 at 1/64 rate, which
+  puts this GPU *below* this CPU on dense float64 arithmetic.
 - JAX Metal (Apple GPU) is experimental and causes test failures. CPU is the
   reference platform. Set `JAX_PLATFORMS=cpu` explicitly.
 - **Memory:** D = 7 smooth fits ~100 MB; D = 137 stochastic ~1.5 GB. NUTS

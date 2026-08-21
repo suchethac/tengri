@@ -71,6 +71,11 @@ ALL_SLUGS = list(SPINE_SLUGS) + list(EXPERIMENTAL_SLUGS)
 #: Every key MUST be in ALL_SLUGS.
 CI_UNEXECUTABLE = {
     "apple_mps": "Requires Apple Silicon (JAX_PLATFORMS=mps); cannot run on ubuntu-latest",
+    "nvidia_cuda": (
+        "Requires an NVIDIA GPU (JAX_PLATFORMS=cuda) and a jax[cuda12] wheel; "
+        "ubuntu-latest runners have neither, and the notebook's whole subject is "
+        "the device. Its render is produced on a CUDA box"
+    ),
     "multimodel_bma_candels": (
         "Requires locally generated wNE SSP grids for MIST/Padova/BaSTI "
         "(ssp_mist_c3k_a_chabrier_wNE_logGasU-3.0_logGasZ0.0, "

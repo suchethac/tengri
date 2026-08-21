@@ -19,6 +19,7 @@ conventions.
 
 | Script | What it measures |
 |---|---|
+| `benchmark_device_matrix.py` | CPU vs GPU, float64 vs float32, across prediction, gradients and inference |
 | `benchmark_forward_model.py` | Forward photometry: exact / compositional / hybrid across all emitters and 3 SFH families |
 | `benchmark_components.py` | Per-component (stellar, dust, nebular, AGN, ...) wall-clock timing |
 | `benchmark_jit_compile.py` | Population-scale JIT compile time vs N galaxies, batching strategies |
