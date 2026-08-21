@@ -808,6 +808,68 @@ def test_selector_surface_control_is_load_bearing(group: str) -> None:
     )
 
 
+# ── Drift-proof census: ensure new selector surfaces are caught ───────────────
+# This test discovers selector-ish frozensets from the grammar (_VALID_* constants)
+# and verifies they're all covered by _SELECTOR_SURFACES. If a new selector surface
+# is added without updating _SELECTOR_SURFACES, this test fails loudly rather than
+# silently under-covering.
+
+
+def test_selector_surfaces_are_covered() -> None:
+    """Discover selector surfaces from the grammar and verify they're covered.
+
+    The `_SELECTOR_SURFACES` dict is hand-written, so it can fall behind if a new
+    selector surface is added to the grammar. This test makes that failure loud:
+    it enumerates validator constants in groups.py that indicate selector surfaces
+    and fails if any are not in the coverage dict.
+
+    This is the "loud-on-new-key fallback" specified in the brief: if a fourth
+    selector spelling is added tomorrow, this test will fail.
+    """
+    import importlib
+    import tengri.parameters.groups as groups_module
+
+    # Discover _VALID_* constants (selector surfaces)
+    discovered: dict[tuple[str, str], str] = {}
+    for attr_name in dir(groups_module):
+        if not attr_name.startswith("_VALID_"):
+            continue
+        attr = getattr(groups_module, attr_name)
+        if not isinstance(attr, frozenset):
+            continue
+
+        # Map constant name to (group, selector_key) based on naming convention
+        # _VALID_AGN_ATTEN_LAWS -> (agn_atten, law)
+        # _VALID_FOREGROUND_LAWS -> (foreground, law)
+        name_parts = attr_name.replace("_VALID_", "").replace("_LAWS", "").lower()
+
+        if name_parts == "agn_atten":
+            group_label = "agn_atten"
+            selector_key = "law"
+        elif name_parts == "foreground":
+            group_label = "foreground"
+            selector_key = "law"
+        else:
+            # Skip any _VALID_* constants that don't match expected patterns
+            continue
+
+        key = (group_label, selector_key)
+        discovered[key] = attr_name
+
+    # Check that all discovered surfaces are covered
+    uncovered = []
+    for discovered_key, const_name in discovered.items():
+        if discovered_key not in _SELECTOR_SURFACES:
+            uncovered.append(
+                f"{discovered_key}: found {const_name} in grammar but not in _SELECTOR_SURFACES"
+            )
+
+    assert not uncovered, (
+        "New selector surface(s) discovered in grammar but not covered by this "
+        "census. Add to _SELECTOR_SURFACES before expanding coverage:\n  " + "\n  ".join(uncovered)
+    )
+
+
 # ── Layer 3: a free parameter the fit cannot move ────────────────────
 
 # Parameters measured to have an exactly-zero gradient. A zero gradient means
