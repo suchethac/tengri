@@ -35,6 +35,12 @@ from _setup import FIG_DIR, effective_wavelengths_um, quiet
 
 quiet()
 
+# Re-enable BakedInNebularWarning for this notebook: the baked-in SSP is the
+# notebook's headline modelling assumption and the warning signals the frozen
+# logU/logZ_gas assumptions to users.
+import warnings
+warnings.filterwarnings("default", message=".*BakedInBackend.*")
+
 from pathlib import Path
 
 import jax
