@@ -58,7 +58,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from tengri import FREE, Fixed, SEDModel, WavePrecomp
+from tengri import FIXED, FREE, Fixed, SEDModel, WavePrecomp
 from tengri.components.stellar.sps.dsps_wrapper import SSPData
 from tengri.observation import Observation, Photometry
 from tengri.observation.photometry import FilterCurve
@@ -457,6 +457,179 @@ def _type_cfg(group: str, name: str) -> dict:
     return {"type": name}
 
 
+# ── Selector surfaces (structural keys + their accepted sets) ──────────────
+# These three are the new selector surfaces beyond the initial four kinds.
+# Each must be discoverable from the grammar to stay drift-proof.
+
+#: Selector surfaces beyond the initial four (xray, radio, igm, dust).
+#: Maps (group, selector_key) → (accepted_set_source, control_param_name).
+#: The source is the stringified import path used to discover the set at
+#: test time (e.g. 'tengri.parameters.groups._VALID_AGN_ATTEN_LAWS').
+#:
+#: New selector surfaces identified (#2012):
+#: - agn.atten.law: selects the attenuation law (prevot_smc only, by design)
+#: - foreground.law: selects the Milky Way foreground extinction law (cardelli only, by design)
+#:
+#: These are distinct from the standard 'type' selector used by other groups because they
+#: select within a single attenuation model, not between different models. A one-element
+#: accepted set is intentional (single-curve by construction).
+_SELECTOR_SURFACES = {
+    ("agn_atten", "law"): (
+        "tengri.parameters.groups._VALID_AGN_ATTEN_LAWS",
+        "agn_attenuation_ebv",
+    ),
+    ("foreground", "law"): (
+        "tengri.parameters.groups._VALID_FOREGROUND_LAWS",
+        "foreground_ebmv_mw",
+    ),
+}
+
+
+def _get_accepted_set(group: str, selector_key: str) -> frozenset[str]:
+    """Retrieve the accepted set for a selector surface from the grammar.
+
+    The accepted set is dynamically loaded from tengri.parameters.groups to
+    ensure this test stays in sync with the actual validation logic. Each
+    selector surface has a frozenset defining what values are accepted by
+    the grammar.
+
+    Parameters
+    ----------
+    group : str
+        Selector group label (e.g. 'agn_atten', 'foreground').
+    selector_key : str
+        The selector key within the group (e.g. 'law').
+
+    Returns
+    -------
+    frozenset[str]
+        The set of accepted values for this selector, loaded from the grammar.
+
+    Raises
+    ------
+    ValueError
+        If the selector surface is not registered in _SELECTOR_SURFACES.
+    RuntimeError
+        If the frozenset cannot be loaded from the grammar.
+    """
+    if (group, selector_key) not in _SELECTOR_SURFACES:
+        raise ValueError(
+            f"Unknown selector surface: {group!r}, {selector_key!r}. "
+            f"Add it to _SELECTOR_SURFACES before using this function."
+        )
+
+    source, _ = _SELECTOR_SURFACES[(group, selector_key)]
+
+    # Import and retrieve from the grammar
+    parts = source.rsplit(".", 1)
+    if len(parts) != 2:
+        raise ValueError(f"Invalid source path: {source}")
+    module_name, attr_name = parts
+    try:
+        import importlib
+
+        module = importlib.import_module(module_name)
+        return getattr(module, attr_name)
+    except (ImportError, AttributeError) as exc:
+        raise RuntimeError(f"Failed to load selector set from {source}: {exc}") from exc
+
+
+def _config_for_selector(group: str, name: str) -> tuple[str, dict]:
+    """Generate the group name and config that selects ``name`` for a selector surface.
+
+    Parameters
+    ----------
+    group : str
+        Selector group label (e.g. 'agn_atten', 'foreground').
+    name : str
+        The value to select.
+
+    Returns
+    -------
+    tuple[str, dict]
+        (actual_group_name, config_dict) where actual_group_name is the key to
+        pass to SEDModel.build (e.g., 'agn', 'foreground').
+    """
+    if group == "agn_atten":
+        # agn.atten.law -> nested agn={'atten': {'law': name}}
+        # Validated against _VALID_AGN_ATTEN_LAWS (currently one entry, 'prevot_smc')
+        # Include a disc so attenuation has AGN emission to act on
+        return "agn", {
+            "type": "composable",
+            "all_params": FIXED,
+            "disc": {"type": "powerlaw", "all_params": FIXED},
+            "atten": {"law": name},
+        }
+    elif group == "foreground":
+        # foreground.law -> {'law': name, ...}
+        # Validated against _VALID_FOREGROUND_LAWS (currently one entry, 'cardelli')
+        return "foreground", {"law": name, "ebmv_mw": 0.05}
+    else:
+        raise ValueError(f"Unknown selector group: {group!r}")
+
+
+def _get_control_param_name(group: str) -> str:
+    """Get the control parameter name that proves a selector isn't inert.
+
+    Returns the translated parameter name (as it appears in model.spec.free_params).
+    """
+    if (group, "law") not in _SELECTOR_SURFACES:
+        raise ValueError(f"Unknown selector group: {group!r}")
+    _, control_param = _SELECTOR_SURFACES[(group, "law")]
+    return control_param
+
+
+def _sed_for_selector(
+    selector_group: str, actual_group: str, cfg: dict, *, extra: dict | None = None
+) -> jnp.ndarray:
+    """Build one configuration and return its SED for a selector surface.
+
+    Similar to _sed() but for the new selector surfaces that don't fit the
+    existing (xray, radio, igm, dust) pattern.
+
+    Parameters
+    ----------
+    selector_group : str
+        The selector group label (e.g., 'agn_atten', 'foreground').
+    actual_group : str
+        The actual group name to pass to SEDModel.build (e.g., 'agn', 'foreground').
+    cfg : dict
+        The group config dict.
+    extra : dict, optional
+        Additional groups to include.
+
+    Returns
+    -------
+    jnp.ndarray
+        The appropriate SED for the selector group. Foreground uses obs_sed (observed-frame)
+        because it applies post-redshift dust extinction. Others use rest_sed.
+    """
+    # Use the same SSP and observation as the main tests
+    lo, hi = 2.0, 7.0
+    groups: dict = {"sfh": {"type": "const"}}
+
+    # For foreground, add redshift (it's an observed-frame effect, so we need z > 0 to see it)
+    if selector_group == "foreground":
+        groups["redshift"] = Fixed(1.0)
+
+    if cfg is not None:
+        groups[actual_group] = cfg
+    groups.update(extra or {})
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        model = SEDModel.build(ssp_data=_ssp(lo, hi), observation=_observation(), **groups)
+        params = model.spec.sample(jax.random.PRNGKey(0))
+        pred = model.predict(params)
+        # Foreground attenuation is applied in the observed frame, so measure obs_sed
+        # Others use rest_sed
+        if selector_group == "foreground":
+            sed = jnp.asarray(pred.obs_sed())
+        else:
+            sed = jnp.asarray(pred.rest_sed())
+        return sed
+
+
 @pytest.mark.parametrize("group", ["xray", "radio", "igm", "dust"])
 def test_no_undeclared_twins(group: str) -> None:
     """No two production names may produce bit-identical output undeclared.
@@ -537,6 +710,184 @@ def test_declared_coincidence_has_a_working_separator(entry: dict) -> None:
         "applied. The coincidence is therefore not 'correct at default "
         "settings'; it is a silent alias. Move this entry to KNOWN_UNDISTINCT "
         "and file an issue."
+    )
+
+
+# ── Layer 2b: Selector surfaces beyond type/law_bc ───────────────────────────
+# Three selector spellings introduced after the four initial kinds were tested:
+# - agn.atten.law (validated against DUST_LAWS, applied nothing — #2012)
+# - foreground.law (single-law limitation like agn.atten)
+# - agn.polar.law (parameter selecting extinction curve in polar_dust block)
+#
+# Each must be covered by the distinctness census to stay drift-proof.
+
+
+@pytest.mark.parametrize("group", ["agn_atten", "foreground"])
+def test_selector_surface_every_accepted_value_gives_distinct_sed(group: str) -> None:
+    """Every accepted value for a selector surface must produce a distinct SED.
+
+    This is the same check as test_no_undeclared_twins, but extended to the
+    two selector surfaces that were introduced without extending that census:
+    - agn.atten.law (fixed by #2012, #1980)
+    - foreground.law (MW dust screen, single-curve by design)
+
+    One-element accepted sets pass vacuously, so each is paired with a control
+    test that proves the selector actually reaches the SED.
+    """
+    accepted_set = _get_accepted_set(group, "law")
+    names = sorted(accepted_set)
+
+    seds = {}
+    for name in names:
+        try:
+            actual_group, cfg = _config_for_selector(group, name)
+            seds[name] = _sed_for_selector(group, actual_group, cfg)
+        except Exception as exc:
+            pytest.fail(f"{group}={name!r} is in the accepted set but failed to build: {exc}")
+
+    undeclared: list[str] = []
+    for i, a in enumerate(names):
+        for b in names[i + 1 :]:
+            if _indistinguishable(seds[a], seds[b]):
+                undeclared.append(f"{group}: {a!r} and {b!r} are bit-identical")
+
+    assert not undeclared, (
+        "Multiple accepted values for a selector produce bit-identical output. "
+        "Either restrict the accepted set to the values that are actually wired, "
+        "or remove the silent mapping that makes them equivalents:\n  " + "\n  ".join(undeclared)
+    )
+
+
+@pytest.mark.parametrize("group", ["agn_atten", "foreground"])
+def test_selector_surface_control_is_load_bearing(group: str) -> None:
+    """The control that proves a selector surface test isn't vacuous.
+
+    For a one-element accepted set (foreground.law and agn_atten.law are both
+    single-curve by design), the distinctness test above compares nothing and
+    passes vacuously. This control asserts that the strength parameter for each
+    selector actually changes the SED, proving the selector reaches the model.
+
+    Parametrized over both to catch the case where one of them becomes
+    disconnected from the SED. A zero-effect control would be the signature.
+    """
+    accepted_set = _get_accepted_set(group, "law")
+    if len(accepted_set) == 0:
+        pytest.skip(f"{group}: no accepted values")
+
+    # For single-element sets (both agn_atten and foreground), this control
+    # is essential: it proves the selector is wired, not inert
+    name = next(iter(accepted_set))
+    control_param = _get_control_param_name(group)
+
+    # Build with control parameter off (minimal/zero strength)
+    actual_group_off, cfg_off = _config_for_selector(group, name)
+    sed_off = _sed_for_selector(group, actual_group_off, cfg_off)
+
+    # Build with control parameter on (significant strength value)
+    if group == "agn_atten":
+        actual_group_on, _ = _config_for_selector(group, name)
+        cfg_on = {
+            "type": "composable",
+            "all_params": FIXED,
+            "disc": {"type": "powerlaw", "all_params": FIXED},
+            "atten": {"law": name, "attenuation_ebv": 0.4},
+        }
+    elif group == "foreground":
+        actual_group_on, _ = _config_for_selector(group, name)
+        cfg_on = {"law": name, "ebmv_mw": 0.5}  # Much higher than the 0.05 in cfg_off
+    else:
+        pytest.fail(f"Unhandled group: {group}")
+
+    sed_on = _sed_for_selector(group, actual_group_on, cfg_on)
+
+    assert not _indistinguishable(sed_off, sed_on), (
+        f"{group}: the control parameter ({control_param}) does not change the "
+        "SED, so this module cannot tell if the selector is wired or not. The "
+        "test_selector_surface_every_accepted_value_gives_distinct_sed test "
+        "above may pass vacuously for a single-value selector."
+    )
+
+
+# ── Drift-proof census: ensure new selector surfaces are caught ───────────────
+# This test discovers selector-ish frozensets from the grammar (_VALID_* constants)
+# and verifies they're all covered by the appropriate census. If a new selector
+# surface is added without updating the relevant coverage mechanism, this test
+# fails loudly. Coverage is by three mechanisms:
+# 1. _VALID_*_TYPES constants → group in _TOP_LEVEL_TYPED_GROUPS or AGN block
+# 2. _VALID_*_LAWS constants → entry in _SELECTOR_SURFACES (law-style selectors)
+
+
+def test_selector_surfaces_are_covered() -> None:
+    """Discover all _VALID_* frozensets and fail if any are uncovered.
+
+    The grammar has two kinds of selector-discoverable constants:
+    - Type-style (_VALID_*_TYPES): covered by _TOP_LEVEL_TYPED_GROUPS or _AGN_BLOCK_TO_KWARG
+    - Law-style (_VALID_*_LAWS): covered by _SELECTOR_SURFACES
+
+    This test ensures all discovered constants are covered by the right mechanism.
+    If a new selector surface is added without registering it, this test fails loudly.
+    """
+    import tengri.parameters.groups as groups_module
+    from tengri.parameters.groups import (
+        _AGN_BLOCK_TO_KWARG,
+        _TOP_LEVEL_TYPED_GROUPS,
+    )
+
+    # Discover ALL _VALID_* frozensets in the grammar
+    discovered_constants: dict[str, frozenset] = {}
+    for attr_name in dir(groups_module):
+        if not attr_name.startswith("_VALID_"):
+            continue
+        attr = getattr(groups_module, attr_name)
+        if not isinstance(attr, frozenset):
+            continue
+        discovered_constants[attr_name] = attr
+
+    uncovered = []
+    for const_name in discovered_constants:
+        found_coverage = False
+
+        # Check type-style selectors: _VALID_<GROUP>_TYPES
+        if const_name.endswith("_TYPES"):
+            # Extract group name from constant: _VALID_AGN_DISC_TYPES -> "agn_disc"
+            # or _VALID_AGN_ATTEN_TYPES -> "agn_atten" or _VALID_XRAY_TYPES -> "xray"
+            group_part = const_name.replace("_VALID_", "").replace("_TYPES", "").lower()
+
+            # Check if it's a top-level group type selector
+            if group_part in _TOP_LEVEL_TYPED_GROUPS:
+                found_coverage = True
+            else:
+                # Check if it's an AGN sub-block (e.g., "agn_disc" -> "disc")
+                for agn_block_name in _AGN_BLOCK_TO_KWARG:
+                    expected = f"_agn_{agn_block_name}" if "_agn" in group_part else agn_block_name
+                    if group_part.endswith(expected):
+                        found_coverage = True
+                        break
+                # Simpler check: agn_disc, agn_torus, etc.
+                if not found_coverage and group_part.startswith("agn_"):
+                    agn_sub = group_part.replace("agn_", "")
+                    if agn_sub in _AGN_BLOCK_TO_KWARG:
+                        found_coverage = True
+
+        # Check law-style selectors: _VALID_*_LAWS
+        elif const_name.endswith("_LAWS"):
+            # Check against _SELECTOR_SURFACES
+            for _, (source, _) in _SELECTOR_SURFACES.items():
+                if source.endswith(const_name):
+                    found_coverage = True
+                    break
+
+        if not found_coverage:
+            uncovered.append(
+                f"Discovered constant {const_name!r} in groups.py but found no coverage. "
+                f"Register it in the appropriate mechanism: _SELECTOR_SURFACES for law "
+                f"constants (_*_LAWS), or ensure the group/AGN-block exists in "
+                f"_TOP_LEVEL_TYPED_GROUPS/_AGN_BLOCK_TO_KWARG for type constants (_*_TYPES)."
+            )
+
+    assert not uncovered, (
+        "Uncovered selector surface(s) found. Every _VALID_* frozenset in the "
+        "grammar MUST be covered by the appropriate census mechanism:\n  " + "\n  ".join(uncovered)
     )
 
 
