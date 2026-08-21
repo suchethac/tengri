@@ -686,7 +686,8 @@ def _normalize_wildcard_keys(group: object) -> object:
         )
     if WILDCARD_KEY in group and WILDCARD_ALIAS not in group:
         raise ValueError(
-            f"The wildcard syntax has been retired. Use {WILDCARD_ALIAS!r} instead of {WILDCARD_KEY!r}. "
+            f"The wildcard syntax has been retired. Use {WILDCARD_ALIAS!r} "
+            f"instead of {WILDCARD_KEY!r}. "
             f"Example: {{'all_params': FREE}} instead of {{'*': FREE}}."
         )
     normalized: dict[object, object] = {}
