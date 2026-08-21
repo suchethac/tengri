@@ -14,7 +14,10 @@ identically zero.
 **Wall clocks** are warm steady state, minimum of 4 repetitions of 30 timed calls,
 every call `block_until_ready`. **FLOPs** are off
 `jax.jit(fn).lower(...).compile().cost_analysis()["flops"]`.
-**Caveat up front:** this GPU was also driving the desktop.
+**Caveat up front:** this GPU was also driving the desktop. And the sampler
+findings (9, 13, 14) are measured on a fixture chosen for cheap forward passes,
+which turns out to be very hard to sample — see **Finding 15** before quoting any
+of their convergence or cost-per-posterior numbers.
 
 ## Question
 
@@ -168,14 +171,20 @@ What it does and does not break:
 | `sum(predict_photometry)` — bare forward surface | **identically zero** |
 | `neg_log_posterior_fn` — what a fit descends | healthy (-32.2), nonzero, finite |
 
-A fit is safe: the likelihood standardizes the residual by σ *before* squaring,
-lifting the magnitudes back into range, and a 300-step float32 MAP moves all seven
-parameters. So float32 *inference* works; float32 `jax.grad` of a raw observable
-does not, and it fails silently.
+The objective gradient comes back finite and nonzero (−32.2 on the threaded
+objective), and a 300-step float32 MAP moves all seven parameters. **That is not
+the same as being right, and I originally drew the wrong conclusion from it.**
+
+This is already open as **#1415**, which is more careful: it verifies against
+central finite differences and finds the likelihood-path gradient wrong by
+*structured factors* — "~2x on stellar mass" — not merely finite. So **float32
+fitting is not safe**, and the correct statement is #1415's, not "fits are
+unaffected". The root cause is tracked in #1388 (`apply_log10_scale` is
+gradient-unsafe above ~1e38).
 
 `tests/regression/precision/test_inference_grad_float32.py` pins that objective
 gradient **finite** — and zero is finite, so existing coverage could not have
-caught this.
+caught the bare-observable case either.
 
 ## Finding 6 — catalog NUTS crosses between 64 and 256 galaxies, but converts little of the batch advantage
 
@@ -510,6 +519,59 @@ of it.** That is the answer to "how long does a catalog posterior take" on this
 model, and the fix is not a faster device — the GPU is already doing 1.47M
 forward predictions a second (Finding 10). It is a sampler that mixes.
 
+## Finding 15 — the convergence numbers above are a property of this fixture, not of tengri
+
+Merged PR #2014 re-measured the single-galaxy sampler table under blackjax 1.6.2
+and reports **min ESS median 118 at L=150** and **10 at L=20**. Findings 13-14
+report 1.3-3.0 on the same settings. Two orders of magnitude apart, so one of them
+is not measuring what its label says. It is mine, and this is what closed it out.
+
+First, the environment is not the difference. #2014 records that the shared venv
+had been rebuilt **below** the declared `blackjax>=1.6` floor on 2026-08-18, which
+invalidated the #1986 campaign. This venv runs **blackjax 1.6.2**, above the
+floor, so nothing here is that bug.
+
+Second, the amount of data is not the difference either. The obvious suspicion is
+that `mock_recovery_minimal` is under-determined — **7 free parameters against 5
+broadband fluxes** — so I re-ran the identical model with a 260-pixel spectrum
+instead, taking it comfortably over-determined. Same galaxy, same settings
+(L=150, 1000 warmup, 600 samples, float64):
+
+| observable | data points | single-galaxy ESS_min | catalog (n_gal=1) ESS_min |
+|---|---:|---:|---:|
+| photometry | 5 | 1.7 | 1.9 |
+| spectrum | 260 | 4.3 | 1.7 |
+
+52x the data moves ESS_min from 1.7 to 4.3. **It is not a data-volume problem.**
+
+What is left is the SFH parameterization. `mock_recovery_minimal` uses `tsnorm`,
+whose `skew`, `trunc` and `width_gyr` are strongly degenerate with each other and
+with `peak_lbt_gyr`; #2014's page uses a different family. So **Findings 9, 13 and
+14 characterize the samplers on a fixture chosen for cheap forward passes, and
+that fixture happens to be very hard to sample.** They are not a general statement
+about catalog inference in tengri, and the 2.8-hour and 51-hour projections in
+Finding 14 should not be quoted as tengri's cost for a 1000-galaxy posterior. A
+benchmark fixture picked for speed is the wrong instrument for a convergence
+claim, and that is the methodological error here.
+
+Three things do survive, because they are qualitative and reproduce independently
+of ESS:
+
+1. `HMC_VALIDATED` at 1000 galaxies returns 600/600 **identical** draws and trips
+   the dead-fit guard — the same signature as open issue #1999.
+2. `mcmc_nuts` returned a completely frozen chain for **3.1% of galaxies** with 0
+   divergences reported, so the freeze is not specific to fixed-length HMC.
+3. A catalog fit has **no aggregate convergence gate**: only a per-galaxy
+   `rhat()` call raises, so those frozen galaxies are silent in a catalog result.
+   (#2008, merged after this work began, now announces a dead fit at `Posterior`
+   construction — which addresses exactly this, on the single-fit path.)
+
+The catalog-versus-single comparison is suggestive and **under-powered**: on
+identical inputs the catalog path was worse at L=20 photometry (ESS 1.8 vs 3.0,
+R-hat 1.47 vs 1.04) and at L=150 spectroscopy (1.7 vs 4.3), and marginally better
+at L=150 photometry (1.9 vs 1.7). One seed each. It is consistent with the missing
+MAP init and forced diagonal mass, and it does not establish them.
+
 ## Interpretation
 
 The GPU question is a shape question. tengri's forward model is memory- and
@@ -583,122 +645,48 @@ accelerator will make a non-mixing chain 48x faster and tell you nothing.
     (GPU 1.11x, CPU 4.6x per 16x) puts the GPU ~3x ahead near 1024, but that is
     arithmetic on two points, not a measurement.
 
-## To file
+## Filed
 
-`gh` is not installed in this environment, so none of these were opened. Bodies
-are written out here so they can be filed verbatim.
+All of it, once `gh` became available. Two of the four things I was about to open
+turned out to exist already, which is the useful part of checking first.
 
-### A. Comment on the OPEN issue #1999 (do this first — do not open a duplicate)
+**Comments on existing issues**
 
-#1999 is "mcmc_hmc freezes on 06_fitting_spectroscopy: 600/600 identical draws,
-both precondition arms now broken" (`area:inference`, `area:notebooks`, `bug`).
-The catalog path shows the same thing, so #1999's scope is too narrow:
+* **#1999** (`mcmc_hmc freezes on 06_fitting_spectroscopy`) —
+  [comment](https://github.com/suchethac/tengri/issues/1999#issuecomment-5365319116).
+  The 600/600-identical signature reproduces on catalog *photometry*, on both CPU
+  and CUDA, and `mcmc_nuts` froze 3.1% of galaxies with 0 divergences — so the
+  scope in #1999 is narrower than the defect. Includes the Finding 15 caveat, so
+  nobody reads my ESS magnitudes as tengri's.
+* **#1415** (`Pure float32: photometry gradients are silently zero/wrong`) —
+  [comment](https://github.com/suchethac/tengri/issues/1415#issuecomment-5365328835).
+  Finding 5 is this issue, already open with finite-difference verification.
+  Added: it reproduces on CUDA and on the exact path, the signs survive as ±0.0,
+  and the float64 magnitudes are well inside float32 range so "underflow" does not
+  mean the output was too small. Also flagged that `notebooks/apple_mps.py` times
+  this exact shape in pure float32.
 
-> Same signature outside that notebook. `CatalogFitter.run("mcmc_hmc", ...)` on a
-> D=7 photometric model (`mock_recovery_minimal`, 5 SDSS bands, z fixed, float32)
-> under the same `HMC_VALIDATED` recipe returns 600/600 identical draws for every
-> parameter at 1000 galaxies, and `Posterior.rhat()` raises the #1438 guard. So
-> this is not specific to `06_fitting_spectroscopy`, to spectroscopy, or to the
-> single-galaxy path — it reproduces on catalog photometry, on **both CPU and
-> CUDA**.
->
-> A convergence matrix over warmup, trajectory length and mass matrix is in
-> `bench/reports/2026-08-20_cuda_device_matrix.md` Finding 13. The short version:
-> warmup length (200-2000) changes nothing; a dense mass matrix helps R-hat but
-> does not fix it; **trajectory length is the only lever that moves** — L=20 → 150
-> takes max split R-hat from 1.93 to 1.037, consistent with #1986's median min ESS
-> 13 → 219. That points at `HMC_VALIDATED`'s `n_leapfrog_steps=20` being too short
-> for these posteriors rather than at a recent regression in the sampler, which is
-> worth checking against #1999's "the published render shows healthy results"
-> claim before hunting for a regression commit.
->
-> One discrepancy worth reconciling: #1999 reports **600 divergent transitions**,
-> while every catalog row here reports a median of **0** divergences with equally
-> bad mixing. If both are the same defect, the divergence count is not a reliable
-> discriminator.
->
-> And it is not only HMC. `mcmc_nuts` on the same 1000-galaxy catalog (300 warmup,
-> 100 samples, 3862 s) returns a **completely frozen chain for 3.1% of galaxies**
-> — every draw of every parameter identical — with median R-hat 1.069, 96.8% of
-> galaxies above 1.01, and 0 divergences. So whatever this is, it is not specific
-> to fixed-length HMC, and a catalog fit currently has no aggregate convergence
-> gate that would surface it: only a per-galaxy `rhat()` call raises.
+**Opened**
 
-Command:
+* **#2022** — float32 on CUDA silently becomes TF32: 4.5% on parameter error bars,
+  and `NVIDIA_TF32_OVERRIDE=0` does not fix it (Findings 7-8).
+* **#2023** — float32 geoVI emission-line marginalization dies on CUDA, cuBLASLt
+  refuses the GEMM (Finding 8).
+* **#2024** — `~/.cache/tengri_precomp` is keyed on neither dtype nor backend.
+* **#2025** — `forward_chunk_size`'s 2 GB budget leaves ~30% on the table on a GPU
+  where the knob is worth 107x (Findings 10-11).
+* **#2026** — the only catalog `mcmc_hmc` test is D=1 and asserts shape and
+  finiteness, so a frozen chain passes it.
 
-```bash
-gh issue comment 1999 --body-file <that text>
-```
+**Not filed, deliberately**
 
-### B. New issue — catalog HMC drops the stabilizers single-fit HMC relies on
-
-Title: *catalog `mcmc_hmc` silently drops MAP init and the `dense_mass_matrix=None`
-auto-policy, and cannot report step size or acceptance*
-Labels: `area:inference`, `bug`, `silent-failure`
-
-Body: `CatalogFitter.run("mcmc_hmc", ...)` is not the same sampler as
-`Fitter.fit("mcmc_hmc", ...)`.
-
-1. **No MAP initialization.** Single-fit runs an 8-restart ADAM MAP
-   (`backends/mcmc/hmc.py`, `_maybe_map_init`); the catalog path starts every
-   galaxy at `0.1 * normal` about the prior centre (`fitter.py:2810-2812`). The
-   docstring of `_maybe_map_init` documents this exact failure shape for #1529
-   ("killed six of eight NUTS fits with R-hat up to 10.74 and zero divergences").
-2. **`dense_mass_matrix` is hardcoded `False`** (`catalog_fitter.py:1412`) and
-   consumed as `bool(dense_mass_matrix)` (`:1478`). Single-fit resolves `None` to
-   `n_dim < 8`, i.e. **dense at D=7** (`nuts.py:138-140`). So passing the
-   documented default silently downgrades to diagonal, and unlike `run_nuts`
-   (`nuts.py:422-424`) the catalog path never logs the choice.
-3. **`precondition` is unreachable.** `_run_native_mcmc` takes no `**kwargs`
-   (`catalog_fitter.py:1394-1414`), so the whitening path
-   (`hmc.py:172-173 prepare_preconditioning`) cannot be used from a catalog fit —
-   which is the escape hatch for the geometry that makes fixed-L HMC fail.
-4. **Step size and acceptance rate are discarded.** `catalog.py:160` drops the
-   adapted step size into `_step_size`; single-fit both logs and returns it
-   (`hmc.py:245-249`, `:334`). Acceptance rate is never captured by any sampler
-   (`_shared.py:496-500` records only position and `is_divergent`). With ~0
-   divergences reported, a badly-mixing catalog fit produces **no** signal.
-
-### C. New issue — the only catalog HMC test cannot fail
-
-Title: *`test_mcmc_hmc_vectorizes_too` is D=1 and asserts only shape and finiteness*
-Labels: `area:tests`, `area:inference`, `silent-failure`
-
-`tests/inference/test_catalog_mcmc_vmap.py:241-268` is the sole catalog HMC test:
-`n_warmup=15, n_samples=15, n_leapfrog_steps=8`, on a model where six of seven
-parameters are `Fixed` (D=1), asserting `shape[0] == 15` and `all(isfinite)`. **A
-completely frozen chain passes both.** Every other test in the file uses
-`mcmc_nuts`, and no catalog test asserts `ptp > 0`, R-hat or ESS. The convention
-exists elsewhere — `tests/inference/test_hierarchical_backends_actually_run.py:182`
-asserts `np.unique(values).size > 1` — but only for `PopulationFitter`. Port it.
-
-### D. Docs steer catalog users to the sampler that does not converge
-
-Title: *`method_selection.md` recommends `mcmc_hmc` for catalog mode on compile-time
-grounds, with no convergence evidence*
-Labels: `area:docs`, `area:inference`
-
-`docs/method_selection.md:26` recommends `mcmc_hmc` for catalog mode because
-"batched NUTS spent over fifteen minutes in XLA compilation without sampling",
-and `docs/known_limitations.md:131` recommends it at D >= 8 for memory. Neither
-carries a convergence caveat, and `mcmc_hmc` has no `[POOR MIXING]` flag while
-`mcmc_ghmc` / `mcmc_mclmc` / `pathfinder` do. Given Finding 13 and the two
-2026-08-17 reports, both need the caveat and a pointer to the trajectory-length
-finding.
-
-### E. The four items from the CUDA work itself
-
-1. **float32 `jax.grad` of photometry returns exactly zero** — `area:perf`,
-   `area:forward`, `bug`, `silent-failure`. Finding 5. A regression test should
-   assert *nonzero* against a float64 reference; the existing test asserts
-   finiteness, which zero satisfies.
-2. **`~/.cache/tengri_precomp` is keyed on neither dtype nor backend** —
-   `area:perf`, `bug`, `silent-failure`. An fp32 run can write an entry an fp64
-   run later reads.
-3. **float32 geoVI emission-line marginalization dies on cuBLASLt** —
-   `area:inference`, `area:nebular`, `bug`. Finding 8.
-4. **`forward_chunk_size`'s 2 GB budget is ~30% off on a 12 GB card, and 107x
-   matters** — `area:inference`, `area:perf`. Finding 11.
+The catalog-path wiring differences (no MAP init, `dense_mass_matrix` hardcoded
+`False` and read as `bool(...)`, `precondition` unreachable, step size and
+acceptance discarded) went into the #1999 comment as leads rather than a separate
+issue: they are unconfirmed as the cause, and splitting them from the freeze they
+might explain would fragment the discussion. The `method_selection.md` and
+`known_limitations.md` staleness is left alone pending #2014's re-measurement,
+which already moved that page.
 
 ## Reproduce
 

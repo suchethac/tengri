@@ -711,6 +711,45 @@ plt.show()
 # is not mixing — it will make a dead chain 48x faster.**
 
 # %% [markdown]
+# ### Why those posterior numbers are about this model, not about tengri
+#
+# Merged PR #2014 re-measured the single-galaxy sampler table under the declared
+# blackjax and reports **min ESS median 118 at L=150**. The catalog numbers above
+# are 1.3-3.0 at the same settings. Two orders of magnitude apart means one of
+# them is mislabelled, and it is the one above.
+#
+# It is not the library: this environment runs blackjax 1.6.2, above the
+# `blackjax>=1.6` floor, so it is not the below-floor venv that invalidated the
+# earlier #1986 campaign. And it is not the amount of data. The obvious suspect
+# is that `mock_recovery_minimal` is under-determined — 7 free parameters against
+# 5 broadband fluxes — so the same model was re-run against a 260-pixel spectrum,
+# comfortably over-determined, same galaxy and settings:
+#
+# | observable | data points | single-galaxy ESS_min | catalog (n_gal=1) |
+# |---|---:|---:|---:|
+# | photometry | 5 | 1.7 | 1.9 |
+# | spectrum | 260 | 4.3 | 1.7 |
+#
+# 52x the data buys ESS_min 1.7 → 4.3. What is left is the SFH family:
+# `mock_recovery_minimal` uses `tsnorm`, whose skew, truncation and width are
+# strongly degenerate with each other and with the peak time.
+#
+# So **the posterior section characterizes the samplers on a fixture picked for
+# cheap forward passes, and that fixture is hard to sample.** Do not read the
+# 2.8-hour and 51-hour figures as tengri's cost for a 1000-galaxy posterior. A
+# benchmark fixture chosen for speed is the wrong instrument for a convergence
+# claim.
+#
+# What survives, because it is qualitative:
+#
+# * `HMC_VALIDATED` at 1000 galaxies returns 600/600 identical draws — the
+#   signature of open issue #1999.
+# * `mcmc_nuts` froze 3.1% of galaxies with zero divergences reported, so the
+#   freeze is not specific to fixed-length HMC.
+# * A catalog fit has no aggregate convergence gate: only a per-galaxy `rhat()`
+#   raises, so a frozen galaxy is silent in a catalog result.
+
+# %% [markdown]
 # ## 6. What float32 buys, and what it costs
 #
 # On this workload float32 buys **nothing measurable**, because the workload is
@@ -785,12 +824,15 @@ print("grad(sum photometry):", {k: float(v) for k, v in grad.items()})
 # | `sum(predict_photometry)` — the bare forward surface | **identically zero** |
 # | `neg_log_posterior_fn` — what a fit descends | healthy, nonzero, finite |
 #
-# A fit is safe because the likelihood standardizes the residual by σ *before*
-# squaring, which lifts the magnitudes back into range. A 300-step MAP fit in
-# float32 moves all seven parameters. So float32 inference works; float32
-# `jax.grad` of a raw observable does not, and it fails silently, which is the
-# worse failure. Existing coverage pins that objective gradient *finite* — and
-# zero is finite, so it would not have caught this.
+# The objective gradient does come back finite and nonzero (−32.2), and a
+# 300-step float32 MAP moves all seven parameters — but **do not read that as
+# float32 fitting being safe.** This is open issue #1415, which checks against
+# central finite differences and finds the likelihood-path gradient wrong by
+# *structured factors*, "~2x on stellar mass". Finite is not correct. The root
+# cause is #1388: `apply_log10_scale` is gradient-unsafe above ~1e38.
+#
+# Existing coverage pins that objective gradient *finite* — and zero is finite,
+# so it would not have caught the bare-observable case either.
 
 # %% [markdown]
 # ## 7. Is the card healthy?
