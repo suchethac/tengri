@@ -575,6 +575,93 @@ print("moved off the initial point:", {k: round(post.params[k] - params[k], 4) f
 # worked.
 
 # %% [markdown]
+# ### A real posterior for 1000 galaxies: hours to days, and neither sampler converges
+#
+# The catalog numbers above are cost per draw at a token budget. Here is the same
+# catalog at a budget you could publish from — 1000 galaxies, GPU float32,
+# `K = 1000`, 300 warmup — with the diagnostics attached, which is the only way
+# these numbers mean anything:
+#
+# | | `mcmc_nuts` | `mcmc_hmc` |
+# |---|---:|---:|
+# | wall clock | **3861.9 s** (64 min) | 149.1 s |
+# | per galaxy | 3.86 s | **0.149 s** |
+# | ESS_min, median galaxy | 2.1 (of 100 draws) | 1.5 (of 1000) |
+# | split R-hat, max | 1.19 | 3.22 |
+# | galaxies with R-hat > 1.01 | 96.8% | 100% |
+# | galaxies fully frozen | **3.1%** | — |
+# | ESS/s, catalog-wide | 0.53 | **10.1** |
+#
+# NUTS costs 26x more per galaxy and delivers ~14x better per-draw efficiency,
+# which does not cover it — so HMC wins on ESS/second by ~19x. **Neither
+# converges.** This is not a fast-wrong versus slow-right choice; both are wrong
+# at practical budgets.
+#
+# The 3.1% deserves its own sentence: **NUTS returned a completely frozen chain
+# for one galaxy in 32** — every draw of every parameter identical — with zero
+# divergences reported. Scaled to the catalog that is ~31 galaxies whose
+# "posterior" is their starting point, and nothing in the output says so. A
+# catalog fit has no aggregate convergence gate; only a per-galaxy `rhat()` call
+# raises.
+#
+# Scaling to 100 effective samples per galaxy, the low end of usable, and
+# assuming ESS grows linearly with draws (optimistic at R-hat 3.2):
+#
+# | | 1000 galaxies to ESS_min = 100 |
+# |---|---:|
+# | `mcmc_hmc` | ~2.8 hours |
+# | `mcmc_nuts` | ~51 hours |
+#
+# **Hours to days for one catalog, with no validated configuration at the end.**
+# And note where that leaves the hardware argument: the card is already doing
+# 1.47 million forward predictions a second (§4). The bottleneck is not the
+# device. It is a sampler that mixes.
+
+# %%
+POST_LABELS = ["NUTS\n(3862 s)", "HMC\n(149 s)"]
+POST_WALL = np.array([3861.9, 149.1])
+POST_ESS = np.array([2.1, 1.5])
+POST_ESSPS = np.array([0.53, 10.1])
+
+fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(12, 3.9))
+for ax, vals, label, title, colors in (
+    (ax1, POST_WALL, "wall clock [s]", "Cost: 1000-galaxy posterior", ["#d62728", "#2ca02c"]),
+    (ax2, POST_ESS, "ESS$_{min}$, median galaxy", "Quality (100 needed)", ["#d62728", "#2ca02c"]),
+    (ax3, POST_ESSPS, "effective samples / s", "Cost-effectiveness", ["#d62728", "#2ca02c"]),
+):
+    bars = ax.bar(POST_LABELS, vals, color=colors)
+    ax.set_ylabel(label)
+    ax.set_title(title, fontsize=10)
+    ax.grid(axis="y", alpha=0.3)
+    for b, v in zip(bars, vals, strict=True):
+        ax.annotate(
+            f"{v:g}",
+            xy=(b.get_x() + b.get_width() / 2, v),
+            xytext=(0, 3),
+            textcoords="offset points",
+            ha="center",
+            fontsize=9,
+        )
+    ax.set_ylim(top=vals.max() * 1.25)
+ax2.axhline(100, ls="--", color="0.4", lw=1)
+ax2.annotate(
+    "usable",
+    xy=(1.4, 100),
+    xytext=(0, 4),
+    textcoords="offset points",
+    fontsize=8,
+    color="0.35",
+    ha="right",
+)
+ax2.set_yscale("log")
+fig.suptitle(
+    "1000-galaxy catalog posterior, GPU float32: cheap, expensive, and neither converged",
+    fontsize=10,
+)
+fig.tight_layout()
+plt.show()
+
+# %% [markdown]
 # ### A cheap sampler is not a fast one: HMC's 48x was a dead chain
 #
 # This subsection replaced an earlier version of itself, and the correction is

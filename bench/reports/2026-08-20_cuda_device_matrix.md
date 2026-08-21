@@ -464,6 +464,52 @@ Two wiring differences make the catalog path more exposed, both from reading
 
 Neither is confirmed as *the* cause; item 3 is the only lever measured to help.
 
+## Finding 14 — NUTS does not converge here either, and freezes 3% of galaxies outright
+
+The obvious reply to Finding 13 is "use NUTS". Measured, 1000 galaxies, GPU
+float32, `K = 1000`, 300 warmup + 100 samples:
+
+| | `mcmc_nuts` | `mcmc_hmc` |
+|---|---:|---:|
+| wall clock | **3861.9 s** (64 min) | 149.1 s |
+| per galaxy | 3.86 s | **0.149 s** |
+| per iteration (whole batch) | 9.65 s | 0.115 s |
+| ESS_min, median galaxy | 2.1 (of 100 draws) | 1.5 (of 1000) |
+| split R-hat, max / median | 1.19 / 1.069 | 3.22 / — |
+| galaxies with R-hat > 1.01 | 96.8% | 100% |
+| **galaxies fully frozen** | **3.1%** | 0% at 64 gal; all at 1000 under `HMC_VALIDATED` |
+| divergences, median | 0 | 0 |
+| ESS/s (catalog-wide) | 0.53 | **10.1** |
+
+NUTS is **26x more expensive per galaxy** and **84x per iteration**. It buys better
+per-draw quality — 2.1 effective of 100 draws (2%) against 1.5 of 1000 (0.15%),
+so about 14x more efficient per draw — but not enough to cover 84x more cost, so
+HMC is ahead on ESS per second by ~19x. **Neither is converged**, and the honest
+reading is that this is not a choice between a fast wrong answer and a slow right
+one: both are wrong at practical budgets.
+
+The 3.1% is the part worth acting on: **NUTS returned a completely frozen chain
+for 1 galaxy in 32**, every draw of every parameter identical. In a 1000-galaxy
+run that is ~31 galaxies whose posteriors are their initial point, and nothing in
+the output says so — `n_divergent` is 0 for them, and a per-galaxy `rhat()` call
+is the only thing that raises. A catalog fit has no aggregate convergence gate.
+
+### What a usable posterior would cost
+
+Scaling to 100 effective samples per galaxy, which is the low end of usable, and
+assuming ESS grows linearly with draws (optimistic — with R-hat at 3.2 it may
+not):
+
+| | 1000 galaxies to ESS_min = 100/galaxy |
+|---|---:|
+| `mcmc_hmc` (L=10, GPU f32) | ~2.8 hours |
+| `mcmc_nuts` (GPU f32) | ~51 hours |
+
+So: **hours to days for one catalog, with no validated configuration at the end
+of it.** That is the answer to "how long does a catalog posterior take" on this
+model, and the fix is not a faster device — the GPU is already doing 1.47M
+forward predictions a second (Finding 10). It is a sampler that mixes.
+
 ## Interpretation
 
 The GPU question is a shape question. tengri's forward model is memory- and
@@ -570,6 +616,13 @@ The catalog path shows the same thing, so #1999's scope is too narrow:
 > while every catalog row here reports a median of **0** divergences with equally
 > bad mixing. If both are the same defect, the divergence count is not a reliable
 > discriminator.
+>
+> And it is not only HMC. `mcmc_nuts` on the same 1000-galaxy catalog (300 warmup,
+> 100 samples, 3862 s) returns a **completely frozen chain for 3.1% of galaxies**
+> — every draw of every parameter identical — with median R-hat 1.069, 96.8% of
+> galaxies above 1.01, and 0 divergences. So whatever this is, it is not specific
+> to fixed-length HMC, and a catalog fit currently has no aggregate convergence
+> gate that would surface it: only a per-galaxy `rhat()` call raises.
 
 Command:
 
