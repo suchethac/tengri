@@ -248,7 +248,7 @@ def profile_component_breakdown(ssp_data, obs, mock_data):
                 "dust_tau_bc": Uniform(0.0, 3.0),
                 "dust_tau_diff": Uniform(0.0, 2.0),
                 "nebular_ssp": True,
-                "apply_igm": True,
+                "igm": {"type": "inoue"},
                 "redshift": Fixed(redshift),
             },
         ),

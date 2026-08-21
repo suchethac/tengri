@@ -69,7 +69,7 @@ model_a = SEDModel.build(
     },
     neb={"type": "cue", "all_params": tengri.FIXED},
     redshift=tengri.Fixed(0.5),
-    apply_igm=True,
+    igm={"type": "inoue"},
 )
 
 baseline_a = dict(model_a.spec.sample(jax.random.PRNGKey(0)))
@@ -98,7 +98,7 @@ model_b = SEDModel.build(
     },
     neb={"type": "cue", "all_params": tengri.FIXED},
     redshift=tengri.Fixed(1.0),
-    apply_igm=True,
+    igm={"type": "inoue"},
 )
 
 baseline_b = dict(model_b.spec.sample(jax.random.PRNGKey(1)))
@@ -128,7 +128,7 @@ model_c = SEDModel.build(
     },
     neb={"type": "cue", "all_params": tengri.FIXED},
     redshift=tengri.Fixed(1.5),
-    apply_igm=True,
+    igm={"type": "inoue"},
 )
 
 baseline_c = dict(model_c.spec.sample(jax.random.PRNGKey(2)))

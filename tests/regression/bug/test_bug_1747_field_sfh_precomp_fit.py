@@ -63,7 +63,7 @@ def _build(ssp, obs, approx):
         },
         neb={"type": "ssp"},
         redshift=Fixed(0.5),
-        apply_igm=False,
+        igm={"type": "none"},
         n_grid=_N_GRID,
         approx=approx,
     )
