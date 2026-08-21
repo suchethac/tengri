@@ -969,12 +969,14 @@ def run_flat_sampler(
         }
 
     elif driver in ("mclmc", "adjusted_mclmc"):
-        import blackjax
-
         from tengri.inference.backends.mcmc._shared import (
             _adjusted_mclmc_sample_scan,
+            _check_blackjax_floor,
             _mclmc_sample_scan,
         )
+
+        _check_blackjax_floor()
+        import blackjax
 
         # blackjax's (adjusted_)mclmc_find_L_and_step_size takes a ONE-argument
         # logdensity, so the data must close over here — one compile per
