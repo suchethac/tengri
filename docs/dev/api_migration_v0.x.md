@@ -417,12 +417,12 @@ model = SEDModel.build(
     ssp_data=ssp,
     filters=['sdss_u', 'sdss_g'],
     sfh={'type': 'dpl', 'all_params': FREE},
-    dust={
+    dust_attenuation={
         'type': 'two_component',
         'law': 'calzetti',
         'all_params': FREE,
-        'emission': {'type': 'dale2014', 'all_params': FIXED},
     },
+    dust_emission={'type': 'dale2014', 'all_params': FIXED},
     neb={'type': 'cue', 'all_params': FIXED},
     redshift=Uniform(0.01, 6.0),
     apply_igm=True,
@@ -430,7 +430,7 @@ model = SEDModel.build(
 
 # Path 3: Round-trip (extract → edit → rebuild)
 groups = model.spec.to_groups()
-groups['dust']['tau_bc'] = Fixed(0.8)  # Tweak in-place
+groups['dust_attenuation']['tau_bc'] = Fixed(0.8)  # Tweak in-place
 model2 = SEDModel.build(ssp_data=ssp, filters=['sdss_u'], **groups)
 ```
 
@@ -453,10 +453,10 @@ parameters in that group not explicitly overridden. (`'*'` is an accepted
 synonym, kept for back-compat and slated for deprecation — prefer `'all_params'`.)
 
 ```python
-dust={
+dust_attenuation={
     'type': 'two_component',
     'law': 'calzetti',
-    'all_params': FIXED,  # All dust params are [all_params FIXED]
+    'all_params': FIXED,  # All dust attenuation params are [all_params FIXED]
     'tau_bc': Uniform(0, 1),  # Override: explicitly free
 }
 ```
@@ -518,7 +518,7 @@ spec = Parameters(
 # New (recommended)
 spec = parse_groups(
     sfh={'type': 'dpl', 'all_params': FREE},
-    dust={'type': 'two_component', 'law': 'calzetti', 'all_params': FREE},
+    dust_attenuation={'type': 'two_component', 'law': 'calzetti', 'all_params': FREE},
 )
 ```
 
@@ -1061,6 +1061,30 @@ is a load-bearing role a string is badly suited to — it shipped once reading
 "`met={'type': 'table'}` becomes `met={'type': 'table'}`" after a rename sweep
 rewrote the before-side. A test now asserts the message names the keys it
 translates *from*.
+
+---
+
+## Dust split into attenuation and emission groups (2026-08, #2000)
+
+**Breaking — no shim.** The `dust` build group is removed; attenuation and IR emission
+are now separate peer top-level groups. Additionally, the nested `dust_attenuation={'emission': ...}`
+form is retired.
+
+| old (removed)                                                | new                                                           |
+| ------------------------------------------------------------ | ------------------------------------------------------------- |
+| `dust={'type': 'single_component', 'law': 'calzetti', ...}`  | `dust_attenuation={'type': 'single_component', 'law': 'calzetti', ...}` |
+| `dust={'type': 'two_component', 'law': 'calzetti', ..., 'emission': {'type': 'dale2014'}}` | `dust_attenuation={'type': 'two_component', 'law': 'calzetti', ...}, dust_emission={'type': 'dale2014'}` |
+| `dust={'emission': {'type': 'modified_blackbody'}}`          | `dust_emission={'type': 'modified_blackbody'}`               |
+| Energy balance via `dust={'all_params': Fixed(eta=1.0)}`     | `dust_emission={'eta_balance': Fixed(1.0)}`                  |
+
+Dust attenuation parameters (`tau_v`, `tau_bc`, `tau_diff`, `Rv_bc`, `Rv_diff`,
+`delta_*, `slope_*`, `bump_strength_*`) move into the attenuation group.
+Energy balance (`eta_balance`, default `Fixed(1.0)` for strict `L_IR = eta * L_absorbed`)
+moves to the emission group. **Note:** if your code predates #1989, the renamed
+group is also now subject to the explicit-law rule — `law` must be spelled.
+
+`tengri.list_dust_attenuation_types()` and `tengri.list_dust_emission_types()`
+are the live menus.
 
 ---
 

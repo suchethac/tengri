@@ -186,13 +186,13 @@ override per-fit:
 ```python
 model = SEDModel.build(
     ssp_data=ssp, observation=obs,
-    dust={
+    dust_attenuation={
         'type': 'two_component', 'law': 'calzetti', 'all_params': FIXED,
-        'emission': {
-            'type':    'modified_blackbody',
-            'T':       Fixed(35.0),          # pin one
-            'beta_ir': Uniform(1.5, 2.5),    # narrow another
-        },
+    },
+    dust_emission={
+        'type':    'modified_blackbody',
+        'T':       Fixed(35.0),          # pin one
+        'beta_ir': Uniform(1.5, 2.5),    # narrow another
     },
 )
 ```
@@ -210,7 +210,7 @@ The class-level defaults never mutate — they're the prior baseline.
 ### Registration with the builder
 
 `__init_subclass__` registers `(cls.name, cls)` in a module-level table.
-`SEDModel.build(dust={'type': 'bosa', ...})` looks up `bosa` and instantiates
+`SEDModel.build(dust_emission={'type': 'bosa', ...})` looks up `bosa` and instantiates
 `BOSADust`. No factory edits, no central registry to maintain — define the
 class anywhere and it's discoverable.
 

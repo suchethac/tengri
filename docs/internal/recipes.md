@@ -54,7 +54,9 @@ dict — inspect it, edit it, or override blocks before building:
 ```python
 spec = tengri.recipes.star_forming_photometry()
 spec["redshift"] = tengri.Fixed(0.1)     # pin redshift
-spec["dust"]["law_bc"] = "calzetti"      # swap the birth-cloud law
+del spec["dust_attenuation"]["law"]               # 'law' and the pair are mutually exclusive
+spec["dust_attenuation"]["law_bc"] = "calzetti"   # birth-cloud law
+spec["dust_attenuation"]["law_diff"] = "power_law"  # diffuse ISM law
 model = SEDModel.build(ssp_data=ssp, observation=obs, **spec)
 model.spec.summary()                      # provenance-tagged view of every parameter
 ```

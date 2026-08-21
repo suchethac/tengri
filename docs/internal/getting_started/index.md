@@ -61,7 +61,7 @@ model = SEDModel.build(
          "beta": Uniform(0.3, 2.0),
          "tau_gyr": Uniform(0.5, 10),
          "log_total_mass": Uniform(8, 12)},
-    dust={"type": "two_component", "all_params": FIXED},
+    dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
     neb={"type": "none"},
     redshift=Fixed(0.1),
 )
