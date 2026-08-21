@@ -1075,10 +1075,10 @@ form is retired.
 | `dust={'type': 'single_component', 'law': 'calzetti', ...}`  | `dust_attenuation={'type': 'single_component', 'law': 'calzetti', ...}` |
 | `dust={'type': 'two_component', 'law': 'calzetti', ..., 'emission': {'type': 'dale2014'}}` | `dust_attenuation={'type': 'two_component', 'law': 'calzetti', ...}, dust_emission={'type': 'dale2014'}` |
 | `dust={'emission': {'type': 'modified_blackbody'}}`          | `dust_emission={'type': 'modified_blackbody'}`               |
-| Energy balance via `dust={'all_params': Fixed(eta=1.0)}`     | `dust_emission={'eta_balance': Fixed(1.0)}`                  |
+| `dust={'emission': {'eta_balance': Fixed(1.0), ...}}`        | `dust_emission={'eta_balance': Fixed(1.0), ...}`             |
 
 Dust attenuation parameters (`tau_v`, `tau_bc`, `tau_diff`, `Rv_bc`, `Rv_diff`,
-`delta_*, `slope_*`, `bump_strength_*`) move into the attenuation group.
+`delta_*`, `slope_*`, `bump_strength_*`) move into the attenuation group.
 Energy balance (`eta_balance`, default `Fixed(1.0)` for strict `L_IR = eta * L_absorbed`)
 moves to the emission group. **Note:** if your code predates #1989, the renamed
 group is also now subject to the explicit-law rule — `law` must be spelled.

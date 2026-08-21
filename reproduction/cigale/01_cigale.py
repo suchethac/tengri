@@ -750,7 +750,7 @@ plt.show()
 #
 # **Lyman continuum.** tengri's attenuation curves polynomial-extend
 # through the FUV; CIGALE zeros attenuation below 912 Å. Models here
-# set `dust={'lyman_cutoff': True}` to match (see §7).
+# set `dust_attenuation={'lyman_cutoff': True}` to match (see §7).
 #
 # **Verification Status:** CROSSVAL — Dust IR emission vs BAGPIPES
 
@@ -1003,7 +1003,7 @@ plt.show()
 # **Far-UV (λ < 1000 Å) — now matched.** Calzetti+2000 was fit on
 # 1200 Å – 22000 Å; tengri's polynomial extrapolates below that, while
 # CIGALE's `dustatt_modified_starburst` drops to zero at 912 Å. Setting
-# `dust={'lyman_cutoff': True}` applies the same 912 Å clip on both sides.
+# `dust_attenuation={'lyman_cutoff': True}` applies the same 912 Å clip on both sides.
 
 # %%
 fig, (ax_l, ax_r) = plt.subplots(1, 2, sharey=True, figsize=(12, 5))

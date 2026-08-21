@@ -43,76 +43,88 @@ from __future__ import annotations
 import ast
 import json
 import sys
+import warnings
 from pathlib import Path
+
+# Scanned docs fences legitimately contain regex-bearing strings whose escapes
+# are not valid Python string escapes; the parse still succeeds, so the warning
+# is pure noise in CI logs.
+warnings.filterwarnings("ignore", category=SyntaxWarning)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # Dust attenuation laws (copied from src/tengri/components/dust/laws/_registry.py
 # to keep this tool stdlib-only and CI-runnable without tengri imports).
-DUST_LAWS = frozenset({
-    "calzetti",
-    "cardelli",
-    "conroy2010",
-    "d03_mwrv31",
-    "hd23_mwrv31",
-    "kriek_conroy",
-    "leitherer02",
-    "li08",
-    "lmc",
-    "narayanan_z",
-    "noll09",
-    "power_law",
-    "prevot_smc",
-    "reddy15",
-    "salim",
-    "salim_sbl18",
-    "smc",
-    "tea",
-    "vw07_bc",
-    "vw07_diff",
-    "wd01_mwrv31",
-    "wd01_smcbar",
-})
+DUST_LAWS = frozenset(
+    {
+        "calzetti",
+        "cardelli",
+        "conroy2010",
+        "d03_mwrv31",
+        "hd23_mwrv31",
+        "kriek_conroy",
+        "leitherer02",
+        "li08",
+        "lmc",
+        "narayanan_z",
+        "noll09",
+        "power_law",
+        "prevot_smc",
+        "reddy15",
+        "salim",
+        "salim_sbl18",
+        "smc",
+        "tea",
+        "vw07_bc",
+        "vw07_diff",
+        "wd01_mwrv31",
+        "wd01_smcbar",
+    }
+)
 
 # Tengri dust attenuation type values
 DUST_ATTENUATION_TYPES = frozenset({"two_component", "single_component", "wg00", "none", "off"})
 
 # Tengri dust emission engine types (from parameters/groups.py _valid_dust_emission_types)
-DUST_EMISSION_TYPES = frozenset({
-    "astrodust",
-    "bosa",
-    "casey2012",
-    "dale2014",
-    "dale2014_cigale",
-    "dh02_ce01",
-    "dl07",
-    "dl07_tabulated",
-    "dl14",
-    "draine2021_pah",
-    "draine_li2007",
-    "draine_li2014",
-    "energy_balance_split",
-    "mbb",
-    "modified_blackbody",
-    "pah_drude",
-    "schreiber2016",
-    "schreiber2018",
-    "themis",
-})
+DUST_EMISSION_TYPES = frozenset(
+    {
+        "astrodust",
+        "bosa",
+        "casey2012",
+        "dale2014",
+        "dale2014_cigale",
+        "dh02_ce01",
+        "dl07",
+        "dl07_tabulated",
+        "dl14",
+        "draine2021_pah",
+        "draine_li2007",
+        "draine_li2014",
+        "energy_balance_split",
+        "mbb",
+        "modified_blackbody",
+        "pah_drude",
+        "schreiber2016",
+        "schreiber2018",
+        "themis",
+    }
+)
 
 # Keys that mark a tengri dust dict
-TENGRI_DUST_MARKERS = frozenset({
-    "all_params",
-    "*",
-    "law",
-    "law_bc",
-    "law_diff",
-    "tau_bc",
-    "tau_diff",
-    "tau_v",
-    "eta_balance",
-    "lyman_cutoff",
-})
+TENGRI_DUST_MARKERS = frozenset(
+    {
+        "all_params",
+        "*",
+        "law",
+        "law_bc",
+        "law_diff",
+        "tau_bc",
+        "tau_diff",
+        "tau_v",
+        "eta_balance",
+        "lyman_cutoff",
+    }
+)
 
 
 def _load_allowlist() -> dict[str, str]:
@@ -164,9 +176,7 @@ def is_tengri_dust_dict(dict_node: ast.Dict) -> bool:
     FSPS configs) carry none of these and should be skipped silently.
     """
     string_keys = {
-        k.value
-        for k in dict_node.keys
-        if isinstance(k, ast.Constant) and isinstance(k.value, str)
+        k.value for k in dict_node.keys if isinstance(k, ast.Constant) and isinstance(k.value, str)
     }
 
     # Check for tengri markers
@@ -175,11 +185,7 @@ def is_tengri_dust_dict(dict_node: ast.Dict) -> bool:
     if not has_tengri_marker:
         # Check if 'type' value is a known tengri type
         for i, k in enumerate(dict_node.keys):
-            if (
-                isinstance(k, ast.Constant)
-                and k.value == "type"
-                and i < len(dict_node.values)
-            ):
+            if isinstance(k, ast.Constant) and k.value == "type" and i < len(dict_node.values):
                 type_node = dict_node.values[i]
                 if isinstance(type_node, ast.Constant) and isinstance(type_node.value, str):
                     type_val = type_node.value
@@ -190,11 +196,7 @@ def is_tengri_dust_dict(dict_node: ast.Dict) -> bool:
     if not has_tengri_marker:
         # Check for nested 'emission' dict with tengri markers
         for i, k in enumerate(dict_node.keys):
-            if (
-                isinstance(k, ast.Constant)
-                and k.value == "emission"
-                and i < len(dict_node.values)
-            ):
+            if isinstance(k, ast.Constant) and k.value == "emission" and i < len(dict_node.values):
                 val = dict_node.values[i]
                 if isinstance(val, ast.Dict) and is_tengri_dust_dict(val):
                     has_tengri_marker = True
@@ -331,9 +333,7 @@ def scan_ast_for_dust_groups(tree: ast.AST) -> list[tuple[int, str, dict]]:
     return violations
 
 
-def _check_dust_dict(
-    dict_node: ast.Dict, parent_key: str
-) -> tuple[str, dict] | None:
+def _check_dust_dict(dict_node: ast.Dict, parent_key: str) -> tuple[str, dict] | None:
     """Check a dust_attenuation or dust_emission dict for violations.
 
     Returns (violation_type, details) or None if valid.
@@ -502,21 +502,16 @@ def format_violation(file_path: Path, lineno: int, vtype: str, details: dict) ->
             "'law' and 'law_bc'/'law_diff'"
         ),
         "single_component_law_missing": (
-            f"{rel}:{lineno}  dust_attenuation type='single_component' "
-            "missing required 'law' key"
+            f"{rel}:{lineno}  dust_attenuation type='single_component' missing required 'law' key"
         ),
         "single_component_law_forbidden": (
             f"{rel}:{lineno}  dust_attenuation type='single_component' "
             "with forbidden 'law_bc'/'law_diff'"
         ),
         "unknown_law_string": (
-            f"{rel}:{lineno}  dust law '{details.get('law', '?')}' "
-            "not in valid law set"
+            f"{rel}:{lineno}  dust law '{details.get('law', '?')}' not in valid law set"
         ),
-        "wg00_with_law": (
-            f"{rel}:{lineno}  dust_attenuation type='wg00' "
-            "with forbidden law keys"
-        ),
+        "wg00_with_law": (f"{rel}:{lineno}  dust_attenuation type='wg00' with forbidden law keys"),
     }
     return messages.get(vtype, f"{rel}:{lineno}  {vtype}")
 
@@ -581,9 +576,7 @@ def main(list_only: bool = False) -> int:
         return 1 if not list_only else 0
 
     # Success message
-    print(
-        f"OK: all dust group grammars are valid. {len(seen_allowlist)} file(s) allowlisted."
-    )
+    print(f"OK: all dust group grammars are valid. {len(seen_allowlist)} file(s) allowlisted.")
     return 0
 
 
