@@ -100,7 +100,7 @@ def test_torus_signature_lists_canonical_short_params() -> None:
 def test_composable_signature_lists_sub_block_kwargs() -> None:
     sig = inspect.signature(builders.agn.composable)
     params = list(sig.parameters)
-    assert params[0] == "defaults"
+    assert params[0] == "all_params"
     # Sub-blocks come right after the wildcard.
     assert set(params[1:7]) == {"disc", "torus", "nlr", "blr", "feii", "atten"}
 

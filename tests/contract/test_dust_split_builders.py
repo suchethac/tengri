@@ -25,7 +25,7 @@ class TestDustAttenutationBuilders:
 
     def test_single_component_returns_attenuation_dict(self):
         """single_component() returns a dict with no emission key."""
-        result = builders.dust.single_component(law="calzetti", defaults=FREE)
+        result = builders.dust.single_component(law="calzetti", all_params=FREE)
         assert isinstance(result, dict)
         assert result["type"] == "single_component"
         assert "law" in result
@@ -34,12 +34,12 @@ class TestDustAttenutationBuilders:
 
     def test_single_component_with_prior(self):
         """single_component() accepts and returns tau_v prior."""
-        result = builders.dust.single_component(law="calzetti", defaults=FREE, tau_v=Uniform(0, 3))
+        result = builders.dust.single_component(law="calzetti", all_params=FREE, tau_v=Uniform(0, 3))
         assert result["tau_v"] == Uniform(0, 3)
 
     def test_two_component_returns_attenuation_dict(self):
         """two_component() returns a dict with no emission key."""
-        result = builders.dust.two_component(law="calzetti", defaults=FREE)
+        result = builders.dust.two_component(law="calzetti", all_params=FREE)
         assert isinstance(result, dict)
         assert result["type"] == "two_component"
         assert "law" in result
@@ -48,7 +48,7 @@ class TestDustAttenutationBuilders:
     def test_two_component_with_per_screen_laws(self):
         """two_component() accepts law_bc and law_diff separately."""
         result = builders.dust.two_component(
-            law_bc="calzetti", law_diff="power_law", defaults=FREE
+            law_bc="calzetti", law_diff="power_law", all_params=FREE
         )
         assert result["law_bc"] == "calzetti"
         assert result["law_diff"] == "power_law"
@@ -58,7 +58,7 @@ class TestDustAttenutationBuilders:
         """two_component() accepts and returns tau_bc, tau_diff priors."""
         result = builders.dust.two_component(
             law="calzetti",
-            defaults=FREE,
+            all_params=FREE,
             tau_bc=Uniform(0, 2),
             tau_diff=Uniform(0, 3),
         )
@@ -76,7 +76,7 @@ class TestDustAttenutationBuilders:
     def test_single_component_in_build(self):
         """single_component() output is accepted by dust_attenuation= kwarg."""
         # Smoke test: builder output parses without error.
-        dust_attenuation = builders.dust.single_component(law="calzetti", defaults=FIXED)
+        dust_attenuation = builders.dust.single_component(law="calzetti", all_params=FIXED)
         groups = {
             "sfh": {"type": "dpl", "all_params": FIXED},
             "dust_attenuation": dust_attenuation,
@@ -89,7 +89,7 @@ class TestDustAttenutationBuilders:
 
     def test_two_component_in_build(self):
         """two_component() output is accepted by dust_attenuation= kwarg."""
-        dust_attenuation = builders.dust.two_component(law="calzetti", defaults=FIXED)
+        dust_attenuation = builders.dust.two_component(law="calzetti", all_params=FIXED)
         groups = {
             "sfh": {"type": "dpl", "all_params": FIXED},
             "dust_attenuation": dust_attenuation,
@@ -106,14 +106,14 @@ class TestDustEmissionBuilders:
 
     def test_emission_dale2014_returns_emission_dict(self):
         """dale2014() returns an emission dict with correct type."""
-        result = builders.dust.emission.dale2014(defaults=FIXED)
+        result = builders.dust.emission.dale2014(all_params=FIXED)
         assert isinstance(result, dict)
         assert result["type"] == "dale2014"
         assert "emission" not in result
 
     def test_emission_in_build(self):
         """dust_emission= kwarg accepts emission builder output."""
-        dust_emission = builders.dust.emission.dale2014(defaults=FIXED)
+        dust_emission = builders.dust.emission.dale2014(all_params=FIXED)
         groups = {
             "sfh": {"type": "dpl", "all_params": FIXED},
             "dust_attenuation": {
@@ -339,18 +339,18 @@ class TestBuildersSurfaceContract:
         """single_component signature shows law as parameter."""
         sig = str(builders.dust.single_component.__signature__)
         assert "law" in sig
-        assert "defaults" in sig
+        assert "all_params" in sig
 
     def test_two_component_signature_has_law_variants(self):
         """two_component signature shows law and law_bc/law_diff."""
         sig = str(builders.dust.two_component.__signature__)
         assert "law" in sig or ("law_bc" in sig and "law_diff" in sig)
-        assert "defaults" in sig
+        assert "all_params" in sig
 
     def test_emission_dale2014_signature(self):
-        """emission.dale2014 signature has defaults parameter."""
+        """emission.dale2014 signature has all_params parameter."""
         sig = str(builders.dust.emission.dale2014.__signature__)
-        assert "defaults" in sig
+        assert "all_params" in sig
 
     def test_relaxed_energy_balance_callable(self):
         """relaxed_energy_balance is callable and works as expected."""

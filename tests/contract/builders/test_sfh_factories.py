@@ -71,7 +71,7 @@ def test_aliases_do_not_get_their_own_factory() -> None:
 def test_dpl_signature_lists_expected_params() -> None:
     sig = inspect.signature(builders.sfh.dpl)
     params = list(sig.parameters)
-    assert params[0] == "defaults", "wildcard kwarg must come first for ergonomics"
+    assert params[0] == "all_params", "wildcard kwarg must come first for ergonomics"
     assert set(params[1:]) == {"alpha", "beta", "tau_gyr", "age_gyr", "log_total_mass"}
     for name, p in sig.parameters.items():
         assert p.kind == inspect.Parameter.KEYWORD_ONLY, name
@@ -81,12 +81,12 @@ def test_dpl_signature_lists_expected_params() -> None:
 def test_every_factory_has_a_real_signature(variant: str) -> None:
     factory = getattr(builders.sfh, variant)
     sig = inspect.signature(factory)
-    assert "defaults" in sig.parameters, "wildcard kwarg missing"
+    assert "all_params" in sig.parameters, "wildcard kwarg missing"
     # Wildcard defaults to FIXED.
-    assert sig.parameters["defaults"].default is FIXED
+    assert sig.parameters["all_params"].default is FIXED
     # Every non-wildcard kwarg is KEYWORD_ONLY.
     for name, p in sig.parameters.items():
-        if name == "defaults":
+        if name == "all_params":
             continue
         assert p.kind == inspect.Parameter.KEYWORD_ONLY, name
 
