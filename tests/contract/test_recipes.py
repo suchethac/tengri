@@ -436,7 +436,7 @@ class TestRecipeStructure:
         """
         r = recipes.high_z()
         assert r["sfh"]["type"] == "tsnorm"
-        assert r["apply_igm"] is True
+        assert r.get("igm", {}).get("type") == "inoue"
         assert "dust_emission" not in r
         assert "approx" not in r
 
@@ -445,7 +445,7 @@ class TestRecipeStructure:
         r = recipes.photoz()
         assert r["sfh"]["type"] == "dpl"
         assert r["neb"]["type"] == "none"
-        assert r["apply_igm"] is True
+        assert r.get("igm", {}).get("type") == "inoue"
         assert "approx" not in r
 
 
