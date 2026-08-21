@@ -310,7 +310,7 @@ def test_catalog_hmc_draws_actually_move(synthetic_ssp, simple_observation):
     ``PopulationFitter``; #2026 is that no catalog test applied it.
 
     Scope, so this is not over-read: on this synthetic D=3 model the pre-PR-#2031
-    configuration (prior-centre init, forced diagonal mass) also passes -- the
+    configuration (prior-center init, forced diagonal mass) also passes -- the
     smallest range across parameters is 0.0070 against 0.0145 with the MAP warm
     start. This is the standing guard the convention asks for, not a reproducer
     for that change. The configurations that do freeze are real models at
@@ -360,7 +360,7 @@ def test_catalog_init_from_accepts_user_starting_points(synthetic_ssp, simple_ob
     """``init_from`` takes an array, one dict, or one dict per galaxy.
 
     Mirrors the single-galaxy contract in ``_maybe_map_init``: ``None`` means
-    "find me a starting point", not "start at the prior centre".
+    "find me a starting point", not "start at the prior center".
     """
     from tengri import CatalogFitter
 

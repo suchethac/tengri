@@ -104,7 +104,7 @@ def build_catalog_map_init(
     The single-galaxy samplers start their warmup from a MAP estimate
     (``_maybe_map_init`` in :mod:`~tengri.inference.backends.mcmc.hmc`); the
     catalog path started every galaxy from ``0.1 * N(0, 1)`` about the prior
-    centre instead. That asymmetry is #1529's failure shape — "killed six of
+    center instead. That asymmetry is #1529's failure shape — "killed six of
     eight NUTS fits with R-hat up to 10.74 and zero divergences" — and it is
     measurable here: on an identical model, galaxy and settings, the catalog
     path returned split R-hat 1.47 where the single-fit path returned 1.04.

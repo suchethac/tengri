@@ -1433,13 +1433,13 @@ class _CatalogFitterOriginal:
         the policy. Pass ``True``/``False`` to override.
 
         ``init_from`` mirrors the single-galaxy contract in
-        :func:`~tengri.inference._sample_utils._maybe_map_init`:
+        ``_maybe_map_init`` (``tengri.inference._sample_utils``):
 
         * ``None`` (default) — each galaxy gets its own ADAM MAP warm start,
           which is what a single fit has always done. Before PR #2031 this path had
           no MAP step and every galaxy started at ``0.1 * N(0, 1)`` about the
-          prior centre.
-        * ``"prior"`` — that former behaviour, kept for reproducing older runs.
+          prior center.
+        * ``"prior"`` — that former behavior, kept for reproducing older runs.
         * an array of shape ``(n_gal, n_dim)`` — starting points in the flat
           unconstrained space, used as given.
         * a list of ``n_gal`` parameter dicts, or one dict broadcast to every
