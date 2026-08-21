@@ -206,7 +206,7 @@ model = SEDModel.build(
     ssp_data=ssp,
     observation=obs,
     sfh={'type': 'field'},
-    dust={'all_params': FREE},
+    dust_attenuation={'type': 'two_component', 'law': 'calzetti', 'all_params': FREE},
     neb={'type': 'cue', 'all_params': FREE},
     redshift=Fixed(7.5),  # fixed high-redshift
 )

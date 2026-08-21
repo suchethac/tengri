@@ -42,6 +42,56 @@ from tengri.parameters.groups import parse_groups
 pytestmark = [pytest.mark.contract, pytest.mark.regression_bug]
 
 
+def _literal_eval_with_sentinels(expr: str) -> dict:
+    """Parse a dict literal that may contain FIXED and FREE sentinels.
+
+    Parses an expression using ast, resolving bare names FIXED and FREE to
+    the real tengri sentinels. All other bare names are rejected (strict
+    literal eval). Everything else (numbers, strings, nested dicts) must be
+    valid Python literals.
+    """
+
+    try:
+        tree = ast.parse(expr, mode="eval")
+    except SyntaxError as err:
+        msg = f"Failed to parse as expression: {expr}"
+        raise ValueError(msg) from err
+
+    # Walk the AST and resolve names
+    def resolve_names(node):
+        if isinstance(node, ast.Dict):
+            keys = [resolve_names(k) for k in node.keys]
+            values = [resolve_names(v) for v in node.values]
+            return dict(zip(keys, values))
+        elif isinstance(node, ast.Name):
+            if node.id == "FIXED":
+                from tengri import FIXED
+
+                return FIXED
+            elif node.id == "FREE":
+                from tengri import FREE
+
+                return FREE
+            else:
+                msg = f"Unknown bare name: {node.id!r}. Only FIXED and FREE are allowed."
+                raise ValueError(msg)
+        elif isinstance(node, ast.Constant):
+            return node.value
+        elif isinstance(node, ast.List):
+            return [resolve_names(elt) for elt in node.elts]
+        elif isinstance(node, ast.Tuple):
+            return tuple(resolve_names(elt) for elt in node.elts)
+        elif isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
+            # Handle negative numbers
+            val = resolve_names(node.operand)
+            return -val
+        else:
+            msg = f"Unsupported AST node type: {type(node).__name__}"
+            raise ValueError(msg)
+
+    return resolve_names(tree.body)
+
+
 def _dict_snippets(message: str) -> list[tuple[str, dict]]:
     """Every ``name={...}`` python-dict literal in ``message``.
 
@@ -49,6 +99,10 @@ def _dict_snippets(message: str) -> list[tuple[str, dict]]:
     (``radio={'sf': {'type': 'bell2003'}}``) and a non-greedy regex stops at the
     first inner ``}``, silently checking a truncated snippet that happens to
     parse — a guard that passes for the wrong reason.
+
+    Handles sentinels FIXED and FREE via _literal_eval_with_sentinels.
+    Filters out snippets that are shown for removal/replacement (e.g., "Replace
+    dust={...} with dust_attenuation={...}" only suggests the dust_attenuation part).
     """
     out: list[tuple[str, dict]] = []
     for i, ch in enumerate(message):
@@ -63,6 +117,11 @@ def _dict_snippets(message: str) -> list[tuple[str, dict]]:
         name = message[k + 1 : j]
         if not name:
             continue
+
+        # Skip removal advice (e.g., "replace dust={...}" or "drop neb={...}")
+        if _is_removal_advice(message, j):
+            continue
+
         depth, end = 0, None
         for m in range(i, len(message)):
             if message[m] == "{":
@@ -75,7 +134,7 @@ def _dict_snippets(message: str) -> list[tuple[str, dict]]:
         if end is None:
             continue
         try:
-            value = ast.literal_eval(message[i : end + 1])
+            value = _literal_eval_with_sentinels(message[i : end + 1])
         except (ValueError, SyntaxError):
             continue
         if isinstance(value, dict):
@@ -84,10 +143,62 @@ def _dict_snippets(message: str) -> list[tuple[str, dict]]:
 
 
 # Each entry provokes a grammar error that offers recovery advice.
+from tengri import FIXED
+
 TRIGGERS = [
     pytest.param({"radio": True}, id="radio-bool-gate-form"),
     pytest.param({"xray": True}, id="xray-bool-gate-form"),
     pytest.param({"shock": True}, id="shock-bool-gate-form"),
+    # Dust retirement: old unified dust= form, lawless (README shape from #2015)
+    pytest.param(
+        {"dust": {"type": "two_component", "all_params": FIXED}},
+        id="dust-two-component-lawless",
+    ),
+    # Dust retirement: with explicit law
+    pytest.param(
+        {"dust": {"type": "two_component", "law": "calzetti", "tau_bc": 0.5, "tau_diff": 0.3}},
+        id="dust-two-component-with-law",
+    ),
+    # Dust retirement: nested emission form
+    pytest.param(
+        {
+            "dust_attenuation": {
+                "type": "two_component",
+                "law": "calzetti",
+                "emission": {"type": "dale2014"},
+            }
+        },
+        id="dust-nested-emission",
+    ),
+    # Dust retirement: two_component lone law_bc (pre-#1989 shape, benchmark had this)
+    pytest.param(
+        {
+            "dust": {
+                "type": "two_component",
+                "law_bc": "calzetti",
+                "tau_bc": 0.5,
+                "tau_diff": 0.3,
+            }
+        },
+        id="dust-two-component-lone-law-bc",
+    ),
+    # Dust retirement: two_component lone law_diff
+    pytest.param(
+        {
+            "dust": {
+                "type": "two_component",
+                "law_diff": "power_law",
+                "tau_bc": 0.5,
+                "tau_diff": 0.3,
+            }
+        },
+        id="dust-two-component-lone-law-diff",
+    ),
+    # Dust retirement: single_component with law_bc (pre-#1989, accepted per migration)
+    pytest.param(
+        {"dust": {"type": "single_component", "law_bc": "calzetti", "tau_v": 0.5}},
+        id="dust-single-component-with-law-bc",
+    ),
 ]
 
 
@@ -103,14 +214,65 @@ def test_error_message_advice_is_itself_valid(kwargs) -> None:
     )
 
     for name, value in snippets:
+        # Skip snippets with ellipsis — they're templates for the reader to complete
+        if _has_ellipsis(value):
+            continue
+
         try:
-            parse_groups(**{name: value})
+            result = parse_groups(**{name: value})
         except Exception as exc:
             pytest.fail(
                 f"the error message for {kwargs!r} recommends {name}={value!r}, "
                 f"but that raises {type(exc).__name__}: {exc}. Recovery advice "
                 f"must be accepted by the grammar it describes."
             )
+
+        # For dust_attenuation blocks, verify that the law actually landed
+        # in the result. A suggestion that parses but silently drops the law
+        # is the same bug one layer deeper (#2030).
+        if name == "dust_attenuation" and isinstance(value, dict):
+            dust_type = value.get("type")
+            if dust_type == "two_component":
+                # Either dust_law_bc (from 'law') or both dust_law_bc and
+                # dust_law_diff must be present in result
+                has_law_bc = hasattr(result, "dust_law_bc") and result.dust_law_bc is not None
+                has_law_diff = (
+                    hasattr(result, "dust_law_diff") and result.dust_law_diff is not None
+                )
+                assert has_law_bc and has_law_diff, (
+                    f"dust_attenuation type='two_component' suggestion {name}={value!r} "
+                    f"parsed but lost the attenuation law (no dust_law_bc/"
+                    f"dust_law_diff in result). The suggestion is incomplete."
+                )
+
+                # For lone-law_bc merges, verify the law value was preserved
+                # (not defaulted to power_law). Lone law_bc applies to both screens.
+                if "law" in value and "law_bc" not in value and "law_diff" not in value:
+                    # This is the 'law' form; check it matches what the user gave
+                    expected_law = value.get("law")
+                    if expected_law:
+                        actual_law_bc = (
+                            result.dust_law_bc if hasattr(result, "dust_law_bc") else None
+                        )
+                        assert actual_law_bc == expected_law, (
+                            f"dust_attenuation suggestion merged 'law' to dust_law_bc, "
+                            f"but the value changed: expected {expected_law!r}, "
+                            f"got {actual_law_bc!r}. Merge was not behavior-preserving."
+                        )
+
+            elif dust_type == "single_component":
+                # Must have dust_law_bc (single screen, stored on both _bc/_diff)
+                has_law = (
+                    hasattr(result, "dust_law_bc")
+                    and result.dust_law_bc is not None
+                    and hasattr(result, "dust_law_diff")
+                    and result.dust_law_diff is not None
+                )
+                assert has_law, (
+                    f"dust_attenuation type='single_component' suggestion "
+                    f"{name}={value!r} parsed but lost the attenuation law "
+                    f"(no dust_law_bc in result). The suggestion is incomplete."
+                )
 
 
 def _skip_reason(name: str, value: dict, status: str) -> str | None:
@@ -249,8 +411,10 @@ _PLACEHOLDER = re.compile(r"\{[A-Za-z_][\w.\[\]'\"()]*\}")
 #: error says "keep this SSP and drop the ``neb={'type': 'cloudy'}`` group",
 #: quoting the construct precisely so the reader can delete it. Feeding that to
 #: the grammar asks the wrong question — and answers it by accident, since it
-#: parses whenever a CLOUDY grid happens to be installed.
-_REMOVAL_CUES = ("drop", "remove", "delete", "without", "instead of", "rather than")
+#: parses whenever a CLOUDY grid happens to be installed. Retirement messages
+#: like "Replace dust={...} with dust_attenuation={...}" quote the old form
+#: for removal context ("Replace ... with ...").
+_REMOVAL_CUES = ("drop", "remove", "delete", "without", "instead of", "rather than", "replace")
 
 #: How far back to look for one of those cues. Long enough to catch "drop the
 #: `neb=...` group", short enough not to swallow an unrelated earlier clause.

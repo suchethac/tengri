@@ -43,7 +43,7 @@ from tengri.components.dust.emission._component_base import EmissionComponent
 
 class CustomBlackbody(EmissionComponent):
     # Registry key used in
-    # SEDModel.build(dust={'emission': {'type': 'custom_blackbody'}})
+    # SEDModel.build(dust_emission={'type': 'custom_blackbody'})
     name = "custom_blackbody"
 
     # No `inputs`, `outputs` or `parameter_prefix` here: EmissionComponent
@@ -92,9 +92,10 @@ class CustomBlackbody(EmissionComponent):
 **Key points:**
 
 - `name` is the key used in
-  `SEDModel.build(dust={'emission': {'type': 'custom_blackbody'}})`. Note the
-  nesting: `dust={'type': ...}` selects the dust *model*
-  (`single_component` / `two_component` / `wg00`), not the emission model.
+  `SEDModel.build(dust_emission={'type': 'custom_blackbody'})`. Dust attenuation and
+  emission are now separate top-level groups: `dust_attenuation={'type': ...}` selects
+  the attenuation *model* (`single_component` / `two_component` / `wg00`), and
+  `dust_emission={'type': ...}` selects the emission model.
 - Subclass the **block's** base class, not `SEDModelComponent`, and do not
   re-declare `inputs`/`outputs` — that is what the validator tests.
 - Class-level `Uniform`, `LogNormal`, etc. priors flow to inference, provided
@@ -143,12 +144,14 @@ assert "custom_blackbody" in _valid_dust_emission_types()   # validator
 model = SEDModel.build(
     ssp_data=load_ssp("ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0"),
     observation=Observation(photometry=Photometry.from_names(["sdss_u", "sdss_g"])),
-    dust={
+    dust_attenuation={
         'type': 'single_component',
         'law': 'calzetti',
-        'emission': {'type': 'custom_blackbody',   # ← your component
-                     'T': Uniform(20.0, 80.0),
-                     'beta_ir': Uniform(1.0, 3.0)},
+    },
+    dust_emission={
+        'type': 'custom_blackbody',   # ← your component
+        'T': Uniform(20.0, 80.0),
+        'beta_ir': Uniform(1.0, 3.0),
     },
     redshift=Fixed(0.1),
 )
@@ -178,13 +181,13 @@ Import it before `SEDModel.build()`, then select it as a **law**, not a type:
 ```python
 model = SEDModel.build(
     ...,
-    dust={'type': 'single_component',   # the dust *model*
+    dust_attenuation={'type': 'single_component',   # the dust attenuation *model*
           'law': 'my_powerlaw',      # ← your law
           'tau_v': Fixed(0.4)},
 )
 ```
 
-`dust={'type': ...}` accepts only `single_component`, `two_component` or
+`dust_attenuation={'type': ...}` accepts only `single_component`, `two_component` or
 `wg00` — passing a law name there is rejected. The accepted law names come
 from `_valid_dust_laws()`, a direct view of `DUST_LAWS`, which the decorator
 populates at import time. The full protocol (accepted signature, expected
