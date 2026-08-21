@@ -112,7 +112,11 @@ def _build(
         groups["dust_emission"] = {"type": emission, "all_params": FIXED}
     if with_radio:
         # #1980: condon92's retired spelling, in its composable resolution.
-        groups["radio"] = {"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}, "all_params": FIXED}
+        groups["radio"] = {
+            "sf": {"type": "bell2003"},
+            "agn": {"type": "powerlaw"},
+            "all_params": FIXED,
+        }
     if with_xray:
         groups["xray"] = {"type": "simple", "all_params": FIXED}
     with warnings.catch_warnings():
@@ -245,7 +249,9 @@ def test_taylor_correction_toggle_two_component(synthetic_ssp):
         "tau_bc": 0.8,
         "tau_diff": 0.4,
     }
-    groups = dict(sfh={"type": "dpl", "all_params": FIXED}, dust_attenuation=dust, neb={"type": "none"})
+    groups = dict(
+        sfh={"type": "dpl", "all_params": FIXED}, dust_attenuation=dust, neb={"type": "none"}
+    )
 
     def build(approx):
         with warnings.catch_warnings():

@@ -230,13 +230,23 @@ def test_energy_balance_split_f_cold_conserves_total(intrinsic_sed):
     # but conserves the total re-emitted energy.
     e_cold = _dust_ir_energy(
         _build_emission(
-            ssp, {"type": "energy_balance_split", "f_cold": tengri.Fixed(0.2), "all_params": tengri.FIXED}
+            ssp,
+            {
+                "type": "energy_balance_split",
+                "f_cold": tengri.Fixed(0.2),
+                "all_params": tengri.FIXED,
+            },
         ),
         {},
     )
     e_warm = _dust_ir_energy(
         _build_emission(
-            ssp, {"type": "energy_balance_split", "f_cold": tengri.Fixed(0.8), "all_params": tengri.FIXED}
+            ssp,
+            {
+                "type": "energy_balance_split",
+                "f_cold": tengri.Fixed(0.8),
+                "all_params": tengri.FIXED,
+            },
         ),
         {},
     )
@@ -257,7 +267,11 @@ def test_energy_balance_split_l_agn_ir_adds(intrinsic_sed):
     boosted = _dust_ir_energy(
         _build_emission(
             ssp,
-            {"type": "energy_balance_split", "L_agn_ir": tengri.Fixed(base), "all_params": tengri.FIXED},
+            {
+                "type": "energy_balance_split",
+                "L_agn_ir": tengri.Fixed(base),
+                "all_params": tengri.FIXED,
+            },
         ),
         {},
     )

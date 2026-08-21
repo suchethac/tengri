@@ -150,7 +150,9 @@ class TestFirrcSlopeDegeneracyGuard:
 
         with pytest.warns(RadioFIRRCDegeneracyWarning, match="degenerate"):
             parse_groups(
-                sfh={"type": "dpl", "all_params": FIXED}, radio={"sf": radio_sf}, redshift=Fixed(0.1)
+                sfh={"type": "dpl", "all_params": FIXED},
+                radio={"sf": radio_sf},
+                redshift=Fixed(0.1),
             )
 
     def test_free_q0_does_not_warn(self):

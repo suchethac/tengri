@@ -829,16 +829,20 @@ class TestAllParamsAlias:
         assert any(p.startswith("sfh_") for p in params.fixed_params)
 
     def test_both_keys_present_raises(self):
-        """Setting both ``'*'`` and ``all_params`` in one dict is ambiguous."""
-        with pytest.raises(ValueError, match="wildcard once"):
+        """A retired ``'*'`` is refused even beside the spelling that replaced it.
+
+        Carrying both is the shape a half-finished migration leaves behind, so
+        it must fail rather than quietly honor one of the two.
+        """
+        with pytest.raises(ValueError, match="retired"):
             parse_groups(
                 sfh={"type": "dpl", "*": FREE, "all_params": FIXED},
                 redshift=Fixed(0.1),
             )
 
     def test_both_keys_present_raises_in_subblock(self):
-        """The both-present guard also fires inside a nested sub-block."""
-        with pytest.raises(ValueError, match="wildcard once"):
+        """The refusal reaches nested sub-blocks, not just top-level groups."""
+        with pytest.raises(ValueError, match="retired"):
             parse_groups(
                 sfh={"type": "dpl", "all_params": FIXED},
                 dust_attenuation={

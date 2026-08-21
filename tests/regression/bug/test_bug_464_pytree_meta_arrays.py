@@ -36,7 +36,12 @@ def test_two_cue_models_predict_photometry_does_not_crash():
         mA = SEDModel.build(
             ssp,
             observation=obs,
-            sfh={"type": "dexp", "all_params": tengri.FIXED, "tau_gyr": 0.3, "log_total_mass": 10.0},
+            sfh={
+                "type": "dexp",
+                "all_params": tengri.FIXED,
+                "tau_gyr": 0.3,
+                "log_total_mass": 10.0,
+            },
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
@@ -52,7 +57,12 @@ def test_two_cue_models_predict_photometry_does_not_crash():
         mB = SEDModel.build(
             ssp,
             observation=obs,
-            sfh={"type": "dexp", "all_params": tengri.FIXED, "tau_gyr": 8.0, "log_total_mass": 10.0},
+            sfh={
+                "type": "dexp",
+                "all_params": tengri.FIXED,
+                "tau_gyr": 8.0,
+                "log_total_mass": 10.0,
+            },
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",

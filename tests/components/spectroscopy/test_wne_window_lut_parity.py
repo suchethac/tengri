@@ -404,7 +404,10 @@ def test_compute_joint_weights_supports_field_sfh():
         m = SEDModel.build(
             ssp_data=ssp,
             observation=obs,
-            sfh={"type": ["dpl", "field"], "all_params": FREE},  # stochastic GP field → unsupported
+            sfh={
+                "type": ["dpl", "field"],
+                "all_params": FREE,
+            },  # stochastic GP field → unsupported
             dust_attenuation=None,
             neb={"type": "none"},
             redshift=Fixed(0.05),

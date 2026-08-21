@@ -131,7 +131,12 @@ def test_axes_adapt_to_free_ionization():
     # (#1020), so it is larger and its length depends on the SSP grid, not on a
     # hard-coded factor.
     m3 = _model(
-        {"type": "cue", "all_params": FIXED, "logU": Uniform(-4.0, -1.0), "logZ_gas": Uniform(-1.0, 0.4)},
+        {
+            "type": "cue",
+            "all_params": FIXED,
+            "logU": Uniform(-4.0, -1.0),
+            "logZ_gas": Uniform(-1.0, 0.4),
+        },
         met={"logzsol": FREE},
     )
     t3 = precompute_nebular_grid(m3, _LW, n_grid=3)
@@ -150,7 +155,12 @@ def test_axes_adapt_to_free_ionization():
     assert t3u.log_line_per_qh.shape == (6, 3, 3, len(_LINES)), t3u.log_line_per_qh.shape
     # met fixed (sfh 'all_params':FIXED fixes met), logU+logZ_gas free -> 2 axes
     m2 = _model(
-        {"type": "cue", "all_params": FIXED, "logU": Uniform(-4.0, -1.0), "logZ_gas": Uniform(-1.0, 0.4)},
+        {
+            "type": "cue",
+            "all_params": FIXED,
+            "logU": Uniform(-4.0, -1.0),
+            "logZ_gas": Uniform(-1.0, 0.4),
+        },
         sfh_wild=FIXED,
     )
     t2 = precompute_nebular_grid(m2, _LW, n_grid=3)
@@ -164,7 +174,12 @@ def test_reconstruct_matches_exact_variable_ionization():
     node-exact PCHIP; strong DESI lines to < few percent on a 14-pt grid.
     """
     m = _model(
-        {"type": "cue", "all_params": FIXED, "logU": Uniform(-4.0, -1.0), "logZ_gas": Uniform(-1.0, 0.4)},
+        {
+            "type": "cue",
+            "all_params": FIXED,
+            "logU": Uniform(-4.0, -1.0),
+            "logZ_gas": Uniform(-1.0, 0.4),
+        },
         sfh_wild=FIXED,
     )
     table = precompute_nebular_grid(m, _LW, n_grid=14)
@@ -223,7 +238,9 @@ def test_phot_channel_reconstructs_nebular_precomp():
     met FIXED + logU free (the 'sometimes met is fixed' sweet spot) — the grid is
     over the smooth gas axis, so the intrinsic-channel error stays tight.
     """
-    m = _wave_model({"type": "cue", "all_params": FIXED, "logU": Uniform(-4.0, -1.0)}, sfh_wild=FIXED)
+    m = _wave_model(
+        {"type": "cue", "all_params": FIXED, "logU": Uniform(-4.0, -1.0)}, sfh_wild=FIXED
+    )
     table = precompute_nebular_grid(m, _LW, n_grid=14)
     assert table.axis_names == ("neb_logU",), table.axis_names
     assert table.log_phot_per_qh is not None, "photometry channel missing"
@@ -319,7 +336,12 @@ def test_gas_only_axes_do_not_warn():
     import warnings as _w
 
     m = _model(
-        {"type": "cue", "all_params": FIXED, "logU": Uniform(-4.0, -1.0), "logZ_gas": Uniform(-1.0, 0.4)},
+        {
+            "type": "cue",
+            "all_params": FIXED,
+            "logU": Uniform(-4.0, -1.0),
+            "logZ_gas": Uniform(-1.0, 0.4),
+        },
         sfh_wild=FIXED,
     )
     with _w.catch_warnings(record=True) as rec:

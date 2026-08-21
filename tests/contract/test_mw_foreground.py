@@ -87,7 +87,11 @@ class TestForwardPassScreen:
             return tengri.SEDModel.build(
                 ssp,
                 sfh={"type": "tsnorm", "all_params": tengri.FIXED},
-                dust_attenuation={"law": "power_law", "type": "two_component", "all_params": tengri.FIXED},
+                dust_attenuation={
+                    "law": "power_law",
+                    "type": "two_component",
+                    "all_params": tengri.FIXED,
+                },
                 redshift=tengri.Fixed(0.05),
             )
 
@@ -100,7 +104,11 @@ class TestForwardPassScreen:
             return tengri.SEDModel.build(
                 ssp,
                 sfh={"type": "tsnorm", "all_params": tengri.FIXED},
-                dust_attenuation={"law": "power_law", "type": "two_component", "all_params": tengri.FIXED},
+                dust_attenuation={
+                    "law": "power_law",
+                    "type": "two_component",
+                    "all_params": tengri.FIXED,
+                },
                 foreground={"ebmv_mw": 0.1, "law": "cardelli", "rv": 3.1},
                 redshift=tengri.Fixed(0.05),
             )
@@ -118,7 +126,11 @@ class TestForwardPassScreen:
             zero_model = tengri.SEDModel.build(
                 ssp,
                 sfh={"type": "tsnorm", "all_params": tengri.FIXED},
-                dust_attenuation={"law": "power_law", "type": "two_component", "all_params": tengri.FIXED},
+                dust_attenuation={
+                    "law": "power_law",
+                    "type": "two_component",
+                    "all_params": tengri.FIXED,
+                },
                 foreground={"ebmv_mw": 0.0},
                 redshift=tengri.Fixed(0.05),
             )

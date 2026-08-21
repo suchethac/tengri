@@ -137,7 +137,11 @@ class TestAGNParameterRouting:
                 sfh={"type": "dpl", "all_params": FIXED},
                 agn={
                     "disc": {"type": "multicolor", "all_params": FIXED},
-                    "atten": {"type": "polar_dust", "all_params": FIXED, "polar_ebv": Uniform(0.0, 1.0)},
+                    "atten": {
+                        "type": "polar_dust",
+                        "all_params": FIXED,
+                        "polar_ebv": Uniform(0.0, 1.0),
+                    },
                 },
                 redshift=Fixed(0.1),
             )
@@ -528,7 +532,11 @@ class TestAGNCrossLevelPlacement:
                 sfh={"type": "dpl", "all_params": FIXED},
                 agn={
                     "agn_log_lbol": Uniform(9.42, 13.42),
-                    "disc": {"type": "qsogen", "all_params": FIXED, "agn_log_lbol": Uniform(10.42, 12.42)},
+                    "disc": {
+                        "type": "qsogen",
+                        "all_params": FIXED,
+                        "agn_log_lbol": Uniform(10.42, 12.42),
+                    },
                     "torus": {"type": "none"},
                     "lines": {"type": "none"},
                     "feii": {"type": "none"},
@@ -977,7 +985,11 @@ class TestAGNLinesDeprecation:
         with pytest.warns(DeprecationWarning, match="lines"):
             params = parse_groups(
                 sfh={"type": "dpl", "all_params": FIXED},
-                agn={"disc": {"type": "multicolor"}, "lines": {"type": "nlr_blr"}, "all_params": FIXED},
+                agn={
+                    "disc": {"type": "multicolor"},
+                    "lines": {"type": "nlr_blr"},
+                    "all_params": FIXED,
+                },
                 redshift=Fixed(0.1),
             )
         assert params.agn_nlr_block == "analytic"
@@ -988,7 +1000,11 @@ class TestAGNLinesDeprecation:
         with pytest.warns(DeprecationWarning):
             params = parse_groups(
                 sfh={"type": "dpl", "all_params": FIXED},
-                agn={"disc": {"type": "multicolor"}, "lines": {"type": "blr"}, "all_params": FIXED},
+                agn={
+                    "disc": {"type": "multicolor"},
+                    "lines": {"type": "blr"},
+                    "all_params": FIXED,
+                },
                 redshift=Fixed(0.1),
             )
         assert params.agn_nlr_block == "none"

@@ -31,7 +31,9 @@ class TestGrammarPlumbing:
     """``neb={'type': 'cue', 'full_catalog': True}`` reaches Parameters."""
 
     def test_default_is_false(self):
-        params = parse_groups(neb={"type": "cue", "all_params": tengri.FIXED}, redshift=Fixed(0.05))
+        params = parse_groups(
+            neb={"type": "cue", "all_params": tengri.FIXED}, redshift=Fixed(0.05)
+        )
         assert params.cue_full_catalog is False
 
     def test_opt_in_is_true(self):

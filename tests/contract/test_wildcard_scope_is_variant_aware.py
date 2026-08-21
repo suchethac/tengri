@@ -553,7 +553,12 @@ def test_an_omitted_law_scopes_as_its_resolved_default():
 
     omitted = freed({"law": "power_law", "type": "two_component", "all_params": FREE})
     explicit = freed(
-        {"type": "two_component", "law_bc": "power_law", "law_diff": "power_law", "all_params": FREE}
+        {
+            "type": "two_component",
+            "law_bc": "power_law",
+            "law_diff": "power_law",
+            "all_params": FREE,
+        }
     )
     assert omitted == explicit, (
         f"omitting the law scopes differently from naming its default: "

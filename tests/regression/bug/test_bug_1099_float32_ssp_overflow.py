@@ -160,7 +160,12 @@ def test_cue_balmer_decrement_on_float32_grid(f32_bc03):
     """
     state = _build(
         load_ssp_data(f32_bc03),
-        neb={"type": "cue", "neb_logU": Fixed(-2.0), "neb_logZ_gas": Fixed(0.0), "all_params": FIXED},
+        neb={
+            "type": "cue",
+            "neb_logU": Fixed(-2.0),
+            "neb_logZ_gas": Fixed(0.0),
+            "all_params": FIXED,
+        },
     ).predict_state({})
 
     wave = np.asarray(state.wave)

@@ -226,7 +226,11 @@ class TestBug361B_silent_nan_warning:
             m = tengri.SEDModel.build(
                 ssp,
                 sfh={"type": "dpl", "all_params": tengri.FIXED},
-                dust_attenuation={"law": "power_law", "type": "two_component", "all_params": tengri.FIXED},
+                dust_attenuation={
+                    "law": "power_law",
+                    "type": "two_component",
+                    "all_params": tengri.FIXED,
+                },
                 redshift=Fixed(0.1),
             )
         pred = m.predict({"redshift": 0.05})

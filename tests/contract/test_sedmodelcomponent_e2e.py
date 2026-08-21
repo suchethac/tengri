@@ -207,7 +207,11 @@ _AGN_E2E_CASES = {
     "skirtor": {"type": "skirtor", "all_params": FIXED},
     "silva04": {"type": "silva04", "all_params": FIXED},
     "cat3d_wind": {"type": "cat3d_wind", "all_params": FIXED},
-    "kubota_done_disc": {"type": "composable", "disc": {"type": "kubota_done"}, "all_params": FIXED},
+    "kubota_done_disc": {
+        "type": "composable",
+        "disc": {"type": "kubota_done"},
+        "all_params": FIXED,
+    },
     "powerlaw_disc": {"type": "composable", "disc": {"type": "powerlaw"}, "all_params": FIXED},
 }
 

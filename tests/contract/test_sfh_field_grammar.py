@@ -32,7 +32,9 @@ def _free(model):
 
 
 def test_field_subblock_enables_modulator(synthetic_ssp_wide, synthetic_tophat_obs):
-    model = _build(synthetic_ssp_wide, synthetic_tophat_obs, {"type": "dpl", "field": {"all_params": FREE}})
+    model = _build(
+        synthetic_ssp_wide, synthetic_tophat_obs, {"type": "dpl", "field": {"all_params": FREE}}
+    )
     assert _free(model) >= _FIELD, "field PSD params should be free"
 
 
@@ -65,7 +67,9 @@ def test_field_explicit_prior(synthetic_ssp_wide, synthetic_tophat_obs):
 
 
 def test_list_form_still_works(synthetic_ssp_wide, synthetic_tophat_obs):
-    model = _build(synthetic_ssp_wide, synthetic_tophat_obs, {"type": ["dpl", "field"], "all_params": FREE})
+    model = _build(
+        synthetic_ssp_wide, synthetic_tophat_obs, {"type": ["dpl", "field"], "all_params": FREE}
+    )
     assert _free(model) >= _FIELD
 
 

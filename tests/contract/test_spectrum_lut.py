@@ -241,7 +241,11 @@ class TestSpectrumLUTGuards:
             m = SEDModel.build(
                 ssp_data=ssp,
                 observation=obs,
-                sfh={"type": "dpl", "alpha": Uniform(0.1, 5.0, "sfh_dpl_alpha"), "all_params": FIXED},
+                sfh={
+                    "type": "dpl",
+                    "alpha": Uniform(0.1, 5.0, "sfh_dpl_alpha"),
+                    "all_params": FIXED,
+                },
                 dust_attenuation={
                     "type": "two_component",
                     "law": "calzetti",

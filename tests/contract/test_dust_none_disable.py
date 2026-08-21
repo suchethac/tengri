@@ -61,7 +61,9 @@ def test_dust_none_matches_omitting_dust(synthetic_ssp_wide, synthetic_tophat_ob
 
 def test_dust_none_with_wildcard_builds(synthetic_ssp_wide, synthetic_tophat_obs):
     model, phot = _phot(
-        synthetic_ssp_wide, synthetic_tophat_obs, dust_attenuation={"type": "none", "all_params": FIXED}
+        synthetic_ssp_wide,
+        synthetic_tophat_obs,
+        dust_attenuation={"type": "none", "all_params": FIXED},
     )
     assert model._dust_model == "off"
     assert np.all(np.isfinite(phot))

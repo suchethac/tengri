@@ -272,7 +272,11 @@ def test_builder_exposes_agn_tau_as_free(synthetic_ssp) -> None:
         },
         agn={
             "disc": {"type": "multicolor", "all_params": tengri.FIXED},
-            "torus": {"type": "nenkova", "all_params": tengri.FIXED, "tau": tengri.Uniform(5, 150)},
+            "torus": {
+                "type": "nenkova",
+                "all_params": tengri.FIXED,
+                "tau": tengri.Uniform(5, 150),
+            },
             "all_params": tengri.FIXED,
             "log_lbol": 12.0,
             "frac": 1.0,
@@ -323,7 +327,11 @@ def test_agn_tau_threads_through_model_layer() -> None:
         },
         agn={
             "disc": {"type": "multicolor", "all_params": tengri.FIXED},
-            "torus": {"type": "nenkova", "all_params": tengri.FIXED, "tau": tengri.Uniform(5, 150)},
+            "torus": {
+                "type": "nenkova",
+                "all_params": tengri.FIXED,
+                "tau": tengri.Uniform(5, 150),
+            },
             "all_params": tengri.FIXED,
             "log_lbol": 12.5,
             "frac": 1.0,
