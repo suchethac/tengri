@@ -210,6 +210,27 @@ class DeadGradientParameterWarning(UserWarning):
     """
 
 
+class DeadFitWarning(UserWarning):
+    """An MCMC fit returned a dead posterior — frozen or 100% divergent (#1999).
+
+    Two unambiguous signatures trigger this at :class:`Posterior` construction:
+    every transition diverged (``n_divergent == n_samples``), or a free
+    parameter shows a single unique draw across 100+ kept samples. Both mean
+    the sampler rejected essentially every proposal — typically an adapted
+    step size past the model's stability limit (#1999 isolated the dense
+    mass-matrix adaptation as one trigger).
+
+    R-hat cannot detect this state: a chain that never moves has zero variance
+    within and between chains, so the ratio reads ~1.0. ``Posterior.rhat()``
+    raises on it, but only if called — this warning is the fit-time announcement
+    for scripts that never read diagnostics.
+
+    Warns rather than raises: the dead object remains inspectable (diagnostics,
+    samples, the MAP init). Filter this category only in tests that construct
+    dead posteriors deliberately.
+    """
+
+
 class CorruptEnergyBalanceWarning(UserWarning):
     """The dust energy-balance integrand was non-finite (#1527).
 

@@ -360,6 +360,64 @@ class Posterior:
     eline_names: tuple | None = field(default=None, repr=False)
     eline_wavelengths: jnp.ndarray | None = field(default=None, repr=False)
 
+    def __post_init__(self):
+        """Detect dead MCMC fits (100% divergent or frozen parameters) and warn.
+
+        A dead fit is unambiguous when:
+        - ``n_divergent == n_samples``: every transition diverged (all-divergent).
+        - Any free parameter has all identical draws (``np.ptp == 0``) over >= 100
+          draws (frozen parameter). Small test posteriors (< 100 draws) are exempt.
+
+        Raises no exception — only warns — so the result is still usable for
+        inspection. The warning message states the failure signature and remedies
+        (shorter warmup, lower target_accept_rate, smaller step_size, or
+        dense_mass_matrix=False per issue #1999).
+
+        Does NOT warn for:
+        - Posteriors without ``n_divergent`` in diagnostics (MAP, Laplace, VI).
+        - Healthy chains (low divergence, varying parameters).
+        - Partial divergences (not 100%).
+        - Small test posteriors (< 100 draws, even if frozen).
+        """
+        # Only check MCMC-family results (have n_divergent in diagnostics)
+        if not self.samples or "n_divergent" not in self.diagnostics:
+            return
+        from tengri.config.exceptions import DeadFitWarning
+
+        n_divergent = self.diagnostics.get("n_divergent", 0)
+        n_samples = self.diagnostics.get("n_samples", len(next(iter(self.samples.values()))))
+
+        # Check all-divergent: n_divergent == n_samples
+        if n_divergent == n_samples and n_samples > 0:
+            msg = (
+                f"dead fit: {n_divergent}/{n_samples} divergent transitions. "
+                f"R-hat cannot detect this — the chain moved nowhere. "
+                f"Remedies: shorter warmup, lower target_accept_rate, smaller step_size, "
+                f"or dense_mass_matrix=False (issue #1999)."
+            )
+            warnings.warn(msg, DeadFitWarning, stacklevel=3)
+            return
+
+        # Check frozen parameters: any param with all identical draws (np.ptp == 0)
+        # over >= 100 draws (small test posteriors are exempt)
+        if n_samples >= 100:
+            frozen_params = []
+            for param_name, param_samples in self.samples.items():
+                param_array = np.asarray(param_samples)
+                # ptp = peak-to-peak (max - min)
+                if np.ptp(param_array) == 0:
+                    frozen_params.append(param_name)
+
+            if frozen_params:
+                frozen_list = ", ".join(f"'{p}'" for p in frozen_params)
+                msg = (
+                    f"dead fit: parameter(s) {frozen_list} have 1 unique draw in {n_samples} "
+                    f"samples. R-hat cannot detect this. "
+                    f"Remedies: shorter warmup, lower target_accept_rate, smaller step_size, "
+                    f"or dense_mass_matrix=False (issue #1999)."
+                )
+                warnings.warn(msg, DeadFitWarning, stacklevel=3)
+
     # ── Derived quantities ────────────────────────────────────────
 
     @functools.cached_property
