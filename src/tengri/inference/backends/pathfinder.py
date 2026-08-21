@@ -85,6 +85,9 @@ def run_pathfinder(
        Parallel quasi-Newton variational inference," Journal of Machine Learning
        Research 23(306), 1-49 (2022). arXiv:2108.03782.
     """
+    from tengri.inference.backends.mcmc._shared import _check_blackjax_floor
+
+    _check_blackjax_floor()
     try:
         import blackjax
     except ImportError:

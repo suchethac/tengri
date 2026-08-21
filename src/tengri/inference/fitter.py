@@ -3906,6 +3906,9 @@ class Fitter:
         self, likelihood, pos_dict, key, n_samples, existing_samples, *, verbose=True
     ):
         """Draw samples via BlackJAX NUTS (independent MCMC, not geoVI)."""
+        from tengri.inference.backends.mcmc._shared import _check_blackjax_floor
+
+        _check_blackjax_floor()
         import blackjax
 
         if verbose:
@@ -4195,17 +4198,21 @@ class Fitter:
 
         Requirements: same model structure, same data shape, parametric SFH.
         """
-        import blackjax
         from jax.flatten_util import ravel_pytree
 
         from tengri.inference.backends.mcmc._shared import (
             DEFAULT_MAX_NUM_DOUBLINGS,
+            _check_blackjax_floor,
             _get_dynamic_hmc_kernel,
             _get_flat_logdensity,
             _get_ghmc_kernel,
             _get_hmc_kernel,
             _get_nuts_kernel,
         )
+
+        _check_blackjax_floor()
+        import blackjax
+
         from tengri.inference.posterior import Posterior
 
         n_warmup = kwargs.get("n_warmup", 300)
