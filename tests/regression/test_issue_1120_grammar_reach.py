@@ -79,6 +79,7 @@ def test_newly_reachable_components_build_with_fixed_defaults(
             model = SEDModel.build(
                 ssp_data=synthetic_ssp_wide,
                 observation=synthetic_tophat_obs,
+                redshift=0.1,
                 **{axis: cfg},
             )
             # If we reach here, the model built successfully.
