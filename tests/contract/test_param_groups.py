@@ -473,7 +473,7 @@ class TestTopLevel:
         """There is nothing left to override with.
 
         This used to assert that a top-level ``apply_igm=False`` beat an
-        activating ``igm`` group -- the behaviour of the secondary switch that
+        activating ``igm`` group -- the behavior of the secondary switch that
         has now been retired precisely because it could disagree with the group
         beside it. The group is the only statement of activation, so passing
         the old kwarg raises instead of quietly winning.

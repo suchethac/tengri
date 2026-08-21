@@ -45,7 +45,7 @@ References:
 - Whitaker et al. 2014, ApJ, 795, 104 (z~2 main sequence, sSFR evolution)
 - Schreiber et al. 2015, A&A, 575, A74 (universal MS parameters)
 
-.. GENERATED FROM PYTHON SOURCE LINES 30-284
+.. GENERATED FROM PYTHON SOURCE LINES 30-286
 
 
 
@@ -167,6 +167,8 @@ References:
     # Use explicit path to avoid loading wNE by default
     from pathlib import Path
 
+    from tengri import Fixed
+
     repo_root = next(
         p
         for p in [Path.cwd(), *Path.cwd().parents]
@@ -186,7 +188,7 @@ References:
             "tau_diff": 0.0,
             "tau_bc": 0.0,
         },
-        neb={"type": "cue", "all_params": tengri.FIXED},
+        neb={"type": "cue", "all_params": tengri.FIXED}, redshift=Fixed(0.1),
     )
 
     # Sample baseline parameters (all fixed except log_total_mass)

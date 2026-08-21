@@ -93,7 +93,7 @@ class TestRedshiftIsRequired:
 
         A wildcard reaching it would let ``all_params: FREE`` elsewhere in the
         model turn a fixed-redshift fit into a photo-z one, which is the largest
-        behavioural change the package can make silently.
+        behavioral change the package can make silently.
         """
         from tengri import FREE
 

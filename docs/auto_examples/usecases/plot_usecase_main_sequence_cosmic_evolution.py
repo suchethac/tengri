@@ -133,6 +133,7 @@ def whitaker2014_z2(log_m_star: np.ndarray) -> np.ndarray:
 # Load bare-stellar SSP (required for Cue nebular backend)
 # Use explicit path to avoid loading wNE by default
 from pathlib import Path
+
 from tengri import Fixed
 
 repo_root = next(
