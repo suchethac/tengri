@@ -827,8 +827,6 @@ def test_selector_surfaces_are_covered() -> None:
     `_SELECTOR_SURFACES` must be added and explicitly documented, not hidden
     behind a `continue` branch.
     """
-    import importlib
-
     import tengri.parameters.groups as groups_module
 
     # Discover ALL _VALID_* frozensets in the grammar (every selector surface)
@@ -849,9 +847,7 @@ def test_selector_surfaces_are_covered() -> None:
         found_coverage = False
 
         # Check every entry in _SELECTOR_SURFACES to find a match
-        for (group, selector_key), (source, _) in _SELECTOR_SURFACES.items():
-            if source == "HARDCODED":
-                continue
+        for _, (source, _) in _SELECTOR_SURFACES.items():
             # source is an import path like 'tengri.parameters.groups._VALID_AGN_ATTEN_LAWS'
             if source.endswith(const_name):
                 found_coverage = True
