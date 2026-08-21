@@ -231,40 +231,44 @@ plt.show()
 # ## Individual mode
 #
 # MAP for the point estimate, then a posterior. With the bins fixed, the lever
-# that matters is trajectory length. Every row is one campaign on one machine,
-# one fit per process, repeated over three to six seeds, 400 samples each, with
-# a dense metric on the `mcmc_hmc` rows:
+# that matters is trajectory length. Every row is six seeds, one fit per
+# process, 400 samples each, dense metric on the `mcmc_hmc` rows, blackjax
+# 1.6.2. The effective-sample columns are exact: a given seed returns the same
+# chain every time. Wall moves with whatever else the machine is doing.
 #
 # | sampler | warmup | wall | min ESS, median | min ESS, worst seed | divergences per run |
 # | --- | --- | --- | --- | --- | --- |
-# | `mcmc_nuts`, diagonal mass (default) | 400 | 75 s | 179 | 122 | 2.0 |
-# | `mcmc_nuts`, `dense_mass_matrix=True` | 400 | 44 s | 35 | 32 | 12.3 |
-# | `mcmc_hmc`, 20 leapfrog steps | 400 | 10 s | 13 | 9 | 2.0 |
-# | `mcmc_hmc`, 60 leapfrog steps | 1000 | 27 s | 113 | 19 | 0.7 |
-# | `mcmc_hmc`, 80 leapfrog steps | 1000 | 35 s | 122 | 48 | 0.3 |
-# | `mcmc_hmc`, 150 leapfrog steps | 1000 | 62 s | 219 | 155 | 2.2 |
+# | `mcmc_nuts`, diagonal mass (default) | 400 | 85 s | 119 | 47 | 3.3 |
+# | `mcmc_nuts`, `dense_mass_matrix=True` | 400 | 49 s | 51 | 48 | 8.8 |
+# | `mcmc_hmc`, 20 leapfrog steps | 400 | 9 s | 10 | 3 | 1.3 |
+# | `mcmc_hmc`, 60 leapfrog steps | 1000 | 28 s | 30 | 23 | 1.7 |
+# | `mcmc_hmc`, 80 leapfrog steps | 1000 | 35 s | 111 | 31 | 2.5 |
+# | `mcmc_hmc`, 150 leapfrog steps | 1000 | 62 s | 118 | 64 | 1.7 |
 #
 # The bin ratios are correlated, and a 20-step trajectory cannot cross that
-# geometry: it barely moves, returning 13 effective samples out of 400. Short
-# trajectories are also biased rather than merely noisy. Against the 150-step
-# posterior, the 20-step metallicity median sits 0.30 sigma away and the
-# 40-step one 0.17 sigma, while every length from 60 steps up agrees to better
-# than 0.07 sigma.
+# geometry: it barely moves, returning 10 effective samples out of 400. Short
+# trajectories are also biased rather than merely noisy, and the bias falls
+# monotonically with length. Against the pooled 150-step posterior, the largest
+# parameter median shift is 0.31 sigma at 20 steps, 0.13 at 40, 0.09 at 60 and
+# 0.05 at 80, in units of that posterior's own width.
 #
-# The last two columns are the reason the fit below runs 150 steps rather than
-# 60. On the median, 60 steps is the cheaper route to a usable answer, at 0.24
-# seconds per effective sample against 0.28. On the worst of six seeds it is
-# not: one seed returned 19 effective samples at 60 steps and one returned 48
-# at 80, while the six 150-step seeds stayed between 155 and 298. A short
-# trajectory fails occasionally rather than uniformly, and a page that is run
-# once, with one seed, has to be told the floor rather than the average. A
-# `target_accept_rate` of 0.8 and a 120-step trajectory were measured too, and
-# both push divergences past six per run for a worse floor.
+# The last two columns are why the fit below runs 150 steps. Cost per effective
+# sample favors 80 steps, at 0.32 seconds against 0.53 for 150 and 0.91 for
+# 60, so a shorter trajectory is not automatically the cheaper one: 60 steps
+# loses on the median and on the cost at once. What separates 80 from 150 is
+# the floor. One seed in six returned 31 effective samples at 80 steps and 23
+# at 60, while no 150-step seed fell below 64. A short trajectory fails
+# occasionally rather than uniformly, and a page that is run once, with one
+# seed, has to be told the floor rather than the average.
 #
 # Each row is a separate process, one fit each, because warmup can peak well
-# above the resident model. Repeating a row moves min ESS by a factor of
-# several and can reorder the table, which is why every row here is three to
-# six seeds: a comparison of two samplers from one fit each is not evidence.
+# above the resident model. Six seeds because min ESS varies by a factor of
+# several between them and fewer can reorder the table: two samplers compared
+# from one fit each is not evidence. The numbers are specific to this model.
+# They were measured with `tau_bc` pinned at 0, and an earlier version of this
+# page that let it inherit its declared default of 1 returned 176 effective
+# samples at 60 steps on the seed that returns 30 here. A fixed nuisance value
+# is part of the geometry the sampler has to cross, not a detail beside it.
 
 # %%
 forward = ForwardModel.build(sed=model)
