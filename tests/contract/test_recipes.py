@@ -25,7 +25,7 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from tengri import SEDModel, parse_groups, recipes
+from tengri import SEDModel, Fixed, parse_groups, recipes
 
 pytestmark = pytest.mark.contract
 
