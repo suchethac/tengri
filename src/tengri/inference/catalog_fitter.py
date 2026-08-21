@@ -28,6 +28,7 @@ from tengri.inference._batching import AUTO, chunking_was_requested, resolve_for
 from tengri.inference._dimension_guard import warn_if_nuts_high_dim as _warn_if_nuts_high_dim
 from tengri.inference._sample_utils import _mean_params, _vmap_samples_to_physical
 from tengri.inference.backends.mcmc._shared import DEFAULT_MAX_NUM_DOUBLINGS
+from tengri.inference.backends.mcmc.catalog import DEFAULT_MAP_INIT_STEPS
 
 DEFAULT_PERCENTILES: tuple[float, ...] = (16.0, 50.0, 84.0)
 """Percentile levels used when ``percentiles=`` is not given."""
@@ -1409,7 +1410,9 @@ class _CatalogFitterOriginal:
         max_num_doublings=DEFAULT_MAX_NUM_DOUBLINGS,
         n_leapfrog_steps=10,
         target_accept_rate=0.85,
-        dense_mass_matrix=False,
+        dense_mass_matrix=None,
+        init_from=None,
+        map_init_steps=DEFAULT_MAP_INIT_STEPS,
         verbose=True,
     ):
         """Vectorized per-galaxy NUTS/HMC sampling via ``lax.map(batch_size=K)``.
@@ -1421,10 +1424,27 @@ class _CatalogFitterOriginal:
         each carrying posterior ``samples`` — the same public contract as the
         sequential path, minus the N serial warmups.
 
-        Diagonal mass matrix is the default (``dense_mass_matrix=False``): each
-        galaxy is low-D and the parallelism is *width over galaxies*, so a
-        diagonal mass keeps the vmap flat and dodges the dense-mass warmup
-        memory spike (see :func:`...mcmc.nuts.run_nuts`).
+        ``dense_mass_matrix=None`` (the default) resolves through the same
+        auto-policy as the single-galaxy samplers — dense below D = 8, diagonal
+        at or above it (#319). Until #2028 this path hardcoded ``False`` and
+        read it as ``bool(dense_mass_matrix)``, so a D=7 catalog silently got a
+        diagonal mass where a single fit of the same model got a dense one, and
+        passing the documented ``None`` default selected diagonal rather than
+        the policy. Pass ``True``/``False`` to override.
+
+        ``init_from`` mirrors the single-galaxy contract in
+        :func:`~tengri.inference._sample_utils._maybe_map_init`:
+
+        * ``None`` (default) — each galaxy gets its own ADAM MAP warm start,
+          which is what a single fit has always done. Before #2028 this path had
+          no MAP step and every galaxy started at ``0.1 * N(0, 1)`` about the
+          prior centre.
+        * ``"prior"`` — that former behaviour, kept for reproducing older runs.
+        * an array of shape ``(n_gal, n_dim)`` — starting points in the flat
+          unconstrained space, used as given.
+        * a list of ``n_gal`` parameter dicts, or one dict broadcast to every
+          galaxy — physical values, converted for you. The medians of a previous
+          :class:`CatalogPosterior` are the intended source.
 
         When ``devices`` is given (``"all"`` or a device list), the galaxy axis
         is sharded across those devices via ``jax.shard_map`` — each device runs
@@ -1432,7 +1452,10 @@ class _CatalogFitterOriginal:
         reduction (galaxies are independent). Bit-parity with the single-device
         path holds up to float round-off.
         """
-        from tengri.inference.backends.mcmc.catalog import build_catalog_mcmc_engine
+        from tengri.inference.backends.mcmc.catalog import (
+            build_catalog_mcmc_engine,
+        )
+        from tengri.inference.backends.mcmc.nuts import _resolve_dense_mass_matrix
         from tengri.inference.posterior import Posterior
 
         sampler = "nuts" if method_tag == "mcmc_nuts" else "hmc"
@@ -1466,6 +1489,17 @@ class _CatalogFitterOriginal:
         per_galaxy_z = any("redshift" in g for g in self.galaxies)
         # Per-galaxy emission-line fluxes (#1480): only when the catalog carries them
         per_galaxy_lines = any("line_flux_obs" in g for g in self.galaxies)
+
+        # Resolve dense-vs-diagonal through the same policy the single-galaxy
+        # samplers use, so a catalog fit of a model does not silently get a
+        # different mass matrix from a single fit of it (#2028).
+        _dummy_flat = ravel_pytree(fitter._initialize_unbounded(jax.random.PRNGKey(0)))[0]
+        user_set_dense = dense_mass_matrix is not None
+        use_dense = _resolve_dense_mass_matrix(dense_mass_matrix, int(_dummy_flat.shape[0]))
+        if verbose and not user_set_dense:
+            policy = "dense (D<8)" if use_dense else "diagonal (D>=8, #319)"
+            print(f"CatalogFitter auto-mass-matrix: {policy}")
+
         run_one, unravel_fn = build_catalog_mcmc_engine(
             fitter,
             sampler,
@@ -1475,7 +1509,7 @@ class _CatalogFitterOriginal:
             max_num_doublings=max_num_doublings,
             n_leapfrog=n_leapfrog_steps,
             target_accept_rate=target_accept_rate,
-            use_dense=bool(dense_mass_matrix),
+            use_dense=use_dense,
             thread_redshift=per_galaxy_z,
             thread_line_fluxes=per_galaxy_lines,
         )
@@ -1553,6 +1587,31 @@ class _CatalogFitterOriginal:
         all_init = jnp.stack(
             [ravel_pytree(fitter._initialize_unbounded(k))[0] for k in init_keys[:n_gal]]
         )
+        if init_from is not None and not isinstance(init_from, str):
+            all_init = self._init_from_user(fitter, init_from, n_gal, d_params)
+        elif init_from is None:
+            all_init = self._map_warm_start(
+                fitter,
+                all_init,
+                (
+                    all_data_orig,
+                    all_noise_orig,
+                    all_presence_orig,
+                    all_redshift_orig,
+                    all_line_flux_orig,
+                    all_line_err_orig,
+                ),
+                n_steps=map_init_steps,
+                chunk=K,
+                thread_redshift=per_galaxy_z,
+                thread_line_fluxes=per_galaxy_lines,
+                verbose=verbose,
+            )
+        elif init_from != "prior":
+            raise ValueError(
+                f"init_from must be None (MAP warm start), 'prior', an array of "
+                f"shape (n_gal, n_dim), or per-galaxy parameter dicts; got {init_from!r}"
+            )
         if n_pad_extra > 0:
             all_init = jnp.concatenate([all_init, jnp.zeros((n_pad_extra, d_params))], axis=0)
         gal_keys = jax.random.split(jax.random.fold_in(key, 1), n_padded)
@@ -1645,6 +1704,140 @@ class _CatalogFitterOriginal:
                 return list(jax.devices())
             raise ValueError(f"devices must be None, 'all', or a device list; got {devices!r}")
         return list(devices)
+
+    def _init_from_user(self, fitter, init_from, n_gal, d_params):
+        """Convert a caller-supplied starting point into the flat init array.
+
+        Parameters
+        ----------
+        fitter : Fitter
+            Template fitter, for the physical-to-unconstrained transform.
+        init_from : array_like or dict or sequence of dict
+            An ``(n_gal, n_dim)`` array already in the flat unconstrained space,
+            one parameter dict broadcast to every galaxy, or a sequence of
+            ``n_gal`` dicts.
+        n_gal : int
+            Galaxies in the catalog.
+        d_params : int
+            Flat dimension.
+
+        Returns
+        -------
+        ndarray, shape (n_gal, d_params)
+
+        Raises
+        ------
+        ValueError
+            If an array has the wrong shape or a sequence the wrong length.
+            Broadcasting the wrong count would start galaxies from each other's
+            initial conditions, which no diagnostic downstream would catch.
+        """
+        from tengri.inference._sample_utils import _as_posterior_like
+
+        def _flat(entry):
+            # _as_posterior_like accepts a plain dict as well as a posterior and
+            # validates the free names (#1854); going straight to
+            # _unbounded_from_posterior dies on AttributeError instead.
+            return ravel_pytree(
+                fitter._unbounded_from_posterior(_as_posterior_like(fitter, entry))
+            )[0]
+
+        if isinstance(init_from, dict):
+            return jnp.broadcast_to(_flat(init_from), (n_gal, d_params))
+
+        if isinstance(init_from, (list, tuple)):
+            if len(init_from) != n_gal:
+                raise ValueError(
+                    f"init_from has {len(init_from)} entries for {n_gal} galaxies; "
+                    "pass one dict per galaxy, or a single dict to share one start"
+                )
+            return jnp.stack([_flat(d) for d in init_from])
+
+        arr = jnp.asarray(init_from)
+        if arr.shape != (n_gal, d_params):
+            raise ValueError(
+                f"init_from array must have shape ({n_gal}, {d_params}), got {arr.shape}"
+            )
+        return arr
+
+    def _map_warm_start(
+        self,
+        fitter,
+        all_init,
+        per_galaxy,
+        *,
+        n_steps,
+        chunk,
+        thread_redshift,
+        thread_line_fluxes,
+        verbose,
+    ):
+        """Replace the random per-galaxy starts with independent MAP estimates.
+
+        Runs the same chunked ``lax.map`` shape as the sampler, so the warm start
+        costs one more pass of the same width rather than a second memory regime.
+
+        Parameters
+        ----------
+        fitter : Fitter
+            Template fitter for the shared model.
+        all_init : ndarray, shape (n_gal, n_dim)
+            The random starting points to improve on. Returned unchanged for any
+            galaxy whose descent leaves the finite domain.
+        per_galaxy : tuple of ndarray
+            ``(data, noise, presence, redshift, line_flux_obs, line_flux_err)``,
+            each with a leading galaxy axis.
+        n_steps : int
+            ADAM steps per galaxy.
+        chunk : int
+            Galaxies per ``lax.map`` step, i.e. the sampler's ``K``.
+        thread_redshift, thread_line_fluxes : bool
+            Whether the catalog carries per-galaxy redshifts / line fluxes.
+        verbose : bool
+            Print the wall clock and how many galaxies moved.
+
+        Returns
+        -------
+        ndarray, shape (n_gal, n_dim)
+            The warm starts.
+
+        Notes
+        -----
+        **JIT-compatible**; the optimizer runs inside ``lax.scan`` under
+        ``lax.map``. Optional: falls back to ``all_init`` with a warning if
+        ``optax`` is missing, since a warm start is an improvement rather than a
+        requirement.
+        """
+        from tengri.inference.backends.mcmc.catalog import build_catalog_map_init
+
+        try:
+            map_init_one = build_catalog_map_init(
+                fitter,
+                n_steps=n_steps,
+                thread_redshift=thread_redshift,
+                thread_line_fluxes=thread_line_fluxes,
+            )
+        except ImportError:  # pragma: no cover - optax is a declared MAP extra
+            warnings.warn(
+                "init_from='map' needs optax; falling back to random starts. "
+                "Install optax, or pass init_from=None to silence this.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            return all_init
+
+        t0 = time.time()
+        warm = jax.lax.map(
+            lambda args: map_init_one(*args), (all_init, *per_galaxy), batch_size=chunk
+        )
+        jax.block_until_ready(warm)
+        if verbose:
+            moved = int(jnp.sum(jnp.any(jnp.abs(warm - all_init) > 0, axis=1)))
+            print(
+                f"CatalogFitter MAP warm start: {n_steps} ADAM steps, "
+                f"{moved}/{all_init.shape[0]} galaxies moved, {time.time() - t0:.1f}s"
+            )
+        return warm
 
     @staticmethod
     def _sharded_vmap(run_one, xs, dev_list):

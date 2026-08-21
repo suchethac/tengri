@@ -266,3 +266,148 @@ def test_mcmc_hmc_vectorizes_too(synthetic_ssp, simple_observation):
         arr = np.asarray(cp[i].samples["sfh_dpl_log_total_mass"])
         assert arr.shape[0] == 15
         assert np.all(np.isfinite(arr))
+
+
+def _build_model_multi_d(synthetic_ssp, simple_observation):
+    """A D=3 model: mass plus two parameters that trade against it.
+
+    ``_build_model`` pins six of seven parameters, so it is D=1 and cannot show
+    a mixing failure -- a frozen chain there is indistinguishable from a
+    converged one by shape and finiteness alone (#2026). These tests need a
+    posterior with somewhere to fail.
+    """
+    from tengri import Fixed, Parameters, SEDModel, Uniform
+
+    spec = Parameters(
+        sfh_dpl_log_total_mass=Uniform(_MASS_LO, _MASS_HI),
+        sfh_dpl_alpha=Uniform(0.5, 5.0),
+        sfh_dpl_age_gyr=Fixed(5.0),
+        sfh_dpl_beta=Fixed(2.0),
+        sfh_dpl_tau_gyr=Fixed(3.0),
+        met_logzsol=Fixed(1.0),
+        dust_tau_bc=Uniform(0.0, 1.0),
+        dust_tau_diff=Fixed(0.2),
+        redshift=Fixed(0.1),
+        mean_sfh_type="dpl",
+    )
+    return SEDModel(spec, synthetic_ssp, observation=simple_observation)
+
+
+_MULTI_D_TRUTHS = [
+    {"sfh_dpl_log_total_mass": 9.0, "sfh_dpl_alpha": 2.0, "dust_tau_bc": 0.3},
+    {"sfh_dpl_log_total_mass": 10.5, "sfh_dpl_alpha": 2.0, "dust_tau_bc": 0.3},
+]
+
+
+def test_catalog_hmc_draws_actually_move(synthetic_ssp, simple_observation):
+    """Every free parameter of every galaxy must *move*, not merely be finite.
+
+    A frozen chain is finite and correctly shaped, and split R-hat reads ~1.0 on
+    it because both variances are zero (#1438), so shape-and-finite assertions
+    cannot see this failure. The convention is the one
+    ``docs/dev/hierarchical-flat-seam.md`` prescribes and
+    ``test_hierarchical_backends_actually_run.py`` already applies to
+    ``PopulationFitter``; #2026 is that no catalog test applied it.
+
+    Scope, so this is not over-read: on this synthetic D=3 model the pre-#2028
+    configuration (prior-centre init, forced diagonal mass) also passes -- the
+    smallest range across parameters is 0.0070 against 0.0145 with the MAP warm
+    start. This is the standing guard the convention asks for, not a reproducer
+    for that change. The configurations that do freeze are real models at
+    catalog scale (#1999).
+    """
+    from tengri import CatalogFitter
+
+    model = _build_model_multi_d(synthetic_ssp, simple_observation)
+    galaxies = _catalog_from_truths(model, _MULTI_D_TRUTHS, jax.random.PRNGKey(0))
+
+    cp = CatalogFitter(model, galaxies, data_type="photometry").run(
+        "mcmc_hmc",
+        key=jax.random.PRNGKey(1),
+        forward_chunk_size=2,
+        n_warmup=60,
+        n_burnin=0,
+        n_samples=60,
+        n_leapfrog_steps=16,
+        verbose=False,
+    )
+
+    for i in range(len(galaxies)):
+        for name in model.spec.free_params:
+            draws = np.asarray(cp[i].samples[name])
+            assert np.all(np.isfinite(draws)), f"galaxy {i}, {name}: non-finite draws"
+            assert np.ptp(draws) > 0, f"galaxy {i}, {name}: the chain never moved"
+
+
+def test_catalog_mass_matrix_follows_the_single_fit_policy():
+    """``dense_mass_matrix=None`` resolves through the shared auto-policy (#2028).
+
+    The catalog path hardcoded ``False`` and consumed it as
+    ``bool(dense_mass_matrix)``, so a D<8 catalog silently got a diagonal mass
+    where a single fit of the same model got a dense one -- and passing the
+    documented ``None`` default selected diagonal rather than the policy.
+    """
+    from tengri.inference.backends.mcmc.nuts import _resolve_dense_mass_matrix
+
+    assert _resolve_dense_mass_matrix(None, 3) is True
+    assert _resolve_dense_mass_matrix(None, 8) is False
+    # An explicit choice still wins, in both directions.
+    assert _resolve_dense_mass_matrix(False, 3) is False
+    assert _resolve_dense_mass_matrix(True, 20) is True
+
+
+def test_catalog_init_from_accepts_user_starting_points(synthetic_ssp, simple_observation):
+    """``init_from`` takes an array, one dict, or one dict per galaxy.
+
+    Mirrors the single-galaxy contract in ``_maybe_map_init``: ``None`` means
+    "find me a starting point", not "start at the prior centre".
+    """
+    from tengri import CatalogFitter
+
+    model = _build_model_multi_d(synthetic_ssp, simple_observation)
+    galaxies = _catalog_from_truths(model, _MULTI_D_TRUTHS, jax.random.PRNGKey(0))
+    fitter = CatalogFitter(model, galaxies, data_type="photometry")
+    kw = {
+        "key": jax.random.PRNGKey(1),
+        "forward_chunk_size": 2,
+        "n_warmup": 20,
+        "n_burnin": 0,
+        "n_samples": 20,
+        "n_leapfrog_steps": 8,
+        "verbose": False,
+    }
+    d_free = len(model.spec.free_params)
+
+    for init_from in ("prior", np.zeros((2, d_free)), _MULTI_D_TRUTHS[0], _MULTI_D_TRUTHS):
+        cp = fitter.run("mcmc_hmc", init_from=init_from, **kw)
+        for i in range(2):
+            arr = np.asarray(cp[i].samples["sfh_dpl_log_total_mass"])
+            assert arr.shape[0] == 20
+            assert np.all(np.isfinite(arr))
+
+
+def test_catalog_init_from_rejects_mismatched_counts(synthetic_ssp, simple_observation):
+    """A wrong-length ``init_from`` raises rather than broadcasting.
+
+    Reusing one galaxy's starting point for another is invisible downstream: the
+    fit runs, the shapes are right, and the posteriors are quietly wrong.
+    """
+    from tengri import CatalogFitter
+
+    model = _build_model_multi_d(synthetic_ssp, simple_observation)
+    galaxies = _catalog_from_truths(model, _MULTI_D_TRUTHS, jax.random.PRNGKey(0))
+    fitter = CatalogFitter(model, galaxies, data_type="photometry")
+    kw = {
+        "key": jax.random.PRNGKey(1),
+        "forward_chunk_size": 2,
+        "n_warmup": 10,
+        "n_samples": 10,
+        "verbose": False,
+    }
+
+    with pytest.raises(ValueError, match="shape"):
+        fitter.run("mcmc_hmc", init_from=np.zeros((3, len(model.spec.free_params))), **kw)
+    with pytest.raises(ValueError, match="entries for 2 galaxies"):
+        fitter.run("mcmc_hmc", init_from=[_MULTI_D_TRUTHS[0]], **kw)
+    with pytest.raises(ValueError, match="init_from must be"):
+        fitter.run("mcmc_hmc", init_from="nonsense", **kw)
