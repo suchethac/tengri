@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Tests for the wildcard kwarg naming: ``all_params=`` canonical, with ``defaults=`` / ``_=`` deprecated.
+"""Wildcard kwarg naming: ``all_params=`` canonical, ``defaults=`` / ``_=`` deprecated.
 
 The canonical wildcard kwarg is ``all_params=`` (matches the dict grammar key).
 The deprecated ``defaults=`` and legacy ``_=`` aliases continue to work for one

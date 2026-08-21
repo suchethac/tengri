@@ -34,7 +34,9 @@ class TestDustAttenutationBuilders:
 
     def test_single_component_with_prior(self):
         """single_component() accepts and returns tau_v prior."""
-        result = builders.dust.single_component(law="calzetti", all_params=FREE, tau_v=Uniform(0, 3))
+        result = builders.dust.single_component(
+            law="calzetti", all_params=FREE, tau_v=Uniform(0, 3)
+        )
         assert result["tau_v"] == Uniform(0, 3)
 
     def test_two_component_returns_attenuation_dict(self):

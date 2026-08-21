@@ -99,6 +99,7 @@ class TestDictGrammarAllParams:
     def test_dict_grammar_accepts_all_params(self):
         """Dict grammar accepts all_params as a structural key."""
         params = parse_groups(
+            redshift=Fixed(0.1),
             sfh={"type": "dpl", "all_params": FREE},
         )
         assert "sfh_dpl_alpha" in params.free_params
@@ -107,12 +108,14 @@ class TestDictGrammarAllParams:
         """Dict grammar rejects 'defaults' and names 'all_params' as correct."""
         with pytest.raises(ValueError, match=r"'defaults'.*all_params"):
             parse_groups(
+                redshift=Fixed(0.1),
                 sfh={"type": "dpl", "defaults": FREE},
             )
 
     def test_dict_grammar_accepts_wildcard_alias(self):
         """Dict grammar still accepts '*' wildcard alias."""
         params = parse_groups(
+            redshift=Fixed(0.1),
             sfh={"type": "dpl", "*": FREE},
         )
         assert "sfh_dpl_alpha" in params.free_params
@@ -163,6 +166,7 @@ class TestBuilderDictEquivalence:
         model_builder = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
             observation=synthetic_tophat_obs,
+            redshift=Fixed(0.1),
             sfh=builders.sfh.dpl(all_params=FREE),
         )
 
@@ -170,6 +174,7 @@ class TestBuilderDictEquivalence:
         model_dict = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
             observation=synthetic_tophat_obs,
+            redshift=Fixed(0.1),
             sfh={"type": "dpl", "all_params": FREE},
         )
 
@@ -181,6 +186,7 @@ class TestBuilderDictEquivalence:
         model_builder = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
             observation=synthetic_tophat_obs,
+            redshift=Fixed(0.1),
             sfh=builders.sfh.dpl(all_params=FIXED),
         )
 
@@ -188,6 +194,7 @@ class TestBuilderDictEquivalence:
         model_dict = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
             observation=synthetic_tophat_obs,
+            redshift=Fixed(0.1),
             sfh={"type": "dpl", "all_params": FIXED},
         )
 
@@ -199,6 +206,7 @@ class TestBuilderDictEquivalence:
         model_builder = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
             observation=synthetic_tophat_obs,
+            redshift=Fixed(0.1),
             sfh=builders.sfh.dpl(all_params=FREE, alpha=Fixed(1.5)),
         )
 
@@ -206,6 +214,7 @@ class TestBuilderDictEquivalence:
         model_dict = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
             observation=synthetic_tophat_obs,
+            redshift=Fixed(0.1),
             sfh={"type": "dpl", "all_params": FREE, "alpha": Fixed(1.5)},
         )
 
@@ -219,12 +228,14 @@ class TestBuilderDictEquivalence:
             model_deprecated = SEDModel.build(
                 ssp_data=synthetic_ssp_wide,
                 observation=synthetic_tophat_obs,
+                redshift=Fixed(0.1),
                 sfh=builders.sfh.dpl(defaults=FREE),
             )
 
         model_canonical = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
             observation=synthetic_tophat_obs,
+            redshift=Fixed(0.1),
             sfh=builders.sfh.dpl(all_params=FREE),
         )
 
