@@ -835,7 +835,35 @@ print("grad(sum photometry):", {k: float(v) for k, v in grad.items()})
 # so it would not have caught the bare-observable case either.
 
 # %% [markdown]
-# ## 7. Is the card healthy?
+# ## 7. Getting the best out of it
+#
+# Everything that matters here moves work from the sequential axis to the
+# parallel one, and nothing makes the arithmetic faster — at 0.12 FLOP/byte the
+# card is never compute-bound. `jax.lax.map(batch_size=K)` is a `scan` over
+# `N/K` chunks with a `vmap` inside each, so **K is the dial that trades
+# sequential kernel launches for parallel width.** A million galaxies at K=100
+# is 10,000 sequential launches; at K=100,000 it is ten.
+#
+# In measured order of leverage:
+#
+# | | knob | gain | note |
+# |---|---|---:|---|
+# | 1 | `forward_chunk_size` as large as fits | **107x** | 72.8 s → 0.68 s per million. GPU wants 100,000 here, the CPU wants ~1,000, and 200,000 is `RESOURCE_EXHAUSTED` |
+# | 2 | the batched surface, never a Python loop | ~50x | `predict_photometry_batch`, `Catalog.simulate(chunk_size=…)`. 2048 sequential dispatches cost more than the fit they feed |
+# | 3 | float32 | 2.5x | forward at batch 2048 — with the matmul flag from §2, and never `jax.grad` of an observable (§6) |
+# | 4 | `TENGRI_FORWARD_MEMORY_BUDGET_GB` | feeds 1 | the 2 GB default lands near chunk 25,000, about 30% off best |
+# | 5 | `XLA_PYTHON_CLIENT_PREALLOCATE=false` | avoids OOM | JAX otherwise claims 75% of the card and the next process gets nothing |
+# | 6 | `TENGRI_NO_BACKGROUND_COMPILE=1` | hygiene | otherwise a thread compiles other modes and eats VRAM mid-measurement |
+# | 7 | warm compile cache | one-off | keyed on the GPU model, so a new card pays in full once |
+#
+# What is not worth optimizing, because the shape is wrong rather than the
+# settings: single-galaxy anything (the CPU wins 8.8x to 33x), the NIFTy `vi*`
+# backends (a Python-level outer loop with ~20 GB of *host* RSS), and
+# `map(optimizer="lbfgs_scipy")`, which drives its loop on the host by
+# construction and converts every gradient to float64 on the way.
+
+# %% [markdown]
+# ## 8. Is the card healthy?
 #
 # If the GPU looks slow at everything, check it against work a GPU should
 # obviously win, so you can tell "wrong workload" from "broken install".
@@ -850,7 +878,7 @@ print(f"matmul 2048^3 (f32): {mm:.2f} ms  ->  {2 * 2048**3 / (mm * 1e-3) / 1e9:.
 # workload is the problem — 0.12 FLOP/byte never reaches those ALUs.
 
 # %% [markdown]
-# ## 8. What breaks on CUDA
+# ## 9. What breaks on CUDA
 #
 # The float32 regression tree — 57 files, the part of the suite most exposed to a
 # device change — run on CUDA against the same run on CPU:
@@ -897,17 +925,19 @@ print(f"matmul 2048^3 (f32): {mm:.2f} ms  ->  {2 * 2048**3 / (mm * 1e-3) / 1e9:.
 # lines in geoVI.
 
 # %% [markdown]
-# ## 9. Limits, honestly
+# ## 10. Limits, honestly
 #
 # * **The float64 penalty is consumer-specific.** 1/64 rate on GeForce, about
 #   1/2 on A100/H100. Re-measure before assuming this transfers.
 # * **This card was driving a desktop.** Absolute numbers would improve on an
 #   idle card; the direction and the crossover scale are what to carry away.
-# * **float32 gradients of raw observables are zero.** §6. Fits are fine.
+# * **float32 gradients of raw observables are zero.** §6 — and #1415's finite-difference
+#   check shows the likelihood gradient wrong by ~2x too, so float32 fitting
+#   is not safe either. Fits are fine.
 # * **float32 on CUDA needs `JAX_DEFAULT_MATMUL_PRECISION=highest`**, or XLA
 #   quietly gives you TF32's 10-bit mantissa. §2.
 # * **float32 geoVI with marginalized emission lines does not run on CUDA** —
-#   cuBLASLt refuses the GEMM. §8.
+#   cuBLASLt refuses the GEMM. §9.
 # * **NIFTy `vi*` backends are not measured here.** `optimize_kl` is a
 #   Python-level outer loop with per-iteration host syncs and ~20 GB of *host*
 #   RSS; there is little for a device to win and it would dominate the run.

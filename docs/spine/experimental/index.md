@@ -40,8 +40,11 @@ template to copy. Each states its own caveats up front.
   batch of 2048 photometry gradients runs 14.7x faster on the card. Two float32
   results matter more than the timings: on Ampere and later, float32 matmuls
   silently become TF32 unless asked otherwise, which costs 4.5% on parameter
-  error bars; and `jax.grad` of a raw observable returns identically zero in
-  float32 on any device, while fits are unaffected.
+  error bars, and `jax.grad` of a raw observable returns identically zero in
+  float32 on any device — #1415, whose finite-difference check also finds the
+  likelihood-path gradient wrong by about a factor of two, so float32 fitting is
+  not safe either. The sampler section carries its own warning: those numbers are
+  a property of a fixture that turned out to be hard to sample, not of tengri.
 
 ```{toctree}
 :maxdepth: 1
