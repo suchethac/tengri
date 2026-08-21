@@ -94,8 +94,9 @@ def _warn_if_tree_depth_saturated(stats: dict) -> None:
         f"constrains. Fixing that on a D=9 continuity fit at z=1.5 cut the "
         f"wall from 174 s to 69 s on its own. After that, trajectory LENGTH is "
         f"the lever: mcmc_hmc with n_leapfrog_steps=150 measured a median "
-        f"min-ESS of 219 over six seeds against 179 for this sampler, and "
-        f"never fell below 155 where 60 steps returned 19 on one seed in six. "
+        f"min-ESS of 118 over six seeds against 119 for this sampler, and "
+        f"never fell below 64 where 80 steps returned 31 and 60 steps 23 on "
+        f"their worst seed. "
         f"dense_mass_matrix=True is not a safe default here — it measured 12 "
         f"divergences per run on that fit (77 per 400 draws before the bins "
         f"were fixed) against 2 for the diagonal, so check n_divergent before "
@@ -273,8 +274,8 @@ def run_nuts(
         universe leave bins with no likelihood sampling a heavy-tailed prior
         (#1975). Matching the edges to the redshift took the same fit from
         174 s to 69 s. ``mcmc_hmc`` with ``n_leapfrog_steps=150`` then
-        measured a median min-ESS of 219 per 400 draws over six seeds
-        against 179 here, and never fell below 155.
+        measured a median min-ESS of 118 per 400 draws over six seeds
+        against 119 here, and never fell below 64.
         ``dense_mass_matrix=True`` is quicker still but measured 12
         divergences per run against 2 for the diagonal, so check
         ``n_divergent`` before trusting it. Lower the cap only to bound
