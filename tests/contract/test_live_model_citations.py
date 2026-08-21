@@ -67,7 +67,13 @@ def test_component_triggers_citation(ssp_data_fsps, extra, expected):
 
 
 def test_igm_and_ssp_baseline_citations(ssp_data_fsps):
-    """The default (IGM on, real SSP) run cites the IGM model + SSP provenance."""
-    keys = _citation_keys(_build(ssp_data_fsps, neb={"type": "none"}))
-    assert "inoue2014" in keys  # default IGM model
+    """A requested IGM plus a real SSP cites the IGM model and the SSP provenance.
+
+    ``igm={}`` rather than nothing: activation is derived from the group, so an
+    omitted group runs no IGM and owes no IGM paper. A typeless group still
+    picks a model (inoue14) and therefore still owes one -- that is the shape
+    where an uncited default can hide, and the one worth pinning here.
+    """
+    keys = _citation_keys(_build(ssp_data_fsps, neb={"type": "none"}, igm={}))
+    assert "inoue2014" in keys  # the model the typeless group selects
     assert "fsps" in keys  # SSP provenance

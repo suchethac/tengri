@@ -750,16 +750,7 @@ def parse_groups(**kwargs) -> Parameters:
     # ``==`` and every genuine photo-z fit over that range is refused as
     # missing. Presence has neither failure mode. Introspection callers pass
     # ``_allow_empty_wildcard`` and legitimately have no redshift.
-    if not allow_empty_wildcard and "redshift" not in kwargs:
-        raise ValueError(
-            "redshift is required. Specify one of:\n"
-            "  - redshift=Fixed(z)             a known redshift\n"
-            "  - redshift=Uniform(lo, hi)      a photo-z fit\n"
-            "  - redshift=<any Distribution>   any other prior\n"
-            "\n"
-            "It used to default to Fixed(0.1), which put every model that "
-            "omitted it at z=0.1 without saying so."
-        )
+    redshift_was_given = "redshift" in kwargs
 
     # ── Pass 0a: Normalize the preferred ``all_params`` wildcard alias ──
     # Rewrite ``all_params`` -> ``'*'`` in every group dict (and nested
@@ -1028,6 +1019,23 @@ def parse_groups(**kwargs) -> Parameters:
     for name in list(final_params._distributions.keys()):
         provenance.setdefault(name, "registry_default")
     object.__setattr__(final_params, "_group_provenance", provenance)
+
+    # Raised HERE, after the groups have been translated and validated, not at
+    # the top. A caller with a malformed group AND no redshift should hear about
+    # the group: it is the more specific of the two complaints, and the one they
+    # can act on. Checking first made `parse_groups(radio=True)` answer with
+    # "redshift is required" instead of the bool-gate advice that explains what
+    # `radio=True` should have been.
+    if not redshift_was_given and not allow_empty_wildcard:
+        raise ValueError(
+            "redshift is required. Specify one of:\n"
+            "  - redshift=Fixed(z)             a known redshift\n"
+            "  - redshift=Uniform(lo, hi)      a photo-z fit\n"
+            "  - redshift=<any Distribution>   any other prior\n"
+            "\n"
+            "It used to default to Fixed(0.1), which put every model that "
+            "omitted it at z=0.1 without saying so."
+        )
 
     _warn_silently_fixed_parameters(final_params, param_partition, kwargs)
     _warn_firrc_slope_degeneracy(final_params)

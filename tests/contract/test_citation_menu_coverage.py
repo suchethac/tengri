@@ -89,17 +89,38 @@ def test_igm_is_cited() -> None:
     assert "Madau" in citation, f"igm=madau requested but not cited (got {citation!r})"
 
 
-def test_igm_default_is_cited() -> None:
-    """IGM attenuation is on by default, so its paper is owed by default.
+def test_igm_typeless_group_is_cited() -> None:
+    """An igm group with no ``type`` still runs a model, so it still owes a paper.
 
-    This is the widest instance of the bug: ``apply_igm`` defaults to
-    ``True`` with ``igm_model='inoue'``, so nearly every fit tengri has
-    ever produced applied Inoue+2014 and cited nobody for it.
+    This was the widest instance of the citation bug: ``apply_igm`` defaulted
+    to ``True``, so nearly every fit tengri ever produced applied Inoue+2014
+    and cited nobody for it. Activation is now derived from the group, so an
+    omitted group runs nothing and the "on by default" premise is retired --
+    but the typeless group is the shape that still gets a model chosen for it,
+    which is where an uncited default can still hide.
     """
-    spec = parse_groups(sfh={"type": "dpl"}, redshift=Fixed(0.1))
-    assert getattr(spec, "apply_igm", False), "premise changed: IGM is no longer on by default"
+    spec = parse_groups(sfh={"type": "dpl"}, igm={}, redshift=Fixed(0.1))
+    assert getattr(spec, "apply_igm", False), (
+        "premise changed: a typeless igm group no longer activates IGM"
+    )
     citation = _citation_for(spec, "igm") or ""
     assert "Inoue" in citation, f"default IGM ran but was not cited (got {citation!r})"
+
+
+def test_no_igm_group_owes_no_igm_citation() -> None:
+    """The mirror of the bug above, and now the reachable one.
+
+    Citing a model that never ran is the same class of error as running one
+    uncited: both make the bibliography a poor description of the fit. With
+    activation derived from the group, an omitted group must leave the IGM
+    slot empty rather than crediting Inoue for an attenuation nobody applied.
+    """
+    spec = parse_groups(sfh={"type": "dpl"}, redshift=Fixed(0.1))
+    assert not getattr(spec, "apply_igm", False), (
+        "premise changed: an omitted igm group is activating IGM again"
+    )
+    citation = _citation_for(spec, "igm") or ""
+    assert "Inoue" not in citation, f"IGM never ran but was cited anyway (got {citation!r})"
 
 
 def test_xray_is_cited() -> None:
