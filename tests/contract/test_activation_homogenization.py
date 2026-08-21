@@ -84,8 +84,16 @@ class TestRedshiftIsRequired:
         assert "redshift" not in spec.free_params
 
     def test_introspection_mode_needs_no_redshift(self):
-        """Registry introspection has no call site to require it of."""
-        spec = parse_groups(sfh={"type": "dpl"}, _allow_empty_wildcard=True, redshift=Fixed(0.1))
+        """Registry introspection has no call site to require it of.
+
+        The redshift is deliberately absent: supplying one here would satisfy
+        the requirement by hand and the test would pass whether or not
+        introspection mode is exempt, which is the whole claim. The sweep that
+        made every caller state its redshift briefly added one, because a
+        caller whose subject is the *absence* of an argument looks identical
+        to a caller that merely forgot it.
+        """
+        spec = parse_groups(sfh={"type": "dpl"}, _allow_empty_wildcard=True)
         assert "redshift" in spec.valid_param_names
 
     def test_a_group_wildcard_does_not_free_redshift(self):
