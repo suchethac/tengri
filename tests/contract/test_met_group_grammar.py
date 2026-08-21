@@ -110,8 +110,9 @@ def test_met_mode_inside_the_met_group_is_refused_with_the_right_form():
 def test_there_is_exactly_one_spelling_left():
     """The point of the change: no second form to keep working, test, or teach."""
     assert "stellar" not in _GROUP_STRUCTURAL_KEYS
-    assert _GROUP_STRUCTURAL_KEYS["met"] == frozenset({"type", "*"}), (
-        "the met group selects with 'type' and takes the wildcard, nothing else"
+    assert _GROUP_STRUCTURAL_KEYS["met"] == frozenset({"type", "*", "all_params"}), (
+        "the met group selects with 'type' and takes the wildcard "
+        "('all_params', or the legacy '*'), nothing else"
     )
 
 
