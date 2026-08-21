@@ -35,7 +35,6 @@ from __future__ import annotations
 import contextlib
 import functools
 import importlib.metadata
-from pathlib import Path
 
 import jax
 import jax.numpy as jnp
@@ -56,8 +55,9 @@ _blackjax_floor_checked = False
 def _get_blackjax_floor_from_source():
     """Parse blackjax floor from source tree's pyproject.toml, if available.
 
-    Tries to resolve the source tree from tengri's __file__ location (src layout)
-    and read the pyproject.toml declaration. Returns the floor version string
+    Resolves the source root through ``tengri._data_setup.package_data_dirs()``
+    (#1431: no component anchors on parent-directory counting itself) and reads
+    the pyproject.toml declaration. Returns the floor version string
     (e.g. "1.6") or None if no source pyproject found.
 
     Returns
@@ -67,13 +67,16 @@ def _get_blackjax_floor_from_source():
         is not available or blackjax is not declared.
     """
     try:
-        # Locate the source tree: tengri/__file__ -> .../src/tengri/...
-        # so parents[2] should be the repo root where pyproject.toml lives
-        import tengri
+        # Locate the source root through the sanctioned seam (#1431: components
+        # must not anchor on parent-directory counting themselves).
+        from tengri._data_setup import package_data_dirs
 
-        pyproject_path = Path(tengri.__file__).parents[2] / "pyproject.toml"
-
-        if not pyproject_path.exists():
+        pyproject_path = None
+        for candidate in package_data_dirs():
+            if (candidate / "pyproject.toml").exists():
+                pyproject_path = candidate / "pyproject.toml"
+                break
+        if pyproject_path is None:
             return None
 
         # Parse the pyproject.toml
