@@ -155,6 +155,7 @@ kitchen_sink = dict(
     }, dust_emission={"type": "dale2014_cigale", "all_params": FIXED, "alpha_dale": 2.2},
     neb={"type": "cue", "all_params": FIXED},
     agn={
+        "all_params": FIXED,  # every AGN block here is deliberately fixed (#1995)
         "disc": {"type": "multicolor", "all_params": FIXED, "log_lbol": 10.5},
         "torus": {"type": "skirtor", "all_params": FIXED, "tau_skirtor": 5.0, "torus_frac": 0.5},
         "nlr": {"type": "analytic", "all_params": FIXED},
@@ -477,6 +478,7 @@ money_shot = dict(
     }, dust_emission={"type": "dale2014_cigale", "all_params": FIXED, "alpha_dale": 2.2},
     neb={"type": "cue", "all_params": FIXED},
     agn={
+        "all_params": FIXED,  # every AGN block here is deliberately fixed (#1995)
         "disc": {"type": "multicolor", "all_params": FIXED, "log_lbol": 10.5},
         "torus": {"type": "skirtor", "all_params": FIXED, "tau_skirtor": 5.0, "torus_frac": 0.5},
         "nlr": {"type": "analytic", "all_params": FIXED},
