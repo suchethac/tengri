@@ -816,57 +816,59 @@ def test_selector_surface_control_is_load_bearing(group: str) -> None:
 
 
 def test_selector_surfaces_are_covered() -> None:
-    """Discover selector surfaces from the grammar and verify they're covered.
+    """Discover all _VALID_* frozensets and fail if any are uncovered.
 
     The `_SELECTOR_SURFACES` dict is hand-written, so it can fall behind if a new
-    selector surface is added to the grammar. This test makes that failure loud:
-    it enumerates validator constants in groups.py that indicate selector surfaces
-    and fails if any are not in the coverage dict.
+    selector surface is added to the grammar. This test guards the most critical
+    case: an unrecognized `_VALID_*` constant in groups.py must fail the test,
+    not be silently skipped.
 
-    This is the "loud-on-new-key fallback" specified in the brief: if a fourth
-    selector spelling is added tomorrow, this test will fail.
+    This inverts the usual pattern: any discovered selector that is NOT in
+    `_SELECTOR_SURFACES` must be added and explicitly documented, not hidden
+    behind a `continue` branch.
     """
     import importlib
+
     import tengri.parameters.groups as groups_module
 
-    # Discover _VALID_* constants (selector surfaces)
-    discovered: dict[tuple[str, str], str] = {}
+    # Discover ALL _VALID_* frozensets in the grammar (every selector surface)
+    discovered_constants: dict[str, frozenset] = {}
     for attr_name in dir(groups_module):
         if not attr_name.startswith("_VALID_"):
             continue
         attr = getattr(groups_module, attr_name)
         if not isinstance(attr, frozenset):
             continue
+        discovered_constants[attr_name] = attr
 
-        # Map constant name to (group, selector_key) based on naming convention
-        # _VALID_AGN_ATTEN_LAWS -> (agn_atten, law)
-        # _VALID_FOREGROUND_LAWS -> (foreground, law)
-        name_parts = attr_name.replace("_VALID_", "").replace("_LAWS", "").lower()
-
-        if name_parts == "agn_atten":
-            group_label = "agn_atten"
-            selector_key = "law"
-        elif name_parts == "foreground":
-            group_label = "foreground"
-            selector_key = "law"
-        else:
-            # Skip any _VALID_* constants that don't match expected patterns
-            continue
-
-        key = (group_label, selector_key)
-        discovered[key] = attr_name
-
-    # Check that all discovered surfaces are covered
+    # Map each discovered constant to the (group, selector_key) it represents.
+    # Convention: _VALID_<GROUP_LABEL>_LAWS maps to a known (group, selector_key).
+    # Unrecognized constants are NOT skipped — they fail loudly.
     uncovered = []
-    for discovered_key, const_name in discovered.items():
-        if discovered_key not in _SELECTOR_SURFACES:
+    for const_name, const_value in discovered_constants.items():
+        found_coverage = False
+
+        # Check every entry in _SELECTOR_SURFACES to find a match
+        for (group, selector_key), (source, _) in _SELECTOR_SURFACES.items():
+            if source == "HARDCODED":
+                continue
+            # source is an import path like 'tengri.parameters.groups._VALID_AGN_ATTEN_LAWS'
+            if source.endswith(const_name):
+                found_coverage = True
+                break
+
+        if not found_coverage:
             uncovered.append(
-                f"{discovered_key}: found {const_name} in grammar but not in _SELECTOR_SURFACES"
+                f"Discovered constant {const_name!r} (value: {sorted(const_value)}) "
+                f"in groups.py, but it is not covered by _SELECTOR_SURFACES. "
+                f"Add an entry to _SELECTOR_SURFACES with the correct import path and "
+                f"control parameter."
             )
 
     assert not uncovered, (
-        "New selector surface(s) discovered in grammar but not covered by this "
-        "census. Add to _SELECTOR_SURFACES before expanding coverage:\n  " + "\n  ".join(uncovered)
+        "Uncovered selector surface(s) found. Every _VALID_* frozenset in the "
+        "grammar MUST be registered in _SELECTOR_SURFACES, or new selectors will "
+        "ship without being tested for distinctness:\n  " + "\n  ".join(uncovered)
     )
 
 
