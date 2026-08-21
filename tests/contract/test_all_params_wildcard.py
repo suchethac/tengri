@@ -11,6 +11,7 @@ Validates that:
 """
 
 import pytest
+
 from tengri import (
     FIXED,
     FREE,
@@ -22,6 +23,26 @@ from tengri import (
 from tengri.parameters.groups import parse_groups
 
 pytestmark = pytest.mark.contract
+
+
+# Parametrize over multiple builder types to ensure all accept all_params=
+BUILDER_VARIANTS = [
+    pytest.param(
+        lambda: builders.sfh.dpl(all_params=FREE),
+        "sfh.dpl",
+        id="sfh_dpl",
+    ),
+    pytest.param(
+        lambda: builders.dust.two_component(all_params=FIXED, law="calzetti"),
+        "dust.two_component",
+        id="dust_two_component",
+    ),
+    pytest.param(
+        lambda: builders.neb.cue(all_params=FIXED),
+        "neb.cue",
+        id="neb_cue",
+    ),
+]
 
 
 class TestBuilderAllParams:
@@ -97,6 +118,42 @@ class TestDictGrammarAllParams:
         assert "sfh_dpl_alpha" in params.free_params
 
 
+class TestMultipleBuilderTypes:
+    """Test that all builder types accept all_params= and deprecate defaults=."""
+
+    @pytest.mark.parametrize("builder_fn,name", BUILDER_VARIANTS)
+    def test_all_builders_accept_all_params(self, builder_fn, name):
+        """All builder types accept all_params= as canonical."""
+        result = builder_fn()
+        assert result["all_params"] in (FREE, FIXED), f"{name} should have all_params key"
+
+    def test_dust_all_params_canonical(self):
+        """dust.two_component accepts all_params= canonically."""
+        dust_dict = builders.dust.two_component(all_params=FIXED, law="calzetti")
+        assert dust_dict["type"] == "two_component"
+        assert dust_dict["all_params"] is FIXED
+
+    def test_dust_defaults_deprecated(self):
+        """dust.two_component accepts deprecated defaults= with warning."""
+        with pytest.warns(DeprecationWarning, match=r"defaults=.*all_params="):
+            dust_dict = builders.dust.two_component(defaults=FIXED, law="calzetti")
+        assert dust_dict["type"] == "two_component"
+        assert dust_dict["all_params"] is FIXED
+
+    def test_neb_all_params_canonical(self):
+        """neb.cue accepts all_params= canonically."""
+        neb_dict = builders.neb.cue(all_params=FIXED)
+        assert neb_dict["type"] == "cue"
+        assert neb_dict["all_params"] is FIXED
+
+    def test_neb_defaults_deprecated(self):
+        """neb.cue accepts deprecated defaults= with warning."""
+        with pytest.warns(DeprecationWarning, match=r"defaults=.*all_params="):
+            neb_dict = builders.neb.cue(defaults=FIXED)
+        assert neb_dict["type"] == "cue"
+        assert neb_dict["all_params"] is FIXED
+
+
 class TestBuilderDictEquivalence:
     """Test that builder and dict spellings produce identical models."""
 
@@ -154,7 +211,9 @@ class TestBuilderDictEquivalence:
 
         assert model_builder.spec.free_params == model_dict.spec.free_params
 
-    def test_deprecated_defaults_produces_same_model(self, synthetic_ssp_wide, synthetic_tophat_obs):
+    def test_deprecated_defaults_produces_same_model(
+        self, synthetic_ssp_wide, synthetic_tophat_obs
+    ):
         """Deprecated defaults= produces the same model as all_params=."""
         with pytest.warns(DeprecationWarning):
             model_deprecated = SEDModel.build(

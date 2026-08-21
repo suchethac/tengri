@@ -118,7 +118,7 @@ def composable(**kwargs: Any) -> dict:
     wildcard = _pop_wildcard("agn.composable", kwargs)
     if wildcard not in (FREE, FIXED):
         raise ValueError(
-            f"agn.composable(defaults=...): expected FREE or FIXED, got "
+            f"agn.composable(all_params=...): expected FREE or FIXED, got "
             f"{wildcard!r}. Use tengri.FREE or tengri.FIXED."
         )
     sub_blocks = {axis: kwargs.pop(axis, None) for axis in _AXIS_MODULES}
@@ -150,7 +150,7 @@ def composable(**kwargs: Any) -> dict:
 
 # Attach a real signature so IDEs see the sub-block + shared-param kwargs.
 _sig_params = [
-    inspect.Parameter("defaults", inspect.Parameter.KEYWORD_ONLY, default=FIXED, annotation=Any),
+    inspect.Parameter("all_params", inspect.Parameter.KEYWORD_ONLY, default=FIXED, annotation=Any),
 ]
 for axis in _AXIS_MODULES:
     _sig_params.append(
