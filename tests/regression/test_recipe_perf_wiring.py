@@ -74,9 +74,6 @@ def test_recipe_dict_still_splattable_into_parameters(recipe_name):
     ``parse_groups(**recipe_dict)`` splat — parse_groups should
     silently drop SEDModel-only passthrough kwargs."""
     recipe_dict = getattr(recipes, recipe_name)()
-    # Ensure redshift is in the recipe dict
-    if "redshift" not in recipe_dict:
-        recipe_dict["redshift"] = tengri.Fixed(0.1)
     spec = tengri.parse_groups(**recipe_dict)
     assert spec.n_free > 0
 
