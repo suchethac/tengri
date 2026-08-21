@@ -2311,23 +2311,73 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
         atten_part = {k: v for k, v in dust_atten_dict.items() if k != "emission"}
         emission_part = dust_atten_dict["emission"]
 
-        # Apply default law if needed (same rule as dust= retirement)
+        # Merge legacy law forms (same rule as dust= retirement)
         dust_type = atten_part.get("type", "two_component")
+        atten_part_translated = {
+            k: v for k, v in atten_part.items() if k not in ("law", "law_bc", "law_diff")
+        }
+
+        law_note = ""
+
         if dust_type == "two_component":
             has_law = "law" in atten_part
             has_law_bc = "law_bc" in atten_part
             has_law_diff = "law_diff" in atten_part
-            if not has_law and not (has_law_bc and has_law_diff):
-                atten_part = dict(atten_part)  # immutable: copy
-                atten_part["law"] = "power_law"
+
+            if has_law:
+                atten_part_translated["law"] = atten_part["law"]
+            elif has_law_bc and has_law_diff:
+                atten_part_translated["law_bc"] = atten_part["law_bc"]
+                atten_part_translated["law_diff"] = atten_part["law_diff"]
+            elif has_law_bc:
+                atten_part_translated["law"] = atten_part["law_bc"]
+                law_note = (
+                    "\n\nNote: The old form had 'law_bc' alone, which pre-#1989 applied "
+                    "to both screens. We merged it to 'law' to preserve that behavior."
+                )
+            elif has_law_diff:
+                atten_part_translated["law_diff"] = atten_part["law_diff"]
+                atten_part_translated["law_bc"] = "power_law"
+                law_note = (
+                    "\n\nNote: The old form had only 'law_diff'; the 'law_bc' screen "
+                    "defaulted to power_law. Verify whether power_law was intended for "
+                    "the birth cloud."
+                )
+            else:
+                atten_part_translated["law"] = "power_law"
+                law_note = (
+                    "\n\nNote: The dust_attenuation suggestion includes 'law': "
+                    "'power_law' — before PR #1989, a missing law defaulted to power_law. "
+                    "This reproduces the old result exactly, but you should verify that "
+                    "power_law was your intended choice and not just an "
+                    "accidentally-omitted setting."
+                )
+
         elif dust_type == "single_component":
-            if "law" not in atten_part:
-                atten_part = dict(atten_part)
-                atten_part["law"] = "power_law"
+            has_law = "law" in atten_part
+            has_law_bc = "law_bc" in atten_part
+
+            if has_law:
+                atten_part_translated["law"] = atten_part["law"]
+            elif has_law_bc:
+                atten_part_translated["law"] = atten_part["law_bc"]
+                law_note = (
+                    "\n\nNote: The old form allowed 'law_bc' on single_component; "
+                    "we merged it to 'law'."
+                )
+            else:
+                atten_part_translated["law"] = "power_law"
+                law_note = (
+                    "\n\nNote: The dust_attenuation suggestion includes 'law': "
+                    "'power_law' — before PR #1989, a missing law defaulted to power_law. "
+                    "This reproduces the old result exactly, but you should verify that "
+                    "power_law was your intended choice and not just an "
+                    "accidentally-omitted setting."
+                )
 
         atten_str = (
             "dust_attenuation={"
-            + ", ".join(f"'{k}': {v!r}" for k, v in sorted(atten_part.items()))
+            + ", ".join(f"'{k}': {v!r}" for k, v in sorted(atten_part_translated.items()))
             + "}"
         )
         emission_str = (
@@ -2345,13 +2395,8 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
             f"    {atten_str},\n"
             f"    {emission_str}"
         )
-        if dust_type == "two_component" and "law" not in dust_atten_dict:
-            message += (
-                "\n\nNote: The dust_attenuation suggestion includes 'law': 'power_law' — "
-                "before PR #1989, a missing law defaulted to power_law. This reproduces "
-                "the old result exactly, but you should verify that power_law was your "
-                "intended choice and not just an accidentally-omitted setting."
-            )
+        if law_note:
+            message += law_note
 
         raise ValueError(message)
 
@@ -2555,29 +2600,75 @@ def _translate_dust_retired(dust_dict: dict, result: dict) -> None:
     # Extract the attenuation half (everything except 'emission')
     atten_dict = {k: v for k, v in dust_dict.items() if k != "emission"}
 
-    # Determine if we need to add a default law. The translation must satisfy
-    # the two-component law rule (either 'law' or both 'law_bc'+'law_diff').
+    # Build the translated attenuation dict by merging legacy law forms into modern form.
+    # Before PR #1989, dust allowed partial law specs; we must translate them cleanly.
     dust_type = atten_dict.get("type", "two_component")
-    needs_default_law = False
+    atten_dict_translated = {
+        k: v for k, v in atten_dict.items() if k not in ("law", "law_bc", "law_diff")
+    }
+
+    law_note = ""  # Explanation if we modified the law spec
 
     if dust_type == "two_component":
-        # Check if any law is specified
         has_law = "law" in atten_dict
         has_law_bc = "law_bc" in atten_dict
         has_law_diff = "law_diff" in atten_dict
-        # Missing all three means we need to add a default
-        if not has_law and not (has_law_bc and has_law_diff):
-            needs_default_law = True
+
+        if has_law:
+            # Already modern form; keep it
+            atten_dict_translated["law"] = atten_dict["law"]
+        elif has_law_bc and has_law_diff:
+            # Already modern form; keep both
+            atten_dict_translated["law_bc"] = atten_dict["law_bc"]
+            atten_dict_translated["law_diff"] = atten_dict["law_diff"]
+        elif has_law_bc:
+            # Lone law_bc: pre-#1989 it applied to both screens; merge to 'law'
+            atten_dict_translated["law"] = atten_dict["law_bc"]
+            law_note = (
+                "\n\nNote: The old form had 'law_bc' alone, which pre-#1989 applied to "
+                "both screens. We merged it to 'law' to preserve that behavior."
+            )
+        elif has_law_diff:
+            # Lone law_diff: the other screen used power_law by default
+            atten_dict_translated["law_diff"] = atten_dict["law_diff"]
+            atten_dict_translated["law_bc"] = "power_law"
+            law_note = (
+                "\n\nNote: The old form had only 'law_diff'; the 'law_bc' screen defaulted "
+                "to power_law. Verify whether power_law was intended for the birth cloud."
+            )
+        else:
+            # No law info: add default
+            atten_dict_translated["law"] = "power_law"
+            law_note = (
+                "\n\nNote: The suggestion includes 'law': 'power_law' — before PR #1989, "
+                "a missing law defaulted to power_law. This reproduces the old result "
+                "exactly, but you should verify that power_law was your intended choice "
+                "and not just an accidentally-omitted setting."
+            )
 
     elif dust_type == "single_component":
-        # single_component requires 'law'
-        if "law" not in atten_dict:
-            needs_default_law = True
+        has_law = "law" in atten_dict
+        has_law_bc = "law_bc" in atten_dict
 
-    # Build the translated attenuation dict with default law if needed
-    atten_dict_translated = dict(atten_dict)
-    if needs_default_law:
-        atten_dict_translated["law"] = "power_law"
+        if has_law:
+            # Already modern form
+            atten_dict_translated["law"] = atten_dict["law"]
+        elif has_law_bc:
+            # Pre-#1989 allowed law_bc on single_component; use it as 'law'
+            atten_dict_translated["law"] = atten_dict["law_bc"]
+            law_note = (
+                "\n\nNote: The old form allowed 'law_bc' on single_component; "
+                "we merged it to 'law'."
+            )
+        else:
+            # No law: add default
+            atten_dict_translated["law"] = "power_law"
+            law_note = (
+                "\n\nNote: The suggestion includes 'law': 'power_law' — before PR #1989, "
+                "a missing law defaulted to power_law. This reproduces the old result "
+                "exactly, but you should verify that power_law was your intended choice "
+                "and not just an accidentally-omitted setting."
+            )
 
     atten_str = (
         "dust_attenuation={"
@@ -2617,14 +2708,8 @@ def _translate_dust_retired(dust_dict: dict, result: dict) -> None:
     else:
         message += "."
 
-    # Add explanation for the default law
-    if needs_default_law:
-        message += (
-            "\n\nNote: The suggestion includes 'law': 'power_law' — before PR #1989, "
-            "a missing law defaulted to power_law. This reproduces the old result exactly, "
-            "but you should verify that power_law was your intended choice and not just "
-            "an accidentally-omitted setting."
-        )
+    if law_note:
+        message += law_note
 
     raise ValueError(message)
 

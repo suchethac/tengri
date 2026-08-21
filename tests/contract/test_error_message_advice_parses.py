@@ -170,6 +170,35 @@ TRIGGERS = [
         },
         id="dust-nested-emission",
     ),
+    # Dust retirement: two_component lone law_bc (pre-#1989 shape, benchmark had this)
+    pytest.param(
+        {
+            "dust": {
+                "type": "two_component",
+                "law_bc": "calzetti",
+                "tau_bc": 0.5,
+                "tau_diff": 0.3,
+            }
+        },
+        id="dust-two-component-lone-law-bc",
+    ),
+    # Dust retirement: two_component lone law_diff
+    pytest.param(
+        {
+            "dust": {
+                "type": "two_component",
+                "law_diff": "power_law",
+                "tau_bc": 0.5,
+                "tau_diff": 0.3,
+            }
+        },
+        id="dust-two-component-lone-law-diff",
+    ),
+    # Dust retirement: single_component with law_bc (pre-#1989, accepted per migration)
+    pytest.param(
+        {"dust": {"type": "single_component", "law_bc": "calzetti", "tau_v": 0.5}},
+        id="dust-single-component-with-law-bc",
+    ),
 ]
 
 
@@ -215,6 +244,22 @@ def test_error_message_advice_is_itself_valid(kwargs) -> None:
                     f"parsed but lost the attenuation law (no dust_law_bc/"
                     f"dust_law_diff in result). The suggestion is incomplete."
                 )
+
+                # For lone-law_bc merges, verify the law value was preserved
+                # (not defaulted to power_law). Lone law_bc applies to both screens.
+                if "law" in value and "law_bc" not in value and "law_diff" not in value:
+                    # This is the 'law' form; check it matches what the user gave
+                    expected_law = value.get("law")
+                    if expected_law:
+                        actual_law_bc = (
+                            result.dust_law_bc if hasattr(result, "dust_law_bc") else None
+                        )
+                        assert actual_law_bc == expected_law, (
+                            f"dust_attenuation suggestion merged 'law' to dust_law_bc, "
+                            f"but the value changed: expected {expected_law!r}, "
+                            f"got {actual_law_bc!r}. Merge was not behavior-preserving."
+                        )
+
             elif dust_type == "single_component":
                 # Must have dust_law_bc (single screen, stored on both _bc/_diff)
                 has_law = (
