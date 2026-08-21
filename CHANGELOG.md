@@ -43,9 +43,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - `tests/contract/test_torus_deprecation.py` (the warn-once contract
   test for the now-private toy torus functions).
 - `tests/components/agn/test_simple_agn.py` and `test_standard_agn.py`.
+- The `dust` build group (#2000). Attenuation and IR emission are now peer top-level
+  groups: `dust_attenuation={...}` (type, `law` or `law_bc`+`law_diff`, and the
+  `tau_*`/`Rv_*`/`delta_*`/`slope_*`/`bump_strength_*` params) and
+  `dust_emission={...}` (type, `eta_balance`, params). The nested
+  `dust_attenuation={'emission': ...}` form is retired with it. **Breaking, with no
+  alias** — `dust=` raises carrying the translation. Energy balance moved to the
+  emission group as `dust_eta_balance` (default `Fixed(1.0)`, strict balance:
+  `L_IR = eta * L_absorbed`). Before/after table in
+  `docs/dev/api_migration_v0.x.md`. **Note:** readers migrating from before #1989
+  encounter both changes at once; the renamed group is *also* now subject to the
+  explicit-law rule.
 
 ### Changed
 
+- Dust attenuation laws are explicit and required (#1989). A dust attenuation group
+  spells its law as either `law` (one law, both screens) or, on `two_component` only,
+  both `law_bc` and `law_diff` together — never one half of the pair, and never
+  neither. **Breaking**, in three shapes:
+  - no law raises. It previously defaulted to `power_law`; `'law': 'power_law'`
+    reproduces the old fit exactly, but check whether that default was intended.
+  - a lone `law_bc` raises. The old form applied it to both screens, so `'law': X` is
+    behavior-preserving; use the pair only when the screens genuinely differ.
+  - `single_component` with `law_bc`/`law_diff` raises — a single screen takes `law`,
+    and its depth is `tau_v`, not `tau_bc`/`tau_diff`.
+  The low-level `Parameters(dust_law_bc=…)` kwargs path is unchanged and still
+  inherits `dust_law_diff` from `dust_law_bc`.
 - **Example gallery curated and refocused**: Pruned 283 → 121 gallery
   scripts across 17 sections; removed inference/fit-comparison examples (they
   belong in notebooks), dissolved `inference`, `workflows`, `multiwavelength`,

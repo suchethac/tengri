@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import pytest
 
+from tengri import Fixed
 from tengri.forward.forward_model import ForwardModel
 from tengri.forward.population import Population
 
@@ -25,6 +26,7 @@ def sed_model_minimal(synthetic_ssp, simple_observation):
         sfh={"type": "dpl", "*": FIXED},
         dust_attenuation={"type": "two_component", "law": "calzetti", "*": FIXED},
         neb={"type": "none"},
+        redshift=Fixed(0.1),
     )
 
 

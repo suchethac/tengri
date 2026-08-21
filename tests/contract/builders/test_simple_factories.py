@@ -31,7 +31,7 @@ import pytest
 
 pytestmark = pytest.mark.contract
 
-from tengri import FIXED, Uniform, builders, parse_groups
+from tengri import FIXED, Fixed, Uniform, builders, parse_groups
 
 
 @pytest.mark.parametrize(
@@ -75,6 +75,7 @@ def test_radio_q_ir_override_round_trips() -> None:
     spec = parse_groups(
         sfh={"type": "dpl"},
         radio=builders.radio.condon92(q_ir=Uniform(2.0, 3.0)),
+        redshift=Fixed(0.1),
     )
     assert "radio_q_ir" in spec.free_params
 
@@ -83,6 +84,7 @@ def test_xray_delta_alpha_ox_override_round_trips() -> None:
     spec = parse_groups(
         sfh={"type": "dpl"},
         xray=builders.xray.simple(delta_alpha_ox=Uniform(-0.3, 0.3)),
+        redshift=Fixed(0.1),
     )
     assert "xray_delta_alpha_ox" in spec.free_params
 
@@ -134,6 +136,7 @@ def test_igm_dla_param_round_trips_to_free() -> None:
     spec = parse_groups(
         sfh={"type": "dpl"},
         igm=builders.igm.inoue14(log_n_hi=Uniform(20.0, 22.0)),
+        redshift=Fixed(0.1),
     )
     assert "dla_log_n_hi" in spec.free_params
 

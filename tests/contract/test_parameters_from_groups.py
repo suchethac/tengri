@@ -66,4 +66,4 @@ class TestFromGroupsBridge:
     def test_from_groups_propagates_validation_errors(self):
         """Unknown group keys raise the same ValueError as parse_groups."""
         with pytest.raises(ValueError, match="Unknown group key"):
-            parse_groups(foo={"type": "x"})
+            parse_groups(foo={"type": "x"}, redshift=Fixed(0.1))

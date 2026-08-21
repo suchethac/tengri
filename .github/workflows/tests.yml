@@ -332,6 +332,14 @@ jobs:
       # a call's keywords sit on different lines from its callee. Stdlib-only,
       # same as the guards around it.
       - run: python tools/check_dust_law_kwargs.py
+      # Validates dust build-group dicts across the entire tree, including
+      # docs/, reproduction/, bench/, scripts/ and other non-src locations.
+      # Two dust changes (#1989, #2000) left 88 broken blocks outside src/ and
+      # tests/ because no gate reaches dict VALUES in notebooks/markdown. Catches
+      # retired dust= syntax, emission nested in dust_attenuation, and law
+      # configuration errors in two_component/single_component blocks. File-level
+      # allowlist for docs explaining the migration. Stdlib-only, no tengri import.
+      - run: python tools/check_dust_group_grammar.py
       # `x / jnp.maximum(d, floor)` returns a plausible finite zero when the
       # numerator is also zero — #1395 shipped that way. The class cannot be
       # swept mechanically (some of these floors are legitimate), so this pins

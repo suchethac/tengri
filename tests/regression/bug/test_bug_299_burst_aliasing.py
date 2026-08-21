@@ -18,6 +18,7 @@ from pathlib import Path
 import pytest
 
 import tengri
+from tengri import Fixed
 from tengri.components.stellar.sfh._aliasing_warning import SFHBurstAliasingWarning
 
 pytestmark = pytest.mark.regression_bug
@@ -60,6 +61,7 @@ def _build_with_burst(ssp, *, width_gyr: float, peak_lbt_gyr: float):
                     "logzsol": -0.1,
                 },
                 dust_attenuation={"law": "power_law", "type": "two_component", "*": tengri.FIXED},
+                redshift=Fixed(0.1),
             )
             return [x for x in w if issubclass(x.category, SFHBurstAliasingWarning)]
 

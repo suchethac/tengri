@@ -36,6 +36,7 @@ def test_ztable_matches_exact_below_1pct(ssp_data_for_accuracy):
         observation=obs,
         sfh={"type": "dpl"},
         redshift=Uniform(0.01, 2.0),
+        igm={"type": "inoue"},
     )
 
     # Exact path (no approximation)
@@ -70,6 +71,7 @@ def measure_ztable_error_and_cost(n_z_value, ssp_data_for_accuracy):
         observation=obs,
         sfh={"type": "dpl"},
         redshift=Uniform(0.01, 2.0),
+        igm={"type": "inoue"},
     )
 
     # Exact path

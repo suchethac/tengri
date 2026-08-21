@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import pytest
 
+from tengri import Fixed
 from tengri.parameters.groups import parse_groups
 
 pytestmark = [pytest.mark.regression_bug]
@@ -42,7 +43,7 @@ def test_the_advised_form_selects_the_tabulated_mode() -> None:
     A snippet the grammar merely tolerates would satisfy the contract guard and
     still leave the user exactly where they started.
     """
-    spec = parse_groups(met={"type": "table"})
+    spec = parse_groups(met={"type": "table"}, redshift=Fixed(0.1))
     assert spec.met_mode == "table", (
         f"met={{'type': 'table'}} parsed but produced met_mode={spec.met_mode!r}; "
         f"the advice would send a stuck user in a circle."
@@ -68,7 +69,7 @@ def test_the_replaced_spelling_is_refused_with_a_translation() -> None:
     for it, so the generic error would be a dead end.
     """
     with pytest.raises(ValueError, match="the 'stellar' group is gone") as exc:
-        parse_groups(stellar={"met_mode": "table"})
+        parse_groups(stellar={"met_mode": "table"}, redshift=Fixed(0.1))
     assert "met={'type': 'table'}" in str(exc.value)
 
 
@@ -89,4 +90,4 @@ def test_the_message_names_a_form_the_grammar_accepts() -> None:
         "the removed spelling must not survive in the published reference"
     )
     # And the named form must actually work, which is the property #1677 lacked.
-    assert parse_groups(met={"type": "table"}).met_mode == "table"
+    assert parse_groups(met={"type": "table"}, redshift=Fixed(0.1)).met_mode == "table"

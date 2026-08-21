@@ -272,7 +272,12 @@ def build_configs(z, obs):
     Returns ``{config_letter: SEDModel}``. Each model opts into the precompute
     (``WavePrecomp``) speed path.
     """
-    common = dict(observation=obs, redshift=Fixed(z), apply_igm=True, approx=WavePrecomp())
+    common = dict(
+        observation=obs,
+        redshift=Fixed(z),
+        igm={"type": "inoue"},
+        approx=WavePrecomp(),
+    )
 
     model_a = SEDModel.build(
         ssp_data=SSP["mist"],

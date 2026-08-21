@@ -25,7 +25,7 @@ import jax
 import jax.numpy as jnp
 import pytest
 
-from tengri import SEDModel, parse_groups, recipes
+from tengri import Fixed, SEDModel, parse_groups, recipes
 
 pytestmark = pytest.mark.contract
 
@@ -446,7 +446,7 @@ class TestRecipeStructure:
         """
         r = recipes.high_z()
         assert r["sfh"]["type"] == "tsnorm"
-        assert r["apply_igm"] is True
+        assert r.get("igm", {}).get("type") == "inoue"
         assert "dust_emission" not in r
         assert "approx" not in r
 
@@ -455,7 +455,7 @@ class TestRecipeStructure:
         r = recipes.photoz()
         assert r["sfh"]["type"] == "dpl"
         assert r["neb"]["type"] == "none"
-        assert r["apply_igm"] is True
+        assert r.get("igm", {}).get("type") == "inoue"
         assert "approx" not in r
 
 
@@ -467,7 +467,7 @@ class TestGateGroupBoolRejected:
     @pytest.mark.parametrize("group", ["radio", "xray", "shock"])
     def test_bool_gate_group_raises_actionable_error(self, group):
         with pytest.raises(ValueError, match=r"type"):
-            parse_groups(**{group: True, "sfh": {"type": "dpl"}})
+            parse_groups(redshift=Fixed(0.1), **{group: True, "sfh": {"type": "dpl"}})
 
     @pytest.mark.parametrize(
         "group,decl,extra",
@@ -480,7 +480,7 @@ class TestGateGroupBoolRejected:
     def test_dict_gate_group_activates_params(self, group, decl, extra):
         """The dict form activates the component — its params appear in the
         built spec (guards the silent-drop regression from the positive side)."""
-        spec = parse_groups(sfh={"type": "dpl"}, **{group: decl}, **extra)
+        spec = parse_groups(redshift=Fixed(0.1), sfh={"type": "dpl"}, **{group: decl}, **extra)
         allp = set(spec.free_params) | set(spec.get_fixed_values())
         assert any(group in k for k in allp), (
             f"{group}={decl} produced no {group} params — silently absent"

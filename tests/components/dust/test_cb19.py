@@ -26,6 +26,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from tengri import Fixed
+
 pytestmark = pytest.mark.bounds
 
 # ── Fixtures ──────────────────────────────────────────────────────
@@ -715,6 +717,7 @@ class TestSEDModelInitNebularDispatch:
                 "slope": -0.7,
             },
             neb={"type": "cb19", "*": tengri.FIXED},
+            redshift=Fixed(0.1),
         )
         assert model.spec.nebular_mode == "cb19"
         assert isinstance(model._nebular_backend, CB19Backend)

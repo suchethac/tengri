@@ -12,6 +12,7 @@ import jax
 import jax.numpy as jnp
 import pytest
 
+from tengri import Fixed
 from tests._grad_parity import assert_grad_matches_fd
 
 
@@ -26,6 +27,7 @@ def sed_model_minimal(synthetic_ssp, simple_observation):
         sfh={"type": "dpl", "*": FIXED},
         dust_attenuation={"type": "two_component", "law": "calzetti", "*": FIXED},
         neb={"type": "none"},
+        redshift=Fixed(0.1),
     )
 
 

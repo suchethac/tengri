@@ -42,6 +42,7 @@ def test_two_step(ssp):
             "step_age_gyr": Fixed(8.0),
         },
         dust_attenuation={"law": "power_law", "type": "two_component", "*": FIXED},
+        redshift=Fixed(0.1),
     )
     assert m.spec.met_mode == "two_step"
     fixed = m.spec.get_fixed_values()
@@ -61,6 +62,7 @@ def test_ramp(ssp):
             "logzsol_final": Fixed(0.0),
         },
         dust_attenuation={"law": "power_law", "type": "two_component", "*": FIXED},
+        redshift=Fixed(0.1),
     )
     assert m.spec.met_mode == "ramp"
 
@@ -72,6 +74,7 @@ def test_unknown_met_mode_raises(ssp):
             sfh={"type": "dpl", "*": FIXED},
             met={"type": "two_steps"},  # typo
             dust_attenuation={"type": "two_component", "*": FIXED},
+            redshift=Fixed(0.1),
         )
 
 
@@ -81,6 +84,7 @@ def test_default_no_met_block(ssp):
         ssp,
         sfh={"type": "dpl", "*": FIXED},
         dust_attenuation={"law": "power_law", "type": "two_component", "*": FIXED},
+        redshift=Fixed(0.1),
     )
     assert m.spec.met_mode == "delta"
 
@@ -98,6 +102,7 @@ def test_roundtrip_emits_met_block(ssp):
             "step_age_gyr": Fixed(8.0),
         },
         dust_attenuation={"law": "power_law", "type": "two_component", "*": FIXED},
+        redshift=Fixed(0.1),
     )
     groups = m.spec.to_groups()
     assert "met" in groups

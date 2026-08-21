@@ -142,24 +142,19 @@ print(f"Mock: {len(flux)}-pixel R=2000 spectrum, SNR = 30/pixel")
 
 # %%
 t0 = time.perf_counter()
-# This posterior has a sharp step-size cliff during warmup adaptation.
-# Re-measured 2026-08-12 (TENGRI_DISABLE_JAX_CACHE=1, 100-sample quick scan):
-#
-#     precondition  warmup   divergences  unique draws  status
-#     off             300             0           98/100    ✓
-#     off            1000             0           96/100    ✓
-#     on             1000            97           1/100    ✗ BROKEN
-#     on              300            99           1/100    ✗ BROKEN
-#
-# Aug 2026 table (now stale) reported precondition=on/warmup=1000 as converged,
-# but current runs show precondition=on is completely broken at both warmup
-# lengths: 97-99% divergence, all samples frozen. This is #1734 (variance
-# cutoff bug in autocorrelation.py:405 + #1438 guard that failed to catch it).
-# Switching to the working arm: precondition=False with the shared HMC_VALIDATED
-# recipe (n_warmup=1000, n_samples=600, 20 leapfrog, dense mass, 0.9 target).
+# This posterior has a sharp step-size cliff during warmup adaptation, and
+# under a DENSE mass matrix the adapted step lands above the stability limit:
+# the chain freezes outright (600/600 identical draws, 600 divergences) on
+# BOTH preconditioning arms — measured locally and reproduced twice on
+# canonical CI environments by the #2005 notebook-execution tier. A diagonal
+# mass matrix is healthy on the same posterior (0 divergences, ~96% unique
+# draws). Root cause (the dense-mass x SpectrumPrecomp interaction) is under
+# investigation in #1999; this override is the documented interim for THIS
+# notebook only — HMC_VALIDATED itself keeps dense_mass_matrix=True because
+# dense mass is load-bearing on the correlated nonparametric-SFH posteriors.
 posterior = forward.fit(
     Data(spectrum=(flux, noise)), key=jax.random.PRNGKey(1),
-    precondition=False, **HMC_VALIDATED
+    precondition=False, **{**HMC_VALIDATED, "dense_mass_matrix": False}
 )
 rhat = posterior.rhat()
 

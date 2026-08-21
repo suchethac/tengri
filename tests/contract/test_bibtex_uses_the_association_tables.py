@@ -113,6 +113,7 @@ def bibtex_text(ssp_data_fsps):
             "all_params": FIXED,
         },
         neb={"type": "none"},
+        igm={"type": "inoue"},
         xray={"type": "simple"},
         radio={"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}},
         redshift=Fixed(0.1),

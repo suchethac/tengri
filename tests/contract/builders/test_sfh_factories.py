@@ -135,8 +135,12 @@ def test_invalid_wildcard_raises_valueerror() -> None:
 
 def test_factory_output_round_trips_through_parse_groups() -> None:
     """The factory must produce a Parameters identical to the dict path."""
-    via_factory = parse_groups(sfh=builders.sfh.dpl(_=FREE, beta=Uniform(1.0, 3.0)))
-    via_dict = parse_groups(sfh={"type": "dpl", "*": FREE, "beta": Uniform(1.0, 3.0)})
+    via_factory = parse_groups(
+        sfh=builders.sfh.dpl(_=FREE, beta=Uniform(1.0, 3.0)), redshift=Fixed(0.1)
+    )
+    via_dict = parse_groups(
+        sfh={"type": "dpl", "*": FREE, "beta": Uniform(1.0, 3.0)}, redshift=Fixed(0.1)
+    )
     assert sorted(via_factory.free_params) == sorted(via_dict.free_params)
     # Spot-check that the user-overridden prior survived.
     assert "sfh_dpl_beta" in via_factory.free_params
@@ -148,7 +152,7 @@ def test_const_exp_short_names_resolve_correctly() -> None:
     ``const_exp`` parameters use the ``sfh_cexp_`` prefix, so the short
     forms exposed by the factory must match what the parser extracts.
     """
-    spec = parse_groups(sfh=builders.sfh.const_exp(_=FREE))
+    spec = parse_groups(sfh=builders.sfh.const_exp(_=FREE), redshift=Fixed(0.1))
     expected = {
         "sfh_cexp_log_total_mass",
         "sfh_cexp_tau_gyr",
@@ -183,7 +187,7 @@ def test_every_additive_factory_default_call_parses_cleanly(variant: str) -> Non
     variants compose with a smooth SFH and are not valid standalone.
     """
     factory = getattr(builders.sfh, variant)
-    parse_groups(sfh=factory())
+    parse_groups(sfh=factory(), redshift=Fixed(0.1))
 
 
 def test_burst_and_field_factories_emit_valid_dicts() -> None:

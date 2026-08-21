@@ -45,7 +45,7 @@ import re
 import pytest
 
 import tengri
-from tengri import FIXED, Observation, Photometry, SEDModel
+from tengri import FIXED, Fixed, Observation, Photometry, SEDModel
 from tengri.config.exceptions import TengriIOError
 
 pytestmark = pytest.mark.contract
@@ -235,7 +235,11 @@ def observation() -> Observation:
 def test_menu_entry_builds_or_refuses_clearly(menu, entry, kwargs, bare_stellar_ssp, observation):
     """A menu entry either reaches the forward model or says why it cannot."""
     try:
-        SEDModel.build(ssp_data=bare_stellar_ssp, observation=observation, **kwargs)
+        SEDModel.build(
+            ssp_data=bare_stellar_ssp,
+            observation=observation,
+            **{"redshift": Fixed(0.1), **kwargs},
+        )
     except ValueError as exc:
         if all(marker in str(exc) for marker in MISSING_DATA_MARKERS):
             pytest.skip(f"{menu} '{entry}' needs an external grid that is not installed: {exc}")

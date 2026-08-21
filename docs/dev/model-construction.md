@@ -39,8 +39,9 @@ model = SEDModel.build(ssp_data=ssp, observation=obs,
 model = SEDModel.build(
     ssp_data=ssp, observation=obs,
     sfh={'type': 'dpl', 'all_params': FREE, 'beta': Uniform(1, 3)},
-    dust={'type': 'two_component', 'law': 'calzetti', 'all_params': FIXED,
-          'tau_bc': 0.5, 'emission': {'type': 'dale2014', 'all_params': FIXED}},
+    dust_attenuation={'type': 'two_component', 'law': 'calzetti', 'all_params': FIXED,
+                      'tau_bc': 0.5},
+    dust_emission={'type': 'dale2014', 'all_params': FIXED},
     neb={'type': 'cue', 'all_params': FIXED},
     shock={'norm': 'frac', 'frac': Uniform(0, 1)},   # composes with neb
     redshift=Fixed(0.05),
@@ -200,7 +201,7 @@ class MyModel(SEDModelComponent):
 ```
 
 `__init_subclass__` does the rest: it discovers the class-level priors,
-registers `(name, cls)` so `SEDModel.build(dust={'type': 'my_model'})` finds
+registers `(name, cls)` so `SEDModel.build(dust_emission={'type': 'my_model'})` finds
 it, fills `inputs()`/`outputs()` from the dicts, and provides sensible default
 `apply()`/`precompute()`. The astronomer writes physics only.
 

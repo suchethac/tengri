@@ -1,0 +1,9 @@
+# Allowlist of files with retired dust grammar (by design)
+# Format: file path -> reason
+# File-level entries only; all violations in allowlisted files are accepted by design.
+docs/dev/archive -> archived documentation with retired blocks
+docs/internal/plans -> issue discussion notes (retired grammar)
+docs/internal/specs -> issue specification notes (retired grammar)
+docs/dev/api_migration_v0.x.md -> quotes retired spelling while explaining migration
+docs/dev/sed-model-components.md -> references old API spelling in explanatory prose
+docs/internal/advanced/extending.md -> teaches registering custom attenuation laws; example law names are deliberately outside the built-in set

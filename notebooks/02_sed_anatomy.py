@@ -155,6 +155,7 @@ kitchen_sink = dict(
     }, dust_emission={"type": "dale2014_cigale", "all_params": FIXED, "alpha_dale": 2.2},
     neb={"type": "cue", "all_params": FIXED},
     agn={
+        "all_params": FIXED,  # every AGN block here is deliberately fixed (#1995)
         "disc": {"type": "multicolor", "all_params": FIXED, "log_lbol": 10.5},
         "torus": {"type": "skirtor", "all_params": FIXED, "tau_skirtor": 5.0, "torus_frac": 0.5},
         "nlr": {"type": "analytic", "all_params": FIXED},
@@ -163,7 +164,7 @@ kitchen_sink = dict(
     radio={"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}, "*": FIXED},
     xray={"type": "simple", "*": FIXED},
     redshift=Fixed(2.0),
-    apply_igm=True,
+    igm={"type": "inoue"},
 )
 
 model = SEDModel.build(ssp_data=ssp, observation=obs, **kitchen_sink)
@@ -362,6 +363,7 @@ log_lbol_grid = [9.5, 10.0, 10.5, 11.0, 11.5]
 cmap = plt.colormaps["plasma"]
 cfg = deepcopy(base)
 cfg["agn"] = {
+    "all_params": FIXED,  # unprovided sub-blocks (nlr/blr/feii/atten) stay fixed by intent
     "disc": {"type": "multicolor", "all_params": FIXED, "log_lbol": Uniform(9.0, 12.0)},
     "torus": {"type": "nenkova", "all_params": FIXED},
 }
@@ -387,7 +389,7 @@ cmap = plt.colormaps["cividis"]
 for z, col in zip(z_grid, cmap(np.linspace(0.15, 0.85, len(z_grid)))):
     cfg = deepcopy(base)
     cfg["redshift"] = Fixed(z)
-    cfg["apply_igm"] = z > 0
+    cfg["igm"] = {"type": "inoue"} if z > 0 else {"type": "none"}
     m = SEDModel.build(ssp_data=ssp, observation=obs, **cfg)
     p = m.spec.sample(jax.random.PRNGKey(0))
     pred = m.predict(p)
@@ -477,6 +479,7 @@ money_shot = dict(
     }, dust_emission={"type": "dale2014_cigale", "all_params": FIXED, "alpha_dale": 2.2},
     neb={"type": "cue", "all_params": FIXED},
     agn={
+        "all_params": FIXED,  # every AGN block here is deliberately fixed (#1995)
         "disc": {"type": "multicolor", "all_params": FIXED, "log_lbol": 10.5},
         "torus": {"type": "skirtor", "all_params": FIXED, "tau_skirtor": 5.0, "torus_frac": 0.5},
         "nlr": {"type": "analytic", "all_params": FIXED},

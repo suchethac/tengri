@@ -79,6 +79,7 @@ class TestFirrcGrammar:
         params = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
             radio={"sf": {"type": "delvecchio2021", "delv_q0": Uniform(2.4, 3.1)}},
+            redshift=Fixed(0.1),
         )
         assert "radio_delv_q0" in params.free_params
 
@@ -86,6 +87,7 @@ class TestFirrcGrammar:
         params = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
             radio={"sf": {"type": "mccheyne2022", "mcch_q0": Uniform(1.5, 2.5)}},
+            redshift=Fixed(0.1),
         )
         assert "radio_mcch_q0" in params.free_params
 
@@ -93,6 +95,7 @@ class TestFirrcGrammar:
         params = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
             radio={"sf": {"type": "delvecchio2021", "radio_delv_q0": Uniform(2.4, 3.1)}},
+            redshift=Fixed(0.1),
         )
         assert "radio_delv_q0" in params.free_params
 
@@ -101,6 +104,7 @@ class TestFirrcGrammar:
         params = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
             radio={"agn": {"type": "dpl", "alpha_thin": Uniform(-1.5, 0.0)}},
+            redshift=Fixed(0.1),
         )
         assert "radio_alpha_thin" in params.free_params
 
@@ -109,6 +113,7 @@ class TestFirrcGrammar:
             parse_groups(
                 sfh={"type": "dpl", "*": FIXED},
                 radio={"sf": {"type": "delvecchio2021", "delv_q00": Uniform(2.0, 3.0)}},
+                redshift=Fixed(0.1),
             )
 
     def test_cross_model_param_not_freed_by_default(self):
@@ -116,6 +121,7 @@ class TestFirrcGrammar:
         params = parse_groups(
             sfh={"type": "dpl", "*": FIXED},
             radio={"sf": {"type": "delvecchio2021", "delv_q0": Uniform(2.4, 3.1)}},
+            redshift=Fixed(0.1),
         )
         freed = [n for n in params.free_params if n.startswith("radio_")]
         assert freed == ["radio_delv_q0"]
@@ -143,7 +149,9 @@ class TestFirrcSlopeDegeneracyGuard:
         from tengri.components.radio._params import RadioFIRRCDegeneracyWarning
 
         with pytest.warns(RadioFIRRCDegeneracyWarning, match="degenerate"):
-            parse_groups(sfh={"type": "dpl", "*": FIXED}, radio={"sf": radio_sf})
+            parse_groups(
+                sfh={"type": "dpl", "*": FIXED}, radio={"sf": radio_sf}, redshift=Fixed(0.1)
+            )
 
     def test_free_q0_does_not_warn(self):
         """The q0 normalization is the legitimate per-galaxy radio-excess knob."""
@@ -156,6 +164,7 @@ class TestFirrcSlopeDegeneracyGuard:
             parse_groups(
                 sfh={"type": "dpl", "*": FIXED},
                 radio={"sf": {"type": "delvecchio2021", "delv_q0": Uniform(2.4, 3.1)}},
+                redshift=Fixed(0.1),
             )
 
     def test_all_fixed_does_not_warn(self):
@@ -168,6 +177,7 @@ class TestFirrcSlopeDegeneracyGuard:
             parse_groups(
                 sfh={"type": "dpl", "*": FIXED},
                 radio={"sf": {"type": "delvecchio2021"}},
+                redshift=Fixed(0.1),
             )
 
     def test_warning_is_filterable(self):
@@ -181,6 +191,7 @@ class TestFirrcSlopeDegeneracyGuard:
             params = parse_groups(
                 sfh={"type": "dpl", "*": FIXED},
                 radio={"sf": {"type": "mccheyne2022", "mcch_mass_slope": Uniform(-0.5, 0.0)}},
+                redshift=Fixed(0.1),
             )
         # The param is still freed — the guard only warns, never blocks.
         assert "radio_mcch_mass_slope" in params.free_params
@@ -200,7 +211,9 @@ class TestFirrcBuilderGrammar:
 
         sf = builders.radio.sf.delvecchio2021(delv_q0=Uniform(2.4, 3.1))
         assert sf["type"] == "delvecchio2021"
-        params = parse_groups(sfh={"type": "dpl", "*": FIXED}, radio={"sf": sf})
+        params = parse_groups(
+            sfh={"type": "dpl", "*": FIXED}, radio={"sf": sf}, redshift=Fixed(0.1)
+        )
         assert "radio_delv_q0" in params.free_params
 
     def test_agn_factory_round_trips_to_free_param(self):
@@ -208,7 +221,9 @@ class TestFirrcBuilderGrammar:
 
         agn = builders.radio.agn.dpl(alpha_thin=Uniform(-1.5, 0.0))
         assert agn["type"] == "dpl"
-        params = parse_groups(sfh={"type": "dpl", "*": FIXED}, radio={"agn": agn})
+        params = parse_groups(
+            sfh={"type": "dpl", "*": FIXED}, radio={"agn": agn}, redshift=Fixed(0.1)
+        )
         assert "radio_alpha_thin" in params.free_params
 
     def test_build_via_factory_threads_and_predicts(self, synthetic_ssp_wide):

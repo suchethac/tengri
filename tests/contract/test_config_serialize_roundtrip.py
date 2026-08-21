@@ -14,6 +14,7 @@ import pytest
 from tengri import (
     FIXED,
     FREE,
+    Fixed,
     Uniform,
     load_filter_set,
     load_ssp_data,
@@ -61,6 +62,7 @@ class TestRoundTripInvariant:
                 "all_params": FIXED,
             },
             filters=filters,
+            redshift=Fixed(0.1),
         )
 
         # Round-trip: config -> yaml -> from_yaml -> config
@@ -89,6 +91,7 @@ class TestRoundTripInvariant:
                 "all_params": FIXED,
             },
             filters=filters,
+            redshift=Fixed(0.1),
         )
 
         # Round-trip
@@ -113,6 +116,7 @@ class TestRoundTripInvariant:
             dust_attenuation={"type": "single_component", "law": "calzetti", "all_params": FIXED},
             dust_emission={"type": "dale2014", "all_params": FIXED},
             filters=filters,
+            redshift=Fixed(0.1),
         )
 
         # Round-trip
@@ -133,6 +137,7 @@ class TestRoundTripInvariant:
             ssp_data=ssp_data,
             sfh={"type": "dpl", "all_params": FREE, "alpha": Uniform(0.5, 2.0)},
             filters=filters,
+            redshift=Fixed(0.1),
         )
 
         # Serialize and deserialize
@@ -161,6 +166,7 @@ class TestRoundTripInvariant:
                 "all_params": FIXED,
             },
             filters=filters,
+            redshift=Fixed(0.1),
         )
 
         # Round-trip via YAML
@@ -236,6 +242,7 @@ class TestFileIOFormats:
             ssp_data=ssp_data,
             sfh={"type": "dpl", "all_params": FIXED},
             filters=filters,
+            redshift=Fixed(0.1),
         )
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -252,6 +259,7 @@ class TestFileIOFormats:
             ssp_data=ssp_data,
             sfh={"type": "dpl", "all_params": FIXED},
             filters=filters,
+            redshift=Fixed(0.1),
         )
 
         with tempfile.TemporaryDirectory() as tmpdir:

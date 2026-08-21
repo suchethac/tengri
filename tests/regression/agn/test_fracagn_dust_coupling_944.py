@@ -52,6 +52,7 @@ class TestFracAGNDustCoupling944:
                     "torus": {"type": "skirtor"},
                     "fracAGN": Fixed(0.3),
                 },
+                redshift=Fixed(0.1),
             )
 
     def test_dust_none_fracagn_free_raises_configerror(
@@ -79,6 +80,7 @@ class TestFracAGNDustCoupling944:
                     "torus": {"type": "skirtor"},
                     "fracAGN": FREE,
                 },
+                redshift=Fixed(0.1),
             )
 
     def test_dust_none_no_fracagn_builds(self, synthetic_ssp_wide, synthetic_tophat_obs):
@@ -98,6 +100,7 @@ class TestFracAGNDustCoupling944:
                 "torus": {"type": "skirtor"},
                 # No fracAGN — torus operates on its own scale
             },
+            redshift=Fixed(0.1),
         )
         assert model is not None
         assert model.spec is not None
@@ -126,6 +129,7 @@ class TestFracAGNDustCoupling944:
                 "feii": {"type": "none"},
                 "atten": {"type": "none"},
             },
+            redshift=Fixed(0.1),
         )
 
         # Should build and predict without error
@@ -155,6 +159,7 @@ class TestFracAGNDustCoupling944:
                 "torus": {"type": "skirtor"},
                 "fracAGN": Fixed(0.3),
             },
+            redshift=Fixed(0.1),
         )
         assert model is not None
         assert model.spec is not None
@@ -191,6 +196,7 @@ class TestFracAGNDustCoupling944:
                 "atten": {"type": "none"},
                 "fracAGN": Fixed(0.3),
             },
+            redshift=Fixed(0.1),
         )
 
         # Model without torus
@@ -214,6 +220,7 @@ class TestFracAGNDustCoupling944:
                 "atten": {"type": "none"},
                 "fracAGN": Fixed(0.3),
             },
+            redshift=Fixed(0.1),
         )
 
         # Sample params
@@ -257,6 +264,7 @@ class TestFracAGNDustCoupling944:
                     "torus": {"type": "skirtor"},
                     "fracAGN": Fixed(0.3),
                 },
+                redshift=Fixed(0.1),
             )
 
             # Just verify it builds and predicts without error

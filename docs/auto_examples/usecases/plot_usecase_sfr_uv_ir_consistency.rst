@@ -354,7 +354,7 @@ References
             "dust_emission": {"type": "dale2014", "all_params": FIXED},
             "neb": {"type": "cue", "all_params": FIXED},
             "redshift": Fixed(0.01),
-            "apply_igm": False,
+            "igm": {"type": "none"},
         }
 
         # Build the SEDModel
@@ -465,7 +465,7 @@ References
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 7.397 seconds)
+   **Total running time of the script:** (0 minutes 10.274 seconds)
 
 
 .. _sphx_glr_download_auto_examples_usecases_plot_usecase_sfr_uv_ir_consistency.py:

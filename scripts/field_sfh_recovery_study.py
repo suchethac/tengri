@@ -145,7 +145,7 @@ def build(ssp, observation):
         dust_attenuation=builders.dust.two_component(defaults=FREE, law="calzetti"),
         neb=builders.neb.ssp(),
         redshift=Fixed(Z_GAL),
-        apply_igm=False,
+        igm={"type": "none"},
         n_grid=N_GRID,
         approx=approx,
     )

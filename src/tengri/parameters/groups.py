@@ -616,7 +616,6 @@ _AGN_PARTITION = {
 #: Top-level kwargs that are not groups (passed through to Parameters).
 _TOP_LEVEL_SETTINGS = {
     "redshift",
-    "apply_igm",
     "n_grid",
     # Emission-line velocity mode. Activating it (``"fixed"``/``"marginalized"``/
     # ``"fitted"``) registers the line-velocity params (``eline_sigma_kms``,
@@ -740,6 +739,20 @@ def parse_groups(**kwargs) -> Parameters:
     # Private introspection escape hatch — popped before group parsing so it is
     # never mistaken for a group name.
     allow_empty_wildcard = bool(kwargs.pop("_allow_empty_wildcard", False))
+
+    # Redshift is required, and the question asked here is whether the caller
+    # PASSED it -- not what its value is. A value-based sentinel cannot answer
+    # that: any object standing in for "absent" is also a legal prior. The one
+    # tried first was ``Uniform(0.0, 10.0)``, which is the most natural photo-z
+    # prior in this package's target science and compares equal to a user's own
+    # ``Uniform(0, 10)`` with an identical repr. That left two silent failures,
+    # one on each side of the identity check: compare with ``is`` and any path
+    # that REBUILDS the default (a copy, a serializer, a to_groups round-trip)
+    # yields a free z in [0, 10] fit where no redshift was given; tighten it to
+    # ``==`` and every genuine photo-z fit over that range is refused as
+    # missing. Presence has neither failure mode. Introspection callers pass
+    # ``_allow_empty_wildcard`` and legitimately have no redshift.
+    redshift_was_given = "redshift" in kwargs
 
     # ── Pass 0a: Normalize the preferred ``all_params`` wildcard alias ──
     # Rewrite ``all_params`` -> ``'*'`` in every group dict (and nested
@@ -1008,6 +1021,23 @@ def parse_groups(**kwargs) -> Parameters:
     for name in list(final_params._distributions.keys()):
         provenance.setdefault(name, "registry_default")
     object.__setattr__(final_params, "_group_provenance", provenance)
+
+    # Raised HERE, after the groups have been translated and validated, not at
+    # the top. A caller with a malformed group AND no redshift should hear about
+    # the group: it is the more specific of the two complaints, and the one they
+    # can act on. Checking first made `parse_groups(radio=True)` answer with
+    # "redshift is required" instead of the bool-gate advice that explains what
+    # `radio=True` should have been.
+    if not redshift_was_given and not allow_empty_wildcard:
+        raise ValueError(
+            "redshift is required. Specify one of:\n"
+            "  - redshift=Fixed(z)             a known redshift\n"
+            "  - redshift=Uniform(lo, hi)      a photo-z fit\n"
+            "  - redshift=<any Distribution>   any other prior\n"
+            "\n"
+            "It used to default to Fixed(0.1), which put every model that "
+            "omitted it at z=0.1 without saying so."
+        )
 
     _warn_silently_fixed_parameters(final_params, param_partition, kwargs)
     _warn_firrc_slope_degeneracy(final_params)
@@ -1916,6 +1946,13 @@ def _translate_structural(groups: dict) -> dict:
                 "removes; tengri.list_metallicity_modes() shows the current form."
             )
 
+        if group_name == "apply_igm":
+            raise ValueError(
+                "apply_igm is retired. IGM activation is now derived from the igm dict: "
+                "pass igm={'type': 'inoue'} (or 'madau', 'meiksin06') to enable IGM, or "
+                "omit the igm dict (or pass igm={'type': 'none'}) to disable it."
+            )
+
         if group_name not in valid_groups:
             suggestions = difflib.get_close_matches(group_name, valid_groups, n=2, cutoff=0.6)
             suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
@@ -2307,11 +2344,98 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
 
     # Reject nested dust_attenuation={'emission': ...} — emission is now a top-level group
     if "emission" in dust_atten_dict:
-        raise ValueError(
+        # Build a helpful translation showing the concrete split
+        atten_part = {k: v for k, v in dust_atten_dict.items() if k != "emission"}
+        emission_part = dust_atten_dict["emission"]
+
+        # Merge legacy law forms (same rule as dust= retirement)
+        dust_type = atten_part.get("type", "two_component")
+        atten_part_translated = {
+            k: v for k, v in atten_part.items() if k not in ("law", "law_bc", "law_diff")
+        }
+
+        law_note = ""
+
+        if dust_type == "two_component":
+            has_law = "law" in atten_part
+            has_law_bc = "law_bc" in atten_part
+            has_law_diff = "law_diff" in atten_part
+
+            if has_law:
+                atten_part_translated["law"] = atten_part["law"]
+            elif has_law_bc and has_law_diff:
+                atten_part_translated["law_bc"] = atten_part["law_bc"]
+                atten_part_translated["law_diff"] = atten_part["law_diff"]
+            elif has_law_bc:
+                atten_part_translated["law"] = atten_part["law_bc"]
+                law_note = (
+                    "\n\nNote: The old form had 'law_bc' alone, which pre-#1989 applied "
+                    "to both screens. We merged it to 'law' to preserve that behavior."
+                )
+            elif has_law_diff:
+                atten_part_translated["law_diff"] = atten_part["law_diff"]
+                atten_part_translated["law_bc"] = "power_law"
+                law_note = (
+                    "\n\nNote: The old form had only 'law_diff'; the 'law_bc' screen "
+                    "defaulted to power_law. Verify whether power_law was intended for "
+                    "the birth cloud."
+                )
+            else:
+                atten_part_translated["law"] = "power_law"
+                law_note = (
+                    "\n\nNote: The dust_attenuation suggestion includes 'law': "
+                    "'power_law' — before PR #1989, a missing law defaulted to power_law. "
+                    "This reproduces the old result exactly, but you should verify that "
+                    "power_law was your intended choice and not just an "
+                    "accidentally-omitted setting."
+                )
+
+        elif dust_type == "single_component":
+            has_law = "law" in atten_part
+            has_law_bc = "law_bc" in atten_part
+
+            if has_law:
+                atten_part_translated["law"] = atten_part["law"]
+            elif has_law_bc:
+                atten_part_translated["law"] = atten_part["law_bc"]
+                law_note = (
+                    "\n\nNote: The old form allowed 'law_bc' on single_component; "
+                    "we merged it to 'law'."
+                )
+            else:
+                atten_part_translated["law"] = "power_law"
+                law_note = (
+                    "\n\nNote: The dust_attenuation suggestion includes 'law': "
+                    "'power_law' — before PR #1989, a missing law defaulted to power_law. "
+                    "This reproduces the old result exactly, but you should verify that "
+                    "power_law was your intended choice and not just an "
+                    "accidentally-omitted setting."
+                )
+
+        atten_str = (
+            "dust_attenuation={"
+            + ", ".join(f"'{k}': {v!r}" for k, v in sorted(atten_part_translated.items()))
+            + "}"
+        )
+        emission_str = (
+            "dust_emission={"
+            + ", ".join(f"'{k}': {v!r}" for k, v in sorted(emission_part.items()))
+            + "}"
+        )
+
+        message = (
             "dust_attenuation={'emission': ...} is retired; "
             "IR emission is now a separate top-level group. "
-            "Rewrite dust_attenuation={...}, dust_emission={...} as separate top-level entries."
+            "Replace\n"
+            f"    dust_attenuation={{..., 'emission': {{...}}}}\n"
+            "with\n"
+            f"    {atten_str},\n"
+            f"    {emission_str}"
         )
+        if law_note:
+            message += law_note
+
+        raise ValueError(message)
 
     # Witt & Gordon (2000) screen (FSPS dust_type=3): capture and validate the
     # three structural selectors. They are static structural choices (not free
@@ -2500,16 +2624,92 @@ def _translate_dust_retired(dust_dict: dict, result: dict) -> None:
     The dust group has been split into dust_attenuation and dust_emission
     as separate top-level groups. This function rejects the old form and
     provides a helpful error message showing the translation.
+
+    Before PR #1989, a missing attenuation law defaulted to 'power_law'.
+    When translating old dust= blocks, we add that default to the
+    dust_attenuation suggestion so it parses and reproduces the old behavior.
     """
     # Passing both the old and the new form is caught in _translate_structural,
     # which sees every group; this function only ever runs for `dust=` and its
     # job is to translate the caller's own dict into the two replacements.
     has_emission = "emission" in dust_dict
 
+    # Extract the attenuation half (everything except 'emission')
     atten_dict = {k: v for k, v in dust_dict.items() if k != "emission"}
+
+    # Build the translated attenuation dict by merging legacy law forms into modern form.
+    # Before PR #1989, dust allowed partial law specs; we must translate them cleanly.
+    dust_type = atten_dict.get("type", "two_component")
+    atten_dict_translated = {
+        k: v for k, v in atten_dict.items() if k not in ("law", "law_bc", "law_diff")
+    }
+
+    law_note = ""  # Explanation if we modified the law spec
+
+    if dust_type == "two_component":
+        has_law = "law" in atten_dict
+        has_law_bc = "law_bc" in atten_dict
+        has_law_diff = "law_diff" in atten_dict
+
+        if has_law:
+            # Already modern form; keep it
+            atten_dict_translated["law"] = atten_dict["law"]
+        elif has_law_bc and has_law_diff:
+            # Already modern form; keep both
+            atten_dict_translated["law_bc"] = atten_dict["law_bc"]
+            atten_dict_translated["law_diff"] = atten_dict["law_diff"]
+        elif has_law_bc:
+            # Lone law_bc: pre-#1989 it applied to both screens; merge to 'law'
+            atten_dict_translated["law"] = atten_dict["law_bc"]
+            law_note = (
+                "\n\nNote: The old form had 'law_bc' alone, which pre-#1989 applied to "
+                "both screens. We merged it to 'law' to preserve that behavior."
+            )
+        elif has_law_diff:
+            # Lone law_diff: the other screen used power_law by default
+            atten_dict_translated["law_diff"] = atten_dict["law_diff"]
+            atten_dict_translated["law_bc"] = "power_law"
+            law_note = (
+                "\n\nNote: The old form had only 'law_diff'; the 'law_bc' screen defaulted "
+                "to power_law. Verify whether power_law was intended for the birth cloud."
+            )
+        else:
+            # No law info: add default
+            atten_dict_translated["law"] = "power_law"
+            law_note = (
+                "\n\nNote: The suggestion includes 'law': 'power_law' — before PR #1989, "
+                "a missing law defaulted to power_law. This reproduces the old result "
+                "exactly, but you should verify that power_law was your intended choice "
+                "and not just an accidentally-omitted setting."
+            )
+
+    elif dust_type == "single_component":
+        has_law = "law" in atten_dict
+        has_law_bc = "law_bc" in atten_dict
+
+        if has_law:
+            # Already modern form
+            atten_dict_translated["law"] = atten_dict["law"]
+        elif has_law_bc:
+            # Pre-#1989 allowed law_bc on single_component; use it as 'law'
+            atten_dict_translated["law"] = atten_dict["law_bc"]
+            law_note = (
+                "\n\nNote: The old form allowed 'law_bc' on single_component; "
+                "we merged it to 'law'."
+            )
+        else:
+            # No law: add default
+            atten_dict_translated["law"] = "power_law"
+            law_note = (
+                "\n\nNote: The suggestion includes 'law': 'power_law' — before PR #1989, "
+                "a missing law defaulted to power_law. This reproduces the old result "
+                "exactly, but you should verify that power_law was your intended choice "
+                "and not just an accidentally-omitted setting."
+            )
+
     atten_str = (
         "dust_attenuation={"
-        + ", ".join(f"'{k}': {v!r}" for k, v in sorted(atten_dict.items()))
+        + ", ".join(f"'{k}': {v!r}" for k, v in sorted(atten_dict_translated.items()))
         + "}"
     )
 
@@ -2544,6 +2744,9 @@ def _translate_dust_retired(dust_dict: dict, result: dict) -> None:
         message += f",\n    {emission_str}"
     else:
         message += "."
+
+    if law_note:
+        message += law_note
 
     raise ValueError(message)
 
@@ -2684,8 +2887,26 @@ def _translate_shock(shock_dict: dict, result: dict) -> None:
 
 
 def _translate_igm(igm_dict: dict, result: dict) -> None:
-    """Translate igm group to apply_igm and related settings."""
-    igm_type = igm_dict.get("type", "madau")
+    """Translate igm group to igm_model and related settings.
+
+    IGM activation is derived from the igm group presence: if igm={'type': ...}
+    is provided, IGM is activated. If igm={'type': 'none'} is provided, IGM is
+    deactivated. The apply_igm secondary switch is retired.
+
+    The typeless default is ``inoue14``, changed here from ``madau``. Those are
+    different transmission curves, not two names for one -- but the two entry
+    points disagreed about which the grammar meant. ``Parameters.__init__``
+    defaults ``igm_model="inoue"`` (an alias of ``inoue14``), so the same model
+    written flat and written as a group got different IGM physics, and
+    ``components/igm/igm.py`` documents the intent as "the dict-grammar API
+    consistently used ``inoue14``" -- which this function contradicted. The
+    comment described the design; the code had drifted from it.
+
+    Measured: no call site in the tree omits ``type``, so this moves nothing
+    today. That is also why it survived -- a latent default is invisible until
+    someone relies on it.
+    """
+    igm_type = igm_dict.get("type", "inoue14")
 
     # Validate type
     valid_igm = _valid_igm_types()
@@ -2694,7 +2915,8 @@ def _translate_igm(igm_dict: dict, result: dict) -> None:
         suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
         raise ValueError(f"Unknown IGM type '{igm_type}'.{suggest_str}")
 
-    # Map type to apply_igm + igm_model
+    # IGM is activated by the presence of the igm dict.
+    # If type='none', it is explicitly deactivated.
     if igm_type == "none":
         result["apply_igm"] = False
     else:
@@ -4549,13 +4771,14 @@ def parameters_to_groups(spec: Parameters) -> dict:
         if len(pending) > n_before:
             result[group_name] = pending
 
-    # Handle top-level parameters (redshift, apply_igm)
+    # Handle top-level settings. No `apply_igm`: the igm group carries
+    # activation on its own (``type: "none"`` when off, omitted when off and
+    # nothing else is set, which now means the same thing), and emitting the
+    # retired keyword beside it made every round-trip raise on the way back in.
+    # A round-trip that emits a key its own parser refuses is the clearest sign
+    # the second switch was redundant.
     if "redshift" in spec.all_params:
         result["redshift"] = spec.get_distribution("redshift")
-
-    if spec.apply_igm is not True:
-        # Only include if non-default (default is True)
-        result["apply_igm"] = spec.apply_igm
 
     if spec.n_grid != 256:
         # Only include if non-default

@@ -120,7 +120,7 @@ for i, tau_v in enumerate(tau_v_values):
         "dust_emission": {"type": "dale2014", "all_params": FIXED},
         "neb": {"type": "cue", "all_params": FIXED},
         "redshift": Fixed(0.01),
-        "apply_igm": False,
+        "igm": {"type": "none"},
     }
 
     # Build the SEDModel
