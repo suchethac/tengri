@@ -22,8 +22,9 @@
 #
 # Deliberately minimal — the point is to show how *fast* the JIT-compiled
 # forward model and gradients are. Truncated-skew-normal SFH, two-component
-# Calzetti dust attenuation, nebular off, redshift fixed at 0.05. Seven free
-# parameters. See `04_building_models.py` for the recipe grammar and
+# Calzetti dust attenuation (birth-cloud pinned to zero, diffuse free),
+# baked-in nebular emission, free stellar metallicity, redshift fixed at 0.05.
+# Seven free parameters. See `04_building_models.py` for the recipe grammar and
 # `02_sed_anatomy.py` for a panchromatic model with dust IR re-emission,
 # nebular, AGN, and IGM enabled.
 
@@ -33,6 +34,12 @@
 from _setup import FIG_DIR, effective_wavelengths_um, quiet
 
 quiet()
+
+# Re-enable BakedInNebularWarning for this notebook: the baked-in SSP is the
+# notebook's headline modeling assumption and the warning signals the frozen
+# logU/logZ_gas assumptions to users.
+import warnings
+warnings.filterwarnings("default", message=".*BakedInBackend.*")
 
 from pathlib import Path
 
@@ -67,12 +74,15 @@ C_POST, C_TRUTH, C_DATA = "#3a76d9", "0.15", "#c3372a"
 # %% [markdown]
 # ## Stellar library and observation
 #
-# A bare-stellar SSP grid (Cue-compatible if you later want to add nebular
-# emission). `load_ssp` with `download=True` fetches the grid on first use if not
-# cached locally; without it, raises `FileNotFoundError` if the grid is missing.
+# An FSPS-generated SSP grid with nebular emission baked in at log(U) = −3.0
+# and solar gas-phase metallicity (Z_gas/Zsun = 1.0). Stellar metallicity is
+# free to vary; gas-phase metallicity is fixed by the grid. Per the project
+# contract, these are independent knobs, so the nebular contribution does not
+# respond to fitted stellar Z. `BakedInNebularWarning` on fit start marks this
+# assumption.
 
 # %%
-SSP_NAME = "fsps_prsc_miles_chabrier"
+SSP_NAME = "prsc_miles_chabrier_wNE"
 ssp = tengri.load_ssp(SSP_NAME, download=True)
 
 FILTERS = [
@@ -94,10 +104,17 @@ obs = Observation(photometry=Photometry.from_names(FILTERS))
 # %% [markdown]
 # ## Build the model
 #
-# Truncated-skew-normal SFH with two-component Calzetti dust attenuation,
-# nebular off, redshift fixed at z = 0.05: seven free parameters. Kept minimal
-# on purpose. Dust IR re-emission, nebular emission, and AGN are covered in
+# Truncated-skew-normal SFH with two-component Calzetti dust attenuation
+# (birth-cloud optical depth τ_BC pinned to zero, diffuse ISM τ_diff free),
+# baked-in nebular emission, and free stellar metallicity;
+# redshift fixed at z = 0.05: seven free parameters. Kept minimal on purpose.
+# Dust IR re-emission, full photoionized nebular grids, and AGN are covered in
 # `02_sed_anatomy.py`.
+#
+# Birth-cloud dust is pinned: the diffuse screen reddens the entire stellar
+# population and drives broadband colors, whereas the birth-cloud screen only
+# reddens young stars and is degenerate with the SFH. A 12-filter dataset
+# cannot separate them without SFH fixed.
 
 # %%
 sed_model = SEDModel.build(
@@ -109,9 +126,11 @@ sed_model = SEDModel.build(
         "type": "two_component",
         "all_params": FIXED,
         "law": "calzetti",
-        "tau_bc": Uniform(0.0, 1.0),
+        "tau_bc": Fixed(0.0),
+        "tau_diff": Uniform(0.0, 3.0),
     },
-    neb={"type": "none"},
+    neb={"type": "ssp"},
+    met={"logzsol": Uniform(-2.0, 0.2)},
     redshift=Fixed(0.05),
 )
 
@@ -128,13 +147,21 @@ citations.print_citations(sed_model)
 #
 # One draw from the prior is the truth. `generate_mock` returns the
 # noiseless model fluxes, Gaussian uncertainties at the requested S/N,
-# and a noisy realization.
+# and a noisy realization. The drawn truth is star-forming (sSFR > 10⁻¹¹ /yr),
+# which we verify to catch any silent changes to the SFH prior.
 
 # %%
 key = jax.random.PRNGKey(9)
 key_truth, key_mock, key_fit = jax.random.split(key, 3)
 
 truth = sed_model.spec.sample(key_truth)
+
+# Verify truth is star-forming
+truth_full_temp = {**sed_model.spec.get_fixed_values(), **truth}
+pred_truth = sed_model.predict(truth_full_temp)
+ssfr_truth = float(pred_truth.ssfr)
+assert ssfr_truth > 1e-11, f"Truth is not star-forming: sSFR = {ssfr_truth:.3e} /yr (need > 1e-11 /yr)"
+
 mock = generate_mock(sed_model, truth, key=key_mock, snr=30.0)
 flux_obs = np.asarray(mock["flux_obs"])
 noise = np.asarray(mock["noise"])
