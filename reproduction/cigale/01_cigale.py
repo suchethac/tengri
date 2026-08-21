@@ -1683,10 +1683,14 @@ def _tengri_xray(log_lbol, cos_inc):
             "log_total_mass": Fixed(0.0),
             "all_params": FIXED,
         },
-        dust_attenuation={"law": "power_law", 
+        dust_attenuation={
             "type": "two_component",
+            "law_bc": "leitherer02",
+            "law_diff": "leitherer02",
             "tau_bc": Fixed(TAU_BC_FIDUCIAL),
             "tau_diff": Fixed(TAU_DIFF_FIDUCIAL),
+            # Lyman-limit clip (CIGALE parity) — match §5/§6
+            "lyman_cutoff": True,
             "all_params": FIXED,
         },
         agn={
