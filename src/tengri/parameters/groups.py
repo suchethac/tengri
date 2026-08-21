@@ -670,7 +670,8 @@ def _normalize_wildcard_keys(group: object) -> object:
     Raises
     ------
     ValueError
-        If a dict sets both ``all_params`` and ``'*'`` (ambiguous intent).
+        If a dict sets both ``all_params`` and ``'*'`` (ambiguous intent), or
+        if the user supplies ``'*'`` directly (use ``all_params`` instead).
 
     Notes
     -----
@@ -682,6 +683,11 @@ def _normalize_wildcard_keys(group: object) -> object:
         raise ValueError(
             f"A group dict may set the wildcard once: use {WILDCARD_ALIAS!r} "
             f"(preferred) or {WILDCARD_KEY!r}, not both."
+        )
+    if WILDCARD_KEY in group and WILDCARD_ALIAS not in group:
+        raise ValueError(
+            f"The wildcard syntax has been retired. Use {WILDCARD_ALIAS!r} instead of {WILDCARD_KEY!r}. "
+            f"Example: {{'all_params': FREE}} instead of {{'*': FREE}}."
         )
     normalized: dict[object, object] = {}
     for key, value in group.items():

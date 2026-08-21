@@ -32,7 +32,7 @@ def _free(model):
 
 
 def test_field_subblock_enables_modulator(synthetic_ssp_wide, synthetic_tophat_obs):
-    model = _build(synthetic_ssp_wide, synthetic_tophat_obs, {"type": "dpl", "field": {"*": FREE}})
+    model = _build(synthetic_ssp_wide, synthetic_tophat_obs, {"type": "dpl", "field": {"all_params": FREE}})
     assert _free(model) >= _FIELD, "field PSD params should be free"
 
 
@@ -47,7 +47,7 @@ def test_field_wildcard_scoped_to_field_params(synthetic_ssp_wide, synthetic_top
     model = _build(
         synthetic_ssp_wide,
         synthetic_tophat_obs,
-        {"type": "dpl", "*": FIXED, "field": {"*": FREE}},
+        {"type": "dpl", "all_params": FIXED, "field": {"all_params": FREE}},
     )
     free = _free(model)
     assert free >= _FIELD
@@ -65,12 +65,12 @@ def test_field_explicit_prior(synthetic_ssp_wide, synthetic_tophat_obs):
 
 
 def test_list_form_still_works(synthetic_ssp_wide, synthetic_tophat_obs):
-    model = _build(synthetic_ssp_wide, synthetic_tophat_obs, {"type": ["dpl", "field"], "*": FREE})
+    model = _build(synthetic_ssp_wide, synthetic_tophat_obs, {"type": ["dpl", "field"], "all_params": FREE})
     assert _free(model) >= _FIELD
 
 
 def test_plain_dpl_unaffected(synthetic_ssp_wide, synthetic_tophat_obs):
-    model = _build(synthetic_ssp_wide, synthetic_tophat_obs, {"type": "dpl", "*": FREE})
+    model = _build(synthetic_ssp_wide, synthetic_tophat_obs, {"type": "dpl", "all_params": FREE})
     assert not (_FIELD & _free(model)), "plain dpl must not gain field params"
 
 
@@ -78,7 +78,7 @@ def test_field_model_predicts_finite(synthetic_ssp_wide, synthetic_tophat_obs):
     model = _build(
         synthetic_ssp_wide,
         synthetic_tophat_obs,
-        {"type": "dpl", "*": FIXED, "field": {"*": FIXED}},
+        {"type": "dpl", "all_params": FIXED, "field": {"all_params": FIXED}},
     )
     phot = np.asarray(model.predict_photometry(model.spec.sample(jax.random.PRNGKey(0))))
     assert np.all(np.isfinite(phot))
