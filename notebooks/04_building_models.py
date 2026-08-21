@@ -482,6 +482,7 @@ for sfh_name, truth_sfh in sfh_families:
         "dust_attenuation": {
             "type": "two_component",
             "law": "calzetti",
+            "all_params": FIXED,  # deliberately all-fixed for this figure (#1995)
             "tau_bc": Fixed(0.5),
             "tau_diff": Fixed(0.3),
             "slope": Fixed(-0.7),
@@ -650,6 +651,7 @@ groups_nodust = {
     "dust_attenuation": {
         "type": "two_component",
         "law": "calzetti",
+        "all_params": FIXED,  # dust-free comparison: everything pinned, taus at zero (#1995)
         "tau_bc": Fixed(0.0),
         "tau_diff": Fixed(0.0),
         "slope": Fixed(-0.7),
@@ -718,6 +720,7 @@ for idx, dust_law in enumerate(dust_laws):
         "dust_attenuation": {
             "type": "two_component",
             "law": dust_law,
+            "all_params": FIXED,  # deliberately all-fixed for this figure (#1995)
             "tau_bc": Fixed(0.5),
             "tau_diff": Fixed(0.3),
             "slope": Fixed(-0.7),
@@ -864,11 +867,12 @@ for idx, emission in enumerate(dust_emissions):
         "dust_attenuation": {
             "type": "two_component",
             "law": "calzetti",
+            "all_params": FIXED,  # deliberately all-fixed for this figure (#1995)
             "tau_bc": Fixed(0.5),
             "tau_diff": Fixed(0.3),
             "slope": Fixed(-0.7),
         },
-        "dust_emission": {"type": emission},
+        "dust_emission": {"type": emission, "all_params": FIXED},
         "neb": {"type": "cue", "all_params": FIXED},
         "redshift": Fixed(z),
         "apply_igm": False,
@@ -920,11 +924,12 @@ for emission in dust_emissions:
         "dust_attenuation": {
             "type": "two_component",
             "law": "calzetti",
+            "all_params": FIXED,  # deliberately all-fixed for this figure (#1995)
             "tau_bc": Fixed(0.5),
             "tau_diff": Fixed(0.3),
             "slope": Fixed(-0.7),
         },
-        "dust_emission": {"type": emission},
+        "dust_emission": {"type": emission, "all_params": FIXED},
         "neb": {"type": "cue", "all_params": FIXED},
         "redshift": Fixed(z),
         "apply_igm": False,

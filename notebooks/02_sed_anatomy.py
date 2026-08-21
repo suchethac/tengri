@@ -363,6 +363,7 @@ log_lbol_grid = [9.5, 10.0, 10.5, 11.0, 11.5]
 cmap = plt.colormaps["plasma"]
 cfg = deepcopy(base)
 cfg["agn"] = {
+    "all_params": FIXED,  # unprovided sub-blocks (nlr/blr/feii/atten) stay fixed by intent
     "disc": {"type": "multicolor", "all_params": FIXED, "log_lbol": Uniform(9.0, 12.0)},
     "torus": {"type": "nenkova", "all_params": FIXED},
 }

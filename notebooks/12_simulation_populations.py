@@ -452,9 +452,9 @@ def build_cloudy():
         observation=Observation(photometry=phot),
         redshift=Fixed(Z_OBS),
         sfh={"type": "table"},
-        met={"type": "table"},
-        dust_attenuation={"type": "two_component", "law": "calzetti", "*": FIXED},
-        neb={"type": "cloudy"},
+        met={"type": "table", "all_params": FIXED},
+        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
+        neb={"type": "cloudy", "all_params": FIXED},
         approx=WavePrecomp(),
     )
     return ForwardModel.build(sed=sed)
