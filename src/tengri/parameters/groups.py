@@ -3006,6 +3006,25 @@ _RADIO_AGN_PARAM_NAMES: frozenset[str] = frozenset().union(*_RADIO_AGN_PARAMS_BY
 #: collide with the host ``dust`` block's parameter prefix.
 _VALID_FOREGROUND_LAWS = frozenset({"cardelli"})
 
+#: Laws the AGN attenuation-stage block actually implements. One entry, and that
+#: is the honest count: ``components/agn/reddening.py`` imports ``prevot_smc``
+#: and applies it unconditionally, so the block is single-curve by construction
+#: -- its own name (``smc_prevot``) and its E(B-V) parameter's description say so.
+#:
+#: This was validated against ``DUST_LAWS`` (22 entries) with every accepted
+#: name mapped to the same block, so ``agn={'atten': {'law': 'calzetti'}}`` was
+#: validated, accepted, and silently given the Prevot SMC curve. Measured: five
+#: distinct law names produced bit-identical SEDs at E(B-V)=0.4, while the same
+#: comparison saw E(B-V) itself change the SED. Validating against a menu the
+#: physics does not honor is worse than not offering the choice -- the careful
+#: "did you mean" error taught users the choice was real (#2012).
+#:
+#: ``smc`` is deliberately NOT here: it is a different curve from ``prevot_smc``
+#: (20% apart over 1000-20000 A), so accepting it would be the same silent
+#: substitution at smaller magnitude. Wiring more laws into the block widens
+#: this set; until then it describes what the block does.
+_VALID_AGN_ATTEN_LAWS = frozenset({"prevot_smc"})
+
 
 def _translate_foreground(fg_dict: dict, result: dict) -> None:
     """Translate the ``foreground`` group (MW screen) — see #297.
@@ -3887,24 +3906,40 @@ def _translate_agn(agn_dict: dict, result: dict) -> None:
                     "agn['atten'] type='smc_prevot' is no longer supported. "
                     "Use the new form with law key instead:\n"
                     "  agn={'atten': {'law': 'prevot_smc', 'ebv': Uniform(...)}}\n"
-                    "Valid DUST_LAWS names: smc, prevot_smc, calzetti, power_law, cardelli, etc."
+                    "'prevot_smc' is the only law this block implements -- it applies "
+                    "that curve unconditionally, so the rename is a spelling change, "
+                    "not a new choice."
                 )
 
             if law_key is not None:
-                # Validate law name against DUST_LAWS
-                from tengri.components.dust.laws._registry import DUST_LAWS
+                # Validate against the laws the block IMPLEMENTS, not against
+                # every name in DUST_LAWS. The old check accepted all 22 and
+                # mapped them to the same single-curve block, so a user who
+                # selected Calzetti silently got Prevot SMC (#2012). Same policy
+                # as `foreground`, which has the same single-curve limitation
+                # and has always refused the laws it does not wire.
+                if law_key not in _VALID_AGN_ATTEN_LAWS:
+                    from tengri.components.dust.laws._registry import DUST_LAWS
 
-                if law_key not in DUST_LAWS:
-                    available = sorted(DUST_LAWS.keys())
-                    suggestions = difflib.get_close_matches(law_key, available, n=2, cutoff=0.6)
+                    valid = sorted(_VALID_AGN_ATTEN_LAWS)
+                    detail = (
+                        f"'{law_key}' is a real attenuation law, but the AGN "
+                        f"attenuation stage does not implement it"
+                        if law_key in DUST_LAWS
+                        else f"Unknown dust law '{law_key}'"
+                    )
+                    suggestions = difflib.get_close_matches(law_key, valid, n=2, cutoff=0.6)
                     suggest_str = (
                         f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
                     )
                     raise ValueError(
-                        f"Unknown dust law '{law_key}'.{suggest_str}\n"
-                        f"Valid DUST_LAWS: {', '.join(available)}"
+                        f"{detail}.{suggest_str}\n"
+                        f"Valid agn['atten'] laws: {valid}.\n"
+                        f"The block applies the Prevot SMC curve unconditionally, so "
+                        f"accepting another name would silently substitute this one. "
+                        f"For a different AGN attenuation curve see agn['polar'], "
+                        f"which selects among smc / calzetti / gaskell."
                     )
-                # Map law name to smc_prevot block (currently the only law-based wrapper)
                 block_type = "smc_prevot"
             else:
                 block_type = type_key
