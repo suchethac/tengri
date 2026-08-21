@@ -21,6 +21,8 @@ is one source of truth for "what is published".
 Usage::
 
     python scripts/execute_notebooks.py --list
+    python scripts/execute_notebooks.py --list --ci
+    python scripts/execute_notebooks.py --list --ci --json
     python scripts/execute_notebooks.py 00_quickstart stochastic_sfh_recovery
     python scripts/execute_notebooks.py --all --timeout 1800
 
@@ -47,6 +49,7 @@ written here.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import sys
@@ -63,6 +66,29 @@ from sync_spine_notebooks_for_docs import (
 )
 
 ALL_SLUGS = list(SPINE_SLUGS) + list(EXPERIMENTAL_SLUGS)
+
+#: Slugs that cannot be executed on CI runners. Maps slug to the reason.
+#: Every key MUST be in ALL_SLUGS.
+CI_UNEXECUTABLE = {
+    "apple_mps": "Requires Apple Silicon (JAX_PLATFORMS=mps); cannot run on ubuntu-latest",
+    "multimodel_bma_candels": (
+        "Requires locally generated wNE SSP grids for MIST/Padova/BaSTI "
+        "(ssp_mist_c3k_a_chabrier_wNE_logGasU-3.0_logGasZ0.0, "
+        "ssp_pdva_miles_chabrier_wNE_logGasU-2.0_logGasZ0.0, "
+        "ssp_bsti_miles_chabrier_wNE_logGasU-2.0_logGasZ0.0); "
+        "neither tracked in git nor in the download registry"
+    ),
+    "12_simulation_populations": (
+        "Benchmarks a model with a live CLOUDY nebular backend (gas=True); "
+        "requires locally generated cloudy_grid_*.h5 files (scripts/convert_fsps_cloudy_grid.py); "
+        "no cloudy_grid_*.h5 is tracked in git, so a fresh checkout cannot run it. "
+        "If a grid is later committed (13 MB), this entry can be dropped"
+    ),
+}
+
+# Assert that every key in CI_UNEXECUTABLE is in ALL_SLUGS.
+for slug in CI_UNEXECUTABLE:
+    assert slug in ALL_SLUGS, f"CI_UNEXECUTABLE key {slug!r} not in ALL_SLUGS"
 
 
 def docs_render_path(slug: str) -> Path:
@@ -129,9 +155,7 @@ def strip_local_paths(nb) -> int:
         for output in cell.get("outputs") or []:
             if "text" in output:
                 t = output["text"]
-                output["text"] = (
-                    [_clean(x) for x in t] if isinstance(t, list) else _clean(t)
-                )
+                output["text"] = [_clean(x) for x in t] if isinstance(t, list) else _clean(t)
             if "traceback" in output:
                 output["traceback"] = [_clean(x) for x in output["traceback"]]
             data = output.get("data") or {}
@@ -214,21 +238,41 @@ def main() -> int:
     ap.add_argument("slugs", nargs="*", help="notebook stems; default is none")
     ap.add_argument("--all", action="store_true", help="execute every published notebook")
     ap.add_argument("--list", action="store_true", help="print the published notebook list")
+    ap.add_argument("--ci", action="store_true", help="exclude notebooks that cannot run on CI")
+    ap.add_argument(
+        "--json", action="store_true", help="with --list, print as JSON array (for CI)"
+    )
     ap.add_argument("--timeout", type=int, default=3000, help="per-cell timeout [s]")
     args = ap.parse_args()
 
+    # Filter slugs based on --ci flag
+    available_slugs = ALL_SLUGS
+    if args.ci:
+        available_slugs = [s for s in ALL_SLUGS if s not in CI_UNEXECUTABLE]
+
     if args.list:
-        for s in ALL_SLUGS:
-            print(s)
+        if args.json:
+            print(json.dumps(available_slugs))
+        else:
+            for s in available_slugs:
+                print(s)
         return 0
 
-    slugs = ALL_SLUGS if args.all else args.slugs
+    slugs = available_slugs if args.all else args.slugs
     if not slugs:
         ap.error("give one or more slugs, or --all (see --list)")
 
-    unknown = [s for s in slugs if s not in ALL_SLUGS]
+    unknown = [s for s in slugs if s not in available_slugs]
     if unknown:
-        print(f"error: not published notebooks: {', '.join(unknown)}", file=sys.stderr)
+        reason_str = ""
+        for s in unknown:
+            if s in CI_UNEXECUTABLE:
+                reason_str = f" ({CI_UNEXECUTABLE[s]})"
+                break
+        print(
+            f"error: not available notebook(s): {', '.join(unknown)}{reason_str}",
+            file=sys.stderr,
+        )
         return 1
 
     if "MPLBACKEND" in os.environ:
