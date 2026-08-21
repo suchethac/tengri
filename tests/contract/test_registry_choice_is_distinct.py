@@ -527,12 +527,11 @@ def _get_accepted_set(group: str, selector_key: str) -> frozenset[str]:
     module_name, attr_name = parts
     try:
         import importlib
+
         module = importlib.import_module(module_name)
         return getattr(module, attr_name)
     except (ImportError, AttributeError) as exc:
-        raise RuntimeError(
-            f"Failed to load selector set from {source}: {exc}"
-        ) from exc
+        raise RuntimeError(f"Failed to load selector set from {source}: {exc}") from exc
 
 
 def _config_for_selector(group: str, name: str) -> tuple[str, dict]:
@@ -744,9 +743,7 @@ def test_selector_surface_every_accepted_value_gives_distinct_sed(group: str) ->
             actual_group, cfg = _config_for_selector(group, name)
             seds[name] = _sed_for_selector(group, actual_group, cfg)
         except Exception as exc:
-            pytest.fail(
-                f"{group}={name!r} is in the accepted set but failed to build: {exc}"
-            )
+            pytest.fail(f"{group}={name!r} is in the accepted set but failed to build: {exc}")
 
     undeclared: list[str] = []
     for i, a in enumerate(names):
@@ -757,8 +754,7 @@ def test_selector_surface_every_accepted_value_gives_distinct_sed(group: str) ->
     assert not undeclared, (
         "Multiple accepted values for a selector produce bit-identical output. "
         "Either restrict the accepted set to the values that are actually wired, "
-        "or remove the silent mapping that makes them equivalents:\n  "
-        + "\n  ".join(undeclared)
+        "or remove the silent mapping that makes them equivalents:\n  " + "\n  ".join(undeclared)
     )
 
 
