@@ -42,7 +42,7 @@ def ssp():
 
 
 def _build(ssp, approx, *, z=0.8, tau_diff=0.0, tau_bc=0.0, igm=True, **kw):
-    extra = {} if igm else {"igm": {"type": "none"}}
+    extra = {"igm": {"type": "inoue"}} if igm else {"igm": {"type": "none"}}
     return SEDModel.build(
         ssp_data=ssp,
         observation=Observation(photometry=Photometry.from_names(BANDS)),

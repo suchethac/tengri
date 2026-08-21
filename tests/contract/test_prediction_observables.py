@@ -63,6 +63,8 @@ def ssp():
 
 def _model(ssp, filters=_FILTERS, spectroscopy=None, **kw) -> SEDModel:
     photometry = Photometry.from_names(filters) if filters else None
+    if "igm" not in kw:
+        kw["igm"] = {"type": "inoue"}
     return SEDModel.build(
         ssp_data=ssp,
         observation=Observation(photometry=photometry, spectroscopy=spectroscopy),

@@ -38,6 +38,8 @@ MAX_LUT_FLOPS = 1_000_000
 
 
 def _model(*, approx=None, z=3.0, **extra):
+    if "igm" not in extra:
+        extra["igm"] = {"type": "inoue"}
     return SEDModel.build(
         ssp_data=pytest.importorskip("tengri").load_ssp(),
         observation=Observation(photometry=Photometry.from_names(FILTERS)),
