@@ -74,6 +74,46 @@ DUST_LAWS = frozenset({
     "wd01_smcbar",
 })
 
+# Tengri dust attenuation type values
+DUST_ATTENUATION_TYPES = frozenset({"two_component", "single_component", "wg00", "none", "off"})
+
+# Tengri dust emission engine types (from parameters/groups.py _valid_dust_emission_types)
+DUST_EMISSION_TYPES = frozenset({
+    "astrodust",
+    "bosa",
+    "casey2012",
+    "dale2014",
+    "dale2014_cigale",
+    "dh02_ce01",
+    "dl07",
+    "dl07_tabulated",
+    "dl14",
+    "draine2021_pah",
+    "draine_li2007",
+    "draine_li2014",
+    "energy_balance_split",
+    "mbb",
+    "modified_blackbody",
+    "pah_drude",
+    "schreiber2016",
+    "schreiber2018",
+    "themis",
+})
+
+# Keys that mark a tengri dust dict
+TENGRI_DUST_MARKERS = frozenset({
+    "all_params",
+    "*",
+    "law",
+    "law_bc",
+    "law_diff",
+    "tau_bc",
+    "tau_diff",
+    "tau_v",
+    "eta_balance",
+    "lyman_cutoff",
+})
+
 
 def _load_allowlist() -> dict[str, str]:
     """Load allowlist from .dust_grammar_allowlist file."""
@@ -108,6 +148,59 @@ def is_allowlisted(path: Path) -> bool:
         if rel == allowed_path or rel.startswith(allowed_path + "/"):
             return True
     return False
+
+
+def is_tengri_dust_dict(dict_node: ast.Dict) -> bool:
+    """Check if a dict is a tengri dust group dict (not external reference code).
+
+    A dict keyed by dust/dust_attenuation/dust_emission is a TENGRI dust group
+    only if it carries tengri markers:
+    - 'type' with string value in tengri type/engine sets
+    - Any of: all_params, *, law, law_bc, law_diff, tau_bc, tau_diff, tau_v,
+      eta_balance, lyman_cutoff
+    - Nested 'emission' dict with tengri markers
+
+    External reference-code configs (e.g., bagpipes {"type": "CF00", "Av": 0.2},
+    FSPS configs) carry none of these and should be skipped silently.
+    """
+    string_keys = {
+        k.value
+        for k in dict_node.keys
+        if isinstance(k, ast.Constant) and isinstance(k.value, str)
+    }
+
+    # Check for tengri markers
+    has_tengri_marker = bool(TENGRI_DUST_MARKERS & string_keys)
+
+    if not has_tengri_marker:
+        # Check if 'type' value is a known tengri type
+        for i, k in enumerate(dict_node.keys):
+            if (
+                isinstance(k, ast.Constant)
+                and k.value == "type"
+                and i < len(dict_node.values)
+            ):
+                type_node = dict_node.values[i]
+                if isinstance(type_node, ast.Constant) and isinstance(type_node.value, str):
+                    type_val = type_node.value
+                    if type_val in (DUST_ATTENUATION_TYPES | DUST_EMISSION_TYPES):
+                        has_tengri_marker = True
+                        break
+
+    if not has_tengri_marker:
+        # Check for nested 'emission' dict with tengri markers
+        for i, k in enumerate(dict_node.keys):
+            if (
+                isinstance(k, ast.Constant)
+                and k.value == "emission"
+                and i < len(dict_node.values)
+            ):
+                val = dict_node.values[i]
+                if isinstance(val, ast.Dict) and is_tengri_dust_dict(val):
+                    has_tengri_marker = True
+                    break
+
+    return has_tengri_marker
 
 
 def extract_python_code_cells_from_ipynb(path: Path) -> list[tuple[int, str]]:
@@ -179,6 +272,8 @@ def scan_ast_for_dust_groups(tree: ast.AST) -> list[tuple[int, str, dict]]:
     - dust=... keyword arguments (both spellings of dict-key notation)
     - dust_attenuation=... and dust_emission=...
 
+    Only flags TENGRI dust groups (not external reference-code configs).
+
     Returns list of (line_number, violation_type, details) tuples.
     violation_type is one of:
         "dust_retired": dust= found (retired)
@@ -195,12 +290,15 @@ def scan_ast_for_dust_groups(tree: ast.AST) -> list[tuple[int, str, dict]]:
         if isinstance(node, ast.Call):
             for kw in node.keywords:
                 if kw.arg == "dust" and isinstance(kw.value, ast.Dict):
-                    # dust= is retired
-                    violations.append((node.lineno, "dust_retired", {}))
+                    # dust= is retired (only if it's a tengri dict)
+                    if is_tengri_dust_dict(kw.value):
+                        violations.append((node.lineno, "dust_retired", {}))
                 elif (
                     kw.arg in ("dust_attenuation", "dust_emission")
                     and isinstance(kw.value, ast.Dict)
+                    and is_tengri_dust_dict(kw.value)
                 ):
+                    # Only check if it's a tengri dict
                     v = _check_dust_dict(kw.value, kw.arg)
                     if v:
                         violations.append((node.lineno, v[0], v[1]))
@@ -213,17 +311,22 @@ def scan_ast_for_dust_groups(tree: ast.AST) -> list[tuple[int, str, dict]]:
                 if isinstance(k, ast.Constant) and isinstance(k.value, str)
             }
 
-            if "dust" in string_keys:
+            if "dust" in string_keys and is_tengri_dust_dict(node):
+                # Only flag if it's a tengri dict
                 violations.append((node.lineno, "dust_retired", {}))
 
             if "dust_attenuation" in string_keys:
                 idx = string_keys["dust_attenuation"]
-                if idx < len(node.values):
+                if (
+                    idx < len(node.values)
+                    and isinstance(node.values[idx], ast.Dict)
+                    and is_tengri_dust_dict(node.values[idx])
+                ):
                     val = node.values[idx]
-                    if isinstance(val, ast.Dict):
-                        v = _check_dust_dict(val, "dust_attenuation")
-                        if v:
-                            violations.append((node.lineno, v[0], v[1]))
+                    # Only check if it's a tengri dict
+                    v = _check_dust_dict(val, "dust_attenuation")
+                    if v:
+                        violations.append((node.lineno, v[0], v[1]))
 
     return violations
 
