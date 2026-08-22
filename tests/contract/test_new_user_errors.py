@@ -35,13 +35,22 @@ _WEIGHTS = os.path.join("data", "cue_weights.npz")
 
 @pytest.fixture(scope="module")
 def dustless_model(synthetic_ssp_wide, synthetic_tophat_obs):
-    """Minimal build — the auto-filled dust group leaves tau_bc/diff FREE."""
+    """Minimal build with explicit dust to test missing-params error handling.
+
+    The dust group must be explicitly enabled with free params since PR-B changed
+    the default: omitted dust_attenuation now means dust_model='off' (parity with
+    other optional groups). This fixture needs dust params to be free to test the
+    MissingParameterError contract.
+    """
+    from tengri import FREE
+
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         return SEDModel.build(
             ssp_data=synthetic_ssp_wide,
             observation=synthetic_tophat_obs,
             sfh={"type": "delayed", "all_params": FIXED},
+            dust_attenuation={"type": "two_component", "law": "power_law", "all_params": FREE},
             redshift=Fixed(0.1),
         )
 
