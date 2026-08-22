@@ -584,15 +584,12 @@ print("Metallicity Modes Tour")
 print("─" * 70)
 
 # Available metallicity modes (live list)
-try:
-    from tengri import list_metallicity_modes
+from tengri import list_metallicity_modes
 
-    met_modes = list_metallicity_modes()
-    print(f"Available metallicity modes ({len(met_modes)} total):")
-    print(f"  {', '.join(met_modes[:5])}, ...")
-except Exception as e:
-    met_modes = ["table", "ramp"]  # fallback list
-    print(f"Metallicity modes (partial list): {', '.join(met_modes)}")
+met_modes = list_metallicity_modes()
+mode_names = [m["name"] for m in met_modes]
+print(f"Available metallicity modes ({len(mode_names)} total):")
+print(f"  {', '.join(mode_names[:5])}, ...")
 
 print()
 
@@ -616,15 +613,11 @@ print()
 # For notebook construction, table mode requires external data, so we show
 # the other modes available via list_metallicity_modes() instead.
 print("Other metallicity modes available:")
-try:
-    from tengri import list_metallicity_modes
-
-    modes = list_metallicity_modes()
-    other_modes = [m for m in modes if m not in ["table", "solar"]]
-    if other_modes:
-        print(f"  {', '.join(other_modes[:3])}, ...")
-except Exception as e:
-    print(f"  (could not list modes: {str(e)[:30]}...)")
+modes = list_metallicity_modes()
+all_mode_names = [m["name"] for m in modes]
+other_modes = [m for m in all_mode_names if m not in ["table", "solar"]]
+if other_modes:
+    print(f"  {', '.join(other_modes[:3])}, ...")
 
 print()
 print("[TIP] Use tengri.list_metallicity_modes() for the complete menu.")
