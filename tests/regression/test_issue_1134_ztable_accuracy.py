@@ -16,14 +16,7 @@ pytestmark = pytest.mark.regression_bug
 
 BANDS = ["galex_fuv", "galex_nuv", "sdss_u", "des_i"]
 Z_GRID = np.linspace(0.05, 1.5, 25)
-# Tolerance: after PR-B (dust_attenuation defaults to 'off' when omitted),
-# this test explicitly specifies dust_attenuation to preserve the ztable
-# test subject (photometry accuracy). With dust=none, the measured worst-case
-# ztable error is 2.3%, reflecting the dust-free SED's different accuracy
-# profile vs. the original implicit dusty model (1.0%). The tolerance is
-# kept at 2.5% to maintain the test's original intent while accommodating
-# the dust configuration change.
-RTOL = 0.025
+RTOL = 0.01
 
 
 @pytest.fixture(scope="session")
@@ -41,8 +34,8 @@ def test_ztable_matches_exact_below_1pct(ssp_data_for_accuracy):
     common = dict(
         ssp_data=ssp_data_for_accuracy,
         observation=obs,
-        sfh={"type": "dpl", "all_params": FIXED},
-        dust_attenuation={"type": "none", "all_params": FIXED},
+        sfh={"type": "dpl"},
+        dust_attenuation={"type": "two_component", "law": "power_law", "all_params": FIXED},
         redshift=Uniform(0.01, 2.0),
         igm={"type": "inoue"},
     )
@@ -78,7 +71,7 @@ def measure_ztable_error_and_cost(n_z_value, ssp_data_for_accuracy):
         ssp_data=ssp_data_for_accuracy,
         observation=obs,
         sfh={"type": "dpl", "all_params": FIXED},
-        dust_attenuation={"type": "none", "all_params": FIXED},
+        dust_attenuation={"type": "two_component", "law": "power_law", "all_params": FIXED},
         redshift=Uniform(0.01, 2.0),
         igm={"type": "inoue"},
     )
