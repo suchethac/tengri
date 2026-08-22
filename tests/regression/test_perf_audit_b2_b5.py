@@ -72,17 +72,17 @@ def test_forward_predict_under_jit_with_dust_ir(emission_label):
     ssp = load_ssp_data(_ssp_path_or_skip())
     obs = Observation(photometry=Photometry.from_names(["sdss_r", "wise_w4"]))
     if emission_label == "dale2014":
-        emission = builders.dust.emission.dale2014(defaults=FIXED)
+        emission = builders.dust.emission.dale2014(all_params=FIXED)
     else:
-        emission = builders.dust.emission.modified_blackbody(defaults=FIXED)
+        emission = builders.dust.emission.modified_blackbody(all_params=FIXED)
 
     model = SEDModel.build(
         ssp_data=ssp,
         observation=obs,
         approx=WavePrecomp(),
-        sfh=builders.sfh.tsnorm(defaults=FREE),
+        sfh=builders.sfh.tsnorm(all_params=FREE),
         dust_attenuation=builders.dust.two_component(
-            defaults=FIXED,
+            all_params=FIXED,
             law="calzetti",
             tau_bc=Uniform(0, 1),
         ),

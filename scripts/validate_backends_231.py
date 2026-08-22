@@ -111,9 +111,9 @@ def build_model(variant: str):
     obs = Observation(photometry=Photometry(filters=tuple(filters)))
 
     if variant == "dpl":
-        sfh = builders.sfh.dpl(defaults=FREE)
+        sfh = builders.sfh.dpl(all_params=FREE)
     elif variant == "dense_basis":
-        sfh = builders.sfh.dense_basis(defaults=FREE)
+        sfh = builders.sfh.dense_basis(all_params=FREE)
     else:
         raise ValueError(variant)
 

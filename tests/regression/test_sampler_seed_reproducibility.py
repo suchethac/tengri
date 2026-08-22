@@ -80,9 +80,9 @@ def _build(ssp_data):
         ssp_data=ssp_data,
         observation=Observation(photometry=Photometry.from_names(FILTERS)),
         approx=WavePrecomp(),
-        sfh=builders.sfh.tsnorm(defaults=FREE),
+        sfh=builders.sfh.tsnorm(all_params=FREE),
         dust_attenuation=builders.dust.two_component(
-            defaults=FIXED, law="calzetti", tau_bc=Uniform(0.0, 1.0)
+            all_params=FIXED, law="calzetti", tau_bc=Uniform(0.0, 1.0)
         ),
         neb=builders.neb.none(),
         redshift=Fixed(0.05),

@@ -1,10 +1,9 @@
 # SPDX-License-Identifier: BSD-3-Clause
-"""Wildcard kwarg naming: ``all_params=`` canonical, ``defaults=`` / ``_=`` deprecated.
+"""Wildcard kwarg naming: ``all_params=`` is the only accepted spelling.
 
 The canonical wildcard kwarg is ``all_params=`` (matches the dict grammar key).
-The deprecated ``defaults=`` and legacy ``_=`` aliases continue to work for one
-deprecation cycle, emit a :class:`DeprecationWarning`, and raise if multiple
-are passed in the same call.
+The retired aliases ``defaults=`` and ``_=`` raise ``TypeError`` naming
+``all_params=`` as the required replacement. No deprecation period.
 
 Covered for: every factory family — generic (igm/radio/xray/neb/dust.emission/
 agn sub-blocks via _factory.make_factory), sfh (its own factory wrapper),
@@ -25,7 +24,7 @@ from tengri.parameters.sentinels import FIXED, FREE
 
 # One factory per wrapper implementation, exercising all three code paths.
 # dust.two_component requires an explicit attenuation law (no default) — a
-# concern orthogonal to the defaults=/_= wildcard mechanics under test here,
+# concern orthogonal to the all_params= wildcard mechanics under test here,
 # so it is pinned via a partial rather than exercised bare like the others.
 _FACTORIES = {
     "generic (igm.inoue14)": builders.igm.inoue14,
@@ -57,52 +56,24 @@ def test_all_params_fixed_is_default(label, factory):
     assert result["all_params"] is FIXED, label
 
 
-# ── Deprecated defaults= alias: still works, emits DeprecationWarning ───
+# ── Retired defaults= alias: raises TypeError ───────────────────────
 
 
 @pytest.mark.parametrize(("label", "factory"), _FACTORIES.items())
-def test_deprecated_defaults_alias_still_works(label, factory):
-    """``defaults=FREE`` is accepted, produces the same dict, and warns."""
-    with pytest.warns(DeprecationWarning, match=r"defaults=.*deprecated.*all_params"):
-        deprecated = factory(defaults=FREE)
-    canonical = factory(all_params=FREE)
-    assert deprecated == canonical, label
+def test_defaults_alias_retired_raises(label, factory):
+    """``defaults=`` alias is retired; raises TypeError naming all_params=."""
+    with pytest.raises(TypeError, match=r"defaults=.*retired.*all_params="):
+        factory(defaults=FREE)
 
 
-# ── Legacy _= alias: still works, emits DeprecationWarning ──────────
-
-
-@pytest.mark.parametrize(("label", "factory"), _FACTORIES.items())
-def test_legacy_underscore_alias_still_works(label, factory):
-    """``_=FREE`` is accepted, produces the same dict, and warns."""
-    with pytest.warns(DeprecationWarning, match=r"_=.*deprecated.*all_params"):
-        legacy = factory(_=FREE)
-    canonical = factory(all_params=FREE)
-    assert legacy == canonical, label
-
-
-# ── Conflicting spellings raise TypeError ────────────────────────────
+# ── Retired _= alias: raises TypeError ──────────────────────────────
 
 
 @pytest.mark.parametrize(("label", "factory"), _FACTORIES.items())
-def test_all_params_and_defaults_raises(label, factory):
-    """Passing both ``all_params=`` and ``defaults=`` is an error."""
-    with pytest.raises(TypeError, match=r"all_params=.*deprecated.*not both"):
-        factory(all_params=FREE, defaults=FIXED)
-
-
-@pytest.mark.parametrize(("label", "factory"), _FACTORIES.items())
-def test_all_params_and_underscore_raises(label, factory):
-    """Passing both ``all_params=`` and ``_=`` is an error."""
-    with pytest.raises(TypeError, match=r"all_params=.*legacy.*not both"):
-        factory(all_params=FREE, _=FIXED)
-
-
-@pytest.mark.parametrize(("label", "factory"), _FACTORIES.items())
-def test_defaults_and_underscore_raises(label, factory):
-    """Passing both ``defaults=`` and ``_=`` is an error."""
-    with pytest.raises(TypeError, match=r"defaults=.*_=.*not both"):
-        factory(defaults=FREE, _=FIXED)
+def test_underscore_alias_retired_raises(label, factory):
+    """``_=`` alias is retired; raises TypeError naming all_params=."""
+    with pytest.raises(TypeError, match=r"_=.*retired.*all_params="):
+        factory(_=FREE)
 
 
 # ── Signature surface: canonical name exposed ────────────────────────
@@ -116,8 +87,8 @@ def test_signature_advertises_all_params(label, factory):
     sig = inspect.signature(factory)
     assert "all_params" in sig.parameters, f"{label}: missing all_params kwarg"
     assert "defaults" not in sig.parameters, (
-        f"{label}: deprecated defaults should NOT appear in the public signature"
+        f"{label}: retired defaults should NOT appear in the public signature"
     )
     assert "_" not in sig.parameters, (
-        f"{label}: legacy underscore should NOT appear in the public signature"
+        f"{label}: retired underscore should NOT appear in the public signature"
     )

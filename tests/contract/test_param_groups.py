@@ -447,6 +447,18 @@ class TestValidation:
                 redshift=Fixed(0.1),
             )
 
+    def test_unknown_key_error_does_not_show_wildcard_key(self):
+        """Unknown key error message should name 'all_params', not internal '*'.
+
+        Regression test for display of internal WILDCARD_KEY ('*') to users.
+        The error message must list user-facing structural keys only.
+        """
+        with pytest.raises(ValueError) as excinfo:
+            parse_groups(sfh={"type": "dpl", "typo_key": 0.5}, redshift=Fixed(0.1))
+        error_msg = str(excinfo.value)
+        assert "'all_params'" in error_msg, "Error should name the wildcard key 'all_params'"
+        assert "'*'" not in error_msg, "Error should NOT show the internal '*' key to the user"
+
 
 class TestTopLevel:
     """Test top-level kwargs (redshift, apply_igm, etc.)."""

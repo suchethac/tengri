@@ -101,7 +101,8 @@ def test_unknown_kwarg_raises_with_valid_list() -> None:
 
 
 def test_invalid_wildcard_raises() -> None:
-    with pytest.raises(ValueError, match="FREE or FIXED"):
+    # _= alias is retired; raises TypeError before checking the value
+    with pytest.raises(TypeError, match=r"_=.*retired"):
         builders.radio.condon92(_="free")
 
 

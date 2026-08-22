@@ -16,7 +16,6 @@ unification can fold SFH onto these helpers when convenient.
 from __future__ import annotations
 
 import inspect
-import warnings
 from collections.abc import Callable
 from typing import Any
 
@@ -167,54 +166,34 @@ def make_factory(
 
 
 def _pop_wildcard(variant: str, kwargs: dict[str, Any]) -> Any:
-    """Pop the wildcard kwarg, supporting ``all_params=``, ``defaults=``, and ``_=``.
+    """Pop the wildcard kwarg, supporting ``all_params=`` only.
 
     The canonical builder name for the wildcard policy is ``all_params=``,
-    mirroring the dict grammar's ``'all_params'`` key. For backward
-    compatibility, ``defaults=`` (deprecated) and ``_=`` (legacy) are
-    accepted and emit :class:`DeprecationWarning`.
+    mirroring the dict grammar's ``'all_params'`` key. The retired aliases
+    ``defaults=`` and ``_=`` raise ``TypeError`` naming ``all_params=`` as
+    the required spelling.
 
-    Raises ``TypeError`` if multiple are passed in the same call.
+    Raises ``TypeError`` if ``defaults=`` or ``_=`` are passed.
     """
     has_canonical = "all_params" in kwargs
     has_deprecated = "defaults" in kwargs
     has_legacy = "_" in kwargs
 
-    # Check for conflicting calls
-    if sum([has_canonical, has_deprecated, has_legacy]) > 1:
-        if has_canonical and has_deprecated:
-            raise TypeError(
-                f"{variant}(): pass `all_params=` (preferred) or `defaults=` "
-                f"(deprecated), not both."
-            )
-        elif has_canonical and has_legacy:
-            raise TypeError(
-                f"{variant}(): pass `all_params=` (preferred) or `_=` (legacy), not both."
-            )
-        else:  # has_deprecated and has_legacy
-            raise TypeError(
-                f"{variant}(): pass `defaults=` (deprecated) or `_=` (legacy), not both."
-            )
+    # Reject deprecated aliases with hard errors naming the replacement
+    if has_deprecated:
+        raise TypeError(
+            "The `defaults=` alias has been retired; the wildcard parameter is "
+            "`all_params=`. Write all_params=FREE instead of defaults=FREE."
+        )
+    if has_legacy:
+        raise TypeError(
+            "The `_=` alias has been retired; the wildcard parameter is "
+            "`all_params=`. Write all_params=FREE instead of _=FREE."
+        )
 
-    # Pop in priority order: canonical first, then deprecated, then legacy
+    # Pop the canonical form or return default
     if has_canonical:
         return kwargs.pop("all_params")
-    if has_deprecated:
-        warnings.warn(
-            f"{variant}(defaults=...) is deprecated; use `all_params=` instead. "
-            "The `defaults=` alias will be removed in a future release.",
-            DeprecationWarning,
-            stacklevel=3,
-        )
-        return kwargs.pop("defaults")
-    if has_legacy:
-        warnings.warn(
-            f"{variant}(_=...) is deprecated; use `all_params=` instead. "
-            "The `_=` alias will be removed in a future release.",
-            DeprecationWarning,
-            stacklevel=3,
-        )
-        return kwargs.pop("_")
     return FIXED
 
 

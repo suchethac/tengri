@@ -51,7 +51,7 @@ def model_and_external_mock():
     model = SEDModel.build(
         ssp_data=ssp,
         observation=Observation(photometry=Photometry(filters=tuple(filters))),
-        sfh=builders.sfh.dpl(defaults=FREE),
+        sfh=builders.sfh.dpl(all_params=FREE),
         dust_attenuation={
             "type": "two_component",
             "all_params": FIXED,
@@ -87,7 +87,7 @@ def _fresh_model() -> SEDModel:
     return SEDModel.build(
         ssp_data=ssp,
         observation=Observation(photometry=Photometry(filters=tuple(filters))),
-        sfh=builders.sfh.dpl(defaults=FREE),
+        sfh=builders.sfh.dpl(all_params=FREE),
         dust_attenuation={
             "type": "two_component",
             "all_params": FIXED,

@@ -187,15 +187,14 @@ groups = model.spec.to_groups()    # round-trip for inspection/editing
 from tengri import builders
 model = SEDModel.build(
     ssp_data=ssp, observation=obs,
-    sfh=builders.sfh.dpl(_=FREE, beta=Uniform(1, 3)),  # ← IDE sees alpha, beta, tau_gyr, log_total_mass
+    sfh=builders.sfh.dpl(all_params=FREE, beta=Uniform(1, 3)),  # ← IDE sees alpha, beta, tau_gyr, log_total_mass
     dust_attenuation={'type': 'two_component', 'law': 'calzetti', 'all_params': FIXED},
     neb={'type': 'cue', 'all_params': FIXED},
 )
 ```
 
 - Grammar: each group dict accepts `'type'` (structural choice), `'all_params'`
-  wildcard (`FREE`/`FIXED`; default `FIXED`; the `'*'` synonym is still accepted
-  but slated for deprecation), and per-parameter short-form overrides (e.g.
+  wildcard (`FREE`/`FIXED`; default `FIXED`), and per-parameter short-form overrides (e.g.
   `'beta'` inside the sfh group resolves to `sfh_dpl_beta`).
 - **`met` is the metallicity group**, parallel to `sfh`: `met={'type': 'table'}`,
   `met={'type': 'ramp', 'logzsol_0': ...}`, `met={'logzsol': Uniform(...)}`.

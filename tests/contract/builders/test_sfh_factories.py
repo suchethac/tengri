@@ -99,7 +99,7 @@ def test_default_call_produces_minimal_dict() -> None:
 
 
 def test_wildcard_free() -> None:
-    assert builders.sfh.dpl(_=FREE) == {"type": "dpl", "all_params": FREE}
+    assert builders.sfh.dpl(all_params=FREE) == {"type": "dpl", "all_params": FREE}
 
 
 def test_per_param_override_is_preserved() -> None:
@@ -110,7 +110,7 @@ def test_per_param_override_is_preserved() -> None:
 
 def test_wildcard_plus_explicit_override() -> None:
     pin = Fixed(1.0)
-    out = builders.sfh.dpl(_=FREE, log_total_mass=pin)
+    out = builders.sfh.dpl(all_params=FREE, log_total_mass=pin)
     assert out == {"type": "dpl", "all_params": FREE, "log_total_mass": pin}
 
 
@@ -126,8 +126,9 @@ def test_unknown_kwarg_raises_typeerror_with_valid_list() -> None:
 
 
 def test_invalid_wildcard_raises_valueerror() -> None:
-    with pytest.raises(ValueError, match="FREE or FIXED"):
-        builders.sfh.dpl(_="free")  # string is not a sentinel
+    # _= alias is retired; raises TypeError before checking the value
+    with pytest.raises(TypeError, match=r"_=.*retired"):
+        builders.sfh.dpl(_="free")
 
 
 # ── Grammar interop: factory output = hand-written dict ───────────
@@ -136,7 +137,7 @@ def test_invalid_wildcard_raises_valueerror() -> None:
 def test_factory_output_round_trips_through_parse_groups() -> None:
     """The factory must produce a Parameters identical to the dict path."""
     via_factory = parse_groups(
-        sfh=builders.sfh.dpl(_=FREE, beta=Uniform(1.0, 3.0)), redshift=Fixed(0.1)
+        sfh=builders.sfh.dpl(all_params=FREE, beta=Uniform(1.0, 3.0)), redshift=Fixed(0.1)
     )
     via_dict = parse_groups(
         sfh={"type": "dpl", "all_params": FREE, "beta": Uniform(1.0, 3.0)}, redshift=Fixed(0.1)
@@ -152,7 +153,7 @@ def test_const_exp_short_names_resolve_correctly() -> None:
     ``const_exp`` parameters use the ``sfh_cexp_`` prefix, so the short
     forms exposed by the factory must match what the parser extracts.
     """
-    spec = parse_groups(sfh=builders.sfh.const_exp(_=FREE), redshift=Fixed(0.1))
+    spec = parse_groups(sfh=builders.sfh.const_exp(all_params=FREE), redshift=Fixed(0.1))
     expected = {
         "sfh_cexp_log_total_mass",
         "sfh_cexp_tau_gyr",
@@ -196,7 +197,7 @@ def test_burst_and_field_factories_emit_valid_dicts() -> None:
     burst_out = builders.sfh.burst()
     assert burst_out["type"] == "burst"
     assert burst_out["all_params"] is FIXED
-    field_out = builders.sfh.field(_=FREE)
+    field_out = builders.sfh.field(all_params=FREE)
     assert field_out["type"] == "field"
     assert field_out["all_params"] is FREE
 
