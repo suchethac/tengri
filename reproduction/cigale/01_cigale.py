@@ -17,10 +17,9 @@
 # # Reproducing CIGALE's physics with tengri
 #
 # CIGALE (Boquien et al. 2019, A&A 622, A103) is the workhorse for
-# panchromatic SED fitting. This notebook places its physics modules next
-# to their tengri equivalents at the same parameters — the module map below
-# pairs them up. Same parameters in, same SED out: any disagreement is
-# physics, not data or fitting.
+# panchromatic SED fitting. This study configures tengri's public API to approximate CIGALE's model choices; it is not a port of CIGALE, and residual differences are documented below.
+# This notebook places its physics modules next to their tengri equivalents at the same parameters — the module map below pairs them up.
+# Same parameters in, same SED out: any disagreement is physics, not data or fitting.
 #
 # Both codes consume the same BC03 templates: CIGALE's bundled
 # Chabrier-IMF grid (Bruzual & Charlot 2003), repackaged into the DSPS
