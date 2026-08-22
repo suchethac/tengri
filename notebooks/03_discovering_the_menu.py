@@ -14,12 +14,9 @@
 # ---
 
 # %% [markdown]
-# # Discovering the menu — every variant, from inside Python
+# # Discovering the model menu
 #
-# Tengri is plugin-aware. The library knows what physics it ships, which
-# inference backends are installed and compatible with a given model,
-# what filters are on disk, and how to fetch missing SSP grids. Asking
-# Python is faster than reading docs.
+# Tengri is plugin-aware. The library knows what physics it ships, which inference backends are installed and compatible with a given model, what filters are on disk, and how to fetch missing SSP grids. Asking Python is faster than reading docs.
 
 # %%
 import os

@@ -14,21 +14,13 @@
 # ---
 
 # %% [markdown]
-# # Why JAX — differentiable inference, in the language of SED fitting
+# # Why JAX
 #
-# Traditional SED fitting (`emcee` + Prospector / BAGPIPES / CIGALE) is
-# gradient-free: at every step the sampler queries the likelihood and
-# guesses the next move. In 10–30 dimensions, with 10⁴ likelihood calls
-# per chain step, a single galaxy takes hours.
+# Traditional SED fitting (`emcee` + Prospector / BAGPIPES / CIGALE) is gradient-free: at every step the sampler queries the likelihood and guesses the next move. In 10–30 dimensions with 10⁴ likelihood calls per chain step, a single galaxy takes hours.
 #
-# Tengri builds the same physics — stellar populations, dust, nebular
-# emission, AGN, IGM — entirely from JAX primitives. The model is
-# differentiable. The likelihood and its gradient come together, at no
-# extra cost. Gradient-based samplers (NUTS, HMC, VI) then *use* that
-# gradient to climb the posterior efficiently.
+# Tengri builds the same physics — stellar populations, dust, nebular emission, AGN, IGM — entirely from JAX primitives. The model is differentiable. The likelihood and its gradient come together at no extra cost. Gradient-based samplers (NUTS, HMC, VI) then use that gradient to climb the posterior efficiently.
 #
-# The figures below make this concrete: an astronomer-readable map of
-# the posterior gradient, and how that translates into wall-clock time.
+# The figures below make this concrete: an astronomer-readable map of the posterior gradient, and how that translates into wall-clock time.
 
 # %%
 import os

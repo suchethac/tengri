@@ -20,6 +20,7 @@
 # the GAMA survey, written in R. Every left-hand panel calls its own functions
 # through `rpy2` (thin wrappers in `_drivers/prospect_driver.py`); the
 # right-hand panel is tengri.
+# This study configures tengri's public API to approximate ProSpect's model choices; tengri's implementation is its own, not derived from ProSpect's code, and residual differences are documented below.
 #
 # The closed-form blocks — the SFH shapes, the mass-mapped metallicity
 # history, the attenuation curves, the IGM — match ProSpect to a fraction

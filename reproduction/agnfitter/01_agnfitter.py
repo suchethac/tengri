@@ -26,6 +26,8 @@
 # orthogonal tracers that break the infrared–ultraviolet degeneracies that
 # limited the original submm-to-UV AGNfitter.
 #
+# This study configures tengri's public API to approximate AGNfitter-rX's model choices; tengri's implementation is its own, not derived from AGNfitter-rX's code, and residual differences are quantified below.
+#
 # The headline comparisons are the two model *face-offs* that drive the
 # paper's conclusions: **§9a** — accretion-disk libraries R06, SN12, KD18, THB21.
 # THB21 wins (Bayes factor ≈10⁵·¹ over R06) because it alone carries the

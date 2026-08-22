@@ -544,7 +544,7 @@ Search qmd first using `collections: ["tengri"]` before reading any file. Fall b
 - `docs/dev/NAMING_CONTRACT.md` — naming conventions (read before any rename/refactor)
 - `docs/dev/20260404-refactor.md` — refactor plan
 - `docs/dev/api_migration_v0.x.md` — public-API migration table (Phase 1→6 + Part II scaffold)
-- `docs/known_bugs.md` — bug tracking (all currently fixed)
+- `docs/dev/known_bugs.md` — internal bug-audit record (moved out of the public docs; all user-visible entries fixed except PERF-01)
 - `docs/dev/notebook_orchestration_oom.md` — operational rules for OOM-safe notebook authoring (multi-fit, subagent zombies, watchdog)
 - `tools/check_param_prefixes.py` — CI guard for free-parameter prefix rule (NAMING_CONTRACT §3.2)
 - `tools/check_param_defaults.py` — CI guard that no signature default falls outside its parameter's declared prior. Such a default is unreachable by any fit and is usually a unit confusion: nine AGN entry points shipped `agn_log_lbol=45.0` (the `log10(erg/s)` magnitude) against a declaration in `log10(L/L_sun)`, so a bare call was ~1e33 too luminous. Read defaults off the declaration with `declared_default(PARAMS, name)` instead of repeating the number (ADR-0011)

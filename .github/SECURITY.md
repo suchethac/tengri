@@ -4,7 +4,7 @@
 
 **Do not open a public GitHub issue for a security bug.** Report it privately, either way:
 
-1. Email: cooray@stanford.edu
+1. Email: astro.tengri@gmail.com
 2. GitHub's private security advisory feature (Settings > Security > Report a vulnerability)
 
 Include:

@@ -1,27 +1,17 @@
 # Installation
 
-## From PyPI
-
-```bash
-pip install "astro-tengri[all]"
-```
-
-The distribution name on PyPI is `astro-tengri`; the Python import
-name is `tengri`. (`pip install tengri` is an unrelated 2017 package.)
-The `[all]` extra pulls in the optimizer and sampler backends (`optax`,
-`blackjax`) used by the quick-start examples; a bare install can build
-models and predict, but `Fitter.run` needs the extras.
-
 ## From source
 
 ```bash
 git clone https://github.com/suchethac/tengri.git
 cd tengri
-pip install -e ".[dev]"
+pip install -e ".[all]"
 ```
 
-Editable installs are recommended for any work that touches the
-forward model.
+This installs the package in editable mode with all optional dependencies
+needed for fitting workflows and reproducible results. For development,
+use `.[dev]` instead. Editable installs are recommended for any work that
+touches the forward model.
 
 ## Optional extras
 
@@ -29,9 +19,12 @@ forward model.
 |---|---|---|
 | `[nuts]` | BlackJAX | NUTS / HMC sampling |
 | `[optax]` | optax | MAP optimization |
+| `[grain-dust]` | dust-extinction | Grain-model dust attenuation laws (wd01, d03, hd23) |
+| `[filters]` | astroquery | Downloading filter curves from SVO Filter Profile Service |
 | `[gpu]`  | jax with CUDA wheels | NVIDIA GPU fits |
-| `[all]`  | all of the above | recommended for new users |
-| `[dev]`  | pytest, ruff, jupytext, sphinx | development |
+| `[metal]` | jax-metal | Apple Silicon acceleration (experimental) |
+| `[all]`  | nuts, optax, grain-dust, filters | recommended for new users; does not include GPU backends |
+| `[dev]`  | pytest, ruff, jupytext, and testing backends | development |
 
 ```bash
 pip install -e ".[all]"
@@ -40,10 +33,13 @@ pip install -e ".[all]"
 ## Requirements
 
 - Python ≥ 3.11
-- JAX ≥ 0.4.20
+- JAX ≥ 0.4.20 and jaxlib ≥ 0.4.20
 - DSPS 0.4.6–0.4.7 (0.4.8 excluded: its PyPI sdist breaks at install time)
+- NumPy ≥ 1.24
+- Matplotlib ≥ 3.7
+- h5py ≥ 3.0
 - NIFTy ≥ 8.5 with the `re` extra
-- NumPy, Matplotlib, h5py
+- filelock ≥ 3.0 (required for persistent JAX cache)
 
 ## JAX backends
 
@@ -83,8 +79,9 @@ wget https://halos.as.arizona.edu/suchethacooray/ssp-spectra/fsps_prsc_miles_cha
 ```
 
 The full catalog of pre-formatted grids (BC03, BPASS, FSPS,
-ProGeny; 46 templates) lives at the
+ProGeny) lives at the
 [public mirror](https://halos.as.arizona.edu/suchethacooray/ssp-spectra/).
+Use `tengri.list_known_ssps()` to see all 38 available SSP grids.
 
 ## Verify your install
 

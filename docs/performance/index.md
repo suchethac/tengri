@@ -1,4 +1,4 @@
-# Performance
+# Performance guide
 
 The forward model is pure JAX, so every backend (MAP, NUTS, geoVI, …)
 runs against the same compiled graph. "How fast is tengri?" therefore
@@ -43,16 +43,16 @@ Inference backends on a 7-parameter mock fit (compile + sample wall):
 | Laplace | ~5 s | < 1 s |
 | Pathfinder | ~10 s | ~2 s |
 | NUTS (1k samples) | ~30 s | ~5 s |
-| `native_vi_nonlinear` (geoVI, JAX-native, experimental) | ~10 s | **2.3 s** |
+| `vi_nonlinear_fast` (geoVI, JAX-native) | ~10 s | **2.3 s** |
 | `vi` (NIFTy.re) | ~75 s | 43.7 s |
 
 — *full breakdowns: [`2026-04-17_native_vs_nifty.md`](https://github.com/suchethac/tengri/blob/main/bench/reports/2026-04-17_native_vs_nifty.md), [`2026-04-22_pathfinder_vs_window_nuts.md`](https://github.com/suchethac/tengri/blob/main/bench/reports/2026-04-22_pathfinder_vs_window_nuts.md), [`2026-05-06_compile_vs_sampling_breakdown.md`](https://github.com/suchethac/tengri/blob/main/bench/reports/2026-05-06_compile_vs_sampling_breakdown.md)*
 
-`native_vi_nonlinear` is **19–25× faster** than the NIFTy path on
-smooth-SFH fits but is **not drop-in posterior-equivalent**: PSD-timescale
-parameters differ by an order of magnitude on stochastic fits. Both native
-backends (`native_vi_nonlinear`, `native_vi_linear`) are experimental and
-flagged unstable in the registry — validate per problem before swapping.
+`vi_nonlinear_fast` is **19–25× faster** than the NIFTy path on
+smooth-SFH fits on some problems but may show differences in posterior geometry
+on stochastic fits. The native backends (`vi_nonlinear_fast`, `vi_linear_fast`)
+are optimized JAX implementations — validate per problem before swapping to ensure
+posterior equivalence on your science case.
 
 ## Persistent compile cache
 
@@ -108,7 +108,7 @@ Available benchmarks (`bench list`):
 | `jit_compile` | Population-scale JIT compile time vs N galaxies |
 | `jit_real_path` | Compile time on the production forward-model path |
 | `inference_engines` | MAP / Laplace / NUTS / VI / NSS at D = 7, 12, 20 |
-| `vi_native_vs_nifty` | geoVI: pure-JAX `native_vi_nonlinear` vs the NIFTy.re reference path |
+| `vi_native_vs_nifty` | geoVI: pure-JAX `vi_nonlinear_fast` vs the NIFTy.re reference path |
 | `vi_xlarge` | VI scaling on stochastic-SFH problems with D >> 100 |
 | `population_native` | Hierarchical PopulationFitter: per-iteration cost vs N galaxies |
 | `adam_vs_lbfgs` | MAP optimizers head-to-head |

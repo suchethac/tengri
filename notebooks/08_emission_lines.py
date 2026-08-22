@@ -14,14 +14,20 @@
 # ---
 
 # %% [markdown]
-# # Emission lines, BPT, and Hα-SFR
+# # Emission lines and BPT diagnostics
 #
-# The nebular backend produces both continuum and discrete line fluxes. This
-# notebook demonstrates three applications:
+# ## What you will do
+# Build forward models for star-forming, composite, and AGN-dominated galaxies. You'll compute emission-line fluxes and place each model on a BPT diagram (using Kauffmann and Kewley demarcation curves) and check whether nebular diagnostics (Hα-derived SFR) are consistent with stellar mass assembly (SFR_10Myr).
 #
-# 1. Forward models for star-forming, composite, and AGN-dominated galaxies.
-# 2. BPT diagram placement under Kauffmann and Kewley demarcation curves.
-# 3. Hα-derived SFR (Kennicutt 1998) consistency with the stellar SFR_10Myr.
+# ## What you need
+# A bare-stellar SSP grid, a nebular backend with line-emission capability (Cue, CloudyGrid), and familiarity with ionization diagrams.
+#
+# ## What you will have
+# Emission-line predictions from forward models, BPT galaxy classification, and a cross-check between independent star formation rate estimators.
+#
+# ---
+#
+# The nebular backend produces both continuum and discrete line fluxes. Three applications follow: forward models for galaxies spanning the BPT ionization sequence, placement on diagnostic diagrams under Kauffmann and Kewley demarcation curves, and consistency checks between Hα-derived SFR (Kennicutt 1998) and stellar 10 Myr SFR.
 
 # %%
 import os

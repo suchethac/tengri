@@ -14,7 +14,7 @@
 # ---
 
 # %% [markdown]
-# # Building models with nested-dict API
+# # Building models
 #
 # A tengri model is a few blocks of physics — a star-formation history, a dust
 # law, a nebular backend, optionally an AGN — and a statement of which

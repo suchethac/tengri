@@ -14,18 +14,20 @@
 # ---
 
 # %% [markdown]
-# # Fitting optical spectroscopy
+# # Fitting spectroscopy
 #
-# Broadband photometry alone — the [`quickstart`](00_quickstart.py) — leaves
-# stellar metallicity and the dust split prior-dominated. An optical spectrum
-# carries the absorption-line
-# depths — Hβ, the Mgb triplet, the Fe blends — that pin stellar age and
-# metallicity. This notebook fits a spectrum *alone* with the same machinery as
-# the quickstart (`SEDModel.build`, validated HMC) and shows what it does and
-# does not constrain: metallicity and age tighten sharply, but the **absolute
-# dust optical depth stays loose** — a spectrum sets the continuum *shape*, not
-# its normalization. Adding photometry closes that gap in
-# [`07_joint_photo_spec`](07_joint_photo_spec.py).
+# ## What you will do
+# Fit an SDSS-like optical spectrum alone to constrain stellar age and metallicity. You'll see what spectroscopy constrains sharply (age, metallicity via absorption lines) and what stays loose (absolute dust optical depth).
+#
+# ## What you need
+# An SSP grid at R ≳ 2000, an observed optical spectrum (e.g., 3800–9200 Å), and a spectroscopic approximation (SpectrumPrecomp) for fast forward passes.
+#
+# ## What you will have
+# A posterior with tight age and metallicity but loose dust normalization—the reason to combine spectroscopy with photometry.
+#
+# ---
+#
+# Broadband photometry alone leaves stellar metallicity and dust prior-dominated. An optical spectrum carries absorption-line depths — Hβ, the Mgb triplet, the Fe blends — that pin stellar age and metallicity. This notebook fits a spectrum alone using the same machinery as the quickstart (SEDModel.build with validated HMC sampling) and shows what it constrains and what stays degenerate. The absolute dust optical depth remains loose because a spectrum sets the continuum shape, not its normalization. Adding photometry closes that degeneracy in [`07_joint_photo_spec`](07_joint_photo_spec.py).
 
 # %%
 from _setup import FIG_DIR, HMC_VALIDATED, quiet

@@ -281,7 +281,7 @@ spectrum_fast = pred.spectrum(wave_obs=..., approx=True)  # interpolates precomp
 - **Post-fit inspection**: Use `approx=True` to match inference exactly.
 - **Speed-critical analysis**: e.g., generating a mock catalog of 1 million galaxies.
 
-### When NOT to use fast
+### When not to use fast
 
 - **Changing filters at runtime** (`pred.photometry(filters=[...])`): incompatible with `approx=True` — raises `ValueError`.
 - **Exact science**: Analysis grids where pre-computed filters would bias the results.
@@ -297,14 +297,18 @@ The model is a pure function of parameters. You can generate mock catalogs from 
 ```python
 import jax
 import jax.numpy as jnp
-from tengri import SEDModel, Observation, Photometry
+from tengri import FREE, SEDModel, Observation, Photometry
 
-# Build a model with only photometry (mock generation is cheap)
+# Build a model with only photometry (mock generation is cheap).
+# Groups are explicit: an omitted dust_attenuation means no dust, and
+# parameters default to fixed, so free parameters must be declared.
 model = SEDModel.build(
     ssp_data=ssp,
     observation=Observation(
         photometry=Photometry.from_names(["sdss-g", "sdss-r", "sdss-i"])
     ),
+    sfh={"type": "dpl", "all_params": FREE},
+    dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FREE},
 )
 
 # Method 1: Sample from the prior

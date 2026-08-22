@@ -114,7 +114,7 @@ EXCLUDE_FILES = frozenset(
         "src/tengri/components/agn/_nthcomp.py",
         "tests/crossval/test_nthcomp_relagn_crossval.py",
         "scripts/build_nthcomp_templates.py",
-        "docs/known_bugs.md",
+        "docs/dev/known_bugs.md",
     }
 )
 

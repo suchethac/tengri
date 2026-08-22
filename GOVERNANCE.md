@@ -6,7 +6,7 @@ Tengri is led by Suchetha Cooray as a single maintainer. Scope and API may chang
 
 ## Response Expectations
 
-Issue triage occurs within two weeks. Pull request response time varies by complexity. For urgent security issues, contact cooray@stanford.edu directly.
+Issue triage occurs within two weeks. Pull request response time varies by complexity. For urgent security issues, contact astro.tengri@gmail.com directly.
 
 ## Decision Process
 

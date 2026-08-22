@@ -38,8 +38,8 @@ The table below is a decision aid; when it disagrees with
   `vi_nonlinear_fast`).
 - **experimental** — present but not yet recommended for science. Several
   carry explicit `[POOR MIXING]` or `[UNSTABLE]` flags in their `short_doc`
-  (e.g. `mcmc_ghmc`, `mcmc_mclmc`, `pathfinder`, `nss`, `native_vi_linear`,
-  `native_vi_nonlinear`). Call `tengri.describe("<name>")` to read the full
+  (e.g. `mcmc_dynamic_hmc`, `mcmc_adjusted_mclmc`, `mcmc_ess`, `nss`, `vi_linear`,
+  `vi_linear_fast`). Call `tengri.describe("<name>")` to read the full
   validation notes before using them.
 
 ## Memory and the one-fit-per-process rule

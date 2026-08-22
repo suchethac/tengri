@@ -14,18 +14,20 @@
 # ---
 
 # %% [markdown]
-# # Joint photometry + spectroscopy
+# # Joint photometry and spectroscopy
 #
-# Broadband photometry alone — the [`quickstart`](00_quickstart.py) — leaves
-# the SFH shape and the metallicity–dust split prior-dominated. Here we add an
-# optical spectrum covering the metallicity-
-# sensitive absorption features (Hβ, Mgb, the Fe blends) and fit both datasets
-# together. The joint posterior is narrower than either single-dataset fit and
-# pins down parameters photometry alone cannot: the line depths break the
-# age–metallicity–dust ridge.
+# ## What you will do
+# Fit broadband photometry and an optical spectrum together. You'll see how the joint posterior resolves degeneracies that neither dataset alone can break: stellar metallicity and dust optical depth, which were degenerate in photometry-only fits, separate when absorption-line depths anchor the age and metallicity.
 #
-# Same machinery as the quickstart and notebook 05 (`SEDModel.build`, validated
-# HMC), with one `Observation` carrying both channels.
+# ## What you need
+# An SSP grid, broadband filters (UV through mid-IR), and a medium-resolution optical spectrum (R ≈ 2000) covering age and metallicity-sensitive absorption lines.
+#
+# ## What you will have
+# A narrower joint posterior with tight constraints on all free parameters, because the two datasets constrain different degeneracies.
+#
+# ---
+#
+# Broadband photometry alone leaves the SFH shape and the metallicity–dust split prior-dominated. An optical spectrum covers metallicity-sensitive absorption features (Hβ, Mgb, Fe blends) and tightens age and metallicity, but the dust optical depth stays loose. Fitting both together yields a joint posterior narrower than either alone: the line depths break the age–metallicity–dust ridge. The machinery is the same as the quickstart (SEDModel.build with validated HMC), with one `Observation` carrying both channels.
 
 # %%
 from _setup import FIG_DIR, HMC_VALIDATED, effective_wavelengths_um, quiet

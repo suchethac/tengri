@@ -66,7 +66,7 @@ Template: `.github/ISSUE_TEMPLATE/feature_request.md`.
 Tengri's physics blocks (AGN models, dust attenuation laws, SFH variants, nebular backends) each have a registry of swappable alternatives. To add yours:
 
 1. **Pick the component.** Run `tengri.list_agn_models()` (or `list_dust_laws()`, `list_sfh_models()`, etc.) to see what's already there and what status each is at. Avoid duplicating an existing alternative.
-2. **Copy the worked example.** Start from [`examples/contrib/example_new_agn_torus.py`](examples/contrib/example_new_agn_torus.py). It registers a model, declares metadata (citation + status), and exercises introspection end-to-end.
+2. **Copy the worked example.** Start from [`docs/dev/example_new_agn_torus.py`](docs/dev/example_new_agn_torus.py). It registers a model, declares metadata (citation + status), and exercises introspection end-to-end.
 3. **Register with metadata.** Use the relevant decorator with `citation`, `status`, `short_doc` filled in:
    ```python
    @register_agn_model(

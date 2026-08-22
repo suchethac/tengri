@@ -1,5 +1,7 @@
 # Physics reproduction
 
+The reproduction studies below configure tengri's public nested-dict API to mimic the behavior of established SED-fitting codes (CIGALE, Prospector, BAGPIPES, AGNFITTER-RX, ProSpect, and others). This is possible because tengri implements a superset of the union of the models found in common SED-fitting codes. These are not reimplementations; tengri's underlying physics may differ, and residual differences are expected and are documented per study.
+
 A new code should earn trust by reproducing the physics in the codes
 already in use before claiming anything new. The notebooks here do that
 for tengri. Each one implements the same models as one external code and
