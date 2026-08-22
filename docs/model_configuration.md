@@ -8,7 +8,7 @@ This is the definitive guide to the nested-dict grammar for building a `SEDModel
 
 ## I. Universal grammar semantics
 
-The `SEDModel.build(...)` method accepts one dict per physics group, each declaring what physics variant to use, which parameters are free, and per-parameter overrides.
+The nested-dict grammar for model configuration (when using SEDModel.build) accepts one dict per physics group, each declaring what physics variant to use, which parameters are free, and per-parameter overrides.
 
 ### Three kinds of keys
 
@@ -21,7 +21,7 @@ Every group dict contains three kinds of keys:
 sfh={'type': 'dpl', 'age_kernel': 'cic'}
 ```
 
-**2. The wildcard key `'all_params'`** — sets the free/fixed status for all parameters in the group that are not explicitly overridden. Accepts `FREE`, `FIXED`, or any `Distribution` instance. Default is `FIXED`. This is the **only wildcard spelling**; the retired `'*'` synonym raises `ValueError` in `SEDModel.build()`.
+**2. The wildcard key `'all_params'`** — sets the free/fixed status for all parameters in the group that are not explicitly overridden. Accepts `FREE`, `FIXED`, or any `Distribution` instance. Default is `FIXED`. This is the **only wildcard spelling**; the retired `'*'` synonym raises `ValueError` when building a model.
 
 ```python
 # All SFH params free, except beta which is fixed at 1.5
@@ -113,12 +113,18 @@ dust_attenuation={'type': 'two_component', 'law': 'calzetti', 'tau_bc_': 0.5}
 
 Each physics block follows the universal grammar. This section lists the structural keys and one minimal working example for each.
 
+```{include} _generated/parameter_tables.rst
+```
+
+Generated per-domain parameter references are shown above. For per-type parameter defaults, units, and descriptions, see [Components Reference](components.md).
+
+
 ### Star-formation history: `sfh`
 
 **Structural keys:**
 - `'type'` — SFH model (`'dpl'`, `'delayed_tau'`, `'lognorm'`, `'field'`, etc.). Menu: `tengri.list_sfh_models()`.
 - `'all_params'` — Wildcard: set all parameters to FREE or FIXED. Only `all_params` spelling (not `'*'`).
-- `'age_kernel'` — Integration method: `'cic'` (default, cloud-in-cell) or `'dsps'` (histogram). See the [model construction](model-construction.md) guide for performance details.
+- `'age_kernel'` — Integration method: `'cic'` (default, cloud-in-cell) or `'dsps'` (histogram). See the model grammar design guide for performance details.
 - `'bin_edges_gyr'` — Non-parametric bin edges (Gyr). Only for `type='histogram'` or similar.
 - `'field_centering'` — Field draw centering ('none' or 'mean'). Only for `type='field'`.
 
@@ -132,7 +138,6 @@ sfh={'type': 'dpl', 'all_params': FREE, 'beta': Uniform(1, 3), 'age_kernel': 'ci
 - A field SFH requires `'age_kernel': 'dsps'` and rejects `'age_kernel': 'cic'`.
 - Default `age_kernel` auto-selects: `'cic'` for parametric SFH, `'dsps'` for field.
 
-See [per-domain SFH parameters](components.md) for the full parameter list.
 
 ### Metallicity: `met`
 
@@ -151,7 +156,6 @@ met={'type': 'ramp', 'logzsol_0': Fixed(-0.3), 'logzsol_1': Free}  # two-knot ra
 - Default `met_logzsol = 0.0` (solar). The SSP grid uses absolute `log10(Z)` internally, with a Zsun offset (Asplund 2009).
 - A tabulated (per-SSP-age) `met=` beside a non-tabulated `sfh` warns but does not raise.
 
-See [per-domain metallicity parameters](components.md) for details.
 
 ### Dust attenuation: `dust_attenuation`
 
@@ -197,7 +201,6 @@ dust_attenuation={'type': 'wg00', 'dust_curve': 'mw_rv31', 'geometry': 'slab', '
 - Parameters like `'slope'`, `'bump_strength'`, `'Rv'`, `'delta'` are set per-screen on two-component (`'slope_bc'`, `'slope_diff'`, etc.). On single-component, just `'slope'`.
 - The `'neb'` channel (`'law_neb'`, `'slope_neb'`, etc.) reddens **only the nebular birth-cloud continuum**, not the young stars. Used when nebular emission is routed through a different dust screen.
 
-See [per-domain dust attenuation parameters](components.md) for the full parameter list.
 
 ### Dust emission: `dust_emission`
 
@@ -217,7 +220,6 @@ dust_emission={'type': 'dale2014', 'all_params': FIXED, 'eta_balance': Fixed(1.0
 - Energy balance: `eta_balance` defaults to `Fixed(1.0)`, which enforces `L_IR = L_absorbed`. Setting it free or to a constant ≠ 1 decouples IR and absorption.
 - Missing dust_emission (or `{'type': 'none'}`) is valid and common for UV-only work.
 
-See [per-domain dust emission parameters](components.md) for details.
 
 ### Nebular emission: `neb`
 
@@ -238,7 +240,6 @@ neb={'type': 'cloudy', 'grid': {'logz': [-2, -1, 0], 'logU': [-3, -2, -1]}}
 - Default `neb_logZ_gas = -0.3` (solar). It is **not automatically inherited** from the stellar metallicity, even if tabulated.
 - Nebular emission is **additive** to stellar continuum; it composites with dust and shock when both are present.
 
-See [per-domain nebular parameters](components.md) for the full list.
 
 ### Shock emission: `shock`
 
@@ -260,7 +261,6 @@ shock={'type': 'mappings', 'norm': 'lhalpha', 'lhalpha': 10**42}  # erg/s
 - Shock and nebular emission compose (both can be on). The shock norms apply independently.
 - Default `shock_abundance = 'solar'`. No abundance parameter by default.
 
-See [per-domain shock parameters](components.md) for details.
 
 ### IGM absorption: `igm`
 
@@ -282,7 +282,6 @@ igm={'type': 'inoue', 'dla': {'type': 'dla_lookback'}}  # With evolving DLA
 - IGM models are applied to **observer-frame** wavelengths, so redshift must be specified for IGM to have an effect.
 - `'patchy'` has minimal effect on Inoue (mostly Rayleigh scattering); larger on Madau.
 
-See [per-domain IGM parameters](components.md) for details.
 
 ### Radio emission: `radio`
 
@@ -303,7 +302,6 @@ radio={'type': 'sf_agn', 'sf': {'type': 'condon'}, 'agn': {'type': 'nandra'}}
 - Use explicit priors on individual parameters, e.g., `radio={'q10': Uniform(-0.5, 0.5)}`.
 - Radio is **composable**: both SF and AGN can emit at once.
 
-See [per-domain radio parameters](components.md) for details.
 
 ### X-ray emission: `xray`
 
@@ -322,7 +320,6 @@ xray={'type': 'lehmer', 'log_nH': 21.0}  # Hydrogen column density, log10(cm^-2)
 - Default calibrations assume specific normalization conventions; consult paper for details.
 - X-ray can be free or fixed like any component.
 
-See [per-domain X-ray parameters](components.md) for details.
 
 ### AGN: `agn`
 
@@ -355,10 +352,9 @@ agn={'type': 'legacy', 'all_params': FIXED}
 **Gotchas:**
 - On `'composable'`, all six sub-blocks are **optional**. Omitting one deactivates it (e.g., no `'disc'` means no direct accretion disk emission).
 - Each sub-block follows the same grammar (type, all_params, parameters) as a top-level group.
-- `'norm': 'cigale_joint'` ties disc/torus/polar normalization to a single AGN-power reference; `'norm': 'independent'` lets each float freely. See ADR-0018 and the model-construction guide.
+- `'norm': 'cigale_joint'` ties disc/torus/polar normalization to a single AGN-power reference; `'norm': 'independent'` lets each float freely. 
 - AGN sub-block names (`'disc'`, `'torus'`, etc.) are **single**, not plural. `'discs'` raises.
 
-See [per-domain AGN parameters](components.md) for details.
 
 ### Foreground extinction: `foreground`
 
@@ -408,7 +404,7 @@ A model's resolved configuration can be inspected and edited via serialization.
 ### Inspect the model config
 
 ```python
-model = SEDModel.build(...)
+model = SEDModel.build(ssp_data=ssp, observation=obs, **config)
 
 # Get the resolved config as a nested dict
 config = model.spec.to_groups()
@@ -492,7 +488,7 @@ Exchange one sub-component:
 ```python
 config = recipes.agn_panchromatic()
 config['agn']['disc'] = {'type': 'bbflat'}  # swap the disk model
-model = SEDModel.build(..., **config)
+model = SEDModel.build(ssp_data=ssp, observation=obs, **config)
 ```
 
 ### Wildcard + explicit override
@@ -518,7 +514,7 @@ agn = {
     'blr': {'type': 'cue'},  # uses defaults
     # feii and atten omitted (OFF)
 }
-model = SEDModel.build(..., agn=agn)
+model = SEDModel.build(ssp_data=ssp, observation=obs, agn=agn)
 ```
 
 ---
@@ -598,7 +594,7 @@ model = SEDModel.build(sfh={'type': 'dpl'}, igm={'type': 'inoue'}, redshift=Unif
 
 ## See also
 
-- [Model construction narrative](model-construction.md) — build path, registry dispatch, add-a-model recipe
+
 - [Model grammar philosophy](model_grammar_design.md) — design decisions behind the grammar
 - [Per-component parameter reference](components.md) — every free/default parameter by component
 - [Configuration philosophy](model_grammar_design.md) — why the grammar is structured this way

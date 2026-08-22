@@ -498,8 +498,6 @@ _REGISTRY_ORDER = (
 _TOO_LONG_TO_PRINT = ("list_filters",)
 
 
-
-
 def _write_parameter_tables(app=None):
     """Render per-domain parameter tables from _GROUP_STRUCTURAL_KEYS."""
     import pathlib
@@ -511,6 +509,7 @@ def _write_parameter_tables(app=None):
     result = subprocess.run([sys.executable, str(script)], cwd=str(repo_root))
     if result.returncode != 0:
         raise RuntimeError(f"Parameter table generator failed with code {result.returncode}")
+
 
 def _write_component_reference(app=None):
     """Render every live registry to ``_generated/component_tables.rst``."""

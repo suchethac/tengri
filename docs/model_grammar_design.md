@@ -1,6 +1,6 @@
 # Model grammar philosophy
 
-The nested-dict grammar for `SEDModel.build()` is built on three core principles: **composition**, **explicitness**, and **orthogonality**. This page explains the reasoning behind the design.
+The nested-dict grammar for building an SEDModel is built on three core principles: **composition**, **explicitness**, and **orthogonality**. This page explains the reasoning behind the design.
 
 ## Design principles
 
@@ -33,10 +33,10 @@ The six AGN sub-blocks are **mutually independent**. Omitting `'disc'` deactivat
 
 ```python
 # IGM is OFF
-model = SEDModel.build(sfh={...}, redshift=...)
+model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={'type': 'dpl'}, redshift=Fixed(0.1))
 
 # IGM is ON
-model = SEDModel.build(sfh={...}, igm={'type': 'inoue'}, redshift=...)
+model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={'type': 'dpl'}, igm={'type': 'inoue'}, redshift=Fixed(0.1))
 ```
 
 No `apply_igm=True` flag. No magic ENV variable. A reader sees `igm={'type': ...}` and knows: IGM is on. A reader sees no `igm=` and knows: IGM is off.
@@ -98,7 +98,7 @@ Why? Nesting dust under one key invited conflating them. A user might ask "what 
 Redshift is not optional. Omitting it raises:
 
 ```python
-model = SEDModel.build(sfh={...})
+model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={'type': 'dpl'})
 # ParameterError: redshift is required. Specify one of:
 #   - redshift=Fixed(z) for a known redshift
 #   - redshift=Uniform(lo, hi) for a photo-z fit
@@ -124,7 +124,7 @@ sfh={'*': FREE}
 # sfh={'all_params': FREE, ...}
 ```
 
-**Why one?** Fewer names = fewer mental models. A reader sees `'all_params'` once and knows what it is. The `'*'` was a Bagpipes carryover; dropping it costs nothing and gains clarity.
+**Why one?** Fewer names = fewer mental models. A reader sees `'all_params'` once and knows what it is. One name, one mental model: the retired `'*'` spelling bought nothing but a second way to write the same thing.
 
 ### No nested wildcard shortcuts
 
@@ -132,7 +132,7 @@ The grammar does **not** support shorthands like `'all_params': {'sfh': FREE, 'n
 
 ```python
 # NOT supported:
-model = SEDModel.build(all_params=FREE, sfh={...}, neb={...})
+model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={'type': 'dpl', 'all_params': FREE}, neb={'type': 'cue', 'all_params': FIXED})
 
 # DO this:
 model = SEDModel.build(sfh={'all_params': FREE, ...}, neb={'all_params': FIXED, ...})
@@ -194,4 +194,4 @@ The grammar is built to make configuration:
 4. **Readable** — a user can scan a model dict and see exactly what it does.
 5. **Extensible** — adding a new component or variant requires no grammar edits.
 
-See the [configuration reference](model_configuration.md) for the detailed syntax and the [model construction guide](model-construction.md) for the internal dispatch and add-a-model recipe.
+See the [configuration reference](model_configuration.md) for the detailed syntax and the configuration reference for usage details.
