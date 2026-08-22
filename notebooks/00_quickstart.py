@@ -221,10 +221,13 @@ print(f"  ∇log-likelihood  warm:       {time.perf_counter() - t:8.4f} s")
 # from that MAP point (`init_from=map_result`).
 #
 # With `init_from=map_result`, the chains start at a good point, so warm-up can
-# be much shorter than a cold start. Here, 1000 warm-up steps are sufficient
-# with the DPL SFH model (which has extra shape freedom), achieving 0 divergences
-# and split-R̂ ≈ 1.0. The practical principle: cold chains need long burn-in;
-# MAP-initialized chains are fast from the start.
+# be much shorter than a cold start: 500 steps here, against the 1500 a cold
+# start of this model wants. The budget is a measured trade: a handful of
+# divergent transitions remain (a few per 1000 draws; longer warm-up reduces
+# them slowly) while split-R̂ stays ≈ 1.0 at every budget tried. The practical
+# principle: cold chains need long burn-in; MAP-initialized chains are fast
+# from the start, and the leftover divergences are printed below rather than
+# hidden — read them together with R̂.
 
 # %%
 t = time.perf_counter()
