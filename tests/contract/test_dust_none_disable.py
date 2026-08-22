@@ -41,7 +41,10 @@ def test_dust_none_disables_dust(synthetic_ssp_wide, synthetic_tophat_obs):
 
 
 def test_dust_none_matches_omitting_dust(synthetic_ssp_wide, synthetic_tophat_obs):
-    """dust_attenuation={'type': 'none'} produces identical params and photometry to omitting the group."""
+    """dust_attenuation={'type': 'none'} produces identical params and photometry.
+
+    Verifies that explicit 'none' is equivalent to omitting the dust_attenuation group.
+    """
     model_none, phot_none = _phot(
         synthetic_ssp_wide, synthetic_tophat_obs, dust_attenuation={"type": "none"}
     )
