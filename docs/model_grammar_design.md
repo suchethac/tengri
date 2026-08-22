@@ -45,7 +45,7 @@ No `apply_igm=True` flag. No magic ENV variable. A reader sees `igm={'type': ...
 
 **Error on ambiguity:** A group dict with keys but no `'type'` raises instead of silently using a default. This catches typos:
 
-```python
+```text
 neb={'logz_gas': -0.3}  # Forgot 'type'
 # ParameterError: neb dict provided but 'type' is missing.
 # Add a type: neb={'type': 'cue', ...} or omit the dict entirely.
@@ -53,7 +53,7 @@ neb={'logz_gas': -0.3}  # Forgot 'type'
 
 **Wildcard never silent:** `'all_params': FREE` on a group with zero free parameters raises instead of silently no-opping. This catches configuration errors:
 
-```python
+```text
 radio={'type': 'sfonly', 'all_params': FREE}
 # ParameterError: 'all_params': FREE has no effect on radio (no free parameters).
 # Use explicit priors instead: radio={'q10': Uniform(...)}
@@ -99,7 +99,7 @@ Why? Nesting dust under one key invited conflating them. A user might ask "what 
 
 Redshift is not optional. Omitting it raises:
 
-```python
+```text
 model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={'type': 'dpl'})
 # ParameterError: redshift is required. Specify one of:
 #   - redshift=Fixed(z) for a known redshift
@@ -120,7 +120,7 @@ All three are `Distribution` instances under the hood. The grammar accepts them 
 
 The grammar has **one** wildcard: `'all_params'`. The retired `'*'` raises with a clear message:
 
-```python
+```text
 sfh={'*': FREE}
 # TypeError: The '*' wildcard is retired. Use 'all_params' instead.
 # sfh={'all_params': FREE, ...}
@@ -146,7 +146,7 @@ model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={'all_params': FREE, .
 
 Dust attenuation requires you to name the law. No "default law" mode:
 
-```python
+```text
 dust_attenuation={'type': 'two_component', 'all_params': FIXED}
 # ParameterError: dust_attenuation type 'two_component' requires 'law' or ('law_bc' and 'law_diff').
 # See tengri.list_dust_laws() for options.

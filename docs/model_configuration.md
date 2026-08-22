@@ -527,7 +527,7 @@ The grammar is designed to fail **loudly** with actionable guidance.
 
 ### Missing required setting
 
-```python
+```text
 model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={'type': 'dpl'})
 # ParameterError: redshift is required. Specify one of:
 #   - redshift=Fixed(z) for a known redshift
@@ -537,7 +537,7 @@ model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={'type': 'dpl'})
 
 ### Missing structural key (when required)
 
-```python
+```text
 model = SEDModel.build(ssp_data=ssp, observation=obs, dust_attenuation={'type': 'two_component', 'all_params': FIXED}, redshift=Fixed(0.1))
 # ParameterError: dust_attenuation type 'two_component' requires 'law' or ('law_bc' and 'law_diff').
 # See tengri.list_dust_laws() for options.
@@ -545,7 +545,7 @@ model = SEDModel.build(ssp_data=ssp, observation=obs, dust_attenuation={'type': 
 
 ### Mismatched law pair
 
-```python
+```text
 dust_attenuation={'type': 'two_component', 'law_bc': 'calzetti'}
 # ParameterError: On dust_attenuation type 'two_component', 'law_bc' requires 'law_diff'.
 # Specify both, or use 'law' for both screens.
@@ -553,7 +553,7 @@ dust_attenuation={'type': 'two_component', 'law_bc': 'calzetti'}
 
 ### Unknown key with suggestion
 
-```python
+```text
 sfh={'type': 'dpl', 'beta_': Uniform(1, 3)}
 # ParameterError: Unknown key 'beta_' in sfh group.
 # Did you mean: beta?
@@ -561,7 +561,7 @@ sfh={'type': 'dpl', 'beta_': Uniform(1, 3)}
 
 ### Retired spelling
 
-```python
+```text
 stellar={'type': 'chabrier'}
 # ValueError: The 'stellar' kwarg is retired. Use 'met=' instead to select metallicity mode.
 # met={'type': 'table'} for the same behavior.
@@ -569,7 +569,7 @@ stellar={'type': 'chabrier'}
 
 ### Retired wildcard
 
-```python
+```text
 sfh={'type': 'dpl', '*': FREE}
 # ValueError: The '*' wildcard is retired. Use 'all_params' instead.
 # sfh={'type': 'dpl', 'all_params': FREE, ...}
