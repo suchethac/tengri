@@ -805,6 +805,19 @@ def parse_groups(**kwargs) -> Parameters:
     # ``all_params`` alias is already canonicalized to ``'*'`` before scoping.
     kwargs = _normalize_sfh_field(kwargs)
 
+    # ── Pass 0c: Inject dust_attenuation={'type': 'none'} when omitted ───
+    # Activate the homogenized "omitted = off" rule: when dust_attenuation
+    # is absent and no old dust= form was given, treat it as {'type': 'none'}
+    # (parity with every other optional physics block). Must happen before
+    # _translate_structural so both structural and param resolution phases
+    # see the injected dict.
+    has_dust_old = "dust" in kwargs and isinstance(kwargs.get("dust"), dict)
+    has_dust_atten = "dust_attenuation" in kwargs and isinstance(
+        kwargs.get("dust_attenuation"), dict
+    )
+    if not has_dust_atten and not has_dust_old:
+        kwargs["dust_attenuation"] = {"type": "none"}
+
     # ── Pass 1: Translate structural choices ──────────────────────────
 
     structural_kwargs = _translate_structural(kwargs)

@@ -41,7 +41,22 @@ def test_dust_none_disables_dust(synthetic_ssp_wide, synthetic_tophat_obs):
 
 
 def test_dust_none_matches_omitting_dust(synthetic_ssp_wide, synthetic_tophat_obs):
-    """A dust-free model built with 'none' is not attenuated."""
+    """dust_attenuation={'type': 'none'} produces identical params and photometry to omitting the group."""
+    model_none, phot_none = _phot(
+        synthetic_ssp_wide, synthetic_tophat_obs, dust_attenuation={"type": "none"}
+    )
+    model_omit, phot_omit = _phot(synthetic_ssp_wide, synthetic_tophat_obs)
+    # Both should have dust disabled.
+    assert model_none._dust_model == "off"
+    assert model_omit._dust_model == "off"
+    # Both should have identical free params (no dust params).
+    assert model_none.spec.free_params == model_omit.spec.free_params
+    # Photometry should be identical (same SED, no attenuation either way).
+    np.testing.assert_allclose(phot_none, phot_omit, rtol=1e-6)
+
+
+def test_heavy_dust_attenuates(synthetic_ssp_wide, synthetic_tophat_obs):
+    """Heavy dust attenuation reduces flux, especially in blue bands."""
     _, none = _phot(synthetic_ssp_wide, synthetic_tophat_obs, dust_attenuation={"type": "none"})
     _, dusty = _phot(
         synthetic_ssp_wide,
