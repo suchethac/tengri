@@ -295,6 +295,7 @@ def test_grammar_matches_low_level_shock_flag(synthetic_ssp_wide, synthetic_toph
     spec = Parameters(
         mean_sfh_type="const",
         redshift=0.1,
+        dust_model="off",
         shock=True,
         shock_norm="frac",
         shock_frac=0.6,

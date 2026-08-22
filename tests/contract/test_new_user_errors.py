@@ -34,38 +34,47 @@ _WEIGHTS = os.path.join("data", "cue_weights.npz")
 
 
 @pytest.fixture(scope="module")
-def dustless_model(synthetic_ssp_wide, synthetic_tophat_obs):
-    """Minimal build — the auto-filled dust group leaves tau_bc/diff FREE."""
+def missing_params_model(synthetic_ssp_wide, synthetic_tophat_obs):
+    """Model with free dust params to test missing-params error handling.
+
+    The dust group is explicitly enabled with free params since PR-B changed
+    the default: omitted dust_attenuation now means dust_model='off' (parity with
+    other optional groups). This fixture needs dust params to be free to test the
+    MissingParameterError contract when predict_photometry({}) is called.
+    """
+    from tengri import FREE
+
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         return SEDModel.build(
             ssp_data=synthetic_ssp_wide,
             observation=synthetic_tophat_obs,
             sfh={"type": "delayed", "all_params": FIXED},
+            dust_attenuation={"type": "two_component", "law": "power_law", "all_params": FREE},
             redshift=Fixed(0.1),
         )
 
 
-def test_missing_free_params_raises_helpfully(dustless_model):
+def test_missing_free_params_raises_helpfully(missing_params_model):
     with pytest.raises(MissingParameterError, match="dust_tau_bc"):
-        dustless_model.predict_photometry({})
+        missing_params_model.predict_photometry({})
 
 
-def test_missing_free_params_message_names_the_fix(dustless_model):
+def test_missing_free_params_message_names_the_fix(missing_params_model):
     with pytest.raises(MissingParameterError, match=r"spec\.sample"):
-        dustless_model.mock({})
+        missing_params_model.mock({})
 
 
-def test_full_params_still_predict(dustless_model):
+def test_full_params_still_predict(missing_params_model):
     import jax
     import numpy as np
 
-    params = dustless_model.spec.sample(jax.random.PRNGKey(0))
-    flux = np.asarray(dustless_model.predict_photometry(params))
+    params = missing_params_model.spec.sample(jax.random.PRNGKey(0))
+    flux = np.asarray(missing_params_model.predict_photometry(params))
     assert np.isfinite(flux).all()
 
 
-def test_predict_validates_eagerly_like_predict_photometry(dustless_model):
+def test_predict_validates_eagerly_like_predict_photometry(missing_params_model):
     """``model.predict`` must reject bad params up front, not defer to accessor.
 
     The lean ``predict_photometry({})`` raised a helpful ``MissingParameterError``,
@@ -78,28 +87,28 @@ def test_predict_validates_eagerly_like_predict_photometry(dustless_model):
 
     from tengri.config.exceptions import UnknownParameterError
 
-    good = dustless_model.spec.sample(jax.random.PRNGKey(0))
+    good = missing_params_model.spec.sample(jax.random.PRNGKey(0))
 
     # A valid full params dict still returns a (lazy) Prediction.
-    assert dustless_model.predict(good) is not None
+    assert missing_params_model.predict(good) is not None
 
     # Missing free params → eager MissingParameterError (not a deferred KeyError).
     with pytest.raises(MissingParameterError, match="dust_tau_bc"):
-        dustless_model.predict({})
+        missing_params_model.predict({})
 
     # A typo'd key is caught (was silently dropped, then KeyError on accessor).
     typo = dict(good)
-    a_key = next(iter(dustless_model.spec.free_params))
+    a_key = next(iter(missing_params_model.spec.free_params))
     typo[f"{a_key}_typo"] = typo.pop(a_key)
     with pytest.raises(UnknownParameterError):
-        dustless_model.predict(typo)
+        missing_params_model.predict(typo)
 
     # A non-dict (e.g. a bare array) names the expected type instead of an
     # opaque "cannot convert dictionary update sequence" error.
     import numpy as np
 
     with pytest.raises(TypeError, match="expects a params dict"):
-        dustless_model.predict(np.array([0.1, 0.2, 0.3]))
+        missing_params_model.predict(np.array([0.1, 0.2, 0.3]))
 
 
 def test_no_observation_model_accessors_name_the_fix(synthetic_ssp_wide):
