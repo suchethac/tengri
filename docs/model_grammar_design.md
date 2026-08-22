@@ -10,9 +10,11 @@ The grammar organizes the model as a flat collection of independent physics bloc
 
 ```python
 model = SEDModel.build(
+    ssp_data=ssp, observation=obs,
     sfh={'type': '...', 'all_params': ..., 'param': ...},
     dust_attenuation={'type': '...', 'all_params': ..., 'param': ...},
     neb={'type': '...', 'all_params': ..., 'param': ...},
+    redshift=Fixed(0.1),
 )
 ```
 
@@ -135,7 +137,7 @@ The grammar does **not** support shorthands like `'all_params': {'sfh': FREE, 'n
 model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={'type': 'dpl', 'all_params': FREE}, neb={'type': 'cue', 'all_params': FIXED})
 
 # DO this:
-model = SEDModel.build(sfh={'all_params': FREE, ...}, neb={'all_params': FIXED, ...})
+model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={'all_params': FREE, ...}, neb={'all_params': FIXED, ...}, redshift=Fixed(0.1))
 ```
 
 **Why?** Nesting wildcards invites ambiguity: does `'all_params': FREE` apply to all params in all groups? Just the explicit ones? Keeping wildcards local — inside each group — makes scope crystal clear.

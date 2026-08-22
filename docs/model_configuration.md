@@ -73,13 +73,13 @@ To activate an optional group, provide its dict with a `'type'`:
 
 ```python
 # IGM is OFF (not provided)
-model = SEDModel.build(sfh={...}, redshift=Fixed(0.1))
+model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={...}, redshift=Fixed(0.1))
 
 # IGM is ON (type given)
-model = SEDModel.build(sfh={...}, igm={'type': 'inoue'}, redshift=Fixed(0.1))
+model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={...}, igm={'type': 'inoue'}, redshift=Fixed(0.1))
 
 # Explicit OFF (same as omitting it)
-model = SEDModel.build(sfh={...}, igm={'type': 'none'}, redshift=Fixed(0.1))
+model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={...}, igm={'type': 'none'}, redshift=Fixed(0.1))
 ```
 
 An optional group with no `'type'` but with other keys raises `ParameterError` with the required syntax.
@@ -90,12 +90,12 @@ An optional group with no `'type'` but with other keys raises `ParameterError` w
 
 ```python
 # WRONG: radio is free-param free
-model = SEDModel.build(radio={'type': 'sfonly', 'all_params': FREE})
+model = SEDModel.build(ssp_data=ssp, observation=obs, radio={'type': 'sfonly', 'all_params': FREE})
 # Raises: "Cannot set all_params=FREE on radio — it has no free parameters."
 # "  Pass explicit priors instead: radio={'type': 'sfonly', 'q10': Uniform(...)}"
 
 # CORRECT: explicit prior on the one available parameter
-model = SEDModel.build(radio={'type': 'sfonly', 'q10': Uniform(-0.5, 0.5)})
+model = SEDModel.build(ssp_data=ssp, observation=obs, radio={'type': 'sfonly', 'q10': Uniform(-0.5, 0.5)})
 ```
 
 ### Error handling and suggestions
@@ -446,7 +446,7 @@ with open("config.yaml", "w") as f:
 
 ```python
 # Input
-model = SEDModel.build(sfh={'type': 'dpl', 'all_params': FREE, 'beta': Uniform(1, 3)})
+model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={'type': 'dpl', 'all_params': FREE, 'beta': Uniform(1, 3)}, redshift=Fixed(0.1))
 
 # Output of model.spec.to_groups()
 {
@@ -497,8 +497,10 @@ Free everything except a few things:
 
 ```python
 model = SEDModel.build(
+    ssp_data=ssp, observation=obs,
     sfh={'type': 'dpl', 'all_params': FREE, 'beta': Fixed(2.0)},  # beta pinned
     dust_attenuation={'type': 'two_component', 'all_params': FIXED, 'tau_bc': Uniform(0, 1)},  # only tau_bc free
+    redshift=Fixed(0.1),
     ...
 )
 ```
@@ -526,7 +528,7 @@ The grammar is designed to fail **loudly** with actionable guidance.
 ### Missing required setting
 
 ```python
-model = SEDModel.build(sfh={'type': 'dpl'})
+model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={'type': 'dpl'})
 # ParameterError: redshift is required. Specify one of:
 #   - redshift=Fixed(z) for a known redshift
 #   - redshift=Uniform(lo, hi) for a photo-z fit
@@ -536,7 +538,7 @@ model = SEDModel.build(sfh={'type': 'dpl'})
 ### Missing structural key (when required)
 
 ```python
-model = SEDModel.build(dust_attenuation={'type': 'two_component', 'all_params': FIXED})
+model = SEDModel.build(ssp_data=ssp, observation=obs, dust_attenuation={'type': 'two_component', 'all_params': FIXED}, redshift=Fixed(0.1))
 # ParameterError: dust_attenuation type 'two_component' requires 'law' or ('law_bc' and 'law_diff').
 # See tengri.list_dust_laws() for options.
 ```
@@ -576,7 +578,7 @@ sfh={'type': 'dpl', '*': FREE}
 ### No-op wildcard
 
 ```python
-radio={'type': 'sfonly', 'all_params': FREE}
+model = SEDModel.build(ssp_data=ssp, observation=obs, radio={'type': 'sfonly', 'all_params': FREE}, redshift=Fixed(0.1))
 # ParameterError: Cannot set 'all_params': FREE on radio — it has no free parameters.
 # Pass explicit priors instead: radio={'type': 'sfonly', 'q10': Uniform(...)}
 ```
@@ -586,7 +588,7 @@ radio={'type': 'sfonly', 'all_params': FREE}
 The model will build, but IGM has no effect:
 
 ```python
-model = SEDModel.build(sfh={'type': 'dpl'}, igm={'type': 'inoue'}, redshift=Uniform(0, 1))
+model = SEDModel.build(ssp_data=ssp, observation=obs, sfh={'type': 'dpl'}, igm={'type': 'inoue'}, redshift=Uniform(0, 1))
 # ✓ Builds. IGM model is loaded but applied only when redshift is known (during prediction).
 ```
 
