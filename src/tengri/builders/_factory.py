@@ -16,7 +16,6 @@ unification can fold SFH onto these helpers when convenient.
 from __future__ import annotations
 
 import inspect
-import warnings
 from collections.abc import Callable
 from typing import Any
 
@@ -183,13 +182,13 @@ def _pop_wildcard(variant: str, kwargs: dict[str, Any]) -> Any:
     # Reject deprecated aliases with hard errors naming the replacement
     if has_deprecated:
         raise TypeError(
-            f"The `defaults=` alias has been retired; the wildcard parameter is "
-            f"`all_params=`. Write all_params=FREE instead of defaults=FREE."
+            "The `defaults=` alias has been retired; the wildcard parameter is "
+            "`all_params=`. Write all_params=FREE instead of defaults=FREE."
         )
     if has_legacy:
         raise TypeError(
-            f"The `_=` alias has been retired; the wildcard parameter is "
-            f"`all_params=`. Write all_params=FREE instead of _=FREE."
+            "The `_=` alias has been retired; the wildcard parameter is "
+            "`all_params=`. Write all_params=FREE instead of _=FREE."
         )
 
     # Pop the canonical form or return default

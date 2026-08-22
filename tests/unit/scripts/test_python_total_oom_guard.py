@@ -47,11 +47,11 @@ def _write_pressure(path: Path, avail_kb: int, swap_used_kb) -> Path:
 
 
 def _run_guard(
-    tmp_path: Path, ps_procs, *, avail_kb, swap_used_kb, shipped_all_params=False, **env_overrides
+    tmp_path: Path, ps_procs, *, avail_kb, swap_used_kb, shipped_defaults=False, **env_overrides
 ):
     """Run one guard tick against fixtures and return the log text.
 
-    ``shipped_all_params=True`` omits the threshold neutralizers so the guard runs
+    ``shipped_defaults=True`` omits the threshold neutralizers so the guard runs
     the configuration a real machine gets. Any test asking "would the guard as
     installed have caught this?" MUST use it: setting the thresholds by hand
     proves only that some configuration works, never that the shipped default
