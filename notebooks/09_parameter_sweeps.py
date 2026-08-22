@@ -16,14 +16,7 @@
 # %% [markdown]
 # # Parameter sweeps
 #
-# Vary one knob, plot a fan of SEDs — the cheapest way to build physical intuition.
-# Because tengri's model is pure JAX, sweeps can be batched through `vmap` and run
-# in a single compiled call. This notebook covers:
-#
-# 1. 1-D sweeps with `sweep_parameter`.
-# 2. Prior fans via `sample_sfh_prior`.
-# 3. Photometric setup with `Instrument`.
-# 4. 2-D photometric grids via `predict_photometry_batch` and `jax.vmap`.
+# Vary one knob and plot a fan of SEDs — the cheapest way to build physical intuition. Because tengri's model is pure JAX, sweeps can be batched through `vmap` and run in a single compiled call. This notebook covers 1-D sweeps with `sweep_parameter`, prior fans via `sample_sfh_prior`, photometric setup, and 2-D photometric grids via vectorized forward passes.
 
 # %%
 import os

@@ -8,8 +8,8 @@ specifying parameters, generating predictions, and creating mock data.
 ``SEDModel`` you build is what goes inside it. Build the SED chain, wrap it,
 fit it.
 
-ForwardModel
-------------
+Forward model
+-------------
 
 .. autoclass:: tengri.ForwardModel
    :members:
@@ -25,8 +25,8 @@ Population
    :members:
    :show-inheritance:
 
-SEDModel
---------
+SED model
+---------
 
 The ``predict_*`` methods that once returned individual observables are
 superseded by the single cached :meth:`~tengri.SEDModel.predict` pass — see
@@ -54,22 +54,22 @@ targets a different output channel and they compose: ``WavePrecomp`` serves
 photometry, ``SpectrumPrecomp`` the spectrum, ``FeaturePrecomp`` the emission
 lines. ``approx=None`` (the default) keeps the exact wave-grid path.
 
-WavePrecomp
-~~~~~~~~~~~
+Wave precomp
+~~~~~~~~~~~~
 
 .. autoclass:: tengri.WavePrecomp
    :members:
    :show-inheritance:
 
-SpectrumPrecomp
-~~~~~~~~~~~~~~~
+Spectrum precomp
+~~~~~~~~~~~~~~~~
 
 .. autoclass:: tengri.SpectrumPrecomp
    :members:
    :show-inheritance:
 
-FeaturePrecomp
-~~~~~~~~~~~~~~
+Feature precomp
+~~~~~~~~~~~~~~~
 
 .. autoclass:: tengri.FeaturePrecomp
    :members:
@@ -89,50 +89,50 @@ Prediction
    :members:
    :show-inheritance:
 
-PriorPredictive
----------------
+Prior predictive
+----------------
 
 .. autoclass:: tengri.PriorPredictive
    :members:
    :show-inheritance:
 
-SEDResult
----------
+SED result
+----------
 
 .. autoclass:: tengri.SEDResult
    :members:
    :show-inheritance:
 
-SFHQuantities
--------------
+SFH quantities
+--------------
 
 .. autoclass:: tengri.SFHQuantities
    :members:
    :show-inheritance:
 
-SEDQuantities
--------------
+SED quantities
+--------------
 
 .. autoclass:: tengri.SEDQuantities
    :members:
    :show-inheritance:
 
-DerivedQuantities
------------------
+Derived quantities
+------------------
 
 .. autoclass:: tengri.DerivedQuantities
    :members:
    :show-inheritance:
 
-EmissionLines
--------------
+Emission lines
+--------------
 
 .. autoclass:: tengri.EmissionLines
    :members:
    :show-inheritance:
 
-MockData
---------
+Mock data
+---------
 
 .. autoclass:: tengri.MockData
    :members:
@@ -192,8 +192,8 @@ Spectroscopy
    :members:
    :show-inheritance:
 
-LineList
---------
+Line list
+---------
 
 .. autoclass:: tengri.LineList
    :members:
@@ -235,22 +235,22 @@ take a **rest-frame** wavelength axis.
 
 .. autofunction:: tengri.measure_index_jax
 
-FilterConvention
-----------------
+Filter convention
+-----------------
 
 .. autoclass:: tengri.FilterConvention
    :members:
    :show-inheritance:
 
-NoiseModel
-----------
+Noise model
+-----------
 
 .. autoclass:: tengri.NoiseModel
    :members:
    :show-inheritance:
 
-VIConfig
---------
+VI config
+---------
 
 .. autoclass:: tengri.VIConfig
    :members:

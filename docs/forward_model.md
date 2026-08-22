@@ -1,4 +1,4 @@
-# Forward model
+# The forward model
 
 Tengri's forward model is split into two clearly separated layers.
 

@@ -57,17 +57,17 @@ SPINE_SLUGS = [
 SPINE_TITLES: dict[str, str] = {
     "00_quickstart": "Quickstart",
     "01_why_jax": "Why JAX",
-    "02_sed_anatomy": "SED Anatomy",
-    "03_discovering_the_menu": "Discovering the Menu",
-    "04_building_models": "Building Models",
-    "05_fitting_photometry": "Fitting Photometry",
-    "06_fitting_spectroscopy": "Fitting Spectroscopy",
-    "07_joint_photo_spec": "Joint Photometry + Spectroscopy",
-    "08_emission_lines": "Emission Lines",
-    "10_fastspecfit_joint_fit": "Joint Fit: Photometry + Lines",
-    "11_catalog_fits": "Catalog Fits in Parallel",
-    "12_simulation_populations": "Forward-Modeling Simulation Populations",
-    "09_parameter_sweeps": "Parameter Sweeps",
+    "02_sed_anatomy": "Anatomy of an SED",
+    "03_discovering_the_menu": "Discovering the model menu",
+    "04_building_models": "Building models",
+    "05_fitting_photometry": "Fitting photometry",
+    "06_fitting_spectroscopy": "Fitting spectroscopy",
+    "07_joint_photo_spec": "Joint photometry and spectroscopy",
+    "08_emission_lines": "Emission lines and BPT diagnostics",
+    "10_fastspecfit_joint_fit": "Joint fits with line fluxes",
+    "11_catalog_fits": "Catalog fitting in parallel",
+    "12_simulation_populations": "Forward modeling galaxy populations",
+    "09_parameter_sweeps": "Parameter sweeps",
 }
 
 # Published under docs/spine/experimental/ -- the "Experimental" toctree at the end

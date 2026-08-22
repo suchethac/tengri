@@ -1,4 +1,4 @@
-# Tengri
+# tengri
 
 [![Tests](https://github.com/suchethac/tengri/actions/workflows/tests.yml/badge.svg)](https://github.com/suchethac/tengri/actions/workflows/tests.yml)
 [![Docs](https://github.com/suchethac/tengri/actions/workflows/docs.yml/badge.svg)](https://suchethacooray.com/tengri/)
@@ -62,21 +62,25 @@ don't use them for publication-grade science.
 
 ## Installation
 
+Tengri is not yet on PyPI. Install from source:
+
 ```bash
-pip install "astro-tengri[all]"
+pip install git+https://github.com/suchethac/tengri.git
 ```
 
-The PyPI distribution name is `astro-tengri`; the import name is `tengri`. (`pip install tengri` is a different, unrelated 2017 package.) The `[all]` extra pulls in the optimizer and sampler backends (`optax`, `blackjax`) that the quick start below uses; a bare `pip install astro-tengri` can build models and predict but not fit.
-
-For development:
+Or clone and install for development:
 
 ```bash
 git clone https://github.com/suchethac/tengri.git
 cd tengri
-pip install -e ".[dev]"
+pip install -e ".[all]"
 ```
 
+The `[all]` extra pulls in the optimizer and sampler backends (`optax`, `blackjax`) that the quick start below uses. A bare install can build models and predict but not fit.
+
 **Requirements:** Python ≥ 3.11, JAX ≥ 0.4.20, DSPS 0.4.6–0.4.7 (0.4.8 excluded: its PyPI sdist breaks at install time), NIFTy 8.5+ with the `re` extra.
+
+(The planned PyPI distribution name will be `astro-tengri`, with import name `tengri`.)
 
 **JAX backends:**
 
@@ -175,7 +179,7 @@ sed = SEDModel.build(
 ```
 
 `all_params` sets every parameter in the group at once; per-parameter keys
-(like `beta` above) override it. `'*'` is an accepted synonym.
+(like `beta` above) override it.
 
 See [`notebooks/04_building_models.py`](notebooks/04_building_models.py)
 for the grammar; `tengri.recipes` shows the curated starting points.
@@ -190,7 +194,7 @@ The notebook spine in [`notebooks/`](https://github.com/suchethac/tengri/tree/ma
 | 01 | `01_why_jax.py`                | JIT, `vmap`, `grad` in the context of galaxy SED inference  |
 | 02 | `02_sed_anatomy.py`            | the panchromatic SED, component by component                |
 | 03 | `03_discovering_the_menu.py`   | discovery API (`list_*`, `describe`, `search`)              |
-| 04 | `04_building_models.py`        | the nested-dict / recipe builder                            |
+| 04 | `04_building_models.py`        | the nested-dict / recipe grammar                            |
 | 05 | `05_fitting_photometry.py`     | photometric fit, end to end                                 |
 | 05 | `05_adding_a_model.py`         | registering a new physics block                             |
 | 06 | `06_fitting_spectroscopy.py`   | spectroscopy with calibration nuisance parameters           |

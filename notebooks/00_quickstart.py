@@ -14,19 +14,20 @@
 # ---
 
 # %% [markdown]
-# # Quickstart: fit a mock galaxy
+# # Quickstart
 #
-# A star-forming galaxy with 12 broadband fluxes from GALEX, SDSS, 2MASS,
-# and WISE (UV through near-IR), fitted with NUTS on a differentiable JAX
-# forward model.
+# ## What you will do
+# Fit 12 broadband photometric observations (UV through near-IR) from a mock star-forming galaxy with a minimal but realistic SED model. You'll use gradient-based inference (NUTS) to map the posterior parameter distribution and check convergence diagnostics.
 #
-# Deliberately minimal — the point is to show how *fast* the JIT-compiled
-# forward model and gradients are. Truncated-skew-normal SFH, two-component
-# Calzetti dust attenuation (birth-cloud pinned to zero, diffuse free),
-# baked-in nebular emission, free stellar metallicity, redshift fixed at 0.05.
-# Seven free parameters. See `04_building_models.py` for the recipe grammar and
-# `02_sed_anatomy.py` for a panchromatic model with dust IR re-emission,
-# nebular, AGN, and IGM enabled.
+# ## What you need
+# An SSP grid with baked-in nebular emission, and broadband filter definitions (GALEX, SDSS, 2MASS, WISE). The model is intentionally minimal: seven free parameters, seven fixed.
+#
+# ## What you will have
+# A posterior sample, convergence diagnostics, a posterior SED with residuals, a star-formation history, and a corner plot of all parameters and key derived quantities.
+#
+# ---
+#
+# The notebook demonstrates how fast JAX gradients make inference: the JIT-compiled forward model and its gradients compile in seconds (cold) and run in milliseconds (warm). The model uses a truncated-skew-normal star-formation history, two-component Calzetti dust attenuation (birth cloud fixed to zero, diffuse component free), baked-in nebular emission at fixed log(U) = −3.0 and solar metallicity, and free stellar metallicity. Redshift is fixed at z = 0.05. For a model with dust infrared re-emission, photoionized nebular grids, AGN, and IGM, see `02_sed_anatomy.py`. For the underlying model-building grammar, see `04_building_models.py`.
 
 # %%
 # Shared notebook setup (see notebooks/_setup.py): quiets the framework notices

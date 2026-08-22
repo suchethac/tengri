@@ -1,4 +1,4 @@
-# API Reference
+# API reference
 
 Auto-generated from docstrings. Everything documented here is importable
 directly from `tengri`.

@@ -14,22 +14,20 @@
 # ---
 
 # %% [markdown]
-# # SED anatomy — a kitchen-sink galaxy from X-rays to radio
+# # Anatomy of an SED
 #
-# A faithful SED is a *composition*: stellar continuum, nebular emission,
-# dust attenuation and re-emission, AGN, radio, X-ray, and intergalactic
-# absorption. Tengri composes all of this from one nested-dict specification.
+# ## What you will do
+# Build a panchromatic SED model with every major component enabled: stellar continuum, nebular emission, dust attenuation and re-emission, AGN, radio, X-ray, and IGM absorption. You'll sweep individual knobs to isolate their contribution to the total flux, from hard X-rays to the radio.
 #
-# The figure below is a **kitchen-sink** model at z = 2 — every component
-# turned on — followed by four mini-sweeps that isolate a single knob
-# at a time. The notebook closes with a complete self-consistent SED from
-# hard X-rays to the radio, with every block overlaid on the total.
+# ## What you need
+# A bare-stellar SSP grid (no nebular or dust emissions) and a panchromatic filter set spanning UV through radio to showcase each component.
 #
-# As the model is built, notice:
+# ## What you will have
+# A toolkit for reasoning about which components matter where in the SED, and how to turn each on or off in your own models. A complete self-consistent spectrum from hard X-rays to 10 cm radio.
 #
-# - `model.summary()` makes the assembly explicit.
-# - `citations.print_citations(model)` produces a working bibliography
-#   for the methods section.
+# ---
+#
+# A faithful SED is a composition: stellar continuum, nebular emission, dust attenuation and re-emission, AGN, radio, X-ray, and intergalactic absorption. Tengri composes all of this from one nested-dict specification. As you build the model, `model.summary()` makes the assembly explicit, and `citations.print_citations(model)` produces a working bibliography for your methods section.
 
 # %%
 import os

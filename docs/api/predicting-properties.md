@@ -281,7 +281,7 @@ spectrum_fast = pred.spectrum(wave_obs=..., approx=True)  # interpolates precomp
 - **Post-fit inspection**: Use `approx=True` to match inference exactly.
 - **Speed-critical analysis**: e.g., generating a mock catalog of 1 million galaxies.
 
-### When NOT to use fast
+### When not to use fast
 
 - **Changing filters at runtime** (`pred.photometry(filters=[...])`): incompatible with `approx=True` — raises `ValueError`.
 - **Exact science**: Analysis grids where pre-computed filters would bias the results.

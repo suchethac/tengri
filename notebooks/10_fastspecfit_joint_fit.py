@@ -14,12 +14,20 @@
 # ---
 
 # %% [markdown]
-# # Joint fit: photometry + emission lines
+# # Joint fits with line fluxes
 #
-# Broadband photometry + emission-line-flux catalog fit (e.g., FastSpecFit for DESI).
-# Uses `predict_line_fluxes` for pure, deblended, absorption-corrected emission —
-# the same quantity FastSpecFit's `LINE_FLUX` reports. Window integrals carry stellar
-# absorption and mis-deblend [N II], so do not compare them to this model.
+# ## What you will do
+# Fit broadband photometry and emission-line fluxes from a catalog (e.g., FastSpecFit line fits from DESI). You'll learn how to use both dataset types together and compare performance of different approximations (exact wave-grid, lookup tables, nested grids).
+#
+# ## What you need
+# An SSP grid, broadband photometry, a line catalog with pure deblended emission fluxes (like FastSpecFit `LINE_FLUX`), and a photoionization backend with free gas-phase metallicity and ionization (e.g., Cue).
+#
+# ## What you will have
+# A posterior that uses line fluxes to constrain nebular gas conditions independent of dust, and a speed comparison showing how nested precomputation helps large catalogs.
+#
+# ---
+#
+# Joint broadband photometry and emission-line-flux fitting (e.g., FastSpecFit for DESI). The notebook uses `predict_line_fluxes` to extract pure, deblended, absorption-corrected emission—the same quantity a catalog's `LINE_FLUX` reports. Direct window-integral methods carry stellar absorption and spectroscopic mis-blends; use them for cross-checks only.
 
 # %%
 from _setup import FIG_DIR, effective_wavelengths_um, quiet

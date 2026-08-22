@@ -715,7 +715,6 @@ exclude_patterns = [
     # excluded here so they don't build as orphans (each emitted a
     # "not in any toctree" warning).
     "adr/**",
-    "known_bugs.md",
     "NEBULAR_REFACTOR.md",
     "_notebooks/**",
     # Not part of the published sidebar (content folded into index.md or omitted)
@@ -749,8 +748,7 @@ exclude_patterns = [
     # ``spine/07_joint_photo_spec`` and ``tengri.list_recipes()`` already serve
     # readers and nothing outside ``docs/`` linked either page.
     #
-    # ``known_bugs.md`` and ``changelog.md`` above stay at ``docs/`` root
-    # deliberately: 30 files cite the former, and both are named in
-    # check_british_spelling and check_doc_examples exemption lists. Moving them
-    # would be churn across three tools for no reader-visible gain.
+    # ``known_bugs.md`` moved to ``docs/dev/`` (excluded via the ``dev/**``
+    # rule above). ``changelog.md`` stays at ``docs/`` root; both are named in
+    # check_british_spelling and check_doc_examples exemption lists.
 ]

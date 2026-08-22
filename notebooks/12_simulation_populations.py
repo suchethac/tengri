@@ -14,26 +14,20 @@
 # ---
 
 # %% [markdown]
-# # Forward-modeling simulation histories: photometry and lines, fast
+# # Forward modeling galaxy populations
 #
-# You have a simulation. For each galaxy it gives you a star formation history
-# and a metallicity history — arrays, not parameters. You want broadband
-# photometry and emission-line fluxes for all of them, as fast as possible.
+# ## What you will do
+# Compute broadband photometry and emission-line fluxes for thousands of galaxies from a simulation. Each galaxy's star-formation and metallicity history are given as arrays (not fitted parameters), and you'll generate observables fast enough for large populations.
 #
-# That is all this notebook does.
+# ## What you need
+# An SSP grid with baked-in nebular emission (wNE), simulated or tabular star-formation and metallicity histories for N galaxies, and a filter set. No priors, no fitting.
 #
-# ```text
-#     in :  t [Gyr]        (n_t,)      cosmic time, shared or per galaxy
-#           SFR(t)         (N, n_t)    M☉/yr
-#           Z(t)           (N, n_t)    stellar metallicity
-#     out:  photometry     (N, n_β)    erg/s/cm2/Hz
-#           line fluxes    (N,)  each  erg/s/cm2
-#           properties     (N,)  each  stellar mass, SFR, ...
-# ```
+# ## What you will have
+# Photometry and emission-line fluxes for the entire population, derived physical properties (stellar mass, SFR), and a clear picture of how much speed vectorization buys you.
 #
-# There is no fitting here and **no free parameters** — the tables are the
-# model. Sections 1–3 are the working code; sections 4–5 are the speed, which
-# is the part worth reading twice.
+# ---
+#
+# You have a simulation. For each galaxy it gives you a star-formation history and a metallicity history as arrays, not fitted parameters. You want broadband photometry and emission-line fluxes for all of them, as fast as possible. There is no fitting here—the tables are the model. The working code occupies the first three sections; the final two sections benchmark speed across different approximation choices. Vectorization turns the computation from one-galaxy-at-a-time to population-at-a-time, measured in seconds for millions of galaxies on a GPU.
 
 # %%
 from _setup import FIG_DIR, quiet

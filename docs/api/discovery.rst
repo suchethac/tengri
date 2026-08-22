@@ -1,5 +1,5 @@
-Discovery & citations
-=====================
+Discovery and citations
+=======================
 
 The introspection surface: browse every model, dust law, SFH variant,
 nebular backend, AGN block, inference method, filter, and recipe that
@@ -32,8 +32,8 @@ help panel, and an install/environment health check.
 
 .. autofunction:: tengri.print_logo
 
-Look up & search
-----------------
+Look up and search
+------------------
 
 ``describe`` resolves any name across every menu (and discloses when a
 name — e.g. ``skirtor``, both a disc and a torus — is registered in more
