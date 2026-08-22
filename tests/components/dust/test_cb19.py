@@ -700,7 +700,7 @@ class TestSEDModelInitNebularDispatch:
             ssp_data_wne,
             sfh={
                 "type": "tsnorm",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "log_peak_sfr": 1.0,
                 "peak_lbt_gyr": 2.0,
                 "width_gyr": 1.0,
@@ -711,12 +711,12 @@ class TestSEDModelInitNebularDispatch:
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "tau_bc": 0.2,
                 "tau_diff": 0.1,
                 "slope": -0.7,
             },
-            neb={"type": "cb19", "*": tengri.FIXED},
+            neb={"type": "cb19", "all_params": tengri.FIXED},
             redshift=Fixed(0.1),
         )
         assert model.spec.nebular_mode == "cb19"

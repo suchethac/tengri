@@ -199,7 +199,7 @@ class TestPerFitCitationSurface:
 
         model = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
-            sfh={"type": "dpl", "*": FREE},
+            sfh={"type": "dpl", "all_params": FREE},
             neb={"type": "none"},
             redshift=Fixed(0.1),
         )

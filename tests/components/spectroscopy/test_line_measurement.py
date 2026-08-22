@@ -59,11 +59,11 @@ def _model(ssp_path, neb, tau=0.0):
         m = SEDModel.build(
             ssp_data=ssp,
             observation=obs,
-            sfh={"type": "dpl", "*": FREE},
+            sfh={"type": "dpl", "all_params": FREE},
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "*": FIXED,
+                "all_params": FIXED,
                 "tau_diff": Uniform(0.0, 2.0),
                 "tau_bc": Uniform(0.0, 2.0),
             },
@@ -129,7 +129,7 @@ def test_line_flux_measured_is_jittable():
 def test_measured_works_for_cue_backend(real_ssp_only):
     """Measure-as-catalog works on Cue's total SED; a clean line ([OIII]) recovers
     the direct nebular luminosity to ~10% (dust off)."""
-    m, p = _model(_BARE, {"type": "cue", "*": FIXED}, tau=0.0)
+    m, p = _model(_BARE, {"type": "cue", "all_params": FIXED}, tau=0.0)
     defs = resolve_line_defs(None, m.observation)
     measured = {ld.name: float(v) for ld, v in zip(defs, m.measure_line_fluxes(p))}
     direct = {
@@ -146,8 +146,8 @@ def test_measured_works_for_cue_backend(real_ssp_only):
 def test_measured_includes_dust_reddening():
     """Measured fluxes redden with dust (bluer lines attenuated more) — the
     catalog-observable behavior the intrinsic predict_line_fluxes lacks."""
-    m0, p0 = _model(_BARE, {"type": "cue", "*": FIXED}, tau=0.0)
-    m1, p1 = _model(_BARE, {"type": "cue", "*": FIXED}, tau=0.6)
+    m0, p0 = _model(_BARE, {"type": "cue", "all_params": FIXED}, tau=0.0)
+    m1, p1 = _model(_BARE, {"type": "cue", "all_params": FIXED}, tau=0.6)
     d0 = resolve_line_defs(None, m0.observation)
     f0 = {ld.name: float(v) for ld, v in zip(d0, m0.measure_line_fluxes(p0))}
     d1 = resolve_line_defs(None, m1.observation)
@@ -159,7 +159,7 @@ def test_measured_includes_dust_reddening():
 
 def test_fast_line_fluxes_raise_for_additive_nebular():
     """The window LUT misses additive Cue emission → approx=True must raise."""
-    m, p = _model(_BARE, {"type": "cue", "*": FIXED}, tau=0.0)
+    m, p = _model(_BARE, {"type": "cue", "all_params": FIXED}, tau=0.0)
     with pytest.raises(ValueError, match=r"baked-in nebular only"):
         m.measure_line_fluxes(p, DESI_LINES, approx=True)
 
@@ -171,7 +171,7 @@ def test_predict_line_fluxes_reddens_by_default():
     was silently dropped in the fit likelihood. Now redden=True is the default;
     redden=False recovers the intrinsic (dust-independent) values.
     """
-    m, p = _model(_BARE, {"type": "cue", "*": FIXED}, tau=0.5)
+    m, p = _model(_BARE, {"type": "cue", "all_params": FIXED}, tau=0.5)
     waves = _LINE_DATA.wavelengths
     red = np.asarray(m.predict_line_fluxes(p, target_wavelengths=waves))
     intr = np.asarray(m.predict_line_fluxes(p, target_wavelengths=waves, redden=False))

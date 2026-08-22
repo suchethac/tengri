@@ -123,7 +123,7 @@ def build_model(variant: str):
         sfh=sfh,
         dust_attenuation={
             "type": "two_component",
-            "*": FIXED,
+            "all_params": FIXED,
             "law": "calzetti",
             "tau_bc": Uniform(0.0, 1.0),
         },

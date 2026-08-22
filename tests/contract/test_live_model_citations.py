@@ -30,8 +30,8 @@ def _build(ssp, **extra):
     kwargs = dict(
         ssp_data=ssp,
         observation=obs,
-        sfh={"type": "dpl", "*": FREE},
-        dust_attenuation={"type": "two_component", "law": "calzetti", "*": FIXED},
+        sfh={"type": "dpl", "all_params": FREE},
+        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
         redshift=Fixed(0.1),
     )
     kwargs.update(extra)
@@ -41,7 +41,7 @@ def _build(ssp, **extra):
 @pytest.mark.parametrize(
     "extra, expected",
     [
-        ({"neb": {"type": "cue", "*": FIXED}}, "cue"),
+        ({"neb": {"type": "cue", "all_params": FIXED}}, "cue"),
         (
             {
                 "neb": {"type": "none"},

@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 """A parameter-free IR engine must not free 19 parameters it never reads (#1482).
 
-#1482 was "``dust.emission '*': FREE`` frees the same seven parameters for every
+#1482 was "``dust.emission 'all_params': FREE`` frees the same seven parameters for every
 backend". Its fix narrows the sub-block wildcard to the selected engine's own
 declared priors, and works for eleven of thirteen production engines.
 
@@ -50,7 +50,7 @@ An earlier revision of this note added "and freeable through the ``dust``
 group". That was wrong, and it is corrected here rather than deleted because
 the mistake is instructive: the grammar partitions ``eta_balance`` into
 **dust.emission**, so ``dust={'eta_balance': ...}`` raises *"'eta_balance' is a
-'dust.emission' parameter, not a 'dust' one"* and ``dust={'*': FREE}`` does not
+'dust.emission' parameter, not a 'dust' one"* and ``dust={'all_params': FREE}`` does not
 reach it either (measured: that wildcard frees ``dust_tau_bc`` and
 ``dust_tau_diff`` only). For a parameter-free engine that is harmless -- there
 is no engine to un-anchor. For ``energy_balance_split`` it is not, which is why

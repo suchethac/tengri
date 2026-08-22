@@ -33,13 +33,13 @@ def _build(ssp, approx):
         approx=approx,
         redshift=Fixed(0.5),
         igm={"type": "none"},
-        sfh={"type": "tsnorm", "*": FIXED, "log_total_mass": Fixed(10.0)},
-        dust_attenuation={"type": "two_component", "law": "calzetti", "*": FIXED},
+        sfh={"type": "tsnorm", "all_params": FIXED, "log_total_mass": Fixed(10.0)},
+        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
         neb={"type": "none"},
         agn={
             "type": "composable",
-            "*": FIXED,
-            "disc": {"type": "multicolor", "*": FIXED},
+            "all_params": FIXED,
+            "disc": {"type": "multicolor", "all_params": FIXED},
             "log_lbol": Fixed(12.0),
         },
     )

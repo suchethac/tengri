@@ -61,14 +61,14 @@ def test_dust_ir_in_waveprecomp_photometry(emission):
     ssp = _ssp_or_skip()
     obs = _ir_obs()
     groups = dict(
-        sfh={"type": "dpl", "*": FIXED},
+        sfh={"type": "dpl", "all_params": FIXED},
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
-            "*": FIXED,
+            "all_params": FIXED,
             "tau_diff": 0.5,  # real attenuation → real L_ir to re-emit
         },
-        dust_emission={"type": emission, "*": FIXED},
+        dust_emission={"type": emission, "all_params": FIXED},
         neb={"type": "none"},
     )
     with warnings.catch_warnings():
@@ -130,14 +130,14 @@ def test_dust_ir_optical_reddest_band_not_inflated(filters):
     ssp = _ssp_or_skip()
     obs = Observation(photometry=Photometry.from_names(filters))
     groups = dict(
-        sfh={"type": "dpl", "*": FIXED},
+        sfh={"type": "dpl", "all_params": FIXED},
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
-            "*": FIXED,
+            "all_params": FIXED,
             "tau_diff": 0.5,  # real attenuation → real L_ir to (not) re-emit in the optical
         },
-        dust_emission={"type": "modified_blackbody", "*": FIXED},
+        dust_emission={"type": "modified_blackbody", "all_params": FIXED},
         neb={"type": "none"},
     )
     with warnings.catch_warnings():

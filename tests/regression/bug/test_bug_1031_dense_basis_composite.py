@@ -58,8 +58,8 @@ def _build(ssp_data, observation, sfh_type):
     return SEDModel.build(
         ssp_data=ssp_data,
         observation=observation,
-        sfh={"type": sfh_type, "*": FREE},
-        dust_attenuation={"type": "two_component", "law": "calzetti", "*": FIXED},
+        sfh={"type": sfh_type, "all_params": FREE},
+        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
         neb={"type": "none"},
         redshift=Fixed(0.5),
     )

@@ -33,7 +33,7 @@ def _composable_agn(disc, *, torus="none"):
         "torus": {"type": torus},
         "atten": {"type": "none"},
         "agn_log_lbol": Fixed(11.42),
-        "*": FIXED,
+        "all_params": FIXED,
     }
 
 
@@ -118,13 +118,13 @@ class TestEndToEndPublish:
     def test_composable_publishes_positive_l2500(self, synthetic_ssp_wide):
         model = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
-            sfh={"type": "delayed", "*": FIXED},
+            sfh={"type": "delayed", "all_params": FIXED},
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
                 "tau_bc": Fixed(0.0),
                 "tau_diff": Fixed(0.0),
-                "*": FIXED,
+                "all_params": FIXED,
             },
             agn=_composable_agn("multicolor", torus="skirtor"),
             redshift=Fixed(0.05),
@@ -139,13 +139,13 @@ class TestEndToEndPublish:
 
         model = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
-            sfh={"type": "delayed", "*": FIXED},
+            sfh={"type": "delayed", "all_params": FIXED},
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
                 "tau_bc": Fixed(0.0),
                 "tau_diff": Fixed(0.0),
-                "*": FIXED,
+                "all_params": FIXED,
             },
             agn=_composable_agn("multicolor"),
             redshift=Fixed(0.05),
@@ -161,13 +161,13 @@ class TestEndToEndPublish:
     def test_disc_none_publishes_zero(self, synthetic_ssp_wide):
         model = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
-            sfh={"type": "delayed", "*": FIXED},
+            sfh={"type": "delayed", "all_params": FIXED},
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
                 "tau_bc": Fixed(0.0),
                 "tau_diff": Fixed(0.0),
-                "*": FIXED,
+                "all_params": FIXED,
             },
             agn=_composable_agn("none"),
             redshift=Fixed(0.05),
@@ -206,13 +206,13 @@ class TestXRayConsumesL2500:
         for disc in ("multicolor", "none"):
             model = SEDModel.build(
                 ssp_data=synthetic_ssp_wide,
-                sfh={"type": "delayed", "*": FIXED},
+                sfh={"type": "delayed", "all_params": FIXED},
                 dust_attenuation={
                     "law": "power_law",
                     "type": "two_component",
                     "tau_bc": Fixed(0.0),
                     "tau_diff": Fixed(0.0),
-                    "*": FIXED,
+                    "all_params": FIXED,
                 },
                 agn=_composable_agn(disc),
                 xray={"type": "simple"},

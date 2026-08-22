@@ -47,7 +47,7 @@ def _build(dust):
 
     kwargs = {
         "ssp_data": tengri.load_ssp(),
-        "sfh": {"type": "delayed", "*": tengri.FIXED, "log_total_mass": 10.0},
+        "sfh": {"type": "delayed", "all_params": tengri.FIXED, "log_total_mass": 10.0},
         "dust_attenuation": dust_attenuation_config,
         "redshift": tengri.Fixed(0.05),
     }
@@ -75,16 +75,16 @@ def test_single_component_emission_reradiates_absorbed_energy():
             {
                 "law": "power_law",
                 "type": "single_component",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "tau_v": tengri.Fixed(2.0),
-                "emission": {"type": "modified_blackbody", "*": tengri.FIXED},
+                "emission": {"type": "modified_blackbody", "all_params": tengri.FIXED},
             }
         )
         no_em = _build(
             {
                 "law": "power_law",
                 "type": "single_component",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "tau_v": tengri.Fixed(2.0),
             }
         )
@@ -115,14 +115,14 @@ def test_single_component_emission_matches_two_component(real_ssp_only):
     except (FileNotFoundError, OSError):
         pytest.skip("SSP data not available (expected in CI)")
 
-    mbb = {"type": "modified_blackbody", "*": tengri.FIXED}
+    mbb = {"type": "modified_blackbody", "all_params": tengri.FIXED}
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         single = _build(
             {
                 "law": "power_law",
                 "type": "single_component",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "tau_v": tengri.Fixed(2.0),
                 "emission": mbb,
             }
@@ -131,7 +131,7 @@ def test_single_component_emission_matches_two_component(real_ssp_only):
             {
                 "law": "power_law",
                 "type": "two_component",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "tau_diff": tengri.Fixed(2.0),
                 "emission": mbb,
             }
@@ -160,9 +160,9 @@ def test_single_component_publishes_nonzero_l_ir():
             {
                 "law": "power_law",
                 "type": "single_component",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "tau_v": tengri.Fixed(2.0),
-                "emission": {"type": "modified_blackbody", "*": tengri.FIXED},
+                "emission": {"type": "modified_blackbody", "all_params": tengri.FIXED},
             }
         )
     L_ir = float(np.asarray(model.predict_state({}).derived.get("L_ir", 0.0)))
@@ -191,16 +191,16 @@ def test_single_component_grid_emission_reradiates():
             {
                 "law": "power_law",
                 "type": "single_component",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "tau_v": tengri.Fixed(2.0),
-                "emission": {"type": "dale2014", "*": tengri.FIXED},
+                "emission": {"type": "dale2014", "all_params": tengri.FIXED},
             }
         )
         no_em = _build(
             {
                 "law": "power_law",
                 "type": "single_component",
-                "*": tengri.FIXED,
+                "all_params": tengri.FIXED,
                 "tau_v": tengri.Fixed(2.0),
             }
         )

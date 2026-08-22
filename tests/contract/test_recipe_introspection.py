@@ -109,8 +109,8 @@ class TestRecipeParametersManualRecipes:
     def test_minimal_recipe_returns_records(self):
         """Minimal recipe with FREE/FIXED sentinels works correctly."""
         recipe = {
-            "sfh": {"type": "dpl", "*": FREE},
-            "dust_attenuation": {"law": "power_law", "type": "two_component", "*": FIXED},
+            "sfh": {"type": "dpl", "all_params": FREE},
+            "dust_attenuation": {"law": "power_law", "type": "two_component", "all_params": FIXED},
             "neb": {"type": "none"},
             "redshift": Fixed(0.05),
         }
@@ -124,14 +124,14 @@ class TestRecipeParametersManualRecipes:
     def test_recipe_with_explicit_priors(self):
         """Recipe with explicit Uniform priors for free params."""
         recipe = {
-            "sfh": {"type": "dpl", "*": FREE},
+            "sfh": {"type": "dpl", "all_params": FREE},
             "dust_attenuation": {
                 "type": "two_component",
                 "law": "calzetti",
-                "*": FREE,
+                "all_params": FREE,
                 "tau_bc": Uniform(0, 1),
             },
-            "neb": {"type": "cue", "*": FIXED},
+            "neb": {"type": "cue", "all_params": FIXED},
             "redshift": Uniform(0.01, 6.0),
         }
         params = recipe_parameters(recipe, free_only=True)

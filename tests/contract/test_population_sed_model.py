@@ -108,8 +108,8 @@ def _real_template(synthetic_ssp, simple_observation):
         observation=simple_observation,
         # Keep the SFH simple but with one free per-galaxy parameter so
         # we can verify the vmap actually fans out across galaxies.
-        sfh={"type": "dpl", "*": FIXED, "log_total_mass": Uniform(-1.0, 3.0)},
-        dust_attenuation={"type": "two_component", "law": "calzetti", "*": FIXED},
+        sfh={"type": "dpl", "all_params": FIXED, "log_total_mass": Uniform(-1.0, 3.0)},
+        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
         neb={"type": "none"},
         redshift=0.05,
     )

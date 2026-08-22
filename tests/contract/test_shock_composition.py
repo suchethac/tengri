@@ -126,7 +126,7 @@ def _build(ssp, obs, shock=None, neb=None):
     return tengri.SEDModel.build(
         ssp_data=ssp,
         observation=obs,
-        sfh={"type": "const", "*": tengri.FIXED},
+        sfh={"type": "const", "all_params": tengri.FIXED},
         neb=neb if neb is not None else {"type": "none"},
         shock=shock,
         redshift=tengri.Fixed(0.1),
@@ -137,7 +137,7 @@ def test_grammar_activates_shock(synthetic_ssp_wide, synthetic_tophat_obs):
     m = _build(
         synthetic_ssp_wide,
         synthetic_tophat_obs,
-        shock={"norm": "frac", "*": tengri.FIXED, "frac": tengri.Fixed(0.3)},
+        shock={"norm": "frac", "all_params": tengri.FIXED, "frac": tengri.Fixed(0.3)},
     )
     assert m.spec.shock is True
     assert m.spec.shock_norm == "frac"
@@ -151,7 +151,7 @@ def test_grammar_explicit_priors_free_shock_params(synthetic_ssp_wide, synthetic
         synthetic_tophat_obs,
         shock={
             "norm": "frac",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "frac": tengri.Uniform(0.0, 1.0),
             "velocity": tengri.Uniform(150.0, 800.0),
         },
@@ -172,12 +172,12 @@ def test_norm_enters_compile_signature(synthetic_ssp_wide, synthetic_tophat_obs)
     m_frac = _build(
         synthetic_ssp_wide,
         synthetic_tophat_obs,
-        shock={"norm": "frac", "*": tengri.FIXED, "frac": tengri.Fixed(0.3)},
+        shock={"norm": "frac", "all_params": tengri.FIXED, "frac": tengri.Fixed(0.3)},
     )
     m_abs = _build(
         synthetic_ssp_wide,
         synthetic_tophat_obs,
-        shock={"norm": "lhalpha", "*": tengri.FIXED, "log_lhalpha": tengri.Fixed(41.0)},
+        shock={"norm": "lhalpha", "all_params": tengri.FIXED, "log_lhalpha": tengri.Fixed(41.0)},
     )
     assert m_frac.compile_signature() != m_abs.compile_signature()
 
@@ -187,7 +187,7 @@ def test_invalid_norm_raises(synthetic_ssp_wide, synthetic_tophat_obs):
         _build(
             synthetic_ssp_wide,
             synthetic_tophat_obs,
-            shock={"norm": "bogus", "*": tengri.FIXED},
+            shock={"norm": "bogus", "all_params": tengri.FIXED},
         )
 
 
@@ -199,7 +199,7 @@ def test_shock_group_round_trips(synthetic_ssp_wide, synthetic_tophat_obs):
         synthetic_tophat_obs,
         shock={
             "norm": "lhalpha",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "log_lhalpha": tengri.Uniform(38.0, 44.0),
             "velocity": tengri.Fixed(350.0),
         },
@@ -238,7 +238,7 @@ def test_shock_composes_in_component_chain(synthetic_ssp_wide, synthetic_tophat_
         neb={"type": "none"},
         shock={
             "norm": "frac",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "frac": tengri.Fixed(0.8),
             "velocity": tengri.Fixed(400.0),
         },
@@ -259,7 +259,7 @@ def test_shock_and_photoionized_are_independent(synthetic_ssp_wide, synthetic_to
         neb={"type": "ssp"},  # baked-in photoionized (no external grid needed)
         shock={
             "norm": "frac",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "frac": tengri.Fixed(0.8),
             "velocity": tengri.Fixed(400.0),
         },
@@ -287,7 +287,7 @@ def test_grammar_matches_low_level_shock_flag(synthetic_ssp_wide, synthetic_toph
         neb={"type": "none"},
         shock={
             "norm": "frac",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "frac": tengri.Fixed(0.6),
             "velocity": tengri.Fixed(350.0),
         },
@@ -315,7 +315,7 @@ def test_absolute_knob_composes_via_grammar(synthetic_ssp_wide, synthetic_tophat
         neb={"type": "none"},
         shock={
             "norm": "lhalpha",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "log_lhalpha": tengri.Fixed(41.0),
             "velocity": tengri.Fixed(400.0),
         },

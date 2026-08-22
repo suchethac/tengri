@@ -33,15 +33,15 @@ def ssp():
 def test_two_step(ssp):
     m = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "dpl", "*": FIXED},
+        sfh={"type": "dpl", "all_params": FIXED},
         met={
             "type": "two_step",
-            "*": FIXED,
+            "all_params": FIXED,
             "logzsol_old": Fixed(-1.0),
             "logzsol_young": Fixed(0.0),
             "step_age_gyr": Fixed(8.0),
         },
-        dust_attenuation={"law": "power_law", "type": "two_component", "*": FIXED},
+        dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
         redshift=Fixed(0.1),
     )
     assert m.spec.met_mode == "two_step"
@@ -54,14 +54,14 @@ def test_two_step(ssp):
 def test_ramp(ssp):
     m = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "dpl", "*": FIXED},
+        sfh={"type": "dpl", "all_params": FIXED},
         met={
             "type": "ramp",
-            "*": FIXED,
+            "all_params": FIXED,
             "logzsol_0": Fixed(-1.5),
             "logzsol_final": Fixed(0.0),
         },
-        dust_attenuation={"law": "power_law", "type": "two_component", "*": FIXED},
+        dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
         redshift=Fixed(0.1),
     )
     assert m.spec.met_mode == "ramp"
@@ -71,9 +71,9 @@ def test_unknown_met_mode_raises(ssp):
     with pytest.raises(ValueError, match="Unknown metallicity mode"):
         tengri.SEDModel.build(
             ssp,
-            sfh={"type": "dpl", "*": FIXED},
+            sfh={"type": "dpl", "all_params": FIXED},
             met={"type": "two_steps"},  # typo
-            dust_attenuation={"type": "two_component", "*": FIXED},
+            dust_attenuation={"type": "two_component", "all_params": FIXED},
             redshift=Fixed(0.1),
         )
 
@@ -82,8 +82,8 @@ def test_default_no_met_block(ssp):
     """Omitting met={} preserves the default met_mode='delta'."""
     m = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "dpl", "*": FIXED},
-        dust_attenuation={"law": "power_law", "type": "two_component", "*": FIXED},
+        sfh={"type": "dpl", "all_params": FIXED},
+        dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
         redshift=Fixed(0.1),
     )
     assert m.spec.met_mode == "delta"
@@ -93,15 +93,15 @@ def test_roundtrip_emits_met_block(ssp):
     """to_groups() should emit a met block when the mode is non-default."""
     m = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "dpl", "*": FIXED},
+        sfh={"type": "dpl", "all_params": FIXED},
         met={
             "type": "two_step",
-            "*": FIXED,
+            "all_params": FIXED,
             "logzsol_old": Fixed(-1.0),
             "logzsol_young": Fixed(0.0),
             "step_age_gyr": Fixed(8.0),
         },
-        dust_attenuation={"law": "power_law", "type": "two_component", "*": FIXED},
+        dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
         redshift=Fixed(0.1),
     )
     groups = m.spec.to_groups()

@@ -74,11 +74,11 @@ def _build(ssp, z: float, approx, *, igm: bool = True, obs=None) -> SEDModel:
     return SEDModel.build(
         ssp_data=ssp,
         observation=obs if obs is not None else _obs(),
-        sfh={"type": "tsnorm", "*": FIXED, "log_total_mass": Uniform(9.0, 11.0)},
+        sfh={"type": "tsnorm", "all_params": FIXED, "log_total_mass": Uniform(9.0, 11.0)},
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "*": FIXED,
+            "all_params": FIXED,
             "tau_diff": 0.3,
             "tau_bc": 0.5,
         },

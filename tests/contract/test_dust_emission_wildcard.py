@@ -1,13 +1,13 @@
 # SPDX-License-Identifier: BSD-3-Clause
 r"""Contract: ``dust.emission``'s ``'*'`` must free parameters the backend reads.
 
-``dust={'emission': {'type': X, '*': FREE}}`` freed the same seven parameters
+``dust={'emission': {'type': X, 'all_params': FREE}}`` freed the same seven parameters
 whichever engine ``X`` named, and for two engines not one of the seven was a
 parameter that engine reads (#1482).
 
 Each backend *does* declare its own parameters correctly — every one is a
 :class:`SEDModelComponent` and ``Dale2014IRSEDComponent`` declares exactly
-``alpha_dale`` and ``frac_agn``. The wildcard does not consult them. ``'*': FREE``
+``alpha_dale`` and ``frac_agn``. The wildcard does not consult them. ``'all_params': FREE``
 means "use the registry default", so it can only free a parameter whose registry
 default is a *distribution*; the 15 dust-emission parameters defaulting to
 ``Fixed`` scalars stay pinned. Which 7 of the 22 carry distribution defaults has
@@ -26,7 +26,7 @@ Composed with the three-outcome predicate from #1474, the narrowing makes every
 verdict count the selected engine's **own** declared parameters:
 
 ======================  ==================  =========================
-``emission.type``       declares            ``'*': FREE`` outcome
+``emission.type``       declares            ``'all_params': FREE`` outcome
 ======================  ==================  =========================
 ``dale2014``            2, both unfreeable  **raises** ("0 of 2")
 ``casey2012``           3, all unfreeable   **raises** ("0 of 3")
@@ -142,7 +142,7 @@ EMISSION_TYPES = _emission_types()
 def _nothing_freeable() -> dict[str, set[str]]:
     """Backends whose every declared parameter still resolves to a ``Fixed`` scalar.
 
-    ``'*': FREE`` can free none of these, so the guard must refuse the build.
+    ``'all_params': FREE`` can free none of these, so the guard must refuse the build.
 
     Derived rather than listed. #887 is giving parameters their declared
     ``free_prior`` a subsystem at a time, and each one moves a backend off this
@@ -176,7 +176,7 @@ def _declares_nothing() -> frozenset[str]:
 
     Distinct from :data:`NOTHING_FREEABLE`, which is "declares parameters, but
     every one is Fixed-by-default". These declare none: ``pah_drude`` is a pure
-    template shape and ``dh02_ce01`` a fixed template pair, so ``'*': FREE``
+    template shape and ``dh02_ce01`` a fixed template pair, so ``'all_params': FREE``
     correctly frees nothing and "at least one live parameter" is the wrong
     question rather than a failed one.
 
@@ -224,15 +224,15 @@ def _build(ssp, obs, emission_type, wildcard=FREE):
     return SEDModel.build(
         ssp_data=ssp,
         observation=obs,
-        sfh={"type": "dpl", "*": FIXED},
+        sfh={"type": "dpl", "all_params": FIXED},
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
-            "*": FIXED,
+            "all_params": FIXED,
             "tau_bc": _TAU_BC,
             "tau_diff": _TAU_DIFF,
         },
-        dust_emission={"type": emission_type, "*": wildcard},
+        dust_emission={"type": emission_type, "all_params": wildcard},
         neb={"type": "none"},
         redshift=Fixed(0.5),
     )
@@ -267,7 +267,7 @@ def _live_params(model):
 def test_wildcard_frees_at_least_one_live_parameter(
     synthetic_ssp_wide, panchromatic_obs, emission_type
 ):
-    """``'*': FREE`` must free something the selected engine actually reads."""
+    """``'all_params': FREE`` must free something the selected engine actually reads."""
     if emission_type in NOTHING_FREEABLE:
         pytest.skip(f"{emission_type} has nothing freeable — covered by the raise test")
     if emission_type in DECLARES_NOTHING:
@@ -280,7 +280,7 @@ def test_wildcard_frees_at_least_one_live_parameter(
     freed, live = _live_params(model)
 
     assert live, (
-        f"dust.emission {{'type': '{emission_type}', '*': FREE}} freed {freed} "
+        f"dust.emission {{'type': '{emission_type}', 'all_params': FREE}} freed {freed} "
         f"and not one of them moves predict_photometry — every freed dimension "
         f"is a silent no-op a sampler would explore for free (#1482)"
     )
@@ -339,7 +339,7 @@ def test_the_freed_set_depends_on_the_backend(synthetic_ssp_wide, panchromatic_o
 
 @pytest.mark.parametrize("emission_type", EMISSION_TYPES)
 def test_no_freed_parameter_is_inert(synthetic_ssp_wide, panchromatic_obs, emission_type):
-    """Every parameter ``'*': FREE`` hands the sampler must move the prediction.
+    """Every parameter ``'all_params': FREE`` hands the sampler must move the prediction.
 
     Stronger than :func:`test_wildcard_frees_at_least_one_live_parameter`, which
     only requires *one* live parameter and so passed throughout the era when
@@ -355,7 +355,7 @@ def test_no_freed_parameter_is_inert(synthetic_ssp_wide, panchromatic_obs, emiss
     inert = sorted(set(freed) - set(live))
 
     assert not inert, (
-        f"dust.emission {{'type': '{emission_type}', '*': FREE}} freed {inert}, "
+        f"dust.emission {{'type': '{emission_type}', 'all_params': FREE}} freed {inert}, "
         f"which do not move predict_photometry — they belong to other engines "
         f"(freed={freed}, live={live}) (#1482)"
     )
@@ -367,7 +367,7 @@ def test_dale2014_reads_alpha_dale_not_alpha(synthetic_ssp_wide, panchromatic_ob
     Without this, a fix could satisfy the sweep above by freeing *any* live
     parameter while leaving Dale+2014's slope unreachable.
     """
-    # Built with the wildcard FIXED, since '*': FREE now correctly refuses here.
+    # Built with the wildcard FIXED, since 'all_params': FREE now correctly refuses here.
     model = _build(synthetic_ssp_wide, panchromatic_obs, "dale2014", wildcard=FIXED)
     params = dict(model.spec.sample(jax.random.PRNGKey(0)))
 
@@ -403,11 +403,11 @@ def test_an_explicit_prior_reaches_the_parameter_the_wildcard_cannot(
     model = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
         observation=panchromatic_obs,
-        sfh={"type": "dpl", "*": FIXED},
+        sfh={"type": "dpl", "all_params": FIXED},
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
-            "*": FIXED,
+            "all_params": FIXED,
             "tau_bc": _TAU_BC,
             "tau_diff": _TAU_DIFF,
         },
@@ -433,11 +433,11 @@ def test_dust_emission_actually_contributes(synthetic_ssp_wide, panchromatic_obs
     without = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
         observation=panchromatic_obs,
-        sfh={"type": "dpl", "*": FIXED},
+        sfh={"type": "dpl", "all_params": FIXED},
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
-            "*": FIXED,
+            "all_params": FIXED,
             "tau_bc": _TAU_BC,
             "tau_diff": _TAU_DIFF,
         },

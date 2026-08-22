@@ -50,9 +50,9 @@ def _build(ssp, sfh):
 
 _SFH_CASES = {
     # tengri CIC age weights + DSPS lognormal-MDF metallicity weights
-    "parametric": {"type": "dpl", "*": FIXED},
+    "parametric": {"type": "dpl", "all_params": FIXED},
     # DSPS calc_rest_sed_sfh_table_* — the core SSP integration
-    "field": {"type": "dpl", "field": {"*": FIXED}, "*": FIXED},
+    "field": {"type": "dpl", "field": {"all_params": FIXED}, "all_params": FIXED},
 }
 
 

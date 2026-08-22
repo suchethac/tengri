@@ -53,11 +53,11 @@ def rest_sed(ssp):
     m = SEDModel.build(
         ssp_data=ssp,
         observation=Observation(photometry=Photometry.from_names(["des_g"])),
-        sfh={"type": "dpl", "*": FREE},
+        sfh={"type": "dpl", "all_params": FREE},
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "*": FIXED,
+            "all_params": FIXED,
             "tau_diff": 0.3,
         },
         redshift=Fixed(0.1),
@@ -185,11 +185,11 @@ def _model(ssp, resample, wave_obs, z=0.1, free_z=False):
                 wave_obs=jnp.asarray(wave_obs), resolution=1500.0, resample=resample
             ),
         ),
-        sfh={"type": "dpl", "*": FREE},
+        sfh={"type": "dpl", "all_params": FREE},
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "*": FIXED,
+            "all_params": FIXED,
             "tau_diff": 0.3,
         },
         redshift=(Uniform(0.05, 0.5) if free_z else Fixed(z)),
@@ -247,11 +247,11 @@ def test_spectrum_precomp_warns_that_it_ignores_conserving(ssp):
                     wave_obs=jnp.asarray(wo), resolution=300.0, resample="conserving"
                 ),
             ),
-            sfh={"type": "dpl", "*": FREE},
+            sfh={"type": "dpl", "all_params": FREE},
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
-                "*": FIXED,
+                "all_params": FIXED,
                 "tau_diff": 0.3,
             },
             redshift=Fixed(0.1),

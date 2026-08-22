@@ -36,24 +36,24 @@ def _build(ssp, sfh, tau_bc, tau_diff, *, z=0.0, log_mass=10.0, logzsol=0.0, emi
     """Two-component dust model at a given optical depth and galaxy config."""
     sfh = dict(sfh)
     sfh["log_total_mass"] = Fixed(log_mass)
-    sfh["*"] = FIXED
+    sfh["all_params"] = FIXED
     dust_attenuation = {
         "type": "two_component",
         "law_bc": "calzetti",
         "law_diff": "calzetti",
         "tau_bc": Fixed(tau_bc),
         "tau_diff": Fixed(tau_diff),
-        "*": FIXED,
+        "all_params": FIXED,
     }
     kwargs = {
         "ssp_data": ssp,
-        "met": {"logzsol": Fixed(logzsol), "*": FIXED},
+        "met": {"logzsol": Fixed(logzsol), "all_params": FIXED},
         "sfh": sfh,
         "dust_attenuation": dust_attenuation,
         "redshift": Fixed(z),
     }
     if emission:
-        kwargs["dust_emission"] = {"type": "dale2014", "*": FIXED}
+        kwargs["dust_emission"] = {"type": "dale2014", "all_params": FIXED}
     return SEDModel.build(**kwargs)
 
 

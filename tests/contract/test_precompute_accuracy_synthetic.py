@@ -100,21 +100,25 @@ def _build(
     dust_atten = {
         "type": "two_component",
         "law": "calzetti",
-        "*": FIXED,
+        "all_params": FIXED,
         "tau_diff": 0.5,  # real attenuation → real L_ir to (re-)emit
     }
     groups = dict(
-        sfh={"type": "dpl", "*": FIXED},
+        sfh={"type": "dpl", "all_params": FIXED},
         dust_attenuation=dust_atten,
         neb={"type": "none"},
     )
     if emission is not None:
-        groups["dust_emission"] = {"type": emission, "*": FIXED}
+        groups["dust_emission"] = {"type": emission, "all_params": FIXED}
     if with_radio:
         # #1980: condon92's retired spelling, in its composable resolution.
-        groups["radio"] = {"sf": {"type": "bell2003"}, "agn": {"type": "powerlaw"}, "*": FIXED}
+        groups["radio"] = {
+            "sf": {"type": "bell2003"},
+            "agn": {"type": "powerlaw"},
+            "all_params": FIXED,
+        }
     if with_xray:
-        groups["xray"] = {"type": "simple", "*": FIXED}
+        groups["xray"] = {"type": "simple", "all_params": FIXED}
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         return SEDModel.build(
@@ -241,11 +245,13 @@ def test_taylor_correction_toggle_two_component(synthetic_ssp):
     dust = {
         "type": "two_component",
         "law": "calzetti",
-        "*": FIXED,
+        "all_params": FIXED,
         "tau_bc": 0.8,
         "tau_diff": 0.4,
     }
-    groups = dict(sfh={"type": "dpl", "*": FIXED}, dust_attenuation=dust, neb={"type": "none"})
+    groups = dict(
+        sfh={"type": "dpl", "all_params": FIXED}, dust_attenuation=dust, neb={"type": "none"}
+    )
 
     def build(approx):
         with warnings.catch_warnings():

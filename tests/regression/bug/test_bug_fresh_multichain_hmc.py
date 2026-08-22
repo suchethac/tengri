@@ -43,7 +43,7 @@ def _tiny_model_and_data(synthetic_ssp_wide, synthetic_tophat_obs):
         ssp_data=synthetic_ssp_wide,
         observation=synthetic_tophat_obs,
         redshift=Fixed(0.1),
-        sfh={"type": "dpl", "*": FREE},
+        sfh={"type": "dpl", "all_params": FREE},
         met={"logzsol": Uniform(-1.5, 0.3)},
     )
     truth = model.spec.sample(jax.random.PRNGKey(3))

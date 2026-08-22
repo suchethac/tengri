@@ -39,15 +39,15 @@ def test_schreiber2016_builds_and_balances():
 
     m = tengri.SEDModel.build(
         ssp,
-        sfh={"type": "tsnorm", "*": tengri.FIXED},
+        sfh={"type": "tsnorm", "all_params": tengri.FIXED},
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_diff": 0.3,
             "tau_bc": 0.3,
         },
-        dust_emission={"type": "schreiber2016", "*": tengri.FIXED},
+        dust_emission={"type": "schreiber2016", "all_params": tengri.FIXED},
         redshift=tengri.Fixed(0.05),
     )
     p = dict(m.spec.sample(jax.random.PRNGKey(0)))

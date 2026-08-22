@@ -29,7 +29,7 @@ def _model(ssp, with_matrix):
     return SEDModel.build(
         ssp_data=ssp,
         observation=obs,
-        sfh={"type": "dpl", "*": FIXED},
+        sfh={"type": "dpl", "all_params": FIXED},
         redshift=Fixed(0.05),
     )
 

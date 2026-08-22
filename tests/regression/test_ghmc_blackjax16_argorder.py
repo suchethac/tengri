@@ -44,8 +44,8 @@ def test_ghmc_runs_and_returns_finite_samples():
         ssp_data=ssp,
         observation=obs,
         redshift=Fixed(0.05),
-        sfh={"type": "dpl", "*": FREE},
-        dust_attenuation={"law": "power_law", "type": "two_component", "*": FIXED},
+        sfh={"type": "dpl", "all_params": FREE},
+        dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
         approx=WavePrecomp(),
     )
     mock = generate_mock(sed, sed.spec.sample(key), key=key, snr=30.0)

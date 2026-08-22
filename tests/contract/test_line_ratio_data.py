@@ -81,13 +81,13 @@ class TestLineRatioPrediction:
             m = SEDModel.build(
                 ssp_data=ssp,
                 observation=obs,
-                sfh={"type": "dpl", "*": FIXED},
+                sfh={"type": "dpl", "all_params": FIXED},
                 dust_attenuation={
                     "type": "two_component",
                     "law": "calzetti",
-                    "*": FIXED,
+                    "all_params": FIXED,
                 },
-                neb={"type": "cue", "*": FIXED},
+                neb={"type": "cue", "all_params": FIXED},
                 redshift=Fixed(0.05),
                 approx=approx,
             )
@@ -125,13 +125,13 @@ class TestLineRatioLikelihood:
             m = SEDModel.build(
                 ssp_data=ssp,
                 observation=obs,
-                sfh={"type": "dpl", "*": FIXED},
+                sfh={"type": "dpl", "all_params": FIXED},
                 dust_attenuation={
                     "type": "two_component",
                     "law": "calzetti",
-                    "*": FIXED,
+                    "all_params": FIXED,
                 },
-                neb={"type": "cue", "*": FIXED},
+                neb={"type": "cue", "all_params": FIXED},
                 redshift=Fixed(0.05),
             )
             fitter = Fitter(

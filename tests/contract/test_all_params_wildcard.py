@@ -112,13 +112,13 @@ class TestDictGrammarAllParams:
                 sfh={"type": "dpl", "defaults": FREE},
             )
 
-    def test_dict_grammar_accepts_wildcard_alias(self):
-        """Dict grammar still accepts '*' wildcard alias."""
-        params = parse_groups(
-            redshift=Fixed(0.1),
-            sfh={"type": "dpl", "*": FREE},
-        )
-        assert "sfh_dpl_alpha" in params.free_params
+    def test_dict_grammar_rejects_wildcard_star(self):
+        """Dict grammar rejects '*' wildcard (use 'all_params' instead)."""
+        with pytest.raises(ValueError, match=r"all_params.*instead"):
+            parse_groups(
+                redshift=Fixed(0.1),
+                sfh={"type": "dpl", "*": FREE},
+            )
 
 
 class TestMultipleBuilderTypes:

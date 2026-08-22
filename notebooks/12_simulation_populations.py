@@ -100,7 +100,7 @@ def build_model(approx=PRECOMP, neb=None):
         redshift=Fixed(Z_OBS),
         sfh={"type": "table"},  # SFH arrives at runtime, as data
         met={"type": "table", "all_params": FIXED},  # so does the stellar metallicity
-        dust_attenuation={"type": "two_component", "law": "calzetti", "*": FIXED},
+        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
         neb=neb or {"type": "ssp", "all_params": FIXED},  # baked into the SSP: zero per-galaxy cost
         approx=approx,  # SSP x filter LUT, or None for the exact path
     )

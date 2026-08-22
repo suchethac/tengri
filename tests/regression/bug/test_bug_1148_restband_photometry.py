@@ -41,11 +41,11 @@ def _build(ssp, z: float, approx, *, tau_diff=0.5, tau_bc=1.0, bands=None) -> SE
     return SEDModel.build(
         ssp_data=ssp,
         observation=Observation(photometry=Photometry.from_names(bands or BANDS)),
-        sfh={"type": "tsnorm", "*": FIXED, "log_total_mass": Uniform(9.0, 11.0)},
+        sfh={"type": "tsnorm", "all_params": FIXED, "log_total_mass": Uniform(9.0, 11.0)},
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "*": FIXED,
+            "all_params": FIXED,
             "tau_diff": tau_diff,
             "tau_bc": tau_bc,
         },
@@ -247,11 +247,11 @@ def test_the_rest_band_lut_carries_no_redshift_axis(synthetic_ssp_wide):
     m_free = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
         observation=Observation(photometry=Photometry.from_names(BANDS)),
-        sfh={"type": "tsnorm", "*": FIXED, "log_total_mass": Uniform(9.0, 11.0)},
+        sfh={"type": "tsnorm", "all_params": FIXED, "log_total_mass": Uniform(9.0, 11.0)},
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "*": FIXED,
+            "all_params": FIXED,
             "tau_diff": 0.5,
             "tau_bc": 1.0,
         },

@@ -43,13 +43,13 @@ def _physical_ssp(ssp):
 def _model(ssp):
     return SEDModel.build(
         ssp_data=ssp,
-        met={"logzsol": Uniform(-1.0, 0.2), "*": FIXED},
+        met={"logzsol": Uniform(-1.0, 0.2), "all_params": FIXED},
         sfh={
             "type": "delayed",
             "tau_gyr": Fixed(1.0),
             "age_gyr": Fixed(5.0),
             "log_total_mass": FREE,
-            "*": FIXED,
+            "all_params": FIXED,
         },
         dust_attenuation={
             "type": "two_component",
@@ -57,7 +57,7 @@ def _model(ssp):
             "law_diff": "calzetti",
             "tau_bc": Fixed(1.0),
             "tau_diff": Fixed(0.7),
-            "*": FIXED,
+            "all_params": FIXED,
         },
         redshift=Fixed(0.1),
     )

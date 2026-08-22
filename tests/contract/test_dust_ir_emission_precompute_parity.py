@@ -72,7 +72,7 @@ def assert_precompute_matches_exact(
         "modified_blackbody").
     dust_config : dict, optional
         Per-parameter dust configuration (tau_diff, tau_bc, law_bc, etc.).
-        Defaults to {'type': emission_type, '*': FIXED, 'tau_diff': 0.5}.
+        Defaults to {'type': emission_type, 'all_params': FIXED, 'tau_diff': 0.5}.
     redshift_dist : Distribution or scalar, optional
         Redshift prior or fixed value. Defaults to Fixed(0.05).
     tolerance : float, default 0.005
@@ -96,23 +96,23 @@ def assert_precompute_matches_exact(
         dust_attenuation = {
             "type": "two_component",
             "law": "calzetti",
-            "*": FIXED,
+            "all_params": FIXED,
             "tau_diff": 0.5,
         }
-        dust_emission = {"type": emission_type, "*": FIXED}
+        dust_emission = {"type": emission_type, "all_params": FIXED}
     else:
         # Split dust_config into attenuation and emission parts
         dust_attenuation = {k: v for k, v in dust_config.items() if k != "emission"}
         if "emission" in dust_config:
             dust_emission = dust_config["emission"]
         else:
-            dust_emission = {"type": emission_type, "*": FIXED}
+            dust_emission = {"type": emission_type, "all_params": FIXED}
 
     if redshift_dist is None:
         redshift_dist = Fixed(0.05)
 
     obs = Observation(photometry=Photometry(filters=tuple(filters)))
-    groups = dict(sfh={"type": "dpl", "*": FIXED}, neb={"type": "none"})
+    groups = dict(sfh={"type": "dpl", "all_params": FIXED}, neb={"type": "none"})
 
     # Build 1: exact path (approx=None)
     exact_model = SEDModel.build(
@@ -247,9 +247,9 @@ def test_dale2014_precompute_matches_exact(synthetic_ssp, dust_ir_filters):
             dust_config={
                 "type": "two_component",
                 "law": "calzetti",
-                "*": FIXED,
+                "all_params": FIXED,
                 "tau_diff": 0.5,
-                "emission": {"type": "dale2014", "*": FIXED},
+                "emission": {"type": "dale2014", "all_params": FIXED},
             },
             tolerance=0.005,
         )

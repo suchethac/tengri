@@ -46,11 +46,11 @@ def _build(approx, wave_lo=3500.0):
         return SEDModel.build(
             ssp_data=ssp,
             observation=obs,
-            sfh={"type": "dpl", "*": FIXED},
+            sfh={"type": "dpl", "all_params": FIXED},
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "*": FIXED,
+                "all_params": FIXED,
             },
             neb={"type": "none"},
             redshift=Fixed(0.05),
@@ -129,11 +129,11 @@ class TestSpectralIndexAsData:
             m = SEDModel.build(
                 ssp_data=ssp,
                 observation=obs,
-                sfh={"type": "dpl", "*": FIXED},
+                sfh={"type": "dpl", "all_params": FIXED},
                 dust_attenuation={
                     "type": "two_component",
                     "law": "calzetti",
-                    "*": FIXED,
+                    "all_params": FIXED,
                 },
                 neb={"type": "none"},
                 redshift=Fixed(0.05),

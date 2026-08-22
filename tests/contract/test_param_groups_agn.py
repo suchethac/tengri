@@ -27,8 +27,8 @@ class TestAGNBasics:
     def test_agn_sets_composable_model(self):
         """Presence of agn group auto-activates agn_model='composable'."""
         params = parse_groups(
-            sfh={"type": "dpl", "*": FIXED},
-            agn={"disc": {"type": "powerlaw", "*": FIXED}},
+            sfh={"type": "dpl", "all_params": FIXED},
+            agn={"disc": {"type": "powerlaw", "all_params": FIXED}},
             redshift=Fixed(0.1),
         )
         assert isinstance(params, Parameters)
@@ -37,8 +37,8 @@ class TestAGNBasics:
     def test_agn_omitted_block_defaults_to_none(self):
         """Omitted blocks default to 'none'."""
         params = parse_groups(
-            sfh={"type": "dpl", "*": FIXED},
-            agn={"disc": {"type": "powerlaw", "*": FIXED}},
+            sfh={"type": "dpl", "all_params": FIXED},
+            agn={"disc": {"type": "powerlaw", "all_params": FIXED}},
             redshift=Fixed(0.1),
         )
         assert params.agn_disc_block == "powerlaw"
@@ -51,14 +51,14 @@ class TestAGNBasics:
     def test_agn_all_blocks_specified(self):
         """User can specify all 6 blocks."""
         params = parse_groups(
-            sfh={"type": "dpl", "*": FIXED},
+            sfh={"type": "dpl", "all_params": FIXED},
             agn={
-                "disc": {"type": "powerlaw", "*": FIXED},
-                "torus": {"type": "simple", "*": FIXED},
-                "nlr": {"type": "analytic", "*": FIXED},
-                "blr": {"type": "analytic", "*": FIXED},
-                "feii": {"type": "none", "*": FIXED},
-                "atten": {"type": "none", "*": FIXED},
+                "disc": {"type": "powerlaw", "all_params": FIXED},
+                "torus": {"type": "simple", "all_params": FIXED},
+                "nlr": {"type": "analytic", "all_params": FIXED},
+                "blr": {"type": "analytic", "all_params": FIXED},
+                "feii": {"type": "none", "all_params": FIXED},
+                "atten": {"type": "none", "all_params": FIXED},
             },
             redshift=Fixed(0.1),
         )
@@ -76,10 +76,10 @@ class TestAGNParameterRouting:
     def test_shared_agn_params_routed_correctly(self):
         """Shared agn_* params (frac, log_lbol) recognized at agn-level."""
         params = parse_groups(
-            sfh={"type": "dpl", "*": FIXED},
+            sfh={"type": "dpl", "all_params": FIXED},
             agn={
-                "disc": {"type": "powerlaw", "*": FIXED},
-                "*": FREE,  # Free all shared agn params
+                "disc": {"type": "powerlaw", "all_params": FIXED},
+                "all_params": FREE,  # Free all shared agn params
                 "log_lbol": Uniform(9.42, 13.42),  # Override with explicit prior
             },
             redshift=Fixed(0.1),
@@ -91,10 +91,10 @@ class TestAGNParameterRouting:
     def test_sub_block_param_routing_torus_skirtor(self):
         """agn.torus 'tau_skirtor' override routes to agn_tau_skirtor."""
         params = parse_groups(
-            sfh={"type": "dpl", "*": FIXED},
+            sfh={"type": "dpl", "all_params": FIXED},
             agn={
-                "disc": {"type": "powerlaw", "*": FIXED},
-                "torus": {"type": "skirtor", "*": FREE, "tau_skirtor": Uniform(3, 11)},
+                "disc": {"type": "powerlaw", "all_params": FIXED},
+                "torus": {"type": "skirtor", "all_params": FREE, "tau_skirtor": Uniform(3, 11)},
             },
             redshift=Fixed(0.1),
         )
@@ -106,9 +106,9 @@ class TestAGNParameterRouting:
     def test_sub_block_param_routing_atten_polar(self):
         """agn.atten 'polar_ebv' routes to agn_polar_ebv."""
         params = parse_groups(
-            sfh={"type": "dpl", "*": FIXED},
+            sfh={"type": "dpl", "all_params": FIXED},
             agn={
-                "atten": {"type": "polar_dust", "*": FIXED, "polar_ebv": Fixed(0.3)},
+                "atten": {"type": "polar_dust", "all_params": FIXED, "polar_ebv": Fixed(0.3)},
             },
             redshift=Fixed(0.1),
         )
@@ -121,10 +121,10 @@ class TestAGNParameterRouting:
         validate_block_recipe is called by hand (#890)."""
         with pytest.warns(RecipeWarning, match="agn_polar_ebv=0"):
             parse_groups(
-                sfh={"type": "dpl", "*": FIXED},
+                sfh={"type": "dpl", "all_params": FIXED},
                 agn={
-                    "disc": {"type": "multicolor", "*": FIXED},
-                    "atten": {"type": "polar_dust", "*": FIXED, "polar_ebv": Fixed(0.0)},
+                    "disc": {"type": "multicolor", "all_params": FIXED},
+                    "atten": {"type": "polar_dust", "all_params": FIXED, "polar_ebv": Fixed(0.0)},
                 },
                 redshift=Fixed(0.1),
             )
@@ -134,10 +134,14 @@ class TestAGNParameterRouting:
         with warnings.catch_warnings():
             warnings.simplefilter("error", RecipeWarning)
             parse_groups(
-                sfh={"type": "dpl", "*": FIXED},
+                sfh={"type": "dpl", "all_params": FIXED},
                 agn={
-                    "disc": {"type": "multicolor", "*": FIXED},
-                    "atten": {"type": "polar_dust", "*": FIXED, "polar_ebv": Uniform(0.0, 1.0)},
+                    "disc": {"type": "multicolor", "all_params": FIXED},
+                    "atten": {
+                        "type": "polar_dust",
+                        "all_params": FIXED,
+                        "polar_ebv": Uniform(0.0, 1.0),
+                    },
                 },
                 redshift=Fixed(0.1),
             )
@@ -147,21 +151,21 @@ class TestAGNParameterRouting:
         with warnings.catch_warnings():
             warnings.simplefilter("error", RecipeWarning)
             parse_groups(
-                sfh={"type": "dpl", "*": FIXED},
+                sfh={"type": "dpl", "all_params": FIXED},
                 agn={
-                    "disc": {"type": "multicolor", "*": FIXED},
-                    "atten": {"type": "polar_dust", "*": FIXED, "polar_ebv": Fixed(0.3)},
+                    "disc": {"type": "multicolor", "all_params": FIXED},
+                    "atten": {"type": "polar_dust", "all_params": FIXED, "polar_ebv": Fixed(0.3)},
                 },
                 redshift=Fixed(0.1),
             )
 
     def test_agn_wildcard_at_agn_level_frees_shared(self):
-        """agn={'*': FREE, 'disc': {...}} frees shared agn params."""
+        """agn={'all_params': FREE, 'disc': {...}} frees shared agn params."""
         params = parse_groups(
-            sfh={"type": "dpl", "*": FIXED},
+            sfh={"type": "dpl", "all_params": FIXED},
             agn={
-                "*": FREE,
-                "disc": {"type": "multicolor", "*": FIXED},
+                "all_params": FREE,
+                "disc": {"type": "multicolor", "all_params": FIXED},
             },
             redshift=Fixed(0.1),
         )
@@ -182,10 +186,10 @@ class TestAGNParameterRouting:
     def test_wildcard_at_sub_block_level_frees_block_params(self):
         """wildcard '*' at sub-block level frees that block's params."""
         params = parse_groups(
-            sfh={"type": "dpl", "*": FIXED},
+            sfh={"type": "dpl", "all_params": FIXED},
             agn={
-                "disc": {"type": "multicolor", "*": FIXED},
-                "torus": {"type": "skirtor", "*": FREE},
+                "disc": {"type": "multicolor", "all_params": FIXED},
+                "torus": {"type": "skirtor", "all_params": FREE},
             },
             redshift=Fixed(0.1),
         )
@@ -195,11 +199,11 @@ class TestAGNParameterRouting:
     def test_per_param_override_beats_wildcard(self):
         """Per-parameter override wins over sub-block wildcard."""
         params = parse_groups(
-            sfh={"type": "dpl", "*": FIXED},
+            sfh={"type": "dpl", "all_params": FIXED},
             agn={
                 "disc": {
                     "type": "powerlaw",
-                    "*": FREE,
+                    "all_params": FREE,
                     "log_lbol": Fixed(10.42),  # Per-disc-param override
                 },
             },
@@ -219,7 +223,7 @@ class TestAGNValidation:
         """Unknown disc block type raises ValueError."""
         with pytest.raises(ValueError, match=r"Unknown.*disc.*block.*type"):
             parse_groups(
-                sfh={"type": "dpl", "*": FIXED},
+                sfh={"type": "dpl", "all_params": FIXED},
                 agn={"disc": {"type": "banana_disc"}},
                 redshift=Fixed(0.1),
             )
@@ -228,7 +232,7 @@ class TestAGNValidation:
         """Unknown torus block type raises ValueError."""
         with pytest.raises(ValueError, match=r"Unknown.*torus.*block.*type"):
             parse_groups(
-                sfh={"type": "dpl", "*": FIXED},
+                sfh={"type": "dpl", "all_params": FIXED},
                 agn={"torus": {"type": "donut_model"}},
                 redshift=Fixed(0.1),
             )
@@ -237,7 +241,7 @@ class TestAGNValidation:
         """Unknown lines block type raises ValueError."""
         with pytest.raises(ValueError, match=r"Unknown.*lines.*block.*type"):
             parse_groups(
-                sfh={"type": "dpl", "*": FIXED},
+                sfh={"type": "dpl", "all_params": FIXED},
                 agn={"lines": {"type": "squiggly"}},
                 redshift=Fixed(0.1),
             )
@@ -246,7 +250,7 @@ class TestAGNValidation:
         """Unknown feii block type raises ValueError."""
         with pytest.raises(ValueError, match=r"Unknown.*feii.*block.*type"):
             parse_groups(
-                sfh={"type": "dpl", "*": FIXED},
+                sfh={"type": "dpl", "all_params": FIXED},
                 agn={"feii": {"type": "iron_oxide"}},
                 redshift=Fixed(0.1),
             )
@@ -255,7 +259,7 @@ class TestAGNValidation:
         """Unknown attenuation block type raises ValueError."""
         with pytest.raises(ValueError, match=r"Unknown.*atten.*block.*type"):
             parse_groups(
-                sfh={"type": "dpl", "*": FIXED},
+                sfh={"type": "dpl", "all_params": FIXED},
                 agn={"atten": {"type": "cloud_of_dust"}},
                 redshift=Fixed(0.1),
             )
@@ -267,10 +271,10 @@ class TestAGNProvenance:
     def test_agn_provenance_user_fixed(self):
         """User-fixed agn param tagged 'user_fixed'."""
         params = parse_groups(
-            sfh={"type": "dpl", "*": FIXED},
+            sfh={"type": "dpl", "all_params": FIXED},
             agn={
-                "*": FIXED,  # Fix shared params
-                "disc": {"type": "powerlaw", "*": FIXED},
+                "all_params": FIXED,  # Fix shared params
+                "disc": {"type": "powerlaw", "all_params": FIXED},
                 "log_lbol": Fixed(11.42),  # Override shared param at agn level
             },
             redshift=Fixed(0.1),
@@ -281,9 +285,9 @@ class TestAGNProvenance:
     def test_agn_provenance_wildcard_free(self):
         """Agn params from wildcard FREE tagged 'wildcard_free'."""
         params = parse_groups(
-            sfh={"type": "dpl", "*": FIXED},
+            sfh={"type": "dpl", "all_params": FIXED},
             agn={
-                "disc": {"type": "multicolor", "*": FREE},
+                "disc": {"type": "multicolor", "all_params": FREE},
             },
             redshift=Fixed(0.1),
         )
@@ -303,8 +307,8 @@ class TestAGNValidBlockTypes:
     def test_valid_disc_types(self, block_type):
         """All known disc block types accepted."""
         params = parse_groups(
-            sfh={"type": "dpl", "*": FIXED},
-            agn={"disc": {"type": block_type, "*": FIXED}},
+            sfh={"type": "dpl", "all_params": FIXED},
+            agn={"disc": {"type": block_type, "all_params": FIXED}},
             redshift=Fixed(0.1),
         )
         assert params.agn_disc_block == block_type
@@ -326,8 +330,8 @@ class TestAGNValidBlockTypes:
     def test_valid_torus_types(self, block_type):
         """All known torus block types accepted."""
         params = parse_groups(
-            sfh={"type": "dpl", "*": FIXED},
-            agn={"torus": {"type": block_type, "*": FIXED}},
+            sfh={"type": "dpl", "all_params": FIXED},
+            agn={"torus": {"type": block_type, "all_params": FIXED}},
             redshift=Fixed(0.1),
         )
         assert params.agn_torus_block == block_type
@@ -339,8 +343,8 @@ class TestAGNValidBlockTypes:
     def test_valid_nlr_types(self, block_type):
         """All known NLR block types accepted."""
         params = parse_groups(
-            sfh={"type": "dpl", "*": FIXED},
-            agn={"nlr": {"type": block_type, "*": FIXED}},
+            sfh={"type": "dpl", "all_params": FIXED},
+            agn={"nlr": {"type": block_type, "all_params": FIXED}},
             redshift=Fixed(0.1),
         )
         assert params.agn_nlr_block == block_type
@@ -352,8 +356,8 @@ class TestAGNValidBlockTypes:
     def test_valid_blr_types(self, block_type):
         """All known BLR block types accepted."""
         params = parse_groups(
-            sfh={"type": "dpl", "*": FIXED},
-            agn={"blr": {"type": block_type, "*": FIXED}},
+            sfh={"type": "dpl", "all_params": FIXED},
+            agn={"blr": {"type": block_type, "all_params": FIXED}},
             redshift=Fixed(0.1),
         )
         assert params.agn_blr_block == block_type
@@ -365,8 +369,8 @@ class TestAGNValidBlockTypes:
     def test_valid_feii_types(self, block_type):
         """All known feii block types accepted."""
         params = parse_groups(
-            sfh={"type": "dpl", "*": FIXED},
-            agn={"feii": {"type": block_type, "*": FIXED}},
+            sfh={"type": "dpl", "all_params": FIXED},
+            agn={"feii": {"type": block_type, "all_params": FIXED}},
             redshift=Fixed(0.1),
         )
         assert params.agn_feii_block == block_type
@@ -378,8 +382,8 @@ class TestAGNValidBlockTypes:
     def test_valid_atten_types(self, block_type):
         """All known attenuation block types accepted via type key."""
         params = parse_groups(
-            sfh={"type": "dpl", "*": FIXED},
-            agn={"atten": {"type": block_type, "*": FIXED}},
+            sfh={"type": "dpl", "all_params": FIXED},
+            agn={"atten": {"type": block_type, "all_params": FIXED}},
             redshift=Fixed(0.1),
         )
         assert params.agn_attenuation_block == block_type
@@ -387,8 +391,8 @@ class TestAGNValidBlockTypes:
     def test_valid_atten_smc_prevot_via_law_key(self):
         """smc_prevot is now selected via law='prevot_smc', not type key."""
         params = parse_groups(
-            sfh={"type": "dpl", "*": FIXED},
-            agn={"atten": {"law": "prevot_smc", "*": FIXED}},
+            sfh={"type": "dpl", "all_params": FIXED},
+            agn={"atten": {"law": "prevot_smc", "all_params": FIXED}},
             redshift=Fixed(0.1),
         )
         assert params.agn_attenuation_block == "smc_prevot"
@@ -397,7 +401,7 @@ class TestAGNValidBlockTypes:
         """Old type='smc_prevot' spelling is rejected with helpful message."""
         with pytest.raises(ValueError) as exc_info:
             parse_groups(
-                sfh={"type": "dpl", "*": FIXED},
+                sfh={"type": "dpl", "all_params": FIXED},
                 agn={"atten": {"type": "smc_prevot"}},
                 redshift=Fixed(0.1),
             )
@@ -413,14 +417,14 @@ class TestAGNComplexScenarios:
     def test_grahsp_full_recipe(self):
         """GRAHSP-pure recipe: every block uses GRAHSP impl."""
         params = parse_groups(
-            sfh={"type": "dpl", "*": FIXED},
+            sfh={"type": "dpl", "all_params": FIXED},
             agn={
-                "disc": {"type": "grahsp_sbpl", "*": FIXED},
-                "torus": {"type": "grahsp", "*": FIXED},
-                "nlr": {"type": "grahsp", "*": FIXED},
-                "blr": {"type": "grahsp", "*": FIXED},
-                "feii": {"type": "grahsp", "*": FIXED},
-                "atten": {"type": "grahsp_biatten", "*": FIXED},
+                "disc": {"type": "grahsp_sbpl", "all_params": FIXED},
+                "torus": {"type": "grahsp", "all_params": FIXED},
+                "nlr": {"type": "grahsp", "all_params": FIXED},
+                "blr": {"type": "grahsp", "all_params": FIXED},
+                "feii": {"type": "grahsp", "all_params": FIXED},
+                "atten": {"type": "grahsp_biatten", "all_params": FIXED},
             },
             redshift=Fixed(0.1),
         )
@@ -435,14 +439,14 @@ class TestAGNComplexScenarios:
     def test_mixed_block_recipe(self):
         """Mix blocks: GRAHSP BBB + simple two-temperature torus + Prevot SMC."""
         params = parse_groups(
-            sfh={"type": "dpl", "*": FIXED},
+            sfh={"type": "dpl", "all_params": FIXED},
             agn={
-                "disc": {"type": "grahsp_sbpl", "*": FIXED},
-                "nlr": {"type": "none", "*": FIXED},
-                "blr": {"type": "none", "*": FIXED},
-                "feii": {"type": "none", "*": FIXED},
-                "torus": {"type": "two_temperature", "*": FIXED},
-                "atten": {"law": "prevot_smc", "*": FIXED},
+                "disc": {"type": "grahsp_sbpl", "all_params": FIXED},
+                "nlr": {"type": "none", "all_params": FIXED},
+                "blr": {"type": "none", "all_params": FIXED},
+                "feii": {"type": "none", "all_params": FIXED},
+                "torus": {"type": "two_temperature", "all_params": FIXED},
+                "atten": {"law": "prevot_smc", "all_params": FIXED},
             },
             redshift=Fixed(0.1),
         )
@@ -456,7 +460,7 @@ class TestAGNComplexScenarios:
     def test_minimal_agn_no_blocks(self):
         """Empty agn dict: all blocks default to 'none'."""
         params = parse_groups(
-            sfh={"type": "dpl", "*": FIXED},
+            sfh={"type": "dpl", "all_params": FIXED},
             agn={},
             redshift=Fixed(0.1),
         )
@@ -485,9 +489,9 @@ class TestAGNCrossLevelPlacement:
         """``agn_log_lbol`` (shared) supplied inside ``disc`` must apply."""
         supplied = Uniform(9.42, 13.42)
         params = parse_groups(
-            sfh={"type": "dpl", "*": FIXED},
+            sfh={"type": "dpl", "all_params": FIXED},
             agn={
-                "disc": {"type": "qsogen", "*": FIXED, "agn_log_lbol": supplied},
+                "disc": {"type": "qsogen", "all_params": FIXED, "agn_log_lbol": supplied},
                 "torus": {"type": "none"},
                 "lines": {"type": "none"},
                 "feii": {"type": "none"},
@@ -508,12 +512,12 @@ class TestAGNCrossLevelPlacement:
         # must be written under their owning sub-block, not at the agn level.
         with pytest.raises(ValueError, match="is a 'agn\\.torus' parameter"):
             parse_groups(
-                sfh={"type": "dpl", "*": FIXED},
+                sfh={"type": "dpl", "all_params": FIXED},
                 agn={
-                    "*": FIXED,
+                    "all_params": FIXED,
                     "tau_skirtor": 7.5,  # Wrong level! Should be in torus={...}
-                    "disc": {"type": "qsogen", "*": FIXED},
-                    "torus": {"type": "skirtor", "*": FIXED},
+                    "disc": {"type": "qsogen", "all_params": FIXED},
+                    "torus": {"type": "skirtor", "all_params": FIXED},
                     "lines": {"type": "none"},
                     "feii": {"type": "none"},
                     "atten": {"type": "none"},
@@ -525,10 +529,14 @@ class TestAGNCrossLevelPlacement:
         """Same param at top level and inside a sub-block ⇒ ValueError."""
         with pytest.raises(ValueError, match="set in multiple locations"):
             parse_groups(
-                sfh={"type": "dpl", "*": FIXED},
+                sfh={"type": "dpl", "all_params": FIXED},
                 agn={
                     "agn_log_lbol": Uniform(9.42, 13.42),
-                    "disc": {"type": "qsogen", "*": FIXED, "agn_log_lbol": Uniform(10.42, 12.42)},
+                    "disc": {
+                        "type": "qsogen",
+                        "all_params": FIXED,
+                        "agn_log_lbol": Uniform(10.42, 12.42),
+                    },
                     "torus": {"type": "none"},
                     "lines": {"type": "none"},
                     "feii": {"type": "none"},
@@ -542,9 +550,9 @@ class TestAGNCrossLevelPlacement:
         not only the full-prefix form (``agn_log_lbol``).
         """
         params = parse_groups(
-            sfh={"type": "dpl", "*": FIXED},
+            sfh={"type": "dpl", "all_params": FIXED},
             agn={
-                "disc": {"type": "qsogen", "*": FIXED, "log_lbol": Uniform(9.42, 13.42)},
+                "disc": {"type": "qsogen", "all_params": FIXED, "log_lbol": Uniform(9.42, 13.42)},
                 "torus": {"type": "none"},
                 "lines": {"type": "none"},
                 "feii": {"type": "none"},
@@ -568,13 +576,13 @@ class TestUniversalKeyValidator:
     @pytest.mark.parametrize(
         ("group_name", "group_dict"),
         [
-            ("sfh", {"type": "dpl", "*": FIXED, "pretend_param": 5}),
+            ("sfh", {"type": "dpl", "all_params": FIXED, "pretend_param": 5}),
             (
                 "dust_attenuation",
                 {
                     "law": "power_law",
                     "type": "two_component",
-                    "*": FIXED,
+                    "all_params": FIXED,
                     "completely_fake_key": 99,
                 },
             ),
@@ -594,15 +602,15 @@ class TestUniversalKeyValidator:
     def test_unknown_key_in_dust_emission_subblock_raises(self):
         with pytest.raises(ValueError, match=r"Unknown key '[^']+' in group 'dust_emission'"):
             parse_groups(
-                sfh={"type": "dpl", "*": FIXED},
+                sfh={"type": "dpl", "all_params": FIXED},
                 dust_attenuation={
                     "type": "two_component",
                     "law": "calzetti",
-                    "*": FIXED,
+                    "all_params": FIXED,
                 },
                 dust_emission={
                     "type": "draine_li2007",
-                    "*": FIXED,
+                    "all_params": FIXED,
                     "phantom_emission_key": 77,
                 },
                 redshift=Fixed(0.1),
@@ -611,9 +619,9 @@ class TestUniversalKeyValidator:
     def test_unknown_key_in_agn_subblock_raises(self):
         with pytest.raises(ValueError, match=r"Unknown key '[^']+' in group 'agn.disc'"):
             parse_groups(
-                sfh={"type": "dpl", "*": FIXED},
+                sfh={"type": "dpl", "all_params": FIXED},
                 agn={
-                    "disc": {"type": "qsogen", "*": FIXED, "totally_made_up_key": 99},
+                    "disc": {"type": "qsogen", "all_params": FIXED, "totally_made_up_key": 99},
                     "torus": {"type": "none"},
                     "lines": {"type": "none"},
                     "feii": {"type": "none"},
@@ -627,10 +635,10 @@ class TestUniversalKeyValidator:
         to a real parameter name."""
         with pytest.raises(ValueError, match=r"Did you mean:.*tau_skirtor"):
             parse_groups(
-                sfh={"type": "dpl", "*": FIXED},
+                sfh={"type": "dpl", "all_params": FIXED},
                 agn={
-                    "torus": {"type": "skirtor", "*": FIXED, "tau_skirto": 5.0},
-                    "disc": {"type": "qsogen", "*": FIXED},
+                    "torus": {"type": "skirtor", "all_params": FIXED, "tau_skirto": 5.0},
+                    "disc": {"type": "qsogen", "all_params": FIXED},
                     "lines": {"type": "none"},
                     "feii": {"type": "none"},
                     "atten": {"type": "none"},
@@ -669,23 +677,23 @@ class TestComposableAGNRuntimeWiring:
                 "tau_gyr": Fixed(1.0),
                 "age_gyr": Fixed(5.0),
                 "log_total_mass": Fixed(0.0),
-                "*": FIXED,
+                "all_params": FIXED,
             },
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
                 "tau_bc": Fixed(0.0),
                 "tau_diff": Fixed(0.0),
-                "*": FIXED,
+                "all_params": FIXED,
             },
             agn={
                 "type": "composable",
-                "*": FIXED,
+                "all_params": FIXED,
                 "frac": 1.0,
                 "log_lbol": 12.5,
-                "disc": {"type": "multicolor", "*": FIXED},
-                "torus": {"type": "skirtor", "*": FIXED},
-                "lines": {"type": "nlr", "*": FIXED},
+                "disc": {"type": "multicolor", "all_params": FIXED},
+                "torus": {"type": "skirtor", "all_params": FIXED},
+                "lines": {"type": "nlr", "all_params": FIXED},
             },
             redshift=Fixed(0.05),
         )
@@ -736,24 +744,24 @@ class TestComposableAGNRuntimeWiring:
                     "tau_gyr": Fixed(1.0),
                     "age_gyr": Fixed(5.0),
                     "log_total_mass": Fixed(0.0),
-                    "*": FIXED,
+                    "all_params": FIXED,
                 },
                 dust_attenuation={
                     "law": "power_law",
                     "type": "two_component",
                     "tau_bc": Fixed(0.0),
                     "tau_diff": Fixed(0.0),
-                    "*": FIXED,
+                    "all_params": FIXED,
                 },
                 agn={
                     "type": "composable",
-                    "*": FIXED,
+                    "all_params": FIXED,
                     "frac": 1.0,
                     "log_lbol": 9.0,
                     "log_mbh": 9.0,
                     "disc": {
                         "type": "adaf",
-                        "*": FIXED,
+                        "all_params": FIXED,
                         "adaf_delta": Fixed(delta),
                         "adaf_alpha": Fixed(alpha),
                     },
@@ -783,7 +791,7 @@ class TestComposableAGNRuntimeWiring:
         )
 
     def test_composable_agn_wildcard_fixed_emits_nonzero_sed(self, synthetic_ssp_wide):
-        """Wildcard ``'*': FIXED`` with no explicit ``frac`` must still
+        """Wildcard ``'all_params': FIXED`` with no explicit ``frac`` must still
         produce a non-zero AGN SED (regression for #417).
 
         Before the fix, ``agn_lum_ratio`` defaulted to ``Fixed(0.0)`` in the
@@ -804,21 +812,21 @@ class TestComposableAGNRuntimeWiring:
                 "tau_gyr": Fixed(1.0),
                 "age_gyr": Fixed(5.0),
                 "log_total_mass": Fixed(0.0),
-                "*": FIXED,
+                "all_params": FIXED,
             },
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
                 "tau_bc": Fixed(0.0),
                 "tau_diff": Fixed(0.0),
-                "*": FIXED,
+                "all_params": FIXED,
             },
             agn={
                 "type": "composable",
-                "*": FIXED,  # NB: no explicit ``frac`` override
+                "all_params": FIXED,  # NB: no explicit ``frac`` override
                 "log_lbol": 13.0,
-                "disc": {"type": "multicolor", "*": FIXED},
-                "torus": {"type": "skirtor", "*": FIXED},
+                "disc": {"type": "multicolor", "all_params": FIXED},
+                "torus": {"type": "skirtor", "all_params": FIXED},
             },
             redshift=Fixed(0.0),
         )
@@ -855,21 +863,21 @@ class TestComposableAGNRuntimeWiring:
                     "tau_gyr": Fixed(1.0),
                     "age_gyr": Fixed(5.0),
                     "log_total_mass": Fixed(0.0),
-                    "*": FIXED,
+                    "all_params": FIXED,
                 },
                 dust_attenuation={
                     "law": "power_law",
                     "type": "two_component",
                     "tau_bc": Fixed(0.0),
                     "tau_diff": Fixed(0.0),
-                    "*": FIXED,
+                    "all_params": FIXED,
                 },
                 agn={
                     "type": "composable",
-                    "*": FIXED,
+                    "all_params": FIXED,
                     "log_lbol": 13.0,
-                    "disc": {"type": "multicolor", "*": FIXED},
-                    "torus": {"type": "silva04", "*": FIXED},
+                    "disc": {"type": "multicolor", "all_params": FIXED},
+                    "torus": {"type": "silva04", "all_params": FIXED},
                     "norm": norm,
                 },
                 redshift=Fixed(0.0),
@@ -928,16 +936,16 @@ class TestComposableAGNRuntimeWiring:
                 "tau_gyr": Fixed(1.0),
                 "age_gyr": Fixed(5.0),
                 "log_total_mass": Fixed(0.0),
-                "*": FIXED,
+                "all_params": FIXED,
             },
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
                 "tau_bc": Fixed(0.0),
                 "tau_diff": Fixed(0.0),
-                "*": FIXED,
+                "all_params": FIXED,
             },
-            agn={"type": "richards2006", "agn_log_lbol": Fixed(13.0), "*": FIXED},
+            agn={"type": "richards2006", "agn_log_lbol": Fixed(13.0), "all_params": FIXED},
             redshift=Fixed(0.0),
         )
         assert model._agn_model == "richards2006", (
@@ -976,8 +984,12 @@ class TestAGNLinesDeprecation:
         """``agn={'lines': {'type': 'nlr_blr'}}`` -> nlr='analytic', blr='analytic'."""
         with pytest.warns(DeprecationWarning, match="lines"):
             params = parse_groups(
-                sfh={"type": "dpl", "*": FIXED},
-                agn={"disc": {"type": "multicolor"}, "lines": {"type": "nlr_blr"}, "*": FIXED},
+                sfh={"type": "dpl", "all_params": FIXED},
+                agn={
+                    "disc": {"type": "multicolor"},
+                    "lines": {"type": "nlr_blr"},
+                    "all_params": FIXED,
+                },
                 redshift=Fixed(0.1),
             )
         assert params.agn_nlr_block == "analytic"
@@ -987,8 +999,12 @@ class TestAGNLinesDeprecation:
         """A single-region legacy name maps to one slot only (other stays 'none')."""
         with pytest.warns(DeprecationWarning):
             params = parse_groups(
-                sfh={"type": "dpl", "*": FIXED},
-                agn={"disc": {"type": "multicolor"}, "lines": {"type": "blr"}, "*": FIXED},
+                sfh={"type": "dpl", "all_params": FIXED},
+                agn={
+                    "disc": {"type": "multicolor"},
+                    "lines": {"type": "blr"},
+                    "all_params": FIXED,
+                },
                 redshift=Fixed(0.1),
             )
         assert params.agn_nlr_block == "none"
@@ -1008,12 +1024,12 @@ class TestAGNLinesDeprecation:
         """Mixing the deprecated ``lines`` with new ``nlr``/``blr`` is an error."""
         with pytest.raises(ValueError, match="both"):
             parse_groups(
-                sfh={"type": "dpl", "*": FIXED},
+                sfh={"type": "dpl", "all_params": FIXED},
                 agn={
                     "disc": {"type": "multicolor"},
                     "lines": {"type": "nlr_blr"},
                     "nlr": {"type": "analytic"},
-                    "*": FIXED,
+                    "all_params": FIXED,
                 },
                 redshift=Fixed(0.1),
             )
@@ -1032,9 +1048,9 @@ class TestAGNSubblockStrictness:
         # agn_tau_skirtor is owned by the torus block, not shared
         with pytest.raises(ValueError, match="is a 'agn\\.torus' parameter"):
             parse_groups(
-                sfh={"type": "dpl", "*": FIXED},
+                sfh={"type": "dpl", "all_params": FIXED},
                 agn={
-                    "disc": {"type": "powerlaw", "*": FIXED},
+                    "disc": {"type": "powerlaw", "all_params": FIXED},
                     "tau_skirtor": Uniform(3, 11),  # Wrong level!
                 },
                 redshift=Fixed(0.1),
@@ -1044,9 +1060,9 @@ class TestAGNSubblockStrictness:
         """Error message for misplaced sub-block param shows correct nesting."""
         with pytest.raises(ValueError) as excinfo:
             parse_groups(
-                sfh={"type": "dpl", "*": FIXED},
+                sfh={"type": "dpl", "all_params": FIXED},
                 agn={
-                    "disc": {"type": "powerlaw", "*": FIXED},
+                    "disc": {"type": "powerlaw", "all_params": FIXED},
                     "tau_skirtor": Uniform(3, 11),
                 },
                 redshift=Fixed(0.1),
@@ -1060,10 +1076,10 @@ class TestAGNSubblockStrictness:
     def test_subblock_owned_param_in_correct_nest_works(self):
         """Same parameter nested correctly under torus dict works fine."""
         params = parse_groups(
-            sfh={"type": "dpl", "*": FIXED},
+            sfh={"type": "dpl", "all_params": FIXED},
             agn={
-                "disc": {"type": "powerlaw", "*": FIXED},
-                "torus": {"type": "skirtor", "*": FIXED, "tau_skirtor": Uniform(3, 11)},
+                "disc": {"type": "powerlaw", "all_params": FIXED},
+                "torus": {"type": "skirtor", "all_params": FIXED, "tau_skirtor": Uniform(3, 11)},
             },
             redshift=Fixed(0.1),
         )
@@ -1074,9 +1090,9 @@ class TestAGNSubblockStrictness:
         """A NLR parameter at agn level raises."""
         with pytest.raises(ValueError, match="is a 'agn\\.nlr' parameter"):
             parse_groups(
-                sfh={"type": "dpl", "*": FIXED},
+                sfh={"type": "dpl", "all_params": FIXED},
                 agn={
-                    "disc": {"type": "powerlaw", "*": FIXED},
+                    "disc": {"type": "powerlaw", "all_params": FIXED},
                     "nlr_cf": Uniform(0.01, 0.5),  # nlr param at wrong level
                 },
                 redshift=Fixed(0.1),
@@ -1086,9 +1102,9 @@ class TestAGNSubblockStrictness:
         """Genuinely shared params (agn_log_lbol, agn_lum_ratio) work at agn level."""
         # These are shared across all blocks, not owned by any sub-block
         params = parse_groups(
-            sfh={"type": "dpl", "*": FIXED},
+            sfh={"type": "dpl", "all_params": FIXED},
             agn={
-                "disc": {"type": "powerlaw", "*": FIXED},
+                "disc": {"type": "powerlaw", "all_params": FIXED},
                 "log_lbol": Uniform(9.42, 13.42),  # Shared param at agn level is OK
             },
             redshift=Fixed(0.1),
@@ -1100,9 +1116,9 @@ class TestAGNSubblockStrictness:
         """Multiple misplaced sub-block params all raise (first one caught)."""
         with pytest.raises(ValueError, match="is a 'agn"):
             parse_groups(
-                sfh={"type": "dpl", "*": FIXED},
+                sfh={"type": "dpl", "all_params": FIXED},
                 agn={
-                    "disc": {"type": "powerlaw", "*": FIXED},
+                    "disc": {"type": "powerlaw", "all_params": FIXED},
                     "tau_skirtor": Uniform(3, 11),  # torus param
                     "nlr_cf": Uniform(0.01, 0.5),  # nlr param
                 },

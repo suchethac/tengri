@@ -43,20 +43,20 @@ def model_with_cue(ssp_bare):
         ssp_bare,
         sfh={
             "type": "const",
-            "*": FIXED,
+            "all_params": FIXED,
             "log_total_mass": 10.0,
             "start_gyr": 10.0,
             "end_gyr": 0.0,
         },
         dust_attenuation={
             "type": "two_component",
-            "*": FIXED,
+            "all_params": FIXED,
             "law": "calzetti",
             "tau_diff": 0.5,
             "tau_bc": 0.1,
             "slope": -0.7,
         },
-        neb={"type": "cue", "*": FIXED},
+        neb={"type": "cue", "all_params": FIXED},
         redshift=Fixed(0.05),
     )
 

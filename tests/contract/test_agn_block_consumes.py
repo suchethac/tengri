@@ -3,7 +3,7 @@
 
 Background. AGN parameters carry *free* Uniform/LogUniform registry defaults so
 the FREE grammar can expand them (before, every agn_* param had a Fixed default,
-so ``agn={'*': FREE}`` and ``recipes.agn_panchromatic()`` silently produced zero
+so ``agn={'all_params': FREE}`` and ``recipes.agn_panchromatic()`` silently produced zero
 free AGN parameters). Because the composable AGN component declares the full
 ~50-param superset, a group wildcard is *scoped* to the parameters the active
 disc/torus/lines/feii/atten blocks actually consume — otherwise it would free
@@ -12,7 +12,7 @@ dozens of no-op nuisance dimensions. These tests pin that contract:
 1. the CONSUMES tables reference only real declared params (no typos);
 2. :func:`agn_active_param_set` scopes the wildcard correctly and falls back to
    the full superset for unknown / grid-gated blocks (never under-frees);
-3. a composable ``'*': FREE`` frees exactly the active set (spec-level, synthetic
+3. a composable ``'all_params': FREE`` frees exactly the active set (spec-level, synthetic
    SSP — CI-runnable, no grids);
 4. every free AGN parameter in ``recipes.agn_panchromatic()`` actually moves
    ``predict()`` — the "no no-op free parameters" guarantee (gate-2; SSP-gated).
@@ -60,7 +60,7 @@ def test_skirtor_torus_consumes_all_polar_dust_knobs():
     ``agn_polar_ebv = 0.03``). All three move the SED — empirically
     ``Delta(polar_T) = 52%`` and ``Delta(polar_beta) = 2.4%`` across their
     priors. Previously only ``agn_polar_ebv`` was credited, so a top-level
-    ``agn={'*': FREE}`` silently froze the polar-dust temperature and slope
+    ``agn={'all_params': FREE}`` silently froze the polar-dust temperature and slope
     (a silent-fixed gap). This guards against that regression without needing
     the gitignored SKIRTOR grid (pure CONSUMES-table membership).
     """
@@ -116,7 +116,7 @@ def test_grahsp_composable_blocks_scope_not_superset():
     ``('nlr', 'grahsp')`` and ``('blr', 'grahsp')`` and ``('feii', 'grahsp')`` were
     missing from the CONSUMES map; an unmapped block makes ``agn_active_param_set``
     over-free to ``ALL_AGN_PARAMS``, i.e. ~39 no-op nuisance dimensions under a
-    top-level ``agn={'*': FREE}`` (the disc/torus/attenuation grahsp blocks *were*
+    top-level ``agn={'all_params': FREE}`` (the disc/torus/attenuation grahsp blocks *were*
     mapped, so the omission was an inconsistency, not a deliberate grid gate).
     """
     for key in (
@@ -229,8 +229,8 @@ def test_unified_agn_nlr_blr_additive(synthetic_ssp_wide):
     def sed(nlr_block, blr_block):
         m = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
-            sfh={"type": "delayed", "*": FIXED},
-            dust_attenuation={"law": "power_law", "type": "two_component", "*": FIXED},
+            sfh={"type": "delayed", "all_params": FIXED},
+            dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
             agn={
                 "type": "composable",
                 "disc": {"type": "kubota_done"},
@@ -238,7 +238,7 @@ def test_unified_agn_nlr_blr_additive(synthetic_ssp_wide):
                 "nlr": {"type": nlr_block},
                 "blr": {"type": blr_block},
                 "agn_log_lbol": Fixed(12.0),
-                "*": FIXED,
+                "all_params": FIXED,
             },
             redshift=Fixed(0.05),
         )
@@ -265,13 +265,13 @@ def test_unified_agn_type1_type2_masking(synthetic_ssp_wide):
     def sed(nlr_block, blr_block, cos_inc):
         m = SEDModel.build(
             ssp_data=synthetic_ssp_wide,
-            sfh={"type": "delayed", "*": FIXED},
+            sfh={"type": "delayed", "all_params": FIXED},
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
                 "tau_bc": Fixed(0.0),
                 "tau_diff": Fixed(0.0),
-                "*": FIXED,
+                "all_params": FIXED,
             },
             agn={
                 "type": "composable",
@@ -282,7 +282,7 @@ def test_unified_agn_type1_type2_masking(synthetic_ssp_wide):
                 "agn_log_lbol": Fixed(12.0),
                 "agn_cos_inc": Fixed(cos_inc),
                 "agn_theta_torus": Fixed(45.0),
-                "*": FIXED,
+                "all_params": FIXED,
             },
             redshift=Fixed(0.05),
         )
@@ -320,7 +320,7 @@ def test_unified_agn_recipe_structure():
 
 
 def test_composable_wildcard_frees_only_active_params(synthetic_ssp_wide):
-    """Spec-level: ``agn={'*': FREE}`` frees exactly the active set (no grids)."""
+    """Spec-level: ``agn={'all_params': FREE}`` frees exactly the active set (no grids)."""
     cfg = {
         "agn_model": "composable",
         "agn_disc_block": "multicolor",
@@ -332,15 +332,15 @@ def test_composable_wildcard_frees_only_active_params(synthetic_ssp_wide):
     }
     model = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
-        sfh={"type": "delayed", "*": FIXED},
-        dust_attenuation={"law": "power_law", "type": "two_component", "*": FIXED},
+        sfh={"type": "delayed", "all_params": FIXED},
+        dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
         agn={
             "type": "composable",
             "disc": {"type": "multicolor"},
             "torus": {"type": "two_temperature"},
             "nlr": {"type": "analytic"},
             "blr": {"type": "none"},
-            "*": FREE,
+            "all_params": FREE,
         },
         redshift=Fixed(0.05),
     )
@@ -349,17 +349,17 @@ def test_composable_wildcard_frees_only_active_params(synthetic_ssp_wide):
 
 
 def test_all_fixed_wildcard_frees_nothing_and_keeps_old_defaults(synthetic_ssp_wide):
-    """Back-compat: ``'*': FIXED`` yields no free AGN params at the historic values."""
+    """Back-compat: ``'all_params': FIXED`` yields no free AGN params at the historic values."""
     model = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
-        sfh={"type": "delayed", "*": FIXED},
-        dust_attenuation={"law": "power_law", "type": "two_component", "*": FIXED},
+        sfh={"type": "delayed", "all_params": FIXED},
+        dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
         agn={
             "type": "composable",
             "disc": {"type": "multicolor"},
             "torus": {"type": "two_temperature"},
             "lines": {"type": "nlr"},
-            "*": FIXED,
+            "all_params": FIXED,
         },
         redshift=Fixed(0.05),
     )
@@ -430,7 +430,7 @@ def test_agn_panchromatic_free_params_all_move_predict(real_ssp_only):
             # invalidate the no-op guard for exactly those params.
             "atten": {"type": "polar_dust"},
             "agn_log_lbol": Fixed(12.0),
-            "*": FIXED,
+            "all_params": FIXED,
         }
         if name is not None:
             # #1980: sub-block-owned params must nest under their PARTITION
@@ -451,7 +451,7 @@ def test_agn_panchromatic_free_params_all_move_predict(real_ssp_only):
                 try:
                     parse_groups(
                         agn={**agn, name: Fixed(value)},
-                        sfh={"type": "delayed", "*": FIXED},
+                        sfh={"type": "delayed", "all_params": FIXED},
                         redshift=Fixed(0.05),
                     )
                 except ValueError as exc:
@@ -465,12 +465,12 @@ def test_agn_panchromatic_free_params_all_move_predict(real_ssp_only):
         m = SEDModel.build(
             ssp_data=ssp,
             observation=obs,
-            sfh={"type": "delayed", "*": FIXED},
+            sfh={"type": "delayed", "all_params": FIXED},
             dust_attenuation={
                 "law": "power_law",
                 "type": "two_component",
                 "tau_diff": Fixed(0.3),
-                "*": FIXED,
+                "all_params": FIXED,
             },
             dust_emission={"type": "dale2014_cigale"},
             agn=agn,

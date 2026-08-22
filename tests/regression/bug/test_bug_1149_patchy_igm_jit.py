@@ -85,11 +85,11 @@ def _build(ssp, *, z, approx, bands=BANDS, patchy=True, x_HI=None):
     return SEDModel.build(
         ssp_data=ssp,
         observation=Observation(photometry=Photometry.from_names(bands)),
-        sfh={"type": "dpl", "*": FREE},
+        sfh={"type": "dpl", "all_params": FREE},
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "*": FIXED,
+            "all_params": FIXED,
             "tau_diff": 0.3,
         },
         redshift=Fixed(z),

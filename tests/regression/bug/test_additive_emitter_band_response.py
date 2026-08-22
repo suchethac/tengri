@@ -75,17 +75,17 @@ MAX_FLOPS = 1_000_000
 
 
 def _model(emission_type, shape, *, approx):
-    emission = {"type": emission_type, "*": FIXED}
+    emission = {"type": emission_type, "all_params": FIXED}
     emission.update({k: Fixed(v) for k, v in shape.items()})
     return SEDModel.build(
         ssp_data=pytest.importorskip("tengri").load_ssp(),
         observation=Observation(photometry=Photometry.from_names(FILTERS)),
         redshift=Fixed(0.1),
-        sfh={"type": "dpl", "*": FIXED},
+        sfh={"type": "dpl", "all_params": FIXED},
         dust_attenuation={
             "type": "two_component",
             "law": "calzetti",
-            "*": FIXED,
+            "all_params": FIXED,
         },
         dust_emission=emission,
         approx=approx,

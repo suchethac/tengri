@@ -27,7 +27,7 @@ _E_BV_STARS = 0.44 * 0.3
 TAU_DIFF_FIDUCIAL = 4.05 * _E_BV_STARS / 1.086
 TAU_BC_FIDUCIAL = 0.0
 
-MET_FIDUCIAL = {"logzsol": Fixed(MET_LOGZSOL_FIDUCIAL), "*": FIXED}
+MET_FIDUCIAL = {"logzsol": Fixed(MET_LOGZSOL_FIDUCIAL), "all_params": FIXED}
 
 _sfh_args_d = (
     "sfhdelayed",
@@ -61,7 +61,7 @@ m_agn_base = SEDModel.build(
         "tau_gyr": Fixed(1.0),
         "age_gyr": Fixed(5.0),
         "log_total_mass": Fixed(0.0),
-        "*": FIXED,
+        "all_params": FIXED,
     },
     dust_attenuation={
         "type": "two_component",
@@ -69,8 +69,8 @@ m_agn_base = SEDModel.build(
         "law_diff": "leitherer02",
         "tau_bc": Fixed(TAU_BC_FIDUCIAL),
         "tau_diff": Fixed(TAU_DIFF_FIDUCIAL),
-        "*": FIXED,
-    }, dust_emission={"type": "dale2014", "*": FIXED},
+        "all_params": FIXED,
+    }, dust_emission={"type": "dale2014", "all_params": FIXED},
     redshift=Fixed(0.0),
 )
 s_agn_base = m_agn_base.predict_state({})
@@ -115,7 +115,7 @@ m_agn = SEDModel.build(
         "tau_gyr": Fixed(1.0),
         "age_gyr": Fixed(5.0),
         "log_total_mass": Fixed(0.0),
-        "*": FIXED,
+        "all_params": FIXED,
     },
     dust_attenuation={
         "type": "two_component",
@@ -123,15 +123,15 @@ m_agn = SEDModel.build(
         "law_diff": "leitherer02",
         "tau_bc": Fixed(TAU_BC_FIDUCIAL),
         "tau_diff": Fixed(TAU_DIFF_FIDUCIAL),
-        "*": FIXED,
-    }, dust_emission={"type": "dale2014", "*": FIXED},
+        "all_params": FIXED,
+    }, dust_emission={"type": "dale2014", "all_params": FIXED},
     agn={
         "type": "composable",
-        "disc": {"type": "schartmann2005", "*": FIXED},
-        "torus": {"type": "skirtor", "*": FIXED},
+        "disc": {"type": "schartmann2005", "all_params": FIXED},
+        "torus": {"type": "skirtor", "all_params": FIXED},
         "agn_log_lbol": Fixed(-0.42),
         "agn_fracAGN": Fixed(0.3),
-        "*": FIXED,
+        "all_params": FIXED,
     },
     redshift=Fixed(0.0),
 )

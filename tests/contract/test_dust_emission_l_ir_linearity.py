@@ -43,17 +43,17 @@ AFFINE_MODELS = {
 
 def _model(ssp, model_name, eta, **emission_extra):
     """Two-component dust with one emission model at a given eta_balance."""
-    emission = {"type": model_name, "*": FIXED, "eta_balance": Fixed(eta)}
+    emission = {"type": model_name, "all_params": FIXED, "eta_balance": Fixed(eta)}
     emission.update(emission_extra)
     return SEDModel.build(
         ssp_data=ssp,
-        met={"logzsol": Fixed(0.0), "*": FIXED},
+        met={"logzsol": Fixed(0.0), "all_params": FIXED},
         sfh={
             "type": "delayed",
             "tau_gyr": Fixed(1.0),
             "age_gyr": Fixed(5.0),
             "log_total_mass": Fixed(10.0),
-            "*": FIXED,
+            "all_params": FIXED,
         },
         dust_attenuation={
             "type": "two_component",
@@ -61,7 +61,7 @@ def _model(ssp, model_name, eta, **emission_extra):
             "law_diff": "calzetti",
             "tau_bc": Fixed(1.0),
             "tau_diff": Fixed(0.7),
-            "*": FIXED,
+            "all_params": FIXED,
         },
         dust_emission=emission,
         redshift=Fixed(0.0),

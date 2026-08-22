@@ -66,7 +66,7 @@ def _build(neb, *, dust_on=True, precomp=True, met=None):
     dust = {
         "type": "two_component",
         "law": "calzetti",
-        "*": FIXED,
+        "all_params": FIXED,
         "tau_diff": Fixed(taus[0]),
         "tau_bc": Fixed(taus[1]),
     }
@@ -75,7 +75,7 @@ def _build(neb, *, dust_on=True, precomp=True, met=None):
         return SEDModel.build(
             ssp_data=ssp,
             observation=obs,
-            sfh={"type": "dpl", "*": FREE},
+            sfh={"type": "dpl", "all_params": FREE},
             dust_attenuation=dust,
             neb=neb,
             redshift=Fixed(Z),
@@ -87,7 +87,7 @@ def _build(neb, *, dust_on=True, precomp=True, met=None):
         )
 
 
-_CUE = {"type": "cue", "*": FIXED, "logU": Uniform(-4.0, -1.0)}
+_CUE = {"type": "cue", "all_params": FIXED, "logU": Uniform(-4.0, -1.0)}
 
 
 def test_enable_attaches_grid_no_silent_noop():
@@ -198,7 +198,7 @@ def test_gas_and_stellar_metallicity_are_separate_axes():
     written below never reaches either path. The decoupling this test is named
     for cannot be exercised while the stellar axis is pinned.
     """
-    neb = {"type": "cue", "*": FIXED, "logU": Fixed(-2.5), "logZ_gas": Uniform(-1.0, 0.4)}
+    neb = {"type": "cue", "all_params": FIXED, "logU": Fixed(-2.5), "logZ_gas": Uniform(-1.0, 0.4)}
     # Range covers the metal-poor value the parity check assigns below.
     met = {"logzsol": Uniform(-1.8, 0.4)}
     m_fast = _build(neb, met=met)

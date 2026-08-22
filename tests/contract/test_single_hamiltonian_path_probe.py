@@ -27,8 +27,8 @@ def _template(synthetic_ssp, simple_observation):
     return SEDModel.build(
         ssp_data=synthetic_ssp,
         observation=simple_observation,
-        sfh={"type": "dpl", "*": FIXED, "log_total_mass": Uniform(-1.0, 3.0)},
-        dust_attenuation={"type": "two_component", "law": "calzetti", "*": FIXED},
+        sfh={"type": "dpl", "all_params": FIXED, "log_total_mass": Uniform(-1.0, 3.0)},
+        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
         neb={"type": "none"},
         redshift=0.05,
     )

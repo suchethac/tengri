@@ -20,7 +20,7 @@ class TestFromGroupsBridge:
     def test_from_groups_returns_parameters(self):
         """Classmethod returns a Parameters instance."""
         spec = parse_groups(
-            sfh={"type": "dpl", "*": FIXED},
+            sfh={"type": "dpl", "all_params": FIXED},
             redshift=Fixed(0.1),
         )
         assert isinstance(spec, Parameters)
@@ -28,14 +28,14 @@ class TestFromGroupsBridge:
     def test_from_groups_identical_to_parse_groups(self):
         """Both paths produce Parameters with identical free/fixed partitions."""
         kwargs = dict(
-            sfh={"type": "dpl", "*": FREE, "beta": Uniform(1, 3)},
+            sfh={"type": "dpl", "all_params": FREE, "beta": Uniform(1, 3)},
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "*": FIXED,
+                "all_params": FIXED,
                 "tau_bc": 0.5,
             },
-            neb={"type": "cue", "*": FIXED},
+            neb={"type": "cue", "all_params": FIXED},
             redshift=Fixed(0.05),
         )
         via_method = parse_groups(**kwargs)
@@ -47,15 +47,15 @@ class TestFromGroupsBridge:
     def test_from_groups_canonical_example(self):
         """The canonical example from the design doc works end-to-end."""
         spec = parse_groups(
-            sfh={"type": "dpl", "*": FREE, "beta": Uniform(1, 3)},
+            sfh={"type": "dpl", "all_params": FREE, "beta": Uniform(1, 3)},
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "*": FIXED,
+                "all_params": FIXED,
                 "tau_bc": 0.5,
             },
-            dust_emission={"type": "dale2014", "*": FIXED},
-            neb={"type": "cue", "*": FIXED},
+            dust_emission={"type": "dale2014", "all_params": FIXED},
+            neb={"type": "cue", "all_params": FIXED},
             redshift=FREE,
         )
         assert "sfh_dpl_beta" in spec.free_params

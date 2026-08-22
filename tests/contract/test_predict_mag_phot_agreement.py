@@ -32,11 +32,11 @@ def model(synthetic_ssp_wide, synthetic_tophat_obs):
     return tengri.SEDModel.build(
         synthetic_ssp_wide,
         observation=synthetic_tophat_obs,
-        sfh={"type": "tsnorm", "*": tengri.FIXED},
+        sfh={"type": "tsnorm", "all_params": tengri.FIXED},
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "*": tengri.FIXED,
+            "all_params": tengri.FIXED,
             "tau_diff": 0.3,
             "tau_bc": 0.2,
         },

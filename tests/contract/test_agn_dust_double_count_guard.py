@@ -28,11 +28,11 @@ def _spec(dust_frac_agn, agn_fracagn, *, emission="dale2014", with_agn=True):
     """Build a spec with a chosen dust emission + (optional) composable AGN."""
     groups = dict(
         redshift=Fixed(0.1),
-        sfh={"type": "dpl", "*": FIXED},
+        sfh={"type": "dpl", "all_params": FIXED},
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "*": FIXED,
+            "all_params": FIXED,
         },
         dust_emission={"type": emission, "frac_agn": dust_frac_agn}
         if emission == "dale2014"
@@ -44,7 +44,7 @@ def _spec(dust_frac_agn, agn_fracagn, *, emission="dale2014", with_agn=True):
             "disc": {"type": "multicolor"},
             "torus": {"type": "none"},
             "agn_ir_frac": agn_fracagn,
-            "*": FIXED,
+            "all_params": FIXED,
         }
     return parse_groups(**groups)
 
@@ -102,13 +102,13 @@ class TestGuardEndToEndAndFilterable:
         with pytest.warns(AGNDustDoubleCountWarning, match="DOUBLE-COUNTED"):
             SEDModel.build(
                 ssp_data=synthetic_ssp_wide,
-                sfh={"type": "delayed", "*": FIXED},
+                sfh={"type": "delayed", "all_params": FIXED},
                 dust_attenuation={
                     "law": "power_law",
                     "type": "two_component",
                     "tau_bc": Fixed(0.0),
                     "tau_diff": Fixed(0.0),
-                    "*": FIXED,
+                    "all_params": FIXED,
                 },
                 dust_emission={"type": "dale2014", "frac_agn": Fixed(0.3)},
                 agn={
@@ -116,7 +116,7 @@ class TestGuardEndToEndAndFilterable:
                     "disc": {"type": "multicolor"},
                     "torus": {"type": "none"},
                     "agn_ir_frac": Fixed(0.5),
-                    "*": FIXED,
+                    "all_params": FIXED,
                 },
                 redshift=Fixed(0.05),
             )
@@ -126,14 +126,14 @@ class TestGuardEndToEndAndFilterable:
             warnings.simplefilter("error", AGNDustDoubleCountWarning)
             model = SEDModel.build(
                 ssp_data=synthetic_ssp_wide,
-                sfh={"type": "delayed", "*": FIXED},
+                sfh={"type": "delayed", "all_params": FIXED},
                 dust_attenuation={
                     "law": "power_law",
                     "type": "two_component",
                     "tau_bc": Fixed(0.0),
                     "tau_diff": Fixed(0.0),
                     # frac_agn defaults to 0
-                    "*": FIXED,
+                    "all_params": FIXED,
                 },
                 dust_emission={"type": "dale2014"},
                 agn={
@@ -141,7 +141,7 @@ class TestGuardEndToEndAndFilterable:
                     "disc": {"type": "multicolor"},
                     "torus": {"type": "none"},
                     "agn_ir_frac": Fixed(0.5),
-                    "*": FIXED,
+                    "all_params": FIXED,
                 },
                 redshift=Fixed(0.05),
             )

@@ -3,7 +3,7 @@
 
 The previous API only accepted ``igm={'dla': True}`` and forced users to
 set ``dla_log_n_hi`` etc. via top-level overrides. This contract test
-pins the new nested form ``igm={'dla': {'log_n_hi': ..., '*': ...}}``
+pins the new nested form ``igm={'dla': {'log_n_hi': ..., 'all_params': ...}}``
 while keeping the boolean form working for back-compat.
 """
 
@@ -18,7 +18,7 @@ pytestmark = pytest.mark.contract
 class TestDLABuilderBlock:
     def test_dict_form_activates_and_routes_overrides(self):
         spec = parse_groups(
-            sfh={"type": "dpl", "*": FIXED},
+            sfh={"type": "dpl", "all_params": FIXED},
             igm={
                 "type": "inoue14",
                 # FIXED, not FREE: both DLA params carry Fixed registry
@@ -27,7 +27,7 @@ class TestDLABuilderBlock:
                 "dla": {
                     "log_n_hi": Uniform(19, 22),
                     "b_turb": Fixed(10.0),
-                    "*": FIXED,
+                    "all_params": FIXED,
                 },
             },
             redshift=Fixed(2.0),
@@ -39,7 +39,7 @@ class TestDLABuilderBlock:
 
     def test_boolean_form_still_works(self):
         spec = parse_groups(
-            sfh={"type": "dpl", "*": FIXED},
+            sfh={"type": "dpl", "all_params": FIXED},
             igm={"type": "inoue14", "dla": True},
             redshift=Fixed(2.0),
         )
@@ -47,7 +47,7 @@ class TestDLABuilderBlock:
 
     def test_no_dla_block_means_no_absorber(self):
         spec = parse_groups(
-            sfh={"type": "dpl", "*": FIXED},
+            sfh={"type": "dpl", "all_params": FIXED},
             igm={"type": "inoue14"},
             redshift=Fixed(2.0),
         )
@@ -56,10 +56,10 @@ class TestDLABuilderBlock:
     def test_unknown_dla_key_raises(self):
         with pytest.raises(ValueError, match=r"dla|igm"):
             parse_groups(
-                sfh={"type": "dpl", "*": FIXED},
+                sfh={"type": "dpl", "all_params": FIXED},
                 igm={
                     "type": "inoue14",
-                    "dla": {"not_a_dla_param": Uniform(0, 1), "*": FREE},
+                    "dla": {"not_a_dla_param": Uniform(0, 1), "all_params": FREE},
                 },
                 redshift=Fixed(2.0),
             )

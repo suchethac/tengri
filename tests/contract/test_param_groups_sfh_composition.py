@@ -25,7 +25,7 @@ class TestSFHBasics:
     def test_sfh_list_dpl_field(self):
         """SFH composition of dpl and field creates both param sets."""
         params = parse_groups(
-            sfh={"type": ["dpl", "field"], "*": FREE},
+            sfh={"type": ["dpl", "field"], "all_params": FREE},
             redshift=Fixed(0.1),
         )
         assert isinstance(params, Parameters)
@@ -36,7 +36,7 @@ class TestSFHBasics:
     def test_sfh_composition_mean_sfh_type_list(self):
         """mean_sfh_type set to the list of types."""
         params = parse_groups(
-            sfh={"type": ["dpl", "field"], "*": FIXED},
+            sfh={"type": ["dpl", "field"], "all_params": FIXED},
             redshift=Fixed(0.1),
         )
         # mean_sfh_type should be a list containing both types
@@ -49,9 +49,9 @@ class TestSFHCompositionWildcard:
     """Test wildcard semantics for SFH composition."""
 
     def test_wildcard_free_frees_all_composition_params(self):
-        """'*': FREE frees ALL params across the composition."""
+        """'all_params': FREE frees ALL params across the composition."""
         params = parse_groups(
-            sfh={"type": ["dpl", "field"], "*": FREE},
+            sfh={"type": ["dpl", "field"], "all_params": FREE},
             redshift=Fixed(0.1),
         )
         # All dpl params should be free
@@ -62,9 +62,9 @@ class TestSFHCompositionWildcard:
         assert len(field_free) > 0
 
     def test_wildcard_fixed_fixes_all_composition_params(self):
-        """'*': FIXED fixes ALL params across the composition."""
+        """'all_params': FIXED fixes ALL params across the composition."""
         params = parse_groups(
-            sfh={"type": ["dpl", "field"], "*": FIXED},
+            sfh={"type": ["dpl", "field"], "all_params": FIXED},
             redshift=Fixed(0.1),
         )
         # All dpl params should be fixed
@@ -77,7 +77,7 @@ class TestSFHCompositionWildcard:
     def test_per_param_override_beats_wildcard(self):
         """Per-param override wins over wildcard in composition."""
         params = parse_groups(
-            sfh={"type": ["dpl", "field"], "*": FREE, "psd_sigma": Fixed(0.5)},
+            sfh={"type": ["dpl", "field"], "all_params": FREE, "psd_sigma": Fixed(0.5)},
             redshift=Fixed(0.1),
         )
         # psd_sigma is unique to field, should be fixed
@@ -94,7 +94,7 @@ class TestSFHCompositionShortNames:
     def test_sfh_unique_short_name_in_composition(self):
         """Unique short name (e.g., psd_sigma) resolves to correct full name."""
         params = parse_groups(
-            sfh={"type": ["dpl", "field"], "*": FIXED, "psd_sigma": Uniform(0, 1)},
+            sfh={"type": ["dpl", "field"], "all_params": FIXED, "psd_sigma": Uniform(0, 1)},
             redshift=Fixed(0.1),
         )
         # psd_sigma is unique to field
@@ -106,7 +106,7 @@ class TestSFHCompositionShortNames:
         params = parse_groups(
             sfh={
                 "type": ["dpl", "field"],
-                "*": FREE,
+                "all_params": FREE,
                 "sfh_dpl_alpha": Fixed(1.5),
             },
             redshift=Fixed(0.1),
@@ -125,7 +125,7 @@ class TestSFHCompositionShortNames:
         params = parse_groups(
             sfh={
                 "type": ["dpl", "tsnorm"],
-                "*": FREE,
+                "all_params": FREE,
                 "sfh_dpl_log_total_mass": Fixed(2.0),  # Use full prefix to disambiguate
             },
             redshift=Fixed(0.1),
@@ -142,7 +142,7 @@ class TestSFHCompositionValidation:
         """At most one burst; multiple bursts raises ValueError."""
         with pytest.raises(ValueError, match="burst"):
             parse_groups(
-                sfh={"type": ["burst", "burst"], "*": FIXED},
+                sfh={"type": ["burst", "burst"], "all_params": FIXED},
                 redshift=Fixed(0.1),
             )
 
@@ -151,14 +151,14 @@ class TestSFHCompositionValidation:
         # Only burst (not additive) should raise or be invalid
         with pytest.raises(ValueError):
             parse_groups(
-                sfh={"type": ["burst"], "*": FIXED},
+                sfh={"type": ["burst"], "all_params": FIXED},
                 redshift=Fixed(0.1),
             )
 
     def test_sfh_composition_dense_basis_autoswap_with_burst(self):
         """dense_basis + burst auto-swaps to dense_basis_pure."""
         params = parse_groups(
-            sfh={"type": ["dense_basis", "burst"], "*": FIXED},
+            sfh={"type": ["dense_basis", "burst"], "all_params": FIXED},
             redshift=Fixed(0.1),
         )
         # mean_sfh_type should have been swapped to dense_basis_pure
@@ -174,8 +174,8 @@ class TestSFHCompositionExamples:
     def test_sfh_dpl_field_standard(self):
         """Standard dpl + field composition."""
         params = parse_groups(
-            sfh={"type": ["dpl", "field"], "*": FREE},
-            dust_attenuation={"law": "power_law", "type": "two_component", "*": FIXED},
+            sfh={"type": ["dpl", "field"], "all_params": FREE},
+            dust_attenuation={"law": "power_law", "type": "two_component", "all_params": FIXED},
             redshift=Fixed(0.1),
         )
         # Standard SFH composition params present
@@ -185,7 +185,7 @@ class TestSFHCompositionExamples:
     def test_sfh_tsnorm_burst(self):
         """tsnorm + burst composition for post-starburst modeling."""
         params = parse_groups(
-            sfh={"type": ["tsnorm", "burst"], "*": FREE},
+            sfh={"type": ["tsnorm", "burst"], "all_params": FREE},
             redshift=Fixed(0.1),
         )
         assert any("sfh_tsnorm_" in p for p in params.free_params)
@@ -194,7 +194,7 @@ class TestSFHCompositionExamples:
     def test_sfh_three_component(self):
         """Three-component composition: dpl + field + burst."""
         params = parse_groups(
-            sfh={"type": ["dpl", "field", "burst"], "*": FIXED},
+            sfh={"type": ["dpl", "field", "burst"], "all_params": FIXED},
             redshift=Fixed(0.1),
         )
         assert isinstance(params, Parameters)
@@ -207,7 +207,7 @@ class TestSFHCompositionProvenance:
     def test_sfh_composition_provenance_wildcard_free(self):
         """SFH composition params from wildcard tagged 'wildcard_free'."""
         params = parse_groups(
-            sfh={"type": ["dpl", "field"], "*": FREE},
+            sfh={"type": ["dpl", "field"], "all_params": FREE},
             redshift=Fixed(0.1),
         )
         prov = params._group_provenance
@@ -218,7 +218,7 @@ class TestSFHCompositionProvenance:
     def test_sfh_composition_provenance_user_fixed(self):
         """User-fixed SFH composition param tagged 'user_fixed'."""
         params = parse_groups(
-            sfh={"type": ["dpl", "field"], "*": FREE, "psd_sigma": Fixed(0.5)},
+            sfh={"type": ["dpl", "field"], "all_params": FREE, "psd_sigma": Fixed(0.5)},
             redshift=Fixed(0.1),
         )
         prov = params._group_provenance

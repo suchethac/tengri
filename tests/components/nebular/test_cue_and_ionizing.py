@@ -396,14 +396,14 @@ class TestCueMultiBuildBudget:
         def _build_one():
             return SEDModel.build(
                 ssp_data=ssp,
-                sfh={"type": "delayed", "*": FIXED},
-                neb={"type": "cue", "*": FIXED},
+                sfh={"type": "delayed", "all_params": FIXED},
+                neb={"type": "cue", "all_params": FIXED},
                 dust_attenuation={
                     "law": "power_law",
                     "type": "two_component",
                     "tau_bc": Fixed(0.0),
                     "tau_diff": Fixed(0.0),
-                    "*": FIXED,
+                    "all_params": FIXED,
                 },
                 redshift=Fixed(0.0),
             )

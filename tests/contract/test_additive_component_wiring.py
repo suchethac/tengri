@@ -48,8 +48,8 @@ def _sed_response_grad(model, params, param_name):
 
 def _base_kwargs():
     return dict(
-        sfh={"type": "dpl", "*": FREE},
-        dust_attenuation={"type": "two_component", "law": "calzetti", "*": FIXED},
+        sfh={"type": "dpl", "all_params": FREE},
+        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
         neb={"type": "none"},
         redshift=Fixed(0.05),
     )
@@ -122,8 +122,8 @@ def test_igm_gate_attenuates_rest_uv_at_high_z(synthetic_ssp_wide, synthetic_top
     common = dict(
         ssp_data=synthetic_ssp_wide,
         observation=synthetic_tophat_obs,
-        sfh={"type": "dpl", "*": FREE},
-        dust_attenuation={"type": "two_component", "law": "calzetti", "*": FIXED},
+        sfh={"type": "dpl", "all_params": FREE},
+        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FIXED},
         neb={"type": "none"},
         redshift=Fixed(3.0),
     )

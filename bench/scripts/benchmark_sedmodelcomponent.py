@@ -81,7 +81,7 @@ def _build_model(ssp, obs, approx):
     return SEDModel.build(
         ssp_data=ssp,
         observation=obs,
-        sfh={"type": "dpl", "*": FIXED},
+        sfh={"type": "dpl", "all_params": FIXED},
         # law_bc: "calzetti" → law: "calzetti" is behavior-preserving:
         # pre-#1989 lone law_bc applied to both screens, now shared law does.
         dust_attenuation={

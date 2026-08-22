@@ -57,8 +57,8 @@ def build_minimal_cue_model(ssp, forward_dtype):
     return SEDModel.build(
         ssp_data=ssp,
         observation=obs,
-        sfh={"type": "dpl", "*": FIXED},
-        neb={"type": "cue", "*": FIXED},
+        sfh={"type": "dpl", "all_params": FIXED},
+        neb={"type": "cue", "all_params": FIXED},
         redshift=Fixed(1.0),
         approx=None,
         forward_dtype=forward_dtype,

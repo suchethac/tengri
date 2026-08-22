@@ -64,15 +64,15 @@ def _old_snorm_model(ssp):
             "width_gyr": Fixed(2.0),
             "skew": Fixed(0.5),
             "log_total_mass": Fixed(10.0),
-            "*": FIXED,
+            "all_params": FIXED,
         },
-        met={"logzsol": Fixed(0.0), "*": FIXED},
+        met={"logzsol": Fixed(0.0), "all_params": FIXED},
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
             "tau_bc": Fixed(0.0),
             "tau_diff": Fixed(0.0),
-            "*": FIXED,
+            "all_params": FIXED,
         },
         redshift=Fixed(0.0),
     )

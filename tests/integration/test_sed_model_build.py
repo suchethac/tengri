@@ -40,7 +40,7 @@ class TestFromGroupsConstruction:
         """Smallest possible config builds without error."""
         model = SEDModel.build(
             ssp_data=ssp,
-            sfh={"type": "dpl", "*": FIXED},
+            sfh={"type": "dpl", "all_params": FIXED},
             redshift=Fixed(0.1),
         )
         assert isinstance(model, SEDModel)
@@ -49,11 +49,11 @@ class TestFromGroupsConstruction:
     def test_spec_matches_parse_groups(self, ssp):
         """The internal spec is exactly what parse_groups would produce."""
         groups = dict(
-            sfh={"type": "dpl", "*": FREE, "beta": Uniform(1, 3)},
+            sfh={"type": "dpl", "all_params": FREE, "beta": Uniform(1, 3)},
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "*": FIXED,
+                "all_params": FIXED,
                 "tau_bc": 0.5,
             },
             redshift=Fixed(0.05),
@@ -68,7 +68,7 @@ class TestFromGroupsConstruction:
         """Passing None for an optional group is a no-op."""
         model = SEDModel.build(
             ssp_data=ssp,
-            sfh={"type": "dpl", "*": FIXED},
+            sfh={"type": "dpl", "all_params": FIXED},
             dust_attenuation=None,
             neb=None,
             redshift=Fixed(0.1),
@@ -186,8 +186,8 @@ class TestValidation:
         """AGN group activates composable AGN model (was deferred until PR4)."""
         model = SEDModel.build(
             ssp_data=ssp,
-            sfh={"type": "dpl", "*": FIXED},
-            agn={"disc": {"type": "powerlaw", "*": FIXED}},
+            sfh={"type": "dpl", "all_params": FIXED},
+            agn={"disc": {"type": "powerlaw", "all_params": FIXED}},
             redshift=Fixed(0.1),
         )
         assert model.spec.agn_model == "composable"
@@ -197,6 +197,6 @@ class TestValidation:
         with pytest.raises(ValueError):
             SEDModel.build(
                 ssp_data=ssp,
-                sfh={"type": "banana", "*": FIXED},
+                sfh={"type": "banana", "all_params": FIXED},
                 redshift=Fixed(0.1),
             )

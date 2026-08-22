@@ -10,7 +10,7 @@ Registering it surfaced a default-hygiene gap that the global
 component (nebular default backend = ``baked_in``, which declares zero params),
 so the cue/cloudy/shock backends' free params escaped the check. This module
 closes that hole: every photoionization/shock backend's declared params must
-carry an explicit `default=` (or be `Fixed`), so `'*': FIXED` never silently
+carry an explicit `default=` (or be `Fixed`), so `'all_params': FIXED` never silently
 falls back to the prior midpoint (#477/#478).
 """
 

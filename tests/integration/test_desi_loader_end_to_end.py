@@ -61,8 +61,8 @@ def desi_model(tmp_path, ssp_data):
     model = SEDModel.build(
         ssp_data=ssp_data,
         observation=Observation(spectroscopy=spectroscopy),
-        sfh={"type": "dpl", "*": FIXED},
-        dust_attenuation={"type": "single_component", "law": "calzetti", "*": FIXED},
+        sfh={"type": "dpl", "all_params": FIXED},
+        dust_attenuation={"type": "single_component", "law": "calzetti", "all_params": FIXED},
         redshift=Fixed(0.1),
     )
     return model, spectroscopy, spectrum, built
@@ -119,8 +119,8 @@ def test_resolution_matrix_changes_the_prediction(desi_model):
     bare_model = SEDModel.build(
         ssp_data=model.ssp_data,
         observation=Observation(spectroscopy=bare),
-        sfh={"type": "dpl", "*": FIXED},
-        dust_attenuation={"type": "single_component", "law": "calzetti", "*": FIXED},
+        sfh={"type": "dpl", "all_params": FIXED},
+        dust_attenuation={"type": "single_component", "law": "calzetti", "all_params": FIXED},
         redshift=Fixed(0.1),
     )
     without = np.asarray(bare_model.predict_spectrum(params))

@@ -8,7 +8,7 @@ What we pin down here:
 
 1. Every variant in the parser's ``_VALID_*_TYPES`` enum surfaces as a
    factory.
-2. Factory output is shape-correct: ``{'type': <variant>, '*': FIXED}``
+2. Factory output is shape-correct: ``{'type': <variant>, 'all_params': FIXED}``
    on a default call, with per-param overrides honored.
 3. Per-param :class:`Distribution` overrides round-trip through the
    parser — the factory dict is byte-equivalent to a hand-written one.

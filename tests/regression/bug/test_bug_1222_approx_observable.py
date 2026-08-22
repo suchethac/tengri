@@ -32,11 +32,11 @@ def _sed(ssp, obs, approx=None):
     return SEDModel.build(
         ssp,
         observation=obs,
-        sfh={"type": "delayed", "*": FIXED},
+        sfh={"type": "delayed", "all_params": FIXED},
         dust_attenuation={
             "law": "power_law",
             "type": "two_component",
-            "*": FIXED,
+            "all_params": FIXED,
             "tau_diff": Uniform(0.0, 1.5),
             "tau_bc": Uniform(0.0, 1.0),
         },

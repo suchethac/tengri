@@ -100,12 +100,12 @@ def test_window_lut_reproduces_wne_reconstruction_bitexact():
         m = SEDModel.build(
             ssp_data=ssp,
             observation=obs,
-            sfh={"type": "dpl", "*": FREE},
+            sfh={"type": "dpl", "all_params": FREE},
             # explicit zero taus — NOT dust=None (which auto-fills FREE taus)
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "*": FIXED,
+                "all_params": FIXED,
                 "tau_diff": Fixed(0.0),
                 "tau_bc": Fixed(0.0),
             },
@@ -167,7 +167,7 @@ def test_bakedin_has_no_direct_line_fluxes():
         m = SEDModel.build(
             ssp_data=ssp,
             observation=obs,
-            sfh={"type": "dpl", "*": FREE},
+            sfh={"type": "dpl", "all_params": FREE},
             dust_attenuation=None,
             neb={"type": "none"},
             redshift=Fixed(0.05),
@@ -190,11 +190,11 @@ def _dust_model():
         m = SEDModel.build(
             ssp_data=ssp,
             observation=obs,
-            sfh={"type": "dpl", "*": FREE},
+            sfh={"type": "dpl", "all_params": FREE},
             dust_attenuation={
                 "type": "two_component",
                 "law": "calzetti",
-                "*": FIXED,
+                "all_params": FIXED,
                 "tau_diff": Uniform(0.0, 2.0),
                 "tau_bc": Uniform(0.0, 2.0),
             },
@@ -404,7 +404,10 @@ def test_compute_joint_weights_supports_field_sfh():
         m = SEDModel.build(
             ssp_data=ssp,
             observation=obs,
-            sfh={"type": ["dpl", "field"], "*": FREE},  # stochastic GP field → unsupported
+            sfh={
+                "type": ["dpl", "field"],
+                "all_params": FREE,
+            },  # stochastic GP field → unsupported
             dust_attenuation=None,
             neb={"type": "none"},
             redshift=Fixed(0.05),
@@ -525,7 +528,7 @@ def test_predict_spectral_indices_fast_matches_exact_field_sfh():
         m = SEDModel.build(
             ssp_data=ssp,
             observation=obs,
-            sfh={"type": ["dpl", "field"], "*": FREE},
+            sfh={"type": ["dpl", "field"], "all_params": FREE},
             dust_attenuation=None,
             neb={"type": "none"},
             redshift=Fixed(0.05),
@@ -557,9 +560,9 @@ def test_predict_spectral_indices_fast_raises_on_additive_nebular():
         m = SEDModel.build(
             ssp_data=ssp,
             observation=obs,
-            sfh={"type": "dpl", "*": FREE},
+            sfh={"type": "dpl", "all_params": FREE},
             dust_attenuation=None,
-            neb={"type": "cue", "*": FIXED},
+            neb={"type": "cue", "all_params": FIXED},
             redshift=Fixed(0.05),
         )
     p = dict(m.spec.sample(jax.random.PRNGKey(0)))

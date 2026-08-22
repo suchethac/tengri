@@ -138,7 +138,7 @@ def test_dla_wildcard_raises_once_every_freeable_param_is_overridden():
     """
     with pytest.raises(ParameterError, match=r"'igm\.dla'"):
         tengri.parse_groups(
-            sfh={"type": "dpl", "*": FIXED},
+            sfh={"type": "dpl", "all_params": FIXED},
             igm={
                 "type": "inoue14",
                 "dla": {
@@ -155,7 +155,7 @@ def test_dla_wildcard_raises_once_every_freeable_param_is_overridden():
 def test_dla_bare_wildcard_is_allowed_because_it_frees_one():
     """The guard is about outcome, not intent: freeing 1 of 4 is still freeing."""
     freed = _free(
-        sfh={"type": "dpl", "*": FIXED},
+        sfh={"type": "dpl", "all_params": FIXED},
         igm={"type": "inoue14", "dla": {"all_params": FREE}},
         redshift=tengri.Fixed(2.0),
     )
@@ -176,7 +176,7 @@ def test_error_names_the_group_and_the_stuck_params():
 
 def test_star_synonym_resolves_identically_to_all_params():
     """``'*'`` is a synonym: it must reach the same resolution, not a bypass."""
-    star = _free(sfh={"type": "dpl"}, neb={"type": "cue", "*": FREE})
+    star = _free(sfh={"type": "dpl"}, neb={"type": "cue", "all_params": FREE})
     alias = _free(sfh={"type": "dpl"}, neb={"type": "cue", "all_params": FREE})
     assert star == alias
     assert any(p.startswith("neb_") for p in star)

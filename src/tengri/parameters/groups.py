@@ -645,13 +645,15 @@ _SEDMODEL_PASSTHROUGH = {
 
 
 def _normalize_wildcard_keys(group: object) -> object:
-    """Rewrite the preferred ``all_params`` wildcard key to canonical ``'*'``.
+    """Rewrite the user-facing ``all_params`` wildcard key to internal ``'*'``.
 
-    The nested-dict grammar accepts two spellings of the group wildcard:
-    ``all_params`` (preferred, human-readable) and ``'*'`` (canonical, slated
-    for deprecation). This normalizer converts the alias to the canonical key
-    once at the parser boundary so every downstream site keeps operating on the
-    single ``'*'`` invariant. Recurses through nested sub-block dicts
+    ``all_params`` is the one spelling the grammar accepts; ``'*'`` is an
+    internal detail and is refused on input. This normalizer rewrites the
+    user's key to the internal one once at the parser boundary, so every
+    downstream site keeps operating on the single ``'*'`` invariant without
+    that invariant ever being something a user has to know. Anything printing
+    a normalized dict back to a user must undo this with
+    :func:`_wildcard_keys_for_display`. Recurses through nested sub-block dicts
     (``dust.emission``, the ``agn.*`` selectors, ``igm.dla``, ``radio.sf`` /
     ``radio.agn``, …); per-parameter values are never dicts, so recursing into
     every dict-valued entry is safe.
@@ -670,7 +672,8 @@ def _normalize_wildcard_keys(group: object) -> object:
     Raises
     ------
     ValueError
-        If a dict sets both ``all_params`` and ``'*'`` (ambiguous intent).
+        If a dict carries ``'*'`` at all -- the key is retired, whether or not
+        ``all_params`` is present beside it.
 
     Notes
     -----
@@ -678,16 +681,53 @@ def _normalize_wildcard_keys(group: object) -> object:
     """
     if not isinstance(group, dict):
         return group
-    if WILDCARD_ALIAS in group and WILDCARD_KEY in group:
+    # One rule, whether or not the dict also carries the preferred spelling:
+    # the advice for both cases is to drop the star. Keeping a separate
+    # "you set both" branch would have to name ``'*'`` as an option to explain
+    # itself, which is a retirement error teaching the retired form.
+    if WILDCARD_KEY in group:
         raise ValueError(
-            f"A group dict may set the wildcard once: use {WILDCARD_ALIAS!r} "
-            f"(preferred) or {WILDCARD_KEY!r}, not both."
+            f"The wildcard key {WILDCARD_KEY!r} has been retired; the wildcard "
+            f"is spelled {WILDCARD_ALIAS!r}. Write "
+            f"{{{WILDCARD_ALIAS!r}: FREE}} instead of {{{WILDCARD_KEY!r}: FREE}}."
         )
     normalized: dict[object, object] = {}
     for key, value in group.items():
         canonical_key = WILDCARD_KEY if key == WILDCARD_ALIAS else key
         normalized[canonical_key] = _normalize_wildcard_keys(value)
     return normalized
+
+
+def _wildcard_keys_for_display(group: object) -> object:
+    """Undo :func:`_normalize_wildcard_keys` for anything shown to a user.
+
+    Normalization runs at the parser boundary, so every dict the translators
+    hold already spells the wildcard ``'*'`` -- the internal key, which is
+    refused on input. A message that formats such a dict verbatim therefore
+    hands back a suggestion the parser rejects: exactly the retirement error
+    that teaches the retired form. Render through this first.
+
+    Parameters
+    ----------
+    group : object
+        A group dict (or any value). Non-dict values pass through unchanged.
+
+    Returns
+    -------
+    object
+        A new dict with ``'*'`` keys rewritten to ``all_params`` (the input is
+        never mutated), or the original value if it is not a dict.
+
+    Notes
+    -----
+    **JIT-compatible**: no -- pure Python, runs at build time only.
+    """
+    if not isinstance(group, dict):
+        return group
+    return {
+        (WILDCARD_ALIAS if key == WILDCARD_KEY else key): _wildcard_keys_for_display(value)
+        for key, value in group.items()
+    }
 
 
 def parse_groups(**kwargs) -> Parameters:
@@ -2414,12 +2454,18 @@ def _translate_dust_attenuation(dust_atten_dict: dict, result: dict) -> None:
 
         atten_str = (
             "dust_attenuation={"
-            + ", ".join(f"'{k}': {v!r}" for k, v in sorted(atten_part_translated.items()))
+            + ", ".join(
+                f"'{k}': {v!r}"
+                for k, v in sorted(_wildcard_keys_for_display(atten_part_translated).items())
+            )
             + "}"
         )
         emission_str = (
             "dust_emission={"
-            + ", ".join(f"'{k}': {v!r}" for k, v in sorted(emission_part.items()))
+            + ", ".join(
+                f"'{k}': {v!r}"
+                for k, v in sorted(_wildcard_keys_for_display(emission_part).items())
+            )
             + "}"
         )
 
@@ -2709,7 +2755,10 @@ def _translate_dust_retired(dust_dict: dict, result: dict) -> None:
 
     atten_str = (
         "dust_attenuation={"
-        + ", ".join(f"'{k}': {v!r}" for k, v in sorted(atten_dict_translated.items()))
+        + ", ".join(
+            f"'{k}': {v!r}"
+            for k, v in sorted(_wildcard_keys_for_display(atten_dict_translated).items())
+        )
         + "}"
     )
 
@@ -2718,7 +2767,7 @@ def _translate_dust_retired(dust_dict: dict, result: dict) -> None:
         emission_dict = dust_dict["emission"]
         if isinstance(emission_dict, dict):
             emis_str_parts = []
-            for k, v in sorted(emission_dict.items()):
+            for k, v in sorted(_wildcard_keys_for_display(emission_dict).items()):
                 if isinstance(v, str):
                     emis_str_parts.append(f"'{k}': {v!r}")
                 else:
@@ -2726,7 +2775,7 @@ def _translate_dust_retired(dust_dict: dict, result: dict) -> None:
             emission_str = "dust_emission={" + ", ".join(emis_str_parts) + "}"
 
     dust_str_parts = []
-    for k, v in sorted(dust_dict.items()):
+    for k, v in sorted(_wildcard_keys_for_display(dust_dict).items()):
         if isinstance(v, str):
             dust_str_parts.append(f"'{k}': {v!r}")
         else:
