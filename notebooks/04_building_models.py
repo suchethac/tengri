@@ -485,15 +485,12 @@ groups_radio = {
     },
     "redshift": Fixed(0.05),
 }
-try:
-    spec_radio = parse_groups(**groups_radio)
-    print("Radio composable (SF + AGN):")
-    radio_params = [p for p in spec_radio.free_params if p.startswith("radio_")]
-    print(f"  Free params: {radio_params}")
-    print("  SF: Bell 2003 FIRRC correlation")
-    print("  AGN: Power-law radio loudness")
-except Exception as e:
-    print(f"Radio model skipped: {str(e)[:50]}...")
+spec_radio = parse_groups(**groups_radio)
+print("Radio composable (SF + AGN):")
+radio_params = [p for p in spec_radio.free_params if p.startswith("radio_")]
+print(f"  Free params: {radio_params}")
+print("  SF: Bell 2003 FIRRC correlation")
+print("  AGN: Power-law radio loudness")
 print()
 
 # %% [markdown]
@@ -506,26 +503,23 @@ print()
 print("X-ray Emission Tour")
 print("─" * 70)
 
-# X-ray: yang20 model (X-ray from XRB + AGN corona)
+# X-ray: yang20 model (X-ray from XRB + AGN corona via alpha_ox)
 groups_xray = {
     "sfh": {"type": "tsnorm", "all_params": FIXED},
     "dust_attenuation": {"law": "calzetti", "type": "two_component", "all_params": FIXED},
     "neb": {"type": "cue", "all_params": FIXED},
     "xray": {
-        "type": "yang20",  # AGN alpha_ox relation (Lusso & Risaliti 2016)
+        "type": "yang20",  # Yang+2020; AGN corona via alpha_ox–L_2500 (Lusso & Risaliti 2016)
         "all_params": FIXED,
     },
     "redshift": Fixed(0.05),
 }
-try:
-    spec_xray = parse_groups(**groups_xray)
-    print("X-ray model ('yang20'):")
-    xray_params = [p for p in spec_xray.free_params if p.startswith("xray_")]
-    print(f"  Free params: {xray_params}")
-    print("  Type: 'yang20' (AGN corona + XRB)")
-    print("  Connects to SFR (XRB scaling) and AGN luminosity")
-except Exception as e:
-    print(f"X-ray model skipped: {str(e)[:50]}...")
+spec_xray = parse_groups(**groups_xray)
+print("X-ray model ('yang20'):")
+xray_params = [p for p in spec_xray.free_params if p.startswith("xray_")]
+print(f"  Free params: {xray_params}")
+print("  Type: 'yang20' (AGN corona + XRB)")
+print("  Connects to SFR (XRB scaling) and AGN luminosity")
 print()
 
 # %% [markdown]
@@ -552,14 +546,11 @@ groups_shock_frac = {
     },
     "redshift": Fixed(0.05),
 }
-try:
-    spec_shock_frac = parse_groups(**groups_shock_frac)
-    print("Shock model (norm='frac'):")
-    shock_params = [p for p in spec_shock_frac.free_params if p.startswith("shock_")]
-    print(f"  Free params: {shock_params}")
-    print("  Normalization: fraction of galaxy Hα")
-except Exception as e:
-    print(f"Shock 'frac' skipped: {str(e)[:50]}...")
+spec_shock_frac = parse_groups(**groups_shock_frac)
+print("Shock model (norm='frac'):")
+shock_params = [p for p in spec_shock_frac.free_params if p.startswith("shock_")]
+print(f"  Free params: {shock_params}")
+print("  Normalization: fraction of galaxy Hα")
 
 print()
 
@@ -574,14 +565,11 @@ groups_shock_lha = {
     },
     "redshift": Fixed(0.05),
 }
-try:
-    spec_shock_lha = parse_groups(**groups_shock_lha)
-    print("Shock model (norm='lhalpha'):")
-    shock_params_lha = [p for p in spec_shock_lha.free_params if p.startswith("shock_")]
-    print(f"  Free params: {shock_params_lha}")
-    print("  Normalization: absolute Hα luminosity (AGN/outflow shocks)")
-except Exception as e:
-    print(f"Shock 'lhalpha' skipped: {str(e)[:50]}...")
+spec_shock_lha = parse_groups(**groups_shock_lha)
+print("Shock model (norm='lhalpha'):")
+shock_params_lha = [p for p in spec_shock_lha.free_params if p.startswith("shock_")]
+print(f"  Free params: {shock_params_lha}")
+print("  Normalization: absolute Hα luminosity (AGN/outflow shocks)")
 print()
 
 # %% [markdown]
@@ -616,14 +604,11 @@ groups_met_scalar = {
     "neb": {"type": "cue", "all_params": FIXED},
     "redshift": Fixed(0.05),
 }
-try:
-    spec_met_scalar = parse_groups(**groups_met_scalar)
-    print("Metallicity (scalar logzsol):")
-    met_params = [p for p in spec_met_scalar.free_params if p.startswith("met_")]
-    print(f"  Free params: {met_params}")
-    print("  Mode: constant metallicity over lookback time")
-except Exception as e:
-    print(f"Scalar met skipped: {str(e)[:50]}...")
+spec_met_scalar = parse_groups(**groups_met_scalar)
+print("Metallicity (scalar logzsol):")
+met_params = [p for p in spec_met_scalar.free_params if p.startswith("met_")]
+print(f"  Free params: {met_params}")
+print("  Mode: constant metallicity over lookback time")
 
 print()
 
