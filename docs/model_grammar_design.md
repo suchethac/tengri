@@ -154,27 +154,10 @@ dust_attenuation={'type': 'two_component', 'all_params': FIXED}
 
 On a two-component attenuation, you must provide **either** a single law for both screens or name both `law_bc` and `law_diff`. You cannot give one without the other — that's a configuration error, not a valid partial spec.
 
-## Comparison to prior art
-
-### Versus Bagpipes (the inspiration)
-
-Bagpipes uses `'*'` for the wildcard. Tengri uses `'all_params'` for clarity and to reserve `'*'` for future expansion (e.g., a filter for all top-level groups, if ever needed).
-
-### Versus Prospector
-
-Prospector uses a flat-kwarg API for parameters. Tengri groups them for readability and scal ability. A model in Prospector has 50+ kwargs; in Tengri, they're organized by block.
-
-### Versus CIGALE
-
-CIGALE uses a config file with a `[module_name:variant]` syntax. Tengri's nested dicts are more Pythonic and enable round-trip serialization to dict/YAML/JSON.
-
-## What the grammar does NOT do
-
-- **No implicit defaults.** If a dict is provided without a `'type'`, it raises.
 - **No silent no-ops.** If `'all_params': FREE` has no effect, it raises.
 - **No structural precedence.** A parameter named in the dict **always** overrides the wildcard, which overrides the default. No special cases.
 - **No per-module configuration files.** The grammar is Python-in, dict-out. Serialization to YAML/JSON is a planned feature (#75) but not the canonical representation.
-- **No "apply" flags.** Physics is on if a dict with a type is given; off otherwise. No `apply_neb=True` aside from the `neb=` dict.
+- **No "apply" flags.** Physics is activated by presence: omit the dict and it is OFF; provide it (with or without `'type'`) and it is ON. For optional groups without an explicit `'type'`, a documented default variant is used (e.g., igm defaults to 'inoue14', dust_attenuation defaults to 'two_component' if present). No `apply_neb=True` aside from the `neb=` dict.
 
 These omissions are **intentional**. They keep the grammar simple and predictable.
 

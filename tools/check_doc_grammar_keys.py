@@ -22,7 +22,16 @@ from typing import NamedTuple
 
 
 class KeyMismatch(NamedTuple):
-    """A discrepancy between doc and code."""
+    """
+
+# NOTE: Coupling with docs/model_configuration.md
+# This guard parses markdown structure expecting:
+# - Section headings: ### Domain: `key`
+# - Subsection marker: **Structural keys:**
+# - Bullet entries: - `'key'` — description
+# If the markdown structure changes, update the regex patterns in _read_doc_keys_from_file()
+# and vice versa.
+A discrepancy between doc and code."""
 
     key: str
     issue: str  # 'missing_from_code', 'undocumented', etc.

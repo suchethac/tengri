@@ -1,5 +1,9 @@
 # Model configuration reference
 
+<!-- COUPLING NOTE: tools/check_doc_grammar_keys.py parses this file.
+     Structure is strict: section headings "### Domain: `key`", marker "**Structural keys:**",
+     and bullets "- `'key'` —". Changes to markdown format require updating the guard's parser. -->
+
 This is the definitive guide to the nested-dict grammar for building a `SEDModel`. It covers universal grammar semantics, per-domain configuration, round-trip serialization, and common patterns.
 
 ## I. Universal grammar semantics
@@ -17,7 +21,7 @@ Every group dict contains three kinds of keys:
 sfh={'type': 'dpl', 'age_kernel': 'cic'}
 ```
 
-**2. The wildcard key `'all_params'`** — sets the free/fixed status for all parameters in the group that are not explicitly overridden. Accepts `FREE`, `FIXED`, or any `Distribution` instance. Default is `FIXED`. This is the **only wildcard spelling**; the retired `'*'` synonym raises `TypeError` in `SEDModel.build()`.
+**2. The wildcard key `'all_params'`** — sets the free/fixed status for all parameters in the group that are not explicitly overridden. Accepts `FREE`, `FIXED`, or any `Distribution` instance. Default is `FIXED`. This is the **only wildcard spelling**; the retired `'*'` synonym raises `ValueError` in `SEDModel.build()`.
 
 ```python
 # All SFH params free, except beta which is fixed at 1.5
@@ -225,13 +229,13 @@ See [per-domain dust emission parameters](components.md) for details.
 
 **Minimal example:**
 ```python
-neb={'type': 'cue', 'all_params': FIXED, 'logz_gas': -0.3}
+neb={'type': 'cue', 'all_params': FIXED, 'logZ_gas': -0.3}
 neb={'type': 'cloudy', 'grid': {'logz': [-2, -1, 0], 'logU': [-3, -2, -1]}}
 ```
 
 **Gotchas:**
-- Nebular metallicity (`'neb_logz_gas'` or short `'logz_gas'` in the `neb` dict) is **independent** from stellar metallicity (`'met='`).
-- Default `neb_logz_gas = -0.3` (solar). It is **not automatically inherited** from the stellar metallicity, even if tabulated.
+- Nebular metallicity (`'neb_logZ_gas'` or short `'logZ_gas'` in the `neb` dict) is **independent** from stellar metallicity (`'met='`).
+- Default `neb_logZ_gas = -0.3` (solar). It is **not automatically inherited** from the stellar metallicity, even if tabulated.
 - Nebular emission is **additive** to stellar continuum; it composites with dust and shock when both are present.
 
 See [per-domain nebular parameters](components.md) for the full list.
@@ -340,7 +344,7 @@ agn={
     'type': 'composable',
     'disc': {'type': 'analytic_disk', 'all_params': FIXED},
     'torus': {'type': 'skirtor', 'all_params': FREE},
-    'nlr': {'type': 'cue', 'logz_gas': -0.3},
+    'nlr': {'type': 'cue', 'all_params': FIXED},
     'norm': 'cigale_joint',
 }
 
@@ -476,7 +480,7 @@ from tengri import recipes, Uniform
 
 config = recipes.star_forming_photometry()
 config['dust_attenuation']['tau_bc'] = 0.6  # override default
-config['neb']['logz_gas'] = Uniform(-0.5, 0.0)  # photo-Z on gas metallicity
+config['neb']['logZ_gas'] = Uniform(-0.5, 0.0)  # photo-Z on gas metallicity
 
 model = SEDModel.build(ssp_data=ssp, observation=obs, **config)
 ```
@@ -510,7 +514,7 @@ agn = {
     'type': 'composable',
     'disc': {'type': 'analytic_disk', 'all_params': FIXED},
     'torus': {'type': 'skirtor', 'all_params': FREE},
-    'nlr': {'type': 'cue', 'logz_gas': -0.3},  # single fixed value
+    'nlr': {'type': 'cue', 'all_params': FIXED},  # single fixed value
     'blr': {'type': 'cue'},  # uses defaults
     # feii and atten omitted (OFF)
 }
@@ -569,7 +573,7 @@ stellar={'type': 'chabrier'}
 
 ```python
 sfh={'type': 'dpl', '*': FREE}
-# TypeError: The '*' wildcard is retired. Use 'all_params' instead.
+# ValueError: The '*' wildcard is retired. Use 'all_params' instead.
 # sfh={'type': 'dpl', 'all_params': FREE, ...}
 ```
 

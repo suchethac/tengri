@@ -8701,7 +8701,7 @@ class SEDModel:
             Nebular emission. Keys: ``'type'`` (required; ``'cue'``, ``'cloudy'``, ``'none'``),
             ``'full_catalog'``, ``'grid'`` (CLOUDY), ``'all_params'``, parameters.
             Default: off. Menu: :func:`tengri.list_nebular_backends`.
-            Metallicity (``'logz_gas'`` or ``'neb_logz'``) is **independent** from
+            Metallicity (``'logZ_gas'`` or ``'neb_logz'``) is **independent** from
             ``met=``; default is ``-0.3`` (solar).
         shock : dict, optional
             Shock nebular emission. Keys: ``'type'`` (required; ``'mappings'``,
@@ -8825,7 +8825,7 @@ class SEDModel:
 
         >>> model = SEDModel.build(
         ...     ssp_data=ssp,
-        ...     sfh={"type": "field", "all_params": FREE},
+        ...     sfh={"type": "dpl", "all_params": FREE},
         ...     met={"type": "ramp", "all_params": FREE},
         ...     dust_attenuation={
         ...         "type": "two_component",
@@ -8833,7 +8833,7 @@ class SEDModel:
         ...         "tau_bc": Uniform(0, 1),
         ...         "tau_diff": Uniform(0, 0.5),
         ...     },
-        ...     neb={"type": "cue", "logz_gas": Uniform(-1, 0)},
+        ...     neb={"type": "cue", "logZ_gas": Uniform(-1, 0)},
         ...     redshift=Uniform(2, 4),  # photo-z
         ...     observation=obs,
         ... )
@@ -8845,9 +8845,9 @@ class SEDModel:
         ...     sfh={"type": "dpl", "all_params": FIXED, "alpha": Uniform(0.5, 3)},
         ...     agn={
         ...         "type": "composable",
-        ...         "disc": {"type": "analytic_disk", "all_params": FIXED},
+        ...         "disc": {"type": "powerlaw", "all_params": FIXED},
         ...         "torus": {"type": "skirtor", "all_params": FREE},
-        ...         "nlr": {"type": "cue", "logz_gas": -0.3},
+        ...         "nlr": {"type": "cue", "logZ_gas": -0.3},
         ...         "norm": "cigale_joint",
         ...     },
         ...     igm={"type": "inoue"},
@@ -8860,7 +8860,7 @@ class SEDModel:
         >>> from tengri import recipes
         >>> config = recipes.star_forming_photometry()
         >>> config["dust_attenuation"]["tau_bc"] = 0.8  # override default
-        >>> config["neb"]["logz_gas"] = Uniform(-0.5, 0)  # photo-z on gas metallicity
+        >>> config["neb"]["logZ_gas"] = Uniform(-0.5, 0)  # photo-z on gas metallicity
         >>> model = SEDModel.build(ssp_data=ssp, observation=obs, **config)
         """
         # Validate that redshift is provided
