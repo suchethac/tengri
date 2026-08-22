@@ -19,7 +19,7 @@
 # Prospector (Johnson, Leja, Conroy & Speagle 2021) is the most widely used
 # Bayesian SED-fitting framework in extragalactic astronomy. Its forward
 # model is FSPS (Conroy, Gunn & White 2009), called through `python-fsps`.
-# This study configures tengri's public API to approximate Prospector's model choices; it is not a port of Prospector, and residual differences are quantified below.
+# This study configures tengri's public API to approximate Prospector's model choices; tengri's implementation is its own, not derived from Prospector's code, and residual differences are quantified below.
 #
 # The left panel of each figure is FSPS evaluated live through `python-fsps`,
 # the engine Prospector uses; the right panel is tengri. Both read the same

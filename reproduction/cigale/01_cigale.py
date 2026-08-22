@@ -17,7 +17,7 @@
 # # Reproducing CIGALE's physics with tengri
 #
 # CIGALE (Boquien et al. 2019, A&A 622, A103) is the workhorse for
-# panchromatic SED fitting. This study configures tengri's public API to approximate CIGALE's model choices; it is not a port of CIGALE, and residual differences are documented below.
+# panchromatic SED fitting. This study configures tengri's public API to approximate CIGALE's model choices; tengri's implementation is its own, not derived from CIGALE's code, and residual differences are documented below.
 # This notebook places its physics modules next to their tengri equivalents at the same parameters — the module map below pairs them up.
 # Same parameters in, same SED out: any disagreement is physics, not data or fitting.
 #

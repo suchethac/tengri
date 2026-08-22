@@ -18,7 +18,7 @@
 #
 # BAGPIPES (Carnall et al. 2018) is the reference code for galaxy SED
 # fitting at high redshift and rest-UV continuum work at cosmic noon.
-# This study configures tengri's public API to approximate BAGPIPES's model choices; it is not a port of BAGPIPES, and residual differences are documented below.
+# This study configures tengri's public API to approximate BAGPIPES's model choices; tengri's implementation is its own, not derived from BAGPIPES's code, and residual differences are documented below.
 #
 # Throughout the panels, a fiducial τ-delayed star formation history
 # (τ = 1 Gyr, age 5 Gyr) at solar metallicity is used with Calzetti dust
