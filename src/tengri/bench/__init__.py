@@ -41,6 +41,10 @@ __all__ = ["BENCHMARK_SCRIPTS", "run"]
 # the public list of what's available, surfaced via ``bench list``.
 
 BENCHMARK_SCRIPTS: dict[str, tuple[str, str]] = {
+    "device_matrix": (
+        "benchmark_device_matrix.py",
+        "CPU vs GPU, float64 vs float32, across prediction, gradients and inference.",
+    ),
     "forward_model": (
         "benchmark_forward_model.py",
         "Forward photometry: exact / compositional / hybrid across all emitters and 3 SFHs.",
