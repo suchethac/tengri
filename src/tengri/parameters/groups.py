@@ -805,6 +805,43 @@ def parse_groups(**kwargs) -> Parameters:
     # ``all_params`` alias is already canonicalized to ``'*'`` before scoping.
     kwargs = _normalize_sfh_field(kwargs)
 
+    # ── Pass 0c: Inject dust_attenuation={'type': 'none'} when omitted ───
+    # Activate the homogenized "omitted = off" rule: when dust_attenuation
+    # is absent and no old dust= form was given, treat it as {'type': 'none'}
+    # (parity with every other optional physics block). Must happen before
+    # _translate_structural so both structural and param resolution phases
+    # see the injected dict.
+    has_dust_old = "dust" in kwargs and isinstance(kwargs.get("dust"), dict)
+    has_dust_atten_present = "dust_attenuation" in kwargs
+    has_dust_atten = has_dust_atten_present and isinstance(kwargs.get("dust_attenuation"), dict)
+    # Validate that if dust_attenuation is present, it's a dict (or None, which means unset).
+    # A string like 'calzetti' (an attenuation law name) or any other non-dict scalar is an error.
+    if (
+        has_dust_atten_present
+        and not has_dust_atten
+        and kwargs.get("dust_attenuation") is not None
+    ):
+        dust_val = kwargs.get("dust_attenuation")
+        raise ValueError(
+            f"dust_attenuation must be a group dict, not {type(dust_val).__name__!r}. "
+            f"Did you mean to specify an attenuation law? "
+            f"Write dust_attenuation={{'type': 'single_component', 'law': {dust_val!r}, ...}} "
+            f"or dust_attenuation={{'type': 'two_component', 'law': {dust_val!r}, ...}} — "
+            f"got dust_attenuation={dust_val!r}."
+        )
+    if not has_dust_atten and not has_dust_old:
+        kwargs["dust_attenuation"] = {"type": "none", "all_params": FIXED}
+    elif (
+        has_dust_atten
+        and kwargs["dust_attenuation"].get("type") == "none"
+        and "all_params" not in kwargs["dust_attenuation"]
+        and "*" not in kwargs["dust_attenuation"]
+    ):
+        # User wrote dust_attenuation={'type': 'none'} explicitly without stating
+        # 'all_params' disposition. Set it to FIXED so the warning machinery doesn't
+        # complain about a missing disposition on an empty-parameter group.
+        kwargs["dust_attenuation"]["all_params"] = FIXED
+
     # ── Pass 1: Translate structural choices ──────────────────────────
 
     structural_kwargs = _translate_structural(kwargs)

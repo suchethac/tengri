@@ -8646,71 +8646,171 @@ class SEDModel:
         observation=None,
         **model_kwargs,
     ) -> SEDModel:
-        """Build an SEDModel from the Bagpipes-style nested-dict form.
+        """Build an SEDModel from the nested-dict grammar.
 
-        Convenience constructor that translates grouped dicts (one per physics
-        block) into a ``Parameters`` via
-        :func:`tengri.parse_groups`, then constructs the
-        ``SEDModel``. Anything left unspecified auto-fills from the registry.
+        The primary way to construct a model. Organizes physics components
+        into one dict per block (sfh, dust_attenuation, neb, etc.), each
+        declaring a structural type, which parameters are free, and per-parameter
+        values. Translates this grammar to a ``Parameters`` spec via
+        :func:`tengri.parse_groups`, then constructs the model.
 
-        The ``from_*`` namespace is reserved for future deserialization
-        entry points (``from_file``, ``from_yaml``, ``from_dict``); use
-        ``build`` to construct a model from in-memory physics-component dicts.
+        The grammar has three kinds of keys:
+
+        1. **Structural keys** — configure the component variant and behavior:
+           ``'type'`` (required; e.g., ``'type': 'dpl'`` for SFH), and
+           component-specific settings (``'law'`` for dust, ``'norm'`` for AGN, etc.).
+        2. **``'all_params'`` wildcard** — set free/fixed status for all parameters
+           in the group not explicitly overridden. Accepts :data:`~tengri.FREE` or
+           :data:`~tengri.FIXED` (default). The only valid wildcard spelling.
+        3. **Parameter keys** — bare or full-prefixed names that override the
+           wildcard or default. Use short forms (``'beta'`` in sfh, ``'tau_bc'`` in
+           dust) for readability.
+
+        **Core groups with defaults:** ``sfh``, ``met``, ``dust_attenuation``,
+        ``dust_emission``, ``redshift``.
+
+        **Optional groups (OFF by default):** ``neb``, ``shock``, ``agn``, ``igm``,
+        ``radio``, ``xray``, ``foreground``. Activate by providing a dict with
+        ``'type'``; omit or pass ``{'type': 'none'}`` to keep off.
 
         Parameters
         ----------
         ssp_data : SSPData
             Pre-loaded SSP grid (from :func:`load_ssp_data`).
-        sfh, dust_attenuation, dust_emission, neb, agn, igm, radio, xray : dict, optional
-            Per-component nested dicts. Each may carry ``'type'``,
-            ``'all_params'`` (wildcard set to :data:`~tengri.FREE` or
-            :data:`~tengri.FIXED`; the ``'*'`` synonym is also accepted),
-            and per-parameter overrides. See
-            :func:`tengri.parameters.parse_groups` for the full grammar.
+        sfh : dict, optional
+            Star-formation history. Keys: ``'type'`` (required; e.g., ``'dpl'``,
+            ``'delayed_tau'``, ``'field'``), ``'age_kernel'`` ('cic' or 'dsps'),
+            ``'bin_edges_gyr'`` (for non-parametric), ``'all_params'``, and
+            per-parameter overrides. Menu: :func:`tengri.list_sfh_models`.
+        met : dict, optional
+            Metallicity mode. Keys: ``'type'`` (required; e.g., ``'table'``,
+            ``'ramp'``), ``'all_params'``, parameters. Menu:
+            :func:`tengri.list_metallicity_modes`.
+        dust_attenuation : dict, optional
+            Dust attenuation screen. Keys: ``'type'`` (required; ``'single_component'``,
+            ``'two_component'``, ``'wg00'``), ``'law'`` or ``'law_bc'``/``'law_diff'``
+            (required depending on type), ``'all_params'``, parameters. Menu:
+            :func:`tengri.list_dust_laws`. On two-component, you must provide
+            either a single ``'law'`` for both screens or both ``'law_bc'`` and
+            ``'law_diff'``.
+        dust_emission : dict, optional
+            Dust infrared emission. Keys: ``'type'`` (required; ``'dale2014'``,
+            ``'draine2016'``, etc.), ``'eta_balance'``, ``'all_params'``, parameters.
+            Menu: :func:`tengri.list_dust_emission_models`.
+        neb : dict, optional
+            Nebular emission. Keys: ``'type'`` (required; ``'cue'``, ``'cloudy'``, ``'none'``),
+            ``'full_catalog'``, ``'grid'`` (CLOUDY), ``'all_params'``, parameters.
+            Default: off. Menu: :func:`tengri.list_nebular_backends`.
+            Metallicity (``'logZ_gas'`` or ``'neb_logz'``) is **independent** from
+            ``met=``; default is ``-0.3`` (solar).
+        shock : dict, optional
+            Shock nebular emission. Keys: ``'type'`` (required; ``'mappings'``,
+            ``'none'``), ``'norm'`` (``'frac'``, ``'lhalpha'``, ``'component'``),
+            ``'abundance'``, ``'all_params'``, parameters. Default: off.
+            Composes with ``neb`` when both are on.
+        agn : dict, optional
+            AGN emission. Keys: ``'type'`` (required; ``'composable'``, ``'legacy'``,
+            ``'none'``), ``'norm'`` (``'cigale_joint'`` or ``'independent'``), and
+            six optional sub-blocks (``'disc'``, ``'torus'``, ``'nlr'``, ``'blr'``,
+            ``'feii'``, ``'atten'``), each with ``'type'`` and parameters. Default: off.
+            Each sub-block follows the same grammar. Menu: :func:`tengri.list_agn_models`,
+            :func:`tengri.list_agn_blocks`.
+        igm : dict, optional
+            IGM absorption. Keys: ``'type'`` (required; ``'inoue'``, ``'madau'``,
+            ``'meiksin06'``, ``'none'``), ``'patchy'``, optional ``'dla'`` sub-block,
+            ``'all_params'``, parameters. Default: off. Menu: :func:`tengri.list_igm_models`.
+        radio : dict, optional
+            Radio emission (star-formation and/or AGN). Keys: ``'type'``
+            (required; ``'sfonly'``, ``'agn'``, ``'sf_agn'``, ``'none'``), optional
+            ``'sf'`` and ``'agn'`` sub-blocks, ``'all_params'``, parameters.
+            Default: off. Menu: :func:`tengri.list_radio_models`.
+        xray : dict, optional
+            X-ray emission. Keys: ``'type'`` (required; ``'yang22'``, ``'lehmer'``,
+            ``'none'``), ``'all_params'``, parameters. Default: off.
+            Menu: :func:`tengri.list_xray_models`.
+        foreground : dict, optional
+            Milky Way foreground reddening. Keys: ``'ebmv_mw'`` (E(B-V) in mag),
+            ``'law'`` (dust law; e.g., ``'mw_rv31'``), ``'rv'`` (RV override).
+            No ``'type'`` (not a registry). Default: off (no foreground reddening).
         redshift : scalar, Distribution, or sentinel
-            Source redshift. **REQUIRED** — must be specified as one of:
+            Source redshift. **REQUIRED** — omitting it raises ``ParameterError``.
+            Specify as one of:
 
             - ``Fixed(z)`` for a known redshift (e.g., ``Fixed(0.05)``)
-            - ``Uniform(lo, hi)`` or any Distribution for a free/photo-z fit
-            - Any other ``Distribution`` instance
+            - ``Uniform(lo, hi)`` for a photo-z fit
+            - A bare scalar (auto-converts to ``Fixed``, e.g., ``redshift=0.05``)
+            - Any other ``Distribution`` (e.g., ``Normal(mu, sigma)``)
 
-            Omitting redshift raises ``ParameterError``. With
-            ``approx=WavePrecomp()`` the free-redshift build pays a sub-band
-            IGM fold that the fixed-z path does not — roughly 9 s against 0.4 s
-            — so a build-time measurement that omits an explicit prior is
-            measuring the cheap path. See :doc:`/performance/compilation`.
+            With ``approx=WavePrecomp()``, a free redshift adds ~9 s to the
+            build (for IGM z-table folding); a fixed z adds ~0.4 s. See
+            :doc:`/performance/compilation`.
         filters : list of str, optional
             Filter names; forwarded to ``__init__``.
         observation : Observation, optional
-            Observation object; forwarded to ``__init__``.
+            Observation object (photometry, spectroscopy); forwarded to
+            ``__init__``.
         **model_kwargs
-            Additional keywords forwarded to :meth:`__init__` (e.g.
-            ``precompute``, ``approx``). ``forward_dtype`` is deliberately absent —
-            it is retired and inert, so keying on it only forced a redundant
-            compile (#1433).
+            Additional keywords forwarded to :meth:`__init__` (e.g.,
+            ``approx``, ``precompute``). ``forward_dtype`` is retired and
+            ignored (#1433).
 
         Returns
         -------
         SEDModel
-            Fully initialized model, identical to one built via
+            Fully initialized model, equivalent to
             ``SEDModel(parse_groups(**groups), ssp_data, ...)``.
+
+        Raises
+        ------
+        ParameterError
+            If redshift is omitted, if unknown group keys are provided, if
+            required structural keys (like ``'law'`` for dust) are missing,
+            or if ``'all_params': FREE`` has no effect.
+
+        Notes
+        -----
+        **Grammar rules:**
+
+        - Every group dict must have a ``'type'`` key (except foreground, which
+          has no registry).
+        - ``'all_params'`` is the only wildcard. The retired ``'*'`` raises
+          ``TypeError``.
+        - Parameter names auto-resolve to their full prefixed forms. Short
+          forms (``'beta'`` in sfh, ``'tau_bc'`` in dust) are preferred.
+        - Unknown keys raise with suggestions via ``difflib``.
+        - A group dict with keys but no ``'type'`` raises.
+        - ``'all_params': FREE`` on a group with no free-parameter models raises
+          (e.g., ``radio={'type': 'sfonly', 'all_params': FREE}``). Use explicit
+          priors instead: ``radio={'q10': Uniform(...)}``.
+
+        The resolved model configuration can be inspected and edited via:
+
+        >>> config = model.spec.to_groups()  # dict with all groups
+        >>> model.spec.summary()  # print with provenance tags
 
         See Also
         --------
         tengri.parse_groups : The underlying nested-dict parser that returns
             a :class:`Parameters` spec.
-        SEDModel.from_config : String-based grouped configuration with
-            defaults from ``defaults.toml``.
+        tengri.recipes : Pre-built configuration dicts for common cases
+            (star-forming galaxies, AGN, high-z, etc.).
+        tengri.FREE, tengri.FIXED : Sentinel values for the ``'all_params'``
+            wildcard.
+        SEDModel.from_dict : Load a model from a serialized config dict.
+        SEDModel.from_file : Load a model from a config file (JSON or YAML).
+        model_configuration : Reference documentation for the grammar.
 
         Examples
         --------
+        **Minimal star-forming galaxy (fixed redshift, photometry only):**
+
         >>> from tengri import SEDModel, FREE, FIXED, Uniform, Fixed
         >>> model = SEDModel.build(
         ...     ssp_data=ssp,
-        ...     sfh={"type": "dpl", "all_params": FREE, "beta": Uniform(1, 3)},
+        ...     sfh={"type": "dpl", "all_params": FREE},
         ...     dust_attenuation={
         ...         "type": "two_component",
-        ...         "law": "calzetti",  # Shared law for both BC and diffuse
+        ...         "law": "calzetti",
         ...         "all_params": FIXED,
         ...         "tau_bc": 0.5,
         ...         "tau_diff": 0.3,
@@ -8720,6 +8820,48 @@ class SEDModel:
         ...     redshift=Fixed(0.05),
         ...     filters=["sdss_u", "sdss_g", "sdss_r"],
         ... )
+
+        **High-z stochastic SFH with free metallicity and photo-z:**
+
+        >>> model = SEDModel.build(
+        ...     ssp_data=ssp,
+        ...     sfh={"type": "dpl", "all_params": FREE},
+        ...     met={"type": "ramp", "all_params": FREE},
+        ...     dust_attenuation={
+        ...         "type": "two_component",
+        ...         "law": "calzetti",
+        ...         "tau_bc": Uniform(0, 1),
+        ...         "tau_diff": Uniform(0, 0.5),
+        ...     },
+        ...     neb={"type": "cue", "logZ_gas": Uniform(-1, 0)},
+        ...     redshift=Uniform(2, 4),  # photo-z
+        ...     observation=obs,
+        ... )
+
+        **Composable AGN with selective freedom:**
+
+        >>> model = SEDModel.build(
+        ...     ssp_data=ssp,
+        ...     sfh={"type": "dpl", "all_params": FIXED, "alpha": Uniform(0.5, 3)},
+        ...     agn={
+        ...         "type": "composable",
+        ...         "disc": {"type": "powerlaw", "all_params": FIXED},
+        ...         "torus": {"type": "skirtor", "all_params": FREE},
+        ...         "nlr": {"type": "cue", "logZ_gas": -0.3},
+        ...         "norm": "cigale_joint",
+        ...     },
+        ...     igm={"type": "inoue"},
+        ...     redshift=Fixed(0.3),
+        ...     observation=obs,
+        ... )
+
+        **Recipe + tweak (start with a built-in template, customize):**
+
+        >>> from tengri import recipes
+        >>> config = recipes.star_forming_photometry()
+        >>> config["dust_attenuation"]["tau_bc"] = 0.8  # override default
+        >>> config["neb"]["logZ_gas"] = Uniform(-0.5, 0)  # photo-z on gas metallicity
+        >>> model = SEDModel.build(ssp_data=ssp, observation=obs, **config)
         """
         # Validate that redshift is provided
         if redshift is None:

@@ -21,6 +21,7 @@ from tengri.observation.photometry import FilterCurve
 
 def build_test_model(use_waveprecomp=False):
     """A small hermetic model (synthetic SSP, no data files)."""
+    from tengri import FREE
     from tengri.forward.sed_model import WavePrecomp
 
     wave = jnp.linspace(3000.0, 10000.0, 60)
@@ -33,7 +34,13 @@ def build_test_model(use_waveprecomp=False):
         for i, (lo, hi) in enumerate([(3500.0, 4500.0), (5000.0, 6500.0), (7500.0, 9000.0)])
     )
     obs = Observation(photometry=Photometry(filters=curves))
-    sed = SEDModel.build(ssp_data=ssp, observation=obs, sfh={"type": "dpl"}, redshift=Fixed(0.5))
+    sed = SEDModel.build(
+        ssp_data=ssp,
+        observation=obs,
+        sfh={"type": "dpl"},
+        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FREE},
+        redshift=Fixed(0.5),
+    )
     truth = {"dust_tau_bc": 0.3, "dust_tau_diff": 0.2}
     data = jnp.asarray(np.asarray(sed.predict_photometry(truth)))
     noise = jnp.asarray(0.05 * np.abs(np.asarray(data)))
