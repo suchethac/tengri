@@ -830,7 +830,17 @@ def parse_groups(**kwargs) -> Parameters:
             f"got dust_attenuation={dust_val!r}."
         )
     if not has_dust_atten and not has_dust_old:
-        kwargs["dust_attenuation"] = {"type": "none"}
+        kwargs["dust_attenuation"] = {"type": "none", "all_params": FIXED}
+    elif (
+        has_dust_atten
+        and kwargs["dust_attenuation"].get("type") == "none"
+        and "all_params" not in kwargs["dust_attenuation"]
+        and "*" not in kwargs["dust_attenuation"]
+    ):
+        # User wrote dust_attenuation={'type': 'none'} explicitly without stating
+        # 'all_params' disposition. Set it to FIXED so the warning machinery doesn't
+        # complain about a missing disposition on an empty-parameter group.
+        kwargs["dust_attenuation"]["all_params"] = FIXED
 
     # ── Pass 1: Translate structural choices ──────────────────────────
 

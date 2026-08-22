@@ -137,6 +137,34 @@ def test_radio_omitted_equals_none():
     assert params_omitted.free_params == params_none.free_params
 
 
+def test_dust_attenuation_none_without_wildcard_does_not_warn():
+    """Explicit dust_attenuation={'type': 'none'} with no wildcard should not warn.
+
+    Groups with zero parameters should never warn about silently-fixed params,
+    since there is nothing to fix. This tests that the warning machinery correctly
+    skips empty-parameter-set groups.
+    """
+    import warnings
+
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always")
+        params = parse_groups(
+            redshift=Fixed(0.1),
+            sfh={"type": "dpl", "all_params": FIXED},
+            dust_attenuation={"type": "none"},  # No all_params disposition
+        )
+        # Should not warn about dust_attenuation since it has no parameters
+        dust_warnings = [
+            x
+            for x in w
+            if "dust_attenuation" in str(x.message)
+            and "no 'all_params' disposition" in str(x.message)
+        ]
+        assert not dust_warnings, (
+            f"Unexpected warning for empty-param group: {[str(x.message) for x in dust_warnings]}"
+        )
+
+
 def test_foreground_omitted():
     """Omitting foreground produces no free params (foreground has no 'type': 'none' form).
 
