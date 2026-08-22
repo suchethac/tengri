@@ -21,8 +21,8 @@
 # parameters are free. The nested-dict grammar (after BAGPIPES) lets you write
 # that down one block at a time: a dict per group, with `'type'` for the
 # structural choice and an `'all_params'` wildcard for free/fixed.
-# (`'all_params'` is the preferred spelling of the wildcard; the older `'*'`
-# is still accepted but is slated for deprecation.)
+# (`'all_params'` is the only wildcard spelling; the older `'*'` is retired
+# and raises ValueError with an error message naming the replacement.)
 
 # %% [markdown]
 # ## Setup
@@ -172,7 +172,7 @@ print()
 # you don't have to wait until SEDModel.build() runs.
 print("PATH 3: Builder factories")
 factory_groups = {
-    "sfh": builders.sfh.dpl(defaults=FREE, log_total_mass=Uniform(9.0, 11.0)),
+    "sfh": builders.sfh.dpl(all_params=FREE, log_total_mass=Uniform(9.0, 11.0)),
     "dust_attenuation": {
         "type": "two_component",
         "law": "calzetti",
@@ -185,7 +185,7 @@ factory_groups = {
 }
 model_factory = SEDModel.build(ssp_data=ssp, observation=observation, **factory_groups)
 print(f"  Model: {model_factory.spec.n_free} free params from factory + dict mix")
-print(f"  builders.sfh.dpl(defaults=FREE) → {builders.sfh.dpl(defaults=FREE)}")
+print(f"  builders.sfh.dpl(all_params=FREE) → {builders.sfh.dpl(all_params=FREE)}")
 print(f"  Available SFH variants ({len(builders.sfh.available())} total):")
 print(f"    {', '.join(builders.sfh.available()[:8])}, ...")
 print()
@@ -217,7 +217,7 @@ print()
 
 # Build a model with tsnorm (instead of dpl from PATH 3)
 groups_sfh_tour = {
-    "sfh": builders.sfh.tsnorm(defaults=FREE, skew=Uniform(-1.0, 1.0)),
+    "sfh": builders.sfh.tsnorm(all_params=FREE, skew=Uniform(-1.0, 1.0)),
     "dust_attenuation": {
         "type": "two_component",
         "law": "calzetti",
@@ -245,10 +245,10 @@ groups_dust_tour = {
     "sfh": {"type": "tsnorm", "all_params": FIXED},
     "dust_attenuation": builders.dust.two_component(
         law="calzetti",
-        defaults=FREE,
+        all_params=FREE,
         tau_bc=Uniform(0.0, 2.0),
     ),
-    "dust_emission": builders.dust.emission.dale2014(defaults=FIXED),
+    "dust_emission": builders.dust.emission.dale2014(all_params=FIXED),
     "neb": {"type": "cue", "all_params": FIXED},
     "redshift": Fixed(0.05),
 }
@@ -273,7 +273,7 @@ try:
     groups_neb_tour = {
         "sfh": {"type": "tsnorm", "all_params": FIXED},
         "dust_attenuation": {"law": "power_law", "type": "two_component", "all_params": FIXED},
-        "neb": builders.neb.cb19(defaults=FREE, log_nH=Uniform(1.0, 4.0)),
+        "neb": builders.neb.cb19(all_params=FREE, log_nH=Uniform(1.0, 4.0)),
         "redshift": Fixed(0.05),
     }
     spec_neb_tour = parse_groups(**groups_neb_tour)
@@ -285,7 +285,7 @@ except Exception as e:
     groups_neb_tour = {
         "sfh": {"type": "tsnorm", "all_params": FIXED},
         "dust_attenuation": {"law": "power_law", "type": "two_component", "all_params": FIXED},
-        "neb": builders.neb.cue(defaults=FIXED),
+        "neb": builders.neb.cue(all_params=FIXED),
         "redshift": Fixed(0.05),
     }
     spec_neb_tour = parse_groups(**groups_neb_tour)
@@ -315,13 +315,13 @@ print("─" * 70)
 
 # Build AGN dict using composable factories (do NOT build full SEDModel here)
 agn_dict = builders.agn.composable(
-    defaults=FREE,
+    all_params=FREE,
     log_lbol=Uniform(9.42, 13.42),
-    disc=builders.agn.disc.multicolor(defaults=FREE),
-    torus=builders.agn.torus.skirtor(defaults=FIXED),
+    disc=builders.agn.disc.multicolor(all_params=FREE),
+    torus=builders.agn.torus.skirtor(all_params=FIXED),
     nlr=builders.agn.nlr.analytic(),
     feii=builders.agn.feii.none(),
-    atten=builders.agn.atten.smc_prevot(defaults=FIXED),
+    atten=builders.agn.atten.smc_prevot(all_params=FIXED),
 )
 print(f"Composable AGN dict keys: {list(agn_dict.keys())}")
 print(f"  agn_dict['type'] = '{agn_dict['type']}'")
@@ -459,6 +459,244 @@ for sfh_name, _ in sfh_families:
 print()
 print("[TIP] Use tengri.describe(name) to inspect any SFH family or component in detail.")
 print("Example: tengri.describe('dpl') shows the parametrization and physics.")
+
+# %% [markdown]
+# ## Radio emission (SF + AGN)
+#
+# Radio emission combines star-formation-driven synchrotron (from the FIR–radio
+# correlation) and AGN jets. The grammar uses two peer sub-blocks:
+# `radio={'sf': {'type': ...}, 'agn': {'type': ...}}`.
+# The legacy flat `radio_sfr_mode` / `radio_agn_model` parameter form is retired;
+# the nested structure is now the canonical API.
+
+# %%
+print("Radio Emission Tour")
+print("─" * 70)
+
+# Composable radio: SF driven by Bell 2003 FIRRC, AGN via power-law
+groups_radio = {
+    "sfh": {"type": "tsnorm", "all_params": FIXED},
+    "dust_attenuation": {"law": "calzetti", "type": "two_component", "all_params": FIXED},
+    "neb": {"type": "cue", "all_params": FIXED},
+    "radio": {
+        "sf": {"type": "bell2003"},  # FIR-radio correlation (Bell 2003)
+        "agn": {"type": "powerlaw"},  # AGN radio as power-law
+        "q_ir": Uniform(2.0, 2.8),  # Vary FIR-radio correlation
+    },
+    "redshift": Fixed(0.05),
+}
+try:
+    spec_radio = parse_groups(**groups_radio)
+    print("Radio composable (SF + AGN):")
+    radio_params = [p for p in spec_radio.free_params if p.startswith("radio_")]
+    print(f"  Free params: {radio_params}")
+    print("  SF: Bell 2003 FIRRC correlation")
+    print("  AGN: Power-law radio loudness")
+except Exception as e:
+    print(f"Radio model skipped: {str(e)[:50]}...")
+print()
+
+# %% [markdown]
+# ## X-ray emission
+#
+# X-ray emission from hot gas, black-hole accretion, and other sources.
+# The `xray` group selects the model type and parametrizes the spectrum.
+
+# %%
+print("X-ray Emission Tour")
+print("─" * 70)
+
+# X-ray: yang20 model (X-ray from XRB + AGN corona)
+groups_xray = {
+    "sfh": {"type": "tsnorm", "all_params": FIXED},
+    "dust_attenuation": {"law": "calzetti", "type": "two_component", "all_params": FIXED},
+    "neb": {"type": "cue", "all_params": FIXED},
+    "xray": {
+        "type": "yang20",  # AGN alpha_ox relation (Lusso & Risaliti 2016)
+        "all_params": FIXED,
+    },
+    "redshift": Fixed(0.05),
+}
+try:
+    spec_xray = parse_groups(**groups_xray)
+    print("X-ray model ('yang20'):")
+    xray_params = [p for p in spec_xray.free_params if p.startswith("xray_")]
+    print(f"  Free params: {xray_params}")
+    print("  Type: 'yang20' (AGN corona + XRB)")
+    print("  Connects to SFR (XRB scaling) and AGN luminosity")
+except Exception as e:
+    print(f"X-ray model skipped: {str(e)[:50]}...")
+print()
+
+# %% [markdown]
+# ## Shock emission (composable with nebular)
+#
+# Shock-driven line emission (MAPPINGS V models) adds to photoionized nebular
+# emission. The shock bucket defaults to all fixed; to free parameters, use
+# explicit priors (e.g. `shock={'frac': Uniform(0, 1)}`). The `all_params: FREE`
+# wildcard is deliberately refused for shock — it is not a silent no-op but a
+# guard against misconfiguration.
+
+# %%
+print("Shock Emission Tour")
+print("─" * 70)
+
+# Shock with 'frac' (relative) normalization: fraction of the galaxy's Hα
+groups_shock_frac = {
+    "sfh": {"type": "tsnorm", "all_params": FIXED},
+    "dust_attenuation": {"law": "calzetti", "type": "two_component", "all_params": FIXED},
+    "neb": {"type": "cue", "all_params": FIXED},
+    "shock": {
+        "norm": "frac",  # Relative: shock Hα as a fraction of galaxy Hα
+        "frac": Uniform(0.0, 0.5),  # Free parameter, 0–50% of Hα
+    },
+    "redshift": Fixed(0.05),
+}
+try:
+    spec_shock_frac = parse_groups(**groups_shock_frac)
+    print("Shock model (norm='frac'):")
+    shock_params = [p for p in spec_shock_frac.free_params if p.startswith("shock_")]
+    print(f"  Free params: {shock_params}")
+    print("  Normalization: fraction of galaxy Hα")
+except Exception as e:
+    print(f"Shock 'frac' skipped: {str(e)[:50]}...")
+
+print()
+
+# Shock with 'lhalpha' (absolute) normalization: absolute Hα luminosity
+groups_shock_lha = {
+    "sfh": {"type": "tsnorm", "all_params": FIXED},
+    "dust_attenuation": {"law": "calzetti", "type": "two_component", "all_params": FIXED},
+    "neb": {"type": "cue", "all_params": FIXED},
+    "shock": {
+        "norm": "lhalpha",  # Absolute: direct shock Hα luminosity
+        "log_lhalpha": Uniform(38.0, 42.0),  # log10(L_Hα / erg/s)
+    },
+    "redshift": Fixed(0.05),
+}
+try:
+    spec_shock_lha = parse_groups(**groups_shock_lha)
+    print("Shock model (norm='lhalpha'):")
+    shock_params_lha = [p for p in spec_shock_lha.free_params if p.startswith("shock_")]
+    print(f"  Free params: {shock_params_lha}")
+    print("  Normalization: absolute Hα luminosity (AGN/outflow shocks)")
+except Exception as e:
+    print(f"Shock 'lhalpha' skipped: {str(e)[:50]}...")
+print()
+
+# %% [markdown]
+# ## Metallicity group
+#
+# The `met` group selects how metallicity evolves with age. Available modes
+# include scalar (`table`, `ramp`, and parametric families). For notebook
+# construction (runtime build), we use a tabular mode or the `logzsol` scalar.
+
+# %%
+print("Metallicity Modes Tour")
+print("─" * 70)
+
+# Available metallicity modes (live list)
+try:
+    from tengri import list_metallicity_modes
+
+    met_modes = list_metallicity_modes()
+    print(f"Available metallicity modes ({len(met_modes)} total):")
+    print(f"  {', '.join(met_modes[:5])}, ...")
+except Exception as e:
+    met_modes = ["table", "ramp"]  # fallback list
+    print(f"Metallicity modes (partial list): {', '.join(met_modes)}")
+
+print()
+
+# Example 1: scalar metallicity (simplest)
+groups_met_scalar = {
+    "sfh": {"type": "tsnorm", "all_params": FIXED},
+    "met": {"logzsol": Uniform(-0.5, 0.3)},  # Vary scalar metallicity
+    "dust_attenuation": {"law": "calzetti", "type": "two_component", "all_params": FIXED},
+    "neb": {"type": "cue", "all_params": FIXED},
+    "redshift": Fixed(0.05),
+}
+try:
+    spec_met_scalar = parse_groups(**groups_met_scalar)
+    print("Metallicity (scalar logzsol):")
+    met_params = [p for p in spec_met_scalar.free_params if p.startswith("met_")]
+    print(f"  Free params: {met_params}")
+    print("  Mode: constant metallicity over lookback time")
+except Exception as e:
+    print(f"Scalar met skipped: {str(e)[:50]}...")
+
+print()
+
+# Example 2: table mode (pre-built or runtime Z(t) histories)
+# For notebook construction, table mode requires external data, so we show
+# the other modes available via list_metallicity_modes() instead.
+print("Other metallicity modes available:")
+try:
+    from tengri import list_metallicity_modes
+
+    modes = list_metallicity_modes()
+    other_modes = [m for m in modes if m not in ["table", "solar"]]
+    if other_modes:
+        print(f"  {', '.join(other_modes[:3])}, ...")
+except Exception as e:
+    print(f"  (could not list modes: {str(e)[:30]}...)")
+
+print()
+print("[TIP] Use tengri.list_metallicity_modes() for the complete menu.")
+print()
+
+# %% [markdown]
+# ## Round-trip: build, extract, rebuild
+#
+# A complete round-trip test: build a model, extract its structure via
+# `to_groups()`, tweak one parameter, rebuild, and verify the structure matches.
+# This demonstrates the invertibility of the nested-dict grammar.
+
+# %%
+print("Round-trip Verification")
+print("─" * 70)
+
+# Build a complete model with multiple blocks
+groups_roundtrip = {
+    "sfh": {"type": "tsnorm", "all_params": FREE, "skew": Uniform(-1.0, 1.0)},
+    "met": {"logzsol": Uniform(-0.5, 0.3)},
+    "dust_attenuation": {
+        "type": "two_component",
+        "law": "calzetti",
+        "all_params": FIXED,
+        "tau_bc": Fixed(0.5),
+        "tau_diff": Fixed(0.3),
+        "slope": Fixed(-0.7),
+    },
+    "dust_emission": {"type": "dale2014", "all_params": FIXED},
+    "neb": {"type": "cue", "all_params": FIXED},
+    "igm": {"type": "inoue"},  # Enable IGM absorption
+    "redshift": Uniform(0.01, 0.1),
+}
+
+# Build the model
+model_rt = SEDModel.build(ssp_data=ssp, observation=observation, **groups_roundtrip)
+print(f"Built model: {model_rt.spec.n_free} free params")
+print(f"  Free params: {model_rt.spec.free_params}")
+
+# Extract structure back to groups dict
+groups_extracted = model_rt.spec.to_groups()
+
+# Verify the round-trip: rebuild from extracted groups
+model_rebuilt = SEDModel.build(ssp_data=ssp, observation=observation, **groups_extracted)
+print(f"\nRound-trip rebuilt: {model_rebuilt.spec.n_free} free params")
+print(f"  Free params: {model_rebuilt.spec.free_params}")
+
+# Verify: free_params sets must match
+match = set(model_rt.spec.free_params) == set(model_rebuilt.spec.free_params)
+print("\nRound-trip verification:")
+print(f"  Free params match: {match}")
+print(f"  n_free match: {model_rt.spec.n_free == model_rebuilt.spec.n_free}")
+
+if match:
+    print("  ✓ Round-trip successful")
+else:
+    print("  ✗ Round-trip mismatch (see diagnostic output above)")
 
 # %% [markdown]
 # ## SED under different SFH families
