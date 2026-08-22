@@ -65,7 +65,7 @@ def build_model_and_mock():
     model = SEDModel.build(
         ssp_data=ssp,
         observation=obs,
-        sfh=builders.sfh.dense_basis(defaults=FREE),
+        sfh=builders.sfh.dense_basis(all_params=FREE),
         dust_attenuation={
             "type": "two_component",
             "all_params": FIXED,

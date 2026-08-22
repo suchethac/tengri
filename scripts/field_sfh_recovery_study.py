@@ -142,7 +142,7 @@ def build(ssp, observation):
         observation=observation,
         sfh={"type": ["dpl", "field"], "all_params": FREE},
         met={"logzsol": Fixed(-0.3)},
-        dust_attenuation=builders.dust.two_component(defaults=FREE, law="calzetti"),
+        dust_attenuation=builders.dust.two_component(all_params=FREE, law="calzetti"),
         neb=builders.neb.ssp(),
         redshift=Fixed(Z_GAL),
         igm={"type": "none"},

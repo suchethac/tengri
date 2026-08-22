@@ -183,8 +183,8 @@ def test_star_synonym_resolves_identically_to_all_params():
 
 
 def test_builders_path_resolves_identically_to_the_dict_form():
-    """``builders.*(defaults=FREE)`` lowers to the same wildcard key."""
-    built = _free(sfh={"type": "dpl"}, neb=tengri.builders.neb.cue(defaults=FREE))
+    """``builders.*(all_params=FREE)`` lowers to the same wildcard key."""
+    built = _free(sfh={"type": "dpl"}, neb=tengri.builders.neb.cue(all_params=FREE))
     dictform = _free(sfh={"type": "dpl"}, neb={"type": "cue", "all_params": FREE})
     assert built == dictform
 

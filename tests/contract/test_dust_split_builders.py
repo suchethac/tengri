@@ -256,7 +256,7 @@ class TestRecipeFreeparams:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             spec = parse_groups(**recipes.star_forming_photometry())
-        # With defaults=FREE, all SFH + attenuation params are free
+        # With all_params=FREE, all SFH + attenuation params are free
         # Check key params are present
         assert "sfh_dpl_alpha" in spec.free_params
         assert "sfh_dpl_beta" in spec.free_params
@@ -272,7 +272,7 @@ class TestRecipeFreeparams:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             spec = parse_groups(**recipes.quiescent_z0())
-        # With defaults=FIXED, only explicit priors are free
+        # With all_params=FIXED, only explicit priors are free
         assert "sfh_dexp_tau_gyr" in spec.free_params
         assert "sfh_dexp_log_total_mass" in spec.free_params
         assert "dust_tau_bc" in spec.free_params
@@ -286,7 +286,7 @@ class TestRecipeFreeparams:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             spec = parse_groups(**recipes.photoz())
-        # With defaults=FIXED, only explicit priors are free
+        # With all_params=FIXED, only explicit priors are free
         assert "sfh_dpl_alpha" in spec.free_params
         assert "dust_tau_bc" in spec.free_params
         assert "dust_tau_diff" in spec.free_params
@@ -300,7 +300,7 @@ class TestRecipeFreeparams:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             spec = parse_groups(**recipes.mock_recovery_minimal())
-        # With defaults=FREE for SFH and FIXED for dust (with explicit tau_bc)
+        # With all_params=FREE for SFH and FIXED for dust (with explicit tau_bc)
         assert "sfh_tsnorm_log_total_mass" in spec.free_params
         assert "dust_tau_bc" in spec.free_params
         assert "met_logzsol" in spec.free_params

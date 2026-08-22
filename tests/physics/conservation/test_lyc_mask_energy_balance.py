@@ -81,7 +81,7 @@ def _build(ssp, dust, approx=None):
         # were captured under — the registry's curated defaults would
         # otherwise shift the SFH (and every golden) silently.
         sfh=builders.sfh.tsnorm(
-            defaults=FIXED,
+            all_params=FIXED,
             log_total_mass=9.75,
             peak_lbt_gyr=6.25,
             width_gyr=2.6,
@@ -241,7 +241,7 @@ class TestGoldenValues:
             ssp_data=synthetic_ssp_wide,
             observation=_obs(),
             sfh=builders.sfh.tsnorm(
-                defaults=FIXED,
+                all_params=FIXED,
                 log_total_mass=9.75,
                 peak_lbt_gyr=6.25,
                 width_gyr=2.6,
@@ -258,7 +258,7 @@ class TestGoldenValues:
             observation=_obs(),
             approx=WavePrecomp(),
             sfh=builders.sfh.tsnorm(
-                defaults=FIXED,
+                all_params=FIXED,
                 log_total_mass=9.75,
                 peak_lbt_gyr=6.25,
                 width_gyr=2.6,
