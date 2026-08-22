@@ -35,7 +35,13 @@ def test_ztable_matches_exact_below_1pct(ssp_data_for_accuracy):
         ssp_data=ssp_data_for_accuracy,
         observation=obs,
         sfh={"type": "dpl"},
-        dust_attenuation={"type": "two_component", "law": "power_law", "all_params": FIXED},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "power_law",
+            "tau_bc": Uniform(0.0, 4.0),
+            "tau_diff": Uniform(0.0, 3.0),
+            "all_params": FIXED,
+        },
         redshift=Uniform(0.01, 2.0),
         igm={"type": "inoue"},
     )
@@ -70,8 +76,14 @@ def measure_ztable_error_and_cost(n_z_value, ssp_data_for_accuracy):
     common = dict(
         ssp_data=ssp_data_for_accuracy,
         observation=obs,
-        sfh={"type": "dpl", "all_params": FIXED},
-        dust_attenuation={"type": "two_component", "law": "power_law", "all_params": FIXED},
+        sfh={"type": "dpl"},
+        dust_attenuation={
+            "type": "two_component",
+            "law": "power_law",
+            "tau_bc": Uniform(0.0, 4.0),
+            "tau_diff": Uniform(0.0, 3.0),
+            "all_params": FIXED,
+        },
         redshift=Uniform(0.01, 2.0),
         igm={"type": "inoue"},
     )
