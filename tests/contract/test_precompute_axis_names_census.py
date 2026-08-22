@@ -69,7 +69,7 @@ DEAD_AXIS_NAMES: dict[str, frozenset[str]] = {
     "tengri.components.agn.qsogen_precompute": frozenset({"agn_plslp1"}),
 }
 
-#: Modules whose dead names still collapse, because they pass ``all_params=`` to
+#: Modules whose dead names still collapse, because they pass ``defaults=`` to
 #: :func:`collapse_fixed_axes` for parameters the model never declares. The
 #: names are still wrong — a user who declares one as free cannot free the axis
 #: — but the grid does reduce, so these are a milder case than the rest.

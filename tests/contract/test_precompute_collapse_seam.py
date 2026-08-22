@@ -136,7 +136,7 @@ def test_defaults_collapse_axes_the_model_never_declared():
     with warnings.catch_warnings():
         warnings.simplefilter("error", DeadPrecomputeAxisWarning)
         out, remaining, collapsed = collapse_fixed_axes(
-            _grid(), names, spec, all_params=defaults, origin="qsogen_precompute"
+            _grid(), names, spec, defaults=defaults, origin="qsogen_precompute"
         )
 
     assert set(collapsed) == {0, 1}, f"both axes should collapse at defaults, got {collapsed}"

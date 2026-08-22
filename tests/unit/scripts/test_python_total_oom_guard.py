@@ -362,7 +362,7 @@ def test_flat_high_swap_alone_does_not_trip(tmp_path):
         _INCIDENT_PROCS,
         avail_kb=int(0.40 * _RAM_KB_48),
         swap_used_kb=[25 * GB, 25 * GB, 25 * GB],
-        shipped_all_params=True,
+        shipped_defaults=True,
         RAM_KB_OVERRIDE=_RAM_KB_48,
         TOTAL_LIMIT_GB=32,
         MAX_TICKS=3,
