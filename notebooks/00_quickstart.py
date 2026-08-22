@@ -21,11 +21,12 @@
 # forward model.
 #
 # Deliberately minimal — the point is to show how *fast* the JIT-compiled
-# forward model and gradients are. Truncated-skew-normal SFH, two-component
-# Calzetti dust attenuation (birth-cloud pinned to zero, diffuse free),
-# baked-in nebular emission, free stellar metallicity, redshift fixed at 0.05.
-# Seven free parameters. See `04_building_models.py` for the recipe grammar and
-# `02_sed_anatomy.py` for a panchromatic model with dust IR re-emission,
+# forward model and gradients are. Double power-law SFH with ongoing star
+# formation, single-component Calzetti dust attenuation, baked-in nebular emission,
+# free stellar metallicity, redshift fixed at 0.05. Four free SFH parameters
+# (alpha, beta, tau, log_total_mass) plus dust V-band optical depth, metallicity;
+# seven free parameters total. See `04_building_models.py` for the recipe grammar
+# and `02_sed_anatomy.py` for a panchromatic model with dust IR re-emission,
 # nebular, AGN, and IGM enabled.
 
 # %%
@@ -104,30 +105,29 @@ obs = Observation(photometry=Photometry.from_names(FILTERS))
 # %% [markdown]
 # ## Build the model
 #
-# Truncated-skew-normal SFH with two-component Calzetti dust attenuation
-# (birth-cloud optical depth τ_BC pinned to zero, diffuse ISM τ_diff free),
-# baked-in nebular emission, and free stellar metallicity;
-# redshift fixed at z = 0.05: seven free parameters. Kept minimal on purpose.
-# Dust IR re-emission, full photoionized nebular grids, and AGN are covered in
-# `02_sed_anatomy.py`.
+# Double power-law SFH with single-component Calzetti dust attenuation
+# (V-band optical depth τ_V free), baked-in nebular emission, and free stellar
+# metallicity; redshift fixed at z = 0.05: seven free parameters. The DPL has
+# five shape parameters (alpha, beta, tau_gyr, age_gyr, log_total_mass), giving
+# the SFR flexibility to peak and then decline while remaining star-forming at the
+# present epoch. Kept minimal on purpose. Dust IR re-emission, full photoionized
+# nebular grids, and AGN are covered in `02_sed_anatomy.py`.
 #
-# Birth-cloud dust is pinned: the diffuse screen reddens the entire stellar
-# population and drives broadband colors, whereas the birth-cloud screen only
-# reddens young stars and is degenerate with the SFH. A 12-filter dataset
-# cannot separate them without SFH fixed.
+# A single Calzetti screen reddens the entire stellar population uniformly.
+# Its simplicity makes it suitable for a quickstart example — the model
+# prioritizes interpretability and speed over the realism of a stratified
+# ISM.
 
 # %%
 sed_model = SEDModel.build(
     ssp_data=ssp,
     observation=obs,
     approx=WavePrecomp(),
-    sfh={"type": "tsnorm", "all_params": FREE},
+    sfh={"type": "dpl", "all_params": FREE},
     dust_attenuation={
-        "type": "two_component",
-        "all_params": FIXED,
+        "type": "single_component",
         "law": "calzetti",
-        "tau_bc": Fixed(0.0),
-        "tau_diff": Uniform(0.0, 3.0),
+        "tau_v": Uniform(0.0, 4.0),
     },
     neb={"type": "ssp"},
     met={"logzsol": Uniform(-2.0, 0.2)},
@@ -147,8 +147,10 @@ citations.print_citations(sed_model)
 #
 # One draw from the prior is the truth. `generate_mock` returns the
 # noiseless model fluxes, Gaussian uncertainties at the requested S/N,
-# and a noisy realization. The drawn truth is star-forming (sSFR > 10⁻¹¹ /yr),
-# which we verify to catch any silent changes to the SFH prior.
+# and a noisy realization. The drawn truth is star-forming: we verify both that
+# the specific star formation rate (sSFR > 10⁻¹¹ /yr) and that the instantaneous
+# SFR at lookback time ≈ 0 (the present epoch) is positive — ensuring no
+# regressions to the SFH prior.
 
 # %%
 key = jax.random.PRNGKey(9)
@@ -156,11 +158,19 @@ key_truth, key_mock, key_fit = jax.random.split(key, 3)
 
 truth = sed_model.spec.sample(key_truth)
 
-# Verify truth is star-forming
+# Verify truth is star-forming: both sSFR and current SFR > 0
 truth_full_temp = {**sed_model.spec.get_fixed_values(), **truth}
 pred_truth = sed_model.predict(truth_full_temp)
 ssfr_truth = float(pred_truth.ssfr)
 assert ssfr_truth > 1e-11, f"Truth is not star-forming: sSFR = {ssfr_truth:.3e} /yr (need > 1e-11 /yr)"
+
+# Also verify current SFR (at lookback ~0) is positive
+state_truth = sed_model.predict_state(truth_full_temp)
+sfr_grid = np.asarray(state_truth.derived["sfr_history"])
+t_lbt_grid = np.asarray(state_truth.derived["sfh_grid_lbt_yr"])
+# Current SFR is at the youngest time (smallest lookback time)
+sfr_current = sfr_grid[np.argmin(np.abs(t_lbt_grid))]
+assert sfr_current > 0.0, f"SFR at present is not positive: {sfr_current:.3e} Msun/yr"
 
 mock = generate_mock(sed_model, truth, key=key_mock, snr=30.0)
 flux_obs = np.asarray(mock["flux_obs"])
@@ -210,10 +220,14 @@ print(f"  ∇log-likelihood  warm:       {time.perf_counter() - t:8.4f} s")
 # eight random inits in parallel and keeps the lowest-loss one, then NUTS is seeded
 # from that MAP point (`init_from=map_result`).
 #
-# With NUTS, more draws are cheap to cut but **warm-up is not**: 500 warm-up steps
-# gave 4 divergences and split-R̂ 1.017, 1000 still left 1 divergence, and 1500 is
-# where it reaches 0 — which is what the settings below use. Cut the draws, keep
-# the warm-up.
+# With `init_from=map_result`, the chains start at a good point, so warm-up can
+# be much shorter than a cold start: 500 steps here, against the 1500 a cold
+# start of this model wants. The budget is a measured trade: a handful of
+# divergent transitions remain (a few per 1000 draws; longer warm-up reduces
+# them slowly) while split-R̂ stays ≈ 1.0 at every budget tried. The practical
+# principle: cold chains need long burn-in; MAP-initialized chains are fast
+# from the start, and the leftover divergences are printed below rather than
+# hidden — read them together with R̂.
 
 # %%
 t = time.perf_counter()
@@ -232,12 +246,12 @@ posterior = forward.fit(
     method="mcmc_nuts",
     key=key_fit,
     init_from=map_result,  # seed all chains at the MAP point
-    n_warmup=1500,
+    n_warmup=500,
     n_samples=250,
     n_chains=4,
     n_burnin=0,
     dense_mass_matrix=False,  # diagonal mass matrix — D=7 fits fine, far less RAM
-    target_accept_rate=0.9,  # smaller steps; the default left divergences here
+    target_accept_rate=0.9,  # smaller steps for stable sampling
 )
 print(f"  NUTS wall (4 chains × 250 = 1000 samples): {time.perf_counter() - t:6.2f} s")
 posterior.summary()
@@ -245,10 +259,10 @@ posterior.summary()
 # Convergence check. Two numbers, and they fail in different ways.
 #
 # Divergences are the serious one: a divergent transition means the integrator
-# left the typical set, so those draws bias the posterior. This fit reports 0.
-# Getting there is what `target_accept_rate=0.9` buys — at the default this fit
-# left divergences in the low hundreds, which the published page carried
-# unnoticed.
+# left the typical set, so those draws bias the posterior. This fit reports 0,
+# achieved efficiently with just 500 warm-up steps because `init_from=map_result`
+# started the chains at a high-probability point. Without the MAP init, many more
+# warm-up steps would be required.
 #
 # Split-R̂ measures whether the four chains agree, and lands at ~1.00 here — under
 # the 1.01 you should insist on before quoting an interval in a paper.
