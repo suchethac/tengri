@@ -313,9 +313,9 @@ fig, axes = plt.subplots(2, 2, figsize=(11, 7.4), constrained_layout=True)
 # (a) SFH shape — three canonical SFHs, mass-normalized
 ax = axes[0, 0]
 for label, sfh_dict, color in [
-    ("exponential", builders.sfh.exp(defaults=FIXED), "#d97a3a"),
-    ("delayed-exp", builders.sfh.dexp(defaults=FIXED), "#c8377d"),
-    ("DPL", builders.sfh.dpl(defaults=FIXED), "#3a76d9"),
+    ("exponential", builders.sfh.exp(all_params=FIXED), "#d97a3a"),
+    ("delayed-exp", builders.sfh.dexp(all_params=FIXED), "#c8377d"),
+    ("DPL", builders.sfh.dpl(all_params=FIXED), "#3a76d9"),
 ]:
     cfg = deepcopy(base)
     cfg["sfh"] = sfh_dict

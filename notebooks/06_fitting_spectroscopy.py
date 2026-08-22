@@ -97,10 +97,10 @@ sed_model = SEDModel.build(
     observation=obs,
     approx=SpectrumPrecomp(),
     sfh=builders.sfh.tsnorm(
-        defaults=FIXED, log_total_mass=FREE, peak_lbt_gyr=FREE, width_gyr=FREE
+        all_params=FIXED, log_total_mass=FREE, peak_lbt_gyr=FREE, width_gyr=FREE
     ),
     dust_attenuation=builders.dust.two_component(
-        defaults=FIXED,
+        all_params=FIXED,
         law="calzetti",
         tau_bc=Uniform(0.0, 1.0),
         tau_diff=Uniform(0.0, 1.0),

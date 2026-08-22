@@ -449,8 +449,7 @@ spec.summary_str()
 ### Wildcard semantics
 
 The `'all_params'` key in a sub-dict sets a default (`FREE` or `FIXED`) for all
-parameters in that group not explicitly overridden. (`'*'` is an accepted
-synonym, kept for back-compat and slated for deprecation — prefer `'all_params'`.)
+parameters in that group not explicitly overridden.
 
 ```python
 dust_attenuation={

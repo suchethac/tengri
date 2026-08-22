@@ -119,10 +119,10 @@ def test_composable_default_call_is_minimal() -> None:
 
 def test_full_composition_produces_grammar_shape() -> None:
     out = builders.agn.composable(
-        _=FREE,
+        all_params=FREE,
         log_lbol=Uniform(9.42, 13.42),
-        disc=builders.agn.disc.multicolor(_=FREE),
-        torus=builders.agn.torus.skirtor(_=FIXED),
+        disc=builders.agn.disc.multicolor(all_params=FREE),
+        torus=builders.agn.torus.skirtor(all_params=FIXED),
         nlr=builders.agn.nlr.analytic(),
         blr=builders.agn.blr.analytic(),
         feii=builders.agn.feii.none(),
@@ -153,7 +153,8 @@ def test_unknown_kwarg_raises_with_valid_lists() -> None:
 
 
 def test_invalid_wildcard_rejected() -> None:
-    with pytest.raises(ValueError, match="FREE or FIXED"):
+    # _= alias is retired; raises TypeError before checking the value
+    with pytest.raises(TypeError, match=r"_=.*retired"):
         builders.agn.composable(_="free")
 
 

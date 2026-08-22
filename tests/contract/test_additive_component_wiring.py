@@ -81,7 +81,7 @@ def test_xray_delta_alpha_ox_is_wired_with_agn(synthetic_ssp_wide, synthetic_top
     model = SEDModel.build(
         ssp_data=synthetic_ssp_wide,
         observation=synthetic_tophat_obs,
-        agn={"type": "composable", "disc": builders.agn.disc.multicolor(defaults=FREE)},
+        agn={"type": "composable", "disc": builders.agn.disc.multicolor(all_params=FREE)},
         xray={"type": "simple", "delta_alpha_ox": Uniform(-2.0, -1.0)},
         **_base_kwargs(),
     )

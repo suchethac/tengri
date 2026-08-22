@@ -140,7 +140,7 @@ def test_two_component_free_round_trips_tau_bc_tau_diff() -> None:
     pathway for dust (unlike radio/xray) flips the attenuation knobs."""
     spec = parse_groups(
         sfh={"type": "dpl"},
-        dust_attenuation=builders.dust.two_component(law="calzetti", _=FREE),
+        dust_attenuation=builders.dust.two_component(law="calzetti", all_params=FREE),
         redshift=Fixed(0.1),
     )
     free_dust = {p for p in spec.free_params if p.startswith("dust_")}
@@ -151,7 +151,7 @@ def test_two_component_free_round_trips_tau_bc_tau_diff() -> None:
 def test_single_component_uses_tau_v_not_tau_bc() -> None:
     spec = parse_groups(
         sfh={"type": "dpl"},
-        dust_attenuation=builders.dust.single_component(law="calzetti", _=FREE),
+        dust_attenuation=builders.dust.single_component(law="calzetti", all_params=FREE),
         redshift=Fixed(0.1),
     )
     free_dust = {p for p in spec.free_params if p.startswith("dust_")}
@@ -180,5 +180,6 @@ def test_unknown_kwarg_raises_with_valid_list() -> None:
 
 
 def test_invalid_wildcard_rejected() -> None:
-    with pytest.raises(ValueError, match="FREE or FIXED"):
+    # _= alias is retired; raises TypeError before checking the value
+    with pytest.raises(TypeError, match=r"_=.*retired"):
         builders.dust.two_component(law="calzetti", _="free")

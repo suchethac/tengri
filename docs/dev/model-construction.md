@@ -60,11 +60,9 @@ groups = model.spec.to_groups()   # round-trip back to the grammar for editing
   - `'type'` — the structural choice (which variant), validated against the
     domain's registered names.
   - `'all_params'` — the wildcard: `FREE` or `FIXED` (default `FIXED`). It
-    cascades over the group's parameters. (`'*'` is an accepted synonym, kept
-    for back-compat and slated for deprecation — prefer `'all_params'`.) For
-    groups whose bucket params default to `Fixed` (e.g. `radio`, `shock`),
-    `'all_params': FREE` is a no-op — use explicit priors instead
-    (`shock={'frac': Uniform(0, 1)}`).
+    cascades over the group's parameters. For groups whose bucket params default
+    to `Fixed` (e.g. `radio`, `shock`), `'all_params': FREE` is a no-op — use
+    explicit priors instead (`shock={'frac': Uniform(0, 1)}`).
   - **Per-parameter short-forms** — a bare parameter name inside the group
     resolves to the full prefixed name (`'beta'` in the `sfh` group →
     `sfh_dpl_beta`; `'frac'` in `shock` → `shock_frac`). The full prefixed

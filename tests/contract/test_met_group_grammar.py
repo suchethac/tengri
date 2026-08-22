@@ -114,7 +114,7 @@ def test_there_is_exactly_one_spelling_left():
     assert "stellar" not in _GROUP_STRUCTURAL_KEYS
     assert _GROUP_STRUCTURAL_KEYS["met"] == frozenset({"type", "*", "all_params"}), (
         "the met group selects with 'type' and takes the wildcard "
-        "('all_params', or the legacy '*'), nothing else"
+        "('all_params', plus the internal '*' the normalizer rewrites it to), nothing else"
     )
 
 

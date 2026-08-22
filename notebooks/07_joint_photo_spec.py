@@ -125,15 +125,15 @@ def build(obs, approx=None):
         # skew/truncation shape nuisances (neither photometry nor a continuum
         # spectrum constrains them, and free they mix poorly under HMC).
         sfh=builders.sfh.tsnorm(
-            defaults=FIXED, log_total_mass=FREE, peak_lbt_gyr=FREE, width_gyr=FREE
+            all_params=FIXED, log_total_mass=FREE, peak_lbt_gyr=FREE, width_gyr=FREE
         ),
         dust_attenuation=builders.dust.two_component(
-            defaults=FIXED,
+            all_params=FIXED,
             law="calzetti",
             tau_bc=Uniform(0.0, 1.0),
             tau_diff=Uniform(0.0, 1.0),
         ),
-        dust_emission=builders.dust.emission.modified_blackbody(defaults=FIXED),
+        dust_emission=builders.dust.emission.modified_blackbody(all_params=FIXED),
         neb=builders.neb.none(),
         met={"logzsol": Uniform(-1.5, 0.3)},
         redshift=Fixed(Z_GAL),
