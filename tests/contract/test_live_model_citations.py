@@ -53,7 +53,7 @@ def _build(ssp, **extra):
         (
             {
                 "neb": {"type": "none"},
-                "agn": {"type": "composable", "disc": builders.agn.disc.multicolor(defaults=FREE)},
+                "agn": {"type": "composable", "disc": builders.agn.disc.multicolor(all_params=FREE)},
                 "xray": {"type": "simple"},
             },
             "lehmer2016",

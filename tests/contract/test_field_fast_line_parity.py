@@ -55,7 +55,7 @@ def test_field_fast_line_matches_exact():
         observation=obs,
         sfh={"type": ["dpl", "field"], "all_params": FREE},
         met={"logzsol": Fixed(-0.3)},
-        dust_attenuation=builders.dust.two_component(defaults=FREE, law="calzetti"),
+        dust_attenuation=builders.dust.two_component(all_params=FREE, law="calzetti"),
         neb=builders.neb.ssp(),
         redshift=Fixed(0.1),
         igm={"type": "none"},

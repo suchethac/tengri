@@ -4,8 +4,9 @@
 """Contract tests for the all_params wildcard naming consistency.
 
 Validates that:
-- Builders accept all_params= as the canonical spelling
-- defaults= on builders still works and warns (deprecated)
+- Builders accept all_params= as the only spelling
+- defaults= on builders raises TypeError with guidance
+- _= on builders raises TypeError with guidance
 - Dict grammar rejects defaults= with guidance to use all_params=
 - Builder and dict grammar spellings produce identical models
 """
@@ -61,36 +62,15 @@ class TestBuilderAllParams:
         assert sfh_dict["all_params"] is FIXED
         assert sfh_dict["alpha"] == Uniform(0.5, 3.0)
 
-    def test_builder_defaults_deprecated_alias(self):
-        """Builder accepts deprecated defaults= with a warning."""
-        with pytest.warns(DeprecationWarning, match=r"defaults=.*all_params="):
-            sfh_dict = builders.sfh.dpl(defaults=FREE)
-        assert sfh_dict["type"] == "dpl"
-        assert sfh_dict["all_params"] is FREE
+    def test_builder_defaults_retired_raises(self):
+        """Builder rejects retired defaults= with TypeError."""
+        with pytest.raises(TypeError, match=r"defaults=.*retired.*all_params="):
+            builders.sfh.dpl(defaults=FREE)
 
-    def test_builder_rejects_both_all_params_and_defaults(self):
-        """Builder raises if both all_params= and defaults= are passed."""
-        with pytest.raises(TypeError, match=r"all_params=.*defaults=.*not both"):
-            builders.sfh.dpl(all_params=FREE, defaults=FIXED)
-
-    def test_builder_legacy_underscore_still_works(self):
-        """Builder accepts legacy _= with a deprecation warning."""
-        with pytest.warns(DeprecationWarning, match=r"_=.*all_params="):
-            sfh_dict = builders.sfh.dpl(_=FREE)
-        assert sfh_dict["type"] == "dpl"
-        assert sfh_dict["all_params"] is FREE
-
-    def test_builder_rejects_all_params_and_underscore(self):
-        """Builder raises if both all_params= and _= are passed."""
-        with pytest.raises(TypeError, match=r"all_params=.*_=.*not both"):
-            builders.sfh.dpl(all_params=FREE, _=FIXED)
-
-    def test_builder_rejects_defaults_and_underscore(self):
-        """Builder raises if both defaults= and _= are passed."""
-        # The TypeError is raised, and we don't emit a warning because
-        # the error happens before the deprecation path
-        with pytest.raises(TypeError, match=r"defaults=.*_=.*not both"):
-            builders.sfh.dpl(defaults=FREE, _=FIXED)
+    def test_builder_underscore_retired_raises(self):
+        """Builder rejects retired _= with TypeError."""
+        with pytest.raises(TypeError, match=r"_=.*retired.*all_params="):
+            builders.sfh.dpl(_=FREE)
 
 
 class TestDictGrammarAllParams:
@@ -122,7 +102,7 @@ class TestDictGrammarAllParams:
 
 
 class TestMultipleBuilderTypes:
-    """Test that all builder types accept all_params= and deprecate defaults=."""
+    """Test that all builder types accept all_params= as the canonical spelling."""
 
     @pytest.mark.parametrize("builder_fn,name", BUILDER_VARIANTS)
     def test_all_builders_accept_all_params(self, builder_fn, name):
@@ -136,12 +116,10 @@ class TestMultipleBuilderTypes:
         assert dust_dict["type"] == "two_component"
         assert dust_dict["all_params"] is FIXED
 
-    def test_dust_defaults_deprecated(self):
-        """dust.two_component accepts deprecated defaults= with warning."""
-        with pytest.warns(DeprecationWarning, match=r"defaults=.*all_params="):
-            dust_dict = builders.dust.two_component(defaults=FIXED, law="calzetti")
-        assert dust_dict["type"] == "two_component"
-        assert dust_dict["all_params"] is FIXED
+    def test_dust_defaults_retired_raises(self):
+        """dust.two_component rejects retired defaults=."""
+        with pytest.raises(TypeError, match=r"defaults=.*retired"):
+            builders.dust.two_component(defaults=FIXED, law="calzetti")
 
     def test_neb_all_params_canonical(self):
         """neb.cue accepts all_params= canonically."""
@@ -149,12 +127,10 @@ class TestMultipleBuilderTypes:
         assert neb_dict["type"] == "cue"
         assert neb_dict["all_params"] is FIXED
 
-    def test_neb_defaults_deprecated(self):
-        """neb.cue accepts deprecated defaults= with warning."""
-        with pytest.warns(DeprecationWarning, match=r"defaults=.*all_params="):
-            neb_dict = builders.neb.cue(defaults=FIXED)
-        assert neb_dict["type"] == "cue"
-        assert neb_dict["all_params"] is FIXED
+    def test_neb_defaults_retired_raises(self):
+        """neb.cue rejects retired defaults=."""
+        with pytest.raises(TypeError, match=r"defaults=.*retired"):
+            builders.neb.cue(defaults=FIXED)
 
 
 class TestBuilderDictEquivalence:
@@ -219,24 +195,3 @@ class TestBuilderDictEquivalence:
         )
 
         assert model_builder.spec.free_params == model_dict.spec.free_params
-
-    def test_deprecated_defaults_produces_same_model(
-        self, synthetic_ssp_wide, synthetic_tophat_obs
-    ):
-        """Deprecated defaults= produces the same model as all_params=."""
-        with pytest.warns(DeprecationWarning):
-            model_deprecated = SEDModel.build(
-                ssp_data=synthetic_ssp_wide,
-                observation=synthetic_tophat_obs,
-                redshift=Fixed(0.1),
-                sfh=builders.sfh.dpl(defaults=FREE),
-            )
-
-        model_canonical = SEDModel.build(
-            ssp_data=synthetic_ssp_wide,
-            observation=synthetic_tophat_obs,
-            redshift=Fixed(0.1),
-            sfh=builders.sfh.dpl(all_params=FREE),
-        )
-
-        assert model_deprecated.spec.free_params == model_canonical.spec.free_params

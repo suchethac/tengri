@@ -177,10 +177,10 @@ because no ``dust`` group was given. Read
 wildcard fixed everything.
 """
 
-#: Canonical wildcard key in the nested-dict grammar. Sets ``FREE``/``FIXED``
-#: for every parameter in a group. Accepted on input and internally canonical,
-#: but ``WILDCARD_ALIAS`` is the preferred user-facing spelling; ``'*'`` is
-#: slated for deprecation.
+#: Internal wildcard key in the nested-dict grammar. Sets ``FREE``/``FIXED``
+#: for every parameter in a group. The normalizer rewrites user-facing
+#: ``WILDCARD_ALIAS`` ('all_params') to this key internally. '*' is NOT a
+#: user input synonym; it is the internal representation after normalization.
 WILDCARD_KEY = "*"
 
 #: Preferred, self-explanatory spelling of the wildcard key. Equivalent to

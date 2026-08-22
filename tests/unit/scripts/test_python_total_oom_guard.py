@@ -47,11 +47,11 @@ def _write_pressure(path: Path, avail_kb: int, swap_used_kb) -> Path:
 
 
 def _run_guard(
-    tmp_path: Path, ps_procs, *, avail_kb, swap_used_kb, shipped_defaults=False, **env_overrides
+    tmp_path: Path, ps_procs, *, avail_kb, swap_used_kb, shipped_all_params=False, **env_overrides
 ):
     """Run one guard tick against fixtures and return the log text.
 
-    ``shipped_defaults=True`` omits the threshold neutralizers so the guard runs
+    ``shipped_all_params=True`` omits the threshold neutralizers so the guard runs
     the configuration a real machine gets. Any test asking "would the guard as
     installed have caught this?" MUST use it: setting the thresholds by hand
     proves only that some configuration works, never that the shipped default
@@ -211,7 +211,7 @@ def test_swap_undercount_must_not_veto_a_firing_trigger(tmp_path):
         procs,
         avail_kb=int(0.18 * 48 * GB),
         swap_used_kb=[15 * GB, 18 * GB, 21 * GB, 22 * GB],
-        shipped_defaults=True,
+        shipped_all_params=True,
         RAM_KB_OVERRIDE=48 * GB,
         TOTAL_LIMIT_GB=32,
         MAX_TICKS=4,
@@ -278,7 +278,7 @@ def test_the_2026_08_10_incident_now_trips(tmp_path):
         _INCIDENT_PROCS,
         avail_kb=_INCIDENT_AVAIL_KB,
         swap_used_kb=_INCIDENT_SWAP_KB,
-        shipped_defaults=True,
+        shipped_all_params=True,
         RAM_KB_OVERRIDE=_RAM_KB_48,
         TOTAL_LIMIT_GB=32,
     )
@@ -320,7 +320,7 @@ def test_a_recovered_machine_holding_more_rss_does_not_trip(tmp_path):
         procs,
         avail_kb=int(0.44 * _RAM_KB_48),
         swap_used_kb=int(8.4 * GB),
-        shipped_defaults=True,
+        shipped_all_params=True,
         RAM_KB_OVERRIDE=_RAM_KB_48,
         TOTAL_LIMIT_GB=32,
     )
@@ -340,7 +340,7 @@ def test_swap_growth_trips_below_the_absolute_level(tmp_path):
         _INCIDENT_PROCS,
         avail_kb=int(0.30 * _RAM_KB_48),
         swap_used_kb=[6 * GB, 9 * GB, 13 * GB, 17 * GB],
-        shipped_defaults=True,
+        shipped_all_params=True,
         RAM_KB_OVERRIDE=_RAM_KB_48,
         TOTAL_LIMIT_GB=32,
         MAX_TICKS=4,
@@ -362,7 +362,7 @@ def test_flat_high_swap_alone_does_not_trip(tmp_path):
         _INCIDENT_PROCS,
         avail_kb=int(0.40 * _RAM_KB_48),
         swap_used_kb=[25 * GB, 25 * GB, 25 * GB],
-        shipped_defaults=True,
+        shipped_all_params=True,
         RAM_KB_OVERRIDE=_RAM_KB_48,
         TOTAL_LIMIT_GB=32,
         MAX_TICKS=3,

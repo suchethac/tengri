@@ -58,7 +58,7 @@ setup_style()
 # Two notices that are correct, and correct to ignore *here*:
 #   - a wNE library warns that nebular emission is already in the templates and must
 #     be paired with the baked-in backend, which is exactly the pairing used below;
-#   - two_component(defaults=FREE) frees the two Calzetti optical depths and reports
+#   - two_component(all_params=FREE) frees the two Calzetti optical depths and reports
 #     that Rv, delta, the bump strength and the obscured fraction stay fixed. They
 #     belong to other attenuation laws, and holding them constant is the point: this
 #     notebook varies the star-formation history, not the dust law.
@@ -165,7 +165,7 @@ def build(observation, n_grid=N_GRID, approx=FAST_PATH):
         observation=observation,
         sfh={"type": ["dpl", "field"], "all_params": FREE},
         met={"logzsol": Fixed(-0.3), "all_params": FIXED},
-        dust_attenuation=builders.dust.two_component(defaults=FREE, law="calzetti"),
+        dust_attenuation=builders.dust.two_component(all_params=FREE, law="calzetti"),
         neb=builders.neb.ssp(),
         redshift=Fixed(Z_GAL),
         igm={"type": "none"},

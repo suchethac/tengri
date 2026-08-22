@@ -66,10 +66,10 @@ Notes
 **Not JAX-traced**: Like Parameters itself, parse_groups is a pure Python
 translator and cannot be called inside a JAX gradient tape.
 
-**Wildcard semantics**: The 'all_params' key (or its synonym '*') in a group
-dict applies a default (FREE or FIXED) to all parameters in that group not
-explicitly overridden. 'all_params' is the preferred spelling; '*' is accepted
-and slated for deprecation.
+**Wildcard semantics**: The 'all_params' key in a group dict applies a default
+(FREE or FIXED) to all parameters in that group not explicitly overridden.
+'all_params' is the only accepted user-facing spelling; '*' is an internal key
+the normalizer rewrites to, not a user input synonym.
 
 **Sentinels**: FREE and FIXED are singleton objects that preserve identity
 across copy and pickle operations.
@@ -3359,6 +3359,13 @@ _AGN_SUBBLOCK_KEYS = frozenset({"disc", "torus", "nlr", "blr", "feii", "atten", 
 
 #: Per-group structural keys the grammar accepts on top of declared params.
 #: Keys nested in a sub-block (e.g. ``dust.emission``) appear separately.
+# Do NOT remove entries from _GROUP_STRUCTURAL_KEYS. The '*' key (WILDCARD_KEY)
+# is required for post-normalization acceptance — validation runs after
+# _normalize_wildcard_keys converts user-facing 'all_params' to '*', and the
+# acceptance set must contain '*' for the converted dict to pass validation.
+# The 'all_params' key is required as user-facing vocabulary for typo
+# suggestions and displayed key lists in error messages. Removing either breaks
+# a different consumer.
 _GROUP_STRUCTURAL_KEYS: dict[str, frozenset[str]] = {
     "sfh": frozenset(
         {"type", "*", "all_params", "bin_edges_gyr", "age_kernel", "field_centering"}
@@ -3877,11 +3884,21 @@ def _check_dict_keys(
         suggestions = difflib.get_close_matches(str(key), list(suggestion_pool), n=2, cutoff=0.6)
         # A suggestion identical to the rejected key is noise, not help.
         suggestions = [s for s in suggestions if s != str(key)]
+        # Filter out the internal '*' key from suggestions defensively.
+        suggestions = [s for s in suggestions if s != WILDCARD_KEY]
         suggest_str = f" Did you mean: {', '.join(suggestions)}?" if suggestions else ""
+        # Display user-facing keys only (exclude internal WILDCARD_KEY '*').
+        displayed_keys = sorted(
+            {
+                k
+                for k in _GROUP_STRUCTURAL_KEYS.get(group, frozenset({"type"}))
+                if k != WILDCARD_KEY
+            }
+        )
         raise ValueError(
             f"Unknown key {key!r} in group {group!r}.{suggest_str} "
             f"Valid structural keys for this group are: "
-            f"{sorted(_GROUP_STRUCTURAL_KEYS.get(group, frozenset({'type', '*'})))}."
+            f"{displayed_keys}."
         )
 
 
