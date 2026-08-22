@@ -8786,7 +8786,7 @@ class SEDModel:
         The resolved model configuration can be inspected and edited via:
 
         >>> config = model.spec.to_groups()  # dict with all groups
-        >>> model.spec.summary()              # print with provenance tags
+        >>> model.spec.summary()  # print with provenance tags
 
         See Also
         --------
