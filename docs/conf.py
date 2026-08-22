@@ -498,6 +498,19 @@ _REGISTRY_ORDER = (
 _TOO_LONG_TO_PRINT = ("list_filters",)
 
 
+def _write_parameter_tables(app=None):
+    """Render per-domain parameter tables from _GROUP_STRUCTURAL_KEYS."""
+    import pathlib
+    import subprocess
+    import sys
+
+    repo_root = pathlib.Path(__file__).resolve().parent.parent
+    script = repo_root / "scripts" / "generate_parameter_tables.py"
+    result = subprocess.run([sys.executable, str(script)], cwd=str(repo_root))
+    if result.returncode != 0:
+        raise RuntimeError(f"Parameter table generator failed with code {result.returncode}")
+
+
 def _write_component_reference(app=None):
     """Render every live registry to ``_generated/component_tables.rst``."""
     import tengri
@@ -533,6 +546,7 @@ def _write_component_reference(app=None):
 def setup(app):
     # Before anything is read, so components.md can include the result.
     app.connect("builder-inited", _write_component_reference)
+    app.connect("builder-inited", _write_parameter_tables)
     # Priority 1000 runs *after* sphinx-gallery's own builder-inited handler.
     app.connect("builder-inited", _fix_gallery_index_toctree, priority=1000)
     # env-before-read-docs fires AFTER sphinx-gallery has generated the

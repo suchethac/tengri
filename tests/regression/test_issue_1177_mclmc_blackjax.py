@@ -64,7 +64,7 @@ requires_blackjax_16 = pytest.mark.skipif(
 @pytest.fixture(scope="module")
 def tiny_fitter():
     """A 2-free-parameter photometric target — the smallest honest MCLMC problem."""
-    from tengri import Fixed, ForwardModel, Observation, Photometry, SEDModel
+    from tengri import FREE, Fixed, ForwardModel, Observation, Photometry, SEDModel
     from tengri.components.stellar.sps.dsps_wrapper import SSPData
     from tengri.inference.fitter import Fitter
     from tengri.observation.photometry import FilterCurve
@@ -79,7 +79,13 @@ def tiny_fitter():
         for i, (lo, hi) in enumerate([(3500.0, 4500.0), (5000.0, 6500.0), (7500.0, 9000.0)])
     )
     obs = Observation(photometry=Photometry(filters=curves))
-    sed = SEDModel.build(ssp_data=ssp, observation=obs, sfh={"type": "dpl"}, redshift=Fixed(0.05))
+    sed = SEDModel.build(
+        ssp_data=ssp,
+        observation=obs,
+        sfh={"type": "dpl"},
+        dust_attenuation={"type": "two_component", "law": "calzetti", "all_params": FREE},
+        redshift=Fixed(0.05),
+    )
     truth = {"dust_tau_bc": 0.3, "dust_tau_diff": 0.2}
     data = jnp.asarray(np.asarray(sed.predict_photometry(truth)))
     noise = jnp.asarray(0.05 * np.abs(np.asarray(data)))

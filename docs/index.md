@@ -120,6 +120,7 @@ and [NOTICE](https://github.com/suchethac/tengri/blob/main/NOTICE).
    spine/02_sed_anatomy
    spine/03_discovering_the_menu
    spine/04_building_models
+   model_grammar_design
 
 .. toctree::
    :caption: Fitting workflows
@@ -154,6 +155,7 @@ and [NOTICE](https://github.com/suchethac/tengri/blob/main/NOTICE).
 
    api/index
    forward_model
+   model_configuration
    components
    units
    method_selection
