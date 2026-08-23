@@ -25,7 +25,7 @@ The following conduct is not tolerated in this project:
 
 ## Enforcement
 
-Reports of misconduct should be sent to cooray@stanford.edu with a clear, factual account of what happened, when, and who was involved.
+Reports of misconduct should be sent to astro.tengri@gmail.com with a clear, factual account of what happened, when, and who was involved.
 
 The project maintainer will review reports in confidence, investigate as needed, and respond within one week. Actions taken may include:
 

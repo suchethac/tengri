@@ -13,7 +13,7 @@ make_log_age_grid
 
 .. autofunction:: tengri.make_log_age_grid
 
-Noise Utilities
+Noise utilities
 ---------------
 
 .. autofunction:: tengri.compute_effective_noise
@@ -51,7 +51,7 @@ Batching
 
 .. autofunction:: tengri.vmap_chunked
 
-Parameter Introspection
+Parameter introspection
 -----------------------
 
 Read-only walker over every declared free parameter — per-component
@@ -81,7 +81,7 @@ ParameterRecord
    :members:
    :show-inheritance:
 
-Physical Constants
+Physical constants
 ------------------
 
 Fundamental physical constants in CGS units.

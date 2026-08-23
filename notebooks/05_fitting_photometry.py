@@ -14,21 +14,20 @@
 # ---
 
 # %% [markdown]
-# # Fitting photometry: more parameters, and how to trust the fit
+# # Fitting photometry
 #
-# [`00_quickstart`](00_quickstart.py) ran a fit and showed the posterior SED,
-# SFH, and corner. This notebook keeps that exact machinery — `SEDModel.build`
-# with the `WavePrecomp` lookup table, a prewarmed two-chain NUTS run — and
-# extends it in the two ways that matter for real work:
+# ## What you will do
+# Extend the quickstart model to eight free parameters, adding stellar metallicity and diffuse dust optical depth. You'll fit a mock galaxy and verify that the posterior is trustworthy through convergence diagnostics, chain traces, and posterior predictive checks.
 #
-# 1. **More free parameters.** On top of the quickstart's SFH + birth-cloud
-#    dust, we free the stellar **metallicity** and the **diffuse** dust optical
-#    depth. That opens the classic age–metallicity–dust degeneracy, which is
-#    the thing broadband photometry struggles with.
-# 2. **Verifying the posterior.** The second half is the part the quickstart
-#    skips: per-parameter split-R̂ and effective sample size, divergence count,
-#    chain traces, and a posterior-predictive χ². These are what let you say a
-#    credible interval means something.
+# ## What you need
+# An SSP grid, a panchromatic photometric filter set (UV through mid-infrared), and a clear understanding of degeneracies between age, metallicity, and dust.
+#
+# ## What you will have
+# A posterior sample with per-parameter convergence statistics, chain traces, posterior-predictive residuals, and confidence in the credible intervals.
+#
+# ---
+#
+# [`00_quickstart`](00_quickstart.py) ran a minimal fit. This notebook keeps the same machinery — `SEDModel.build` with the `WavePrecomp` lookup table, NUTS sampling — and extends it in the two ways that matter for real work. First, we add free parameters: stellar metallicity and diffuse dust optical depth, opening the classic age–metallicity–dust degeneracy that broadband photometry struggles with. Second, we verify the posterior using per-parameter split-R̂, effective sample size, divergence counts, chain traces, and posterior-predictive χ². These diagnostics let you know whether a credible interval actually means something.
 
 # %%
 from _setup import FIG_DIR, effective_wavelengths_um, quiet

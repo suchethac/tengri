@@ -1,11 +1,11 @@
-Physics Models
+Physics models
 ==============
 
 The building blocks of tengri's forward model: star formation history
 parameterizations, power spectral density functions, dust attenuation,
 stellar population synthesis, and filter handling.
 
-Star Formation History
+Star formation history
 ----------------------
 
 Analytic mean-SFH functional forms. Each takes a log-age grid and shape
@@ -33,8 +33,8 @@ parameters, returning SFR in solar masses per year.
 
 .. autofunction:: tengri.triweight_burst
 
-SFH Registry
-~~~~~~~~~~~~~
+SFH registry
+~~~~~~~~~~~~
 
 .. autofunction:: tengri.resolve_sfh
 
@@ -48,7 +48,7 @@ SFH Registry
 
 .. autodata:: tengri.components.stellar.sfh.registry.FIELD_MODEL_REGISTRY
 
-Power Spectral Density
+Power spectral density
 ----------------------
 
 DRW (damped random walk) PSD models that govern the burstiness of star
@@ -62,8 +62,8 @@ formation histories via Gaussian process priors.
 
 .. autofunction:: tengri.compute_sqrt_power_drw
 
-GP Generation
--------------
+GP generation
+--------------
 
 Functions for generating Gaussian process realizations from PSD parameters
 and a latent vector.
@@ -76,7 +76,7 @@ and a latent vector.
 
 .. autofunction:: tengri.gp_from_xi
 
-Dust Attenuation
+Dust attenuation
 -----------------
 
 Two-component dust attenuation (birth cloud + diffuse ISM) following
@@ -91,7 +91,7 @@ Attenuation curves: ``calzetti``, ``cardelli``, ``kriek_conroy``, ``smc``,
    :members: calzetti, cardelli, kriek_conroy, smc, lmc, power_law, wg00_shell, wg00_cloudy, wg00_dusty
    :noindex:
 
-Dust Emission
+Dust emission
 ~~~~~~~~~~~~~
 
 Energy-balanced IR dust emission models.
@@ -107,7 +107,7 @@ loaded from bundled data files.
 
 .. autofunction:: tengri.load_pahspec_draine2021
 
-Dust Priors
+Dust priors
 ~~~~~~~~~~~
 
 Redshift-dependent attenuation priors from cosmological simulations.
@@ -137,7 +137,7 @@ Accretion disc, torus, BLR, NLR, and unified AGN models.
    :members: unified_agn, multicolor_agn, kubota_done_full_agn, unified_nlr_blr
    :noindex:
 
-Nebular Emission
+Nebular emission
 ----------------
 
 Nebular line and continuum emission from CLOUDY grids or the Cue neural
@@ -151,7 +151,7 @@ network emulator, with optional shock and DIG mixing.
    :members: mix_dig_emission
    :noindex:
 
-Observation Models
+Observation models
 ------------------
 
 Photometry, spectroscopy, calibration, and emission line marginalization.
@@ -168,7 +168,58 @@ before it is compared with data.
 
 .. autofunction:: tengri.apply_lsf
 
-Intergalactic Medium
+Radio
+------
+
+Star-formation synchrotron and AGN jets. Radio models activate via nested
+dictionaries separating star-forming and AGN components (e.g.
+``SEDModel.build(..., radio={'sf': {'type': 'bell2003'}, 'agn': {'type': 'powerlaw'}})``)
+or compact single-model activation (e.g. ``{'type': 'condon92'}`` combining both).
+Discover available models and radio-block options via:
+
+.. autofunction:: tengri.list_radio_models
+   :noindex:
+
+.. autofunction:: tengri.list_radio_blocks
+   :noindex:
+
+Radio SED models are configured via SEDComponent classes with configurable
+parameters for synchrotron spectral index, AGN loudness, and star-formation
+efficiency.
+
+.. autoclass:: tengri.components.radio.RadioDPL
+   :members:
+   :show-inheritance:
+
+.. autoclass:: tengri.components.radio.RadioPowerLawSEDComponent
+   :members:
+   :show-inheritance:
+
+X-ray
+------
+
+X-ray emission from accretion-powered AGN coronae and stellar binary systems
+(both high-mass and low-mass). X-ray models activate via dictionary
+(e.g. ``SEDModel.build(..., xray={'type': 'simple'})`` or
+``xray={'type': 'lopez24'}`` for IR-selected AGN).
+Discover available models via:
+
+.. autofunction:: tengri.list_xray_models
+   :noindex:
+
+X-ray SED models include AGN corona normalizations tied to either UV-optical
+disc emission or mid-infrared dust luminosity, and XRB contributions scaled
+by galaxy stellar mass.
+
+.. autoclass:: tengri.components.xray.AGNXRayCoronaSEDComponent
+   :members:
+   :show-inheritance:
+
+.. autoclass:: tengri.components.xray.XRayAirdSEDComponent
+   :members:
+   :show-inheritance:
+
+Intergalactic medium
 --------------------
 
 Mean IGM attenuation blueward of Lyman-alpha.
@@ -185,7 +236,11 @@ Mean IGM attenuation blueward of Lyman-alpha.
 
 .. autofunction:: tengri.igm_transmission_meiksin06
 
-Stellar Population Synthesis
+.. automodule:: tengri.components.igm
+   :members: igm_transmission_asada25
+   :noindex:
+
+Stellar population synthesis
 ----------------------------
 
 DSPS-based stellar population synthesis: loading SSP grids and computing
@@ -222,7 +277,7 @@ Loading and managing photometric filter transmission curves.
 
 .. autofunction:: tengri.load_filter_set
 
-Spatial Profiles
+Spatial profiles
 ----------------
 
 Surface-brightness profiles and the sub-models that compose them. A

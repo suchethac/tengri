@@ -89,25 +89,25 @@ the ``population`` slot — the same engine drives it::
     result = forward.fit(method="vi")
 
 Constructing :class:`~tengri.PopulationFitter` directly is deprecated and will
-be removed in tengri v1.0 (issue #211); the class remains as the routed
-implementation behind the pattern above.
+be removed in tengri v1.0; the class remains as the routed implementation
+behind the pattern above.
 
-PopulationSEDModel
-~~~~~~~~~~~~~~~~~~
+Population SED model
+~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: tengri.PopulationSEDModel
    :members:
    :show-inheritance:
 
-PopulationFitter
-~~~~~~~~~~~~~~~~
+Population fitter
+~~~~~~~~~~~~~~~~~
 
 .. autoclass:: tengri.PopulationFitter
    :members:
    :show-inheritance:
 
-PopulationPosterior
-~~~~~~~~~~~~~~~~~~~
+Population posterior
+~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: tengri.PopulationPosterior
    :members:
@@ -124,7 +124,7 @@ prior — the measured-versus-prior decomposition of a fit.
 .. autoclass:: tengri.ParameterInformation
    :members:
 
-sample_raytrace
+Sample raytrace
 ---------------
 
 .. autofunction:: tengri.sample_raytrace

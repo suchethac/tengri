@@ -19,22 +19,22 @@ Gaussian
    :members:
    :show-inheritance:
 
-LogUniform
-----------
+Log uniform
+-----------
 
 .. autoclass:: tengri.LogUniform
    :members:
    :show-inheritance:
 
-LogNormal
----------
+Log normal
+----------
 
 .. autoclass:: tengri.LogNormal
    :members:
    :show-inheritance:
 
-StudentT
---------
+Student t
+---------
 
 .. autoclass:: tengri.StudentT
    :members:

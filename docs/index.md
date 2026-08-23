@@ -109,7 +109,6 @@ and [NOTICE](https://github.com/suchethac/tengri/blob/main/NOTICE).
    overview
    installation
    spine/00_quickstart
-   spine/01_why_jax
    citation
 
 .. toctree::
@@ -117,13 +116,14 @@ and [NOTICE](https://github.com/suchethac/tengri/blob/main/NOTICE).
    :maxdepth: 1
    :hidden:
 
+   spine/01_why_jax
    spine/02_sed_anatomy
    spine/03_discovering_the_menu
    spine/04_building_models
    model_grammar_design
 
 .. toctree::
-   :caption: Common workflows
+   :caption: Fitting workflows
    :maxdepth: 1
    :hidden:
 
@@ -134,7 +134,7 @@ and [NOTICE](https://github.com/suchethac/tengri/blob/main/NOTICE).
    spine/12_simulation_populations
 
 .. toctree::
-   :caption: Examples
+   :caption: Example gallery
    :maxdepth: 1
    :titlesonly:
    :hidden:
@@ -153,16 +153,16 @@ and [NOTICE](https://github.com/suchethac/tengri/blob/main/NOTICE).
    :maxdepth: 1
    :hidden:
 
+   api/index
    forward_model
    model_configuration
    components
-   api/index
+   units
    method_selection
    performance/index
    performance/memory
    performance/compilation
    known_limitations
-   units
 
 .. toctree::
    :caption: Experimental

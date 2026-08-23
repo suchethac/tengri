@@ -1,3 +1,7 @@
+# Known Bugs — Internal Engineering Audit
+
+This is an internal engineering audit record kept for contributors — users should see `docs/known_limitations.md` instead.
+
 # Known Bugs — Audit 2026-03-31 (Updated 2026-04-30)
 
 **2026-04-30 update:** BUG-NSS-01, BUG-NSS-02, and BUG-NSS-03 (all from the HST AR proposal

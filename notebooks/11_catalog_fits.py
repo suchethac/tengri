@@ -14,28 +14,20 @@
 # ---
 
 # %% [markdown]
-# # Catalog fits: a survey in parallel
+# # Catalog fitting in parallel
 #
-# Notebooks [`05`](05_fitting_photometry.py)–[`10`](10_fastspecfit_joint_fit.py)
-# fit *one* galaxy at a time. A survey is not one galaxy. Rubin LSST will deliver
-# photometry for **billions** of galaxies; the DESI/Euclid value-added catalogs
-# are already in the tens of millions. The unit of work is no longer a fit — it
-# is a *catalog* of fits.
+# ## What you will do
+# Fit thousands of independent galaxies as one vectorized program, advancing them all together on each sampler step. You'll implement a Rubin-LSST-style photometric redshift survey with free dust and compare single-galaxy-at-a-time fitting to the vectorized catalog approach.
 #
-# The good news is that a catalog of independent galaxies is
-# **embarrassingly parallel**: each galaxy is its own low-dimensional posterior,
-# and nothing couples them. The naive way to exploit that is a Python `for` loop
-# over per-galaxy fits — correct, but it pays the JIT compile and walks the
-# galaxies one at a time. `Catalog` does the same fits as **one vectorized program**:
-# `forward_chunk_size=K` galaxies advance their chains *together* on every
-# sampler step, and the compiled graph is `O(1)` in the catalog size `N`. On a
-# GPU those `K` chains fill the card's lanes at once — that is the throughput win.
+# ## What you need
+# An SSP grid with baked-in nebular emission (wNE), a photometric filter set spanning optical to near-IR, and a vectorized sampler infrastructure (`Catalog` class).
 #
-# This notebook builds a **Rubin-LSST-style** scenario — LSST *ugrizy* plus the
-# Euclid near-IR that a real LSST-era catalog carries — with **free redshift and
-# dust** (a photometric-redshift fit) over an SSP that carries nebular emission,
-# fits a mock catalog in parallel, and **prints the timing in detail**, because
-# the whole point is how fast a catalog goes through.
+# ## What you will have
+# A posterior for thousands of galaxies completed in seconds on a GPU, with a clear picture of how vectorization drops per-galaxy cost as K galaxies fill the accelerator's compute lanes.
+#
+# ---
+#
+# Notebooks [`05`](05_fitting_photometry.py)–[`10`](10_fastspecfit_joint_fit.py) fit one galaxy at a time. A survey is not one galaxy. Rubin LSST will deliver billions of galaxies; the DESI/Euclid value-added catalogs are already tens of millions. A catalog of independent galaxies is embarrassingly parallel—each galaxy is its own low-dimensional posterior. The naive Python `for` loop over per-galaxy fits is correct but walks them one at a time, paying the JIT compile repeatedly. The `Catalog` class does the same fits as one vectorized program: K galaxies advance their chains together on every sampler step, the compiled graph is O(1) in catalog size N, and on a GPU those K chains fill the card's compute lanes at once. This notebook builds a Rubin-LSST-style scenario (LSST *ugrizy* plus Euclid near-IR) with free redshift and dust, fits a mock catalog, and prints detailed timings.
 
 # %%
 from _setup import FIG_DIR, quiet
