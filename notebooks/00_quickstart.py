@@ -17,8 +17,8 @@
 # # Quickstart: fit a mock galaxy
 #
 # A star-forming galaxy with 12 broadband fluxes from GALEX, SDSS, 2MASS,
-# and WISE (UV through near-IR), fitted with NUTS on a differentiable JAX
-# forward model.
+# and WISE (UV through near-IR), fitted with Hamiltonian Monte Carlo on a
+# differentiable JAX forward model.
 #
 # Deliberately minimal — the point is to show how *fast* the JIT-compiled
 # forward model and gradients are. Double power-law SFH that rises for ten
@@ -239,70 +239,69 @@ print(f"  ∇log-likelihood  warm:       {time.perf_counter() - t:8.4f} s")
 # the data in the `Data` container with the channel name (here, `photometry`), hand
 # it to the fitter, and pick a method. The channel is explicit and unambiguous.
 #
-# Multi-start ADAM for the MAP point estimate, then NUTS with four parallel
-# chains via `jax.vmap` for the full posterior. The `n_restarts=8` parameter
-# runs eight random inits in parallel and keeps the lowest-loss one, then NUTS
-# is seeded from that MAP point (`init_from=map_result`).
+# Multi-start ADAM for the MAP point estimate, then Hamiltonian Monte Carlo
+# with four parallel chains via `jax.vmap` for the full posterior. The
+# `n_restarts=8` parameter runs eight random inits in parallel and keeps the
+# lowest-loss one, then the chains are seeded from that MAP point
+# (`init_from=map_result`).
 #
-# Two settings make the posterior cheap. `init_from=map_result` starts the
+# Three settings make the posterior cheap. `init_from=map_result` starts the
 # chains at a high-probability point, so a short warm-up suffices where a cold
 # start needs many hundreds of steps. `precondition=True` builds an analytic
 # metric from the model's own Hessian at the MAP point and samples in whitened
 # coordinates — the posterior is unchanged (the map is linear); only the
-# geometry the integrator sees improves, so trajectories are shorter and steps
-# larger. The diagnostics are printed below rather than hidden — read
-# divergences together with R̂.
+# geometry the integrator sees improves. And on that whitened geometry a
+# *fixed* trajectory of 50 leapfrog steps spans the posterior, so plain HMC
+# (`mcmc_hmc`) replaces NUTS: no tree building, every gradient evaluation
+# spent on a draw. (NUTS — `method="mcmc_nuts"` — tunes the trajectory length
+# automatically and is the safer default when you have not measured your
+# model; here it costs the same wall for a quarter of the effective samples.)
+# The diagnostics are printed below rather than hidden — read divergences
+# together with R̂.
 
 # %%
-t = time.perf_counter()
-map_result = forward.fit(
-    Data(photometry=(flux_obs, noise)),
-    method="map",
+data = Data(photometry=(flux_obs, noise))
+map_kwargs = dict(method="map", key=key_fit, n_restarts=8, n_steps=500)
+hmc_kwargs = dict(
+    method="mcmc_hmc",
     key=key_fit,
-    n_restarts=8,
-    n_steps=800,
-)
-print(f"  MAP wall:  {time.perf_counter() - t:6.2f} s")
-
-t = time.perf_counter()
-posterior = forward.fit(
-    Data(photometry=(flux_obs, noise)),
-    method="mcmc_nuts",
-    key=key_fit,
-    init_from=map_result,  # seed all chains at the MAP point
     n_warmup=200,
-    n_samples=125,
+    n_samples=300,
     n_chains=4,
     n_burnin=0,
+    n_leapfrog_steps=50,
     dense_mass_matrix=False,
     target_accept_rate=0.85,
     precondition=True,  # sample in whitened coordinates (metric from the MAP-point Hessian)
 )
-print(f"  NUTS wall (4 chains × 125 = 500 samples): {time.perf_counter() - t:6.2f} s")
+
+# First calls pay one-time JIT compilation (persisted to the on-disk cache)
+# and the warm-up adaptation (cached per model); the timed repeats show the
+# warm cost. Identical key -> identical result.
+t = time.perf_counter()
+map_result = forward.fit(data, **map_kwargs)
+print(f"  MAP first call: {time.perf_counter() - t:6.2f} s  (compile + run)")
+t = time.perf_counter()
+map_result = forward.fit(data, **map_kwargs)
+print(f"  MAP warm:       {time.perf_counter() - t:6.2f} s")
+
+t = time.perf_counter()
+posterior = forward.fit(data, init_from=map_result, **hmc_kwargs)
+print(f"  HMC first call: {time.perf_counter() - t:6.2f} s  (compile + adapt + sample)")
+t = time.perf_counter()
+posterior = forward.fit(data, init_from=map_result, **hmc_kwargs)
+print(f"  HMC warm:       {time.perf_counter() - t:6.2f} s  (4 chains × 300 = 1200 samples)")
 posterior.summary()
 
-# Convergence check. Two numbers, and they fail in different ways.
-#
-# Divergences are the serious one: a divergent transition means the integrator
-# left the typical set, so those draws bias the posterior. This fit reports 0:
-# the MAP start and the preconditioned metric remove the curvature the
-# integrator would otherwise trip on.
-#
-# Split-R̂ measures whether the four chains agree, and lands at ≈ 1.01 here —
-# at the threshold you should insist on before quoting an interval in a paper.
-# That is the deliberate price of a quick look: a 500-draw budget trades the
-# last digit of R̂ for wall time. For publication-grade output, raise
-# `n_samples` (and expect the wall to scale with it).
-#
-# One caveat about how R̂ is earned: the chains start at the MAP point plus a
-# small jitter. Near-identical starts under-disperse the chains, which can
-# flatter R̂ by understating the between-chain variance.
-# And R̂ cannot see a chain that never moved: a frozen chain scores ~1.0 too.
-# Read it together with the divergence count, never alone.
+# Convergence: read R̂ together with the divergence count — divergent
+# transitions bias the draws, and R̂ alone cannot see a frozen chain. For
+# publication-grade intervals insist on R̂ < 1.01 (raise `n_samples`).
 rhat = posterior.rhat()
+ess = posterior.effective_sample_size()
 print(
     f"\n  max split-R̂ = {max(float(v) for v in rhat.values()):.4f}"
     f"    divergences = {posterior.diagnostics.get('n_divergent', 'n/a')}"
+    f"    min ESS = {min(float(v) for v in ess.values()):.0f}"
 )
 
 # %% [markdown]
