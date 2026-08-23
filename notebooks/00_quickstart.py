@@ -261,10 +261,9 @@ print(f"  ∇log-likelihood  warm:       {time.perf_counter() - t:8.4f} s")
 
 # %%
 data = Data(photometry=(flux_obs, noise))
-map_kwargs = dict(method="map", key=key_fit, n_restarts=8, n_steps=500)
+map_kwargs = dict(method="map", n_restarts=8, n_steps=500)
 hmc_kwargs = dict(
     method="mcmc_hmc",
-    key=key_fit,
     n_warmup=200,
     n_samples=300,
     n_chains=4,
@@ -275,22 +274,24 @@ hmc_kwargs = dict(
     precondition=True,  # sample in whitened coordinates (metric from the MAP-point Hessian)
 )
 
-# First calls pay one-time JIT compilation (persisted to the on-disk cache)
-# and the warm-up adaptation (cached per model); the timed repeats show the
-# warm cost. Identical key -> identical result.
-t = time.perf_counter()
-map_result = forward.fit(data, **map_kwargs)
-print(f"  MAP first call: {time.perf_counter() - t:6.2f} s  (compile + run)")
-t = time.perf_counter()
-map_result = forward.fit(data, **map_kwargs)
-print(f"  MAP warm:       {time.perf_counter() - t:6.2f} s")
+# Kernel compilation depends on the model shape, not on the galaxy, and
+# persists in the on-disk cache — pay it once by fitting a throwaway prior
+# draw. Everything galaxy-dependent stays inside the timed fits below: the
+# MAP optimization, the Hessian metric, the warm-up adaptation (step size and
+# mass matrix are tuned to *this* posterior), and the sampling itself.
+key_wt, key_wm, key_wf = jax.random.split(jax.random.PRNGKey(0), 3)
+warm_mock = generate_mock(sed_model, sed_model.spec.sample(key_wt), key=key_wm, snr=30.0)
+warm_data = Data(photometry=(np.asarray(warm_mock["flux_obs"]), np.asarray(warm_mock["noise"])))
+warm_map = forward.fit(warm_data, key=key_wf, **map_kwargs)
+_ = forward.fit(warm_data, key=key_wf, init_from=warm_map, **hmc_kwargs)
 
 t = time.perf_counter()
-posterior = forward.fit(data, init_from=map_result, **hmc_kwargs)
-print(f"  HMC first call: {time.perf_counter() - t:6.2f} s  (compile + adapt + sample)")
+map_result = forward.fit(data, key=key_fit, **map_kwargs)
+print(f"  MAP wall:  {time.perf_counter() - t:6.2f} s")
+
 t = time.perf_counter()
-posterior = forward.fit(data, init_from=map_result, **hmc_kwargs)
-print(f"  HMC warm:       {time.perf_counter() - t:6.2f} s  (4 chains × 300 = 1200 samples)")
+posterior = forward.fit(data, key=key_fit, init_from=map_result, **hmc_kwargs)
+print(f"  HMC wall (adapt + sample; 4 chains × 300 = 1200 draws): {time.perf_counter() - t:6.2f} s")
 posterior.summary()
 
 # Convergence: read R̂ together with the divergence count — divergent
