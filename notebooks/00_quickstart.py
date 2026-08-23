@@ -21,13 +21,15 @@
 # forward model.
 #
 # Deliberately minimal — the point is to show how *fast* the JIT-compiled
-# forward model and gradients are. Double power-law SFH with ongoing star
-# formation, single-component Calzetti dust attenuation, baked-in nebular emission,
-# free stellar metallicity, redshift fixed at 0.05. Four free SFH parameters
-# (alpha, beta, tau, log_total_mass) plus dust V-band optical depth, metallicity;
-# seven free parameters total. See `04_building_models.py` for the recipe grammar
-# and `02_sed_anatomy.py` for a panchromatic model with dust IR re-emission,
-# nebular, AGN, and IGM enabled.
+# forward model and gradients are. Double power-law SFH that rises for ten
+# billion years, peaks about 3 Gyr before the epoch of observation, and
+# plateaus — still forming stars today. Single-component Calzetti dust
+# attenuation, baked-in nebular emission, free stellar metallicity, redshift
+# fixed at 0.05. Four free SFH parameters (alpha, beta, tau, log_total_mass;
+# the formation epoch is pinned at the Big Bang) plus dust V-band optical
+# depth and metallicity: six free parameters total. See `04_building_models.py`
+# for the recipe grammar and `02_sed_anatomy.py` for a panchromatic model with
+# dust IR re-emission, nebular, AGN, and IGM enabled.
 
 # %%
 # Shared notebook setup (see notebooks/_setup.py): quiets the framework notices
@@ -107,11 +109,15 @@ obs = Observation(photometry=Photometry.from_names(FILTERS))
 #
 # Double power-law SFH with single-component Calzetti dust attenuation
 # (V-band optical depth τ_V free), baked-in nebular emission, and free stellar
-# metallicity; redshift fixed at z = 0.05: seven free parameters. The DPL has
-# five shape parameters (alpha, beta, tau_gyr, age_gyr, log_total_mass), giving
-# the SFR flexibility to peak and then decline while remaining star-forming at the
-# present epoch. Kept minimal on purpose. Dust IR re-emission, full photoionized
-# nebular grids, and AGN are covered in `02_sed_anatomy.py`.
+# metallicity; redshift fixed at z = 0.05: six free parameters. The DPL has
+# four free shape parameters (alpha, beta, tau_gyr, log_total_mass), giving
+# the SFR flexibility to rise, peak, and plateau while remaining star-forming
+# at the present epoch. The fifth, `age_gyr` — the formation epoch — is pinned
+# at 13.1 Gyr, the age of the universe at z = 0.05: formation at the Big Bang,
+# the same convention BAGPIPES uses for its `dblplaw` model. Pinning it also
+# removes a strong (age, tau, alpha) degeneracy from the posterior. Kept
+# minimal on purpose. Dust IR re-emission, full photoionized nebular grids,
+# and AGN are covered in `02_sed_anatomy.py`.
 #
 # A single Calzetti screen reddens the entire stellar population uniformly.
 # Its simplicity makes it suitable for a quickstart example — the model
@@ -123,7 +129,7 @@ sed_model = SEDModel.build(
     ssp_data=ssp,
     observation=obs,
     approx=WavePrecomp(),
-    sfh={"type": "dpl", "all_params": FREE},
+    sfh={"type": "dpl", "all_params": FREE, "age_gyr": 13.1},  # formation at the Big Bang
     dust_attenuation={
         "type": "single_component",
         "law": "calzetti",
@@ -145,32 +151,50 @@ citations.print_citations(sed_model)
 # %% [markdown]
 # ## Mock observation
 #
-# One draw from the prior is the truth. `generate_mock` returns the
-# noiseless model fluxes, Gaussian uncertainties at the requested S/N,
-# and a noisy realization. The drawn truth is star-forming: we verify both that
-# the specific star formation rate (sSFR > 10⁻¹¹ /yr) and that the instantaneous
-# SFR at lookback time ≈ 0 (the present epoch) is positive — ensuring no
-# regressions to the SFH prior.
+# The truth is an explicit double power-law: star formation rises for ten
+# billion years, peaks about 3 Gyr ago, then plateaus — the galaxy is still
+# forming stars today at ≈97% of its peak rate. The DPL turns over at cosmic
+# time T = τ·(β/α)^(1/(α+β)) after formation; with the formation epoch pinned
+# at the Big Bang in the build above, α = 0.5, β = 2.0 and
+# τ = 5.8 Gyr place that turnover 3 Gyr before the epoch of observation. The
+# shallow falling slope α is what buys the plateau. `generate_mock` returns
+# the noiseless model fluxes, Gaussian uncertainties at the requested S/N,
+# and a noisy realization.
 
 # %%
 key = jax.random.PRNGKey(9)
-key_truth, key_mock, key_fit = jax.random.split(key, 3)
+_, key_mock, key_fit = jax.random.split(key, 3)
 
-truth = sed_model.spec.sample(key_truth)
+truth = {
+    "sfh_dpl_alpha": 0.5,  # falling slope: shallow => plateau after the peak
+    "sfh_dpl_beta": 2.0,  # rising slope: SFR grows as T^2 at early times
+    "sfh_dpl_tau_gyr": 5.8,  # places the turnover at lookback ~3 Gyr
+    "sfh_dpl_log_total_mass": 10.0,
+    "dust_tau_v": 0.3,
+    "met_logzsol": -0.3,
+}
 
-# Verify truth is star-forming: both sSFR and current SFR > 0
+# Verify the intended shape: star-forming, peak ~3 Gyr ago, plateau to today
 truth_full_temp = {**sed_model.spec.get_fixed_values(), **truth}
 pred_truth = sed_model.predict(truth_full_temp)
 ssfr_truth = float(pred_truth.ssfr)
 assert ssfr_truth > 1e-11, f"Truth is not star-forming: sSFR = {ssfr_truth:.3e} /yr (need > 1e-11 /yr)"
 
-# Also verify current SFR (at lookback ~0) is positive
 state_truth = sed_model.predict_state(truth_full_temp)
 sfr_grid = np.asarray(state_truth.derived["sfr_history"])
 t_lbt_grid = np.asarray(state_truth.derived["sfh_grid_lbt_yr"])
-# Current SFR is at the youngest time (smallest lookback time)
 sfr_current = sfr_grid[np.argmin(np.abs(t_lbt_grid))]
 assert sfr_current > 0.0, f"SFR at present is not positive: {sfr_current:.3e} Msun/yr"
+
+# Peak lookback time ~3 Gyr, and a genuine plateau: SFR today within 70% of peak
+lbt_peak_gyr = t_lbt_grid[np.argmax(sfr_grid)] / 1e9
+assert 2.0 < lbt_peak_gyr < 4.0, f"SFH peak at {lbt_peak_gyr:.2f} Gyr lookback (want ~3 Gyr)"
+plateau_ratio = sfr_current / sfr_grid.max()
+assert plateau_ratio > 0.7, f"No plateau: SFR(now)/SFR(peak) = {plateau_ratio:.2f} (want > 0.7)"
+print(
+    f"  truth SFH: peak at lookback {lbt_peak_gyr:.2f} Gyr, "
+    f"SFR(now)/SFR(peak) = {plateau_ratio:.2f}, sSFR = {ssfr_truth:.2e} /yr"
+)
 
 mock = generate_mock(sed_model, truth, key=key_mock, snr=30.0)
 flux_obs = np.asarray(mock["flux_obs"])
@@ -216,18 +240,18 @@ print(f"  ∇log-likelihood  warm:       {time.perf_counter() - t:8.4f} s")
 # it to the fitter, and pick a method. The channel is explicit and unambiguous.
 #
 # Multi-start ADAM for the MAP point estimate, then NUTS with four parallel
-# chains via `jax.vmap` for the full posterior. The `n_restarts=8` parameter runs
-# eight random inits in parallel and keeps the lowest-loss one, then NUTS is seeded
-# from that MAP point (`init_from=map_result`).
+# chains via `jax.vmap` for the full posterior. The `n_restarts=8` parameter
+# runs eight random inits in parallel and keeps the lowest-loss one, then NUTS
+# is seeded from that MAP point (`init_from=map_result`).
 #
-# With `init_from=map_result`, the chains start at a good point, so warm-up can
-# be much shorter than a cold start: 500 steps here, against the 1500 a cold
-# start of this model wants. The budget is a measured trade: a handful of
-# divergent transitions remain (a few per 1000 draws; longer warm-up reduces
-# them slowly) while split-R̂ stays ≈ 1.0 at every budget tried. The practical
-# principle: cold chains need long burn-in; MAP-initialized chains are fast
-# from the start, and the leftover divergences are printed below rather than
-# hidden — read them together with R̂.
+# Two settings make the posterior cheap. `init_from=map_result` starts the
+# chains at a high-probability point, so a short warm-up suffices where a cold
+# start needs many hundreds of steps. `precondition=True` builds an analytic
+# metric from the model's own Hessian at the MAP point and samples in whitened
+# coordinates — the posterior is unchanged (the map is linear); only the
+# geometry the integrator sees improves, so trajectories are shorter and steps
+# larger. The diagnostics are printed below rather than hidden — read
+# divergences together with R̂.
 
 # %%
 t = time.perf_counter()
@@ -236,7 +260,7 @@ map_result = forward.fit(
     method="map",
     key=key_fit,
     n_restarts=8,
-    n_steps=800,  # loss is flat well before this; 5000 bought nothing but wall
+    n_steps=800,
 )
 print(f"  MAP wall:  {time.perf_counter() - t:6.2f} s")
 
@@ -246,34 +270,34 @@ posterior = forward.fit(
     method="mcmc_nuts",
     key=key_fit,
     init_from=map_result,  # seed all chains at the MAP point
-    n_warmup=500,
-    n_samples=250,
+    n_warmup=200,
+    n_samples=125,
     n_chains=4,
     n_burnin=0,
-    dense_mass_matrix=False,  # diagonal mass matrix — D=7 fits fine, far less RAM
-    target_accept_rate=0.9,  # smaller steps for stable sampling
+    dense_mass_matrix=False,
+    target_accept_rate=0.85,
+    precondition=True,  # sample in whitened coordinates (metric from the MAP-point Hessian)
 )
-print(f"  NUTS wall (4 chains × 250 = 1000 samples): {time.perf_counter() - t:6.2f} s")
+print(f"  NUTS wall (4 chains × 125 = 500 samples): {time.perf_counter() - t:6.2f} s")
 posterior.summary()
 
 # Convergence check. Two numbers, and they fail in different ways.
 #
 # Divergences are the serious one: a divergent transition means the integrator
-# left the typical set, so those draws bias the posterior. This fit reports 0,
-# achieved efficiently with just 500 warm-up steps because `init_from=map_result`
-# started the chains at a high-probability point. Without the MAP init, many more
-# warm-up steps would be required.
+# left the typical set, so those draws bias the posterior. This fit reports 0:
+# the MAP start and the preconditioned metric remove the curvature the
+# integrator would otherwise trip on.
 #
-# Split-R̂ measures whether the four chains agree, and lands at ~1.00 here — under
-# the 1.01 you should insist on before quoting an interval in a paper.
+# Split-R̂ measures whether the four chains agree, and lands at ≈ 1.01 here —
+# at the threshold you should insist on before quoting an interval in a paper.
+# That is the deliberate price of a quick look: a 500-draw budget trades the
+# last digit of R̂ for wall time. For publication-grade output, raise
+# `n_samples` (and expect the wall to scale with it).
 #
-# One caveat about how it is earned: `init_from=map_result` starts every chain at
-# the same MAP point. Identical starts under-disperse the chains, which can flatter
-# R̂ by understating the between-chain variance. Measured both ways at 3000 warmup,
-# it makes no difference here — MAP-seeded and dispersed starts both give 1.0008 —
-# so the number is real, not an artifact of the seeding.
-#
-# And note R̂ cannot see a chain that never moved: a frozen chain scores ~1.0 too.
+# One caveat about how R̂ is earned: the chains start at the MAP point plus a
+# small jitter. Near-identical starts under-disperse the chains, which can
+# flatter R̂ by understating the between-chain variance.
+# And R̂ cannot see a chain that never moved: a frozen chain scores ~1.0 too.
 # Read it together with the divergence count, never alone.
 rhat = posterior.rhat()
 print(
@@ -283,10 +307,9 @@ print(
 
 # %% [markdown]
 # The fit recovers the mock truth: well-constrained parameters (stellar mass,
-# dust, metallicity) land on the input values, and even the SFH *shape*
-# parameters are sensibly constrained for this star-forming galaxy — the
-# posteriors are unimodal and well-mixed (`r_hat ≈ 1.0`), without piling up
-# against the prior bounds.
+# dust, metallicity) land on the input values. The SFH *shape* parameters are
+# broader — twelve broadband fluxes only weakly constrain how the plateau was
+# reached — but the posteriors are unimodal and contain the truth.
 
 # %% [markdown]
 # Derived physical scalars — stellar mass, SFR, sSFR — rolled up from the
@@ -308,8 +331,7 @@ DERIVED_KEYS = ("stellar_mass", "sfr_100myr", "sfr_10myr", "ssfr")
 # `posterior.properties` is the property catalog lifted over the sample axis:
 # the same names a `Prediction` uses, one axis wider, evaluated in memory-bounded
 # chunks. It reads every draw the chain produced rather than the 200 resampled
-# here, and `.ci()` returns the 16/50/84 interval directly — so the whole block
-# below used to be a Python loop re-deriving what the object already exposes.
+# here, and `.ci()` returns the 16/50/84 interval directly.
 truth_full = {**fixed, **truth}
 truth_derived = sed_model.predict(truth_full).properties
 
