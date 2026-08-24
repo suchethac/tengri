@@ -5,7 +5,7 @@ The v3 templates store ``cos_inclination`` **descending** (1 → 0), because the
 inclination nodes ascend in angle.  Every interpolation helper requires strictly
 ascending nodes, and ``compute_grid_weights`` derives its kernel bandwidth from
 the *first* spacing -- which on the descending axis is the axis's **smallest**
-spacing, and negative.  The result was a near-nearest-neighbour lookup on a
+spacing, and negative.  The result was a near-nearest-neighbor lookup on a
 fittable parameter: 23/40 distinct outputs and 60% exactly-zero gradients
 through the production SED path.
 
@@ -77,7 +77,7 @@ def _sum_sed(cos_inc):
 
 
 @requires_skirtor
-def test_skirtor_cos_inc_sweep_is_interpolated_not_nearest_neighbour():
+def test_skirtor_cos_inc_sweep_is_interpolated_not_nearest_neighbor():
     """A 40-point cos_inc sweep through ``skirtor_sed`` yields 40 distinct SEDs.
 
     Pre-#1911 this gave 23 distinct values, with the repeats forming plateaus
@@ -93,7 +93,7 @@ def test_skirtor_cos_inc_sweep_is_interpolated_not_nearest_neighbour():
     distinct = len(np.unique(values))
     assert distinct == 40, (
         f"cos_inc sweep gave {distinct}/40 distinct SEDs; repeats mean the axis is "
-        "being read as a nearest-neighbour lookup again (#1911)."
+        "being read as a nearest-neighbor lookup again (#1911)."
     )
 
 
@@ -102,7 +102,7 @@ def test_skirtor_cos_inc_gradient_is_never_exactly_zero():
     """d(SED)/d(cos_inc) is nonzero at every sweep point.
 
     Pre-#1911, 60% of the sweep returned an exactly-zero gradient, so a fit
-    initialised on one of those plateaus received no signal at all.
+    initialized on one of those plateaus received no signal at all.
     """
     grad_fn = jax.jit(jax.grad(_sum_sed))
     sweep = np.linspace(0.0, 1.0, 40)

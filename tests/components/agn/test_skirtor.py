@@ -119,7 +119,7 @@ class TestSKIRTORAnalytic:
         # ascending order and onto index-space interpolation. The stored axis is
         # descending, so the kernel bandwidth (taken from the first spacing) was
         # both negative and equal to the axis's *smallest* spacing -- a
-        # near-nearest-neighbour lookup. The default ``agn_cos_inc`` is
+        # near-nearest-neighbor lookup. The default ``agn_cos_inc`` is
         # 0.8660254 (30 deg), an exact grid node, so these values move only by
         # the difference between a near-node-exact lookup and a genuine
         # (smoothing) interpolation:
@@ -407,7 +407,7 @@ class TestSKIRTORGradients:
         within an interval but only C0 at a node whose adjacent spacings differ,
         so a central difference straddling a node averages the two one-sided
         slopes and cannot match AD there. 0.5 is exactly such a node: its
-        neighbouring spacings are 0.157980 and 0.142788, and the resulting
+        neighboring spacings are 0.157980 and 0.142788, and the resulting
         half-jump predicts a 5.05% AD-vs-FD gap -- which is what was measured,
         to three significant figures.
 
