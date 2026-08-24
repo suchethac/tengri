@@ -154,8 +154,12 @@ def posterior_plot_sfh(result, truth_sfh=None, ax=None):
 # Convergence thresholds and checks
 # ═══════════════════════════════════════════════════════════════════
 
-# Thresholds following Vehtari et al. (2021) "Rank-normalization,
-# folding, and localization" and Stan/ArviZ conventions.
+#: Industry-standard convergence diagnostic thresholds, following Vehtari et al.
+#: (2021) and Stan/ArviZ conventions. Keys are threshold names
+#: (``'ess_bulk_min'``, ``'ess_total_target'``, ``'divergence_warn'``,
+#: ``'divergence_fail_pct'``, ``'accept_rt_lo'``, ``'accept_rt_hi'``,
+#: ``'accept_nuts_target'``); values are numeric thresholds. Used by
+#: :func:`convergence_check` and :func:`convergence_table`.
 CONVERGENCE_THRESHOLDS = {
     "ess_bulk_min": 100,  # minimum bulk ESS per parameter
     "ess_total_target": 400,  # target total ESS for reliable summaries

@@ -47,7 +47,10 @@ COLORS = {
     "seq": ["#d4d4d4", "#a8a8a8", "#1f77b4", "#2ca02c", "#d62728"],
 }
 
-# Named sampler styles for consistent legends
+#: Matplotlib line and color styles for consistent sampler legends across plots.
+#: Keys are sampler names (``'MAP'``, ``'RT'``, ``'VI'``, ``'MCMC_NUTS'``, etc.);
+#: values are dicts with ``'color'``, ``'ls'`` (line style), ``'lw'`` (line width),
+#: and ``'alpha'`` (opacity). Use these for consistency across the gallery and papers.
 SAMPLER_STYLE = {
     "MAP": {"color": COLORS["map"], "ls": "--", "lw": 2.0, "alpha": 1.0},
     "RT": {"color": COLORS["rt"], "ls": "-", "lw": 2.0, "alpha": 1.0},
@@ -200,7 +203,9 @@ SPECTRAL_FEATURES = {
 # Burstiness plane (for NB01)
 # ═══════════════════════════════════════════════════════════════════
 
-# Galaxy type annotations for the sigma-tau grid
+#: Galaxy type labels for the burstiness plane (sigma-tau grid).
+#: Keys are tuples ``(sigma_bin, tau_bin)`` representing position on the grid;
+#: values are descriptive galaxy type names. Use for annotating parameter space plots.
 GALAXY_ANNOTATIONS = {
     (0, 0): "Dead elliptical",
     (0, 2): "Secular disk",
@@ -222,6 +227,11 @@ SED_XLABEL = r"Rest-frame wavelength (Å)"
 SFH_XLABEL = "Lookback time (Gyr)"
 SFH_YLABEL = r"SFR (M$_\odot$ yr$^{-1}$)"
 
+#: Matplotlib colormaps for parameter sweep plots, keyed by sweep parameter name.
+#: Maps ``'dust'``, ``'agn'``, ``'sfh'``, ``'nebular'``, ``'radio'``, ``'redshift'``,
+#: ``'metallicity'``, ``'stellar_age'`` to colormap names. Defaults are
+#: perceptually-uniform and colorblind-safe; see ``SWEEP_VMIN`` and ``SWEEP_VMAX``
+#: for value clamping.
 SWEEP_CMAPS = {
     # Default to viridis everywhere — perceptually-uniform, colorblind-safe,
     # and the bright-yellow tail is suppressed by the SWEEP_VMAX clamp below
@@ -242,4 +252,7 @@ SWEEP_CMAPS = {
 SWEEP_VMIN = 0.0
 SWEEP_VMAX = 0.85
 
+#: Matplotlib style dict for reference curves in comparison plots.
+#: Contains ``'color'`` (mid-gray), ``'lw'`` (line width), ``'zorder'`` (stacking),
+#: and ``'label'`` for use with :func:`matplotlib.pyplot.plot` and legend.
 REFERENCE_STYLE = dict(color="0.55", lw=2.0, zorder=0, label="reference")
