@@ -191,3 +191,128 @@ class TestCompileSignatureInvariants:
         sig_after = fitter.compile_signature()
 
         assert sig_before == sig_after, "Toggling memory_mode must not invalidate the engine cache"
+
+    def test_identical_ssp_content_produces_equal_signature(self, photometry, spec_dpl):
+        """Two SEDModels with separately-constructed identical SSPData have equal signatures.
+
+        Since PR #1973, the compile signature includes a blake2b content digest
+        of ssp_flux. Two SSPData instances created independently with identical
+        numerical content produce identical digests (content-based, not id-based),
+        so the resulting SEDModel and Fitter signatures are equal.
+
+        This is the (#1973) regression guard: identical-content SSP grids must
+        reuse one compiled engine, not silently run separate ones.
+        """
+        # Create two separately-constructed SSPData with identical content
+        n_met, n_age, n_wave = 8, 15, 200
+
+        ssp1 = SSPData(
+            ssp_wave=jnp.logspace(3, 4.5, n_wave),
+            ssp_flux=jnp.ones((n_met, n_age, n_wave), dtype=jnp.float64),
+            ssp_lg_age_gyr=jnp.linspace(6, 10.1, n_age),
+            ssp_lgmet=jnp.linspace(-2.0, 0.3, n_met),
+        )
+
+        ssp2 = SSPData(
+            ssp_wave=jnp.logspace(3, 4.5, n_wave),
+            ssp_flux=jnp.ones((n_met, n_age, n_wave), dtype=jnp.float64),
+            ssp_lg_age_gyr=jnp.linspace(6, 10.1, n_age),
+            ssp_lgmet=jnp.linspace(-2.0, 0.3, n_met),
+        )
+
+        model1 = SEDModel(spec_dpl, ssp1, observation=photometry)
+        model2 = SEDModel(spec_dpl, ssp2, observation=photometry)
+
+        data = jnp.ones(3)
+        noise = jnp.ones(3) * 0.1
+
+        fitter1 = Fitter(model1, data, noise, data_type="photometry")
+        fitter2 = Fitter(model2, data, noise, data_type="photometry")
+
+        # Both should produce equal signatures
+        sig1 = fitter1.compile_signature()
+        sig2 = fitter2.compile_signature()
+
+        assert sig1 == sig2, (
+            "Separately-constructed identical-content SSPData must produce equal signatures"
+        )
+
+    def test_different_ssp_flux_content_produces_unequal_signature(self, photometry, spec_dpl):
+        """Two SEDModels with different ssp_flux content produce unequal signatures.
+
+        The compile signature includes a blake2b content digest of ssp_flux.
+        Two SSPData instances with the same shape and lgmet but different flux
+        values produce different digests, so their signatures differ.
+
+        This is the (#2047) regression guard: different SSP flux content must
+        NOT be collapsed into one engine (which would silently run wrong physics).
+        """
+        n_met, n_age, n_wave = 8, 15, 200
+
+        ssp1 = SSPData(
+            ssp_wave=jnp.logspace(3, 4.5, n_wave),
+            ssp_flux=jnp.ones((n_met, n_age, n_wave), dtype=jnp.float64),
+            ssp_lg_age_gyr=jnp.linspace(6, 10.1, n_age),
+            ssp_lgmet=jnp.linspace(-2.0, 0.3, n_met),
+        )
+
+        ssp2 = SSPData(
+            ssp_wave=jnp.logspace(3, 4.5, n_wave),
+            ssp_flux=jnp.ones((n_met, n_age, n_wave), dtype=jnp.float64) * 1.1,
+            ssp_lg_age_gyr=jnp.linspace(6, 10.1, n_age),
+            ssp_lgmet=jnp.linspace(-2.0, 0.3, n_met),
+        )  # Different flux content
+
+        model1 = SEDModel(spec_dpl, ssp1, observation=photometry)
+        model2 = SEDModel(spec_dpl, ssp2, observation=photometry)
+
+        data = jnp.ones(3)
+        noise = jnp.ones(3) * 0.1
+
+        fitter1 = Fitter(model1, data, noise, data_type="photometry")
+        fitter2 = Fitter(model2, data, noise, data_type="photometry")
+
+        # Both should produce different signatures
+        sig1 = fitter1.compile_signature()
+        sig2 = fitter2.compile_signature()
+
+        assert sig1 != sig2, "Different ssp_flux content must produce different signatures"
+
+    def test_different_ssp_lgmet_values_produce_unequal_signature(self, photometry, spec_dpl):
+        """Two SEDModels with different ssp_lgmet values produce unequal signatures.
+
+        The compile signature includes a hash of the ssp_lgmet array values
+        (not just shape). Two SSPData instances with the same flux and shape but
+        different metallicity grids produce different signatures.
+        """
+        n_met, n_age, n_wave = 8, 15, 200
+        flux = jnp.ones((n_met, n_age, n_wave), dtype=jnp.float64)
+
+        ssp1 = SSPData(
+            ssp_wave=jnp.logspace(3, 4.5, n_wave),
+            ssp_flux=flux,
+            ssp_lg_age_gyr=jnp.linspace(6, 10.1, n_age),
+            ssp_lgmet=jnp.linspace(-2.0, 0.3, n_met),
+        )
+
+        ssp2 = SSPData(
+            ssp_wave=jnp.logspace(3, 4.5, n_wave),
+            ssp_flux=flux,
+            ssp_lg_age_gyr=jnp.linspace(6, 10.1, n_age),
+            ssp_lgmet=jnp.linspace(-2.0, 0.5, n_met),  # Different metallicity grid
+        )
+
+        model1 = SEDModel(spec_dpl, ssp1, observation=photometry)
+        model2 = SEDModel(spec_dpl, ssp2, observation=photometry)
+
+        data = jnp.ones(3)
+        noise = jnp.ones(3) * 0.1
+
+        fitter1 = Fitter(model1, data, noise, data_type="photometry")
+        fitter2 = Fitter(model2, data, noise, data_type="photometry")
+
+        # Both should produce different signatures
+        sig1 = fitter1.compile_signature()
+        sig2 = fitter2.compile_signature()
+
+        assert sig1 != sig2, "Different ssp_lgmet values must produce different signatures"
