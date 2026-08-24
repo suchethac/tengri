@@ -47,7 +47,7 @@ __all__ = ["cache_dir", "cache_key", "clear_memo", "load", "memo_get", "memo_put
 
 #: Bump when the stored table's meaning changes (transmission formula, node
 #: layout, dtype convention). Entries keyed with an older version are ignored.
-_CACHE_VERSION = 1
+_CACHE_VERSION = 2
 
 #: In-process memo. The on-disk layer alone still costs an npz read per build,
 #: and #1453 measured repeat builds *within* one process re-paying in full.
@@ -70,6 +70,12 @@ def cache_dir() -> Path | None:
 def cache_key(waves_rest, z_grid, igm_model, *, igm_patchy=False, use_dla=False) -> str:
     """Content hash over everything the transmission table depends on.
 
+    Includes session precision (jax_enable_x64) and JAX backend since the
+    transmission values are computed through JAX and inherit session precision.
+    Contamination without these: float32 session writes an entry, float64
+    session reads it (~1e-7 relative error silently poisoning precision
+    benchmarks/parity tests that share a cache dir between arms). Issue #2024.
+
     Parameters
     ----------
     waves_rest : array_like
@@ -90,6 +96,8 @@ def cache_key(waves_rest, z_grid, igm_model, *, igm_patchy=False, use_dla=False)
     str
         Hex digest.
     """
+    import jax
+
     h = hashlib.sha256()
     h.update(f"v{_CACHE_VERSION}".encode())
     for arr in (waves_rest, z_grid):
@@ -98,7 +106,17 @@ def cache_key(waves_rest, z_grid, igm_model, *, igm_patchy=False, use_dla=False)
         # different shape are a different table.
         h.update(repr((a.shape, a.dtype.str)).encode())
         h.update(a.tobytes())
-    h.update(repr((str(igm_model), bool(igm_patchy), bool(use_dla))).encode())
+    h.update(
+        repr(
+            (
+                str(igm_model),
+                bool(igm_patchy),
+                bool(use_dla),
+                bool(jax.config.jax_enable_x64),
+                jax.default_backend(),
+            )
+        ).encode()
+    )
     return h.hexdigest()
 
 
@@ -112,6 +130,12 @@ def band_factor_key(wave_rest, filter_waves, filter_trans, z_grid, igm_model, co
     ``precompute_band_factors`` integrates the transmission against each filter
     response, so its result depends on the filter curves and the convolution
     convention as well — inputs the sub-band node table never sees.
+
+    Includes session precision (jax_enable_x64) and JAX backend since the
+    band factor values are computed through JAX and inherit session precision.
+    Contamination without these: float32 session writes an entry, float64
+    session reads it (~1e-7 relative error silently poisoning precision
+    benchmarks/parity tests that share a cache dir between arms). Issue #2024.
 
     Parameters
     ----------
@@ -133,6 +157,8 @@ def band_factor_key(wave_rest, filter_waves, filter_trans, z_grid, igm_model, co
     str
         Hex digest.
     """
+    import jax
+
     h = hashlib.sha256()
     h.update(f"bf-v{_CACHE_VERSION}".encode())
     for arr in (wave_rest, z_grid):
@@ -145,7 +171,16 @@ def band_factor_key(wave_rest, filter_waves, filter_trans, z_grid, igm_model, co
             a = np.ascontiguousarray(np.asarray(arr, dtype=np.float64))
             h.update(repr((a.shape, a.dtype.str)).encode())
             h.update(a.tobytes())
-    h.update(repr((str(igm_model), str(convention))).encode())
+    h.update(
+        repr(
+            (
+                str(igm_model),
+                str(convention),
+                bool(jax.config.jax_enable_x64),
+                jax.default_backend(),
+            )
+        ).encode()
+    )
     return h.hexdigest()
 
 
