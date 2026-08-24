@@ -51,6 +51,25 @@ SSP_PATH = "data/ssp_prsc_miles_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
 if not os.path.exists(SSP_PATH):
     SSP_PATH = "data/ssp_mist_c3k_a_chabrier_wNE_logGasU-3.0_logGasZ0.0.h5"
 
+# Census tracking: sections that were skipped due to errors.
+# Populated by bench_config() and bench_gradient(); reported at the end.
+_SKIPPED_SECTIONS: list[tuple[str, str]] = []
+
+# Census tracking: sections that completed successfully.
+# Populated by bench_config() and bench_gradient() after printing results.
+# Used to detect removals/renames in config (not just errors).
+_COMPLETED_SECTIONS: set[str] = set()
+
+# Required sections: must be present in _COMPLETED_SECTIONS at the end.
+# This catches silent benchmark loss from spec staleness, config changes, or removals (#925).
+# Naming: section_name = f"{label}_{sfh_type}" for forward configs, and
+# f"{label}_grad_{sfh_type}" for gradient configs. The stochastic field (sfh_type="field")
+# is the expensive D~137 regime the benchmark watches.
+_REQUIRED_SECTIONS = {
+    "Stellar only_field",  # Forward: stochastic field, stellar-only
+    "Stellar only_grad_field",  # Gradient: stochastic field, stellar-only
+}
+
 
 def bench_one(fn, n_warmup=N_WARMUP, n_runs=N_RUNS):
     """Return mean per-call time in microseconds."""
@@ -115,12 +134,14 @@ def build_model(sfh_type, spec_kwargs, *, approx):
 
 def bench_config(label, sfh_type, cfg_kwargs):
     """Time exact vs WavePrecomp for one config."""
+    section_name = f"{label}_{sfh_type}"
     try:
         model_e, params_e, _ = build_model(sfh_type, cfg_kwargs, approx=None)
         ref = model_e.predict_photometry(params_e)
         us_e = bench_one(lambda: model_e.predict_photometry(params_e))
     except Exception as exc:
         print(f"  {label:<40} SKIPPED ({type(exc).__name__}: {exc!s:.60s})")
+        _SKIPPED_SECTIONS.append((section_name, str(exc)))
         return
 
     try:
@@ -136,6 +157,7 @@ def bench_config(label, sfh_type, cfg_kwargs):
             f"speedup={spd:>5.1f}×  "
             f"err={err * 100:>7.3f}%"
         )
+        _COMPLETED_SECTIONS.add(section_name)
     except Exception as exc:
         print(
             f"  {label:<40} "
@@ -146,6 +168,7 @@ def bench_config(label, sfh_type, cfg_kwargs):
 
 def bench_gradient(label, sfh_type, cfg_kwargs):
     """Time grad-of-loss for exact vs WavePrecomp."""
+    section_name = f"{label}_grad_{sfh_type}"
     diff_key = "dust_tau_diff"
 
     def _grad_us(model, params):
@@ -172,13 +195,16 @@ def bench_gradient(label, sfh_type, cfg_kwargs):
         us_p = _grad_us(model_p, params_p)
     except Exception as exc:
         print(f"  {label:<40} SKIPPED ({type(exc).__name__})")
+        _SKIPPED_SECTIONS.append((section_name, str(exc)))
         return
 
     if us_e is None or us_p is None:
         print(f"  {label:<40} skipped (no {diff_key} in params)")
+        _SKIPPED_SECTIONS.append((section_name, f"no {diff_key} in params"))
         return
     spd = us_e / us_p if us_p > 0 else float("nan")
     print(f"  {label:<40} exact={us_e:>8.0f} µs  precomp={us_p:>8.0f} µs  speedup={spd:>5.1f}×")
+    _COMPLETED_SECTIONS.add(section_name)
 
 
 def print_header(title):
@@ -317,7 +343,31 @@ if __name__ == "__main__":
         for cfg_label, cfg_kwargs in grad_configs:
             bench_gradient(cfg_label, sfh_type, cfg_kwargs)
 
+    # --- Census: report skipped sections and assert required sections completed ---
     print()
     print("=" * 110)
-    print("  Done.")
-    print("=" * 110)
+
+    # First, report skipped sections (whether required or not)
+    if _SKIPPED_SECTIONS:
+        print(f"  SKIPPED SECTIONS (total: {len(_SKIPPED_SECTIONS)})")
+        print("=" * 110)
+        for section_name, error_msg in _SKIPPED_SECTIONS:
+            print(f"  {section_name}: {error_msg[:70]}")
+        print()
+
+    # Check: all required sections must have completed successfully.
+    # Catches removals, renames, and errors (silent-loss detection per #925).
+    required_missing = _REQUIRED_SECTIONS - _COMPLETED_SECTIONS
+    if required_missing:
+        print("  ERROR: Required sections did not complete:")
+        for section_name in sorted(required_missing):
+            print(f"    - {section_name}")
+        print()
+        print("=" * 110)
+        raise SystemExit(1)
+    else:
+        if _SKIPPED_SECTIONS:
+            print("  All required sections completed. (Some optional sections skipped)")
+        else:
+            print("  Done. (All sections completed successfully)")
+        print("=" * 110)
