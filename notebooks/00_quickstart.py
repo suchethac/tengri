@@ -162,7 +162,7 @@ citations.print_citations(sed_model)
 # and a noisy realization.
 
 # %%
-key = jax.random.PRNGKey(9)
+key = jax.random.PRNGKey(6)
 _, key_mock, key_fit = jax.random.split(key, 3)
 
 truth = {
