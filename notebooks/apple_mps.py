@@ -25,12 +25,16 @@
 #
 # ```text
 #     one galaxy at a time    ->  CPU, by 59x to 86x. Large and stable.
-#     ~256 galaxies a batch   ->  parity, +/-25%, whichever shape you measure.
-#     never assume, measure   ->  MPS run-to-run spread exceeds the effect size.
+#     ~256 a batch            ->  CPU still ahead on every shape (1.2x to 2.3x).
+#     ~1000+ a batch          ->  MPS ahead, and the margin grows with N.
+#     4096 a batch            ->  MPS 2.4x to 3.2x faster -- and it is the only
+#                                 one that RUNS the inference shape; CPU is
+#                                 OOM-killed there.
 # ```
 #
-# There is no throughput reason to move tengri to the Apple GPU on this hardware.
-# The honest reasons are compile time (~10x faster) and curiosity.
+# So the useful question is not "GPU or CPU" but "how many galaxies at once".
+# Below roughly a thousand, stay on the CPU. Above it, the GPU wins on
+# throughput and — at catalog scale — on whether the job completes at all.
 #
 # The reason is not that the GPU is slow. It is that tengri moves a lot of memory
 # and does very little arithmetic — about **0.12 FLOP per byte** on the
@@ -41,11 +45,17 @@
 # **Two warnings about the numbers in this notebook**, both learned by getting
 # them wrong first:
 #
-# 1. **MPS timings are not reproducible to better than ~2x.** The same script,
-#    same batch, run twice, gave 0.28 and 0.67 ms/galaxy. CPU was stable to ~6%
-#    over the same period. Absolute MPS numbers here are illustrative; the
-#    *ratios* measured side by side in one sitting are what to trust, and even
-#    those move with what else the machine is doing.
+# 1. **Timings move with machine load, and MPS more than CPU.** An early pass
+#    got 0.28 and 0.67 ms/galaxy from the same script at the same batch. A later
+#    pass on a quiet machine held both platforms to 1.5-14% across runs. Trust
+#    ratios measured side by side in one sitting; treat absolute numbers as
+#    indicative and re-measure on your own hardware.
+#
+#    **They also move with the tengri version.** Everything below was
+#    re-measured after 71 commits of main landed, and the verdict changed: CPU
+#    forward went 0.29 -> 0.088 ms/galaxy, which pushed the crossover from ~250
+#    galaxies to somewhere between 256 and 1024. MPS barely moved. A perf change
+#    on the CPU path is a change to this notebook's conclusion.
 # 2. **Benchmark one shape per process.** Running forward, gradient and a fit in
 #    a single process makes the later ones look worse. That contamination alone
 #    flipped a conclusion for me.
@@ -192,85 +202,75 @@ def grad_one(p):
     return jax.grad(lambda q: jnp.sum(model.predict_photometry(q)))(p)
 
 
-# A smoke check, not the measurement: batch 256 needs several GB and will kill
-# the kernel on a loaded machine. The tables below carry the full sweep.
+# This cell proves the batched gradient RUNS on the GPU and returns finite
+# numbers. It deliberately does not print timings.
+#
+# Timings taken inline in a notebook did not agree with the tables below --
+# measured 61.7 ms/galaxy at batch 32 where the same model in a plain process
+# gives 3.3. The cause is not the Jupyter kernel (measured: 1.26x, not 20x), not
+# machine load, and not the attenuation law (1.32x). Whatever it is, a number
+# printed here that contradicts the table beside it by 20x is worse than no
+# number. The tables were measured one shape per process with the evaluation
+# point pinned, which a single notebook cell cannot reproduce.
 for n in (1, 32):
     batch = {k: jnp.broadcast_to(v, (n, *jnp.shape(v))) for k, v in params.items()}
-    ms = timed(jax.vmap(grad_one), batch) if n > 1 else timed(grad_one, params)
-    print(f"batch={n:4d}  total={ms:7.2f} ms   per galaxy={ms / n:6.3f} ms")
+    out = jax.vmap(grad_one)(batch) if n > 1 else grad_one(params)
+    finite = bool(np.isfinite(np.asarray(out["sfh_dpl_log_total_mass"])).all())
+    print(f"batch={n:4d}  gradient finite={finite}  device={jax.devices()[0]}")
 
 # %% [markdown]
 # ### Measured, M4 Pro, float32, `WavePrecomp`, 6 bands
 #
-# Gradient of `sum(predict_photometry)`, warm, 10 reps:
+# Gradient of `sum(predict_photometry)`, warm, one shape per process, medians of
+# 2-3 independent runs. Re-measured on tengri `082bee8c7`.
 #
-# | batch | CPU per galaxy | MPS per galaxy | faster |
+# | batch | CPU per galaxy | MPS per galaxy | |
 # |---|---|---|---|
 # | 1 | **0.79 ms** | 46.65 ms | CPU 59x |
-# | 8 | **0.41** | 6.64 | CPU 16x |
 # | 32 | **0.30** | 1.83 | CPU 6.1x |
-# | 128 | **0.30** | 0.55 | CPU 1.8x |
-# | 256 | 0.31 | **0.28** | MPS — crossover |
-# | 512 | 0.31 | **0.18** | MPS 1.7x |
+# | 256 | **0.246** | 0.294 | CPU 1.2x |
+# | 1024 | 0.244 | **0.124** | MPS 2.0x |
+# | 4096 | ~0.30 | **0.094** | MPS 3.2x |
 #
-# MPS total time is almost flat in batch size: **46.7 ms at n=1, 94.4 ms at
-# n=512**, for 512x the work. It is nearly all fixed overhead. CPU is linear. So
-# the question is never "is the GPU fast" — it is "do you have enough galaxies to
-# amortize ~46 ms of dispatch".
+# The shape of it: **CPU plateaus and MPS does not.** From batch 256 upward the
+# CPU sits at 0.24-0.30 ms/galaxy however many you give it, while MPS keeps
+# falling — 0.294, 0.124, 0.094. MPS pays a large fixed dispatch cost once and
+# then amortizes it; the CPU has nothing left to amortize.
 #
-# **That table is one run and the crossover in it is not a constant.** Repeating
-# the identical script at batch 256 across independent processes, on a busier
-# machine:
-#
-# | | runs [ms/galaxy] | median |
-# |---|---|---|
-# | CPU | 0.70, 0.62, 0.60, 0.52 | 0.61 |
-# | MPS | 0.43, 0.42, 0.35, 0.35 | 0.385 |
-#
-# Same batch size, but every number roughly doubled versus the first table
-# because the machine was under load. The *direction* held; the values did not.
-# Treat "a few hundred galaxies" as the scale at which this becomes worth
-# measuring on your own machine — not as a threshold you can inherit.
-#
-# **Compile time favors MPS heavily** — cold 0.34–0.71 s against CPU's 4.6–5.1 s.
-# For iterating on a model that is a real gain regardless of throughput.
+# The rows at batch 1 and 32 are from an earlier tengri; the CPU path has since
+# got faster, so treat them as an upper bound on the CPU column, not a
+# measurement of today.
 
 # %% [markdown]
-# ### It depends on the SHAPE of the work — but less than you would think
+# ### It depends on the SHAPE of the work — and on how many galaxies
 #
-# "Prediction on the GPU, inference on the CPU" is the natural intuition. The
-# data does not support it, and it also does not support the opposite. Batch 256,
-# one shape per process, 3–4 independent runs each:
+# "Prediction on the GPU, inference on the CPU" is the natural intuition, and it
+# is not what the data says. Batch 256 and batch 4096, one shape per process,
+# 2-3 runs each, on tengri `082bee8c7`:
 #
-# | shape | CPU [ms/gal] | MPS [ms/gal] | MPS/CPU |
-# |---|---|---|---|
-# | **A** forward `predict_photometry` | 0.288, 0.304, 0.290 | 0.296, 0.353, 0.314 | 1.08 |
-# | **B** gradient `grad(sum(predict))` | 0.577, 0.484, 0.571 | 0.497, 0.434, 0.370 | **0.76** |
-# | **C** inference: 50 scanned grad steps | 0.397, 0.389, 0.373 | 0.537, 0.530, 0.355, 0.363 | 1.15 |
+# | shape | batch | CPU [ms/gal] | MPS [ms/gal] | |
+# |---|---|---|---|---|
+# | **A** forward `predict_photometry` | 256 | **0.088** | 0.200 | CPU 2.3x |
+# | | 4096 | 0.133 | **0.055** | MPS 2.4x |
+# | **B** gradient `grad(sum(predict))` | 256 | **0.246** | 0.294 | CPU 1.2x |
+# | | 4096 | ~0.30 | **0.094** | MPS 3.2x |
+# | **C** inference: 50 scanned grad steps | 256 | **0.190** | 0.285 | CPU 1.5x |
+# | | 4096 | **OOM** | **0.101** | only MPS runs |
 #
-# **All three sit within ±25% of parity, and MPS's own run-to-run spread is
-# larger than the gaps between them** — shape C ranges 0.355–0.537 ms, about 51%,
-# while CPU holds to ~5%. With this many replicates the shape ordering is simply
-# not resolvable, with one exception:
+# Two things to take from this.
 #
-# **The gradient is MPS's best case.** It is the only shape where MPS beat CPU in
-# every replication. That is consistent with the arithmetic-intensity argument —
-# the reverse pass does more work per byte already moved than the forward pass
-# does — but the margin is small.
+# **The batch size decides, not the shape.** At 256 the CPU wins all three; at
+# 4096 the GPU wins all three. Within a batch size the shapes differ by less
+# than the batch effect does.
 #
-# An earlier version of this notebook claimed forward prediction was MPS's
-# *worst* case at ~2.1x slower. That came from two runs and did not replicate;
-# it is 1.08x here. Both that claim and the original "MPS wins from ~250" were
-# over-read from too few samples. What survives replication is narrower:
+# **At 4096 the inference shape does not fit in CPU memory at all.** Both CPU
+# runs were SIGKILLed by the host's OOM guard (exit 137) while MPS returned in
+# 0.10 ms/galaxy. On unified memory the GPU is not merely faster there — it is
+# the one that completes. For catalog-scale fitting that is a stronger argument
+# than any of the throughput numbers.
 #
-# ```text
-#   one galaxy      ->  CPU wins by 59x (gradient) to 86x (MAP fit). Large, stable.
-#   ~256 a batch    ->  parity, +/-25%, with MPS noise exceeding the shape differences.
-#   gradient shape  ->  MPS's best case, consistently, by a small margin.
-# ```
-#
-# On this hardware there is no throughput reason to move to the GPU. The
-# defensible reasons are the compile time (§4) and curiosity.
+# **Compile time favors MPS heavily** — cold 0.34-0.71 s against CPU's 4.6-5.1 s.
+# For iterating on a model that is a real gain regardless of throughput.
 
 # %% [markdown]
 # ### The same numbers, as a picture
@@ -282,9 +282,11 @@ for n in (1, 32):
 # %%
 import matplotlib.pyplot as plt
 
-BATCH = np.array([1, 8, 32, 128, 256, 512])
-CPU_PER = np.array([0.79, 0.41, 0.30, 0.30, 0.31, 0.31])  # ms per galaxy
-MPS_PER = np.array([46.65, 6.64, 1.83, 0.55, 0.28, 0.18])
+# Gradient shape, medians of independent runs. The 1 and 32 rows predate the
+# CPU perf work on main, so the CPU column there is an upper bound.
+BATCH = np.array([1, 32, 256, 1024, 4096])
+CPU_PER = np.array([0.79, 0.30, 0.246, 0.244, 0.300])  # ms per galaxy
+MPS_PER = np.array([46.65, 1.83, 0.294, 0.124, 0.094])
 CPU_TOT = CPU_PER * BATCH
 MPS_TOT = MPS_PER * BATCH
 
@@ -353,10 +355,10 @@ fitter = Fitter(
 print("resolved approx:", fitter.model.approx)  # expect wave_precomp=True, ztable=True
 
 # Run three times: the first includes XLA compilation, the rest do not.
-for i in (1, 2):
-    t0 = time.perf_counter()
-    posterior = fitter.run("map", n_steps=100, verbose=False)
-    print(f"  MAP run {i}: {time.perf_counter() - t0:6.2f} s  (100 steps)")
+# Same caveat as above: this shows a fit RUNS on the GPU, not how fast. See the
+# table below for timings taken outside a notebook.
+posterior = fitter.run("map", n_steps=100, verbose=False)
+print("MAP fit completed on", jax.devices()[0])
 
 # %% [markdown]
 # ### Measured: single-galaxy MAP, 300 ADAM steps
@@ -382,12 +384,13 @@ for i in (1, 2):
 #
 # So: **do not fit one galaxy on the GPU.**
 #
-# Does batching rescue it? Partly. Shape C in §4 is exactly this question — a
-# batch of 256 carried through 50 scanned gradient steps — and it lands at
-# **1.15x slower** than CPU, i.e. parity within the noise, while the bare
-# gradient at the same batch was MPS's one consistent win. A fit multiplies
-# per-step dispatch by the step count, so it gives back some of what batching
-# buys.
+# Does batching rescue it? Yes, if the batch is large enough. Shape C in §4 is
+# exactly this question — a batch carried through 50 scanned gradient steps. At
+# batch 256 it is **1.5x slower** than CPU; at batch 4096 the CPU run is
+# **OOM-killed** while MPS returns in 0.10 ms/galaxy. A fit multiplies per-step
+# dispatch by the step count, so it needs a bigger batch than a bare gradient
+# does before the GPU pays off — but past that point it is the only one that
+# runs.
 #
 # The honest position: a `CatalogFitter` over hundreds of galaxies with a vmapped
 # backend (`mcmc_nuts`, `mcmc_hmc`) is the case with the best chance, because it
@@ -425,6 +428,10 @@ print(f"matmul 2048^2: {mm:.2f} ms  ->  {2 * 2048**3 / (mm * 1e-3) / 1e9:.0f} GF
 #   Expect to bump both together.
 # * **Not in CI.** Nothing here is covered by the test suite. Treat results as
 #   experimental and check anything important against a CPU float64 run.
+# * **The numbers age.** They are a ratio between two moving targets. Re-measured
+#   after 71 commits of main, the CPU forward path had got 3.3x faster and the
+#   crossover moved from ~250 galaxies to between 256 and 1024. Any perf work on
+#   the CPU path changes the conclusion here, so re-run before relying on it.
 #
 # For a fit that must be right, use the default: CPU, float64. This path is for
 # large batches and for iterating quickly, not for final science.
