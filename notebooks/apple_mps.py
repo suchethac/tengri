@@ -42,23 +42,17 @@
 # So per galaxy there is nothing for the GPU to win with; the only way it wins is
 # by having enough galaxies in flight to hide its dispatch latency.
 #
-# **Two warnings about the numbers in this notebook**, both learned by getting
-# them wrong first:
+# **How to read the numbers here:**
 #
-# 1. **Timings move with machine load, and MPS more than CPU.** An early pass
-#    got 0.28 and 0.67 ms/galaxy from the same script at the same batch. A later
-#    pass on a quiet machine held both platforms to 1.5-14% across runs. Trust
-#    ratios measured side by side in one sitting; treat absolute numbers as
-#    indicative and re-measure on your own hardware.
-#
-#    **They also move with the tengri version.** Everything below was
-#    re-measured after 71 commits of main landed, and the verdict changed: CPU
-#    forward went 0.29 -> 0.088 ms/galaxy, which pushed the crossover from ~250
-#    galaxies to somewhere between 256 and 1024. MPS barely moved. A perf change
-#    on the CPU path is a change to this notebook's conclusion.
-# 2. **Benchmark one shape per process.** Running forward, gradient and a fit in
-#    a single process makes the later ones look worse. That contamination alone
-#    flipped a conclusion for me.
+# 1. **Timings move with machine load, MPS more than CPU.** On a quiet machine
+#    both platforms hold to 1.5-14% across runs; on a busy one MPS can vary by
+#    2x. Trust ratios measured side by side in one sitting; treat absolute
+#    values as indicative and re-measure on your own hardware.
+# 2. **They also move with the tengri version.** The CPU path is actively
+#    optimized, and a change there moves the crossover. These numbers are a
+#    ratio between two moving targets.
+# 3. **Benchmark one shape per process.** Running forward, gradient and a fit in
+#    a single process makes the later ones look slower than they are.
 
 # %% [markdown]
 # ## 1. Install
@@ -202,16 +196,12 @@ def grad_one(p):
     return jax.grad(lambda q: jnp.sum(model.predict_photometry(q)))(p)
 
 
-# This cell proves the batched gradient RUNS on the GPU and returns finite
-# numbers. It deliberately does not print timings.
+# Confirms the batched gradient runs on the GPU and returns finite numbers.
 #
-# Timings taken inline in a notebook did not agree with the tables below --
-# measured 61.7 ms/galaxy at batch 32 where the same model in a plain process
-# gives 3.3. The cause is not the Jupyter kernel (measured: 1.26x, not 20x), not
-# machine load, and not the attenuation law (1.32x). Whatever it is, a number
-# printed here that contradicts the table beside it by 20x is worse than no
-# number. The tables were measured one shape per process with the evaluation
-# point pinned, which a single notebook cell cannot reproduce.
+# It deliberately prints no timings. Timings taken inline in a notebook do not
+# agree with the tables below -- inline is roughly 20x slower than the same
+# model in a plain process, for reasons that are not the Jupyter kernel, machine
+# load, or the attenuation law. Benchmark from a script, not from a cell.
 for n in (1, 32):
     batch = {k: jnp.broadcast_to(v, (n, *jnp.shape(v))) for k, v in params.items()}
     out = jax.vmap(grad_one)(batch) if n > 1 else grad_one(params)
@@ -237,9 +227,8 @@ for n in (1, 32):
 # falling — 0.294, 0.124, 0.094. MPS pays a large fixed dispatch cost once and
 # then amortizes it; the CPU has nothing left to amortize.
 #
-# The rows at batch 1 and 32 are from an earlier tengri; the CPU path has since
-# got faster, so treat them as an upper bound on the CPU column, not a
-# measurement of today.
+# The batch 1 and 32 rows were taken against an older tengri whose CPU path was
+# slower, so treat their CPU column as an upper bound.
 
 # %% [markdown]
 # ### It depends on the SHAPE of the work — and on how many galaxies
@@ -355,8 +344,8 @@ fitter = Fitter(
 print("resolved approx:", fitter.model.approx)  # expect wave_precomp=True, ztable=True
 
 # Run three times: the first includes XLA compilation, the rest do not.
-# Same caveat as above: this shows a fit RUNS on the GPU, not how fast. See the
-# table below for timings taken outside a notebook.
+# Confirms a fit runs on the GPU. Timings are in the table below, measured
+# outside a notebook.
 posterior = fitter.run("map", n_steps=100, verbose=False)
 print("MAP fit completed on", jax.devices()[0])
 
@@ -428,10 +417,9 @@ print(f"matmul 2048^2: {mm:.2f} ms  ->  {2 * 2048**3 / (mm * 1e-3) / 1e9:.0f} GF
 #   Expect to bump both together.
 # * **Not in CI.** Nothing here is covered by the test suite. Treat results as
 #   experimental and check anything important against a CPU float64 run.
-# * **The numbers age.** They are a ratio between two moving targets. Re-measured
-#   after 71 commits of main, the CPU forward path had got 3.3x faster and the
-#   crossover moved from ~250 galaxies to between 256 and 1024. Any perf work on
-#   the CPU path changes the conclusion here, so re-run before relying on it.
+# * **The numbers age.** They are a ratio between two moving targets, and the
+#   CPU path is actively optimized — a 3.3x speedup there moved the crossover
+#   from ~250 galaxies to between 256 and 1024. Re-run before relying on them.
 #
 # For a fit that must be right, use the default: CPU, float64. This path is for
 # large batches and for iterating quickly, not for final science.
